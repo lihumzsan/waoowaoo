@@ -8,7 +8,6 @@ export interface OperationResultTaskRow {
   status: string
   targetType: string
   targetId: string
-  episodeId: string | null
   payload: unknown
   result: unknown
   errorCode: string | null
@@ -61,12 +60,12 @@ function readSafeUrl(result: Record<string, unknown> | null, keys: string[]): st
 }
 
 function inferMediaType(taskType: string, result: Record<string, unknown> | null): RecentOperationMediaType | null {
-  if (taskType === TASK_TYPE.CREATIVE_RESOURCE_AUDIO) return 'music'
-  if (taskType === TASK_TYPE.CREATIVE_RESOURCE_VOICE) return 'audio'
-  if (taskType === TASK_TYPE.CREATIVE_RESOURCE_IMAGE) return 'image'
+  if (taskType === TASK_TYPE.WORKSPACE_RESOURCE_AUDIO) return 'music'
+  if (taskType === TASK_TYPE.WORKSPACE_RESOURCE_VOICE) return 'audio'
+  if (taskType === TASK_TYPE.WORKSPACE_RESOURCE_IMAGE) return 'image'
   if (
-    taskType === TASK_TYPE.CREATIVE_RESOURCE_VIDEO
-    || taskType === TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE
+    taskType === TASK_TYPE.WORKSPACE_RESOURCE_VIDEO
+    || taskType === TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE
   ) return 'video'
   if (readString(result, 'audioUrl')) return 'audio'
   if (readString(result, 'videoUrl')) return 'video'
@@ -138,7 +137,6 @@ export function normalizeTaskOperationResult(task: OperationResultTaskRow): Rece
     operationExecutionId: task.operationExecutionId,
     targetType: task.targetType,
     targetId: task.targetId,
-    episodeId: task.episodeId,
     provider: readProvider(model, result),
     model,
     media: buildMedia(task.type, result),

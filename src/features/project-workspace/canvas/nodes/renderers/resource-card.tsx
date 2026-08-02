@@ -7,8 +7,8 @@ import {
 } from './resource-media-shell'
 
 export function ResourceCardContent({ data }: WorkspaceCanvasNodeRendererProps) {
+  if (data.kind !== 'resourceCard') return null
   const details = data.resourceDetails
-  if (!details) return null
   const items: ResourceMediaShellItem[] = [{
     resource: details.resource,
     summary: details.presentation.summary,

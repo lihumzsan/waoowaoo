@@ -21,7 +21,6 @@ interface PureRecordParams extends RecordParams {
   cost: number
   balanceAfter: number
   freezeId?: string
-  episodeId?: string | null
   taskType?: string | null
 }
 
@@ -220,7 +219,6 @@ export async function recordUsageCostOnly(
       relatedId: params.freezeId || null,
       freezeId: params.freezeId || null,
       projectId: hasProject ? params.projectId : null,
-      episodeId: params.episodeId || null,
       taskType: params.taskType || params.action || null,
       billingMeta: buildBillingMeta(params),
     },

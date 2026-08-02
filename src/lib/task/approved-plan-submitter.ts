@@ -52,7 +52,6 @@ function preparePlannedTask(params: {
     userId: params.userId,
     projectId: params.projectId,
     parentTaskId: null,
-    episodeId: params.task.episodeId ?? null,
     type: params.task.taskType,
     targetType: params.task.target.targetType,
     targetId: params.task.target.targetId,

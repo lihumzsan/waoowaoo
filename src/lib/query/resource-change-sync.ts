@@ -4,57 +4,29 @@ import type { WorkspaceResourceRef } from '@/lib/task/types'
 import {
   dedupeWorkspaceResourceRefs,
   isWorkspaceResourceName,
-  WORKSPACE_RESOURCE_KIND,
 } from '@/lib/workspace-resource/resource-impact'
 
-export { isWorkspaceResourceName, WORKSPACE_RESOURCE_KIND }
+export { isWorkspaceResourceName }
 
-export type WorkspaceResourceKind = (typeof WORKSPACE_RESOURCE_KIND)[keyof typeof WORKSPACE_RESOURCE_KIND]
+export type WorkspaceResourceKind = WorkspaceResourceRef['kind']
 export type WorkspaceResourceChange = WorkspaceResourceRef
 
 function queryKeysForResource(ref: WorkspaceResourceRef): QueryKey[] {
-  if (ref.kind === WORKSPACE_RESOURCE_KIND.STORY_CANON && ref.episodeId) {
-    return [queryKeys.project.storyCanon(ref.projectId, ref.episodeId)]
-  }
-
-  if (ref.kind === WORKSPACE_RESOURCE_KIND.EPISODE_DATA && ref.episodeId) {
-    return [queryKeys.episodeData(ref.projectId, ref.episodeId)]
-  }
-
-  if (ref.kind === WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT && ref.episodeId) {
-    return [queryKeys.project.context(ref.projectId, ref.episodeId)]
-  }
-
-  if (ref.kind === WORKSPACE_RESOURCE_KIND.PROJECT_ASSETS) {
-    const projectAssetKeys: QueryKey[] = [
-      queryKeys.assets.all('project', ref.projectId),
-      queryKeys.projectAssets.all(ref.projectId),
-      queryKeys.projectData(ref.projectId),
-    ]
-    if (ref.episodeId) {
-      projectAssetKeys.push(queryKeys.episodeData(ref.projectId, ref.episodeId))
-      projectAssetKeys.push(queryKeys.project.context(ref.projectId, ref.episodeId))
-    }
-    return projectAssetKeys
-  }
-
-  if (ref.kind === WORKSPACE_RESOURCE_KIND.GLOBAL_ASSETS) {
+  if (ref.kind === 'globalAssets') {
     const globalAssetKeys: QueryKey[] = [
-      queryKeys.assets.all('global'),
+      queryKeys.assets.all(),
       queryKeys.globalAssets.all(),
       queryKeys.globalAssets.folders(),
     ]
     return globalAssetKeys
   }
 
-  if (ref.kind === WORKSPACE_RESOURCE_KIND.PROJECT_DATA) {
+  if (ref.kind === 'projectData') {
     return [queryKeys.projectData(ref.projectId)]
   }
 
-  if (ref.kind === WORKSPACE_RESOURCE_KIND.CREATIVE_RESOURCES) {
-    // Every Episode query includes Project-scope Resources. A Project-scope
-    // change therefore invalidates the complete family, not only the `''` key.
-    return [queryKeys.project.creativeResourcesAll(ref.projectId)]
+  if (ref.kind === 'workspaceResources') {
+    return [queryKeys.project.workspaceResourcesAll(ref.projectId)]
   }
 
   return []

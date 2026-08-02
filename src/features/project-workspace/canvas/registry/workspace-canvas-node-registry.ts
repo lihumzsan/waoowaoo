@@ -2,16 +2,16 @@ import type { AppIconName } from '@/components/ui/icons'
 import { TASK_TYPE, type TaskType } from '@/lib/task/types'
 import type { WorkspaceCanvasNodeKind } from '../node-canvas-types'
 import type { WorkspaceCanvasNodeActionKey } from '../contracts/workspace-canvas-interactions'
-import type { CreativeResourceMediaType } from '@/lib/creative-resource/contracts'
+import type { WorkspaceResourceMediaType } from '@/lib/workspace-resource/contracts'
 
 interface WorkspaceCanvasNodeDefinition<K extends WorkspaceCanvasNodeKind = WorkspaceCanvasNodeKind> {
   readonly kind: K
-  readonly identityScope: 'resource'
-  readonly taskTargetType: 'CreativeResource'
+  readonly identityScope: 'resource' | 'folder'
+  readonly taskTargetType: 'WorkspaceResource' | null
   readonly taskTypes: readonly TaskType[]
   readonly rendererKey: K
   readonly actionKeysByMediaType: Readonly<Record<
-    CreativeResourceMediaType,
+    WorkspaceResourceMediaType,
     readonly WorkspaceCanvasNodeActionKey[]
   >>
   /**
@@ -21,6 +21,7 @@ interface WorkspaceCanvasNodeDefinition<K extends WorkspaceCanvasNodeKind = Work
    */
   readonly presentation: {
     readonly iconName: AppIconName
+    readonly hasTargetHandle: boolean
     readonly hasSourceHandle: boolean
   }
   readonly conformanceFixture: K
@@ -30,14 +31,13 @@ export const WORKSPACE_CANVAS_NODE_DEFINITIONS = {
   resourceCard: {
     kind: 'resourceCard',
     identityScope: 'resource',
-    taskTargetType: 'CreativeResource',
+    taskTargetType: 'WorkspaceResource',
     taskTypes: [
-      TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
-      TASK_TYPE.CREATIVE_RESOURCE_AUDIO,
-      TASK_TYPE.CREATIVE_RESOURCE_VOICE,
-      TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
-      TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE,
-      TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
+      TASK_TYPE.WORKSPACE_RESOURCE_IMAGE,
+      TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
+      TASK_TYPE.WORKSPACE_RESOURCE_VOICE,
+      TASK_TYPE.WORKSPACE_RESOURCE_VIDEO,
+      TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
     ],
     rendererKey: 'resourceCard',
     actionKeysByMediaType: {
@@ -60,9 +60,29 @@ export const WORKSPACE_CANVAS_NODE_DEFINITIONS = {
     },
     presentation: {
       iconName: 'package',
+      hasTargetHandle: true,
       hasSourceHandle: true,
     },
     conformanceFixture: 'resourceCard',
+  },
+  folder: {
+    kind: 'folder',
+    identityScope: 'folder',
+    taskTargetType: null,
+    taskTypes: [],
+    rendererKey: 'folder',
+    actionKeysByMediaType: {
+      text: [],
+      image: [],
+      audio: [],
+      video: [],
+    },
+    presentation: {
+      iconName: 'folder',
+      hasTargetHandle: false,
+      hasSourceHandle: false,
+    },
+    conformanceFixture: 'folder',
   },
 } as const satisfies Record<WorkspaceCanvasNodeKind, WorkspaceCanvasNodeDefinition>
 

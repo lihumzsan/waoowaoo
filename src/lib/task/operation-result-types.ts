@@ -30,7 +30,6 @@ export interface RecentOperationResult {
   operationExecutionId?: string | null
   targetType: string
   targetId: string
-  episodeId?: string | null
   provider?: string | null
   model?: string | null
   media?: RecentOperationMedia | null

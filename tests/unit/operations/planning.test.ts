@@ -1,13 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   mergeOperationPlanViewsForApproval,
-  planProjectAgentOperationFromApi,
   quoteOperationPlan,
   toOperationPlanView,
   type OperationPlan,
 } from '@/lib/operations/planning'
-import { NextRequest } from 'next/server'
-import { createProjectAgentOperationRegistryForApi } from '@/lib/operations/registry'
 import { TASK_TYPE, type TaskBillingInfo } from '@/lib/task/types'
 
 const originalDeploymentEdition = process.env.DEPLOYMENT_EDITION
@@ -15,9 +12,9 @@ const originalBillingMode = process.env.BILLING_MODE
 
 function mediaBillingInfo(params: {
   taskType:
-    | typeof TASK_TYPE.CREATIVE_RESOURCE_IMAGE
-    | typeof TASK_TYPE.CREATIVE_RESOURCE_VIDEO
-    | typeof TASK_TYPE.CREATIVE_RESOURCE_AUDIO
+    | typeof TASK_TYPE.WORKSPACE_RESOURCE_IMAGE
+    | typeof TASK_TYPE.WORKSPACE_RESOURCE_VIDEO
+    | typeof TASK_TYPE.WORKSPACE_RESOURCE_AUDIO
   apiType: 'image' | 'video' | 'music'
   model: string
   maxFrozenCost: number
@@ -37,21 +34,6 @@ function mediaBillingInfo(params: {
   }
 }
 
-function textBillingInfo(): TaskBillingInfo {
-  return {
-    billable: true,
-    source: 'task',
-    taskType: TASK_TYPE.CREATIVE_WORK,
-    apiType: 'text',
-    model: 'text-model',
-    quantity: 1000,
-    unit: 'token',
-    maxFrozenCost: 99,
-    action: TASK_TYPE.CREATIVE_WORK,
-    status: 'quoted',
-  }
-}
-
 function buildPlan(): OperationPlan {
   return {
     kind: 'task_submission',
@@ -61,50 +43,47 @@ function buildPlan(): OperationPlan {
     tasks: [
       {
         id: 'image-task',
-        taskType: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
-        target: { targetType: 'CreativeResource', targetId: 'image-resource-1' },
+        taskType: TASK_TYPE.WORKSPACE_RESOURCE_IMAGE,
+        target: { targetType: 'WorkspaceResource', targetId: 'image-resource-1' },
         payload: { model: 'payload-should-not-drive-quote' },
         billingInfo: mediaBillingInfo({
-          taskType: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
+          taskType: TASK_TYPE.WORKSPACE_RESOURCE_IMAGE,
           apiType: 'image',
           model: 'planned-image-model',
           maxFrozenCost: 3.5,
           unit: 'image',
         }),
         locale: 'zh',
-        episodeId: 'episode-1',
       },
       {
         id: 'video-task',
-        taskType: TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
-        target: { targetType: 'CreativeResource', targetId: 'video-resource-1' },
+        taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO,
+        target: { targetType: 'WorkspaceResource', targetId: 'video-resource-1' },
         payload: { model: 'different-payload-model' },
         billingInfo: mediaBillingInfo({
-          taskType: TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
+          taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO,
           apiType: 'video',
           model: 'planned-video-model',
           maxFrozenCost: 6.25,
           unit: 'second',
         }),
         locale: 'zh',
-        episodeId: 'episode-1',
       },
       {
-        id: 'text-task',
-        taskType: TASK_TYPE.CREATIVE_WORK,
-        target: { targetType: 'CreativeWork', targetId: 'creative-work-1' },
-        payload: { model: 'expensive-text-payload' },
-        billingInfo: textBillingInfo(),
+        id: 'merge-task',
+        taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
+        target: { targetType: 'WorkspaceResource', targetId: 'merged-video-resource-1' },
+        payload: { deterministic: true },
+        billingInfo: { billable: false },
         locale: 'zh',
-        episodeId: 'episode-1',
       },
       {
         id: 'audio-task',
-        taskType: TASK_TYPE.CREATIVE_RESOURCE_AUDIO,
-        target: { targetType: 'CreativeResource', targetId: 'audio-resource-1' },
+        taskType: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
+        target: { targetType: 'WorkspaceResource', targetId: 'audio-resource-1' },
         payload: { model: 'payload-audio-model' },
         billingInfo: mediaBillingInfo({
-          taskType: TASK_TYPE.CREATIVE_RESOURCE_AUDIO,
+          taskType: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
           apiType: 'music',
           model: 'planned-audio-model',
           maxFrozenCost: 2.5,
@@ -135,7 +114,7 @@ describe('operation planning billing quote', () => {
     }
   })
 
-  it('quotes fixed-price media from PlannedTask.billingInfo without counting text tasks', async () => {
+  it('quotes fixed-price media without charging a deterministic merge Task', async () => {
     const quote = await quoteOperationPlan(buildPlan())
 
     expect(quote.showCredits).toBe(true)
@@ -197,25 +176,4 @@ describe('operation planning billing quote', () => {
     expect(approval).not.toHaveProperty('planSnapshotId')
   })
 
-  it('requires every billable_media operation to expose the immutable plan and commit contract', () => {
-    const registry = createProjectAgentOperationRegistryForApi()
-    for (const [operationId, operation] of Object.entries(registry)) {
-      if (operation.confirmation.kind !== 'billable_media') continue
-      expect(operation.plan, operationId).toBeTypeOf('function')
-      expect(operation.commit, operationId).toBeTypeOf('function')
-    }
-  })
-
-  it('rejects a tool-only operation before API planning performs business work', async () => {
-    await expect(planProjectAgentOperationFromApi({
-      request: new NextRequest('http://localhost/api/operations/plan'),
-      operationId: 'adopt_creative_direction',
-      projectId: 'project-1',
-      userId: 'user-1',
-      input: {},
-    })).rejects.toMatchObject({
-      code: 'FORBIDDEN',
-      details: expect.objectContaining({ code: 'OPERATION_NOT_ALLOWED', channel: 'api' }),
-    })
-  })
 })

@@ -16,7 +16,6 @@ import {
   type ProjectAgentOperationRegistryDraft,
 } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
-import { createProjectEpisodeInTransaction } from '@/lib/projects/episode-service'
 import {
   isProjectVideoRatio,
   writeProjectVideoRatioInTransaction,
@@ -102,7 +101,7 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
         })
 
         const projectIds = projects.map((project) => project.id)
-        const [costsByProject, projectEpisodes] = await Promise.all([
+        const [costsByProject, resourceCounts] = await Promise.all([
           projectIds.length === 0
             ? []
             : prisma.usageCost.groupBy({
@@ -112,36 +111,14 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
               }),
           projectIds.length === 0
             ? []
-            : prisma.project.findMany({
-                where: { id: { in: projectIds } },
-                select: {
-                  id: true,
-                  characters: {
-                    select: {
-                      appearances: {
-                        select: { imageMediaId: true, imageUrl: true },
-                      },
-                    },
-                  },
-                  locations: {
-                    select: {
-                      images: {
-                        select: { imageMediaId: true, imageUrl: true },
-                      },
-                    },
-                  },
-                  creativeResources: {
-                    where: { mediaType: 'video', status: 'ready', materializedAt: { not: null } },
-                    select: { id: true },
-                  },
-                  episodes: {
-                    orderBy: { episodeNumber: 'asc' },
-                    select: {
-                      episodeNumber: true,
-                      novelText: true,
-                    },
-                  },
+            : prisma.workspaceResource.groupBy({
+                by: ['projectId', 'resourceKind', 'mediaType'],
+                where: {
+                  projectId: { in: projectIds },
+                  deletedAt: null,
+                  activePath: { not: null },
                 },
+                _count: { _all: true },
               }),
         ])
 
@@ -153,42 +130,34 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
         )
 
         const statsMap = new Map<string, {
-          episodes: number
+          resources: number
+          folders: number
           images: number
           videos: number
-          firstEpisodePreview: string | null
-        }>(
-          projectEpisodes.map((projectEntry) => {
-            const imageCount = projectEntry.characters.reduce(
-              (total, character) => total + character.appearances.filter((appearance) => appearance.imageMediaId || appearance.imageUrl).length,
-              0,
-            ) + projectEntry.locations.reduce(
-              (total, location) => total + location.images.filter((image) => image.imageMediaId || image.imageUrl).length,
-              0,
-            )
-            const videoCount = projectEntry.creativeResources.length
-            const firstEpisode = projectEntry.episodes[0]
-            const preview = firstEpisode?.novelText ? firstEpisode.novelText.slice(0, 100) : null
-            return [
-              projectEntry.id,
-              {
-                episodes: projectEntry.episodes.length,
-                images: imageCount,
-                videos: videoCount,
-                firstEpisodePreview: preview,
-              },
-            ]
-          }),
-        )
+        }>()
+        for (const count of resourceCounts) {
+          const current = statsMap.get(count.projectId) ?? {
+            resources: 0,
+            folders: 0,
+            images: 0,
+            videos: 0,
+          }
+          const amount = count._count._all
+          current.resources += amount
+          if (count.resourceKind === 'folder') current.folders += amount
+          if (count.mediaType === 'image') current.images += amount
+          if (count.mediaType === 'video') current.videos += amount
+          statsMap.set(count.projectId, current)
+        }
 
         const projectsWithStats = projects.map((project) => ({
           ...project,
           totalCost: costMap.get(project.id) ?? 0,
           stats: statsMap.get(project.id) ?? {
-            episodes: 0,
+            resources: 0,
+            folders: 0,
             images: 0,
             videos: 0,
-            firstEpisodePreview: null,
           },
         }))
 
@@ -216,9 +185,6 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
         videoRatio: z.string().trim().min(1).refine(isProjectVideoRatio, {
           message: 'Unsupported project video ratio.',
         }).optional(),
-        initialEpisode: z.object({
-          name: z.string().trim().min(1),
-        }).strict().optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
       executeInTransaction: async (ctx, input, transaction) => {
@@ -281,16 +247,6 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
             projectId: project.id,
             videoRatio: input.videoRatio,
           })
-        }
-
-        if (input.initialEpisode) {
-          const created = await createProjectEpisodeInTransaction({
-            transaction,
-            projectId: project.id,
-            userId: ctx.userId,
-            name: input.initialEpisode.name,
-          })
-          return { project: created.project, episode: created.episode }
         }
 
         return { project }

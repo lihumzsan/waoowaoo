@@ -11,7 +11,6 @@ export type TaskItem = {
   type: string
   targetType: string
   targetId: string
-  episodeId?: string | null
   status: string
   progress?: number | null
   errorCode?: string | null

@@ -38,7 +38,7 @@ function normalizeStorageKey(key: string): string {
 
 function ownedMediaRelations(userId: string): Prisma.MediaObjectWhereInput[] {
   return [
-    { creativeResources: { some: { userId } } },
+    { workspaceResourceVersions: { some: { resource: { userId } } } },
   ]
 }
 

@@ -83,7 +83,6 @@ async function snapshotTables(backupDir: string) {
   const tasks: SnapshotTask[] = [
     { name: 'projects', tableName: 'projects' },
     { name: 'projects', tableName: 'projects' },
-    { name: 'project_episodes', tableName: 'project_episodes' },
     { name: 'project_panels', tableName: 'project_panels' },
     { name: 'global_characters', tableName: 'global_characters' },
     { name: 'global_character_appearances', tableName: 'global_character_appearances' },

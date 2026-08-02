@@ -1,11 +1,12 @@
 import type { CSSProperties } from 'react'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
-import type { CreativeResourceCardView } from '@/lib/creative-resource/contracts'
+import type { WorkspaceResourceView } from '@/lib/workspace-resource/contracts'
 import type {
   WorkspaceCanvasFlowEdge,
   WorkspaceCanvasFlowNode,
-  WorkspaceCanvasNodeData,
+  WorkspaceCanvasFolderNodeData,
   WorkspaceCanvasNodeRecord,
+  WorkspaceCanvasResourceNodeData,
 } from '../node-canvas-types'
 
 interface TranslateValues {
@@ -16,10 +17,9 @@ type Translate = (key: string, values?: TranslateValues) => string
 
 export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly projectId?: string
-  readonly episodeName?: string
   /** Project `videoRatio` (`W:H`); media frame cards derive their size from it. */
   readonly projectAspectRatio?: string | null
-  readonly creativeResources?: readonly CreativeResourceCardView[]
+  readonly workspaceResources?: readonly WorkspaceResourceView[]
   readonly savedLayouts: readonly CanvasNodeLayout[]
   readonly translate: Translate
 }
@@ -27,9 +27,8 @@ export interface BuildWorkspaceNodeCanvasProjectionInput {
 export function createWorkspaceNodeProjectionContext(input: BuildWorkspaceNodeCanvasProjectionInput) {
   return {
     projectId: input.projectId,
-    episodeName: input.episodeName,
     projectAspectRatio: input.projectAspectRatio ?? null,
-    creativeResources: input.creativeResources ?? [],
+    workspaceResources: input.workspaceResources ?? [],
     savedLayouts: input.savedLayouts,
     translate: input.translate,
     nodes: [] as WorkspaceCanvasFlowNode[],
@@ -55,17 +54,19 @@ export function createEdge(id: string, source: string, target: string): Workspac
 export function createNode(input: {
   readonly id: string
   readonly position: { readonly x: number; readonly y: number }
-  readonly data: Omit<WorkspaceCanvasNodeData, 'nodeId' | 'width' | 'height'>
+  readonly data:
+    | Omit<WorkspaceCanvasResourceNodeData, 'nodeId' | 'width' | 'height'>
+    | Omit<WorkspaceCanvasFolderNodeData, 'nodeId' | 'width' | 'height'>
   readonly width: number
   readonly height: number
 }): WorkspaceCanvasFlowNode {
-  const data: WorkspaceCanvasNodeRecord = {
+  const data = {
     ...input.data,
     nodeId: input.id,
     width: input.width,
     height: input.height,
     layoutBasePosition: input.position,
-  }
+  } as WorkspaceCanvasNodeRecord
   const style: CSSProperties = { width: input.width, height: input.height }
   return {
     id: input.id,

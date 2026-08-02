@@ -105,9 +105,7 @@ function isTaskVisibleInOperationContext(
 ): boolean {
   if (task.userId !== ctx.userId) return false
   if (ctx.invocationChannel === 'api') return true
-  if (task.projectId !== ctx.projectId) return false
-  const episodeId = ctx.context.episodeId?.trim() || null
-  return !episodeId || task.episodeId === null || task.episodeId === episodeId
+  return task.projectId === ctx.projectId
 }
 
 export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
@@ -116,7 +114,7 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
       id: 'list_tasks',
       summary: 'List tasks for the current user with optional filters.',
       intent: 'query',
-      channels: { tool: true, api: true, mcp: true },
+      channels: { tool: false, api: true, mcp: false },
       effects: {
         writes: false,
         billable: false,
@@ -136,13 +134,9 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
             field: 'projectId',
           })
         }
-        const episodeId = restrictedToAssistantScope
-          ? ctx.context.episodeId?.trim() || undefined
-          : undefined
         const tasks = await queryTasks({
           userId: ctx.userId,
           projectId: restrictedToAssistantScope ? ctx.projectId : input.projectId,
-          episodeId,
           targetType: input.targetType,
           targetId: input.targetId,
           status: input.status,
@@ -158,7 +152,7 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
       id: 'get_task',
       summary: 'Get task detail for the current user; optionally includes lifecycle events.',
       intent: 'query',
-      channels: { tool: true, api: true, mcp: true },
+      channels: { tool: false, api: true, mcp: false },
       effects: {
         writes: false,
         billable: false,

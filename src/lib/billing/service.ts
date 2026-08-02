@@ -803,7 +803,6 @@ export type TaskBillingPreparation = {
   id: string
   userId: string
   projectId: string
-  episodeId?: string | null
   billingInfo: TaskBillingInfo | { billable: false } | null
 }
 
@@ -863,7 +862,6 @@ async function prepareTaskBillingSnapshot(
     metadata: {
       taskType: info.taskType,
       action: info.action,
-      episodeId: task.episodeId || null,
       apiType: info.apiType,
       model: info.model,
       quantity: info.quantity,
@@ -916,7 +914,6 @@ export async function settleTaskBillingInTransaction(
   task: {
     id: string
     projectId: string
-    episodeId?: string | null
     userId: string
     billingInfo: TaskBillingInfo | { billable: false } | null
   },
@@ -956,7 +953,6 @@ export async function settleTaskBillingInTransaction(
   if (mode === 'SHADOW') {
     await recordShadowUsageInTransaction(tx, task.userId, {
       projectId: task.projectId,
-      episodeId: task.episodeId ?? null,
       taskType: info.taskType || null,
       action: info.action,
       apiType: info.apiType,
@@ -1002,7 +998,6 @@ export async function settleTaskBillingInTransaction(
     info.freezeId,
     {
       projectId: task.projectId,
-      episodeId: task.episodeId ?? null,
       action: info.action,
       apiType: info.apiType,
       model: recordModel.model,

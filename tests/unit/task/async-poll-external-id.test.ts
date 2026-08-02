@@ -3,13 +3,23 @@ import { formatExternalId, parseExternalId } from '@/lib/ai-exec/async-poll'
 import { normalizeAsyncPollResult } from '@/lib/ai-providers/async-task-types'
 
 describe('async poll externalId contract', () => {
-  it('requires an explicit disposition only for failed provider terminals', () => {
+  it('requires an explicit disposition and typed code only for failed provider terminals', () => {
     expect(() => normalizeAsyncPollResult({ status: 'failed', error: 'terminal' }))
       .toThrow('ASYNC_PROVIDER_FAILURE_DISPOSITION_REQUIRED')
     expect(() => normalizeAsyncPollResult({ status: 'pending', failureDisposition: 'retryable' }))
       .toThrow('ASYNC_PROVIDER_NON_FAILURE_DISPOSITION_FORBIDDEN')
-    expect(normalizeAsyncPollResult({ status: 'failed', failureDisposition: 'permanent', error: 'safety' }))
-      .toMatchObject({ status: 'failed', failureDisposition: 'permanent' })
+    expect(() => normalizeAsyncPollResult({ status: 'failed', failureDisposition: 'permanent', error: 'safety' }))
+      .toThrow('ASYNC_PROVIDER_FAILURE_CODE_REQUIRED')
+    expect(normalizeAsyncPollResult({
+      status: 'failed',
+      failureDisposition: 'permanent',
+      errorCode: 'EXTERNAL_ERROR',
+      error: 'safety',
+    })).toMatchObject({
+      status: 'failed',
+      failureDisposition: 'permanent',
+      errorCode: 'EXTERNAL_ERROR',
+    })
   })
 
   it('parses standard FAL externalId with endpoint', () => {

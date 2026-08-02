@@ -28,7 +28,6 @@ type CanvasOperationPhase = 'idle' | 'planning' | 'confirming' | 'executing'
 
 export function useCanvasOperationAction(params: {
   readonly projectId: string
-  readonly episodeId: string | null
 }) {
   const t = useTranslations('projectWorkflow.canvas.workspace.operationConfirm')
   const { showError } = useToast()
@@ -37,10 +36,7 @@ export function useCanvasOperationAction(params: {
   const [pending, setPending] = useState<PendingCanvasOperation | null>(null)
   const busyRef = useRef(false)
 
-  const context = useMemo(
-    () => params.episodeId ? { episodeId: params.episodeId } : {},
-    [params.episodeId],
-  )
+  const context = useMemo(() => ({}), [])
 
   const begin = useCallback(async (request: CanvasOperationRequest) => {
     if (phase !== 'idle' || busyRef.current) return
@@ -82,7 +78,7 @@ export function useCanvasOperationAction(params: {
         operationRequestId: grant.operationRequestId,
       })
       await queryClient.invalidateQueries({
-        queryKey: queryKeys.project.creativeResourcesAll(params.projectId),
+        queryKey: queryKeys.project.workspaceResourcesAll(params.projectId),
       })
       pending.onAccepted?.(pending.plan)
       setPending(null)

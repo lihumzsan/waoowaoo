@@ -7,27 +7,20 @@ export type TaskSchedulerClass = keyof WorkflowConcurrencyConfig
 export type TaskTargetTerminalProjector = 'none'
 
 export type TaskExecutionHandlerKey =
-  | 'creative_work'
-  | 'creative_resource_image'
-  | 'creative_resource_web_reference'
-  | 'creative_resource_audio'
-  | 'creative_resource_voice'
-  | 'creative_resource_video'
-  | 'creative_resource_video_merge'
+  | 'workspace_resource_image'
+  | 'workspace_resource_audio'
+  | 'workspace_resource_voice'
+  | 'workspace_resource_video'
+  | 'workspace_resource_video_merge'
 
 export type TaskBillingPolicy = 'none' | 'text' | 'image' | 'video' | 'music' | 'voice'
 export type TaskExecutionProtocol = 'handler_result_checkpoint'
 export type TaskTerminalSuccessHandoff = 'handler_result_checkpoint'
-export type TaskTerminalOutputMaterializer =
-  | 'none'
-  | 'creative_resource'
-  | 'domain_creative_resource'
+export type TaskTerminalOutputMaterializer = 'none' | 'workspace_resource'
 export type TaskSubmissionTargetOwnership = 'none'
 export type TaskTerminalModelKeyRequirement = 'required' | 'none'
 export type TaskContinuationResultProjection = 'full' | 'reference'
 export type TaskLifecyclePayloadProjection = 'full' | 'reference'
-
-export const CREATIVE_WORK_EXECUTION_DEADLINE_MS = 20 * 60_000
 
 export type TaskDefinition = {
   executionHandler: TaskExecutionHandlerKey
@@ -87,97 +80,68 @@ function definition(
 }
 
 export const TASK_DEFINITIONS = {
-  [TASK_TYPE.CREATIVE_WORK]: definition(
-    'creative_work',
-    'none',
-    3,
-    'analysis',
-    'creative_resources',
-    'none',
-    'none',
-    'none',
-    'domain_creative_resource',
-    'reference',
-    'reference',
-    'required',
-    CREATIVE_WORK_EXECUTION_DEADLINE_MS,
-  ),
-  [TASK_TYPE.CREATIVE_RESOURCE_IMAGE]: definition(
-    'creative_resource_image',
+  [TASK_TYPE.WORKSPACE_RESOURCE_IMAGE]: definition(
+    'workspace_resource_image',
     'image',
     3,
     'image',
-    'creative_resources',
+    'workspace_resources',
     'none',
     'none',
     'none',
-    'creative_resource',
+    'workspace_resource',
     'reference',
     'reference',
   ),
-  [TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE]: definition(
-    'creative_resource_web_reference',
-    'none',
-    3,
-    'image',
-    'creative_resources',
-    'none',
-    'none',
-    'none',
-    'creative_resource',
-    'reference',
-    'reference',
-    'none',
-  ),
-  [TASK_TYPE.CREATIVE_RESOURCE_AUDIO]: definition(
-    'creative_resource_audio',
+  [TASK_TYPE.WORKSPACE_RESOURCE_AUDIO]: definition(
+    'workspace_resource_audio',
     'music',
     3,
     'image',
-    'creative_resources',
+    'workspace_resources',
     'none',
     'none',
     'none',
-    'creative_resource',
+    'workspace_resource',
     'reference',
     'reference',
   ),
-  [TASK_TYPE.CREATIVE_RESOURCE_VOICE]: definition(
-    'creative_resource_voice',
+  [TASK_TYPE.WORKSPACE_RESOURCE_VOICE]: definition(
+    'workspace_resource_voice',
     'voice',
     3,
     'image',
-    'creative_resources',
+    'workspace_resources',
     'none',
     'none',
     'none',
-    'creative_resource',
+    'workspace_resource',
     'reference',
     'reference',
   ),
-  [TASK_TYPE.CREATIVE_RESOURCE_VIDEO]: definition(
-    'creative_resource_video',
+  [TASK_TYPE.WORKSPACE_RESOURCE_VIDEO]: definition(
+    'workspace_resource_video',
     'video',
     3,
     'video',
-    'creative_resources',
+    'workspace_resources',
     'none',
     'none',
     'none',
-    'creative_resource',
+    'workspace_resource',
     'reference',
     'reference',
   ),
-  [TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE]: definition(
-    'creative_resource_video_merge',
+  [TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE]: definition(
+    'workspace_resource_video_merge',
     'none',
     1,
     'video',
-    'creative_resources',
+    'workspace_resources',
     'none',
     'none',
     'none',
-    'creative_resource',
+    'workspace_resource',
     'reference',
     'reference',
     'none',

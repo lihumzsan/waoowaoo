@@ -10,31 +10,6 @@ import {
 import { getAssetKindRegistration } from '@/lib/assets/kinds/registry'
 import type { MediaRef } from '@/types/project'
 
-type CharacterAppearanceRecord = {
-  id: string
-  appearanceIndex: number
-  changeReason: string
-  description: string | null
-  imageUrl: string | null
-  media?: MediaRef | null
-  imageUrls: string[]
-  imageMedias?: MediaRef[]
-  selectedIndex: number | null
-  previousImageUrl: string | null
-  previousMedia?: MediaRef | null
-  previousImageUrls?: string[]
-  previousImageMedias?: MediaRef[]
-}
-
-type ProjectCharacterRecord = {
-  id: string
-  name: string
-  introduction?: string | null
-  profileData?: string | null
-  profileConfirmed?: boolean | null
-  appearances: CharacterAppearanceRecord[]
-}
-
 type GlobalCharacterRecord = {
   id: string
   name: string
@@ -67,25 +42,11 @@ type LocationImageRecord = {
   isSelected: boolean
 }
 
-type ProjectLocationRecord = {
-  id: string
-  name: string
-  summary: string | null
-  images: LocationImageRecord[]
-}
-
 type GlobalLocationRecord = {
   id: string
   name: string
   summary: string | null
   folderId: string | null
-  images: LocationImageRecord[]
-}
-
-type ProjectPropRecord = {
-  id: string
-  name: string
-  summary: string | null
   images: LocationImageRecord[]
 }
 
@@ -132,49 +93,6 @@ function createVariant(params: {
     },
     taskRefs: [],
     taskState: createIdleTaskState(),
-  }
-}
-
-export function mapProjectCharacterToAsset(character: ProjectCharacterRecord): CharacterAssetSummary {
-  const registration = getAssetKindRegistration('character')
-  const variants = character.appearances.map((appearance) => {
-    const imageMedias = appearance.imageMedias ?? []
-    const previousImageMedias = appearance.previousImageMedias ?? []
-    const renders = appearance.imageUrls.map((imageUrl, renderIndex) =>
-      createRender({
-        id: `${appearance.id}:${renderIndex}`,
-        index: renderIndex,
-        imageUrl,
-        media: imageMedias[renderIndex] ?? null,
-        isSelected: appearance.selectedIndex === renderIndex,
-        previousImageUrl: appearance.previousImageUrls?.[renderIndex] ?? appearance.previousImageUrl ?? null,
-        previousMedia: previousImageMedias[renderIndex] ?? appearance.previousMedia ?? null,
-      }),
-    )
-    return createVariant({
-      id: appearance.id,
-      index: appearance.appearanceIndex,
-      label: appearance.changeReason,
-      description: appearance.description,
-      selectedRenderIndex: appearance.selectedIndex,
-      renders,
-    })
-  })
-
-  return {
-    id: character.id,
-    scope: 'project',
-    kind: 'character',
-    family: 'visual',
-    name: character.name,
-    folderId: null,
-    capabilities: registration.capabilities,
-    taskRefs: [],
-    taskState: createIdleTaskState(),
-    variants,
-    introduction: character.introduction ?? null,
-    profileData: character.profileData ?? null,
-    profileConfirmed: character.profileConfirmed ?? null,
   }
 }
 
@@ -246,30 +164,6 @@ function buildLocationVariants(
   })
 }
 
-function mapLocationLikeProjectAsset(
-  kind: 'location' | 'prop',
-  asset: ProjectLocationRecord | ProjectPropRecord,
-): LocationAssetSummary | PropAssetSummary {
-  const registration = getAssetKindRegistration(kind)
-  const variants = buildLocationVariants(asset.images)
-  const selectedVariant = variants.find((variant) => variant.renders[0]?.isSelected)
-  const base = {
-    id: asset.id,
-    scope: 'project' as const,
-    kind,
-    family: 'visual' as const,
-    name: asset.name,
-    folderId: null,
-    capabilities: registration.capabilities,
-    taskRefs: [],
-    taskState: createIdleTaskState(),
-    variants,
-    summary: asset.summary,
-    selectedVariantId: selectedVariant?.id ?? null,
-  }
-  return base
-}
-
 function mapLocationLikeGlobalAsset(
   kind: 'location' | 'prop',
   asset: GlobalLocationRecord | GlobalPropRecord,
@@ -293,16 +187,8 @@ function mapLocationLikeGlobalAsset(
   }
 }
 
-export function mapProjectLocationToAsset(location: ProjectLocationRecord): LocationAssetSummary {
-  return mapLocationLikeProjectAsset('location', location) as LocationAssetSummary
-}
-
 export function mapGlobalLocationToAsset(location: GlobalLocationRecord): LocationAssetSummary {
   return mapLocationLikeGlobalAsset('location', location) as LocationAssetSummary
-}
-
-export function mapProjectPropToAsset(prop: ProjectPropRecord): PropAssetSummary {
-  return mapLocationLikeProjectAsset('prop', prop) as PropAssetSummary
 }
 
 export function mapGlobalPropToAsset(prop: GlobalPropRecord): PropAssetSummary {

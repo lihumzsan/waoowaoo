@@ -1,9 +1,8 @@
 import { prisma } from './prisma'
 
-async function resetCreativeResourceState() {
-  await prisma.creativeResourceBinding.deleteMany()
-  await prisma.creativeResourceLineage.deleteMany()
-  await prisma.creativeResource.deleteMany()
+async function resetWorkspaceResourceState() {
+  await prisma.workspaceResourceLineage.deleteMany()
+  await prisma.workspaceResource.deleteMany()
 }
 
 async function resetAgentTurnState() {
@@ -33,7 +32,7 @@ export async function resetBillingState() {
   await prisma.balanceFreeze.deleteMany()
   await prisma.usageCost.deleteMany()
   await resetAgentTurnState()
-  await resetCreativeResourceState()
+  await resetWorkspaceResourceState()
   await resetTaskExecutionState()
   await resetOperationExecutionState()
   await prisma.inviteRedemption.deleteMany()
@@ -48,7 +47,7 @@ export async function resetBillingState() {
 
 export async function resetTaskState() {
   await resetAgentTurnState()
-  await resetCreativeResourceState()
+  await resetWorkspaceResourceState()
   await resetTaskExecutionState()
   await resetOperationExecutionState()
 }
@@ -61,18 +60,9 @@ export async function resetAssetHubState() {
   await prisma.globalAssetFolder.deleteMany()
 }
 
-export async function resetProjectWorkflowState() {
-  await prisma.characterAppearance.deleteMany()
-  await prisma.locationImage.deleteMany()
-  await prisma.projectCharacter.deleteMany()
-  await prisma.projectLocation.deleteMany()
-  await prisma.projectEpisode.deleteMany()
-}
-
 export async function resetSystemState() {
   await resetTaskState()
   await resetAssetHubState()
-  await resetProjectWorkflowState()
   await prisma.usageCost.deleteMany()
   await prisma.project.deleteMany()
   await prisma.userPreference.deleteMany()

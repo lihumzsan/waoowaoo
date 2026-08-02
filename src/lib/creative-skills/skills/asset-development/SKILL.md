@@ -12,7 +12,7 @@
 - 同一实体的机位、景别、构图、光线或短暂动作变化不能成为新资产。只有独立且持久的视觉身份才拆分。
 - 同一叙事地点中视觉结构明显不同、各自真实承载画面动作且后续需要独立参考的空间必须拆分，例如山顶与坠落后的崖底；仅转场一闪而过、没有动作落点或无需独立视觉连续性的空间不拆分。
 - 同一个 Creative Task 完成筛选和稳定身份设计；不输出独立 extraction Resource、候选台账、最终 Prompt 或第二套资产状态。
-- `canonicalName + kind` 表达稳定生产身份，服务端据此生成 `manifestAssetId`；不得发明数据库 ID、使用数组位置或新增 `other` 类型。
+- `canonicalName + kind` 表达稳定创作身份；不得发明系统 ID、使用数组位置或新增含糊的 `other` 类型。实际身份由输出 WorkspaceResource 路径与 resourceId 拥有。
 
 ## 风格消费边界
 
@@ -89,4 +89,4 @@
 
 ## 边界
 
-本 Skill 只负责 `outputKind=asset_manifest` 的资产筛选和稳定可见设计。唯一项目级呈现政策由 `creative-direction` Skill 负责；最终图片 Prompt、画幅、资产图版式、背景格式和 Provider 参数只由服务端 Asset Prompt Compiler 与 Asset Format Policy 定义。
+本 Skill 只负责资产筛选与稳定可见设计，结果可写为普通资产清单文件。项目级呈现政策由 `creative-direction` Skill 负责；最终图片 Prompt、画幅、版式、背景和 Provider 参数在实际媒体 Operation 中按服务端 Asset Format Policy 编译。

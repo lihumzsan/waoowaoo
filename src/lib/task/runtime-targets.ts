@@ -83,7 +83,7 @@ function target(
 }
 
 export const TASK_RUNTIME_TARGETS = {
-  creativeResource(resourceId: string | null | undefined, types: readonly TaskType[]) {
-    return target('CreativeResource', resourceId, types)
+  workspaceResource(resourceId: string | null | undefined, types: readonly TaskType[]) {
+    return target('WorkspaceResource', resourceId, types)
   },
 } as const

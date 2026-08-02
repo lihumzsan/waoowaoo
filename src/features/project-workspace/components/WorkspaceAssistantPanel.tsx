@@ -7,7 +7,7 @@ import { AppIcon } from '@/components/ui/icons'
 import { useAttachmentFilePicker } from '@/components/project-assistant/useAttachmentFilePicker'
 import {
   isAssistantRuntimeApprovalRequest,
-  isAssistantRuntimeChoiceRequest,
+  isAssistantRuntimeInputRequest,
   readAssistantRuntimeMcpElicitation,
   readAssistantRuntimeUserInputQuestions,
   type AssistantRuntimePendingInteractionView,
@@ -15,7 +15,6 @@ import {
 import {
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_ACCEPT,
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES,
-  type ProjectAssistantTextAttachment,
 } from '@/lib/project-agent/text-attachments'
 import {
   uploadProjectAssistantTextAttachment,
@@ -55,7 +54,6 @@ import {
 } from './workspace-assistant/panel-layout'
 import { useWorkspaceAssistantCanvasFocus } from './workspace-assistant/useWorkspaceAssistantCanvasFocus'
 import { useWorkspaceAssistantComposer } from './workspace-assistant/useWorkspaceAssistantComposer'
-import { useWorkspaceAssistantMessageDispatch } from './workspace-assistant/useWorkspaceAssistantMessageDispatch'
 import { useWorkspaceAssistantPanelResize } from './workspace-assistant/useWorkspaceAssistantPanelResize'
 import { useWorkspaceAssistantRuntime } from './workspace-assistant/useWorkspaceAssistantRuntime'
 import {
@@ -71,18 +69,10 @@ import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
 
 interface WorkspaceAssistantPanelProps {
   projectId: string
-  episodeId?: string
   selection: WorkspaceCanvasSelection | null
   draftRequest: WorkspaceAssistantDraftRequest | null
   onDraftRequestConsumed: (requestId: string) => void
   onClearSelection: () => void
-  autoStartDraft?: {
-    readonly message: string
-    readonly attachments: readonly ProjectAssistantTextAttachment[]
-    readonly mediaAttachments: readonly ProjectAssistantMediaAttachment[]
-  } | null
-  autoStartKey?: string | null
-  onAutoStartConsumed?: () => void
   onActiveOperationChange?: (focusRequest: WorkspaceAssistantActiveFocusRequest | null) => void
 }
 
@@ -156,6 +146,25 @@ function runtimeApprovalTitle(
   const path = interaction.params.path
   if (typeof path === 'string' && path.trim()) return path
   return fallback
+}
+
+function runtimePermissionApprovalFacts(
+  interaction: AssistantRuntimePendingInteractionView,
+): readonly { readonly kind: 'cwd' | 'network' | 'fileSystem'; readonly value: string }[] {
+  if (interaction.method !== 'item/permissions/requestApproval' || !isRecord(interaction.params)) return []
+  const facts: { kind: 'cwd' | 'network' | 'fileSystem'; value: string }[] = []
+  if (typeof interaction.params.cwd === 'string' && interaction.params.cwd.trim()) {
+    facts.push({ kind: 'cwd', value: interaction.params.cwd })
+  }
+  if (!isRecord(interaction.params.permissions)) return facts
+  const permissions = interaction.params.permissions
+  if (permissions.network !== null && permissions.network !== undefined) {
+    facts.push({ kind: 'network', value: JSON.stringify(permissions.network) })
+  }
+  if (permissions.fileSystem !== null && permissions.fileSystem !== undefined) {
+    facts.push({ kind: 'fileSystem', value: JSON.stringify(permissions.fileSystem) })
+  }
+  return facts
 }
 
 type RuntimeRequestContent =
@@ -319,7 +328,7 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
         ))}
         {error ? (
           <div role="alert" className="text-xs text-[var(--glass-tone-warn-fg)]">
-            {t('cards.choiceSubmitErrorFallback')}
+            {t('cards.interactionSubmitErrorFallback')}
           </div>
         ) : null}
         <button
@@ -337,7 +346,7 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
             })
           }}
         >
-          {submitting ? t('cards.choiceSubmitting') : t('cards.confirmContinue')}
+          {submitting ? t('cards.interactionSubmitting') : t('cards.confirmContinue')}
         </button>
       </div>
     )
@@ -529,7 +538,7 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
       ) : null}
       {error ? (
         <div role="alert" className="text-xs text-[var(--glass-tone-warn-fg)]">
-          {t('cards.choiceSubmitErrorFallback')}
+          {t('cards.interactionSubmitErrorFallback')}
         </div>
       ) : null}
       <div className="flex gap-2">
@@ -543,7 +552,7 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
             _meta: null,
           })}
         >
-          {submitting ? t('cards.choiceSubmitting') : t('cards.confirmContinue')}
+          {submitting ? t('cards.interactionSubmitting') : t('cards.confirmContinue')}
         </button>
         <button
           type="button"
@@ -560,14 +569,10 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
 
 export default function WorkspaceAssistantPanel({
   projectId,
-  episodeId,
   selection,
   draftRequest,
   onDraftRequestConsumed,
   onClearSelection,
-  autoStartDraft,
-  autoStartKey,
-  onAutoStartConsumed,
   onActiveOperationChange,
 }: WorkspaceAssistantPanelProps) {
   const t = useTranslations('assistantAgent')
@@ -575,11 +580,10 @@ export default function WorkspaceAssistantPanel({
   const resolveClientError = useClientErrorMessage()
   const assistantRuntime = useWorkspaceAssistantRuntime({
     projectId,
-    episodeId,
     selectedScopeRef: selection?.selectedScopeRef ?? null,
     selectedAssetId: selection?.selectedAssetId ?? null,
   })
-  const panelScopeKey = `${projectId}:${episodeId ?? ''}`
+  const panelScopeKey = projectId
   const panelScopeKeyRef = useRef(panelScopeKey)
   panelScopeKeyRef.current = panelScopeKey
   const panelResize = useWorkspaceAssistantPanelResize()
@@ -664,15 +668,6 @@ export default function WorkspaceAssistantPanel({
     setAttachmentError(null)
   }, [panelScopeKey])
 
-  useWorkspaceAssistantMessageDispatch({
-    autoStartDraft,
-    autoStartKey,
-    storageLoading: assistantRuntime.viewLoading,
-    pending: assistantRuntime.pending,
-    onAutoStartConsumed,
-    sendMessage: assistantRuntime.sendMessage,
-    sendHiddenMessage: assistantRuntime.sendHiddenMessage,
-  })
   useWorkspaceAssistantCanvasFocus({
     view: assistantRuntime.view,
     storageLoading: assistantRuntime.viewLoading,
@@ -686,7 +681,7 @@ export default function WorkspaceAssistantPanel({
   const serverPendingApproval = isAssistantRuntimeApprovalRequest(pendingInteraction)
     ? pendingInteraction
     : null
-  const activeRuntimeRequest = isAssistantRuntimeChoiceRequest(pendingInteraction)
+  const activeRuntimeRequest = isAssistantRuntimeInputRequest(pendingInteraction)
     ? pendingInteraction
     : null
   const displayedRuntimeRequest = serverPendingApproval ? null : activeRuntimeRequest
@@ -824,7 +819,7 @@ export default function WorkspaceAssistantPanel({
           <WorkspaceAssistantRepeatedToolCallGroupProvider messages={assistantRuntime.messages}>
             <AssistantRuntimeProvider runtime={assistantRuntime.runtime}>
               <ThreadPrimitive.Root
-                key={`${projectId}:${episodeId ?? ''}`}
+                key={projectId}
                 className="relative flex h-full min-h-0 flex-col"
               >
                 <WorkspaceAssistantSettings />
@@ -917,6 +912,13 @@ export default function WorkspaceAssistantPanel({
                                   t('cards.confirmationRequired'),
                                 ),
                                 operationPlan: null,
+                                details: runtimePermissionApprovalFacts(serverPendingApproval).map((fact) => {
+                                  switch (fact.kind) {
+                                    case 'cwd': return t('runtime.permission.cwd', { value: fact.value })
+                                    case 'network': return t('runtime.permission.network', { value: fact.value })
+                                    case 'fileSystem': return t('runtime.permission.fileSystem', { value: fact.value })
+                                  }
+                                }),
                               }]}
                               subtitle={t('cards.confirmationRequired')}
                               onConfirm={() =>
@@ -942,7 +944,7 @@ export default function WorkspaceAssistantPanel({
                       <WorkspaceAssistantRuntimeRequestCard
                         key={displayedRuntimeRequest.interactionId}
                         interaction={displayedRuntimeRequest}
-                        onSubmit={assistantRuntime.submitChoiceResponse}
+                        onSubmit={assistantRuntime.submitInteractionResponse}
                       />
                     </div>
                   ) : null}

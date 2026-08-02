@@ -19,10 +19,10 @@ function buildInput(params: {
   return {
     userId: params.userId,
     projectId: params.projectId,
-    type: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
-    targetType: 'CreativeResource',
+    type: TASK_TYPE.WORKSPACE_RESOURCE_IMAGE,
+    targetType: 'WorkspaceResource',
     targetId: `resource-${params.suffix}`,
-    dedupeKey: `creative-resource-image:${params.projectId}:${params.suffix}`,
+    dedupeKey: `workspace-resource-image:${params.projectId}:${params.suffix}`,
     payload: {
       lifecycleProjection: {
         resources: [{
@@ -66,39 +66,6 @@ describe('transactional Task batch dedupe', () => {
 
     expect(created).toMatchObject({ deduped: false, task: { status: TASK_STATUS.QUEUED } })
     await expect(prisma.taskEvent.count({ where: { taskId: created?.task.id } })).resolves.toBe(1)
-  })
-
-  it('rejects an optional episode scope that belongs to another project', async () => {
-    const user = await createTestUser()
-    const project = await createTestProject(user.id)
-    const otherProject = await createTestProject(user.id)
-    const otherEpisode = await prisma.projectEpisode.create({
-      data: { projectId: otherProject.id, episodeNumber: 1, name: 'Other project episode' },
-    })
-    const input: CreateTaskInput = {
-      userId: user.id,
-      projectId: project.id,
-      type: TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
-      targetType: 'CreativeResource',
-      targetId: 'video-resource-invalid-scope',
-      payload: {
-        lifecycleProjection: {
-          resources: [{
-            resourceId: 'video-resource-invalid-scope',
-            mediaType: 'video',
-            schemaId: 'generic.video',
-            name: 'Invalid scope video',
-          }],
-        },
-        resourceId: 'video-resource-invalid-scope',
-        meta: { locale: 'en' },
-      },
-    }
-
-    await expect(persistBatch([{ ...input, episodeId: otherEpisode.id }])).rejects.toThrow(
-      `TASK_EPISODE_SCOPE_MISMATCH:${project.id}:${otherEpisode.id}`,
-    )
-    await expect(prisma.task.count()).resolves.toBe(0)
   })
 
   it('strictly reuses an active Task only when its fingerprint and durable bundle match', async () => {
@@ -224,8 +191,8 @@ describe('transactional Task batch dedupe', () => {
       data: {
         userId: user.id,
         projectId: project.id,
-        type: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
-        targetType: 'CreativeResource',
+        type: TASK_TYPE.WORKSPACE_RESOURCE_IMAGE,
+        targetType: 'WorkspaceResource',
         targetId: 'resource-progress',
         status: TASK_STATUS.PROCESSING,
         attempt: 1,
@@ -234,7 +201,7 @@ describe('transactional Task batch dedupe', () => {
           resourceId: 'resource-progress',
           imageModel: 'fal::image-model',
           referenceMode: 'asset',
-          meta: { locale: 'zh', flowId: 'creative_resource:image' },
+          meta: { locale: 'zh', flowId: 'workspace_resource:image' },
           ui: { intent: 'generate', hasOutputAtStart: true },
         },
         queuedAt: new Date(),
@@ -243,7 +210,7 @@ describe('transactional Task batch dedupe', () => {
     })
 
     expect(await tryUpdateTaskProgress(task.id, 1, 18, {
-      stage: 'generate_creative_resource_image',
+      stage: 'generate_workspace_resource_image',
       externalPhase: 'running',
       streamRunId: 'event-only-stream',
       output: 'event-only-output',
@@ -257,11 +224,11 @@ describe('transactional Task batch dedupe', () => {
     const payload = asRecord(stored?.payload)
     expect(stored?.progress).toBe(18)
     expect(payload).toMatchObject({
-      stage: 'generate_creative_resource_image',
+      stage: 'generate_workspace_resource_image',
       externalPhase: 'running',
       imageModel: 'fal::image-model',
       referenceMode: 'asset',
-      meta: { locale: 'zh', flowId: 'creative_resource:image' },
+      meta: { locale: 'zh', flowId: 'workspace_resource:image' },
       ui: { intent: 'generate', hasOutputAtStart: true },
     })
     expect(payload).not.toHaveProperty('streamRunId')
@@ -276,8 +243,8 @@ describe('transactional Task batch dedupe', () => {
       data: {
         userId: user.id,
         projectId: project.id,
-        type: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
-        targetType: 'CreativeResource',
+        type: TASK_TYPE.WORKSPACE_RESOURCE_IMAGE,
+        targetType: 'WorkspaceResource',
         targetId: 'resource-stale-attempt',
         status: TASK_STATUS.PROCESSING,
         attempt: 2,

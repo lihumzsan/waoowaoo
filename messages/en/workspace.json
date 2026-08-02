@@ -33,7 +33,7 @@
   },
   "deleteFailed": "Failed to delete project",
   "totalProjects": "{count} projects in total",
-  "statsEpisodes": "Episodes",
+  "statsFolders": "Folders",
   "statsImages": "Images",
   "statsVideos": "Videos",
   "noContent": "No content yet",

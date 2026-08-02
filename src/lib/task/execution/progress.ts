@@ -147,7 +147,6 @@ export async function projectTaskProgress(input: {
     taskType: data.type,
     targetType: data.targetType,
     targetId: data.targetId,
-    episodeId: data.episodeId || null,
     payload: {
       progress: value,
       ...nextPayload,
@@ -184,7 +183,6 @@ export async function reportTaskStreamChunk(
     taskType: data.type,
     targetType: data.targetType,
     targetId: data.targetId,
-    episodeId: data.episodeId || null,
     payload: {
       ...mergedPayload,
       trace: {

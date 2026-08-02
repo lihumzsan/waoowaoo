@@ -4,7 +4,6 @@ import type {
   OperationChannelsDraft,
   OperationConfirmation,
   OperationGroupPath,
-  OperationPrerequisites,
   ProjectAgentToolInputSchema,
   ProjectAgentOperationRegistry,
   ProjectAgentOperationRegistryDraft,
@@ -14,7 +13,6 @@ import { createProjectAgentToolInputSchema } from './tool-input-schema'
 export interface OperationPackDefaults {
   groupPath: OperationGroupPath
   channels: OperationChannelsDraft
-  prerequisites: OperationPrerequisites
   confirmation: OperationConfirmation
 }
 
@@ -40,17 +38,6 @@ function normalizeChannels(channels: OperationChannelsDraft): OperationChannels 
     api: channels.api === true,
     mcp: channels.mcp === true,
   }
-}
-
-function mergePrerequisites(
-  operation: { id: string; prerequisites?: Partial<OperationPrerequisites> },
-  defaults: OperationPackDefaults,
-): OperationPrerequisites {
-  const episodeId = operation.prerequisites?.episodeId ?? defaults.prerequisites.episodeId
-  if (episodeId !== 'required' && episodeId !== 'optional' && episodeId !== 'forbidden') {
-    throw new Error(`PROJECT_AGENT_OPERATION_PREREQUISITE_EPISODE_INVALID:${String(operation.id)}`)
-  }
-  return { episodeId }
 }
 
 function mergeConfirmation(
@@ -132,7 +119,6 @@ export function withOperationPack(
   const normalizedDefaults: OperationPackDefaults = {
     groupPath: normalizeGroupPath(defaults.groupPath),
     channels: normalizeChannels(defaults.channels),
-    prerequisites: defaults.prerequisites,
     confirmation: defaults.confirmation,
   }
 
@@ -171,7 +157,6 @@ export function withOperationPack(
       // receipt whose outcome survives costs at most one extra call. Only a
       // result that exists nowhere else must opt out.
       modelResultRetention: operation.modelResultRetention ?? 'recoverable',
-      prerequisites: mergePrerequisites(operation, normalizedDefaults),
       confirmation: mergeConfirmation(operation, normalizedDefaults),
       resourceContract: operation.resourceContract ?? {
         kind: 'none' as const,

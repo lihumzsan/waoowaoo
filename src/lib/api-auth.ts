@@ -69,31 +69,6 @@ async function requireExistingSession(): Promise<AuthSession | null> {
 }
 
 /**
- * 可选的关联数据加载配置
- */
-export type ProjectAuthIncludes = {
-    characters?: boolean
-    locations?: boolean
-    episodes?: boolean
-}
-
-interface AuthCharacterLike {
-    name: string
-    introduction?: string | null
-    [key: string]: unknown
-}
-
-interface AuthLocationLike {
-    name: string
-    [key: string]: unknown
-}
-
-interface AuthEpisodeLike {
-    id: string
-    [key: string]: unknown
-}
-
-/**
  * 基础 projectData 类型
  */
 export interface NovelDataBase {
@@ -104,15 +79,7 @@ export interface NovelDataBase {
 /**
  * 根据 include 选项推断的 projectData 类型
  */
-export type NovelDataWithIncludes<T extends ProjectAuthIncludes> = NovelDataBase
-    & (T['characters'] extends true ? { characters: AuthCharacterLike[] } : Record<string, never>)
-    & (T['locations'] extends true ? { locations: AuthLocationLike[] } : Record<string, never>)
-    & (T['episodes'] extends true ? { episodes: AuthEpisodeLike[] } : Record<string, never>)
-
-/**
- * 完整的认证上下文（带泛型）
- */
-export interface ProjectAuthContextWithIncludes<T extends ProjectAuthIncludes = ProjectAuthIncludes> {
+export interface ProjectAuthContext {
     session: AuthSession
     project: {
         id: string
@@ -120,13 +87,8 @@ export interface ProjectAuthContextWithIncludes<T extends ProjectAuthIncludes = 
         name: string
         [key: string]: unknown
     }
-    projectData: NovelDataWithIncludes<T>
+    projectData: NovelDataBase
 }
-
-/**
- * 向后兼容的类型别名
- */
-export type ProjectAuthContext = ProjectAuthContextWithIncludes<ProjectAuthIncludes>
 
 // ============================================================
 // 错误响应工具
@@ -222,10 +184,7 @@ export async function requireAuth(): Promise<AuthSession> {
  * // authResult.projectData.characters 和 locations 自动可用
  * ```
  */
-export async function requireProjectAuth<T extends ProjectAuthIncludes = ProjectAuthIncludes>(
-    projectId: string,
-    options?: { include?: T }
-): Promise<ProjectAuthContextWithIncludes<T> | NextResponse> {
+export async function requireProjectAuth(projectId: string): Promise<ProjectAuthContext | NextResponse> {
     // 1. 验证 Session
     const session = await requireExistingSession()
     if (!session) {
@@ -233,25 +192,12 @@ export async function requireProjectAuth<T extends ProjectAuthIncludes = Project
     }
     bindAuthLogContext(session, projectId)
 
-    // 2. 构建动态 include 对象
-    const projectIncludes: Record<string, boolean> = {}
-    if (options?.include?.characters) {
-        projectIncludes.characters = true
-    }
-    if (options?.include?.locations) {
-        projectIncludes.locations = true
-    }
-    if (options?.include?.episodes) {
-        projectIncludes.episodes = true
-    }
-    // 3. 获取项目基础信息
-    const hasIncludes = Object.keys(projectIncludes).length > 0
+    // 2. 获取项目基础信息
     const project = await withRetry({
         scope: 'prisma:requireProjectAuth',
         policy: RETRY_POLICY.prisma,
         run: async () => await prisma.project.findUnique({
             where: { id: projectId },
-            ...(hasIncludes ? { include: projectIncludes } : {}),
         }),
     })
 
@@ -274,9 +220,6 @@ export async function requireProjectAuth<T extends ProjectAuthIncludes = Project
         editModel?: string | null
         videoModel?: string | null
         musicModel?: string | null
-        characters?: AuthCharacterLike[]
-        locations?: AuthLocationLike[]
-        episodes?: AuthEpisodeLike[]
         [key: string]: unknown
     }
     const processedProjectData = {
@@ -287,15 +230,12 @@ export async function requireProjectAuth<T extends ProjectAuthIncludes = Project
         editModel: extractModelKey(rawProjectData.editModel),
         videoModel: extractModelKey(rawProjectData.videoModel),
         musicModel: extractModelKey(rawProjectData.musicModel),
-        ...(rawProjectData.characters ? { characters: rawProjectData.characters } : {}),
-        ...(rawProjectData.locations ? { locations: rawProjectData.locations } : {}),
-        ...(rawProjectData.episodes ? { episodes: rawProjectData.episodes } : {}),
     }
 
     return {
         session,
         project,
-        projectData: processedProjectData as unknown as NovelDataWithIncludes<T>
+        projectData: processedProjectData
     }
 }
 

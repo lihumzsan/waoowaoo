@@ -38,15 +38,15 @@ export function buildOptimisticCanvasLayoutSnapshot(params: {
 }): ProjectCanvasLayoutSnapshot {
   return {
     projectId: params.projectId,
-    episodeId: params.input.episodeId,
+    folderKey: params.input.folderKey,
     schemaVersion: CANVAS_LAYOUT_SCHEMA_VERSION,
     viewport: params.input.viewport,
     nodeLayouts: params.input.nodeLayouts,
   }
 }
 
-async function readCanvasLayout(projectId: string, episodeId: string): Promise<CanvasLayoutPersistenceResult> {
-  const search = new URLSearchParams({ episodeId })
+async function readCanvasLayout(projectId: string, folderKey: string): Promise<CanvasLayoutPersistenceResult> {
+  const search = new URLSearchParams({ folderKey })
   const response = await apiFetch(`/api/projects/${projectId}/canvas-layout?${search.toString()}`)
   await requireSuccessfulResponse(response)
   const payload = await response.json() as unknown
@@ -73,14 +73,14 @@ async function writeCanvasLayout(
 
 export function useCanvasLayoutPersistence(params: {
   readonly projectId: string
-  readonly episodeId: string
+  readonly folderKey: string
 }) {
   const queryClient = useQueryClient()
-  const layoutQueryKey = queryKeys.project.canvasLayout(params.projectId, params.episodeId)
+  const layoutQueryKey = queryKeys.project.canvasLayout(params.projectId, params.folderKey)
   const query = useQuery({
     queryKey: layoutQueryKey,
-    queryFn: () => readCanvasLayout(params.projectId, params.episodeId),
-    enabled: Boolean(params.projectId && params.episodeId),
+    queryFn: () => readCanvasLayout(params.projectId, params.folderKey),
+    enabled: Boolean(params.projectId && params.folderKey),
   })
 
   const setLayoutCache = (layout: ProjectCanvasLayoutSnapshot | null) => {
@@ -122,6 +122,7 @@ export function useCanvasLayoutPersistence(params: {
     layoutWarningCode: query.data?.warningCode ?? null,
     isLoading: query.isLoading,
     loadError: query.error,
+    reloadLayout: query.refetch,
     saveLayout: mutation.mutateAsync,
     isSaving: mutation.isPending,
     saveError: mutation.error,

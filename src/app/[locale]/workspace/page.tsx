@@ -456,27 +456,27 @@ export default function WorkspacePage() {
                     {project.name}
                   </h3>
 
-                  {/* 描述：优先用户描述，fallback 到第一集故事 */}
-                  {(project.description || project.stats?.firstEpisodePreview) && (
+                  {/* 项目描述 */}
+                  {project.description && (
                     <div className="flex items-start gap-2 mb-4">
                       <AppIcon name="fileText" className="w-4 h-4 text-[var(--glass-text-tertiary)] mt-0.5 flex-shrink-0" />
                       <p className="text-sm text-[var(--glass-text-secondary)] line-clamp-2 leading-relaxed">
-                        {project.description || project.stats?.firstEpisodePreview}
+                        {project.description}
                       </p>
                     </div>
                   )}
 
                   {/* 统计信息 - 整行统一渐变 */}
-                  {project.stats && (project.stats.episodes > 0 || project.stats.images > 0 || project.stats.videos > 0) ? (
+                  {project.stats && project.stats.resources > 0 ? (
                     <div className="flex items-center gap-2 mb-3">
                       {/* 共享渐变定义 */}
                       <IconGradientDefs className="w-0 h-0 absolute" aria-hidden="true" />
                       <AppIcon name="statsBarGradient" className="w-4 h-4 flex-shrink-0" />
                       <div className="flex items-center gap-3 text-sm font-semibold bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">
-                        {project.stats.episodes > 0 && (
-                          <span className="flex items-center gap-1" title={t('statsEpisodes')}>
-                            <AppIcon name="statsEpisodeGradient" className="w-3.5 h-3.5" />
-                            {project.stats.episodes}
+                        {project.stats.folders > 0 && (
+                          <span className="flex items-center gap-1" title={t('statsFolders')}>
+                            <AppIcon name="folder" className="w-3.5 h-3.5" />
+                            {project.stats.folders}
                           </span>
                         )}
                         {project.stats.images > 0 && (

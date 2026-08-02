@@ -2,13 +2,11 @@ import {
   getTaskDefinition,
   type TaskExecutionHandlerKey,
 } from '@/lib/task/definition'
-import { handleCreativeResourceAudioTask } from './handlers/creative-resource-audio'
-import { handleCreativeResourceImageTask } from './handlers/creative-resource-image'
-import { handleCreativeResourceVideoMergeTask } from './handlers/creative-resource-video-merge'
-import { handleCreativeResourceVideoTask } from './handlers/creative-resource-video'
-import { handleCreativeResourceVoiceTask } from './handlers/creative-resource-voice'
-import { handleCreativeResourceWebReferenceTask } from './handlers/creative-resource-web-reference'
-import { handleCreativeWorkTask } from './handlers/creative-work'
+import { handleWorkspaceResourceAudioTask } from './handlers/workspace-resource-audio'
+import { handleWorkspaceResourceImageTask } from './handlers/workspace-resource-image'
+import { handleWorkspaceResourceVideoMergeTask } from './handlers/workspace-resource-video-merge'
+import { handleWorkspaceResourceVideoTask } from './handlers/workspace-resource-video'
+import { handleWorkspaceResourceVoiceTask } from './handlers/workspace-resource-voice'
 import { reportTaskProgress } from './progress'
 import type {
   TaskExecutionContext,
@@ -17,13 +15,11 @@ import type {
 } from './context'
 
 const TASK_EXECUTION_HANDLERS = {
-  creative_work: handleCreativeWorkTask,
-  creative_resource_image: handleCreativeResourceImageTask,
-  creative_resource_web_reference: handleCreativeResourceWebReferenceTask,
-  creative_resource_audio: handleCreativeResourceAudioTask,
-  creative_resource_voice: handleCreativeResourceVoiceTask,
-  creative_resource_video: handleCreativeResourceVideoTask,
-  creative_resource_video_merge: handleCreativeResourceVideoMergeTask,
+  workspace_resource_image: handleWorkspaceResourceImageTask,
+  workspace_resource_audio: handleWorkspaceResourceAudioTask,
+  workspace_resource_voice: handleWorkspaceResourceVoiceTask,
+  workspace_resource_video: handleWorkspaceResourceVideoTask,
+  workspace_resource_video_merge: handleWorkspaceResourceVideoMergeTask,
 } satisfies Record<TaskExecutionHandlerKey, TaskExecutionHandler>
 
 /**

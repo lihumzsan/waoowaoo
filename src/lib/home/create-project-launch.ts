@@ -20,9 +20,6 @@ interface ProjectCreationPayload {
   project?: {
     id?: string | null
   } | null
-  episode?: {
-    id?: string | null
-  } | null
 }
 
 interface ApiFetchLike {
@@ -36,13 +33,11 @@ export interface CreateHomeProjectLaunchParams {
   projectName: string
   storyText: string
   videoRatio: ProjectVideoRatio
-  episodeName: string
   hasAssistantDraftContent?: boolean
 }
 
 export interface CreateHomeProjectLaunchResult {
   projectId: string
-  episodeId: string
   target: HomeWorkspaceLaunchTarget
 }
 
@@ -67,37 +62,28 @@ function readNestedString(
   return typeof value === 'string' && value.trim() ? value : null
 }
 
-async function readHomeProjectLaunchIds(response: Response): Promise<{
-  readonly projectId: string
-  readonly episodeId: string
-}> {
+async function readHomeProjectLaunchId(response: Response): Promise<string> {
   const payload = await response.json() as ProjectCreationPayload
   const projectId = readNestedString(readObject(payload), 'project', 'id')
   if (!projectId) {
     throw new Error('Project creation response missing project id')
   }
-  const episodeId = readNestedString(readObject(payload), 'episode', 'id')
-  if (!episodeId) {
-    throw new Error('Project creation response missing initial episode id')
-  }
-  return { projectId, episodeId }
+  return projectId
 }
 
-export function buildHomeWorkspaceLaunchTarget(projectId: string, episodeId: string): HomeWorkspaceLaunchTarget {
+export function buildHomeWorkspaceLaunchTarget(projectId: string): HomeWorkspaceLaunchTarget {
   const params = new URLSearchParams({
-    episode: episodeId,
     [HOME_ASSISTANT_AUTOSTART_QUERY]: HOME_ASSISTANT_AUTOSTART_VALUE,
   })
   return `/workspace/${encodeURIComponent(projectId)}?${params.toString()}`
 }
 
-export function buildHomeAssistantAutoStartStorageKey(projectId: string, episodeId: string): string {
-  return `${HOME_ASSISTANT_AUTOSTART_STORAGE_PREFIX}:${projectId}:${episodeId}`
+export function buildHomeAssistantAutoStartStorageKey(projectId: string): string {
+  return `${HOME_ASSISTANT_AUTOSTART_STORAGE_PREFIX}:${projectId}`
 }
 
 export function writeHomeAssistantAutoStartDraft(input: {
   readonly projectId: string
-  readonly episodeId: string
   readonly message: string
   readonly attachments?: readonly ProjectAssistantTextAttachment[]
   readonly mediaAttachments?: readonly ProjectAssistantMediaAttachment[]
@@ -112,7 +98,7 @@ export function writeHomeAssistantAutoStartDraft(input: {
     throw new Error('HOME_ASSISTANT_AUTOSTART_DRAFT_EMPTY')
   }
   window.sessionStorage.setItem(
-    buildHomeAssistantAutoStartStorageKey(input.projectId, input.episodeId),
+    buildHomeAssistantAutoStartStorageKey(input.projectId),
     JSON.stringify({
       message,
       attachments,
@@ -153,16 +139,16 @@ function parseHomeAssistantAutoStartDraft(rawValue: string | null): HomeAssistan
     : null
 }
 
-export function readHomeAssistantAutoStartDraft(projectId: string, episodeId: string): HomeAssistantAutoStartDraft | null {
+export function readHomeAssistantAutoStartDraft(projectId: string): HomeAssistantAutoStartDraft | null {
   if (typeof window === 'undefined') return null
   return parseHomeAssistantAutoStartDraft(
-    window.sessionStorage.getItem(buildHomeAssistantAutoStartStorageKey(projectId, episodeId)),
+    window.sessionStorage.getItem(buildHomeAssistantAutoStartStorageKey(projectId)),
   )
 }
 
-export function removeHomeAssistantAutoStartDraft(projectId: string, episodeId: string): void {
+export function removeHomeAssistantAutoStartDraft(projectId: string): void {
   if (typeof window === 'undefined') return
-  window.sessionStorage.removeItem(buildHomeAssistantAutoStartStorageKey(projectId, episodeId))
+  window.sessionStorage.removeItem(buildHomeAssistantAutoStartStorageKey(projectId))
 }
 
 export async function createHomeProjectLaunch({
@@ -170,7 +156,6 @@ export async function createHomeProjectLaunch({
   projectName,
   storyText,
   videoRatio,
-  episodeName,
   hasAssistantDraftContent = false,
 }: CreateHomeProjectLaunchParams): Promise<CreateHomeProjectLaunchResult> {
   if (!storyText.trim() && !hasAssistantDraftContent) {
@@ -183,7 +168,6 @@ export async function createHomeProjectLaunch({
     body: JSON.stringify({
       name: projectName,
       videoRatio,
-      initialEpisode: { name: episodeName },
     }),
   })
 
@@ -191,11 +175,10 @@ export async function createHomeProjectLaunch({
     throw await readClientApiError(projectResponse)
   }
 
-  const { projectId, episodeId } = await readHomeProjectLaunchIds(projectResponse)
+  const projectId = await readHomeProjectLaunchId(projectResponse)
 
   return {
     projectId,
-    episodeId,
-    target: buildHomeWorkspaceLaunchTarget(projectId, episodeId),
+    target: buildHomeWorkspaceLaunchTarget(projectId),
   }
 }

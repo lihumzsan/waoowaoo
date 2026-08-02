@@ -10,19 +10,13 @@ import { queryKeys } from '../keys'
 
 export function useAgentSessionView(
   projectId: string | null,
-  episodeId?: string | null,
 ) {
   return useQuery<AssistantRuntimeSessionView>({
-    queryKey: queryKeys.project.assistantThread(
-      projectId ?? '',
-      episodeId ?? '',
-    ),
+    queryKey: queryKeys.project.assistantThread(projectId ?? ''),
     queryFn: async ({ signal }) => {
       if (!projectId) throw new Error('AGENT_SESSION_VIEW_PROJECT_ID_REQUIRED')
-      const search = new URLSearchParams()
-      if (episodeId) search.set('episodeId', episodeId)
       const response = await apiFetch(
-        `/api/projects/${encodeURIComponent(projectId)}/assistant/chat?${search.toString()}`,
+        `/api/projects/${encodeURIComponent(projectId)}/assistant/chat`,
         { signal },
       )
       if (!response.ok) {
@@ -33,7 +27,6 @@ export function useAgentSessionView(
       )
       if (
         view.scope.projectId !== projectId
-        || view.scope.episodeId !== (episodeId ?? null)
         || view.scope.assistantId !== 'workspace-command'
       ) {
         throw new Error('AGENT_SESSION_VIEW_SCOPE_DIVERGED')

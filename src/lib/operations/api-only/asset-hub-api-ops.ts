@@ -84,9 +84,19 @@ const preparedAssetHubUploadSchema = z.discriminatedUnion('kind', [
     labelText: z.string().min(1),
     locationUpdatedAtMs: z.number().int().nonnegative(),
   }).strict(),
+  z.object({
+    kind: z.literal('prop'),
+    assetId: z.string().min(1),
+    imageKey: z.string().min(1),
+    imageIndex: z.number().int().nonnegative(),
+    existingImageId: z.string().min(1).nullable(),
+    existingImageUpdatedAtMs: z.number().int().nonnegative().nullable(),
+    labelText: z.string().min(1),
+    locationUpdatedAtMs: z.number().int().nonnegative(),
+  }).strict(),
 ]).superRefine((prepared, ctx) => {
   if (
-    prepared.kind === 'location'
+    prepared.kind !== 'character'
     && ((prepared.existingImageId === null) !== (prepared.existingImageUpdatedAtMs === null))
   ) {
     ctx.addIssue({
@@ -129,10 +139,10 @@ async function prepareAssetHubImageUpload(
   const requestedImageIndex = parseAppearanceIndex(formData.get('imageIndex'))
   const labelText = normalizeString(formData.get('labelText'))
 
-  if (!isFileLike(file) || !assetId || (type === 'location' && !labelText)) {
+  if (!isFileLike(file) || !assetId || ((type === 'location' || type === 'prop') && !labelText)) {
     throw new ApiError('INVALID_PARAMS')
   }
-  if (type !== 'character' && type !== 'location') throw new ApiError('INVALID_PARAMS')
+  if (type !== 'character' && type !== 'location' && type !== 'prop') throw new ApiError('INVALID_PARAMS')
   assertFileSizeWithinLimit(file, MAX_IMAGE_BYTES, 'asset hub image')
 
   await requireOwnedAssetTarget({
@@ -151,9 +161,9 @@ async function prepareAssetHubImageUpload(
     throw new ApiError('NOT_FOUND')
   }
 
-  const location = type === 'location'
+  const location = type === 'location' || type === 'prop'
     ? await prisma.globalLocation.findFirst({
-        where: { id: assetId, userId },
+        where: { id: assetId, userId, assetKind: type },
         select: {
           name: true,
           updatedAt: true,
@@ -169,7 +179,7 @@ async function prepareAssetHubImageUpload(
         },
       })
     : null
-  if (type === 'location' && !location) throw new ApiError('NOT_FOUND')
+  if ((type === 'location' || type === 'prop') && !location) throw new ApiError('NOT_FOUND')
 
   const buffer = Buffer.from(await file.arrayBuffer())
   const processed = await sharp(buffer)
@@ -177,7 +187,7 @@ async function prepareAssetHubImageUpload(
     .toBuffer()
   const keyPrefix = type === 'character'
     ? `global-char-${assetId}-${appearanceIndex ?? 'na'}-upload`
-    : `global-loc-${assetId}-upload`
+    : `global-${type}-${assetId}-upload`
   const imageKey = generateUniqueKey(keyPrefix, 'jpg')
   try {
     await uploadObject(processed, imageKey, undefined, 'image/jpeg')
@@ -283,6 +293,7 @@ async function commitPreparedAssetHubImageUpload(
     where: {
       id: prepared.assetId,
       userId,
+      assetKind: prepared.kind,
       updatedAt: new Date(prepared.locationUpdatedAtMs),
     },
     select: { id: true },
@@ -351,10 +362,10 @@ async function compensatePreparedAssetHubImageUpload(
       })
     : await prisma.globalLocationImage.findFirst({
         where: {
-          locationId: prepared.assetId,
-          imageIndex: prepared.imageIndex,
-          imageUrl: prepared.imageKey,
-          location: { userId },
+      locationId: prepared.assetId,
+      imageIndex: prepared.imageIndex,
+      imageUrl: prepared.imageKey,
+          location: { userId, assetKind: prepared.kind },
         },
         select: { id: true },
       })

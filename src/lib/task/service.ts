@@ -56,7 +56,6 @@ export async function getTaskById(taskId: string) {
 export async function queryTasks(filters: {
   userId?: string
   projectId?: string
-  episodeId?: string
   targetType?: string
   targetId?: string
   status?: TaskStatus[]
@@ -67,9 +66,6 @@ export async function queryTasks(filters: {
     where: {
       ...(filters.userId ? { userId: filters.userId } : {}),
       ...(filters.projectId ? { projectId: filters.projectId } : {}),
-      ...(filters.episodeId
-        ? { OR: [{ episodeId: null }, { episodeId: filters.episodeId }] }
-        : {}),
       ...(filters.targetType ? { targetType: filters.targetType } : {}),
       ...(filters.targetId ? { targetId: filters.targetId } : {}),
       ...(filters.status?.length ? { status: { in: filters.status } } : {}),

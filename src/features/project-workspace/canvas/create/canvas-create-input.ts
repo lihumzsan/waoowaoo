@@ -3,7 +3,7 @@ import type { WorkspaceCanvasCreateRequest } from '../contracts/workspace-canvas
 /** Builds only the operation's public input; ratio/model defaults stay server-owned. */
 export function buildWorkspaceCanvasCreateOperationInput(
   request: WorkspaceCanvasCreateRequest,
-  episodeId: string,
+  outputPath: string,
 ): Readonly<Record<string, unknown>> {
   const optionalName = request.name ? { name: request.name } : {}
   if (request.capability.mediaKind === 'voice') {
@@ -13,6 +13,7 @@ export function buildWorkspaceCanvasCreateOperationInput(
         description: request.prompt,
         previewText: request.voicePreviewText,
         language: 'Auto',
+        outputPath,
         resource: { name: request.name },
         target: { kind: 'standalone' },
         count: request.count,
@@ -22,7 +23,7 @@ export function buildWorkspaceCanvasCreateOperationInput(
 
   const common = {
     kind: request.capability.requestKind,
-    episodeId,
+    outputPath,
     ...optionalName,
     prompt: request.prompt,
     count: request.count,

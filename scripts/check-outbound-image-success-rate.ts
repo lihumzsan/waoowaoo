@@ -106,8 +106,8 @@ async function fetchWindowSummary(params: {
   projectId: string | null
 }) {
   const monitoredTypes = [
-    TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
-    TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
+    TASK_TYPE.WORKSPACE_RESOURCE_IMAGE,
+    TASK_TYPE.WORKSPACE_RESOURCE_VIDEO,
   ]
 
   const rows = await prisma.task.findMany({

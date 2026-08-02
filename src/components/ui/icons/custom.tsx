@@ -551,12 +551,6 @@ const CustomIcon087Node: IconNode = [
 const CustomIcon087Base = createLucideIcon('CustomIcon087', CustomIcon087Node)
 export const CustomIcon087: CustomIconComponent = CustomIcon087Base
 
-const CustomIcon088Node: IconNode = [
-  ['path', { stroke: "url(#icon-gradient)", strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: "2", d: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10", fill: "none" }],
-]
-const CustomIcon088Base = createLucideIcon('CustomIcon088', CustomIcon088Node)
-export const CustomIcon088: CustomIconComponent = CustomIcon088Base
-
 const CustomIcon089Node: IconNode = [
   ['path', { stroke: "url(#icon-gradient)", strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: "2", d: "M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z", fill: "none" }],
 ]
@@ -718,7 +712,6 @@ export const customIcons = {
   download: CustomIcon085,
   folder: CustomIcon086,
   statsBarGradient: CustomIcon087,
-  statsEpisodeGradient: CustomIcon088,
   statsImageGradient: CustomIcon089,
   statsVideoGradient: CustomIcon090,
   statsBar: CustomIcon091,

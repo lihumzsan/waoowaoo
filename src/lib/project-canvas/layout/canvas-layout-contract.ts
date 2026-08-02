@@ -3,37 +3,18 @@ import type { CanvasNodeLayout, CanvasViewportLayout } from '@/lib/project-canva
 
 export const CANVAS_LAYOUT_SCHEMA_VERSION = 1
 
+export const projectCanvasFolderKeySchema = z.string().trim().min(1).max(191)
+
 export const projectCanvasNodeTypeSchema = z.enum([
-  'editSourceScript',
-  'storyCanon',
-  'creativeDirection',
-  'editPipelineStep',
-  'editProcessGroup',
-  'editScript',
-  'editShotExecutionPlan',
-  'videoPlan',
-  'bgmScore',
-  'editRequiredAsset',
-  'editAssetGroup',
   'resourceCard',
+  'folder',
 ])
 
 export type CanvasLayoutNodeType = z.infer<typeof projectCanvasNodeTypeSchema>
 
 export const projectCanvasTargetTypeSchema = z.enum([
-  'project',
-  'episode',
-  'videoSegment',
-  'editSourceScript',
-  'storyCanon',
-  'creativeDirection',
-  'editPipelineStep',
-  'editScript',
-  'editShotExecutionPlan',
-  'editAssetRequirement',
-  'projectCharacter',
-  'projectLocation',
-  'creativeResource',
+  'workspaceResource',
+  'folder',
 ])
 
 const finiteNumberSchema = z.number().finite()
@@ -68,7 +49,7 @@ export interface CanvasNodeLayoutSnapshot extends CanvasNodeLayout {
 
 export interface ProjectCanvasLayoutSnapshot {
   readonly projectId: string
-  readonly episodeId: string
+  readonly folderKey: string
   readonly schemaVersion: number
   readonly viewport: CanvasViewportLayout
   readonly nodeLayouts: readonly CanvasNodeLayoutSnapshot[]
@@ -78,16 +59,16 @@ export const canvasNodeLayoutSnapshotSchema: z.ZodType<CanvasNodeLayoutSnapshot>
 
 export const projectCanvasLayoutSnapshotSchema: z.ZodType<ProjectCanvasLayoutSnapshot> = z.object({
   projectId: z.string().trim().min(1),
-  episodeId: z.string().trim().min(1),
+  folderKey: projectCanvasFolderKeySchema,
   schemaVersion: z.number().int(),
   viewport: canvasViewportLayoutSchema,
   nodeLayouts: z.array(canvasNodeLayoutSnapshotSchema),
 })
 
 export const upsertCanvasLayoutInputSchema = z.object({
-  episodeId: z.string().trim().min(1),
+  folderKey: projectCanvasFolderKeySchema,
   viewport: canvasViewportLayoutSchema,
-  nodeLayouts: z.array(canvasNodeLayoutInputSchema).max(2000),
+  nodeLayouts: z.array(canvasNodeLayoutInputSchema).max(5000),
 })
 
 export type UpsertCanvasLayoutInput = z.infer<typeof upsertCanvasLayoutInputSchema>

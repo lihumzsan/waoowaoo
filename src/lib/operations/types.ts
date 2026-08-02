@@ -8,13 +8,8 @@ import type { OperationPlan } from './planning'
 import type { OperationExecutionAuthorization } from './planned-operation-invocation'
 import type { Prisma } from '@prisma/client'
 import type { WorkspaceResourceImpact } from '@/lib/workspace-resource/resource-impact'
-import type { CreativeResourceOperationContract } from '@/lib/creative-resource/contracts'
+import type { WorkspaceResourceOperationContract } from '@/lib/workspace-resource/contracts'
 import type { WorkspaceResourceRef } from '@/lib/task/types'
-import type {
-  ProjectAgentChoiceCardDefinition,
-  ProjectAgentChoiceCommitment,
-  ProjectAgentChoiceSubject,
-} from '@/lib/project-agent/choice-offer'
 
 export type ProjectAgentOperationId = string
 
@@ -62,16 +57,6 @@ export interface ProjectAgentOperationContext {
   operationExecutionTransaction?: Prisma.TransactionClient | null
   executionAuthorization?: OperationExecutionAuthorization | null
   followUpBatchBinding?: ProjectAgentFollowUpBatchBinding | null
-  choiceOfferWriter?:
-    | ((offer: {
-        operationId: string
-        callId: string
-        card: ProjectAgentChoiceCardDefinition
-        subject: ProjectAgentChoiceSubject
-        commitments: readonly ProjectAgentChoiceCommitment[]
-        modelArguments: unknown
-      }) => Promise<{ offerId: string }>)
-    | null
 }
 
 export function requireProjectAgentOperationRequest(
@@ -153,10 +138,6 @@ export type OperationIntent = 'query' | 'plan' | 'act'
 
 export type OperationGroupPath = string[]
 
-export interface OperationPrerequisites {
-  episodeId: 'required' | 'optional' | 'forbidden'
-}
-
 export interface OperationChannels {
   tool: boolean
   api: boolean
@@ -216,26 +197,6 @@ export interface OperationConfirmation {
   } | null
 }
 
-/** Operation-declared user-interaction semantics. */
-export interface OperationAgentFlow {
-  /**
-   * A tool-owned, durable suspension protocol. Approval is created by the
-   * Agents SDK approval boundary, while Choice is declared by the operation
-   * that settles its Offer.
-   */
-  suspendsFor?: 'choice' | null
-}
-
-/**
- * Opt-in capability for a deterministic, transaction-only domain mutation
- * that may be frozen into a durable Choice Offer and committed with the
- * user's current answer. Choice never owns domain semantics; the target
- * Operation remains the sole writer and revalidates its complete input.
- */
-export interface OperationChoiceCommit {
-  enabled: true
-}
-
 export type RuntimeSchemaSafeParseResult<T> =
   { success: true; data: T } | { success: false; error: { issues: unknown } }
 
@@ -265,7 +226,6 @@ export type ProjectAgentToolErrorCode =
   | 'OPERATION_INPUT_INVALID'
   | 'OPERATION_NOT_FOUND'
   | 'OPERATION_PLAN_CHANGED'
-  | 'OPERATION_PREREQUISITE_MISSING'
   | 'OPERATION_OUTPUT_INVALID'
 
 export interface ProjectAgentToolError {
@@ -329,11 +289,8 @@ interface ProjectAgentOperationDefinitionFields<
    * decision the user already made.
    */
   modelResultRetention?: OperationModelResultRetention
-  prerequisites?: Partial<OperationPrerequisites>
   effects: OperationEffects
-  resourceContract?: CreativeResourceOperationContract
-  agentFlow?: OperationAgentFlow
-  choiceCommit?: OperationChoiceCommit
+  resourceContract?: WorkspaceResourceOperationContract
   /**
    * Model-facing Operation input schema returned by the fixed Agent gateway.
    * This schema must never expose internal execution fields such as
@@ -428,9 +385,8 @@ type NormalizedOperationFields = {
   channels: OperationChannels
   toolExposure: OperationToolExposure
   modelResultRetention: OperationModelResultRetention
-  prerequisites: OperationPrerequisites
   toolInputSchema: ProjectAgentToolInputSchema
-  resourceContract: CreativeResourceOperationContract
+  resourceContract: WorkspaceResourceOperationContract
   toolContractRevision: string | null
 }
 

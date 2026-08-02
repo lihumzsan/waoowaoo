@@ -10,10 +10,10 @@ export async function probeMediaDurationSeconds(filePath: string): Promise<numbe
     '-of',
     'default=noprint_wrappers=1:nokey=1',
     filePath,
-  ], { stage: 'creative_resource_video_merge_probe_duration' })
+  ], { stage: 'workspace_resource_video_merge_probe_duration' })
   const duration = Number.parseFloat(result.stdout.trim())
   if (!Number.isFinite(duration) || duration <= 0) {
-    throw new Error('CREATIVE_RESOURCE_VIDEO_MERGE_DURATION_INVALID')
+    throw new Error('WORKSPACE_RESOURCE_VIDEO_MERGE_DURATION_INVALID')
   }
   return duration
 }
@@ -32,12 +32,12 @@ export async function probeVideoDimensions(filePath: string): Promise<{
     '-of',
     'csv=p=0:s=x',
     filePath,
-  ], { stage: 'creative_resource_video_merge_probe_dimensions' })
+  ], { stage: 'workspace_resource_video_merge_probe_dimensions' })
   const [rawWidth, rawHeight] = result.stdout.trim().split('x')
   const width = Number.parseInt(rawWidth ?? '', 10)
   const height = Number.parseInt(rawHeight ?? '', 10)
   if (!Number.isSafeInteger(width) || width <= 0 || !Number.isSafeInteger(height) || height <= 0) {
-    throw new Error('CREATIVE_RESOURCE_VIDEO_MERGE_DIMENSIONS_INVALID')
+    throw new Error('WORKSPACE_RESOURCE_VIDEO_MERGE_DIMENSIONS_INVALID')
   }
   return { width, height }
 }
@@ -66,7 +66,7 @@ export async function normalizeVideoClip(input: {
     '20',
     input.outputPath,
   ], {
-    stage: 'creative_resource_video_merge_normalize',
+    stage: 'workspace_resource_video_merge_normalize',
     expectedDurationSeconds: input.durationSeconds,
   })
 }
@@ -82,7 +82,7 @@ export async function concatVideoClips(input: {
   readonly durationSeconds: number
 }): Promise<void> {
   if (input.clipPaths.length === 0) {
-    throw new Error('CREATIVE_RESOURCE_VIDEO_MERGE_INPUT_REQUIRED')
+    throw new Error('WORKSPACE_RESOURCE_VIDEO_MERGE_INPUT_REQUIRED')
   }
   const lines = input.clipPaths.map((clipPath) => `file '${escapeConcatPath(clipPath)}'`).join('\n')
   await writeFile(input.listPath, `${lines}\n`, 'utf8')
@@ -98,7 +98,7 @@ export async function concatVideoClips(input: {
     'copy',
     input.outputPath,
   ], {
-    stage: 'creative_resource_video_merge_concat',
+    stage: 'workspace_resource_video_merge_concat',
     expectedDurationSeconds: input.durationSeconds,
   })
 }

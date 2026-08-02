@@ -30,7 +30,6 @@ type LedgerRecordParams = {
   quantity: number
   unit: UsageUnit
   metadata?: Record<string, unknown>
-  episodeId?: string | null
   taskType?: string | null
 }
 
@@ -226,7 +225,6 @@ type FreezeAuditRow = {
   description: string
   billingMeta: string
   projectId?: string | null
-  episodeId?: string | null
   taskType?: string | null
 }
 
@@ -247,7 +245,6 @@ async function appendFreezeAuditTransaction(tx: Prisma.TransactionClient, row: F
       relatedId: row.freezeId,
       freezeId: row.freezeId,
       projectId: row.projectId || null,
-      episodeId: row.episodeId || null,
       taskType: row.taskType || null,
       billingMeta: row.billingMeta,
     },
@@ -334,7 +331,6 @@ export async function freezeBalanceInTransaction(
     description: `[FREEZE] ${action || options?.source || 'sync'}`,
     billingMeta: buildFreezeAuditMeta({ freezeAmount: normalizedAmount }, metadata),
     projectId: readScopedProjectId(metadata),
-    episodeId: readMetadataString(metadata, 'episodeId'),
     taskType: readMetadataString(metadata, 'taskType') || action,
   })
   ledgerLogger.info({
@@ -498,7 +494,6 @@ export async function confirmChargeWithRecordInTransaction(
         refundedAmount: refundAmount,
       }),
       projectId: isProjectScoped(recordParams.projectId) ? recordParams.projectId : null,
-      episodeId: recordParams.episodeId ?? null,
       taskType: recordParams.taskType || recordParams.action || null,
     })
   }
@@ -597,7 +592,6 @@ export async function rollbackFreezeInTransaction(
     description: `[REFUND] freeze rollback${action ? ` - ${action}` : ''}`,
     billingMeta: buildFreezeAuditMeta({ refundedAmount: freezeAmount }, storedMetadata),
     projectId: readScopedProjectId(storedMetadata),
-    episodeId: readMetadataString(storedMetadata, 'episodeId'),
     taskType: readMetadataString(storedMetadata, 'taskType') || action,
   })
   ledgerLogger.info({
@@ -714,7 +708,6 @@ export async function recordShadowUsageInTransaction(
   userId: string,
   params: {
     projectId: string
-    episodeId?: string | null
     taskType?: string | null
     action: string
     apiType: ApiType
@@ -743,7 +736,6 @@ export async function recordShadowUsageInTransaction(
       relatedId: null,
       freezeId: null,
       projectId: params.projectId || null,
-      episodeId: params.episodeId || null,
       taskType: params.taskType || params.action || null,
       billingMeta: buildBillingMeta(params),
     },

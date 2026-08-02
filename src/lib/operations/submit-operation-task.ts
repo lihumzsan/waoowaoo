@@ -28,7 +28,6 @@ export interface OperationTaskSubmissionParams {
   userId: string
   projectId: string
   parentTaskId?: string | null
-  episodeId?: string | null
   type: TaskType
   targetType: string
   targetId: string
@@ -86,7 +85,6 @@ async function prepareOperationTaskSubmission(
     requestId,
     projectId: params.projectId,
     parentTaskId: params.parentTaskId || null,
-    episodeId: params.episodeId || null,
     type: params.type,
     targetType: params.targetType,
     targetId: params.targetId,

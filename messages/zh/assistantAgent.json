@@ -57,93 +57,6 @@
     "executionCompleted": "执行完成 · 调用 {count} 次工具",
     "executionFailed": "执行失败 · 调用 {count} 次工具"
   },
-  "subagents": {
-    "label": "Subagent",
-    "tabsLabel": "Subagent",
-    "primary": "Primary",
-    "runningSummary": "{count} 个 Subagent 运行中 · 已读取 {skills} 个 Skill",
-    "close": "关闭 {title}",
-    "result": "创作结果",
-    "structuredOutputRunning": "正在编写结构化结果…",
-    "fullResult": "完整结构化结果",
-    "fullResultLoading": "正在读取完整结果…",
-    "fullResultError": "无法读取完整结果。",
-    "failure": {
-      "title": "Subagent 未能完成",
-      "reasonLabel": "原因",
-      "reasonFallback": "任务没有提供可展示的具体失败原因。",
-      "nextStep": "请根据原因修正委派输入、上下文或配置后再重新委派；不要原样静默重试。"
-    },
-    "execution": {
-      "running": "思考与工具调用",
-      "completed": "思考与工具调用记录"
-    },
-    "status": {
-      "running": "进行中",
-      "completed": "已完成",
-      "failed": "失败",
-      "cancelled": "已取消"
-    },
-    "outputKinds": {
-      "screenplay": "剧本",
-      "chapterContinuityPlan": "跨 Chapter 连续性规划",
-      "creativeDirection": "创作方向",
-      "assetManifest": "资产设计清单",
-      "videoPromptSet": "视频生成设计",
-      "musicDirection": "配乐设计"
-    },
-    "events": {
-      "started": "已接收委派目标",
-      "skillRead": "读取 {skill}",
-      "reasoningRunning": "正在推理",
-      "reasoningCompleted": "完成一轮推理",
-      "reasoningTruncated": "这段可展示推理已达到记录上限。",
-      "generationPreparing": "正在准备专业知识",
-      "generationPrepared": "专业知识准备完成",
-      "generationCreating": "正在生成结构化结果",
-      "generationCreated": "候选结构化结果已生成",
-      "generationCorrecting": "正在根据校验结果修正",
-      "generationCorrected": "修正后的候选结果已生成",
-      "toolCalled": "调用 read_skill：{skill}",
-      "toolCompleted": "read_skill 完成：{skill}",
-      "toolFailed": "read_skill 失败：{skill}",
-      "researchStarted": "联网研究：{query}",
-      "researchCompleted": "研究完成：{sources} 个来源 · {images} 张图",
-      "researchUnavailable": "联网研究未完成：检索不可用或失败",
-      "submissionStarted": "正在校验结构化结果",
-      "submissionRejected": "结构化校验未通过，正在修正：{issues} 项",
-      "submissionAccepted": "结构化结果已通过校验 · {chars} 字符",
-      "submissionInputDiagnostic": "实际提交：{type} · {chars} 字符 · 顶层字段：{keys}",
-      "submissionIssueHelp": "生成结果暂时不符合所需结构，助手正在自动修正。",
-      "submissionInputNoKeys": "无",
-      "submissionInputTypes": {
-        "undefined": "未定义",
-        "null": "空值",
-        "object": "对象",
-        "array": "数组",
-        "string": "字符串",
-        "number": "数字",
-        "boolean": "布尔值"
-      },
-      "toolName": "工具",
-      "toolResult": "结果",
-      "toolUri": "资源",
-      "skillReadResult": "版本 {version} · 已读取 {chars} 字符"
-    },
-    "groupCollapsed": "{count} 个创作模块",
-    "groupExpand": "展开",
-    "groupCollapse": "收起",
-    "steps": "{count} 步",
-    "dockRunning": "{count} 个创作模块运行中",
-    "primaryAttention": "主对话有待处理的选择"
-  },
-  "webSearch": {
-    "searching": "联网检索：{brief}",
-    "searchingQuery": "正在搜索：{query}",
-    "result": "已参考 {sources} 个来源",
-    "resultWithImages": "已参考 {sources} 个来源 · {images} 张图",
-    "imageAlt": "检索结果图片"
-  },
   "attachments": {
     "openUpload": "上传文件",
     "fileMeta": "{chars} 字 · {size}",
@@ -173,6 +86,58 @@
     "arguments": "参数",
     "result": "结果",
     "waiting": "等待工具返回结果..."
+  },
+  "runtime": {
+    "goal": "当前目标",
+    "goalUsage": "{tokens} tokens · {seconds} 秒",
+    "goalStatus": {
+      "active": "进行中",
+      "paused": "已暂停",
+      "blocked": "已阻塞",
+      "usageLimited": "用量受限",
+      "budgetLimited": "预算受限",
+      "complete": "已完成"
+    },
+    "skills": {
+      "title": "可用 Skills",
+      "count": "{count} 个 Skills",
+      "changed": "Skill 清单已刷新",
+      "disabled": "未启用",
+      "errors": "{count} 个 Skill 加载失败"
+    },
+    "permission": {
+      "cwd": "工作目录：{value}",
+      "network": "网络权限：{value}",
+      "fileSystem": "文件系统权限：{value}"
+    },
+    "progress": {
+      "shell": "命令输出",
+      "file": "文件修改",
+      "mcp": "生产能力进度",
+      "diff": "本轮差异"
+    },
+    "native": {
+      "shell": "执行命令",
+      "fileChange": "修改文件",
+      "webSearch": "联网检索",
+      "viewImage": "查看图片",
+      "subagent": "Subagent",
+      "subagentAction": {
+        "spawnAgent": "启动 Subagent",
+        "sendInput": "向 Subagent 发送输入",
+        "resumeAgent": "恢复 Subagent",
+        "wait": "等待 Subagent",
+        "closeAgent": "关闭 Subagent",
+        "activity": "Subagent 动态"
+      },
+      "subagentSummary": "{active} 个进行中 · {completed} 个完成 · {failed} 个失败",
+      "web": {
+        "search": "正在搜索：{query}",
+        "openPage": "正在打开页面：{value}",
+        "findInPage": "正在页内查找：{value}",
+        "other": "正在处理联网结果"
+      }
+    }
   },
   "thread": {
     "user": "用户",
@@ -242,22 +207,9 @@
     "billingQuoteWithoutCredits": "将提交 {count} 个媒体生成任务",
     "confirmContinue": "继续执行",
     "cancelAction": "取消操作",
-    "choiceCancel": "关闭并取消此选择",
-    "choiceRequired": "请选择所有必填项后继续。",
-    "choiceBack": "返回上一步",
-    "choiceSubmitting": "处理中...",
-    "choiceSubmitFailed": "提交失败：{error}",
-    "choiceSubmitErrorFallback": "该选择暂时无法提交，请刷新对话后重试。",
-    "choiceCancelledResponse": "已取消本次选择",
-    "choiceReplyLabel": "其他想法",
-    "choiceReplyPlaceholder": "输入你的想法...",
-    "choiceReplySubmit": "提交想法",
-    "choiceCustomOptionLabel": "其他{label}",
-    "choiceCustomOptionPlaceholder": "其他{label}",
-    "choiceCustomOptionSubmit": "选择其他{label}",
-    "contextCompacted": "已压缩较早的 {count} 条上下文记录"
-  },
-  "choiceCard": {
-    "groupProgress": "第 {current} / {total} 组"
+    "interactionSubmitting": "处理中...",
+    "interactionSubmitErrorFallback": "该响应暂时无法提交，请刷新对话后重试。",
+    "contextCompacted": "已压缩较早的 {count} 条上下文记录",
+    "contextCompactedUnknown": "已压缩较早的上下文"
   }
 }

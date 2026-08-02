@@ -24,13 +24,12 @@ import {
 import {
   dedupeWorkspaceResourceRefs,
   resolveWorkspaceResourceRefs,
-  WORKSPACE_RESOURCE_KIND,
 } from '@/lib/workspace-resource/resource-impact'
 import type {
   TaskTerminalCommitIntent,
   TaskTerminalCommitResult,
 } from './types'
-import { materializeCreativeResourceTaskTerminalInTransaction } from '@/lib/creative-resource/task-materializer'
+import { materializeWorkspaceResourceTaskTerminalInTransaction } from '@/lib/workspace-resource/task-materializer'
 import { recordFollowUpBatchTaskTerminalInTransaction } from '@/lib/agent-turn/follow-up-batch'
 
 const terminalLogger = createScopedLogger({ module: 'task.terminal' })
@@ -40,7 +39,6 @@ type TerminalTaskRow = {
   id: string
   userId: string
   projectId: string
-  episodeId: string | null
   type: string
   targetType: string
   targetId: string
@@ -116,7 +114,7 @@ async function loadLockedTask(
   taskId: string,
 ): Promise<TerminalTaskRow | null> {
   const rows = await tx.$queryRaw<TerminalTaskRow[]>(Prisma.sql`
-    SELECT id, userId, projectId, episodeId, type, targetType, targetId,
+    SELECT id, userId, projectId, type, targetType, targetId,
            status, attempt, payload, billingInfo, operationId, operationExecutionId, updatedAt
     FROM tasks
     WHERE id = ${taskId}
@@ -214,7 +212,6 @@ export async function commitTaskTerminal(
           {
             id: task.id,
             projectId: task.projectId,
-            episodeId: task.episodeId,
             userId: task.userId,
             billingInfo: currentBillingInfo,
           },
@@ -224,13 +221,12 @@ export async function commitTaskTerminal(
           },
         )) as TaskBillingInfo | null
         materializedOutput =
-          await materializeCreativeResourceTaskTerminalInTransaction(tx, {
+          await materializeWorkspaceResourceTaskTerminalInTransaction(tx, {
             kind: 'completed',
             task: {
               id: task.id,
               userId: task.userId,
               projectId: task.projectId,
-              episodeId: task.episodeId,
               type: taskType,
               targetType: task.targetType,
               targetId: task.targetId,
@@ -262,13 +258,12 @@ export async function commitTaskTerminal(
         errorCode = intent.kind === 'failed' ? intent.errorCode : null
         errorMessage = intent.kind === 'failed' ? intent.errorMessage : null
         materializedOutput =
-          await materializeCreativeResourceTaskTerminalInTransaction(tx, {
+          await materializeWorkspaceResourceTaskTerminalInTransaction(tx, {
             kind: intent.kind,
             task: {
               id: task.id,
               userId: task.userId,
               projectId: task.projectId,
-              episodeId: task.episodeId,
               type: taskType,
               targetType: task.targetType,
               targetId: task.targetId,
@@ -343,14 +338,12 @@ export async function commitTaskTerminal(
         ...resolveWorkspaceResourceRefs({
           impact: getTaskDefinition(taskType).terminalResourceImpact,
           projectId: task.projectId,
-          episodeId: task.episodeId,
         }),
         ...(materializedOutput
           ? [
               {
-                kind: WORKSPACE_RESOURCE_KIND.CREATIVE_RESOURCES,
+                kind: 'workspaceResources',
                 projectId: task.projectId,
-                episodeId: task.episodeId,
               } as const,
             ]
           : []),
@@ -362,7 +355,6 @@ export async function commitTaskTerminal(
         taskType,
         targetType: task.targetType,
         targetId: task.targetId,
-        episodeId: task.episodeId,
         coveragePayload: task.payload,
         affectedResources,
         payload: projectTaskLifecyclePayload(taskType, {

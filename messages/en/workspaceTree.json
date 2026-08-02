@@ -1,0 +1,20 @@
+{
+  "root": "Project",
+  "search": "Search files",
+  "loading": "Loading…",
+  "failed": "Could not load the project workspace.",
+  "empty": "This folder is empty. Ask the Agent to create or organize project files.",
+  "loadMore": "Load more",
+  "mediaType": {
+    "text": "Text",
+    "image": "Image",
+    "audio": "Audio",
+    "video": "Video"
+  },
+  "status": {
+    "pending": "Pending",
+    "ready": "Ready",
+    "failed": "Failed",
+    "canceled": "Canceled"
+  }
+}

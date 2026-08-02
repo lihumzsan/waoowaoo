@@ -56,7 +56,6 @@ export default function AssetHubPage() {
     const [characterEditModal, setCharacterEditModal] = useState<{
         characterId: string
         characterName: string
-        appearanceId: string
         appearanceIndex: number
         changeReason: string
         description: string
@@ -157,7 +156,6 @@ export default function AssetHubPage() {
         setCharacterEditModal({
             characterId: typedCharacter.id,
             characterName: typedCharacter.name,
-            appearanceId: typedAppearance.id,
             appearanceIndex: typedAppearance.appearanceIndex,
             changeReason: typedAppearance.changeReason || t('appearanceLabel', { index: typedAppearance.appearanceIndex }),
             description: typedAppearance.description || ''
@@ -339,7 +337,6 @@ export default function AssetHubPage() {
             {/* 新建角色弹窗 */}
             {showAddCharacter && (
                 <CharacterCreationModal
-                    mode="asset-hub"
                     folderId={selectedFolderId}
                     onClose={() => setShowAddCharacter(false)}
                     onSuccess={() => setShowAddCharacter(false)}
@@ -349,7 +346,6 @@ export default function AssetHubPage() {
             {/* 新建场景弹窗 */}
             {showAddLocation && (
                 <LocationCreationModal
-                    mode="asset-hub"
                     folderId={selectedFolderId}
                     onClose={() => setShowAddLocation(false)}
                     onSuccess={() => setShowAddLocation(false)}
@@ -358,7 +354,6 @@ export default function AssetHubPage() {
 
             {showAddProp && (
                 <PropCreationModal
-                    mode="asset-hub"
                     folderId={selectedFolderId}
                     onClose={() => setShowAddProp(false)}
                     onSuccess={() => setShowAddProp(false)}
@@ -394,10 +389,8 @@ export default function AssetHubPage() {
             {/* 角色编辑弹窗 */}
             {characterEditModal && (
                 <CharacterEditModal
-                    mode="asset-hub"
                     characterId={characterEditModal.characterId}
                     characterName={characterEditModal.characterName}
-                    appearanceId={characterEditModal.appearanceId}
                     appearanceIndex={characterEditModal.appearanceIndex}
                     changeReason={characterEditModal.changeReason}
                     description={characterEditModal.description}
@@ -408,11 +401,9 @@ export default function AssetHubPage() {
             {/* 场景编辑弹窗 */}
             {locationEditModal && (
                 <LocationEditModal
-                    mode="asset-hub"
                     locationId={locationEditModal.locationId}
                     locationName={locationEditModal.locationName}
                     summary={locationEditModal.summary}
-                    imageIndex={locationEditModal.imageIndex}
                     description={locationEditModal.description}
                     onClose={() => setLocationEditModal(null)}
                 />
@@ -420,7 +411,6 @@ export default function AssetHubPage() {
 
             {propEditModal && (
                 <PropEditModal
-                    mode="asset-hub"
                     propId={propEditModal.propId}
                     propName={propEditModal.propName}
                     summary={propEditModal.summary}

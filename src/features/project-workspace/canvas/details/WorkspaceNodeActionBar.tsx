@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl'
 import { AppIcon, type AppIconName } from '@/components/ui/icons'
-import type { CreativeResourceCardView } from '@/lib/creative-resource/contracts'
+import type { WorkspaceResourceCardView } from '../contracts/workspace-canvas-interactions'
 import { getWorkspaceCanvasNodeDefinition } from '../registry/workspace-canvas-node-registry'
 import type { WorkspaceCanvasNodeActionKey } from '../contracts/workspace-canvas-interactions'
 import type { WorkspaceNodeDetailsActions } from './WorkspaceNodeDetailsCard'
@@ -15,7 +15,7 @@ export function WorkspaceNodeActionBar({
   onPreview,
   onOperation,
 }: {
-  readonly card: CreativeResourceCardView
+  readonly card: WorkspaceResourceCardView
   readonly busy: boolean
   readonly onDiscuss: () => void
   readonly onDownload: (() => void) | null

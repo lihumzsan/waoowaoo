@@ -33,7 +33,7 @@
   },
   "deleteFailed": "删除项目失败",
   "totalProjects": "共 {count} 个项目",
-  "statsEpisodes": "章节数",
+  "statsFolders": "文件夹数",
   "statsImages": "图片数",
   "statsVideos": "视频数",
   "noContent": "暂无内容",

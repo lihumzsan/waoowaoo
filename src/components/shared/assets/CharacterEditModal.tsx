@@ -9,43 +9,28 @@ import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import {
     useUpdateCharacterAppearanceDescription,
     useUpdateCharacterName,
-    useUpdateProjectAppearanceDescription,
-    useUpdateProjectCharacterIntroduction,
-    useUpdateProjectCharacterName,
 } from '@/lib/query/hooks'
 import { useToast } from '@/contexts/ToastContext'
 
 export interface CharacterEditModalProps {
-    mode: 'asset-hub' | 'project'
     characterId: string
     characterName: string
     description: string
     appearanceIndex?: number
     changeReason?: string
-    projectId?: string
-    appearanceId?: string
-    descriptionIndex?: number
-    introduction?: string | null
     onClose: () => void
     onUpdate?: (newDescription: string) => void
-    onIntroductionUpdate?: (newIntroduction: string) => void
     onNameUpdate?: (newName: string) => void
 }
 
 export function CharacterEditModal({
-    mode,
     characterId,
     characterName,
     description,
     appearanceIndex,
     changeReason,
-    projectId,
-    appearanceId,
-    descriptionIndex,
-    introduction,
     onClose,
     onUpdate,
-    onIntroductionUpdate,
     onNameUpdate,
 }: CharacterEditModalProps) {
     const t = useTranslations('assets')
@@ -53,7 +38,6 @@ export function CharacterEditModal({
 
     const [editingName, setEditingName] = useState(characterName)
     const [editingDescription, setEditingDescription] = useState(description)
-    const [editingIntroduction, setEditingIntroduction] = useState(introduction || '')
     const [isSaving, setIsSaving] = useState(false)
     const savingState = isSaving
         ? resolveTaskPresentationState({
@@ -65,54 +49,22 @@ export function CharacterEditModal({
         : null
 
     const updateAssetHubName = useUpdateCharacterName()
-    const updateProjectName = useUpdateProjectCharacterName(projectId ?? '')
     const updateAssetHubAppearanceDesc = useUpdateCharacterAppearanceDescription()
-    const updateProjectAppearanceDesc = useUpdateProjectAppearanceDescription(projectId ?? '')
-    const updateProjectIntroduction = useUpdateProjectCharacterIntroduction(projectId ?? '')
 
     const persistNameIfNeeded = async () => {
         const nextName = editingName.trim()
         if (!nextName || nextName === characterName) return
 
-        if (mode === 'asset-hub') {
-            await updateAssetHubName.mutateAsync({ characterId, name: nextName })
-        } else {
-            await updateProjectName.mutateAsync({ characterId, name: nextName })
-        }
+        await updateAssetHubName.mutateAsync({ characterId, name: nextName })
         onNameUpdate?.(nextName)
     }
 
     const persistDescription = async () => {
-        if (mode === 'asset-hub') {
-            await updateAssetHubAppearanceDesc.mutateAsync({
-                characterId,
-                appearanceIndex: appearanceIndex ?? 0,
-                description: editingDescription,
-            })
-            return
-        }
-
-        if (!appearanceId) {
-            throw new Error('Missing appearanceId')
-        }
-        await updateProjectAppearanceDesc.mutateAsync({
+        await updateAssetHubAppearanceDesc.mutateAsync({
             characterId,
-            appearanceId,
+            appearanceIndex: appearanceIndex ?? 0,
             description: editingDescription,
-            descriptionIndex,
         })
-    }
-
-    const persistIntroductionIfNeeded = async () => {
-        if (mode !== 'project' || !projectId) return
-        if (editingIntroduction === (introduction || '')) return
-
-        const nextIntro = editingIntroduction.trim()
-        await updateProjectIntroduction.mutateAsync({
-            characterId,
-            introduction: nextIntro,
-        })
-        onIntroductionUpdate?.(nextIntro)
     }
 
     const handleSaveName = async () => {
@@ -130,7 +82,6 @@ export function CharacterEditModal({
             setIsSaving(true)
             await persistNameIfNeeded()
             await persistDescription()
-            await persistIntroductionIfNeeded()
 
             onUpdate?.(editingDescription)
             onClose()
@@ -174,10 +125,10 @@ export function CharacterEditModal({
                             {editingName !== characterName && (
                                 <button
                                     onClick={handleSaveName}
-                                    disabled={updateAssetHubName.isPending || updateProjectName.isPending || !editingName.trim()}
+                                    disabled={updateAssetHubName.isPending || !editingName.trim()}
                                     className="glass-btn-base glass-btn-tone-success px-3 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed text-sm whitespace-nowrap"
                                 >
-                                    {(updateAssetHubName.isPending || updateProjectName.isPending)
+                                    {updateAssetHubName.isPending
                                         ? t('modal.processing')
                                         : t('modal.saveName')}
                                 </button>
@@ -185,25 +136,7 @@ export function CharacterEditModal({
                         </div>
                     </div>
 
-                    {mode === 'project' && (
-                        <div className="space-y-2">
-                            <label className="glass-field-label block">
-                                {t('modal.introduction')}
-                            </label>
-                            <textarea
-                                value={editingIntroduction}
-                                onChange={(e) => setEditingIntroduction(e.target.value)}
-                                rows={3}
-                                className="glass-textarea-base w-full px-3 py-2 resize-none"
-                                placeholder={t('modal.introductionPlaceholder')}
-                            />
-                            <p className="glass-field-hint">
-                                {t('modal.introductionTip')}
-                            </p>
-                        </div>
-                    )}
-
-                    {mode === 'asset-hub' && changeReason && (
+                    {changeReason && (
                         <div className="text-sm text-[var(--glass-text-secondary)]">
                             {t('character.appearance')}:
                             <span className="ml-1 inline-flex items-center rounded-full px-2 py-0.5 bg-[var(--glass-tone-neutral-bg)] text-[var(--glass-tone-neutral-fg)]">

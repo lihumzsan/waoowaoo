@@ -19,7 +19,6 @@ type TaskEventListener = (event: SSEEvent) => void
 
 interface WorkspaceContextValue {
   projectId: string
-  episodeId?: string
   refreshData: (scope?: RefreshScope) => Promise<void>
   onRefresh: (options?: RefreshOptions) => Promise<void>
   subscribeTaskEvents: (listener: TaskEventListener) => () => void
@@ -27,13 +26,12 @@ interface WorkspaceContextValue {
 
 interface WorkspaceProviderProps {
   projectId: string
-  episodeId?: string
   children: ReactNode
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null)
 
-export function WorkspaceProvider({ projectId, episodeId, children }: WorkspaceProviderProps) {
+export function WorkspaceProvider({ projectId, children }: WorkspaceProviderProps) {
   const queryClient = useQueryClient()
   const listenersRef = useRef(new Set<TaskEventListener>())
 
@@ -45,19 +43,11 @@ export function WorkspaceProvider({ projectId, episodeId, children }: WorkspaceP
     }
 
     if (!scope || scope === 'all' || scope === 'assets') {
-      promises.push(queryClient.refetchQueries({ queryKey: queryKeys.assets.all('project', projectId) }))
-      promises.push(queryClient.refetchQueries({ queryKey: queryKeys.projectAssets.all(projectId) }))
-    }
-
-    if (episodeId) {
-      promises.push(queryClient.refetchQueries({ queryKey: queryKeys.project.storyCanon(projectId, episodeId) }))
-      promises.push(queryClient.refetchQueries({ queryKey: queryKeys.project.creativeResources(projectId, episodeId) }))
-      promises.push(queryClient.refetchQueries({ queryKey: queryKeys.project.context(projectId, episodeId) }))
-      promises.push(queryClient.refetchQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) }))
+      promises.push(queryClient.refetchQueries({ queryKey: queryKeys.project.workspaceResources(projectId) }))
     }
 
     await Promise.all(promises)
-  }, [episodeId, projectId, queryClient])
+  }, [projectId, queryClient])
 
   const onRefresh = useCallback(async (options?: RefreshOptions) => {
     await refreshData(options?.scope as RefreshScope | undefined)
@@ -78,18 +68,16 @@ export function WorkspaceProvider({ projectId, episodeId, children }: WorkspaceP
 
   useSSE({
     projectId,
-    episodeId,
     enabled: !!projectId,
     onEvent: handleTaskEvent,
   })
 
   const value = useMemo<WorkspaceContextValue>(() => ({
     projectId,
-    episodeId,
     refreshData,
     onRefresh,
     subscribeTaskEvents,
-  }), [episodeId, onRefresh, projectId, refreshData, subscribeTaskEvents])
+  }), [onRefresh, projectId, refreshData, subscribeTaskEvents])
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>
 }

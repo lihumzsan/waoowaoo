@@ -11,7 +11,6 @@ export type TaskExecutionDataSource = {
   parentTaskId: string | null
   type: string
   projectId: string
-  episodeId: string | null
   targetType: string
   targetId: string
   payload: unknown
@@ -81,7 +80,6 @@ export function buildTaskExecutionData(
     type,
     locale,
     projectId: source.projectId,
-    episodeId: source.episodeId,
     targetType: source.targetType,
     targetId: source.targetId,
     payload,

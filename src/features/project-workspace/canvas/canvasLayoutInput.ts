@@ -1,14 +1,16 @@
 import type { UpsertCanvasLayoutInput } from '@/lib/project-canvas/layout/canvas-layout-contract'
+import type { Viewport } from '@xyflow/react'
 import { DEFAULT_WORKSPACE_CANVAS_VIEWPORT } from './canvasViewport'
 import type { WorkspaceCanvasFlowNode } from './node-canvas-types'
 
 export function buildWorkspaceCanvasLayoutInput(params: {
-  readonly episodeId: string
+  readonly folderKey: string
+  readonly viewport?: Viewport
   readonly nodes: readonly WorkspaceCanvasFlowNode[]
 }): UpsertCanvasLayoutInput {
   return {
-    episodeId: params.episodeId,
-    viewport: DEFAULT_WORKSPACE_CANVAS_VIEWPORT,
+    folderKey: params.folderKey,
+    viewport: params.viewport ?? DEFAULT_WORKSPACE_CANVAS_VIEWPORT,
     nodeLayouts: params.nodes.map((node, index) => ({
       nodeKey: node.id,
       nodeType: node.data.layoutNodeType,

@@ -2,13 +2,13 @@ import type { Edge, Node } from '@xyflow/react'
 import type { CanvasLayoutNodeType } from '@/lib/project-canvas/layout/canvas-layout-contract'
 import type { TaskRuntimeTarget } from '@/lib/task/runtime-targets'
 import type { WorkspaceCanvasLifecycle } from './lifecycle/workspace-canvas-lifecycle'
-import type { WorkspaceCreativeResourceCardView } from './contracts/workspace-canvas-interactions'
+import type { WorkspaceResourceCardView } from './contracts/workspace-canvas-interactions'
 
 /**
  * Canvas projects durable Creative Resources. Resource schema and lineage,
  * rather than a workflow stage name, describe what each card represents.
  */
-export type WorkspaceCanvasNodeKind = 'resourceCard'
+export type WorkspaceCanvasNodeKind = 'resourceCard' | 'folder'
 
 /**
  * The shape a Resource card's media area takes, declared per media family in
@@ -26,18 +26,16 @@ export interface WorkspaceCanvasMediaShell {
   readonly fit: 'cover' | 'contain'
 }
 
-export interface WorkspaceCanvasNodeData {
+interface WorkspaceCanvasBaseNodeData {
   readonly nodeId?: string
   readonly projectId?: string
-  readonly episodeName?: string
   readonly kind: WorkspaceCanvasNodeKind
-  readonly layoutNodeType: Extract<CanvasLayoutNodeType, 'resourceCard'>
-  readonly targetType: 'creativeResource'
+  readonly layoutNodeType: Extract<CanvasLayoutNodeType, 'resourceCard' | 'folder'>
+  readonly targetType: 'workspaceResource' | 'folder'
   readonly targetId: string
   readonly title: string
   readonly eyebrow: string
   readonly lifecycle: WorkspaceCanvasLifecycle
-  readonly mediaShell: WorkspaceCanvasMediaShell
   readonly runtimeTargets?: readonly TaskRuntimeTarget[]
   readonly width: number
   readonly height: number
@@ -48,10 +46,33 @@ export interface WorkspaceCanvasNodeData {
   readonly readOnly?: boolean
   /** Pure UI selection flag mirrored from the workspace selection state. */
   readonly uiSelected?: boolean
-  readonly resourceDetails: WorkspaceCreativeResourceCardView
 }
 
-export type WorkspaceCanvasNodeRecord = WorkspaceCanvasNodeData & Record<string, unknown>
+export interface WorkspaceCanvasResourceNodeData extends WorkspaceCanvasBaseNodeData {
+  readonly kind: 'resourceCard'
+  readonly layoutNodeType: 'resourceCard'
+  readonly targetType: 'workspaceResource'
+  readonly mediaShell: WorkspaceCanvasMediaShell
+  readonly resourceDetails: WorkspaceResourceCardView
+}
+
+export interface WorkspaceCanvasFolderNodeData extends WorkspaceCanvasBaseNodeData {
+  readonly kind: 'folder'
+  readonly layoutNodeType: 'folder'
+  readonly targetType: 'folder'
+  readonly folder: {
+    readonly resourceId: string
+    readonly workspacePath: string
+  }
+}
+
+export type WorkspaceCanvasNodeData =
+  | WorkspaceCanvasResourceNodeData
+  | WorkspaceCanvasFolderNodeData
+
+export type WorkspaceCanvasNodeRecord =
+  | (WorkspaceCanvasResourceNodeData & Record<string, unknown>)
+  | (WorkspaceCanvasFolderNodeData & Record<string, unknown>)
 export type WorkspaceCanvasFlowNode = Node<WorkspaceCanvasNodeRecord, 'workspaceNode'>
 export type WorkspaceCanvasFlowEdge = Edge
 

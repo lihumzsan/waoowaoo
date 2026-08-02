@@ -1,4 +1,3 @@
-import type { Usage } from '@openai/agents'
 import type { Prisma } from '@prisma/client'
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
@@ -7,7 +6,7 @@ import { recordUsageFact } from './reporting'
 
 export const llmUsageFactSchema = z
   .object({
-    phase: z.enum(['agent_model', 'context_compaction', 'creative_worker']),
+    phase: z.enum(['agent_model', 'context_compaction']),
     modelKey: z.string().trim().min(1).max(191),
     inputTokens: z.number().int().nonnegative(),
     outputTokens: z.number().int().nonnegative(),
@@ -19,7 +18,7 @@ export const llmUsageFactSchema = z
 export type LlmUsageFact = z.infer<typeof llmUsageFactSchema>
 
 export function buildLlmUsageFactId(
-  scope: 'agent-turn' | 'creative-work',
+  scope: 'agent-turn',
   identityParts: readonly (string | number)[],
 ): string {
   const canonicalIdentity = identityParts
@@ -34,31 +33,6 @@ export function buildLlmUsageFactId(
 
 function normalizeTokenCount(value: number | undefined): number {
   return Number.isFinite(value) ? Math.max(0, Math.floor(value ?? 0)) : 0
-}
-
-function readAgentsCachedInputTokens(usage: Usage): number {
-  const details = usage.requestUsageEntries
-    ? usage.requestUsageEntries.map((entry) => entry.inputTokensDetails)
-    : usage.inputTokensDetails
-  return details.reduce((total, entry) => {
-    const value = entry.cached_tokens
-    return total + normalizeTokenCount(value)
-  }, 0)
-}
-
-export function projectAgentsSdkUsage(params: {
-  phase: 'agent_model' | 'creative_worker'
-  modelKey: string
-  usage: Usage
-}): LlmUsageFact {
-  return llmUsageFactSchema.parse({
-    phase: params.phase,
-    modelKey: params.modelKey,
-    inputTokens: normalizeTokenCount(params.usage.inputTokens),
-    outputTokens: normalizeTokenCount(params.usage.outputTokens),
-    cachedInputTokens: readAgentsCachedInputTokens(params.usage),
-    requestCount: normalizeTokenCount(params.usage.requests),
-  })
 }
 
 export function projectAiLlmUsage(params: {

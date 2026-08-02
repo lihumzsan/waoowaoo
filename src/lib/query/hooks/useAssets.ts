@@ -20,11 +20,8 @@ import type {
 
 function buildQueryPath(input: AssetQueryInput): string {
   const searchParams = new URLSearchParams({
-    scope: input.scope,
+    scope: 'global',
   })
-  if (input.projectId) {
-    searchParams.set('projectId', input.projectId)
-  }
   if (input.folderId) {
     searchParams.set('folderId', input.folderId)
   }
@@ -45,28 +42,22 @@ export function useAssets(input: AssetQueryInput) {
       const data = await response.json() as ReadAssetsResponse
       return data.assets
     },
-    enabled: input.scope === 'global' || !!input.projectId,
     staleTime: 5_000,
   })
 }
 
 type AssetActionScopeInput = {
-  scope: 'global' | 'project'
-  projectId?: string | null
   kind: AssetKind
 }
 
-export function useRefreshAssets(input: { scope: 'global' | 'project'; projectId?: string | null }) {
+export function useRefreshAssets() {
   const queryClient = useQueryClient()
   return () => {
     return syncWorkspaceResourceChanges({
       queryClient,
       changes: resolveWorkspaceResourceRefs({
-        impact: input.scope === 'global'
-          ? WORKSPACE_RESOURCE_IMPACT.GLOBAL_ASSETS
-          : WORKSPACE_RESOURCE_IMPACT.PROJECT_ASSETS,
-        projectId: input.scope === 'global' ? GLOBAL_ASSET_PROJECT_ID : input.projectId ?? '',
-        episodeId: null,
+        impact: WORKSPACE_RESOURCE_IMPACT.GLOBAL_ASSETS,
+        projectId: GLOBAL_ASSET_PROJECT_ID,
       }),
     })
   }
@@ -80,9 +71,8 @@ export function useAssetActions(input: AssetActionScopeInput) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        scope: input.scope,
+        scope: 'global',
         kind: input.kind,
-        projectId: input.projectId,
         ...payload,
       }),
     }, queryClient)
@@ -93,9 +83,8 @@ export function useAssetActions(input: AssetActionScopeInput) {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        scope: input.scope,
+        scope: 'global',
         kind: input.kind,
-        projectId: input.projectId,
       }),
     }, queryClient)
   }
@@ -105,24 +94,10 @@ export function useAssetActions(input: AssetActionScopeInput) {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        scope: input.scope,
+        scope: 'global',
         kind: input.kind,
-        projectId: input.projectId,
         ...payload,
       }),
-    }, queryClient)
-  }
-
-  const uploadRender = async (assetId: string, file: File, imageIndex?: number) => {
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('scope', input.scope)
-    formData.append('kind', input.kind)
-    if (input.projectId) formData.append('projectId', input.projectId)
-    if (imageIndex !== undefined) formData.append('imageIndex', String(imageIndex))
-    await requestOperationMutationVoidWithError(`/api/assets/${assetId}/upload-render`, {
-      method: 'POST',
-      body: formData,
     }, queryClient)
   }
 
@@ -131,9 +106,8 @@ export function useAssetActions(input: AssetActionScopeInput) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        scope: input.scope,
+        scope: 'global',
         kind: input.kind,
-        projectId: input.projectId,
         ...payload,
       }),
     }, queryClient)
@@ -144,25 +118,9 @@ export function useAssetActions(input: AssetActionScopeInput) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        scope: input.scope,
+        scope: 'global',
         kind: input.kind,
-        projectId: input.projectId,
         ...payload,
-      }),
-    }, queryClient)
-  }
-
-  const copyFromGlobal = async (payload: { targetId: string; globalAssetId: string }) => {
-    if (input.scope !== 'project' || !input.projectId) {
-      throw new Error('copyFromGlobal is only available for project asset scope')
-    }
-    await requestOperationMutationVoidWithError(`/api/assets/${payload.targetId}/copy`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        kind: input.kind,
-        projectId: input.projectId,
-        globalAssetId: payload.globalAssetId,
       }),
     }, queryClient)
   }
@@ -172,9 +130,8 @@ export function useAssetActions(input: AssetActionScopeInput) {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        scope: input.scope,
+        scope: 'global',
         kind: input.kind,
-        projectId: input.projectId,
         ...payload,
       }),
     }, queryClient)
@@ -184,10 +141,8 @@ export function useAssetActions(input: AssetActionScopeInput) {
     create,
     update,
     updateVariant,
-    uploadRender,
     remove,
     selectRender,
     revertRender,
-    copyFromGlobal,
   }
 }

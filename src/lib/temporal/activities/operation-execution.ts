@@ -180,18 +180,11 @@ async function executeApprovedPlanOperation(
     select: {
       projectId: true,
       planSnapshotId: true,
-      planSnapshot: {
-        select: {
-          episodeId: true,
-          projectId: true,
-        },
-      },
     },
   })
   if (
     !grant ||
-    grant.projectId !== command.projectId ||
-    grant.planSnapshot.projectId !== command.projectId
+    grant.projectId !== command.projectId
   ) {
     return failNonRetryable('OPERATION_EXECUTION_PROJECT_SCOPE_DIVERGED', command.approvalGrantId)
   }
@@ -204,9 +197,6 @@ async function executeApprovedPlanOperation(
     return failNonRetryable('OPERATION_EXECUTION_PLAN_LOCALE_DIVERGED', grant.planSnapshotId)
   }
   const locale = [...locales][0]
-  if (command.context.episodeId !== grant.planSnapshot.episodeId) {
-    return failNonRetryable('OPERATION_EXECUTION_CONTEXT_SCOPE_DIVERGED', command.executionId)
-  }
   const followUpBatchBinding =
     command.context.origin.kind === 'agent_turn'
       ? createAgentFollowUpBatchBinding({
@@ -223,7 +213,6 @@ async function executeApprovedPlanOperation(
     userId: command.userId,
     projectId: command.projectId,
     context: {
-      episodeId: grant.planSnapshot.episodeId,
       ...(locale ? { locale } : {}),
       selectedScopeRef: command.context.selectedScopeRef,
       selectedAssetId: command.context.selectedAssetId,
@@ -382,7 +371,6 @@ async function executeDirectTaskOperation(
           projectId: command.projectId,
           context: {
             ...(command.context.locale ? { locale: command.context.locale } : {}),
-            episodeId: command.context.episodeId,
             selectedScopeRef: command.context.selectedScopeRef,
             selectedAssetId: command.context.selectedAssetId,
             ...(command.context.origin.kind === 'agent_turn'

@@ -37,7 +37,6 @@ const DIRECT_COMMAND_KEYS = [
 ] as const
 
 const DIRECT_CONTEXT_KEYS = [
-  'episodeId',
   'locale',
   'origin',
   'selectedAssetId',
@@ -162,7 +161,6 @@ export function assertOperationExecutionCommand(
   )
   for (const [value, code] of [
     [command.context.locale, 'OPERATION_EXECUTION_LOCALE_INVALID'],
-    [command.context.episodeId, 'OPERATION_EXECUTION_EPISODE_ID_INVALID'],
     [command.context.selectedScopeRef, 'OPERATION_EXECUTION_SCOPE_REF_INVALID'],
     [command.context.selectedAssetId, 'OPERATION_EXECUTION_ASSET_ID_INVALID'],
   ] as const) {

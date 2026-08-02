@@ -41,14 +41,11 @@ export type BillingTransactionDisplayRow = {
   externalOrderId: string | null
   idempotencyKey: string | null
   projectId: string | null
-  episodeId: string | null
   taskType: string | null
   billingMeta: Record<string, unknown> | null
   createdAt: Date
   action: string | null
   projectName: string | null
-  episodeNumber: number | null
-  episodeName: string | null
   target: BillingTransactionTargetView | null
   operationId: string | null
   operationRequestId: string | null
@@ -62,7 +59,7 @@ type AggregationEntry =
 const GROUP_TARGET_LABEL_BY_TYPE: Record<string, string> = {
   CharacterAppearance: 'transactionTargets.characterAppearanceGroup',
   LocationImage: 'transactionTargets.locationImageGroup',
-  CreativeResource: 'transactionTargets.creativeResourceGroup',
+  WorkspaceResource: 'transactionTargets.workspaceResourceGroup',
 }
 
 function readNumber(value: unknown): number | null {
@@ -123,7 +120,6 @@ function createAggregationKey(row: BillingTransactionDisplayRow): string | null 
     row.type,
     row.action,
     row.projectId,
-    row.episodeId,
     row.target?.targetType ?? null,
     billingSpecSignature(row.billingMeta),
   ])

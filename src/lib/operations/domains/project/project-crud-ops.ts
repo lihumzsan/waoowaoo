@@ -2,8 +2,7 @@ import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
-import { deleteProjectOwnedCreativeResourceLineage } from '@/lib/creative-resource/project-deletion'
-import { deleteProjectNarrativeProjections } from '@/lib/story-canon/project-deletion'
+import { deleteProjectOwnedWorkspaceResourceLineage } from '@/lib/workspace-resource/project-deletion'
 import { addSignedUrlsToProject } from '@/lib/storage'
 import { logProjectAction } from '@/lib/logging/semantic'
 import { resolveTaskLocale } from '@/lib/task/resolve-locale'
@@ -113,8 +112,7 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
       id: 'update_project',
       summary: 'Update project name/description for the project owner.',
       intent: 'act',
-      channels: { tool: true, api: true, mcp: true },
-      toolContractRevision: 'update_project/v1',
+      channels: { tool: false, api: true, mcp: false },
       effects: {
         writes: true,
         workspaceResourceImpact: 'project_data',
@@ -268,15 +266,10 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
           })
         }
 
-        await deleteProjectOwnedCreativeResourceLineage({
+        await deleteProjectOwnedWorkspaceResourceLineage({
           projectId: ctx.projectId,
           transaction,
         })
-        await deleteProjectNarrativeProjections({
-          projectId: ctx.projectId,
-          transaction,
-        })
-
         // FollowUpBatch deliberately has no Project foreign key because a
         // terminal Task may settle after the originating Thread disappears.
         // Project deletion must therefore close this recovery authority

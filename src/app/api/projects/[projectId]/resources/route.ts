@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isErrorResponse, requireProjectAuthLight } from '@/lib/api-auth'
 import { ApiError, apiHandler } from '@/lib/api-errors'
-import { isCreativeResourceMediaType, isCreativeResourceStatus } from '@/lib/creative-resource/contracts'
-import { listProjectCreativeResourceCards } from '@/lib/creative-resource/view-service'
+import { listWorkspaceResourceTreePage } from '@/lib/workspace-resource/view-service'
+
+function parseLimit(value: string | null): number | undefined {
+  if (value === null) return undefined
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 200) {
+    throw new ApiError('INVALID_PARAMS', { field: 'limit' })
+  }
+  return parsed
+}
 
 export const GET = apiHandler(async (
   request: NextRequest,
@@ -11,38 +19,14 @@ export const GET = apiHandler(async (
   const { projectId } = await context.params
   const auth = await requireProjectAuthLight(projectId)
   if (isErrorResponse(auth)) return auth
-  const rawEpisodeId = request.nextUrl.searchParams.get('episodeId')
-  const episodeId = rawEpisodeId === null ? undefined : rawEpisodeId.trim() || null
-  const rawMediaType = request.nextUrl.searchParams.get('mediaType')
-  if (rawMediaType !== null && !isCreativeResourceMediaType(rawMediaType)) {
-    throw new ApiError('INVALID_PARAMS', { field: 'mediaType' })
-  }
-  const mediaType = rawMediaType !== null && isCreativeResourceMediaType(rawMediaType) ? rawMediaType : null
-  const rawStatus = request.nextUrl.searchParams.get('status')
-  if (rawStatus !== null && !isCreativeResourceStatus(rawStatus)) {
-    throw new ApiError('INVALID_PARAMS', { field: 'status' })
-  }
-  const status = rawStatus !== null && isCreativeResourceStatus(rawStatus) ? rawStatus : null
-  const schemaId = request.nextUrl.searchParams.get('schemaId')?.trim() || null
-  const resources = await listProjectCreativeResourceCards({
+  const page = await listWorkspaceResourceTreePage({
     projectId,
     userId: auth.session.user.id,
-    episodeId,
-    mediaType,
-    schemaId,
-    status,
-    limit: 200,
+    prefix: request.nextUrl.searchParams.get('prefix'),
+    search: request.nextUrl.searchParams.get('search'),
+    cursor: request.nextUrl.searchParams.get('cursor'),
+    limit: parseLimit(request.nextUrl.searchParams.get('limit')),
+    deleted: request.nextUrl.searchParams.get('deleted') === 'true',
   })
-  const projectResources = request.nextUrl.searchParams.get('includeProjectScope') === 'true' && episodeId
-    ? await listProjectCreativeResourceCards({
-        projectId,
-        userId: auth.session.user.id,
-        episodeId: null,
-        mediaType,
-        schemaId,
-        status,
-        limit: 200,
-      })
-    : []
-  return NextResponse.json({ success: true, resources: [...projectResources, ...resources] })
+  return NextResponse.json({ success: true, page })
 })

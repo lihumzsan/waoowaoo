@@ -51,7 +51,6 @@
   "previousPage": "Previous",
   "nextPage": "Next",
   "pagination": "{total} items, Page {page} / {totalPages}",
-  "episodeLabel": "Episode {number}",
   "billingDetail": {
     "imageWithRes": "{count} images · {resolution}",
     "image": "{count} images",
@@ -73,10 +72,9 @@
     "projectLocation": "Location {name}",
     "locationImage": "Location {name} · Image {index}",
     "locationImageGroup": "{count} location images",
-    "creativeResource": "Resource {name}",
-    "creativeResourceGroup": "{count} creative resources",
+    "workspaceResource": "Resource {name}",
+    "workspaceResourceGroup": "{count} creative resources",
     "taskGroup": "{count} related items",
-    "projectEpisode": "Episode {number} · {name}",
     "project": "Project {name}",
     "globalCharacter": "Asset character {name}",
     "globalCharacterAppearance": "Asset character {name} · Appearance {index}",
@@ -150,11 +148,10 @@
     "music": "Music Generation"
   },
   "actionTypes": {
-    "creative_work": "Creative Subagent",
-    "creative_resource_image": "Image Resource Generation",
-    "creative_resource_audio": "Audio Resource Generation",
-    "creative_resource_voice": "Voice Resource Generation",
-    "creative_resource_video": "Video Resource Generation",
-    "creative_resource_video_merge": "Video Resource Merge"
+    "workspace_resource_image": "Image Resource Generation",
+    "workspace_resource_audio": "Audio Resource Generation",
+    "workspace_resource_voice": "Voice Resource Generation",
+    "workspace_resource_video": "Video Resource Generation",
+    "workspace_resource_video_merge": "Video Resource Merge"
   }
 }

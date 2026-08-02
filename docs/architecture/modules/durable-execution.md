@@ -61,7 +61,7 @@ Codex Thread/Turn、模型 stream、command/file approval、Workspace 与 app-se
   明确 retryable code；Activity retry 同一 batchId。没有 timer、DB poller、伪造浏览器 request 或
   第二通知队列。Batch canceled/notified 是 non-retryable replay。
 - **DE-13 — Clear 关闭旧 Batch。** clear 事务取消旧 Thread 未完成 Batch；晚到 Task 只能结算
-  member，不能唤醒新 Thread。follow-up 必须从 Batch 读取 user/project/thread/episode/context，
+  member，不能唤醒新 Thread。follow-up 必须从 Batch 读取 user/project/thread/context，
   不信任 Temporal caller 提供 scope。
 - **DE-14 — Cancel 不覆盖已提交完成。** checkpoint/terminal 已提交时业务事实优先；cancel 只
   阻止尚未发生的执行。Provider cancel 在读取正式 ledger 后独立重试，不能反向阻塞 terminal、

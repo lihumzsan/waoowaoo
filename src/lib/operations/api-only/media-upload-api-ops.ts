@@ -7,7 +7,7 @@ import {
   buildUserUploadStorageKey,
   resolveUserUploadAcceptedMedia,
   userUploadSchemaIdForMediaType,
-} from '@/lib/creative-resource/upload-contract'
+} from '@/lib/workspace-resource/upload-contract'
 import {
   assertFileSizeWithinLimit,
   MAX_AUDIO_BYTES,
@@ -177,7 +177,7 @@ export function createMediaUploadApiOperations(): ProjectAgentOperationRegistryD
       inputSchema: resourceAttachmentInputSchema,
       outputSchema: uploadMediaOutputSchema,
       execute: async (ctx, input) => {
-        const resource = await prisma.creativeResource.findUnique({
+        const resource = await prisma.workspaceResource.findUnique({
           where: { id: input.resourceId },
           select: {
             id: true,
@@ -185,30 +185,44 @@ export function createMediaUploadApiOperations(): ProjectAgentOperationRegistryD
             mediaType: true,
             name: true,
             status: true,
-            media: {
+            currentVersion: true,
+            versions: {
+              orderBy: { version: 'desc' },
+              take: 1,
               select: {
-                publicId: true,
-                sha256: true,
-                mimeType: true,
+                version: true,
+                media: {
+                  select: {
+                    publicId: true,
+                    sha256: true,
+                    mimeType: true,
+                  },
+                },
               },
             },
           },
         })
         if (!resource || resource.projectId !== ctx.projectId) {
           throw new ApiError('NOT_FOUND', {
-            code: 'CREATIVE_RESOURCE_NOT_FOUND',
+            code: 'WORKSPACE_RESOURCE_NOT_FOUND',
             field: 'resourceId',
           })
         }
-        if (resource.mediaType !== 'image' || resource.status !== 'ready' || !resource.media) {
+        const current = resource.versions[0]
+        if (
+          resource.mediaType !== 'image'
+          || resource.status !== 'ready'
+          || !current
+          || current.version !== resource.currentVersion
+        ) {
           throw new ApiError('INVALID_PARAMS', {
             code: 'RESOURCE_ATTACHMENT_NOT_ELIGIBLE',
             field: 'resourceId',
             message: 'only ready image Resources with stored media can be attached to the assistant',
           })
         }
-        const accepted = resolveUserUploadAcceptedMedia(resource.media.mimeType)
-        if (!accepted || accepted.mediaType !== 'image' || !resource.media.sha256) {
+        const accepted = resolveUserUploadAcceptedMedia(current.media.mimeType)
+        if (!accepted || accepted.mediaType !== 'image' || !current.media.sha256) {
           throw new ApiError('INVALID_PARAMS', {
             code: 'RESOURCE_ATTACHMENT_MEDIA_UNSUPPORTED',
             field: 'resourceId',
@@ -218,14 +232,14 @@ export function createMediaUploadApiOperations(): ProjectAgentOperationRegistryD
         const name = resource.name.trim().slice(0, 200) || 'Image'
         const attachmentToken = buildProjectAssistantAttachmentToken({
           v: 1,
-          publicId: resource.media.publicId,
+          publicId: current.media.publicId,
           resourceId: resource.id,
           userId: ctx.userId,
           projectId: ctx.projectId,
           mediaType: 'image',
           fileName: `${name.slice(0, 190)}.${accepted.extension}`,
           name,
-          sha256: resource.media.sha256.toLowerCase(),
+          sha256: current.media.sha256.toLowerCase(),
         })
         return uploadMediaOutputSchema.parse({
           success: true,
@@ -240,7 +254,7 @@ export function createMediaUploadApiOperations(): ProjectAgentOperationRegistryD
     }),
     api_project_upload_media: defineOperation({
       id: 'api_project_upload_media',
-      summary: 'API-only: Register one user-uploaded image or audio file (sniffed, sanitized, content-addressed, MediaObject-registered) as a chat attachment and return its signed registration receipt. No CreativeResource is created here; the Agent materializes an attachment on demand through register_uploaded_media.',
+      summary: 'API-only: Register one user-uploaded image or audio file (sniffed, sanitized, content-addressed, MediaObject-registered) as a chat attachment and return its signed registration receipt. No WorkspaceResource is created here; the Agent materializes an attachment on demand through register_uploaded_media.',
       intent: 'act',
       effects: {
         writes: true,

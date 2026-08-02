@@ -1,17 +1,14 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import type { MouseEvent } from 'react'
 import { useTranslations } from 'next-intl'
-import { useProjectAssets } from '@/lib/query/hooks'
 import CharacterCreationForm from './character-creation/CharacterCreationForm'
 import { useCharacterCreationSubmit } from './character-creation/hooks/useCharacterCreationSubmit'
 import { AppIcon } from '@/components/ui/icons'
 
 export interface CharacterCreationModalProps {
-  mode: 'asset-hub' | 'project'
   folderId?: string | null
-  projectId?: string
   onClose: () => void
   onSuccess: () => void
 }
@@ -21,41 +18,21 @@ const XMarkIcon = ({ className }: { className?: string }) => (
 )
 
 export function CharacterCreationModal({
-  mode,
   folderId,
-  projectId,
   onClose,
   onSuccess,
 }: CharacterCreationModalProps) {
   const t = useTranslations('assetModal')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [isSubAppearance, setIsSubAppearance] = useState(false)
-  const [selectedCharacterId, setSelectedCharacterId] = useState('')
-  const [changeReason, setChangeReason] = useState('')
-
-  const projectAssets = useProjectAssets(mode === 'project' ? (projectId ?? null) : null)
-  const availableCharacters = useMemo(() => {
-    if (mode !== 'project') return []
-    return (projectAssets.data?.characters || []).map((character) => ({
-      id: character.id,
-      name: character.name,
-      appearances: character.appearances || [],
-    }))
-  }, [mode, projectAssets.data?.characters])
 
   const {
     isSubmitting,
     handleSubmit,
   } = useCharacterCreationSubmit({
-    mode,
     folderId,
-    projectId,
     name,
     description,
-    isSubAppearance,
-    selectedCharacterId,
-    changeReason,
     onSuccess,
     onClose,
   })
@@ -86,18 +63,10 @@ export function CharacterCreationModal({
           </div>
 
           <CharacterCreationForm
-            mode={mode}
             name={name}
             setName={setName}
             description={description}
             setDescription={setDescription}
-            isSubAppearance={isSubAppearance}
-            setIsSubAppearance={setIsSubAppearance}
-            selectedCharacterId={selectedCharacterId}
-            setSelectedCharacterId={setSelectedCharacterId}
-            changeReason={changeReason}
-            setChangeReason={setChangeReason}
-            availableCharacters={availableCharacters}
           />
         </div>
 
@@ -111,9 +80,7 @@ export function CharacterCreationModal({
           </button>
           <button
             onClick={() => { void handleSubmit() }}
-            disabled={isSubmitting || (isSubAppearance
-              ? !selectedCharacterId.trim() || !changeReason.trim() || !description.trim()
-              : !name.trim() || !description.trim())}
+            disabled={isSubmitting || !name.trim() || !description.trim()}
             className="glass-btn-base glass-btn-primary px-4 py-2 rounded-lg text-sm disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {isSubmitting ? t('common.adding') : t('common.add')}

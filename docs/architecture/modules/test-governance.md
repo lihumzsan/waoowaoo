@@ -75,8 +75,8 @@ MySQL schema 和测试 namespace，并向测试进程注入随机本机端口；
   typecheck可以成功却没有检查任何runtime script，干净worktree才以TS18003暴露。当前配置
   直接枚举`package.json`真实tsx入口，删除生成文件占位；空输入和漏接新脚本都不能继续
   冒充静态验证。首次真正检查随即发现两份图片健康脚本仍引用已删除的三类旧Task；它们现
-  只观察生产registry中实际触达outbound image边界的`creative_resource_image +
-  creative_resource_video`，没有旧枚举兼容或双读。
+  只观察生产registry中实际触达outbound image边界的`workspace_resource_image +
+  workspace_resource_video`，没有旧枚举兼容或双读。
 
 ## 修改检查表
 

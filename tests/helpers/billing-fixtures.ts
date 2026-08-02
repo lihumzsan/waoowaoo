@@ -46,7 +46,6 @@ export async function createQueuedTask(params: {
   id: string
   userId: string
   projectId: string
-  episodeId?: string | null
   type: TaskType
   targetType: string
   targetId: string
@@ -59,7 +58,6 @@ export async function createQueuedTask(params: {
   const executionInput = {
     userId: params.userId,
     projectId: params.projectId,
-    episodeId: params.episodeId ?? null,
     type: params.type,
     targetType: params.targetType,
     targetId: params.targetId,
@@ -73,7 +71,6 @@ export async function createQueuedTask(params: {
       id: params.id,
       userId: params.userId,
       projectId: params.projectId,
-      episodeId: params.episodeId || null,
       type: params.type,
       targetType: params.targetType,
       targetId: params.targetId,

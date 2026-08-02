@@ -254,7 +254,7 @@ export function useRefreshGlobalAssets() {
 
     return () => {
         queryClient.invalidateQueries({
-            queryKey: queryKeys.assets.all('global'),
+            queryKey: queryKeys.assets.all(),
         })
         queryClient.invalidateQueries({ queryKey: queryKeys.globalAssets.all() })
     }

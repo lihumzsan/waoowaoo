@@ -13,8 +13,7 @@ export function createApiOnlyOperationRegistry(): ProjectAgentOperationRegistry 
     ...createUserApiConfigConnectionDiagnosticOperations(),
   }, {
     groupPath: ['api-only'],
-    channels: { tool: false, api: true },
-    prerequisites: { episodeId: 'optional' },
+    channels: { tool: false, api: true, mcp: false },
     confirmation: { kind: 'none', required: false, summary: null, budget: null },
   })
 }

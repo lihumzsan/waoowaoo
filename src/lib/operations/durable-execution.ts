@@ -48,7 +48,6 @@ function assertStoredExecution(
     scopeKind: string
     scopeId: string
     projectId: string | null
-    episodeId: string | null
     operationId: string
     planSnapshotId: string | null
     approvalGrantId: string | null
@@ -72,7 +71,6 @@ function assertStoredExecution(
     row.scopeKind !== 'project' ||
     row.scopeId !== command.projectId ||
     row.projectId !== command.projectId ||
-    row.episodeId !== command.context.episodeId ||
     row.operationId !== command.operationId ||
     row.planSnapshotId !== null ||
     row.approvalGrantId !== null ||
@@ -145,7 +143,6 @@ export async function executeDirectOperationTransaction(params: {
             scopeKind: 'project',
             scopeId: command.projectId,
             projectId: command.projectId,
-            episodeId: command.context.episodeId,
             operationId: command.operationId,
             planSnapshotId: null,
             approvalGrantId: null,

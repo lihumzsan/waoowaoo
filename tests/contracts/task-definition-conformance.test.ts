@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { isBillableTaskType } from '@/lib/billing/task-policy'
-import { CREATIVE_WORK_EXECUTION_DEADLINE_MS, TASK_DEFINITIONS } from '@/lib/task/definition'
+import { TASK_DEFINITIONS } from '@/lib/task/definition'
 import { TASK_TYPE } from '@/lib/task/types'
 import { getTaskMaxAttempts } from '@/lib/task/retry-policy'
 
@@ -17,44 +17,13 @@ describe('TaskDefinition conformance', () => {
       expect(definition.executionProtocol).toBe('handler_result_checkpoint')
       expect(definition.terminalSuccessHandoff).toBe('handler_result_checkpoint')
       expect(definition.submissionTargetOwnership).toBe('none')
-      expect(definition.terminalResourceImpact).toBe('creative_resources')
+      expect(definition.terminalResourceImpact).toBe('workspace_resources')
       expect(definition.terminalFailureProjector).toBe('none')
       expect(definition.terminalCancelProjector).toBe('none')
-      if (definition.executionDeadlineMs !== null) {
-        expect(Number.isSafeInteger(definition.executionDeadlineMs)).toBe(true)
-        expect(definition.executionDeadlineMs).toBeGreaterThan(0)
-      }
-    }
-  })
-
-  it('materializes Creative Work results and provider media through the Resource spine', () => {
-    expect(TASK_DEFINITIONS[TASK_TYPE.CREATIVE_WORK]).toMatchObject({
-      billingPolicy: 'none',
-      terminalOutputMaterializer: 'domain_creative_resource',
-      continuationResultProjection: 'reference',
-      lifecyclePayloadProjection: 'reference',
-      executionDeadlineMs: CREATIVE_WORK_EXECUTION_DEADLINE_MS,
-    })
-    expect(CREATIVE_WORK_EXECUTION_DEADLINE_MS).toBe(20 * 60_000)
-    for (const taskType of [TASK_TYPE.CREATIVE_RESOURCE_AUDIO, TASK_TYPE.CREATIVE_RESOURCE_VOICE]) {
-      expect(TASK_DEFINITIONS[taskType].schedulerClass).toBe('image')
-    }
-    expect(
-      Object.entries(TASK_DEFINITIONS)
-        .filter(([taskType]) => taskType !== TASK_TYPE.CREATIVE_WORK)
-        .every(([, definition]) => definition.executionDeadlineMs === null),
-    ).toBe(true)
-    for (const taskType of [
-      TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
-      TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
-      TASK_TYPE.CREATIVE_RESOURCE_AUDIO,
-      TASK_TYPE.CREATIVE_RESOURCE_VOICE,
-      TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
-      TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE,
-    ]) {
-      expect(TASK_DEFINITIONS[taskType].terminalOutputMaterializer).toBe('creative_resource')
+      expect(definition.terminalOutputMaterializer).toBe('workspace_resource')
       expect(TASK_DEFINITIONS[taskType].continuationResultProjection).toBe('reference')
       expect(TASK_DEFINITIONS[taskType].lifecyclePayloadProjection).toBe('reference')
+      expect(definition.executionDeadlineMs).toBeNull()
     }
   })
 })

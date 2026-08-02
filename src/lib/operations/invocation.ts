@@ -3,7 +3,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { resolveWorkspaceResourceRefs } from '@/lib/workspace-resource/resource-impact'
 import { publishOperationMutationReceipt } from '@/lib/workspace-resource/resource-change-publisher'
-import { resolveOperationEffectiveEpisodeId, resolveOperationScopeInput } from './environment-input'
+import { resolveOperationScopeInput } from './environment-input'
 import {
   buildProjectAgentToolInputCorrections,
   normalizeProjectAgentToolInput,
@@ -69,47 +69,12 @@ function normalizeInvocationInput(params: {
       ? resolveOperationScopeInput({
           input: split.businessInput,
           context: params.context,
-          prerequisites: params.operation.prerequisites,
         })
       : split.businessInput
   return {
     businessInput,
     invocation: params.approvedInvocation ?? split.invocation,
   }
-}
-
-function assertPrerequisites(params: {
-  operation: ProjectAgentOperationDefinition
-  input: unknown
-  context: ProjectAgentOperationContext['context']
-}): string {
-  const effectiveEpisode = resolveOperationEffectiveEpisodeId({
-    input: params.input,
-    context: params.context,
-  })
-  const hasEpisodeId = effectiveEpisode.episodeId.length > 0
-  if (params.operation.prerequisites.episodeId === 'required' && !hasEpisodeId) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'OPERATION_PREREQUISITE_MISSING',
-      operationId: params.operation.id,
-      prerequisite: 'episodeId',
-      required: 'required',
-      actual: null,
-      message: 'PROJECT_AGENT_OPERATION_PREREQUISITE_EPISODE_REQUIRED',
-    })
-  }
-  if (params.operation.prerequisites.episodeId === 'forbidden' && hasEpisodeId) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'OPERATION_PREREQUISITE_MISSING',
-      operationId: params.operation.id,
-      prerequisite: 'episodeId',
-      required: 'forbidden',
-      actual: effectiveEpisode.episodeId,
-      source: effectiveEpisode.source,
-      message: 'PROJECT_AGENT_OPERATION_PREREQUISITE_EPISODE_FORBIDDEN',
-    })
-  }
-  return effectiveEpisode.episodeId
 }
 
 export function prepareProjectAgentOperationInput(params: {
@@ -121,7 +86,6 @@ export function prepareProjectAgentOperationInput(params: {
 }): {
   input: unknown
   invocation: PlannedOperationInvocation | null
-  effectiveEpisodeId: string
 } {
   assertOperationChannelAllowed(params.operation, params.channel)
   const normalized = normalizeInvocationInput(params)
@@ -134,11 +98,6 @@ export function prepareProjectAgentOperationInput(params: {
           toolInputSchema: params.operation.toolInputSchema,
         })
       : normalized.businessInput
-  const effectiveEpisodeId = assertPrerequisites({
-    operation: params.operation,
-    input: normalizedBusinessInput,
-    context: params.context,
-  })
   const parsedInput = params.operation.inputSchema.safeParse(normalizedBusinessInput)
   if (!parsedInput.success) {
     throw new ApiError('INVALID_PARAMS', {
@@ -156,14 +115,13 @@ export function prepareProjectAgentOperationInput(params: {
   return {
     input: parsedInput.data,
     invocation: normalized.invocation,
-    effectiveEpisodeId,
   }
 }
 
 /**
  * The sole runtime authority for invoking a registered Assistant operation.
  * Adapters may provide source context and translate the result/error shape, but
- * may not reinterpret channels, prerequisites, approval provenance, execution
+ * may not reinterpret channels, approval provenance, execution
  * behavior, or schemas.
  */
 export async function invokeProjectAgentOperation(params: {
@@ -176,7 +134,6 @@ export async function invokeProjectAgentOperation(params: {
   transaction?: Prisma.TransactionClient
   invocationMode?:
     | 'default'
-    | 'atomic_choice_commit'
     | 'agent_tool_effect'
     | 'durable_operation_execution'
 }): Promise<ProjectAgentOperationInvocationResult> {
@@ -188,10 +145,9 @@ export async function invokeProjectAgentOperation(params: {
   }
   params.context.invocationChannel = params.channel
   const invocationMode = params.invocationMode ?? 'default'
-  const atomicChoiceCommit = invocationMode === 'atomic_choice_commit'
   const agentToolEffect = invocationMode === 'agent_tool_effect'
   const durableOperationExecution = invocationMode === 'durable_operation_execution'
-  if (Boolean(params.transaction) !== (atomicChoiceCommit || agentToolEffect)) {
+  if (Boolean(params.transaction) !== agentToolEffect) {
     throw new Error(
       `PROJECT_AGENT_OPERATION_TRANSACTION_MODE_INVALID:${params.operationId}:${invocationMode}`,
     )
@@ -200,7 +156,6 @@ export async function invokeProjectAgentOperation(params: {
     params.channel === 'tool' &&
     !durableOperationExecution &&
     !agentToolEffect &&
-    !atomicChoiceCommit &&
     operation.effects.writes
   ) {
     throw new Error(`PROJECT_AGENT_OPERATION_DURABLE_WRITE_OWNER_REQUIRED:${params.operationId}`)
@@ -227,30 +182,12 @@ export async function invokeProjectAgentOperation(params: {
       operation.effects.externalSideEffects ||
       operation.effects.longRunning ||
       operation.confirmation.kind !== 'none' ||
-      operation.agentFlow?.suspendsFor ||
       !operation.executeInTransaction ||
       operation.prepareTransaction ||
       operation.compensateTransactionFailure ||
       !params.transaction)
   ) {
     throw new Error(`PROJECT_AGENT_OPERATION_TOOL_EFFECT_CONTRACT_INVALID:${operation.id}`)
-  }
-  if (
-    atomicChoiceCommit &&
-    (operation.choiceCommit?.enabled !== true ||
-      operation.channels.tool !== true ||
-      operation.intent !== 'act' ||
-      !operation.effects.writes ||
-      operation.effects.billable ||
-      operation.effects.destructive ||
-      operation.effects.bulk ||
-      operation.effects.longRunning ||
-      operation.effects.externalSideEffects ||
-      operation.confirmation.kind !== 'none' ||
-      operation.agentFlow?.suspendsFor ||
-      !operation.executeInTransaction)
-  ) {
-    throw new Error(`PROJECT_AGENT_CHOICE_COMMIT_OPERATION_CONTRACT_INVALID:${operation.id}`)
   }
   const prepared = prepareProjectAgentOperationInput({
     channel: params.channel,
@@ -264,7 +201,6 @@ export async function invokeProjectAgentOperation(params: {
     ? resolveWorkspaceResourceRefs({
         impact: operation.effects.workspaceResourceImpact,
         projectId: params.context.projectId,
-        episodeId: prepared.effectiveEpisodeId || null,
       })
     : []
   if (affectedResources.length > 0 && operation.confirmation.kind === 'billable_media') {
@@ -321,8 +257,7 @@ export async function invokeProjectAgentOperation(params: {
         return parsed
       }
       if (params.transaction) {
-        // Atomic choice commit: the outer transaction owner commits and owns
-        // any post-commit dispatch; nothing has committed at this point.
+        // The outer ToolEffect owner commits and owns post-commit dispatch.
         parsedOutputData = await executeTransaction(params.transaction)
       } else {
         try {
@@ -352,7 +287,6 @@ export async function invokeProjectAgentOperation(params: {
       mutationReceipt = projectOperationMutationReceipt({
         operation,
         projectId: params.context.projectId,
-        episodeId: prepared.effectiveEpisodeId || null,
       })
       if (!params.transaction) {
         await publishOperationMutationReceipt({

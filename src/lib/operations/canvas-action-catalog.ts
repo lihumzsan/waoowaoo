@@ -1,13 +1,13 @@
 import type {
-  CreativeResourceAlternativeGenerationCapability,
-  CreativeResourceAlternativeMediaKind,
-} from '@/lib/creative-resource/contracts'
+  WorkspaceResourceAlternativeGenerationCapability,
+  WorkspaceResourceAlternativeMediaKind,
+} from '@/lib/workspace-resource/contracts'
 import { createProjectAgentOperationRegistryForApi } from './registry'
 
 export interface CanvasCreationActionView {
   readonly operationId: string
-  readonly mediaKind: CreativeResourceAlternativeMediaKind
-  readonly requestKind: CreativeResourceAlternativeGenerationCapability['requestKind']
+  readonly mediaKind: WorkspaceResourceAlternativeMediaKind
+  readonly requestKind: WorkspaceResourceAlternativeGenerationCapability['requestKind']
   readonly alternatives: {
     readonly min: number
     readonly max: number
@@ -26,7 +26,7 @@ export interface CanvasActionCatalogView {
   readonly creation: readonly CanvasCreationActionView[]
 }
 
-const MEDIA_ORDER: Readonly<Record<CreativeResourceAlternativeMediaKind, number>> = {
+const MEDIA_ORDER: Readonly<Record<WorkspaceResourceAlternativeMediaKind, number>> = {
   image: 0,
   video: 1,
   music: 2,

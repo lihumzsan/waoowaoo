@@ -47,7 +47,7 @@ export function applyWorkspaceSSEEvent(params: {
     event.type === WORKSPACE_SSE_EVENT_TYPE.AGENT_SESSION_VIEW_CHANGED
   ) {
     queryClient.invalidateQueries({
-      queryKey: queryKeys.project.assistantThread(projectId, event.episodeId ?? ''),
+      queryKey: queryKeys.project.assistantThread(projectId),
       exact: true,
     })
     return

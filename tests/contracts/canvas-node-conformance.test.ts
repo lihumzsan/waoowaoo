@@ -1,50 +1,60 @@
 import { describe, expect, it } from 'vitest'
-import { WORKSPACE_CANVAS_NODE_DEFINITIONS } from '@/features/project-workspace/canvas/registry/workspace-canvas-node-registry'
+import { WORKSPACE_CANVAS_CONFORMANCE_FIXTURES } from '@/features/project-workspace/canvas/conformance/workspace-canvas-conformance-fixtures'
 import { WORKSPACE_CANVAS_NODE_RENDERERS } from '@/features/project-workspace/canvas/nodes/workspace-node-renderer-registry'
 import {
   getWorkspaceCanvasNodePresentationProfile,
   resolveWorkspaceCanvasMediaShell,
   resolveWorkspaceCanvasNodeSize,
 } from '@/features/project-workspace/canvas/node-presentation-profiles'
-import { CREATIVE_RESOURCE_MEDIA_TYPES } from '@/lib/creative-resource/contracts'
-import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource/schema-registry'
-import { TASK_TYPE } from '@/lib/task/types'
+import { WORKSPACE_CANVAS_NODE_DEFINITIONS } from '@/features/project-workspace/canvas/registry/workspace-canvas-node-registry'
+import { WORKSPACE_RESOURCE_MEDIA_TYPES } from '@/lib/workspace-resource/contracts'
+import { WORKSPACE_RESOURCE_SCHEMA } from '@/lib/workspace-resource/schema-registry'
 
 describe('workspace Canvas node registry conformance', () => {
-  it('exposes one Resource node kind with an exhaustive renderer and presentation', () => {
-    expect(Object.keys(WORKSPACE_CANVAS_NODE_DEFINITIONS)).toEqual(['resourceCard'])
-    expect(Object.keys(WORKSPACE_CANVAS_NODE_RENDERERS)).toEqual(['resourceCard'])
+  it('gives every production node kind exactly one renderer and conformance fixture', () => {
+    const registeredKinds = Object.keys(WORKSPACE_CANVAS_NODE_DEFINITIONS).sort()
+    expect(Object.keys(WORKSPACE_CANVAS_NODE_RENDERERS).sort()).toEqual(registeredKinds)
+    expect(Object.keys(WORKSPACE_CANVAS_CONFORMANCE_FIXTURES).sort()).toEqual(registeredKinds)
 
-    const definition = WORKSPACE_CANVAS_NODE_DEFINITIONS.resourceCard
-    expect(definition.identityScope).toBe('resource')
-    expect(definition.taskTargetType).toBe('CreativeResource')
-    expect(definition.rendererKey).toBe('resourceCard')
-    expect(definition.conformanceFixture).toBe('resourceCard')
-    expect(definition.taskTypes).toEqual([
-      TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
-      TASK_TYPE.CREATIVE_RESOURCE_AUDIO,
-      TASK_TYPE.CREATIVE_RESOURCE_VOICE,
-      TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
-      TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE,
-      TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
-    ])
+    for (const kind of registeredKinds) {
+      const typedKind = kind as keyof typeof WORKSPACE_CANVAS_NODE_DEFINITIONS
+      const definition = WORKSPACE_CANVAS_NODE_DEFINITIONS[typedKind]
+      const fixture = WORKSPACE_CANVAS_CONFORMANCE_FIXTURES[typedKind]
+      expect(definition.kind).toBe(typedKind)
+      expect(definition.rendererKey).toBe(typedKind)
+      expect(definition.conformanceFixture).toBe(typedKind)
+      expect(fixture.kind).toBe(typedKind)
+      if (fixture.taskTarget === null) {
+        expect(definition.taskTargetType).toBeNull()
+        expect(definition.taskTypes).toEqual([])
+      } else {
+        expect(definition.taskTargetType).toBe(fixture.taskTarget.targetType)
+        expect(definition.taskTypes).toContain(fixture.taskTarget.taskType)
+      }
+    }
   })
 
-  it('declares a media presentation for every Resource media type', () => {
+  it('declares a media presentation for every WorkspaceResource media type', () => {
     const profile = getWorkspaceCanvasNodePresentationProfile('resourceCard')
-    expect(Object.keys(profile.media).sort()).toEqual([...CREATIVE_RESOURCE_MEDIA_TYPES].sort())
+    expect(Object.keys(profile.media).sort()).toEqual([...WORKSPACE_RESOURCE_MEDIA_TYPES].sort())
 
-    for (const mediaType of CREATIVE_RESOURCE_MEDIA_TYPES) {
+    const schemaByMedia = {
+      text: WORKSPACE_RESOURCE_SCHEMA.GENERIC_TEXT,
+      image: WORKSPACE_RESOURCE_SCHEMA.GENERIC_IMAGE,
+      audio: WORKSPACE_RESOURCE_SCHEMA.BGM_AUDIO,
+      video: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
+    } as const
+    for (const mediaType of WORKSPACE_RESOURCE_MEDIA_TYPES) {
       const shell = resolveWorkspaceCanvasMediaShell({
         kind: 'resourceCard',
         mediaType,
-        schemaId: mediaType === 'image' ? CREATIVE_RESOURCE_SCHEMA.GENERIC_IMAGE : `generic.${mediaType}`,
+        schemaId: schemaByMedia[mediaType],
         projectAspectRatio: '16:9',
       })
       const size = resolveWorkspaceCanvasNodeSize({
         kind: 'resourceCard',
         mediaType,
-        schemaId: mediaType === 'image' ? CREATIVE_RESOURCE_SCHEMA.GENERIC_IMAGE : `generic.${mediaType}`,
+        schemaId: schemaByMedia[mediaType],
         projectAspectRatio: '16:9',
       })
       expect(shell.width).toBeGreaterThan(0)
@@ -54,38 +64,11 @@ describe('workspace Canvas node registry conformance', () => {
     }
   })
 
-  it('derives frame cards from the project aspect ratio with an identical pending shell', () => {
-    const wide = resolveWorkspaceCanvasMediaShell({
-      kind: 'resourceCard',
-      mediaType: 'image',
-      schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_IMAGE,
-      projectAspectRatio: '16:9',
-    })
-    const tall = resolveWorkspaceCanvasMediaShell({
-      kind: 'resourceCard',
-      mediaType: 'image',
-      schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_IMAGE,
-      projectAspectRatio: '9:16',
-    })
-    expect(wide.form).toBe('frame')
-    expect(tall.form).toBe('frame')
-    expect(wide.width / wide.height).toBeCloseTo(16 / 9, 1)
-    expect(tall.width / tall.height).toBeCloseTo(9 / 16, 1)
-
-    const fallback = resolveWorkspaceCanvasMediaShell({
-      kind: 'resourceCard',
-      mediaType: 'video',
-      schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_VIDEO,
-      projectAspectRatio: null,
-    })
-    expect(fallback.width / fallback.height).toBeCloseTo(16 / 9, 1)
-  })
-
-  it('resolves frozen ratio, media dimensions, and asset policy before the project ratio', () => {
+  it('resolves frozen ratio, media dimensions, asset policy, and fallback in authority order', () => {
     const frozen = resolveWorkspaceCanvasMediaShell({
       kind: 'resourceCard',
       mediaType: 'image',
-      schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_IMAGE,
+      schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_IMAGE,
       generationOptions: { aspectRatio: '1:1' },
       mediaWidth: 1600,
       mediaHeight: 900,
@@ -96,7 +79,7 @@ describe('workspace Canvas node registry conformance', () => {
     const media = resolveWorkspaceCanvasMediaShell({
       kind: 'resourceCard',
       mediaType: 'image',
-      schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_IMAGE,
+      schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_IMAGE,
       mediaWidth: 1600,
       mediaHeight: 900,
       projectAspectRatio: '9:16',
@@ -106,10 +89,18 @@ describe('workspace Canvas node registry conformance', () => {
     const asset = resolveWorkspaceCanvasMediaShell({
       kind: 'resourceCard',
       mediaType: 'image',
-      schemaId: CREATIVE_RESOURCE_SCHEMA.CHARACTER_IMAGE,
+      schemaId: WORKSPACE_RESOURCE_SCHEMA.CHARACTER_IMAGE,
       projectAspectRatio: '16:9',
     })
     expect(asset.width / asset.height).toBeCloseTo(4 / 3, 1)
     expect(asset.fit).toBe('contain')
+
+    const fallback = resolveWorkspaceCanvasMediaShell({
+      kind: 'resourceCard',
+      mediaType: 'video',
+      schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
+      projectAspectRatio: null,
+    })
+    expect(fallback.width / fallback.height).toBeCloseTo(16 / 9, 1)
   })
 })

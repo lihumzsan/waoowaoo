@@ -51,10 +51,10 @@ interface PendingHomeMediaFile extends PendingMediaFileChip {
 }
 
 interface ProjectStats {
-  episodes: number
+  resources: number
+  folders: number
   images: number
   videos: number
-  firstEpisodePreview: string | null
 }
 
 interface Project {
@@ -72,7 +72,6 @@ export default function HomePage() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const t = useTranslations('home')
-  const tc = useTranslations('common')
   const ta = useTranslations('assistantAgent')
   const resolveClientError = useClientErrorMessage()
   const { showError } = useToast()
@@ -142,7 +141,6 @@ export default function HomePage() {
       projectName: t('defaultProjectName', {
         timestamp: formatDefaultProjectTimestamp(new Date()),
       }),
-      episodeName: `${tc('episode')} 1`,
       setSubmitting: setCreateLoading,
       setError: setCreateError,
       navigate: (target) => {
@@ -582,23 +580,23 @@ export default function HomePage() {
                   <h3 className="text-sm font-bold text-[var(--glass-text-primary)] mb-2 group-hover:text-[var(--glass-tone-info-fg)] transition-colors line-clamp-1">
                     {project.name}
                   </h3>
-                  {(project.description || project.stats?.firstEpisodePreview) && (
+                  {project.description && (
                     <div className="flex items-start gap-2 mb-3">
                       <AppIcon name="fileText" className="w-3.5 h-3.5 text-[var(--glass-text-tertiary)] mt-0.5 flex-shrink-0" />
                       <p className="text-xs text-[var(--glass-text-secondary)] line-clamp-2 leading-relaxed">
-                        {project.description || project.stats?.firstEpisodePreview}
+                        {project.description}
                       </p>
                     </div>
                   )}
-                  {project.stats && (project.stats.episodes > 0 || project.stats.images > 0 || project.stats.videos > 0) && (
+                  {project.stats && project.stats.resources > 0 && (
                     <div className="flex items-center gap-2 mb-3">
                       <IconGradientDefs className="w-0 h-0 absolute" aria-hidden="true" />
                       <AppIcon name="statsBarGradient" className="w-4 h-4 flex-shrink-0" />
                       <div className="flex items-center gap-3 text-sm font-semibold bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">
-                        {project.stats.episodes > 0 && (
+                        {project.stats.folders > 0 && (
                           <span className="flex items-center gap-1">
-                            <AppIcon name="statsEpisodeGradient" className="w-3.5 h-3.5" />
-                            {project.stats.episodes}
+                            <AppIcon name="folder" className="w-3.5 h-3.5" />
+                            {project.stats.folders}
                           </span>
                         )}
                         {project.stats.images > 0 && (

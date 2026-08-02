@@ -11,7 +11,6 @@ interface AddLocationModalProps {
 export function AddLocationModal({ folderId, onClose, onSuccess }: AddLocationModalProps) {
     return (
         <LocationCreationModal
-            mode="asset-hub"
             folderId={folderId}
             onClose={onClose}
             onSuccess={onSuccess}

@@ -4,10 +4,10 @@ export interface WorkspaceCanvasConformanceFixture<K extends WorkspaceCanvasNode
   readonly kind: K
   readonly canonicalNodeId: string
   readonly taskTarget: {
-    readonly targetType: 'CreativeResource'
+    readonly targetType: 'WorkspaceResource'
     readonly targetId: string
     readonly taskType: string
-  }
+  } | null
 }
 
 export const WORKSPACE_CANVAS_CONFORMANCE_FIXTURES = {
@@ -15,9 +15,14 @@ export const WORKSPACE_CANVAS_CONFORMANCE_FIXTURES = {
     kind: 'resourceCard',
     canonicalNodeId: 'resource:conformance-resource',
     taskTarget: {
-      targetType: 'CreativeResource',
+      targetType: 'WorkspaceResource',
       targetId: 'conformance-resource',
-      taskType: 'creative_resource_image',
+      taskType: 'workspace_resource_image',
     },
+  },
+  folder: {
+    kind: 'folder',
+    canonicalNodeId: 'folder:conformance-folder',
+    taskTarget: null,
   },
 } as const satisfies Record<WorkspaceCanvasNodeKind, WorkspaceCanvasConformanceFixture>

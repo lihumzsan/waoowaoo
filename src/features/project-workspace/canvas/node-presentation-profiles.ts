@@ -3,9 +3,9 @@ import {
   resolveAssetImageKindForSchemaId,
 } from '@/lib/asset-generation'
 import type {
-  CreativeResourceJsonValue,
-  CreativeResourceMediaType,
-} from '@/lib/creative-resource/contracts'
+  WorkspaceResourceJsonValue,
+  WorkspaceResourceMediaType,
+} from '@/lib/workspace-resource/contracts'
 import type {
   WorkspaceCanvasMediaShell,
   WorkspaceCanvasMediaShellForm,
@@ -25,7 +25,7 @@ interface WorkspaceCanvasMediaPresentation {
 }
 
 export interface WorkspaceCanvasNodePresentationProfile {
-  readonly media: Record<CreativeResourceMediaType, WorkspaceCanvasMediaPresentation>
+  readonly media: Record<WorkspaceResourceMediaType, WorkspaceCanvasMediaPresentation>
 }
 
 /** Card chrome around the media area: horizontal padding (14px × 2) + border. */
@@ -53,10 +53,10 @@ const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
       text: { form: 'card', maxMediaWidth: 360, maxMediaHeight: 220 },
     },
   },
-} as const satisfies Record<WorkspaceCanvasNodeKind, WorkspaceCanvasNodePresentationProfile>
+} as const satisfies Record<Extract<WorkspaceCanvasNodeKind, 'resourceCard'>, WorkspaceCanvasNodePresentationProfile>
 
 export function getWorkspaceCanvasNodePresentationProfile(
-  kind: WorkspaceCanvasNodeKind,
+  kind: Extract<WorkspaceCanvasNodeKind, 'resourceCard'>,
 ): WorkspaceCanvasNodePresentationProfile {
   return WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES[kind]
 }
@@ -75,7 +75,7 @@ function parseFrameAspect(value: string | null | undefined): {
   return { width, height }
 }
 
-function frozenAspectRatio(generationOptions: CreativeResourceJsonValue | null | undefined): string | null {
+function frozenAspectRatio(generationOptions: WorkspaceResourceJsonValue | null | undefined): string | null {
   if (!generationOptions || typeof generationOptions !== 'object' || Array.isArray(generationOptions)) {
     return null
   }
@@ -85,7 +85,7 @@ function frozenAspectRatio(generationOptions: CreativeResourceJsonValue | null |
 
 function resolvedFrameAspect(input: {
   readonly schemaId: string
-  readonly generationOptions?: CreativeResourceJsonValue | null
+  readonly generationOptions?: WorkspaceResourceJsonValue | null
   readonly mediaWidth?: number | null
   readonly mediaHeight?: number | null
   readonly projectAspectRatio: string | null | undefined
@@ -116,10 +116,10 @@ function resolvedFrameAspect(input: {
  * exact shell, so a card never jumps in size when generation completes.
  */
 export function resolveWorkspaceCanvasMediaShell(input: {
-  readonly kind: WorkspaceCanvasNodeKind
-  readonly mediaType: CreativeResourceMediaType
+  readonly kind: Extract<WorkspaceCanvasNodeKind, 'resourceCard'>
+  readonly mediaType: WorkspaceResourceMediaType
   readonly schemaId: string
-  readonly generationOptions?: CreativeResourceJsonValue | null
+  readonly generationOptions?: WorkspaceResourceJsonValue | null
   readonly mediaWidth?: number | null
   readonly mediaHeight?: number | null
   readonly projectAspectRatio: string | null | undefined
@@ -149,10 +149,10 @@ export function resolveWorkspaceCanvasMediaShell(input: {
 }
 
 export function resolveWorkspaceCanvasNodeSize(input: {
-  readonly kind: WorkspaceCanvasNodeKind
-  readonly mediaType: CreativeResourceMediaType
+  readonly kind: Extract<WorkspaceCanvasNodeKind, 'resourceCard'>
+  readonly mediaType: WorkspaceResourceMediaType
   readonly schemaId: string
-  readonly generationOptions?: CreativeResourceJsonValue | null
+  readonly generationOptions?: WorkspaceResourceJsonValue | null
   readonly mediaWidth?: number | null
   readonly mediaHeight?: number | null
   readonly projectAspectRatio: string | null | undefined

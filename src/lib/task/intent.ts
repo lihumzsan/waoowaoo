@@ -22,13 +22,11 @@ export const TASK_INTENTS: TaskIntent[] = [
 const TASK_INTENT_SET = new Set<string>(TASK_INTENTS)
 
 const TASK_INTENT_BY_TYPE: Record<TaskType, TaskIntent> = {
-  [TASK_TYPE.CREATIVE_WORK]: 'analyze',
-  [TASK_TYPE.CREATIVE_RESOURCE_IMAGE]: 'generate',
-  [TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE]: 'convert',
-  [TASK_TYPE.CREATIVE_RESOURCE_AUDIO]: 'generate',
-  [TASK_TYPE.CREATIVE_RESOURCE_VOICE]: 'generate',
-  [TASK_TYPE.CREATIVE_RESOURCE_VIDEO]: 'generate',
-  [TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE]: 'process',
+  [TASK_TYPE.WORKSPACE_RESOURCE_IMAGE]: 'generate',
+  [TASK_TYPE.WORKSPACE_RESOURCE_AUDIO]: 'generate',
+  [TASK_TYPE.WORKSPACE_RESOURCE_VOICE]: 'generate',
+  [TASK_TYPE.WORKSPACE_RESOURCE_VIDEO]: 'generate',
+  [TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE]: 'process',
 }
 
 export function resolveTaskIntent(taskType: string | null | undefined): TaskIntent {

@@ -53,11 +53,6 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
         `PROJECT_AGENT_OPERATION_CHANNELS_MCP_TOOL_REQUIRED:${operationId}`,
       )
     }
-    const prerequisites = op.prerequisites as { episodeId?: unknown } | undefined
-    const episodeId = prerequisites?.episodeId
-    if (episodeId !== 'required' && episodeId !== 'optional' && episodeId !== 'forbidden') {
-      throw new Error(`PROJECT_AGENT_OPERATION_PREREQUISITES_INVALID:${operationId}`)
-    }
     const effects = op.effects as Record<string, unknown> | undefined
     if (!effects || typeof effects !== 'object' || Array.isArray(effects)) {
       throw new Error(`PROJECT_AGENT_OPERATION_EFFECTS_MISSING:${operationId}`)
@@ -78,11 +73,37 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
       if (resourceContract.acceptsReferences !== true && resourceContract.acceptsReferences !== false) {
         throw new Error(`PROJECT_AGENT_OPERATION_RESOURCE_CONTRACT_REFERENCES_INVALID:${operationId}`)
       }
-      if (!Array.isArray(resourceContract.outputMediaTypes) || resourceContract.outputMediaTypes.length === 0) {
+      const outputResourceKinds = resourceContract.outputResourceKinds
+      if (
+        !Array.isArray(outputResourceKinds)
+        || outputResourceKinds.length === 0
+        || outputResourceKinds.some((kind) => kind !== 'file' && kind !== 'folder')
+        || new Set(outputResourceKinds).size !== outputResourceKinds.length
+      ) {
+        throw new Error(`PROJECT_AGENT_OPERATION_RESOURCE_CONTRACT_RESOURCE_KIND_INVALID:${operationId}`)
+      }
+      const producesFile = outputResourceKinds.includes('file')
+      if (
+        !Array.isArray(resourceContract.outputMediaTypes)
+        || (producesFile && resourceContract.outputMediaTypes.length === 0)
+        || (!producesFile && resourceContract.outputMediaTypes.length !== 0)
+        || resourceContract.outputMediaTypes.some((mediaType) => (
+          mediaType !== 'text' && mediaType !== 'image' && mediaType !== 'audio' && mediaType !== 'video'
+        ))
+        || new Set(resourceContract.outputMediaTypes).size !== resourceContract.outputMediaTypes.length
+      ) {
         throw new Error(`PROJECT_AGENT_OPERATION_RESOURCE_CONTRACT_MEDIA_MISSING:${operationId}`)
       }
-      if (!Array.isArray(resourceContract.outputSchemaIds) || resourceContract.outputSchemaIds.length === 0) {
+      if (
+        !Array.isArray(resourceContract.outputSchemaIds)
+        || resourceContract.outputSchemaIds.length === 0
+        || resourceContract.outputSchemaIds.some((schemaId) => typeof schemaId !== 'string' || !schemaId.trim())
+        || new Set(resourceContract.outputSchemaIds).size !== resourceContract.outputSchemaIds.length
+      ) {
         throw new Error(`PROJECT_AGENT_OPERATION_RESOURCE_CONTRACT_SCHEMA_MISSING:${operationId}`)
+      }
+      if (resourceContract.placement !== 'required') {
+        throw new Error(`PROJECT_AGENT_OPERATION_RESOURCE_CONTRACT_PLACEMENT_INVALID:${operationId}`)
       }
       const alternativeGeneration = resourceContract.alternativeGeneration
       if (alternativeGeneration !== undefined) {
@@ -171,23 +192,6 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
         `PROJECT_AGENT_OPERATION_TOOL_CONTRACT_REVISION_FORBIDDEN:${operationId}`,
       )
     }
-    const agentFlow = op.agentFlow as
-      | {
-          suspendsFor?: unknown
-        }
-      | undefined
-    if (agentFlow !== undefined) {
-      if (!agentFlow || typeof agentFlow !== 'object' || Array.isArray(agentFlow)) {
-        throw new Error(`PROJECT_AGENT_OPERATION_AGENT_FLOW_INVALID:${operationId}`)
-      }
-      if (
-        agentFlow.suspendsFor !== undefined &&
-        agentFlow.suspendsFor !== null &&
-        agentFlow.suspendsFor !== 'choice'
-      ) {
-        throw new Error(`PROJECT_AGENT_OPERATION_AGENT_FLOW_SUSPENDS_FOR_INVALID:${operationId}`)
-      }
-    }
     const confirmation = op.confirmation as { kind?: unknown; required?: unknown } | undefined
     if (!confirmation || typeof confirmation !== 'object' || Array.isArray(confirmation)) {
       throw new Error(`PROJECT_AGENT_OPERATION_CONFIRMATION_MISSING:${operationId}`)
@@ -200,40 +204,6 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
     }
     if ((confirmation.kind === 'none') !== (confirmation.required === false)) {
       throw new Error(`PROJECT_AGENT_OPERATION_CONFIRMATION_KIND_REQUIRED_MISMATCH:${operationId}`)
-    }
-    if (agentFlow?.suspendsFor === 'choice') {
-      if (
-        channels.tool !== true
-        || channels.api !== false
-        || effects.writes !== false
-        || confirmation.kind !== 'none'
-        || confirmation.required !== false
-      ) {
-        throw new Error(`PROJECT_AGENT_OPERATION_CHOICE_LIFECYCLE_CONTRACT_INVALID:${operationId}`)
-      }
-    }
-    const choiceCommit = op.choiceCommit as { enabled?: unknown } | undefined
-    if (choiceCommit !== undefined) {
-      if (
-        !choiceCommit
-        || typeof choiceCommit !== 'object'
-        || Array.isArray(choiceCommit)
-        || choiceCommit.enabled !== true
-        || intent !== 'act'
-        || channels.tool !== true
-        || effects.writes !== true
-        || effects.billable !== false
-        || effects.destructive !== false
-        || effects.bulk !== false
-        || effects.externalSideEffects !== false
-        || effects.longRunning !== false
-        || confirmation.kind !== 'none'
-        || confirmation.required !== false
-        || agentFlow?.suspendsFor != null
-        || typeof op.executeInTransaction !== 'function'
-      ) {
-        throw new Error(`PROJECT_AGENT_OPERATION_CHOICE_COMMIT_CONTRACT_INVALID:${operationId}`)
-      }
     }
     if (confirmation.kind === 'billable_media') {
       mustTrimmedString(op.planContractRevision, 'PLAN_CONTRACT_REVISION')

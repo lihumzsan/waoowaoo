@@ -16,7 +16,6 @@ type CreateHomeProjectLaunch = (
 
 type WriteHomeAssistantAutoStartMessage = (input: {
   readonly projectId: string
-  readonly episodeId: string
   readonly message: string
   readonly attachments?: readonly ProjectAssistantTextAttachment[]
   readonly mediaAttachments?: readonly ProjectAssistantMediaAttachment[]
@@ -35,7 +34,6 @@ export interface SubmitHomeQuickStartLaunchParams {
   readonly isSubmitting: boolean
   readonly apiFetch: CreateHomeProjectLaunchParams['apiFetch']
   readonly projectName: string
-  readonly episodeName: string
   readonly setSubmitting: (submitting: boolean) => void
   readonly setError: (message: string | null) => void
   readonly navigate: (target: HomeWorkspaceLaunchTarget) => void
@@ -53,7 +51,6 @@ export async function submitHomeQuickStartLaunch({
   isSubmitting,
   apiFetch,
   projectName,
-  episodeName,
   setSubmitting,
   setError,
   navigate,
@@ -76,7 +73,6 @@ export async function submitHomeQuickStartLaunch({
       projectName,
       storyText,
       videoRatio,
-      episodeName,
       hasAssistantDraftContent: storyText.length > 0
         || draftAttachments.length > 0
         || draftMediaFiles.length > 0,
@@ -94,7 +90,6 @@ export async function submitHomeQuickStartLaunch({
 
     writeAutoStartMessage({
       projectId: result.projectId,
-      episodeId: result.episodeId,
       message: storyText,
       attachments: draftAttachments,
       mediaAttachments,

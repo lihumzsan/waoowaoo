@@ -78,7 +78,6 @@ function parsePlannedTask(value: unknown): PlannedTask {
     payload,
     billingInfo,
     locale,
-    episodeId: readNullableString(record, 'episodeId'),
     dedupeKey: readNullableString(record, 'dedupeKey'),
   }
 }
@@ -97,7 +96,6 @@ function parsePlannedTaskDependency(value: unknown): PlannedTaskDependency {
       targetType: readString(target, 'targetType'),
       targetId: readString(target, 'targetId'),
     },
-    episodeId: readNullableString(record, 'episodeId'),
   }
 }
 
@@ -145,7 +143,6 @@ async function assertOperationPlanTaskDependencies(plan: OperationPlan): Promise
       id: true,
       userId: true,
       projectId: true,
-      episodeId: true,
       type: true,
       targetType: true,
       targetId: true,
@@ -159,7 +156,6 @@ async function assertOperationPlanTaskDependencies(plan: OperationPlan): Promise
     if (
       task.userId !== plan.userId
       || task.projectId !== plan.projectId
-      || task.episodeId !== dependency.episodeId
       || task.type !== dependency.taskType
       || task.targetType !== dependency.target.targetType
       || task.targetId !== dependency.target.targetId
@@ -178,7 +174,6 @@ export interface PersistedOperationPlanSnapshot {
   scopeKind: string
   scopeId: string
   projectId: string | null
-  episodeId: string | null
   operationId: string
   apiRequestId: string | null
   apiRequestContextHash: string | null
@@ -234,7 +229,6 @@ function parsePersistedOperationPlanSnapshot(
     scopeKind: record.scopeKind,
     scopeId: record.scopeId,
     projectId: record.projectId,
-    episodeId: record.episodeId,
     operationId: record.operationId,
     apiRequestId: record.apiRequestId,
     apiRequestContextHash: record.apiRequestContextHash,
@@ -251,7 +245,6 @@ function parsePersistedOperationPlanSnapshot(
 function assertApiRequestReplayMatches(params: {
   readonly snapshot: PersistedOperationPlanSnapshot
   readonly executionContractRevision: string
-  readonly episodeId?: string | null
   readonly inputHash: string
   readonly apiRequestContextHash?: string
   readonly planHash?: string
@@ -260,7 +253,6 @@ function assertApiRequestReplayMatches(params: {
   const snapshot = params.snapshot
   if (
     snapshot.executionContractRevision !== params.executionContractRevision
-    || (params.episodeId !== undefined && snapshot.episodeId !== params.episodeId)
     || snapshot.inputHash !== params.inputHash
     || (
       params.apiRequestContextHash !== undefined
@@ -318,7 +310,6 @@ export async function persistOperationPlanSnapshot(params: {
   executionContractRevision: string
   normalizedInput: unknown
   quote: BillingQuoteView
-  episodeId?: string | null
   apiRequestId?: string | null
   apiRequestContext?: unknown
 }): Promise<PersistedOperationPlanSnapshot> {
@@ -354,7 +345,6 @@ export async function persistOperationPlanSnapshot(params: {
     scopeKind,
     scopeId,
     projectId: scopeKind === 'project' ? params.plan.projectId : null,
-    episodeId: params.episodeId ?? null,
     operationId: params.plan.operationId,
     apiRequestId,
     apiRequestContextHash,
@@ -391,7 +381,6 @@ export async function persistOperationPlanSnapshot(params: {
     assertApiRequestReplayMatches({
       snapshot,
       executionContractRevision,
-      episodeId: params.episodeId ?? null,
       inputHash,
       ...(apiRequestContextHash ? { apiRequestContextHash } : {}),
       planHash,

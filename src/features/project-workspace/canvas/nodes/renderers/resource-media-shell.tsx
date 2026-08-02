@@ -3,9 +3,9 @@
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import type {
-  CreativeResourceSummaryView,
-  CreativeResourceView,
-} from '@/lib/creative-resource/contracts'
+  WorkspaceCanvasResourceFileView,
+  WorkspaceCanvasResourceSummaryView,
+} from '../../contracts/workspace-canvas-interactions'
 import { useEstimatedTaskProgress } from '@/lib/query/hooks/useEstimatedTaskProgress'
 import {
   workspaceCanvasGenerationStage,
@@ -73,8 +73,8 @@ function MediaBody({
   summary,
   fit,
 }: {
-  readonly resource: CreativeResourceView
-  readonly summary: CreativeResourceSummaryView
+  readonly resource: WorkspaceCanvasResourceFileView
+  readonly summary: WorkspaceCanvasResourceSummaryView
   readonly fit: WorkspaceCanvasMediaShell['fit']
 }) {
   if (summary.kind === 'media' && summary.url) {
@@ -121,13 +121,26 @@ function MediaBody({
     )
   }
   if (summary.kind === 'structured') {
-    return <StructuredBody entryCount={summary.entryCount} />
+    return <StructuredBody entryCount={summary.entryCount} preview={summary.preview} />
   }
   return <EmptyMediaBody />
 }
 
-function StructuredBody({ entryCount }: { readonly entryCount: number | null }) {
+function StructuredBody({
+  entryCount,
+  preview,
+}: {
+  readonly entryCount: number | null
+  readonly preview: string | null
+}) {
   const labels = useTranslations('projectWorkflow.canvas.workspace.nodeFields')
+  if (preview) {
+    return (
+      <p className={`${SELECTABLE_TEXT_CLASS} h-full w-full overflow-hidden whitespace-pre-wrap break-words p-4 text-sm leading-6 text-slate-700`}>
+        {preview}
+      </p>
+    )
+  }
   const text = entryCount === null
     ? labels('structuredSummaryUnknown')
     : labels('structuredSummary', { count: entryCount })
@@ -139,8 +152,8 @@ function StructuredBody({ entryCount }: { readonly entryCount: number | null }) 
 }
 
 export interface ResourceMediaShellItem {
-  readonly resource: CreativeResourceView
-  readonly summary: CreativeResourceSummaryView
+  readonly resource: WorkspaceCanvasResourceFileView
+  readonly summary: WorkspaceCanvasResourceSummaryView
 }
 
 function itemBody(

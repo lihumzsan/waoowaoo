@@ -76,7 +76,6 @@ type WorkflowTaskRow = {
   parentTaskId: string | null
   type: string
   projectId: string
-  episodeId: string | null
   targetType: string
   targetId: string
   payload: unknown
@@ -185,7 +184,6 @@ async function loadTaskRow(taskId: string): Promise<WorkflowTaskRow> {
       parentTaskId: true,
       type: true,
       projectId: true,
-      episodeId: true,
       targetType: true,
       targetId: true,
       payload: true,

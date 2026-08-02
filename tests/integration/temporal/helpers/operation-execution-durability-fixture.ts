@@ -4,16 +4,92 @@ import {
   type DirectTaskOperationExecutionCommand,
 } from '@/lib/temporal/operation-execution/contracts'
 import { createProjectAgentOperationRegistryForApi } from '@/lib/operations/registry'
+import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
+import type { WorkspaceResourceInputRef } from '@/lib/workspace-resource/contracts'
+import { buildWorkspaceResourceId } from '@/lib/workspace-resource/identity'
+import {
+  materializeWorkspaceResourceInTransaction,
+  reserveWorkspaceResourceInTransaction,
+} from '@/lib/workspace-resource/persistence'
+import { WORKSPACE_RESOURCE_SCHEMA } from '@/lib/workspace-resource/schema-registry'
 import { prisma } from '../../../helpers/prisma'
 
-const OPERATION_ID = 'import_web_reference_image'
+const OPERATION_ID = 'merge_videos'
 
 export interface OperationExecutionDurabilityFixture {
   readonly userId: string
   readonly projectId: string
   readonly threadId: string
   readonly originTurnId: string
+  readonly mediaObjectIds: readonly string[]
   readonly command: DirectTaskOperationExecutionCommand
+}
+
+async function seedVideoInputs(input: {
+  readonly suffix: string
+  readonly userId: string
+  readonly projectId: string
+}) {
+  const media = await Promise.all([0, 1].map(async (index) => (
+    await ensureMediaObjectFromStorageKey(
+      `tests/temporal/operation-durability/${input.suffix}-${String(index)}.mp4`,
+      {
+        mimeType: 'video/mp4',
+        sizeBytes: 1,
+        width: 1,
+        height: 1,
+        durationMs: 1_000,
+      },
+    )
+  )))
+  const resources = await prisma.$transaction(async (tx) => {
+    const created: WorkspaceResourceInputRef[] = []
+    for (const [index, mediaObject] of media.entries()) {
+      const resourceId = buildWorkspaceResourceId({
+        operationId: 'operation_durability_source',
+        requestId: input.suffix,
+        memberIndex: index,
+      })
+      const workspacePath = `operation-durability-${input.suffix}-${String(index)}.resource`
+      await reserveWorkspaceResourceInTransaction(tx, {
+        resourceId,
+        userId: input.userId,
+        projectId: input.projectId,
+        outputPath: workspacePath,
+        mediaType: 'video',
+        schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
+        sourceType: 'temporal_test_fixture',
+        sourceId: `${input.suffix}:${String(index)}`,
+      })
+      await materializeWorkspaceResourceInTransaction(tx, {
+        resourceId,
+        userId: input.userId,
+        mediaType: 'video',
+        schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
+        content: { kind: 'media', mediaId: mediaObject.id },
+        inputs: [],
+        provenance: {
+          operationId: null,
+          inputHash: null,
+          taskId: null,
+          operationExecutionId: null,
+          toolCallId: null,
+          prompt: null,
+          modelKey: null,
+          generationOptions: null,
+        },
+      })
+      created.push({
+        resourceId,
+        contentVersion: 1,
+        workspacePath,
+        role: 'source_video' as const,
+        position: index,
+      })
+    }
+    return created
+  })
+  return { resources, mediaObjectIds: media.map((item) => item.id) }
 }
 
 export async function createOperationExecutionDurabilityFixture():
@@ -33,17 +109,6 @@ Promise<OperationExecutionDurabilityFixture> {
   ) {
     throw new Error('OPERATION_DURABILITY_REGISTRY_CONTRACT_MISSING')
   }
-  const parsedInput = operation.inputSchema.safeParse({
-    imageUrl: `https://example.test/${suffix}.png`,
-    sourceWebsiteUrl: `https://example.test/${suffix}`,
-    name: `Operation durability ${suffix}`,
-    caption: 'Durable Operation execution fixture',
-  })
-  if (!parsedInput.success) {
-    throw new Error('OPERATION_DURABILITY_INPUT_INVALID')
-  }
-  const normalizedInput = parsedInput.data
-
   await prisma.user.create({
     data: {
       id: userId,
@@ -52,6 +117,7 @@ Promise<OperationExecutionDurabilityFixture> {
       preferences: {
         create: {
           imageConcurrency: 1,
+          videoConcurrency: 1,
         },
       },
       projects: {
@@ -62,13 +128,21 @@ Promise<OperationExecutionDurabilityFixture> {
       },
     },
   })
+  const seededInputs = await seedVideoInputs({ suffix, userId, projectId })
+  const parsedInput = operation.inputSchema.safeParse({
+    outputPath: `operation-durability-output-${suffix}.resource`,
+    videos: seededInputs.resources,
+  })
+  if (!parsedInput.success) {
+    throw new Error('OPERATION_DURABILITY_INPUT_INVALID')
+  }
+  const normalizedInput = parsedInput.data
   await prisma.projectAssistantThread.create({
     data: {
       id: threadId,
       projectId,
       userId,
       assistantId: 'workspace-command',
-      scopeRef: `project:${projectId}`,
       messagesJson: [],
     },
   })
@@ -87,7 +161,6 @@ Promise<OperationExecutionDurabilityFixture> {
       executionOwnerId: `operation-durability-owner-${suffix}`,
       contextJson: {
         locale: 'en',
-        episodeId: null,
         selectedScopeRef: null,
         selectedAssetId: null,
       },
@@ -100,6 +173,7 @@ Promise<OperationExecutionDurabilityFixture> {
     projectId,
     threadId,
     originTurnId,
+    mediaObjectIds: seededInputs.mediaObjectIds,
     command: {
       protocol: OPERATION_EXECUTION_PROTOCOL,
       kind: 'direct_task',
@@ -113,7 +187,6 @@ Promise<OperationExecutionDurabilityFixture> {
       executionContractRevision: authority.contractRevision,
       context: {
         locale: 'en',
-        episodeId: null,
         selectedScopeRef: null,
         selectedAssetId: null,
         origin: {
@@ -136,7 +209,7 @@ export async function removeOperationExecutionDurabilityFixture(
   await prisma.projectAssistantThread.deleteMany({
     where: { id: fixture.threadId },
   })
-  await prisma.creativeResource.deleteMany({
+  await prisma.workspaceResource.deleteMany({
     where: { projectId: fixture.projectId },
   })
   await prisma.task.deleteMany({
@@ -157,5 +230,8 @@ export async function removeOperationExecutionDurabilityFixture(
   })
   await prisma.user.deleteMany({
     where: { id: fixture.userId },
+  })
+  await prisma.mediaObject.deleteMany({
+    where: { id: { in: [...fixture.mediaObjectIds] } },
   })
 }

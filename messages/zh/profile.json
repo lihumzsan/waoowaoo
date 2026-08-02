@@ -51,7 +51,6 @@
   "previousPage": "上一页",
   "nextPage": "下一页",
   "pagination": "共 {total} 条，第 {page} / {totalPages} 页",
-  "episodeLabel": "第 {number} 集",
   "billingDetail": {
     "imageWithRes": "{count}张 · {resolution}",
     "image": "{count}张",
@@ -73,10 +72,9 @@
     "projectLocation": "场景 {name}",
     "locationImage": "场景 {name} · 图片 {index}",
     "locationImageGroup": "{count} 张场景图片",
-    "creativeResource": "资源 {name}",
-    "creativeResourceGroup": "{count} 个创作资源",
+    "workspaceResource": "资源 {name}",
+    "workspaceResourceGroup": "{count} 个创作资源",
     "taskGroup": "{count} 个关联对象",
-    "projectEpisode": "第 {number} 集 · {name}",
     "project": "项目 {name}",
     "globalCharacter": "素材角色 {name}",
     "globalCharacterAppearance": "素材角色 {name} · 形象 {index}",
@@ -150,11 +148,10 @@
     "music": "音乐生成"
   },
   "actionTypes": {
-    "creative_work": "专业创作 Subagent",
-    "creative_resource_image": "图片资源生成",
-    "creative_resource_audio": "音频资源生成",
-    "creative_resource_voice": "音色资源生成",
-    "creative_resource_video": "视频资源生成",
-    "creative_resource_video_merge": "视频资源合并"
+    "workspace_resource_image": "图片资源生成",
+    "workspace_resource_audio": "音频资源生成",
+    "workspace_resource_voice": "音色资源生成",
+    "workspace_resource_video": "视频资源生成",
+    "workspace_resource_video_merge": "视频资源合并"
   }
 }

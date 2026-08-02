@@ -228,9 +228,7 @@
     "createFailed": "Creation failed"
   },
   "filterBar": {
-    "all": "All",
-    "allEpisodes": "All Episodes",
-    "episodeLabel": "Ep.{number} · {name}"
+    "all": "All"
   },
   "assetLibrary": {
     "button": "Asset Library",

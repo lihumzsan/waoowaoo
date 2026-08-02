@@ -21,7 +21,6 @@ export function CharacterEditModal({
 }: CharacterEditModalProps) {
     return (
         <SharedCharacterEditModal
-            mode="asset-hub"
             characterId={characterId}
             characterName={characterName}
             description={description}

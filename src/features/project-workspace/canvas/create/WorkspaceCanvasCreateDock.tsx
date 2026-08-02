@@ -177,7 +177,6 @@ export function WorkspaceCanvasCreateDock({
           maxLength={capability?.inputLimits.promptMaxLength ?? undefined}
           placeholder={needsVoicePreview ? t('voiceDescriptionPlaceholder') : t('promptPlaceholder')}
           className="glass-input-base w-full resize-y px-2.5 py-2 text-sm"
-          // eslint-disable-next-line jsx-a11y/no-autofocus
           autoFocus
         />
 

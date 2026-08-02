@@ -61,7 +61,7 @@ function captureLocationQuerySnapshots(queryClient: ReturnType<typeof useQueryCl
 function captureUnifiedQuerySnapshots(queryClient: ReturnType<typeof useQueryClient>) {
   return queryClient
     .getQueriesData<AssetSummary[]>({
-      queryKey: queryKeys.assets.all('global'),
+      queryKey: queryKeys.assets.all(),
       exact: false,
     })
     .map(([queryKey, data]) => ({ queryKey, data }))
@@ -155,7 +155,7 @@ export function useSelectLocationImage() {
         exact: false,
       })
       await queryClient.cancelQueries({
-        queryKey: queryKeys.assets.all('global'),
+        queryKey: queryKeys.assets.all(),
         exact: false,
       })
       const previousQueries = captureLocationQuerySnapshots(queryClient)
@@ -171,7 +171,7 @@ export function useSelectLocationImage() {
 
       queryClient.setQueriesData<AssetSummary[] | undefined>(
         {
-          queryKey: queryKeys.assets.all('global'),
+          queryKey: queryKeys.assets.all(),
           exact: false,
         },
         (previous) => applyUnifiedLocationSelection(previous, variables.locationId, variables.imageIndex),
@@ -220,15 +220,17 @@ export function useUploadLocationImage() {
       locationId,
       labelText,
       imageIndex,
+      assetType,
     }: {
       file: File
       locationId: string
       labelText: string
       imageIndex?: number
+      assetType?: 'location' | 'prop'
     }) => {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('type', 'location')
+      formData.append('type', assetType ?? 'location')
       formData.append('id', locationId)
       formData.append('labelText', labelText)
       if (imageIndex !== undefined) {
@@ -260,7 +262,7 @@ export function useDeleteLocation() {
         exact: false,
       })
       await queryClient.cancelQueries({
-        queryKey: queryKeys.assets.all('global'),
+        queryKey: queryKeys.assets.all(),
         exact: false,
       })
       const previousQueries = captureLocationQuerySnapshots(queryClient)
@@ -276,7 +278,7 @@ export function useDeleteLocation() {
 
       queryClient.setQueriesData<AssetSummary[] | undefined>(
         {
-          queryKey: queryKeys.assets.all('global'),
+          queryKey: queryKeys.assets.all(),
           exact: false,
         },
         (previous) => previous?.filter((asset) => asset.id !== locationId),

@@ -48,13 +48,11 @@ export function isTaskTerminalEventType(value: string | null | undefined): value
 }
 
 export const TASK_TYPE = {
-  CREATIVE_WORK: 'creative_work',
-  CREATIVE_RESOURCE_IMAGE: 'creative_resource_image',
-  CREATIVE_RESOURCE_WEB_REFERENCE: 'creative_resource_web_reference',
-  CREATIVE_RESOURCE_AUDIO: 'creative_resource_audio',
-  CREATIVE_RESOURCE_VOICE: 'creative_resource_voice',
-  CREATIVE_RESOURCE_VIDEO: 'creative_resource_video',
-  CREATIVE_RESOURCE_VIDEO_MERGE: 'creative_resource_video_merge',
+  WORKSPACE_RESOURCE_IMAGE: 'workspace_resource_image',
+  WORKSPACE_RESOURCE_AUDIO: 'workspace_resource_audio',
+  WORKSPACE_RESOURCE_VOICE: 'workspace_resource_voice',
+  WORKSPACE_RESOURCE_VIDEO: 'workspace_resource_video',
+  WORKSPACE_RESOURCE_VIDEO_MERGE: 'workspace_resource_video_merge',
 } as const
 
 export type TaskType = (typeof TASK_TYPE)[keyof typeof TASK_TYPE]
@@ -98,7 +96,6 @@ export type TaskExecutionData = {
   type: TaskType
   locale: Locale
   projectId: string
-  episodeId?: string | null
   targetType: string
   targetId: string
   payload?: Record<string, unknown> | null
@@ -116,25 +113,19 @@ export type TaskExecutionData = {
 }
 
 export type WorkspaceResourceName =
-  | 'storyCanon'
-  | 'projectAssets'
   | 'globalAssets'
-  | 'episodeData'
   | 'projectData'
-  | 'projectContext'
-  | 'creativeResources'
+  | 'workspaceResources'
 
 export type WorkspaceResourceRef = {
   kind: WorkspaceResourceName
   projectId: string
-  episodeId?: string | null
 }
 
 export type CreateTaskInput = {
   userId: string
   projectId: string
   parentTaskId?: string | null
-  episodeId?: string | null
   type: TaskType
   targetType: string
   targetId: string

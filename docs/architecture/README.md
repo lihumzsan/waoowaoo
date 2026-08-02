@@ -23,18 +23,17 @@ npm run architecture:impact -- --changed
 | Temporal、Thread/Turn 执行许可、长期 Task 调度、恢复与跨系统交接 | [Temporal 持久执行边界](modules/durable-execution.md) | Thread Coordinator、TaskWorkflow、SchedulerWorkflow、业务幂等账本 |
 | Agent 指令、Skill、结构化模型输出字段或 raw output 协议 | [Agent 指令、Skill 与模型输出契约](modules/ai-prompt-output-contract.md) | Runtime instructions、Skill registry、生产 raw schema、parser/normalizer、MCP adapter |
 | 图片、视频、音乐的报价、确认、提交、扣费 | [计费与审批](modules/billing-approval.md) | billing policy、operation plan、task submitter |
-| 创作产物身份、Lineage、Binding、通用媒体卡片 | [创作 Resource 与 Lineage](modules/creative-resource.md) | creative-resource persistence、Task terminal materializer、Resource View |
-| 新增或修改 Canvas 节点、节点身份、流式事件、展开态、重放 | [Canvas 节点与流式状态](modules/canvas-node.md) | node id、structured stream adapter、canvas projection、motion presence transition |
-| 章节核心剪辑计划、镜头结构、章节 ledger 事实投影 | [章节核心剪辑规划](modules/chapter-planning.md) | chapter input、strict output schema、ledger facts projector |
+| 创作目录、Resource 身份、内容版本、Lineage、Placement 与媒体卡片 | [Workspace Resource 树](modules/workspace-resource.md) | WorkspaceResource Catalog、对象存储内容、Task terminal materializer、Resource View |
+| Canvas 文件夹导航、direct children、节点身份、卡片投影、folder-scoped layout 或大规模渲染 | [Canvas 节点与流式状态](modules/canvas-node.md) | WorkspaceResource View、node registry、folderKey layout、ReactFlow projection |
 | 整集 BGM 规划、候选与最终混音 | [BGM 规划、生成与最终混音](modules/audio-production.md) | BgmDesign strict contract、candidate QC、design/timeline fence、final mix |
 | Operation → Temporal → Activity → DB 的任务提交、attempt、恢复与终态 | [Temporal 异步 Task 生命周期](modules/async-task-lifecycle.md) | Task registry、TaskWorkflow、SchedulerWorkflow、Terminal Service |
-| Agent Thread/Turn、工具调度、Approval/Choice、中断与任务完成后的新 Turn | [Assistant Thread、Turn 与交互生命周期](modules/assistant-run-lifecycle.md) | AgentTurn service、Thread Coordinator、operation registry |
-| Codex app-server、Creative Workspace、Wao MCP 与生产隔离 | [Codex Creative Runtime](modules/codex-runtime-rollout.md) | RuntimeAdapter、AssistantRuntime、单 S3 workspace bundle、Operation Registry 投影 |
-| Creative Skill、专业知识发现、无状态 Creative Worker 与主 Agent 委派 | [Creative Skill 与无状态 Worker](modules/creative-skill-worker.md) | Creative Skill registry、Creative Worker、`delegate_creative_work` |
-| 联网搜索、OpenAI 托管研究、研究预算、证据归档与不可信网页边界 | [Web Search](modules/web-search.md) | web-search service/provider、`web_search` Operation、Creative Worker research projector |
+| Agent Thread/Turn、原生交互、审批、中断、steer 与任务完成后的新 Turn | [Assistant Thread、Turn 与交互生命周期](modules/assistant-run-lifecycle.md) | AssistantRuntime、Runtime Session Manager、Codex event projector |
+| Codex app-server、临时 Workspace、Wao MCP 与生产隔离 | [Codex Creative Runtime](modules/codex-runtime-rollout.md) | RuntimeAdapter、Session Manager、Workspace materialize/capture、MCP 投影 |
+| Creative Skill、专业知识发现与 Codex 原生 Subagent | [Creative Skills](modules/creative-skills.md) | Creative Skill registry、Codex skills/list、原生协作事件 |
+| Codex 原生联网搜索、搜索事件投影与不可信网页边界 | [Web Search](modules/web-search.md) | Codex app-server Web Search、Assistant View projector |
 | provider、模型选择、异步轮询、外部失败与降级 | [Provider Gateway](modules/provider-gateway.md) | ai-providers、ai-exec、ai-registry |
 | 注册/登录、顶层导航、语言切换、deployment capability 投影 | [产品外壳、身份与本地化](modules/product-shell.md) | auth/session、i18n navigation、deployment features、Navbar |
-| 全局/项目资产的 owner、scope、kind、variant 与复制边界 | [资产 Scope 所有权](modules/asset-scope-ownership.md) | asset scope resolver、asset actions、unified asset operations |
+| 全局 Asset Hub 的 owner、kind、variant 与媒体访问边界 | [资产 Scope 所有权](modules/asset-scope-ownership.md) | asset scope resolver、asset actions、Asset Hub operations |
 | 结构化日志、log context、审计通道与告警命名空间 | [日志与可观测性](modules/logging-observability.md) | logging core 唯一 write、semantic helpers、log context |
 | 自动化测试准入、保留集合、关键基础设施、registry conformance 与最小浏览器安全 | [测试治理](modules/test-governance.md) | admission contract、retained suites、critical scenarios、security browser harness |
 

@@ -8,16 +8,11 @@ import TaskStatusInline from '@/components/task/TaskStatusInline'
 import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import {
     useCreateAssetHubLocation,
-    useCreateProjectLocation,
 } from '@/lib/query/hooks'
 import { useToast } from '@/contexts/ToastContext'
 
 export interface LocationCreationModalProps {
-    mode: 'asset-hub' | 'project'
-    // Asset Hub 模式使用
     folderId?: string | null
-    // 项目模式使用
-    projectId?: string
     onClose: () => void
     onSuccess: () => void
 }
@@ -28,16 +23,13 @@ const XMarkIcon = ({ className }: { className?: string }) => (
 )
 
 export function LocationCreationModal({
-    mode,
     folderId,
-    projectId,
     onClose,
     onSuccess
 }: LocationCreationModalProps) {
     const t = useTranslations('assetModal')
     const { showError } = useToast()
     const createAssetHubLocation = useCreateAssetHubLocation()
-    const createProjectLocation = useCreateProjectLocation(projectId || '')
 
     // 表单字段
     const [name, setName] = useState('')
@@ -80,22 +72,12 @@ export function LocationCreationModal({
                 description: description.trim(),
             }
 
-            if (mode === 'asset-hub') {
-                body.folderId = folderId
-            }
-
-            if (mode === 'asset-hub') {
-                await createAssetHubLocation.mutateAsync({
-                    name: body.name,
-                    summary: body.description,
-                    folderId: body.folderId ?? null,
-                })
-            } else {
-                await createProjectLocation.mutateAsync({
-                    name: body.name,
-                    description: body.description,
-                })
-            }
+            body.folderId = folderId
+            await createAssetHubLocation.mutateAsync({
+                name: body.name,
+                summary: body.description,
+                folderId: body.folderId ?? null,
+            })
 
             onSuccess()
             onClose()

@@ -19,23 +19,13 @@ function toJson(value: unknown): Prisma.InputJsonValue | Prisma.NullTypes.JsonNu
 }
 
 async function assertTaskSubmissionScope(
-  tx: Prisma.TransactionClient,
+  _tx: Prisma.TransactionClient,
   input: CreateTaskInput & { readonly id?: string },
 ): Promise<void> {
-  const episodeId = input.episodeId || null
   resolveWorkspaceResourceRefs({
     impact: getTaskDefinition(input.type).terminalResourceImpact,
     projectId: input.projectId,
-    episodeId,
   })
-  if (!episodeId) return
-  const episode = await tx.projectEpisode.findUnique({
-    where: { id: episodeId },
-    select: { projectId: true },
-  })
-  if (!episode || episode.projectId !== input.projectId) {
-    throw new Error(`TASK_EPISODE_SCOPE_MISMATCH:${input.projectId}:${episodeId}`)
-  }
 }
 
 type PersistedSubmittedTask = {
@@ -59,7 +49,6 @@ async function persistValidatedSubmittedTaskInTransaction(params: {
       userId: input.userId,
       projectId: input.projectId,
       parentTaskId: input.parentTaskId || null,
-      episodeId: input.episodeId || null,
       type: input.type,
       targetType: input.targetType,
       targetId: input.targetId,
@@ -87,7 +76,6 @@ async function persistValidatedSubmittedTaskInTransaction(params: {
         id: task.id,
         userId: task.userId,
         projectId: task.projectId,
-        episodeId: task.episodeId,
         billingInfo: input.billingInfo,
       },
       params.billingMode,
@@ -113,7 +101,6 @@ async function persistValidatedSubmittedTaskInTransaction(params: {
         taskType: stored.type,
         targetType: stored.targetType,
         targetId: stored.targetId,
-        episodeId: stored.episodeId,
         coveragePayload: input.payload,
         payload: projectTaskLifecyclePayload(input.type, {
           ...(input.payload || {}),

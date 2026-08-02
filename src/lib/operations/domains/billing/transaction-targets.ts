@@ -15,64 +15,24 @@ export async function resolveBillingTransactionTargets(
 
   const { refsByKey, idsByType } = groupTargetRefs(tasks)
 
-  const projectCharacterIds = idsFor(idsByType, 'ProjectCharacter')
-  const characterAppearanceIds = idsFor(idsByType, 'CharacterAppearance')
-  const projectLocationIds = idsFor(idsByType, 'ProjectLocation')
-  const locationImageIds = idsFor(idsByType, 'LocationImage')
-  const creativeResourceIds = idsFor(idsByType, 'CreativeResource')
-  const episodeIds = idsFor(idsByType, 'ProjectEpisode')
+  const workspaceResourceIds = idsFor(idsByType, 'WorkspaceResource')
   const projectIds = idsFor(idsByType, 'Project')
   const globalCharacterIds = idsFor(idsByType, 'GlobalCharacter')
   const globalCharacterAppearanceIds = idsFor(idsByType, 'GlobalCharacterAppearance')
   const globalLocationIds = idsFor(idsByType, 'GlobalLocation')
   const globalLocationImageIds = idsFor(idsByType, 'GlobalLocationImage')
   const [
-    projectCharacters,
-    characterAppearances,
-    projectLocations,
-    locationImages,
-    creativeResources,
-    episodes,
+    workspaceResources,
     projects,
     globalCharacters,
     globalCharacterAppearances,
     globalLocations,
     globalLocationImages,
   ] = await Promise.all([
-    projectCharacterIds.length > 0
-      ? prisma.projectCharacter.findMany({
-        where: { id: { in: projectCharacterIds } },
+    workspaceResourceIds.length > 0
+      ? prisma.workspaceResource.findMany({
+        where: { id: { in: workspaceResourceIds } },
         select: { id: true, name: true },
-      })
-      : Promise.resolve([]),
-    characterAppearanceIds.length > 0
-      ? prisma.characterAppearance.findMany({
-        where: { id: { in: characterAppearanceIds } },
-        select: { id: true, appearanceIndex: true, character: { select: { name: true } } },
-      })
-      : Promise.resolve([]),
-    projectLocationIds.length > 0
-      ? prisma.projectLocation.findMany({
-        where: { id: { in: projectLocationIds } },
-        select: { id: true, name: true },
-      })
-      : Promise.resolve([]),
-    locationImageIds.length > 0
-      ? prisma.locationImage.findMany({
-        where: { id: { in: locationImageIds } },
-        select: { id: true, imageIndex: true, location: { select: { name: true } } },
-      })
-      : Promise.resolve([]),
-    creativeResourceIds.length > 0
-      ? prisma.creativeResource.findMany({
-        where: { id: { in: creativeResourceIds } },
-        select: { id: true, name: true },
-      })
-      : Promise.resolve([]),
-    episodeIds.length > 0
-      ? prisma.projectEpisode.findMany({
-        where: { id: { in: episodeIds } },
-        select: { id: true, episodeNumber: true, name: true },
       })
       : Promise.resolve([]),
     projectIds.length > 0
@@ -107,57 +67,12 @@ export async function resolveBillingTransactionTargets(
       : Promise.resolve([]),
   ])
 
-  for (const character of projectCharacters) {
+  for (const resource of workspaceResources) {
     assignTargetView(result, refsByKey, {
-      targetType: 'ProjectCharacter',
-      targetId: character.id,
-      labelKey: 'transactionTargets.projectCharacter',
-      labelParams: { name: character.name },
-    })
-  }
-
-  for (const appearance of characterAppearances) {
-    assignTargetView(result, refsByKey, {
-      targetType: 'CharacterAppearance',
-      targetId: appearance.id,
-      labelKey: 'transactionTargets.characterAppearance',
-      labelParams: { name: appearance.character.name, index: appearance.appearanceIndex + 1 },
-    })
-  }
-
-  for (const location of projectLocations) {
-    assignTargetView(result, refsByKey, {
-      targetType: 'ProjectLocation',
-      targetId: location.id,
-      labelKey: 'transactionTargets.projectLocation',
-      labelParams: { name: location.name },
-    })
-  }
-
-  for (const image of locationImages) {
-    assignTargetView(result, refsByKey, {
-      targetType: 'LocationImage',
-      targetId: image.id,
-      labelKey: 'transactionTargets.locationImage',
-      labelParams: { name: image.location.name, index: image.imageIndex + 1 },
-    })
-  }
-
-  for (const resource of creativeResources) {
-    assignTargetView(result, refsByKey, {
-      targetType: 'CreativeResource',
+      targetType: 'WorkspaceResource',
       targetId: resource.id,
-      labelKey: 'transactionTargets.creativeResource',
+      labelKey: 'transactionTargets.workspaceResource',
       labelParams: { name: resource.name },
-    })
-  }
-
-  for (const episode of episodes) {
-    assignTargetView(result, refsByKey, {
-      targetType: 'ProjectEpisode',
-      targetId: episode.id,
-      labelKey: 'transactionTargets.projectEpisode',
-      labelParams: { number: episode.episodeNumber, name: episode.name },
     })
   }
 

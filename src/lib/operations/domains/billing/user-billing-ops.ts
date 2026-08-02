@@ -124,7 +124,6 @@ export function createUserBillingOperations(): ProjectAgentOperationRegistryDraf
             select: {
               id: true,
               projectId: true,
-              episodeId: true,
               type: true,
               targetType: true,
               targetId: true,
@@ -149,29 +148,14 @@ export function createUserBillingOperations(): ProjectAgentOperationRegistryDraf
             .map((t) => t.projectId ?? (t.freezeId ? taskByFreezeId.get(t.freezeId)?.projectId ?? null : null))
             .filter(Boolean) as string[]),
         ]
-        const episodeIds = [
-          ...new Set(transactionsRaw
-            .map((t) => t.episodeId ?? (t.freezeId ? taskByFreezeId.get(t.freezeId)?.episodeId ?? null : null))
-            .filter(Boolean) as string[]),
-        ]
-
-        const [projects, episodes] = await Promise.all([
-          projectIds.length > 0
-            ? prisma.project.findMany({
-              where: { id: { in: projectIds } },
-              select: { id: true, name: true },
-            })
-            : Promise.resolve([]),
-          episodeIds.length > 0
-            ? prisma.projectEpisode.findMany({
-              where: { id: { in: episodeIds } },
-              select: { id: true, episodeNumber: true, name: true },
-            })
-            : Promise.resolve([]),
-        ])
+        const projects = projectIds.length > 0
+          ? await prisma.project.findMany({
+            where: { id: { in: projectIds } },
+            select: { id: true, name: true },
+          })
+          : []
 
         const projectMap = new Map(projects.map((p) => [p.id, p.name]))
-        const episodeMap = new Map(episodes.map((e) => [e.id, { episodeNumber: e.episodeNumber, name: e.name }]))
 
         const transactions = transactionsRaw.map((item): BillingTransactionDisplayRow => {
           let billingMeta: Record<string, unknown> | null = null
@@ -185,7 +169,6 @@ export function createUserBillingOperations(): ProjectAgentOperationRegistryDraf
 
           const task = item.freezeId ? taskByFreezeId.get(item.freezeId) ?? null : null
           const projectId = item.projectId ?? task?.projectId ?? null
-          const episodeId = item.episodeId ?? task?.episodeId ?? null
           const action = item.taskType ?? task?.type ?? extractActionFromDescription(item.description)
 
           return {
@@ -194,10 +177,7 @@ export function createUserBillingOperations(): ProjectAgentOperationRegistryDraf
             balanceAfter: toMoneyNumber(item.balanceAfter),
             action,
             projectId,
-            episodeId,
             projectName: projectId ? (projectMap.get(projectId) ?? null) : null,
-            episodeNumber: episodeId ? (episodeMap.get(episodeId)?.episodeNumber ?? null) : null,
-            episodeName: episodeId ? (episodeMap.get(episodeId)?.name ?? null) : null,
             billingMeta,
             target: task ? (targetByTaskId.get(task.id) ?? null) : null,
             operationId: task?.operationId ?? null,

@@ -1,1 +1,0 @@
-export const CREATIVE_CHAPTER_MAX_DURATION_SECONDS = 180 as const

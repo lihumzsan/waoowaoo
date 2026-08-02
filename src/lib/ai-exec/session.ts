@@ -6,7 +6,6 @@ export type AiExecutionSessionScope = {
   kind: AiExecutionSessionKind
   userId?: string | null
   projectId?: string | null
-  episodeId?: string | null
   assistantId?: string | null
   action?: string | null
   modelKey?: string | null

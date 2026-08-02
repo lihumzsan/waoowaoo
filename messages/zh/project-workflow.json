@@ -1,31 +1,4 @@
 {
-  "execution": {
-    "creating": "AI 正在创作…",
-    "assistantGuidanceRequest": "读取当前项目上下文，并判断哪项独立能力最适合用户此刻的目标。创意判断必须使用 Skill 或 Creative Subagent；只有当前决策确实需要用户输入时，才请求一个通用 Choice。"
-  },
-  "rebuildConfirm": {
-    "confirm": "继续并清空",
-    "cancel": "取消"
-  },
-  "workspaceScope": {
-    "all": "全部",
-    "chapter": "第 {index} 章"
-  },
-  "episodeOverview": {
-    "title": "剧集上下文",
-    "titleWithStoryCanon": "剧集上下文 · {title}",
-    "chapters": "Chapter",
-    "targetDuration": "目标时长",
-    "characters": "角色 {count}",
-    "locations": "场景 {count}",
-    "beats": "节拍 {count}",
-    "ledgerEvents": "连续事实 {count}",
-    "emotionalCues": "情绪线索 {count}",
-    "worldRules": "世界规则 {count}",
-    "chapterIndex": "Chapter {index}",
-    "chapterDuration": "时长 {duration}",
-    "emptyChapters": "暂无 Chapter 上下文单元"
-  },
   "canvas": {
     "workspace": {
       "toolbar": {
@@ -137,6 +110,17 @@
       "details": {
         "empty": "暂无生成信息"
       },
+      "folderNavigation": {
+        "root": "项目文件",
+        "searchPlaceholder": "搜索项目文件",
+        "searchResults": "搜索结果",
+        "noResults": "没有匹配的文件",
+        "loadMore": "加载更多",
+        "loading": "正在加载文件…",
+        "loadFailed": "文件加载失败",
+        "retry": "重试",
+        "openFolder": "打开文件夹"
+      },
       "nodes": {
         "resourceCard": {
           "eyebrow": "创作资源 · {type}",
@@ -146,6 +130,9 @@
             "audio": "音频",
             "video": "视频"
           }
+        },
+        "folder": {
+          "eyebrow": "文件夹"
         }
       }
     }

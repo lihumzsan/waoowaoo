@@ -15,18 +15,15 @@ export function LocationEditModal({
     locationId,
     locationName,
     summary,
-    imageIndex,
     description,
     onClose,
 }: LocationEditModalProps) {
     return (
         <SharedLocationEditModal
-            mode="asset-hub"
             locationId={locationId}
             locationName={locationName}
             description={description}
             summary={summary}
-            imageIndex={imageIndex}
             onClose={onClose}
         />
     )

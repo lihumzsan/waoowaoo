@@ -24,7 +24,6 @@ export interface OperationMutationResponse<T = unknown> {
 export function projectOperationMutationReceipt(params: {
   operation: ProjectAgentOperationDefinition
   projectId: string
-  episodeId: string | null
 }): OperationMutationReceipt {
   if (!params.operation.effects.writes) {
     throw new Error(
@@ -43,7 +42,6 @@ export function projectOperationMutationReceipt(params: {
     changedRefs: resolveWorkspaceResourceRefs({
       impact: params.operation.effects.workspaceResourceImpact,
       projectId: params.projectId,
-      episodeId: params.episodeId,
     }),
   }
 }

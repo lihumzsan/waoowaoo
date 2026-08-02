@@ -25,33 +25,32 @@ import { useTranslations } from 'next-intl'
 
 type UseSSEOptions = {
   projectId?: string | null
-  episodeId?: string | null
   enabled?: boolean
   onEvent?: (event: SSEEvent) => void
 }
 
-function cursorStorageKey(projectId: string, episodeId: string | null | undefined): string {
-  return `workspace-sse-cursor:v5:${projectId}:${episodeId ?? 'all'}`
+function cursorStorageKey(projectId: string): string {
+  return `workspace-sse-cursor:v6:${projectId}`
 }
 
-function readStoredCursor(projectId: string, episodeId: string | null | undefined): WorkspaceSseCursor {
+function readStoredCursor(projectId: string): WorkspaceSseCursor {
   if (typeof window === 'undefined') return { ...EMPTY_WORKSPACE_SSE_CURSOR }
   const storage = window.sessionStorage
   if (!storage) return { ...EMPTY_WORKSPACE_SSE_CURSOR }
   try {
-    return parseWorkspaceSseCursor(storage.getItem(cursorStorageKey(projectId, episodeId)))
+    return parseWorkspaceSseCursor(storage.getItem(cursorStorageKey(projectId)))
   } catch (error) {
     _ulogError('[useSSE] invalid durable cursor', error)
-    storage.removeItem(cursorStorageKey(projectId, episodeId))
+    storage.removeItem(cursorStorageKey(projectId))
     return { ...EMPTY_WORKSPACE_SSE_CURSOR }
   }
 }
 
-function persistCursor(projectId: string, episodeId: string | null | undefined, cursor: WorkspaceSseCursor): void {
-  window.sessionStorage?.setItem(cursorStorageKey(projectId, episodeId), serializeWorkspaceSseCursor(cursor))
+function persistCursor(projectId: string, cursor: WorkspaceSseCursor): void {
+  window.sessionStorage?.setItem(cursorStorageKey(projectId), serializeWorkspaceSseCursor(cursor))
 }
 
-export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSEOptions) {
+export function useSSE({ projectId, enabled = true, onEvent }: UseSSEOptions) {
   const queryClient = useQueryClient()
   const tErrors = useTranslations('errors')
   const { dismissToast, showToast } = useToast()
@@ -66,14 +65,13 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
 
   const connection = useMemo(() => {
     if (!projectId) return null
-    const cursor = readStoredCursor(projectId, episodeId)
+    const cursor = readStoredCursor(projectId)
     const params = new URLSearchParams({ projectId })
-    if (episodeId) params.set('episodeId', episodeId)
     if (cursor.taskEventId > 0) {
       params.set('cursor', serializeWorkspaceSseCursor(cursor))
     }
     return { url: `/api/sse?${params}`, cursor, generation: snapshotResyncGeneration }
-  }, [projectId, episodeId, snapshotResyncGeneration])
+  }, [projectId, snapshotResyncGeneration])
   const eventSequence = useMemo(
     () => new WorkspaceSSEEventSequence(connection?.cursor.taskEventId ?? 0),
     [connection],
@@ -98,24 +96,24 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
       : advanceWorkspaceSseCursor(cursorRef.current, payload)
     cursorRef.current = nextCursor
     if (projectId) {
-      persistCursor(projectId, episodeId, nextCursor)
+      persistCursor(projectId, nextCursor)
     }
-  }, [applyEvent, episodeId, eventSequence, projectId])
+  }, [applyEvent, eventSequence, projectId])
 
   const requestSnapshotResync = useCallback(() => {
     if (!projectId) return
-    window.sessionStorage?.removeItem(cursorStorageKey(projectId, episodeId))
+    window.sessionStorage?.removeItem(cursorStorageKey(projectId))
     cursorRef.current = { ...EMPTY_WORKSPACE_SSE_CURSOR }
     sourceRef.current?.close()
     sourceRef.current = null
     setSnapshotResyncGeneration((current) => current + 1)
-  }, [episodeId, projectId])
+  }, [projectId])
 
   useEffect(() => {
     if (!enabled || !connection || !projectId) return
 
     setConnectionState('connecting')
-    cursorRef.current = readStoredCursor(projectId, episodeId)
+    cursorRef.current = readStoredCursor(projectId)
     const source = new EventSource(connection.url)
     sourceRef.current = source
 
@@ -127,7 +125,7 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
       const attempt = reconnectAttemptRef.current + 1
       reconnectAttemptRef.current = attempt
       const delayMs = Math.min(30_000, 1_000 * 2 ** Math.min(attempt - 1, 5))
-      _ulogWarn(`[useSSE] ${context}; scheduling resync`, { projectId, episodeId, attempt, delayMs })
+      _ulogWarn(`[useSSE] ${context}; scheduling resync`, { projectId, attempt, delayMs })
       if (reconnectTimerRef.current !== null) window.clearTimeout(reconnectTimerRef.current)
       reconnectTimerRef.current = window.setTimeout(() => {
         reconnectTimerRef.current = null
@@ -197,7 +195,7 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
       source.close()
       sourceRef.current = null
     }
-  }, [connection, dismissToast, enabled, episodeId, handleParsedEvent, projectId, requestSnapshotResync, showToast, tErrors])
+  }, [connection, dismissToast, enabled, handleParsedEvent, projectId, requestSnapshotResync, showToast, tErrors])
 
   useEffect(() => () => {
     if (reconnectToastRef.current) {

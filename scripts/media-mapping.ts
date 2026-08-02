@@ -11,26 +11,6 @@ export type MediaModelMapping = {
 
 export const MEDIA_MODEL_MAPPINGS: MediaModelMapping[] = [
   {
-    model: 'characterAppearance',
-    tableName: 'character_appearances',
-    fields: [{ legacyField: 'imageUrl', mediaIdField: 'imageMediaId' }],
-  },
-  {
-    model: 'locationImage',
-    tableName: 'location_images',
-    fields: [{ legacyField: 'imageUrl', mediaIdField: 'imageMediaId' }],
-  },
-  {
-    model: 'projectEpisode',
-    tableName: 'project_episodes',
-    fields: [{ legacyField: 'audioUrl', mediaIdField: 'audioMediaId' }],
-  },
-  {
-    model: 'projectShot',
-    tableName: 'project_shots',
-    fields: [{ legacyField: 'imageUrl', mediaIdField: 'imageMediaId' }],
-  },
-  {
     model: 'globalCharacterAppearance',
     tableName: 'global_character_appearances',
     fields: [

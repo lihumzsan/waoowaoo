@@ -28,11 +28,13 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
   return (
     <WorkspaceNodeImagePreviewContext.Provider value={setPreviewImageUrl}>
       <div className="relative h-full overflow-visible">
-        <Handle
-          type="target"
-          position={Position.Left}
-          className="!z-10 !h-3.5 !w-3.5 !border-2 !border-white !bg-slate-500 !shadow-sm"
-        />
+        {presentation.hasTargetHandle ? (
+          <Handle
+            type="target"
+            position={Position.Left}
+            className="!z-10 !h-3.5 !w-3.5 !border-2 !border-white !bg-slate-500 !shadow-sm"
+          />
+        ) : null}
         {presentation.hasSourceHandle ? (
           <Handle
             type="source"

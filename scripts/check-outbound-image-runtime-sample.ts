@@ -132,8 +132,8 @@ async function main() {
   const options = parseOptions()
   const since = new Date(Date.now() - options.minutes * 60_000)
   const monitoredTypes = [
-    TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
-    TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
+    TASK_TYPE.WORKSPACE_RESOURCE_IMAGE,
+    TASK_TYPE.WORKSPACE_RESOURCE_VIDEO,
   ]
 
   const tasks = await prisma.task.findMany({

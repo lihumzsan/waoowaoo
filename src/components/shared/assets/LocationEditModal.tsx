@@ -9,44 +9,30 @@ import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import {
     useUpdateLocationName,
     useUpdateLocationSummary,
-    useUpdateProjectLocationDescription,
-    useUpdateProjectLocationName,
 } from '@/lib/query/hooks'
 import { useToast } from '@/contexts/ToastContext'
 
 export interface LocationEditModalProps {
-    mode: 'asset-hub' | 'project'
     locationId: string
     locationName: string
     description: string
     summary?: string
-    imageIndex?: number
-    projectId?: string
-    descriptionIndex?: number
     onClose: () => void
     onUpdate?: (newDescription: string) => void
     onNameUpdate?: (newName: string) => void
 }
 
 export function LocationEditModal({
-    mode,
     locationId,
     locationName,
     description,
     summary,
-    imageIndex,
-    projectId,
-    descriptionIndex,
     onClose,
     onUpdate,
     onNameUpdate,
 }: LocationEditModalProps) {
     const t = useTranslations('assets')
     const { showError } = useToast()
-
-    const resolvedImageIndex = mode === 'asset-hub'
-        ? (imageIndex ?? 0)
-        : (descriptionIndex ?? 0)
 
     const [editingName, setEditingName] = useState(locationName)
     const [editingDescription, setEditingDescription] = useState(description || summary || '')
@@ -61,35 +47,20 @@ export function LocationEditModal({
         : null
 
     const updateAssetHubName = useUpdateLocationName()
-    const updateProjectName = useUpdateProjectLocationName(projectId ?? '')
     const updateAssetHubSummary = useUpdateLocationSummary()
-    const updateProjectDescription = useUpdateProjectLocationDescription(projectId ?? '')
 
     const persistNameIfNeeded = async () => {
         const nextName = editingName.trim()
         if (!nextName || nextName === locationName) return
 
-        if (mode === 'asset-hub') {
-            await updateAssetHubName.mutateAsync({ locationId, name: nextName })
-        } else {
-            await updateProjectName.mutateAsync({ locationId, name: nextName })
-        }
+        await updateAssetHubName.mutateAsync({ locationId, name: nextName })
         onNameUpdate?.(nextName)
     }
 
     const persistDescription = async () => {
-        if (mode === 'asset-hub') {
-            await updateAssetHubSummary.mutateAsync({
-                locationId,
-                summary: editingDescription,
-            })
-            return
-        }
-
-        await updateProjectDescription.mutateAsync({
+        await updateAssetHubSummary.mutateAsync({
             locationId,
-            imageIndex: resolvedImageIndex,
-            description: editingDescription,
+            summary: editingDescription,
         })
     }
 
@@ -151,10 +122,10 @@ export function LocationEditModal({
                             {editingName !== locationName && (
                                 <button
                                     onClick={handleSaveName}
-                                    disabled={updateAssetHubName.isPending || updateProjectName.isPending || !editingName.trim()}
+                                    disabled={updateAssetHubName.isPending || !editingName.trim()}
                                     className="glass-btn-base glass-btn-tone-success px-3 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed text-sm whitespace-nowrap"
                                 >
-                                    {(updateAssetHubName.isPending || updateProjectName.isPending)
+                                    {updateAssetHubName.isPending
                                         ? t('modal.processing')
                                         : t('modal.saveName')}
                                 </button>

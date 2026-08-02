@@ -57,93 +57,6 @@
     "executionCompleted": "Work complete · {count, plural, one {# tool call} other {# tool calls}}",
     "executionFailed": "Execution failed · {count, plural, one {# tool call} other {# tool calls}}"
   },
-  "subagents": {
-    "label": "Subagent",
-    "tabsLabel": "Subagents",
-    "primary": "Primary",
-    "runningSummary": "{count, plural, one {1 Subagent running} other {# Subagents running}} · {skills, plural, one {1 Skill read} other {# Skills read}}",
-    "close": "Close {title}",
-    "result": "Creative result",
-    "structuredOutputRunning": "Writing structured result…",
-    "fullResult": "Complete structured result",
-    "fullResultLoading": "Loading the complete result…",
-    "fullResultError": "The complete result could not be loaded.",
-    "failure": {
-      "title": "Subagent did not complete",
-      "reasonLabel": "Reason",
-      "reasonFallback": "The task did not provide a displayable failure reason.",
-      "nextStep": "Correct the delegated input, context, or configuration based on this reason before delegating again; do not silently retry the same request."
-    },
-    "execution": {
-      "running": "Reasoning and tool calls",
-      "completed": "Reasoning and tool call history"
-    },
-    "status": {
-      "running": "Running",
-      "completed": "Completed",
-      "failed": "Failed",
-      "cancelled": "Cancelled"
-    },
-    "outputKinds": {
-      "screenplay": "Screenplay",
-      "chapterContinuityPlan": "Chapter Continuity Plan",
-      "creativeDirection": "Creative Direction",
-      "assetManifest": "Asset Manifest",
-      "videoPromptSet": "Video Generation Design",
-      "musicDirection": "Music Direction"
-    },
-    "events": {
-      "started": "Delegation received",
-      "skillRead": "Read {skill}",
-      "reasoningRunning": "Reasoning",
-      "reasoningCompleted": "Reasoning step completed",
-      "reasoningTruncated": "This visible reasoning segment reached the recording limit.",
-      "generationPreparing": "Preparing professional knowledge",
-      "generationPrepared": "Professional knowledge prepared",
-      "generationCreating": "Generating structured result",
-      "generationCreated": "Structured candidate generated",
-      "generationCorrecting": "Correcting validation issues",
-      "generationCorrected": "Corrected candidate generated",
-      "toolCalled": "Calling read_skill: {skill}",
-      "toolCompleted": "read_skill completed: {skill}",
-      "toolFailed": "read_skill failed: {skill}",
-      "researchStarted": "Researching: {query}",
-      "researchCompleted": "Research complete: {sources} sources · {images} images",
-      "researchUnavailable": "Research did not complete: search was unavailable or failed",
-      "submissionStarted": "Validating structured result",
-      "submissionRejected": "Structured validation failed; correcting {issues} issues",
-      "submissionAccepted": "Structured result accepted · {chars} characters",
-      "submissionInputDiagnostic": "Actual submission: {type} · {chars} characters · top-level fields: {keys}",
-      "submissionIssueHelp": "The generated result did not match the required structure. The assistant is correcting it automatically.",
-      "submissionInputNoKeys": "none",
-      "submissionInputTypes": {
-        "undefined": "undefined",
-        "null": "null",
-        "object": "object",
-        "array": "array",
-        "string": "string",
-        "number": "number",
-        "boolean": "boolean"
-      },
-      "toolName": "Tool",
-      "toolResult": "Result",
-      "toolUri": "Resource",
-      "skillReadResult": "Version {version} · {chars} characters read"
-    },
-    "groupCollapsed": "{count, plural, one {1 creative module} other {# creative modules}}",
-    "groupExpand": "Expand",
-    "groupCollapse": "Collapse",
-    "steps": "{count, plural, one {1 step} other {# steps}}",
-    "dockRunning": "{count, plural, one {1 creative module running} other {# creative modules running}}",
-    "primaryAttention": "A decision is waiting in the primary conversation"
-  },
-  "webSearch": {
-    "searching": "Searching the web: {brief}",
-    "searchingQuery": "Searching: {query}",
-    "result": "Referenced {sources} sources",
-    "resultWithImages": "Referenced {sources} sources · {images} images",
-    "imageAlt": "Web search result image"
-  },
   "attachments": {
     "openUpload": "Attach file",
     "fileMeta": "{chars} chars · {size}",
@@ -173,6 +86,58 @@
     "arguments": "Arguments",
     "result": "Result",
     "waiting": "Waiting for tool result..."
+  },
+  "runtime": {
+    "goal": "Active goal",
+    "goalUsage": "{tokens} tokens · {seconds}s",
+    "goalStatus": {
+      "active": "Active",
+      "paused": "Paused",
+      "blocked": "Blocked",
+      "usageLimited": "Usage limited",
+      "budgetLimited": "Budget limited",
+      "complete": "Complete"
+    },
+    "skills": {
+      "title": "Available Skills",
+      "count": "{count, plural, one {1 Skill} other {# Skills}}",
+      "changed": "Skill inventory refreshed",
+      "disabled": "Disabled",
+      "errors": "{count, plural, one {1 Skill could not be loaded} other {# Skills could not be loaded}}"
+    },
+    "permission": {
+      "cwd": "Working directory: {value}",
+      "network": "Network profile: {value}",
+      "fileSystem": "File-system profile: {value}"
+    },
+    "progress": {
+      "shell": "Shell output",
+      "file": "File changes",
+      "mcp": "Production capability progress",
+      "diff": "Turn diff"
+    },
+    "native": {
+      "shell": "Shell command",
+      "fileChange": "File change",
+      "webSearch": "Web search",
+      "viewImage": "View image",
+      "subagent": "Subagent",
+      "subagentAction": {
+        "spawnAgent": "Start Subagent",
+        "sendInput": "Send input to Subagent",
+        "resumeAgent": "Resume Subagent",
+        "wait": "Wait for Subagent",
+        "closeAgent": "Close Subagent",
+        "activity": "Subagent activity"
+      },
+      "subagentSummary": "{active} active · {completed} done · {failed} failed",
+      "web": {
+        "search": "Searching: {query}",
+        "openPage": "Opening page: {value}",
+        "findInPage": "Finding in page: {value}",
+        "other": "Working with web results"
+      }
+    }
   },
   "thread": {
     "user": "User",
@@ -242,22 +207,9 @@
     "billingQuoteWithoutCredits": "{count, plural, one {1 media generation task will be submitted} other {# media generation tasks will be submitted}}",
     "confirmContinue": "Continue",
     "cancelAction": "Cancel",
-    "choiceCancel": "Close and cancel this choice",
-    "choiceRequired": "Select all required options to continue.",
-    "choiceBack": "Back to previous choice",
-    "choiceSubmitting": "Processing...",
-    "choiceSubmitFailed": "Submit failed: {error}",
-    "choiceSubmitErrorFallback": "This choice could not be submitted. Refresh the conversation and try again.",
-    "choiceCancelledResponse": "Cancelled this choice",
-    "choiceReplyLabel": "Other ideas",
-    "choiceReplyPlaceholder": "Enter your notes...",
-    "choiceReplySubmit": "Submit notes",
-    "choiceCustomOptionLabel": "Other {label}",
-    "choiceCustomOptionPlaceholder": "Other {label}",
-    "choiceCustomOptionSubmit": "Select other {label}",
-    "contextCompacted": "Compressed {count} earlier context records"
-  },
-  "choiceCard": {
-    "groupProgress": "Question {current} of {total}"
+    "interactionSubmitting": "Processing...",
+    "interactionSubmitErrorFallback": "This response could not be submitted. Refresh the conversation and try again.",
+    "contextCompacted": "Compressed {count} earlier context records",
+    "contextCompactedUnknown": "Earlier context was compressed"
   }
 }

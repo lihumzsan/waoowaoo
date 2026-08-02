@@ -1,9 +1,10 @@
 import type {
-  CreativeResourceCardView,
-  CreativeResourceCanvasOperationView,
-  CreativeResourceCardMemberView,
-  CreativeResourceMediaType,
-} from '@/lib/creative-resource/contracts'
+  WorkspaceResourceInputSummary,
+  WorkspaceResourceJsonObject,
+  WorkspaceResourceMediaType,
+  WorkspaceResourceStatus,
+  WorkspaceResourceView,
+} from '@/lib/workspace-resource/contracts'
 import type { CanvasCreationActionView } from '@/lib/operations/canvas-action-catalog'
 
 export const WORKSPACE_CANVAS_CREATE_KINDS = [
@@ -22,7 +23,7 @@ export type WorkspaceCanvasCreateKind = typeof WORKSPACE_CANVAS_CREATE_KINDS[num
  */
 export type WorkspaceCanvasCreateCapabilityView = CanvasCreationActionView
 
-export type WorkspaceCanvasResourceOperationKind = CreativeResourceCanvasOperationView['kind']
+export type WorkspaceCanvasResourceOperationKind = 'retry' | 'variant'
 
 export type WorkspaceCanvasNodeActionKey =
   | 'discuss'
@@ -36,25 +37,80 @@ export type WorkspaceCanvasNodeActionKey =
  * Operation input in the View prevents the renderer from rebuilding frozen
  * references, scope, or retry facts.
  */
-export type WorkspaceCanvasResourceOperationView = CreativeResourceCanvasOperationView
+export interface WorkspaceCanvasResourceOperationView {
+  readonly kind: WorkspaceCanvasResourceOperationKind
+  readonly operationId: string
+  readonly confirmation: 'billable_media'
+  readonly input: WorkspaceResourceJsonObject
+}
 
 /**
  * Client extension point for the Resource Card View. These optional fields are
  * absent on older servers; the UI then hides only the affected actions instead
  * of inventing capability or candidate facts.
  */
-export type WorkspaceCreativeResourceCardView = CreativeResourceCardView
+export type WorkspaceCanvasResourceFileView = WorkspaceResourceView & {
+  readonly resourceKind: 'file'
+  readonly mediaType: WorkspaceResourceMediaType
+}
 
-export type WorkspaceCreativeResourceCardMemberView = CreativeResourceCardMemberView
+export interface WorkspaceCanvasResourcePreviewView {
+  readonly resourceId: string
+  readonly name: string
+  readonly status: WorkspaceResourceStatus
+  readonly mediaType: WorkspaceResourceMediaType
+  readonly error: { readonly code: string | null; readonly message: string } | null
+}
+
+export type WorkspaceCanvasResourceSummaryView =
+  | { readonly kind: 'text'; readonly text: string }
+  | {
+      readonly kind: 'structured'
+      readonly entryCount: number | null
+      readonly preview: string | null
+    }
+  | {
+      readonly kind: 'media'
+      readonly mediaType: WorkspaceResourceMediaType
+      readonly url: string | null
+      readonly mimeType: string | null
+      readonly width: number | null
+      readonly height: number | null
+      readonly durationMs: number | null
+    }
+  | { readonly kind: 'empty' }
+
+export interface WorkspaceResourceCardMemberView {
+  readonly resource: WorkspaceCanvasResourcePreviewView
+  readonly inputSummaries: readonly WorkspaceResourceInputSummary[]
+  readonly download: { readonly href: string; readonly fileName: string } | null
+  readonly presentation: {
+    readonly rendererKey: string
+    readonly fallbackMediaType: WorkspaceResourceMediaType
+    readonly summary: WorkspaceCanvasResourceSummaryView
+  }
+}
+
+export interface WorkspaceResourceCardView
+  extends WorkspaceResourceCardMemberView {
+  readonly resource: WorkspaceCanvasResourceFileView
+  readonly alternativeGroup: {
+    readonly groupId: string
+    readonly total: number
+    readonly members: readonly WorkspaceResourceCardMemberView[]
+  } | null
+  readonly canvasOperations: readonly WorkspaceCanvasResourceOperationView[]
+}
+
 
 export interface WorkspaceCanvasSelection {
   readonly nodeId: string
-  readonly targetType: 'creativeResource'
+  readonly targetType: 'workspaceResource'
   readonly targetId: string
   readonly selectedScopeRef: string
   readonly selectedAssetId: string | null
   readonly name: string
-  readonly mediaType: CreativeResourceMediaType
+  readonly mediaType: WorkspaceResourceMediaType
   readonly previewUrl: string | null
 }
 

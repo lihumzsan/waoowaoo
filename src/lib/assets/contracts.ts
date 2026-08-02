@@ -1,6 +1,6 @@
 import type { MediaRef } from '@/types/project'
 
-export type AssetScope = 'global' | 'project'
+export type AssetScope = 'global'
 
 export type AssetKind = 'character' | 'location' | 'prop'
 
@@ -101,7 +101,6 @@ export type AssetSummary =
 
 export type AssetQueryInput = {
   scope: AssetScope
-  projectId?: string | null
   folderId?: string | null
   kind?: AssetKind | null
 }

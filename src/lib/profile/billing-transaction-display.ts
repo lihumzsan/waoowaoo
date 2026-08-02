@@ -30,8 +30,6 @@ export type ProfileBillingDetailPart =
 
 export type ProfileTransactionScopeInput = {
   projectName?: string | null
-  episodeNumber?: number | null
-  episodeName?: string | null
   target?: unknown | null
 }
 

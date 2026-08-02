@@ -27,8 +27,8 @@ gate。Temporal transport 不拥有业务结果，MySQL Task/Resource/Billing/Pr
   business retry、execution deadline、billing、scope、terminal modelKey requirement、
   result projection、Resource impact、materializer 与 `followUpPolicy`。新增实例主要增加
   registry声明；多处switch表示契约未穷尽。
-- **TL-03 — 只有七类生产 Task。** 当前长期能力为 `creative_work`、image、
-  web-reference、audio、voice、video、video-merge。固定创作阶段、风格预览、EditScript、
+- **TL-03 — 生产 Task 由 registry 穷尽。** 当前长期媒体能力为 image、
+  web-reference、audio、voice、video、video-merge。Agent/Skill/Subagent 不创建 Task；固定创作阶段、风格预览、EditScript、
   BGM plan、final render等专用Task不得恢复。
 - **TL-04 — 所有 Task 只经 Scheduler。** Task创建事务提交后，唯一Temporal client以
   `taskId` 向 `UserTaskSchedulerWorkflow(userId)` 提交。Scheduler按registry class与服务端
@@ -93,11 +93,11 @@ gate。Temporal transport 不拥有业务结果，MySQL Task/Resource/Billing/Pr
   只能读取同一Workflow result，不能重复执行domain写入。Persistence返回多Task receipt时，
   Activity必须先穷尽验证全部taskId/userId/type，再逐个幂等schedule；确定性receipt/update
   分歧non-retryable，无法确认的Temporal transport才重试，禁止验证一半后永久遗漏余下Task。
-- **TL-16 — Resource是媒体目标。** 通用媒体Task target为CreativeResource，提交前校验
+- **TL-16 — Resource是媒体目标。** 通用媒体Task target为WorkspaceResource，提交前校验
   canonical Resource ID、owner、scope与真实输入；成功时唯一materializer写内容与Lineage。
   Task result是交接输入，不是第二领域数据库。
-- **TL-17 — Creative Work结果只物化一次。** `creative_work` strict outputKind由统一
-  materializer转换为Resource/Lineage；相同Task/结果replay必须幂等。Worker没有领域writer。
+- **TL-17 — Resource 结果只物化一次。** 每种媒体 Task 由 registry 指向唯一
+  materializer 写入 WorkspaceResource/Lineage；相同 Task/result replay 必须幂等。Agent 与 Provider 都没有领域 writer。
 - **TL-18 — 进度不是协议。** Task progress、Provider phase和estimated percentage只服务
   View/SSE。`Task.payload`运行字段只能由`progress-payload.ts`的唯一envelope投影写入；
   handler或领域parser不能各维护字段白名单。
@@ -147,8 +147,7 @@ gate。Temporal transport 不拥有业务结果，MySQL Task/Resource/Billing/Pr
 - Task Activities：`src/lib/temporal/activities/task.ts`与共享handler registry。
 - Provider fence：`src/lib/task/provider-invocation.ts`、`src/lib/ai-exec/engine.ts`。
 - 终态：`src/lib/task/terminal/**`。
-- 结果物化：`src/lib/creative-resource/task-materializer.ts`与
-  `creative-work-materialization.ts`。
+- 结果物化：`src/lib/workspace-resource/task-materializer.ts`。
 - Agent接力：`src/lib/agent-turn/follow-up-batch.ts`与Thread Coordinator client。
 - 资源影响：`src/lib/workspace-resource/resource-impact.ts`与正式changed refs投影。
 - SSE route只负责transport admission与已提交事件/stream的传输。

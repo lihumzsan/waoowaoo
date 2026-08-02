@@ -4,9 +4,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import GlassModalShell from '@/components/ui/primitives/GlassModalShell'
 import { AppIcon } from '@/components/ui/icons'
-import type { CreativeResourceCardMemberView } from '@/lib/creative-resource/contracts'
+import type { WorkspaceResourceCardMemberView } from '../contracts/workspace-canvas-interactions'
 
-function ResourcePreviewBody({ card }: { readonly card: CreativeResourceCardMemberView }) {
+function ResourcePreviewBody({ card }: { readonly card: WorkspaceResourceCardMemberView }) {
   const statusLabels = useTranslations('projectWorkflow.canvas.workspace.status')
   const previewLabels = useTranslations('projectWorkflow.canvas.workspace.preview')
   const summary = card.presentation.summary
@@ -38,6 +38,9 @@ function ResourcePreviewBody({ card }: { readonly card: CreativeResourceCardMemb
     return <pre className="max-h-[68vh] overflow-auto whitespace-pre-wrap rounded-2xl bg-slate-50 p-5 text-sm leading-6 text-slate-700">{summary.text}</pre>
   }
   if (summary.kind === 'structured') {
+    if (summary.preview) {
+      return <pre className="max-h-[68vh] overflow-auto whitespace-pre-wrap rounded-2xl bg-slate-50 p-5 text-sm leading-6 text-slate-700">{summary.preview}</pre>
+    }
     return (
       <div className="flex min-h-[18rem] items-center justify-center rounded-2xl bg-slate-50 text-sm text-[var(--glass-text-tertiary)]">
         {summary.entryCount === null
@@ -55,10 +58,10 @@ export function WorkspaceResourcePreviewModal({
   onClose,
   onDiscuss,
 }: {
-  readonly members: readonly CreativeResourceCardMemberView[]
+  readonly members: readonly WorkspaceResourceCardMemberView[]
   readonly initialResourceId: string
   readonly onClose: () => void
-  readonly onDiscuss: (card: CreativeResourceCardMemberView) => void
+  readonly onDiscuss: (card: WorkspaceResourceCardMemberView) => void
 }) {
   const t = useTranslations('projectWorkflow.canvas.workspace.preview')
   const initialIndex = Math.max(0, members.findIndex((card) => card.resource.resourceId === initialResourceId))

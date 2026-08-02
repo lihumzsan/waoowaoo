@@ -40,7 +40,6 @@ export interface PlannedTask {
   target: PlannedTaskTarget
   payload: Record<string, unknown>
   billingInfo: TaskBillingInfo
-  episodeId?: string | null
   dedupeKey?: string | null
   locale: Locale
 }
@@ -49,7 +48,6 @@ export interface PlannedTaskDependency {
   taskId: string
   taskType: TaskType
   target: PlannedTaskTarget
-  episodeId: string | null
 }
 
 export interface OperationPlan {
@@ -228,7 +226,6 @@ export function assertOperationPlanTaskResourceScopes(plan: OperationPlan): void
     resolveWorkspaceResourceRefs({
       impact: getTaskDefinition(task.taskType).terminalResourceImpact,
       projectId: plan.projectId,
-      episodeId: task.episodeId ?? null,
     })
   }
 }
@@ -241,7 +238,6 @@ export function createPlannedTask(params: {
   payload: Record<string, unknown>
   billingInfo: TaskBillingInfo
   locale: PlannedTask['locale']
-  episodeId?: string | null
   dedupeKey?: string | null
 }): PlannedTask {
   return {
@@ -254,7 +250,6 @@ export function createPlannedTask(params: {
     payload: params.payload,
     billingInfo: params.billingInfo,
     locale: params.locale,
-    episodeId: params.episodeId ?? null,
     dedupeKey: params.dedupeKey ?? null,
   }
 }
@@ -300,30 +295,15 @@ export async function persistOperationPlanView(params: {
   plan: OperationPlan
   executionContractRevision: string
   normalizedInput: unknown
-  episodeId?: string | null
   apiRequestId?: string | null
   apiRequestContext?: unknown
 }): Promise<OperationPlanView> {
   const quote = await quoteOperationPlan(params.plan)
-  const taskEpisodeIds = Array.from(new Set(
-    params.plan.tasks
-      .map((task) => task.episodeId ?? null)
-      .filter((episodeId): episodeId is string => Boolean(episodeId)),
-  ))
-  if (taskEpisodeIds.length > 1) {
-    throw new Error(`OPERATION_PLAN_EPISODE_SCOPE_AMBIGUOUS:${params.plan.operationId}`)
-  }
-  const plannedEpisodeId = taskEpisodeIds[0] ?? null
-  const requestedEpisodeId = params.episodeId ?? null
-  if (plannedEpisodeId && requestedEpisodeId && plannedEpisodeId !== requestedEpisodeId) {
-    throw new Error(`OPERATION_PLAN_EPISODE_SCOPE_MISMATCH:${params.plan.operationId}`)
-  }
   const snapshot = await persistOperationPlanSnapshot({
     plan: params.plan,
     executionContractRevision: params.executionContractRevision,
     normalizedInput: params.normalizedInput,
     quote,
-    episodeId: plannedEpisodeId ?? requestedEpisodeId,
     apiRequestId: params.apiRequestId,
     apiRequestContext: params.apiRequestContext,
   })
@@ -393,7 +373,6 @@ export async function planProjectAgentOperationFromApi(params: {
   operationRequestId?: string | null
   context?: {
     locale?: string | null
-    episodeId?: string | null
     selectedScopeRef?: string | null
     selectedAssetId?: string | null
   }
@@ -424,11 +403,9 @@ export async function planProjectAgentOperationFromApi(params: {
   const operationRequestId = params.operationRequestId?.trim() || null
   const apiRequestContext = {
     locale: params.context?.locale?.trim() || null,
-    episodeId: params.context?.episodeId?.trim() || null,
     selectedScopeRef: params.context?.selectedScopeRef?.trim() || null,
     selectedAssetId: params.context?.selectedAssetId?.trim() || null,
   }
-  const requestedEpisodeId = apiRequestContext.episodeId
   if (operationRequestId) {
     const replay = await loadOperationPlanSnapshotByApiRequest({
       userId: params.userId,
@@ -458,7 +435,6 @@ export async function planProjectAgentOperationFromApi(params: {
       projectId: params.projectId,
       context: {
         ...(apiRequestContext.locale ? { locale: apiRequestContext.locale } : {}),
-        ...(apiRequestContext.episodeId ? { episodeId: apiRequestContext.episodeId } : {}),
         ...(apiRequestContext.selectedScopeRef
           ? { selectedScopeRef: apiRequestContext.selectedScopeRef }
           : {}),
@@ -476,7 +452,6 @@ export async function planProjectAgentOperationFromApi(params: {
     plan,
     executionContractRevision: operation.planContractRevision,
     normalizedInput: parsed.data,
-    episodeId: requestedEpisodeId,
     apiRequestId: operationRequestId,
     apiRequestContext,
   })

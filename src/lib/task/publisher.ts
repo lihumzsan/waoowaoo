@@ -38,7 +38,6 @@ type TaskMeta = {
   type: string
   targetType: string
   targetId: string
-  episodeId: string | null
   payload: unknown
 }
 
@@ -127,7 +126,6 @@ function buildLifecycleEvent(params: {
   taskType?: string | null
   targetType?: string | null
   targetId?: string | null
-  episodeId?: string | null
   payload?: Record<string, unknown> | null
   coveragePayload?: unknown
 }): TaskSSEEvent {
@@ -141,7 +139,6 @@ function buildLifecycleEvent(params: {
     taskType: params.taskType || null,
     targetType: params.targetType || null,
     targetId: params.targetId || null,
-    episodeId: params.episodeId || null,
     payload: withTaskCoveredTargetsPayload({
       taskType: params.taskType,
       targetType: params.targetType,
@@ -164,7 +161,6 @@ async function loadTaskMeta(taskId: string): Promise<TaskMeta | null> {
       type: true,
       targetType: true,
       targetId: true,
-      episodeId: true,
       payload: true,
     },
   })
@@ -190,7 +186,6 @@ function buildStreamEvent(params: {
   taskType?: string | null
   targetType?: string | null
   targetId?: string | null
-  episodeId?: string | null
   payload?: Record<string, unknown> | null
 }): TaskSSEEvent {
   return {
@@ -203,7 +198,6 @@ function buildStreamEvent(params: {
     taskType: params.taskType || null,
     targetType: params.targetType || null,
     targetId: params.targetId || null,
-    episodeId: params.episodeId || null,
     payload: normalizeStreamPayload(params.taskType, params.payload || null),
   }
 }
@@ -220,7 +214,6 @@ async function mapRowsToReplayEvents(rows: TaskEventRow[]): Promise<TaskSSEEvent
           type: true,
           targetType: true,
           targetId: true,
-          episodeId: true,
           payload: true,
         },
       })
@@ -239,7 +232,6 @@ async function mapRowsToReplayEvents(rows: TaskEventRow[]): Promise<TaskSSEEvent
         taskType: task?.type || null,
         targetType: task?.targetType || null,
         targetId: task?.targetId || null,
-        episodeId: task?.episodeId || null,
         payload: row.payload || null,
       })
     }
@@ -254,7 +246,6 @@ async function mapRowsToReplayEvents(rows: TaskEventRow[]): Promise<TaskSSEEvent
       taskType: task?.type || null,
       targetType: task?.targetType || null,
       targetId: task?.targetId || null,
-      episodeId: task?.episodeId || null,
       payload: row.payload || null,
       coveragePayload: task?.payload ?? row.payload ?? null,
     })
@@ -276,7 +267,6 @@ export async function listTaskLifecycleEvents(taskId: string, limit = 500) {
 export async function listRecentTerminalLifecycleEvents(params: {
   projectId: string
   userId: string
-  episodeId?: string | null
   limit?: number
 }) {
   const safeLimit = Number.isFinite(params.limit)
@@ -287,7 +277,6 @@ export async function listRecentTerminalLifecycleEvents(params: {
       projectId: params.projectId,
       userId: params.userId,
       eventType: { in: TASK_TERMINAL_EVENT_TYPES },
-      ...(params.episodeId ? { task: { episodeId: params.episodeId } } : {}),
     },
     orderBy: { id: 'desc' },
     take: safeLimit,
@@ -307,7 +296,6 @@ export function buildTaskLifecycleEventPayload(params: {
   taskType: string
   targetType: string
   targetId: string
-  episodeId?: string | null
   payload?: Record<string, unknown> | null
   coveragePayload?: unknown
   affectedResources?: readonly WorkspaceResourceRef[]
@@ -356,7 +344,6 @@ async function publishTaskLifecycleEvent(params: {
   taskType?: string | null
   targetType?: string | null
   targetId?: string | null
-  episodeId?: string | null
   payload?: Record<string, unknown> | null
   persist?: boolean
 }) {
@@ -369,7 +356,6 @@ async function publishTaskLifecycleEvent(params: {
   const eventTaskType = params.taskType || taskMeta?.type || null
   const eventTargetType = params.targetType || taskMeta?.targetType || null
   const eventTargetId = params.targetId || taskMeta?.targetId || null
-  const eventEpisodeId = params.episodeId || taskMeta?.episodeId || null
   const coveragePayload = taskMeta?.payload ?? params.payload ?? null
   const eventPayload = eventTaskType && eventTargetType && eventTargetId
     ? buildTaskLifecycleEventPayload({
@@ -379,7 +365,6 @@ async function publishTaskLifecycleEvent(params: {
         taskType: eventTaskType,
         targetType: eventTargetType,
         targetId: eventTargetId,
-        episodeId: eventEpisodeId,
         payload: params.payload,
         coveragePayload,
       })
@@ -408,7 +393,6 @@ async function publishTaskLifecycleEvent(params: {
     taskType: eventTaskType,
     targetType: eventTargetType,
     targetId: eventTargetId,
-    episodeId: eventEpisodeId,
     payload: eventPayload,
     coveragePayload,
   })
@@ -425,7 +409,6 @@ export async function publishTaskEvent(params: {
   taskType?: string | null
   targetType?: string | null
   targetId?: string | null
-  episodeId?: string | null
   payload?: Record<string, unknown> | null
   persist?: boolean
 }) {
@@ -437,7 +420,6 @@ export async function publishTaskEvent(params: {
     taskType: params.taskType,
     targetType: params.targetType,
     targetId: params.targetId,
-    episodeId: params.episodeId,
     payload: params.payload,
     persist: params.persist,
   })
@@ -450,7 +432,6 @@ export async function publishTaskStreamEvent(params: {
   taskType?: string | null
   targetType?: string | null
   targetId?: string | null
-  episodeId?: string | null
   payload?: Record<string, unknown> | null
 }) {
   if (!STREAM_EPHEMERAL_ENABLED) return null
@@ -465,7 +446,6 @@ export async function publishTaskStreamEvent(params: {
     taskType: params.taskType || null,
     targetType: params.targetType || null,
     targetId: params.targetId || null,
-    episodeId: params.episodeId || null,
     payload: normalizedPayload,
   })
 

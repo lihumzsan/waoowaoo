@@ -8,6 +8,7 @@ import {
   validateProjectAssistantMediaAttachmentFile,
 } from '@/lib/project-agent/media-attachments/client'
 import { requestOperationMutationWithError } from '@/lib/query/mutations/mutation-shared'
+import { buildCanvasUploadOutputPath } from '../create/canvas-output-path'
 
 export type CanvasUploadStage =
   | 'uploading'
@@ -24,6 +25,7 @@ export interface CanvasUploadQueueItem {
   readonly attachment: ProjectAssistantMediaAttachment | null
   readonly materializeRequestId: string | null
   readonly resourceId: string | null
+  readonly outputPath: string
   readonly error: unknown
 }
 
@@ -52,9 +54,10 @@ function requireMaterializedResource(value: unknown): { readonly resourceId: str
 
 export function useCanvasUploadQueue(params: {
   readonly projectId: string
+  readonly directoryPath: string
   readonly onMaterialized: (item: CanvasUploadQueueItem, resourceId: string, reused: boolean) => void
 }) {
-  const { projectId, onMaterialized } = params
+  const { projectId, directoryPath, onMaterialized } = params
   const queryClient = useQueryClient()
   const [items, setItems] = useState<readonly CanvasUploadQueueItem[]>([])
 
@@ -86,6 +89,7 @@ export function useCanvasUploadQueue(params: {
           },
           body: JSON.stringify({
             attachmentToken,
+            outputPath: item.outputPath,
             // Empty means keep the bounded, sanitized display name registered
             // by the upload authority; the Canvas has no rename field here.
             name: '',
@@ -144,11 +148,19 @@ export function useCanvasUploadQueue(params: {
       attachment: null,
       materializeRequestId: null,
       resourceId: null,
+      outputPath: '',
       error: null,
+    })).map((item) => ({
+      ...item,
+      outputPath: buildCanvasUploadOutputPath({
+        directoryPath,
+        fileName: item.file.name,
+        uniqueSuffix: item.id,
+      }),
     }))
     setItems((current) => [...current, ...added])
     added.forEach((item) => { void upload(item) })
-  }, [upload])
+  }, [directoryPath, upload])
 
   const retry = useCallback((item: CanvasUploadQueueItem) => {
     if (item.stage === 'failed_materialize' && item.attachment) {

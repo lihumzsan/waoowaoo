@@ -1,31 +1,4 @@
 {
-  "execution": {
-    "creating": "AI creating...",
-    "assistantGuidanceRequest": "Read the current project context and decide which independent capability best serves the user's current goal. Use a Skill or Creative Subagent for creative judgment, and request a generic Choice only when the current decision genuinely needs user input."
-  },
-  "rebuildConfirm": {
-    "confirm": "Continue and clear",
-    "cancel": "Cancel"
-  },
-  "workspaceScope": {
-    "all": "All",
-    "chapter": "Chapter {index}"
-  },
-  "episodeOverview": {
-    "title": "Episode context",
-    "titleWithStoryCanon": "Episode context · {title}",
-    "chapters": "Chapters",
-    "targetDuration": "Target duration",
-    "characters": "Characters {count}",
-    "locations": "Locations {count}",
-    "beats": "Beats {count}",
-    "ledgerEvents": "Ledger events {count}",
-    "emotionalCues": "Emotion cues {count}",
-    "worldRules": "World rules {count}",
-    "chapterIndex": "Chapter {index}",
-    "chapterDuration": "Duration {duration}",
-    "emptyChapters": "No Chapter context units"
-  },
   "canvas": {
     "workspace": {
       "toolbar": {
@@ -137,6 +110,17 @@
       "details": {
         "empty": "No generation details"
       },
+      "folderNavigation": {
+        "root": "Project files",
+        "searchPlaceholder": "Search project files",
+        "searchResults": "Search results",
+        "noResults": "No matching files",
+        "loadMore": "Load more",
+        "loading": "Loading files…",
+        "loadFailed": "Files could not be loaded",
+        "retry": "Retry",
+        "openFolder": "Open folder"
+      },
       "nodes": {
         "resourceCard": {
           "eyebrow": "Creative Resource · {type}",
@@ -146,6 +130,9 @@
             "audio": "Audio",
             "video": "Video"
           }
+        },
+        "folder": {
+          "eyebrow": "Folder"
         }
       }
     }

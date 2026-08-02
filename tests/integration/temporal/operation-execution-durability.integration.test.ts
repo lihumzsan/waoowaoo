@@ -24,7 +24,7 @@ import {
  * - TG-03 critical infrastructure: real Temporal Server, the production
  *   OperationExecutionWorkflow, production Operation Activity and real MySQL.
  * - Independent oracle: one immutable OperationExecution, Task, Created
- *   TaskEvent and pending CreativeResource plus Temporal Activity attempts.
+ *   TaskEvent and pending WorkspaceResource plus Temporal Activity attempts.
  * - Rejects rerunning a domain Operation after its transaction committed but
  *   the Activity acknowledgement was lost, and rejects payload reuse under
  *   the same execution identity.
@@ -196,8 +196,8 @@ describe('Temporal Operation execution durability', () => {
             idempotencyKey: true,
           },
         }),
-        prisma.creativeResource.findMany({
-          where: { projectId: fixture.projectId },
+        prisma.workspaceResource.findMany({
+          where: { operationExecutionId: receipt.operationExecutionId },
           select: {
             id: true,
             taskId: true,
@@ -229,8 +229,8 @@ describe('Temporal Operation execution durability', () => {
       expect(resources).toEqual([
         {
           id: tasks[0]?.targetId,
-          taskId: null,
-          operationExecutionId: null,
+          taskId,
+          operationExecutionId: receipt.operationExecutionId,
           status: 'pending',
         },
       ])

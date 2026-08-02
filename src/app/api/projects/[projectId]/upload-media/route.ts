@@ -8,7 +8,7 @@ import { executeProjectAgentOperationFromApi } from '@/lib/adapters/api/execute-
  * Register one user-uploaded image or audio file (multipart `file`, optional
  * `name`) as a chat attachment: bytes are sanitized and stored, the shared
  * MediaObject is registered, and a signed attachment receipt is returned.
- * No CreativeResource is created; the Agent materializes attachments on
+ * No WorkspaceResource is created; the Agent materializes attachments on
  * demand through the register_uploaded_media operation.
  */
 export const POST = apiHandler(async (

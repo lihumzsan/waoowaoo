@@ -24,7 +24,6 @@ export interface ApprovedPlanOperationExecutionCommand {
 
 export interface DirectTaskOperationContextSnapshot {
   locale: string | null
-  episodeId: string | null
   selectedScopeRef: string | null
   selectedAssetId: string | null
   origin:

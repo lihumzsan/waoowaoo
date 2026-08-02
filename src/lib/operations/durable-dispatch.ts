@@ -136,7 +136,6 @@ export async function executeDirectTaskOperationViaTemporal(params: {
     executionContractRevision: contractRevision,
     context: {
       locale: params.context.locale?.trim() || null,
-      episodeId: prepared.effectiveEpisodeId || null,
       selectedScopeRef: params.context.selectedScopeRef?.trim() || null,
       selectedAssetId: params.context.selectedAssetId?.trim() || null,
       origin: { ...params.origin },
@@ -210,7 +209,6 @@ export async function executeApprovedTaskOperationViaTemporal(params: {
     source: params.source,
     context: {
       locale: params.context.locale?.trim() || null,
-      episodeId: params.context.episodeId?.trim() || null,
       selectedScopeRef: params.context.selectedScopeRef?.trim() || null,
       selectedAssetId: params.context.selectedAssetId?.trim() || null,
       origin: { ...params.origin },

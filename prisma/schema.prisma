@@ -27,189 +27,6 @@ model Account {
   @@map("account")
 }
 
-model CharacterAppearance {
-  id                   String           @id @default(uuid())
-  characterId          String
-  appearanceIndex      Int
-  changeReason         String
-  description          String?          @db.Text
-  descriptions         String?          @db.Text
-  imageUrl             String?          @db.Text
-  imageUrls            String?          @db.Text
-  selectedIndex        Int?
-  createdAt            DateTime         @default(now())
-  updatedAt            DateTime         @default(now()) @updatedAt
-  previousImageUrl     String?          @db.Text
-  previousImageUrls    String?          @db.Text
-  previousDescription  String?          @db.Text // 上一次的描述词（用于撤回）
-  previousDescriptions String?          @db.Text // 上一次的描述词数组（用于撤回）
-  imageMediaId         String?
-  imageMedia           MediaObject?     @relation("CharacterAppearanceImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)
-  character            ProjectCharacter @relation(fields: [characterId], references: [id], onDelete: Cascade)
-
-  @@unique([characterId, appearanceIndex])
-  @@index([characterId])
-  @@index([imageMediaId])
-  @@map("character_appearances")
-}
-
-model LocationImage {
-  id                  String            @id @default(uuid())
-  locationId          String
-  imageIndex          Int
-  description         String?           @db.Text
-  imageUrl            String?           @db.Text
-  isSelected          Boolean           @default(false)
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @default(now()) @updatedAt
-  previousImageUrl    String?           @db.Text
-  previousDescription String?           @db.Text // 上一次的描述词（用于撤回）
-  imageMediaId        String?
-  imageMedia          MediaObject?      @relation("LocationImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)
-  location            ProjectLocation   @relation("LocationImages", fields: [locationId], references: [id], onDelete: Cascade)
-  selectedByLocations ProjectLocation[] @relation("SelectedLocationImage")
-
-  @@unique([locationId, imageIndex])
-  @@index([locationId])
-  @@index([imageMediaId])
-  @@map("location_images")
-}
-
-model ProjectCharacter {
-  id                      String                @id @default(uuid())
-  projectId               String
-  manifestAssetId         String?               @db.VarChar(80)
-  name                    String
-  aliases                 String?               @db.Text
-  createdAt               DateTime              @default(now())
-  updatedAt               DateTime              @default(now()) @updatedAt
-  profileData             String?               @db.Text
-  profileConfirmed        Boolean               @default(false)
-  introduction            String?               @db.Text // 角色介绍（身份、关系、称呼映射，如"我"对应此角色）
-  sourceGlobalCharacterId String? // 🆕 来源全局角色ID（复制时记录）
-  appearances             CharacterAppearance[]
-  project                 Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@unique([projectId, name])
-  @@unique([projectId, manifestAssetId])
-  @@index([projectId])
-  @@map("project_characters")
-}
-
-model ProjectLocation {
-  id                     String          @id @default(uuid())
-  projectId              String
-  manifestAssetId        String?         @db.VarChar(80)
-  name                   String
-  summary                String?         @db.Text // 场景简要描述（用途/人物关联）
-  assetKind              String          @default("location")
-  createdAt              DateTime        @default(now())
-  updatedAt              DateTime        @default(now()) @updatedAt
-  sourceGlobalLocationId String? // 🆕 来源全局场景ID（复制时记录）
-  selectedImageId        String?
-  selectedImage          LocationImage?  @relation("SelectedLocationImage", fields: [selectedImageId], references: [id], onDelete: SetNull)
-  images                 LocationImage[] @relation("LocationImages")
-  project                Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@unique([projectId, assetKind, name])
-  @@unique([projectId, assetKind, manifestAssetId])
-  @@index([projectId])
-  @@map("project_locations")
-}
-
-model ProjectEpisode {
-  id                String                         @id @default(uuid())
-  projectId         String
-  episodeNumber     Int
-  name              String
-  description       String?                        @db.Text
-  novelText         String?                        @db.Text
-  audioUrl          String?                        @db.Text
-  audioMediaId      String?
-  audioMedia        MediaObject?                   @relation("ProjectEpisodeAudioMedia", fields: [audioMediaId], references: [id], onDelete: SetNull)
-  srtContent        String?                        @db.Text
-  createdAt         DateTime                       @default(now())
-  updatedAt         DateTime                       @default(now()) @updatedAt
-  project           Project                        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  chapters          ProjectEditChapter[]
-  sourceDocuments   ProjectEpisodeSourceDocument[]
-  storyCanon        ProjectStoryCanon?
-  canvasLayout      ProjectCanvasLayout?
-  creativeResources CreativeResource[]
-  creativeBindings  CreativeResourceBinding[]
-
-  @@unique([projectId, episodeNumber])
-  @@index([projectId])
-  @@index([audioMediaId])
-  @@map("project_episodes")
-}
-
-model ProjectEditChapter {
-  id                String                       @id @default(uuid())
-  episodeId         String
-  chapterIndex      Int
-  title             String
-  summary           String                       @db.Text
-  sourceDocumentId  String
-  sourceStart       Int
-  sourceEnd         Int
-  targetDurationSec Int
-  entrySnapshotJson Json
-  eventsJson        Json
-  planVersion       Int                          @default(1)
-  provenanceJson    Json
-  createdAt         DateTime                     @default(now())
-  updatedAt         DateTime                     @default(now()) @updatedAt
-  episode           ProjectEpisode               @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  sourceDocument    ProjectEpisodeSourceDocument @relation(fields: [sourceDocumentId], references: [id], onDelete: Cascade)
-
-  @@unique([episodeId, chapterIndex])
-  @@index([episodeId])
-  @@index([sourceDocumentId])
-  @@map("project_edit_chapters")
-}
-
-model ProjectEpisodeSourceDocument {
-  id               String               @id @default(uuid())
-  episodeId        String
-  normalizedText   String               @db.LongText
-  checksum         String               @db.VarChar(64)
-  version          Int
-  sourceResourceId String               @db.VarChar(32)
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @default(now()) @updatedAt
-  episode          ProjectEpisode       @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  storyCanons      ProjectStoryCanon[]
-  chapters         ProjectEditChapter[]
-
-  @@unique([episodeId, version])
-  @@unique([episodeId, sourceResourceId])
-  @@index([episodeId])
-  @@index([sourceResourceId])
-  @@map("project_episode_source_documents")
-}
-
-model ProjectStoryCanon {
-  id                   String                       @id @default(uuid())
-  episodeId            String                       @unique
-  sourceDocumentId     String
-  storyCanonJson       Json
-  beatSheetJson        Json
-  ledgerJson           Json
-  emotionalCurveJson   Json
-  storyCanonResourceId String                       @db.VarChar(32)
-  version              Int                          @default(1)
-  createdAt            DateTime                     @default(now())
-  updatedAt            DateTime                     @default(now()) @updatedAt
-  episode              ProjectEpisode               @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  sourceDocument       ProjectEpisodeSourceDocument @relation(fields: [sourceDocumentId], references: [id], onDelete: Restrict)
-
-  @@index([episodeId])
-  @@index([sourceDocumentId])
-  @@index([storyCanonResourceId])
-  @@map("project_story_canons")
-}
-
 model MutationBatch {
   id          String          @id @default(uuid())
   projectId   String
@@ -250,9 +67,7 @@ model ProjectAssistantThread {
   id              String             @id @default(uuid())
   projectId       String
   userId          String
-  episodeId       String?
   assistantId     String
-  scopeRef        String
   runtimeThreadId String?            @unique @db.VarChar(191)
   messagesJson    Json
   planJson        Json?
@@ -262,41 +77,40 @@ model ProjectAssistantThread {
   user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   turns           ProjectAgentTurn[]
 
-  @@unique([projectId, userId, assistantId, scopeRef])
-  @@index([projectId, episodeId, updatedAt])
+  @@unique([projectId, userId, assistantId])
+  @@index([projectId, updatedAt])
   @@index([userId, updatedAt])
   @@map("project_assistant_threads")
 }
 
 model ProjectAgentTurn {
-  id                      String                 @id @db.VarChar(191)
-  threadId                String
-  projectId               String
-  userId                  String
-  episodeId               String?
-  sourceKind              String                 @db.VarChar(32)
-  sourceId                String                 @db.VarChar(191)
-  payloadHash             String                 @db.VarChar(64)
-  requestId               String                 @db.VarChar(128)
-  status                  String                 @default("queued") @db.VarChar(32)
-  attempt                 Int                    @default(0)
-  executionOwnerId        String?                @db.VarChar(191)
-  userMessageJson         Json?
-  contextJson             Json
-  runtimeTurnId           String?                @unique @db.VarChar(191)
-  assistantMessageId      String?                @db.VarChar(191)
-  stopReason              String?                @db.VarChar(64)
-  errorCode               String?                @db.VarChar(128)
-  errorMessage            String?                @db.Text
-  cancelRequestId         String?                @db.VarChar(128)
-  cancelReason            String?                @db.Text
-  startedAt               DateTime?
-  finishedAt              DateTime?
-  createdAt               DateTime               @default(now())
-  updatedAt               DateTime               @updatedAt
-  thread                  ProjectAssistantThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  toolEffects             AgentToolEffect[]
-  interactions            AgentTurnInteraction[]
+  id                 String                 @id @db.VarChar(191)
+  threadId           String
+  projectId          String
+  userId             String
+  sourceKind         String                 @db.VarChar(32)
+  sourceId           String                 @db.VarChar(191)
+  payloadHash        String                 @db.VarChar(64)
+  requestId          String                 @db.VarChar(128)
+  status             String                 @default("queued") @db.VarChar(32)
+  attempt            Int                    @default(0)
+  executionOwnerId   String?                @db.VarChar(191)
+  userMessageJson    Json?
+  contextJson        Json
+  runtimeTurnId      String?                @unique @db.VarChar(191)
+  assistantMessageId String?                @db.VarChar(191)
+  stopReason         String?                @db.VarChar(64)
+  errorCode          String?                @db.VarChar(128)
+  errorMessage       String?                @db.Text
+  cancelRequestId    String?                @db.VarChar(128)
+  cancelReason       String?                @db.Text
+  startedAt          DateTime?
+  finishedAt         DateTime?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  thread             ProjectAssistantThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  toolEffects        AgentToolEffect[]
+  interactions       AgentTurnInteraction[]
 
   @@unique([threadId, sourceKind, sourceId])
   @@index([threadId, status, createdAt])
@@ -322,21 +136,21 @@ model AgentToolEffect {
 }
 
 model AgentTurnInteraction {
-  id           String           @id @db.VarChar(191)
-  turnId       String
-  kind         String           @db.VarChar(32)
-  status       String           @default("pending") @db.VarChar(32)
-  payloadJson  Json
-  runtimeRequestId String?      @db.VarChar(191)
-  responseJson Json?
-  version      Int              @default(0)
-  resolvedAt   DateTime?
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-  turn         ProjectAgentTurn @relation(fields: [turnId], references: [id], onDelete: Cascade)
+  id               String           @id @db.VarChar(191)
+  turnId           String
+  kind             String           @db.VarChar(32)
+  status           String           @default("pending") @db.VarChar(32)
+  payloadJson      Json
+  runtimeRequestId String?          @db.VarChar(191)
+  responseJson     Json?
+  version          Int              @default(0)
+  resolvedAt       DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  turn             ProjectAgentTurn @relation(fields: [turnId], references: [id], onDelete: Cascade)
 
-  @@index([turnId, status, createdAt])
   @@unique([turnId, runtimeRequestId])
+  @@index([turnId, status, createdAt])
   @@map("agent_turn_interactions")
 }
 
@@ -347,9 +161,7 @@ model ProjectAssistantThreadArchive {
   threadId         String
   projectId        String
   userId           String
-  episodeId        String?
   assistantId      String
-  scopeRef         String
   runtimeThreadId  String?  @db.VarChar(191)
   messagesJson     Json
   clearRequestId   String?  @db.VarChar(128)
@@ -366,83 +178,33 @@ model ProjectAssistantThreadArchive {
 }
 
 model Project {
-  id                  String                    @id @default(uuid())
+  id                  String                   @id @default(uuid())
   name                String
-  description         String?                   @db.Text
+  description         String?                  @db.Text
   userId              String
   analysisModel       String?
   imageModel          String?
   videoModel          String?
   musicModel          String?
   videoRatio          String?
-  globalAssetText     String?                   @db.LongText
   characterModel      String?
   locationModel       String?
   editModel           String?
-  videoResolution     String                    @default("720p")
-  capabilityOverrides String?                   @db.LongText
-  lastEpisodeId       String?
-  imageResolution     String                    @default("2K")
-  createdAt           DateTime                  @default(now())
-  updatedAt           DateTime                  @default(now()) @updatedAt
+  videoResolution     String                   @default("720p")
+  capabilityOverrides String?                  @db.LongText
+  imageResolution     String                   @default("2K")
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @default(now()) @updatedAt
   lastAccessedAt      DateTime?
-  user                User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   usageCosts          UsageCost[]
   assistantThreads    ProjectAssistantThread[]
   mutationBatches     MutationBatch[]
-  episodes            ProjectEpisode[]
-  characters          ProjectCharacter[]
-  locations           ProjectLocation[]
+  workspaceResources  WorkspaceResource[]
   canvasLayouts       ProjectCanvasLayout[]
-  creativeResources   CreativeResource[]
-  creativeBindings    CreativeResourceBinding[]
 
   @@index([userId])
   @@map("projects")
-}
-
-model ProjectCanvasLayout {
-  id            String                    @id @default(uuid())
-  projectId     String
-  episodeId     String                    @unique
-  schemaVersion Int                       @default(1)
-  viewportX     Float                     @default(0)
-  viewportY     Float                     @default(0)
-  zoom          Float                     @default(1)
-  createdAt     DateTime                  @default(now())
-  updatedAt     DateTime                  @default(now()) @updatedAt
-  project       Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  episode       ProjectEpisode            @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  nodeLayouts   ProjectCanvasNodeLayout[]
-
-  @@unique([projectId, episodeId])
-  @@index([projectId])
-  @@map("project_canvas_layouts")
-}
-
-model ProjectCanvasNodeLayout {
-  id         String              @id @default(uuid())
-  layoutId   String
-  nodeKey    String
-  nodeType   String
-  targetType String
-  targetId   String
-  x          Float
-  y          Float
-  width      Float
-  height     Float
-  zIndex     Int                 @default(0)
-  locked     Boolean             @default(false)
-  collapsed  Boolean             @default(false)
-  hidden     Boolean             @default(false)
-  createdAt  DateTime            @default(now())
-  updatedAt  DateTime            @default(now()) @updatedAt
-  layout     ProjectCanvasLayout @relation(fields: [layoutId], references: [id], onDelete: Cascade)
-
-  @@unique([layoutId, nodeKey])
-  @@index([layoutId])
-  @@index([targetType, targetId])
-  @@map("project_canvas_node_layouts")
 }
 
 model Session {
@@ -504,8 +266,7 @@ model User {
   projectAssistantThreadArchives ProjectAssistantThreadArchive[]
   mutationBatches                MutationBatch[]
   inviteRedemptions              InviteRedemption[]
-  creativeResources              CreativeResource[]
-  creativeBindings               CreativeResourceBinding[]
+  workspaceResources             WorkspaceResource[]
 
   @@map("user")
 }
@@ -637,7 +398,6 @@ model BalanceTransaction {
   externalOrderId String?  @db.VarChar(128)
   idempotencyKey  String?  @db.VarChar(128)
   projectId       String?  @db.VarChar(128) // 关联项目 ID，用于流水展示项目名
-  episodeId       String?  @db.VarChar(128) // 关联集数 ID，用于流水展示集数
   taskType        String?  @db.VarChar(64) // 任务类型 key（与 action 一致），用于前端 i18n
   billingMeta     String?  @db.Text // 计费详情 JSON: { quantity, unit, model, resolution, duration, tokens... }
   createdAt       DateTime @default(now())
@@ -657,7 +417,6 @@ model Task {
   userId               String
   projectId            String
   parentTaskId         String?
-  episodeId            String?
   type                 String
   targetType           String
   targetId             String
@@ -691,7 +450,7 @@ model Task {
   executionCheckpoints TaskExecutionCheckpoint[]
   approvalGrant        ApprovalGrant?            @relation(fields: [approvalGrantId], references: [id], onDelete: Restrict)
   operationExecution   OperationExecution?       @relation(fields: [operationExecutionId], references: [id], onDelete: Restrict)
-  creativeResources    CreativeResource[]
+  workspaceResources   WorkspaceResource[]
   followUpMemberships  FollowUpBatchMember[]
 
   @@unique([operationExecutionId, operationPlanTaskId])
@@ -716,7 +475,6 @@ model FollowUpBatch {
   callId                 String                @db.VarChar(191)
   projectId              String
   userId                 String
-  episodeId              String?
   assistantId            String                @db.VarChar(64)
   operationId            String                @db.VarChar(128)
   contextJson            Json
@@ -757,7 +515,6 @@ model OperationPlanSnapshot {
   scopeKind                 String               @db.VarChar(32)
   scopeId                   String               @db.VarChar(191)
   projectId                 String?
-  episodeId                 String?
   operationId               String               @db.VarChar(128)
   apiRequestId              String?              @db.VarChar(128)
   apiRequestContextHash     String?              @db.VarChar(64)
@@ -783,7 +540,6 @@ model ApprovalGrant {
   scopeKind           String                @db.VarChar(32)
   scopeId             String                @db.VarChar(191)
   projectId           String?
-  episodeId           String?
   operationId         String                @db.VarChar(128)
   planSnapshotId      String
   requestId           String                @db.VarChar(128)
@@ -822,7 +578,6 @@ model OperationExecution {
   scopeKind            String                 @db.VarChar(32)
   scopeId              String                 @db.VarChar(191)
   projectId            String?
-  episodeId            String?
   operationId          String                 @db.VarChar(128)
   planSnapshotId       String?
   approvalGrantId      String?                @unique
@@ -835,8 +590,8 @@ model OperationExecution {
   planSnapshot         OperationPlanSnapshot? @relation(fields: [planSnapshotId], references: [id], onDelete: Restrict)
   approvalGrant        ApprovalGrant?         @relation(fields: [approvalGrantId], references: [id], onDelete: Restrict)
   tasks                Task[]
-  creativeResources    CreativeResource[]     @relation("CreativeResourceOperationExecution")
-  alternativeResources CreativeResource[]     @relation("CreativeResourceAlternativeGroupExecution")
+  workspaceResources   WorkspaceResource[]    @relation("WorkspaceResourceOperationExecution")
+  alternativeResources WorkspaceResource[]    @relation("WorkspaceResourceAlternativeGroupExecution")
 
   @@unique([planSnapshotId, requestId])
   @@index([userId, scopeKind, scopeId, operationId, createdAt])
@@ -898,7 +653,7 @@ model GlobalAssetFolder {
   @@map("global_asset_folders")
 }
 
-// 全局角色（结构与 ProjectCharacter 一致）
+// 用户级 Asset Hub 角色
 model GlobalCharacter {
   id               String   @id @default(uuid())
   userId           String
@@ -950,7 +705,7 @@ model GlobalCharacterAppearance {
   @@map("global_character_appearances")
 }
 
-// 全局场景（结构与 ProjectLocation 一致）
+// 用户级 Asset Hub 场景
 model GlobalLocation {
   id        String   @id @default(uuid())
   userId    String
@@ -1009,117 +764,143 @@ model MediaObject {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @default(now()) @updatedAt
 
-  characterAppearanceImages             CharacterAppearance[]       @relation("CharacterAppearanceImageMedia")
-  locationImages                        LocationImage[]             @relation("LocationImageMedia")
-  projectEpisodeAudios                  ProjectEpisode[]            @relation("ProjectEpisodeAudioMedia")
   globalCharacterAppearanceImages       GlobalCharacterAppearance[] @relation("GlobalCharacterAppearanceImageMedia")
   globalCharacterAppearancePreviousImgs GlobalCharacterAppearance[] @relation("GlobalCharacterAppearancePreviousImageMedia")
   globalLocationImageImages             GlobalLocationImage[]       @relation("GlobalLocationImageMedia")
   globalLocationImagePreviousImages     GlobalLocationImage[]       @relation("GlobalLocationImagePreviousImageMedia")
-  creativeResources                     CreativeResource[]
+  workspaceResourceVersions             WorkspaceResourceVersion[]
 
   @@index([createdAt])
   @@map("media_objects")
 }
 
-model CreativeResource {
-  id                          String                    @id @db.VarChar(32)
+model WorkspaceResource {
+  id                          String                     @id @db.VarChar(32)
   userId                      String
-  projectId                   String?
-  episodeId                   String?
-  scopeKind                   String                    @db.VarChar(32)
-  scopeId                     String                    @db.VarChar(191)
-  mediaType                   String                    @db.VarChar(16)
-  schemaId                    String                    @db.VarChar(96)
-  name                        String                    @db.VarChar(191)
-  status                      String                    @default("pending") @db.VarChar(32)
-  sourceType                  String?                   @db.VarChar(96)
-  sourceId                    String?                   @db.VarChar(191)
+  projectId                   String
+  workspacePath               String                     @db.VarChar(512)
+  activePath                  String?                    @db.VarChar(512)
+  resourceKind                String                     @default("file") @db.VarChar(16)
+  mediaType                   String?                    @db.VarChar(16)
+  schemaId                    String                     @db.VarChar(96)
+  name                        String                     @db.VarChar(191)
+  status                      String                     @default("pending") @db.VarChar(32)
+  currentVersion              Int                        @default(0)
+  sourceType                  String?                    @db.VarChar(96)
+  sourceId                    String?                    @db.VarChar(191)
   memberIndex                 Int?
-  contentText                 String?                   @db.LongText
-  contentJson                 Json?
-  mediaId                     String?
-  prompt                      String?                   @db.LongText
-  modelKey                    String?                   @db.VarChar(191)
+  prompt                      String?                    @db.LongText
+  modelKey                    String?                    @db.VarChar(191)
   generationOptions           Json?
-  operationId                 String?                   @db.VarChar(128)
-  inputHash                   String?                   @db.VarChar(64)
+  operationId                 String?                    @db.VarChar(128)
+  inputHash                   String?                    @db.VarChar(64)
   taskId                      String?
   operationExecutionId        String?
   alternativeGroupExecutionId String?
-  toolCallId                  String?                   @db.VarChar(191)
-  errorCode                   String?                   @db.VarChar(128)
-  errorMessage                String?                   @db.Text
-  creativeData                Json?
-  creativeDataVersion         Int                       @default(0)
+  toolCallId                  String?                    @db.VarChar(191)
+  errorCode                   String?                    @db.VarChar(128)
+  errorMessage                String?                    @db.Text
   materializedAt              DateTime?
-  archivedAt                  DateTime?
-  createdAt                   DateTime                  @default(now())
-  updatedAt                   DateTime                  @updatedAt
-  user                        User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  project                     Project?                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  episode                     ProjectEpisode?           @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  media                       MediaObject?              @relation(fields: [mediaId], references: [id], onDelete: Restrict)
-  task                        Task?                     @relation(fields: [taskId], references: [id], onDelete: Restrict)
-  operationExecution          OperationExecution?       @relation("CreativeResourceOperationExecution", fields: [operationExecutionId], references: [id], onDelete: Restrict)
-  alternativeGroupExecution   OperationExecution?       @relation("CreativeResourceAlternativeGroupExecution", fields: [alternativeGroupExecutionId], references: [id], onDelete: Restrict)
-  inputLineage                CreativeResourceLineage[] @relation("CreativeResourceLineageInput")
-  outputLineage               CreativeResourceLineage[] @relation("CreativeResourceLineageOutput")
-  bindings                    CreativeResourceBinding[]
+  deletedAt                   DateTime?
+  createdAt                   DateTime                   @default(now())
+  updatedAt                   DateTime                   @updatedAt
+  user                        User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project                     Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task                        Task?                      @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  operationExecution          OperationExecution?        @relation("WorkspaceResourceOperationExecution", fields: [operationExecutionId], references: [id], onDelete: Restrict)
+  alternativeGroupExecution   OperationExecution?        @relation("WorkspaceResourceAlternativeGroupExecution", fields: [alternativeGroupExecutionId], references: [id], onDelete: Restrict)
+  versions                    WorkspaceResourceVersion[]
+  inputLineage                WorkspaceResourceLineage[] @relation("WorkspaceResourceLineageInput")
+  outputLineage               WorkspaceResourceLineage[] @relation("WorkspaceResourceLineageOutput")
 
-  @@unique([sourceType, sourceId], map: "creative_resources_source_key")
-  @@unique([alternativeGroupExecutionId, memberIndex], map: "creative_resources_alternative_member_key")
-  @@index([userId, scopeKind, scopeId, createdAt], map: "creative_resources_scope_created_idx")
-  @@index([projectId, episodeId, createdAt], map: "creative_resources_project_episode_idx")
-  @@index([schemaId, mediaType, createdAt], map: "creative_resources_schema_media_idx")
-  @@index([mediaId], map: "creative_resources_media_idx")
-  @@index([taskId], map: "creative_resources_task_idx")
-  @@index([operationExecutionId], map: "creative_resources_execution_idx")
-  @@index([alternativeGroupExecutionId], map: "creative_resources_alternative_group_idx")
-  @@index([projectId, episodeId, archivedAt, createdAt], map: "creative_resources_project_archive_idx")
-  @@index([operationId, inputHash], map: "creative_resources_operation_input_idx")
-  @@map("creative_resources")
+  @@unique([projectId, activePath], map: "workspace_resources_project_active_path_key")
+  @@unique([sourceType, sourceId], map: "workspace_resources_source_key")
+  @@unique([alternativeGroupExecutionId, memberIndex], map: "workspace_resources_alternative_member_key")
+  @@index([projectId, deletedAt, workspacePath], map: "workspace_resources_project_tree_idx")
+  @@index([userId, projectId, createdAt], map: "workspace_resources_user_project_idx")
+  @@index([resourceKind, schemaId, mediaType, createdAt], map: "workspace_resources_kind_schema_media_idx")
+  @@index([taskId], map: "workspace_resources_task_idx")
+  @@index([operationExecutionId], map: "workspace_resources_execution_idx")
+  @@index([alternativeGroupExecutionId], map: "workspace_resources_alternative_group_idx")
+  @@index([operationId, inputHash], map: "workspace_resources_operation_input_idx")
+  @@map("workspace_resources")
 }
 
-model CreativeResourceLineage {
-  id               String           @id @default(uuid())
-  outputResourceId String           @db.VarChar(32)
-  inputResourceId  String           @db.VarChar(32)
-  role             String           @db.VarChar(64)
+model ProjectCanvasLayout {
+  id            String                    @id @default(uuid())
+  projectId     String
+  folderKey     String                    @db.VarChar(191)
+  schemaVersion Int                       @default(1)
+  viewportX     Float                     @default(0)
+  viewportY     Float                     @default(0)
+  zoom          Float                     @default(1)
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @default(now()) @updatedAt
+  project       Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  nodeLayouts   ProjectCanvasNodeLayout[]
+
+  @@unique([projectId, folderKey], map: "project_canvas_layouts_project_folder_key")
+  @@index([projectId], map: "project_canvas_layouts_project_idx")
+  @@map("project_canvas_layouts")
+}
+
+model ProjectCanvasNodeLayout {
+  id         String              @id @default(uuid())
+  layoutId   String
+  nodeKey    String
+  nodeType   String
+  targetType String
+  targetId   String
+  x          Float
+  y          Float
+  width      Float
+  height     Float
+  zIndex     Int                 @default(0)
+  locked     Boolean             @default(false)
+  collapsed  Boolean             @default(false)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @default(now()) @updatedAt
+  layout     ProjectCanvasLayout @relation(fields: [layoutId], references: [id], onDelete: Cascade)
+
+  @@unique([layoutId, nodeKey], map: "project_canvas_node_layouts_layout_node_key")
+  @@index([layoutId], map: "project_canvas_node_layouts_layout_idx")
+  @@index([targetType, targetId], map: "project_canvas_node_layouts_target_idx")
+  @@map("project_canvas_node_layouts")
+}
+
+model WorkspaceResourceVersion {
+  id           String            @id @default(uuid())
+  resourceId   String            @db.VarChar(32)
+  version      Int
+  contentKind  String            @db.VarChar(16)
+  mediaId      String
+  sha256       String?           @db.VarChar(64)
+  sizeBytes    BigInt?
+  sourceTurnId String?           @db.VarChar(191)
+  createdAt    DateTime          @default(now())
+  resource     WorkspaceResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  media        MediaObject       @relation(fields: [mediaId], references: [id], onDelete: Restrict)
+
+  @@unique([resourceId, version], map: "workspace_resource_versions_resource_version_key")
+  @@index([mediaId], map: "workspace_resource_versions_media_idx")
+  @@map("workspace_resource_versions")
+}
+
+model WorkspaceResourceLineage {
+  id               String            @id @default(uuid())
+  outputResourceId String            @db.VarChar(32)
+  outputVersion    Int
+  inputResourceId  String            @db.VarChar(32)
+  inputVersion     Int
+  role             String            @db.VarChar(64)
   position         Int
-  createdAt        DateTime         @default(now())
-  outputResource   CreativeResource @relation("CreativeResourceLineageOutput", fields: [outputResourceId], references: [id], onDelete: Cascade)
-  inputResource    CreativeResource @relation("CreativeResourceLineageInput", fields: [inputResourceId], references: [id], onDelete: Restrict)
+  createdAt        DateTime          @default(now())
+  outputResource   WorkspaceResource @relation("WorkspaceResourceLineageOutput", fields: [outputResourceId], references: [id], onDelete: Cascade)
+  inputResource    WorkspaceResource @relation("WorkspaceResourceLineageInput", fields: [inputResourceId], references: [id], onDelete: Restrict)
 
-  @@unique([outputResourceId, role, position], map: "creative_lineage_output_role_position_key")
-  @@index([inputResourceId], map: "creative_lineage_input_idx")
-  @@map("creative_resource_lineage")
-}
-
-model CreativeResourceBinding {
-  id         String           @id @default(uuid())
-  userId     String
-  projectId  String?
-  episodeId  String?
-  scopeKind  String           @db.VarChar(32)
-  scopeId    String           @db.VarChar(191)
-  role       String           @db.VarChar(64)
-  slotKey    String           @db.VarChar(128)
-  resourceId String           @db.VarChar(32)
-  source     String           @db.VarChar(64)
-  version    Int              @default(0)
-  createdAt  DateTime         @default(now())
-  updatedAt  DateTime         @updatedAt
-  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  project    Project?         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  episode    ProjectEpisode?  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  resource   CreativeResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
-
-  @@unique([scopeKind, scopeId, role, slotKey], map: "creative_bindings_scope_role_slot_key")
-  @@index([userId, scopeKind, scopeId], map: "creative_bindings_user_scope_idx")
-  @@index([projectId, episodeId], map: "creative_bindings_project_episode_idx")
-  @@index([resourceId], map: "creative_bindings_resource_idx")
-  @@map("creative_resource_bindings")
+  @@unique([outputResourceId, outputVersion, role, position], map: "workspace_lineage_output_version_role_position_key")
+  @@index([inputResourceId], map: "workspace_lineage_input_idx")
+  @@map("workspace_resource_lineage")
 }
 
 model LegacyMediaRefBackup {

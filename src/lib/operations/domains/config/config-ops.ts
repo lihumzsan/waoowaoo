@@ -2,8 +2,6 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { logProjectAction } from '@/lib/logging/semantic'
 import { ApiError } from '@/lib/api-errors'
-import { attachMediaFieldsToProject } from '@/lib/media/attach'
-import { buildProjectReadModel } from '@/lib/projects/build-project-read-model'
 import {
   type CapabilitySelections,
   type UnifiedModelType,
@@ -316,7 +314,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
 
     update_project_config: defineOperation({
       id: 'update_project_config',
-      summary: 'Persist one explicit project output aspect ratio. This is the sole writer for that project fact and may be committed atomically by a generic Choice answer.',
+      summary: 'Persist explicit project model, capability and output aspect-ratio configuration.',
       intent: 'act',
       toolContractRevision: 'update_project_config/v1',
       channels: { tool: true, api: true, mcp: true },
@@ -331,7 +329,6 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
         longRunning: false,
       },
       confirmation: { kind: 'none', required: false },
-      choiceCommit: { enabled: true },
       toolInputSchema: {
         type: 'object',
         properties: {
@@ -418,9 +415,6 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
           where: { id: ctx.projectId },
         })
 
-        const projectWithSignedUrls = await attachMediaFieldsToProject(updatedProject)
-        const fullProject = buildProjectReadModel(updatedProject, projectWithSignedUrls)
-
         logProjectAction(
           'UPDATE_NOVEL_PROMOTION',
           ctx.userId,
@@ -430,7 +424,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
           { changes: body },
         )
 
-        return { project: fullProject }
+        return { project: updatedProject }
       },
     }),
   }

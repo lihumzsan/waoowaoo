@@ -37,13 +37,10 @@ export function WorkspaceNodeDetailsCard({
   readonly actions: WorkspaceNodeDetailsActions
 }) {
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
+  if (node.data.kind !== 'resourceCard') return null
   const resource = node.data.resourceDetails.resource
-  const prompt = resource.materialization?.provenance.prompt
-    ?? resource.pendingGeneration?.prompt
-    ?? null
-  const modelKey = resource.materialization?.provenance.modelKey
-    ?? resource.pendingGeneration?.modelKey
-    ?? null
+  const prompt = resource.prompt
+  const modelKey = resource.modelKey
   const inputs = node.data.resourceDetails.inputSummaries
   const width = Math.max(node.data.width, DETAILS_CARD_MIN_WIDTH)
 

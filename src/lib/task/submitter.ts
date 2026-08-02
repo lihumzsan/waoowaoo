@@ -85,7 +85,6 @@ export type SubmitTaskParams = {
   locale: Locale
   projectId: string
   parentTaskId?: string | null
-  episodeId?: string | null
   type: TaskType
   targetType: string
   targetId: string
@@ -171,7 +170,6 @@ export async function prepareTaskSubmissionInput(params: SubmitTaskParams): Prom
     userId: params.userId,
     projectId: params.projectId,
     parentTaskId: params.parentTaskId || null,
-    episodeId: params.episodeId || null,
     type: params.type,
     targetType: params.targetType,
     targetId: params.targetId,

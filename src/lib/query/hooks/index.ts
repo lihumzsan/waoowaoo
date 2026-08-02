@@ -2,7 +2,7 @@
  * React Query Hooks 统一导出
  * 
  * 使用示例：
- * import { useProjectAssets } from '@/lib/query/hooks'
+ * import { useWorkspaceResources } from '@/lib/query/hooks'
  */
 
 // 中心资产库
@@ -47,51 +47,6 @@ export {
     useCreateAssetHubCharacter,
 } from '../mutations/useAssetHubMutations'
 
-// 项目资产
-export {
-    useProjectAssets,
-    useProjectCharacters,
-    useProjectLocations,
-    useProjectProps,
-    useRefreshProjectAssets,
-    type ProjectAssetsData,
-} from './useProjectAssets'
-export {
-    useSelectProjectCharacterImage,
-    useUndoProjectCharacterImage,
-    useUploadProjectCharacterImage,
-    useDeleteProjectCharacter,
-    useDeleteProjectAppearance,
-    useUpdateProjectCharacterName,
-    useSelectProjectLocationImage,
-    useUndoProjectLocationImage,
-    useUploadProjectLocationImage,
-    useDeleteProjectLocation,
-    useUpdateProjectLocationName,
-    useUpdateProjectAppearanceDescription,
-    useUpdateProjectLocationDescription,
-    useUpdateProjectCharacterIntroduction,
-    useCreateProjectLocation,
-    useUploadProjectTempMedia,
-    useCreateProjectCharacter,
-    useCreateProjectCharacterAppearance,
-    useCopyProjectAssetFromGlobal,
-    useUpdateProjectConfig,
-    useUpdateProjectEpisodeField,
-    useConfirmProjectCharacterSelection,
-    useConfirmProjectLocationSelection,
-    useDownloadRemoteBlob,
-} from '../mutations/useProjectMutations'
-
-export type {
-    Character,
-    CharacterAppearance,
-    Location,
-    LocationImage,
-    Prop,
-    PropImage,
-} from '@/types/project'
-
 // 实时任务
 export {
     useSSE,
@@ -107,26 +62,11 @@ export {
 export {
     useProjectData,
     useRefreshProjectData,
-    useEpisodeData,
-    useEpisodes,
-    useRefreshEpisodeData,
-    useRefreshAll,
-    type Episode,
 } from './useProjectData'
 
 export {
-    useProjectContext,
-} from './useProjectContext'
-
-export {
-    useCreativeResources,
-} from './useCreativeResources'
-
-export {
-    projectStoryCanonQueryOptions,
-    useProjectStoryCanon,
-    useProjectStoryCanonResponse,
-} from './useStoryCanon'
+    useWorkspaceResources,
+} from './useWorkspaceResources'
 
 export {
     useAgentSessionView,

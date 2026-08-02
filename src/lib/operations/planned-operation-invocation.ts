@@ -211,7 +211,6 @@ export async function issueApprovalGrantGroupInTransaction(
         scopeKind: snapshot.scopeKind,
         scopeId: snapshot.scopeId,
         projectId: snapshot.projectId,
-        episodeId: snapshot.episodeId,
         operationId: snapshot.operationId,
         planSnapshotId: snapshot.id,
         requestId: request.requestId,
@@ -266,24 +265,21 @@ export async function issueApprovalGrant(params: {
 function assertSnapshotScope(params: {
   userId: string
   projectId: string
-  episodeId?: string | null
   operationId: string
   normalizedInput: unknown
   snapshot: NonNullable<Awaited<ReturnType<typeof loadOperationPlanSnapshot>>>
 }): void {
   const expectedScopeKind =
     params.projectId === GLOBAL_ASSET_PROJECT_ID ? 'global_asset_hub' : 'project'
-  const requestedEpisodeId = params.episodeId ?? null
   if (
     params.snapshot.userId !== params.userId ||
     params.snapshot.scopeKind !== expectedScopeKind ||
     params.snapshot.scopeId !== params.projectId ||
-    params.snapshot.operationId !== params.operationId ||
-    (requestedEpisodeId !== null && params.snapshot.episodeId !== requestedEpisodeId)
+    params.snapshot.operationId !== params.operationId
   ) {
     throw new ApiError('FORBIDDEN', {
       code: 'OPERATION_PLAN_SCOPE_MISMATCH',
-      message: 'the approved plan does not belong to this user, scope, episode, or operation',
+      message: 'the approved plan does not belong to this user, scope, or operation',
     })
   }
   if (hashCanonicalJson(params.normalizedInput) !== params.snapshot.inputHash) {
@@ -444,7 +440,6 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
   assertSnapshotScope({
     userId: params.ctx.userId,
     projectId: params.ctx.projectId,
-    episodeId: params.ctx.context.episodeId ?? null,
     operationId: params.operation.id,
     normalizedInput: params.normalizedInput,
     snapshot: previewSnapshot,
@@ -492,7 +487,6 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
       assertSnapshotScope({
         userId: params.ctx.userId,
         projectId: params.ctx.projectId,
-        episodeId: params.ctx.context.episodeId ?? null,
         operationId: params.operation.id,
         normalizedInput: params.normalizedInput,
         snapshot,
@@ -541,7 +535,6 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
           scopeKind: snapshot.scopeKind,
           scopeId: snapshot.scopeId,
           projectId: snapshot.projectId,
-          episodeId: snapshot.episodeId,
           operationId: snapshot.operationId,
           planSnapshotId: snapshot.id,
           approvalGrantId: grant.id,
@@ -557,10 +550,7 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
       const committedOutput = await commit(
         {
           ...params.ctx,
-          context: {
-            ...params.ctx.context,
-            episodeId: snapshot.episodeId,
-          },
+          context: params.ctx.context,
           writer: bufferedWriter,
           executionAuthorization: {
             approvalGrantId: grant.id,

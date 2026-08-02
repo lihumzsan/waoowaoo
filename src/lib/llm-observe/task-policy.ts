@@ -1,4 +1,3 @@
-import { TASK_TYPE, type TaskType } from '@/lib/task/types'
 import type { LLMObserveDisplayMode } from './config'
 
 export type LLMTaskPolicy = {
@@ -17,24 +16,12 @@ const DEFAULT_POLICY: LLMTaskPolicy = {
   captureReasoning: false,
 }
 
-const LONG_FLOW_POLICY: LLMTaskPolicy = {
-  consoleEnabled: true,
-  displayMode: 'detail',
-  fullscreen: true,
-  priority: 1,
-  captureReasoning: true,
-}
-
-const POLICY_BY_TASK_TYPE: Partial<Record<TaskType, LLMTaskPolicy>> = {
-  [TASK_TYPE.CREATIVE_WORK]: LONG_FLOW_POLICY,
-}
-
 export function getLLMTaskPolicy(taskType: string | null | undefined): LLMTaskPolicy {
-  if (!taskType) return DEFAULT_POLICY
-  return POLICY_BY_TASK_TYPE[taskType as TaskType] || DEFAULT_POLICY
+  void taskType
+  return DEFAULT_POLICY
 }
 
-export function isLLMTaskType(taskType: string | null | undefined): taskType is TaskType {
-  return typeof taskType === 'string'
-    && Object.prototype.hasOwnProperty.call(POLICY_BY_TASK_TYPE, taskType)
+export function isLLMTaskType(taskType: string | null | undefined): boolean {
+  void taskType
+  return false
 }

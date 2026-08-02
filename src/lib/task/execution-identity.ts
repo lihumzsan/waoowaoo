@@ -13,7 +13,6 @@ export function createTaskExecutionFingerprint(input: CreateTaskInput): string {
     userId: input.userId,
     projectId: input.projectId,
     parentTaskId: input.parentTaskId ?? null,
-    episodeId: input.episodeId ?? null,
     type: input.type,
     targetType: input.targetType,
     targetId: input.targetId,

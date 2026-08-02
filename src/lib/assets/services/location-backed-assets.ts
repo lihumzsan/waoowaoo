@@ -4,16 +4,6 @@ import { prisma } from '@/lib/prisma'
 
 export type LocationBackedAssetKind = 'location' | 'prop'
 
-type ProjectLocationBackedAssetRow = {
-  id: string
-  projectId: string
-  name: string
-  summary: string | null
-  selectedImageId: string | null
-  sourceGlobalLocationId: string | null
-  assetKind: LocationBackedAssetKind
-}
-
 type GlobalLocationBackedAssetRow = {
   id: string
   userId: string
@@ -34,10 +24,6 @@ type LocationBackedImageRow = {
   previousDescription: string | null
   isSelected: boolean
   locationId: string
-}
-
-export type ProjectLocationBackedAssetRecord = ProjectLocationBackedAssetRow & {
-  images: LocationBackedImageRow[]
 }
 
 export type GlobalLocationBackedAssetRecord = GlobalLocationBackedAssetRow & {
@@ -78,29 +64,6 @@ function normalizeSeedDescriptions(input: {
   return fallbackDescription.length > 0 ? [fallbackDescription] : []
 }
 
-async function readProjectLocationBackedImages(locationIds: string[]): Promise<Map<string, LocationBackedImageRow[]>> {
-  if (locationIds.length === 0) {
-    return new Map()
-  }
-  const rows = await prisma.$queryRaw<LocationBackedImageRow[]>(Prisma.sql`
-    SELECT
-      id,
-      imageIndex,
-      description,
-      imageUrl,
-      imageMediaId,
-      previousImageUrl,
-      NULL AS previousImageMediaId,
-      previousDescription,
-      isSelected,
-      locationId
-    FROM location_images
-    WHERE locationId IN (${Prisma.join(locationIds)})
-    ORDER BY locationId ASC, imageIndex ASC
-  `)
-  return buildImageGroups(rows)
-}
-
 async function readGlobalLocationBackedImages(locationIds: string[]): Promise<Map<string, LocationBackedImageRow[]>> {
   if (locationIds.length === 0) {
     return new Map()
@@ -122,31 +85,6 @@ async function readGlobalLocationBackedImages(locationIds: string[]): Promise<Ma
     ORDER BY locationId ASC, imageIndex ASC
   `)
   return buildImageGroups(rows)
-}
-
-export async function listProjectLocationBackedAssets(
-  projectId: string,
-  kind: LocationBackedAssetKind,
-): Promise<ProjectLocationBackedAssetRecord[]> {
-  const rows = await prisma.$queryRaw<ProjectLocationBackedAssetRow[]>(Prisma.sql`
-    SELECT
-      id,
-      projectId,
-      name,
-      summary,
-      selectedImageId,
-      sourceGlobalLocationId,
-      assetKind
-    FROM project_locations
-    WHERE projectId = ${projectId}
-      AND assetKind = ${kind}
-    ORDER BY createdAt ASC
-  `)
-  const imagesByLocationId = await readProjectLocationBackedImages(rows.map((row) => row.id))
-  return rows.map((row) => ({
-    ...row,
-    images: imagesByLocationId.get(row.id) ?? [],
-  }))
 }
 
 export async function listGlobalLocationBackedAssets(input: {
@@ -176,46 +114,6 @@ export async function listGlobalLocationBackedAssets(input: {
     ...row,
     images: imagesByLocationId.get(row.id) ?? [],
   }))
-}
-
-export async function createProjectLocationBackedAsset(input: {
-  projectId: string
-  name: string
-  summary: string
-  initialDescription?: string
-  kind: LocationBackedAssetKind
-}, transaction: Prisma.TransactionClient): Promise<{ id: string }> {
-  const id = randomUUID()
-  await transaction.$executeRaw(Prisma.sql`
-    INSERT INTO project_locations (
-      id,
-      projectId,
-      name,
-      summary,
-      selectedImageId,
-      sourceGlobalLocationId,
-      assetKind,
-      createdAt,
-      updatedAt
-    ) VALUES (
-      ${id},
-      ${input.projectId},
-      ${input.name},
-      ${input.summary},
-      NULL,
-      NULL,
-      ${input.kind},
-      NOW(),
-      NOW()
-    )
-  `)
-  await seedProjectLocationBackedImageSlots({
-    locationId: id,
-    fallbackDescription: input.initialDescription ?? input.summary,
-    descriptions: [input.initialDescription ?? input.summary],
-    locationImageModel: transaction.locationImage,
-  })
-  return { id }
 }
 
 export async function createGlobalLocationBackedAsset(input: {
@@ -256,35 +154,6 @@ export async function createGlobalLocationBackedAsset(input: {
   return { id }
 }
 
-export async function seedProjectLocationBackedImageSlots(input: {
-  locationId: string
-  fallbackDescription: string
-  descriptions?: string[]
-  locationImageModel?: {
-    createMany: (args: {
-      data: Array<{
-        locationId: string
-        imageIndex: number
-        description: string
-      }>
-    }) => Promise<unknown>
-  }
-}): Promise<void> {
-  const descriptions = normalizeSeedDescriptions(input)
-  if (descriptions.length === 0) {
-    return
-  }
-
-  const locationImageModel = input.locationImageModel ?? prisma.locationImage
-  await locationImageModel.createMany({
-    data: descriptions.map((description, imageIndex) => ({
-      locationId: input.locationId,
-      imageIndex,
-      description,
-    })),
-  })
-}
-
 export async function seedGlobalLocationBackedImageSlots(input: {
   locationId: string
   fallbackDescription: string
@@ -302,14 +171,6 @@ export async function seedGlobalLocationBackedImageSlots(input: {
       description,
     })),
   })
-}
-
-export async function deleteProjectLocationBackedAsset(
-  assetId: string,
-  transaction: Prisma.TransactionClient,
-): Promise<void> {
-  await transaction.$executeRaw(Prisma.sql`DELETE FROM location_images WHERE locationId = ${assetId}`)
-  await transaction.$executeRaw(Prisma.sql`DELETE FROM project_locations WHERE id = ${assetId}`)
 }
 
 export async function deleteGlobalLocationBackedAsset(

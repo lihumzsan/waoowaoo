@@ -8,24 +8,18 @@ import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import { useAssetActions } from '@/lib/query/hooks'
 
 export interface PropCreationModalProps {
-  mode: 'asset-hub' | 'project'
   folderId?: string | null
-  projectId?: string
   onClose: () => void
   onSuccess: () => void
 }
 
 export function PropCreationModal({
-  mode,
   folderId,
-  projectId,
   onClose,
   onSuccess,
 }: PropCreationModalProps) {
   const t = useTranslations('assetModal')
   const actions = useAssetActions({
-    scope: mode === 'asset-hub' ? 'global' : 'project',
-    projectId,
     kind: 'prop',
   })
   const [name, setName] = useState('')

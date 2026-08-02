@@ -138,7 +138,7 @@ describe('Temporal Task terminal and follow-up durability', () => {
       await taskClient.schedule({
         taskId: fixture.firstTaskId,
         userId: fixture.userId,
-        taskType: TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
+        taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
       })
       const firstTerminalReceipt = await requireWorker().waitForTerminalPostCommitFault()
       const firstCommittedTask = await prisma.task.findUniqueOrThrow({
@@ -170,7 +170,7 @@ describe('Temporal Task terminal and follow-up durability', () => {
       await taskClient.schedule({
         taskId: fixture.secondTaskId,
         userId: fixture.userId,
-        taskType: TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
+        taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
       })
       await waitForTaskTerminal(fixture.secondTaskId)
       const secondWhileNotificationBlocked = await prisma.task.findUniqueOrThrow({
@@ -290,13 +290,13 @@ describe('Temporal Task terminal and follow-up durability', () => {
       await taskClient.schedule({
         taskId: fixture.firstTaskId,
         userId: fixture.userId,
-        taskType: TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
+        taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
       })
       await queuedCancelWorker.waitForCapacityHeld()
       await taskClient.schedule({
         taskId: fixture.secondTaskId,
         userId: fixture.userId,
-        taskType: TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
+        taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
       })
 
       const queuedTask = await prisma.task.findUniqueOrThrow({
@@ -313,7 +313,7 @@ describe('Temporal Task terminal and follow-up durability', () => {
         reference: {
           taskId: fixture.secondTaskId,
           userId: fixture.userId,
-          taskType: TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
+          taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
         },
         reason: 'TEST_CANCEL_WHILE_QUEUED',
       })
@@ -379,14 +379,14 @@ describe('Temporal Task terminal and follow-up durability', () => {
       await taskClient.schedule({
         taskId: fixture.taskId,
         userId: fixture.userId,
-        taskType: TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
+        taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
       })
       await lateCancelWorker.waitForHandlerCheckpointCommit()
       const cancelView = await taskClient.cancel({
         reference: {
           taskId: fixture.taskId,
           userId: fixture.userId,
-          taskType: TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
+          taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
         },
         reason: 'TEST_CANCEL_AFTER_HANDLER_CHECKPOINT_COMMIT',
       })
@@ -458,13 +458,17 @@ describe('Temporal Task terminal and follow-up durability', () => {
             type: 'consume',
           },
         }),
-        prisma.creativeResource.findUniqueOrThrow({
+        prisma.workspaceResource.findUniqueOrThrow({
           where: { id: fixture.resourceId },
           select: {
             status: true,
-            mediaId: true,
+            currentVersion: true,
             errorCode: true,
             errorMessage: true,
+            versions: {
+              where: { version: 1 },
+              select: { mediaId: true },
+            },
           },
         }),
         handle.fetchHistory(),
@@ -492,9 +496,10 @@ describe('Temporal Task terminal and follow-up durability', () => {
       expect(consumeTransactions).toBe(1)
       expect(resource).toEqual({
         status: 'ready',
-        mediaId: fixture.mediaObjectId,
+        currentVersion: 1,
         errorCode: null,
         errorMessage: null,
+        versions: [{ mediaId: fixture.mediaObjectId }],
       })
       expect(activityAttempts(history, 'cancelTaskProviderJobs')).toHaveLength(0)
     } finally {
@@ -536,7 +541,7 @@ describe('Temporal Task terminal and follow-up durability', () => {
       await taskClient.schedule({
         taskId: fixture.taskId,
         userId: fixture.userId,
-        taskType: TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
+        taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
       })
       await child.waitUntilRunResultBlocked()
       const taskAtKillBoundary = await prisma.task.findUniqueOrThrow({

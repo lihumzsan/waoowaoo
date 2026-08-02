@@ -82,65 +82,6 @@ export async function attachMediaFieldsToGlobalLocation<T extends Record<string,
   }
 }
 
-async function attachMediaFieldsToProjectCharacter<T extends Record<string, unknown>>(character: T) {
-  const appearances = await Promise.all(
-    ((character.appearances as Array<Record<string, unknown>>) || [])
-      .map((appearance) => attachMediaFieldsToAppearance(appearance)),
-  )
-  return {
-    ...character,
-    appearances,
-  }
-}
-
-async function attachMediaFieldsToProjectLocation<T extends Record<string, unknown>>(location: T) {
-  const images = await Promise.all(
-    ((location.images as Array<Record<string, unknown>>) || []).map(async (img) => {
-    const imageMedia = await resolveMediaRef(img.imageMediaId, img.imageUrl)
-    const previousImageMedia = await resolveMediaRef(img.previousImageMediaId, img.previousImageUrl)
-    return {
-      ...img,
-      media: imageMedia,
-      imageMedia,
-      previousImageMedia,
-      imageUrl: imageMedia?.url || img.imageUrl || null,
-      previousImageUrl: previousImageMedia?.url || img.previousImageUrl || null,
-    }
-    }),
-  )
-
-  return {
-    ...location,
-    images,
-  }
-}
-
-async function attachMediaFieldsToProjectProp<T extends Record<string, unknown>>(prop: T) {
-  return await attachMediaFieldsToProjectLocation(prop)
-}
-
-export async function attachMediaFieldsToProject<T extends Record<string, unknown>>(projectLike: T) {
-  const audioMedia = await resolveMediaRef(projectLike.audioMediaId, projectLike.audioUrl)
-  const characters = await Promise.all(
-    ((projectLike.characters as Array<Record<string, unknown>>) || []).map(attachMediaFieldsToProjectCharacter),
-  )
-  const locations = await Promise.all(
-    ((projectLike.locations as Array<Record<string, unknown>>) || []).map(attachMediaFieldsToProjectLocation),
-  )
-  const props = await Promise.all(
-    ((projectLike.props as Array<Record<string, unknown>>) || []).map(attachMediaFieldsToProjectProp),
-  )
-  return {
-    ...projectLike,
-    media: audioMedia,
-    audioMedia,
-    audioUrl: audioMedia?.url || projectLike.audioUrl || null,
-    characters,
-    locations,
-    props,
-  }
-}
-
 export function firstMediaUrl(list: MediaRef[]): string[] {
   return list.map((m) => m.url)
 }

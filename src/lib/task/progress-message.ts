@@ -1,22 +1,18 @@
 import { TASK_EVENT_TYPE, TASK_TYPE } from './types'
 
 const TASK_TYPE_LABELS: Record<string, string> = {
-  [TASK_TYPE.CREATIVE_WORK]: 'progress.taskType.creativeWork',
-  [TASK_TYPE.CREATIVE_RESOURCE_IMAGE]: 'progress.taskType.creativeResourceImage',
-  [TASK_TYPE.CREATIVE_RESOURCE_AUDIO]: 'progress.taskType.creativeResourceAudio',
-  [TASK_TYPE.CREATIVE_RESOURCE_VOICE]: 'progress.taskType.creativeResourceVoice',
-  [TASK_TYPE.CREATIVE_RESOURCE_VIDEO]: 'progress.taskType.creativeResourceVideo',
-  [TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE]: 'progress.taskType.creativeResourceVideoMerge',
+  [TASK_TYPE.WORKSPACE_RESOURCE_IMAGE]: 'progress.taskType.workspaceResourceImage',
+  [TASK_TYPE.WORKSPACE_RESOURCE_AUDIO]: 'progress.taskType.workspaceResourceAudio',
+  [TASK_TYPE.WORKSPACE_RESOURCE_VOICE]: 'progress.taskType.workspaceResourceVoice',
+  [TASK_TYPE.WORKSPACE_RESOURCE_VIDEO]: 'progress.taskType.workspaceResourceVideo',
+  [TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE]: 'progress.taskType.workspaceResourceVideoMerge',
 }
 
 const STAGE_LABELS: Record<string, string> = {
   received: 'progress.stage.received',
-  creative_work_prepare: 'progress.stage.creativeWorkPrepare',
-  creative_work_reasoning: 'progress.stage.creativeWorkReasoning',
-  creative_work_finalize: 'progress.stage.creativeWorkFinalize',
-  creative_resource_prepare: 'progress.stage.creativeResourcePrepare',
-  creative_resource_generate: 'progress.stage.creativeResourceGenerate',
-  creative_resource_persist: 'progress.stage.creativeResourcePersist',
+  workspace_resource_prepare: 'progress.stage.workspaceResourcePrepare',
+  workspace_resource_generate: 'progress.stage.workspaceResourceGenerate',
+  workspace_resource_persist: 'progress.stage.workspaceResourcePersist',
   generate_voice_submit: 'progress.stage.generateVoiceSubmit',
   persist_voice: 'progress.stage.persistVoice',
   polling_external: 'progress.stage.pollingExternal',

@@ -33,7 +33,6 @@ function uniqueTaskEvents(events: TaskSSEEvent[]): TaskSSEEvent[] {
 
 async function listActiveLifecycleSnapshot(params: {
   projectId: string
-  episodeId: string | null
   userId: string
   limit?: number
 }): Promise<TaskSSEEvent[]> {
@@ -45,7 +44,6 @@ async function listActiveLifecycleSnapshot(params: {
       status: {
         in: [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING],
       },
-      ...(params.episodeId ? { episodeId: params.episodeId } : {}),
     },
     orderBy: { updatedAt: 'desc' },
     take: limit,
@@ -54,7 +52,6 @@ async function listActiveLifecycleSnapshot(params: {
       type: true,
       targetType: true,
       targetId: true,
-      episodeId: true,
       userId: true,
       status: true,
       progress: true,
@@ -92,7 +89,6 @@ async function listActiveLifecycleSnapshot(params: {
       taskType: row.type,
       targetType: row.targetType,
       targetId: row.targetId,
-      episodeId: row.episodeId,
       payload: eventPayload,
     }
   })
@@ -100,7 +96,6 @@ async function listActiveLifecycleSnapshot(params: {
 
 async function listRecoverableTaskSnapshot(params: {
   projectId: string
-  episodeId: string | null
   userId: string
   activeLimit?: number
   terminalLimit?: number
@@ -109,12 +104,10 @@ async function listRecoverableTaskSnapshot(params: {
     listRecentTerminalLifecycleEvents({
       projectId: params.projectId,
       userId: params.userId,
-      episodeId: params.episodeId,
       limit: params.terminalLimit ?? 200,
     }),
     listActiveLifecycleSnapshot({
       projectId: params.projectId,
-      episodeId: params.episodeId,
       userId: params.userId,
       limit: params.activeLimit ?? 500,
     }),
@@ -142,7 +135,6 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
         longRunning: false,
       },
       inputSchema: z.object({
-        episodeId: z.string().optional().nullable(),
         lastEventId: z.string().optional().nullable(),
         includeRecoverableSnapshot: z.boolean().optional(),
         replayLimit: z.number().int().positive().max(5000).optional(),
@@ -153,7 +145,6 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
         const channel = getProjectChannel(ctx.projectId)
         const cursor = parseWorkspaceSseCursor(input.lastEventId || null)
         const includeRecoverableSnapshot = input.includeRecoverableSnapshot !== false
-        const episodeId = input.episodeId?.trim() || ctx.context.episodeId?.trim() || null
 
         if (cursor.taskEventId > 0) {
           const replayLimit = input.replayLimit ?? 5000
@@ -166,7 +157,6 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
           const recoverableTaskEvents = includeRecoverableSnapshot
             ? await listRecoverableTaskSnapshot({
                 projectId: ctx.projectId,
-                episodeId,
                 userId: ctx.userId,
                 activeLimit: input.snapshotLimit ?? 500,
                 terminalLimit: Math.min(input.snapshotLimit ?? 500, 200),
@@ -198,7 +188,6 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
         const snapshotLimit = input.snapshotLimit ?? 500
         const events = await listRecoverableTaskSnapshot({
           projectId: ctx.projectId,
-          episodeId,
           userId: ctx.userId,
           activeLimit: snapshotLimit,
           terminalLimit: Math.min(snapshotLimit, 200),

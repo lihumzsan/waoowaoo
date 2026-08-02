@@ -3,13 +3,14 @@ import { Prisma } from '@prisma/client'
 import { addBalance } from '@/lib/billing'
 import { freezeBalance } from '@/lib/billing/ledger'
 import { createAgentFollowUpBatchBinding } from '@/lib/agent-turn/follow-up-batch'
+import type { WorkspaceResourceInputRef } from '@/lib/workspace-resource/contracts'
+import { buildWorkspaceResourceId } from '@/lib/workspace-resource/identity'
 import {
-  buildCreativeResourceId,
-  resolveProjectCreativeResourceScope,
-} from '@/lib/creative-resource/identity'
-import { reserveCreativeResourcesInTransaction } from '@/lib/creative-resource/persistence'
-import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource/schema-registry'
-import { buildCreativeResourceLifecycleProjection } from '@/lib/creative-resource/task-runtime-envelope'
+  materializeWorkspaceResourceInTransaction,
+  reserveWorkspaceResourceInTransaction,
+} from '@/lib/workspace-resource/persistence'
+import { WORKSPACE_RESOURCE_SCHEMA } from '@/lib/workspace-resource/schema-registry'
+import { buildWorkspaceResourceLifecycleProjection } from '@/lib/workspace-resource/task-runtime-envelope'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { submitOperationTaskBatch } from '@/lib/operations/submit-operation-task'
 import { buildTaskWorkflowId } from '@/lib/temporal/identity'
@@ -27,6 +28,7 @@ export interface TaskDurabilityFixture {
   readonly batchId: string
   readonly firstTaskId: string
   readonly secondTaskId: string
+  readonly mediaObjectIds: readonly string[]
 }
 
 export interface TaskWorkerKillFixture {
@@ -34,6 +36,7 @@ export interface TaskWorkerKillFixture {
   readonly projectId: string
   readonly taskId: string
   readonly checkpointId: string
+  readonly mediaObjectIds: readonly string[]
 }
 
 export interface TaskLateCancelFixture {
@@ -43,10 +46,81 @@ export interface TaskLateCancelFixture {
   readonly checkpointId: string
   readonly freezeId: string
   readonly mediaObjectId: string
+  readonly mediaObjectIds: readonly string[]
   readonly resourceId: string
 }
 
-const operationId = 'import_web_reference_image'
+const operationId = 'merge_videos'
+
+async function seedSourceVideos(input: {
+  readonly suffix: string
+  readonly userId: string
+  readonly projectId: string
+}): Promise<{
+  readonly references: readonly WorkspaceResourceInputRef[]
+  readonly mediaObjectIds: readonly string[]
+}> {
+  const media = await Promise.all([0, 1].map(async (index) => (
+    await ensureMediaObjectFromStorageKey(
+      `tests/temporal/task-durability/${input.suffix}-source-${String(index)}.mp4`,
+      {
+        mimeType: 'video/mp4',
+        sizeBytes: 1,
+        width: 1,
+        height: 1,
+        durationMs: 1_000,
+      },
+    )
+  )))
+  const references = await prisma.$transaction(async (tx) => {
+    const created: WorkspaceResourceInputRef[] = []
+    for (const [index, mediaObject] of media.entries()) {
+      const resourceId = buildWorkspaceResourceId({
+        operationId: 'task_durability_source',
+        requestId: input.suffix,
+        memberIndex: index,
+      })
+      const workspacePath = `task-durability-${input.suffix}-source-${String(index)}.resource`
+      await reserveWorkspaceResourceInTransaction(tx, {
+        resourceId,
+        userId: input.userId,
+        projectId: input.projectId,
+        outputPath: workspacePath,
+        mediaType: 'video',
+        schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
+        sourceType: 'temporal_test_fixture',
+        sourceId: `${input.suffix}:source:${String(index)}`,
+      })
+      await materializeWorkspaceResourceInTransaction(tx, {
+        resourceId,
+        userId: input.userId,
+        mediaType: 'video',
+        schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
+        content: { kind: 'media', mediaId: mediaObject.id },
+        inputs: [],
+        provenance: {
+          operationId: null,
+          inputHash: null,
+          taskId: null,
+          operationExecutionId: null,
+          toolCallId: null,
+          prompt: null,
+          modelKey: null,
+          generationOptions: null,
+        },
+      })
+      created.push({
+        resourceId,
+        contentVersion: 1,
+        workspacePath,
+        role: 'source_video',
+        position: index,
+      })
+    }
+    return created
+  })
+  return { references, mediaObjectIds: media.map((item) => item.id) }
+}
 
 async function submitFixtureTask(input: {
   readonly suffix: string
@@ -55,9 +129,10 @@ async function submitFixtureTask(input: {
   readonly followUpBatchBinding:
     | ReturnType<typeof createAgentFollowUpBatchBinding>
     | null
+  readonly references: readonly WorkspaceResourceInputRef[]
 }): Promise<string> {
   const requestId = `task-durability-request-${input.suffix}`
-  const resourceId = buildCreativeResourceId({
+  const resourceId = buildWorkspaceResourceId({
     operationId,
     requestId,
     memberIndex: 0,
@@ -70,60 +145,49 @@ async function submitFixtureTask(input: {
           requestId,
           userId: input.userId,
           projectId: input.projectId,
-          type: TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
-          targetType: 'CreativeResource',
+          type: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
+          targetType: 'WorkspaceResource',
           targetId: resourceId,
           operationId,
           source: 'system',
           operationExecutionTransaction: transaction,
           followUpBatchBinding: input.followUpBatchBinding,
           payload: {
-            lifecycleProjection: buildCreativeResourceLifecycleProjection([
+            lifecycleProjection: buildWorkspaceResourceLifecycleProjection([
               {
                 resourceId,
-                mediaType: 'image',
-                schemaId: CREATIVE_RESOURCE_SCHEMA.WEB_REFERENCE_IMAGE,
+                mediaType: 'video',
+                schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
                 name: `Task durability ${input.suffix}`,
               },
             ]),
             resource: {
               resourceId,
-              mediaType: 'image',
-              schemaId: CREATIVE_RESOURCE_SCHEMA.WEB_REFERENCE_IMAGE,
+              mediaType: 'video',
+              schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
               prompt: null,
               modelKey: null,
               inputHash: 'b'.repeat(64),
-              inputs: [],
-              generationOptions: {
-                origin: 'web_search_image',
-                imageUrl: `https://example.test/${input.suffix}.png`,
-                sourceWebsiteUrl: `https://example.test/${input.suffix}`,
-                caption: `Task durability ${input.suffix}`,
-              },
+              inputs: input.references,
+              generationOptions: { mergeMode: 'ordered_concat' },
               toolCallId: null,
             },
           },
           dedupeKey: `task-durability-${input.suffix}`,
           locale: 'en',
           decoratePayload: false,
-          onTaskCreatedInTransaction: async (transaction) => {
-            await reserveCreativeResourcesInTransaction(transaction, {
-              scope: resolveProjectCreativeResourceScope({
-                userId: input.userId,
-                projectId: input.projectId,
-                episodeId: null,
-              }),
-              mediaType: 'image',
-              schemaId: CREATIVE_RESOURCE_SCHEMA.WEB_REFERENCE_IMAGE,
+          onTaskCreatedInTransaction: async (transaction, task) => {
+            await reserveWorkspaceResourceInTransaction(transaction, {
+              resourceId,
+              userId: input.userId,
+              projectId: input.projectId,
+              outputPath: `task-durability-${input.suffix}-output.resource`,
+              mediaType: 'video',
+              schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
               operationId,
-              requestId,
-              members: [
-                {
-                  resourceId,
-                  name: `Task durability ${input.suffix}`,
-                  memberIndex: 0,
-                },
-              ],
+              inputHash: 'b'.repeat(64),
+              taskId: task.id,
+              generationOptions: { mergeMode: 'ordered_concat' },
             })
           },
         },
@@ -225,6 +289,7 @@ export async function createTaskDurabilityFixture(): Promise<TaskDurabilityFixtu
       preferences: {
         create: {
           imageConcurrency: 1,
+          videoConcurrency: 1,
         },
       },
       projects: {
@@ -241,7 +306,6 @@ export async function createTaskDurabilityFixture(): Promise<TaskDurabilityFixtu
       projectId,
       userId,
       assistantId: 'workspace-command',
-      scopeRef: `project:${projectId}`,
       messagesJson: [],
     },
   })
@@ -255,16 +319,14 @@ export async function createTaskDurabilityFixture(): Promise<TaskDurabilityFixtu
       sourceId: `task-durability-source-${suffix}`,
       payloadHash: 'a'.repeat(64),
       requestId: `task-durability-origin-${suffix}`,
-      status: 'completed',
+      status: 'running',
       attempt: 1,
       contextJson: {
         locale: 'en',
-        episodeId: null,
         selectedScopeRef: null,
         selectedAssetId: null,
       },
       startedAt: new Date(),
-      finishedAt: new Date(),
     },
   })
 
@@ -274,11 +336,13 @@ export async function createTaskDurabilityFixture(): Promise<TaskDurabilityFixtu
     callId: `task-durability-call-${suffix}`,
     operationId,
   })
+  const sourceVideos = await seedSourceVideos({ suffix, userId, projectId })
   const firstTaskId = await submitFixtureTask({
     suffix: `${suffix}-first`,
     userId,
     projectId,
     followUpBatchBinding,
+    references: sourceVideos.references,
   })
   const batch = await prisma.followUpBatch.findUniqueOrThrow({
     where: { executionKey },
@@ -289,11 +353,19 @@ export async function createTaskDurabilityFixture(): Promise<TaskDurabilityFixtu
     userId,
     projectId,
     followUpBatchBinding: null,
+    references: sourceVideos.references,
   })
   await Promise.all([
     seedFinalFailureCheckpoint(firstTaskId),
     seedFinalFailureCheckpoint(secondTaskId),
   ])
+  await prisma.projectAgentTurn.update({
+    where: { id: originTurnId },
+    data: {
+      status: 'completed',
+      finishedAt: new Date(),
+    },
+  })
   return {
     userId,
     projectId,
@@ -302,6 +374,7 @@ export async function createTaskDurabilityFixture(): Promise<TaskDurabilityFixtu
     batchId: batch.id,
     firstTaskId,
     secondTaskId,
+    mediaObjectIds: sourceVideos.mediaObjectIds,
   }
 }
 
@@ -317,6 +390,7 @@ export async function createTaskWorkerKillFixture(): Promise<TaskWorkerKillFixtu
       preferences: {
         create: {
           imageConcurrency: 1,
+          videoConcurrency: 1,
         },
       },
       projects: {
@@ -327,11 +401,13 @@ export async function createTaskWorkerKillFixture(): Promise<TaskWorkerKillFixtu
       },
     },
   })
+  const sourceVideos = await seedSourceVideos({ suffix, userId, projectId })
   const taskId = await submitFixtureTask({
     suffix: `${suffix}-worker-kill`,
     userId,
     projectId,
     followUpBatchBinding: null,
+    references: sourceVideos.references,
   })
   const checkpoint = await seedFinalFailureCheckpoint(taskId)
   return {
@@ -339,6 +415,7 @@ export async function createTaskWorkerKillFixture(): Promise<TaskWorkerKillFixtu
     projectId,
     taskId,
     checkpointId: checkpoint.id,
+    mediaObjectIds: sourceVideos.mediaObjectIds,
   }
 }
 
@@ -354,6 +431,7 @@ export async function createTaskLateCancelFixture(): Promise<TaskLateCancelFixtu
       preferences: {
         create: {
           imageConcurrency: 1,
+          videoConcurrency: 1,
         },
       },
       projects: {
@@ -364,11 +442,13 @@ export async function createTaskLateCancelFixture(): Promise<TaskLateCancelFixtu
       },
     },
   })
+  const sourceVideos = await seedSourceVideos({ suffix, userId, projectId })
   const taskId = await submitFixtureTask({
     suffix: `${suffix}-late-cancel`,
     userId,
     projectId,
     followUpBatchBinding: null,
+    references: sourceVideos.references,
   })
   const task = await prisma.task.findUniqueOrThrow({
     where: { id: taskId },
@@ -388,12 +468,12 @@ export async function createTaskLateCancelFixture(): Promise<TaskLateCancelFixtu
     idempotencyKey: `task-late-cancel-freeze-${suffix}`,
     metadata: {
       projectId,
-      taskType: TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
-      action: TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
-      apiType: 'text',
+      taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
+      action: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
+      apiType: 'video',
       model: 'task-late-cancel-model',
       quantity: 1,
-      unit: 'token',
+      unit: 'video',
     },
   })
   if (freeze.status !== 'frozen') {
@@ -402,14 +482,14 @@ export async function createTaskLateCancelFixture(): Promise<TaskLateCancelFixtu
   const billingInfo = {
     billable: true,
     source: 'task',
-    taskType: TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
-    apiType: 'text',
+    taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
+    apiType: 'video',
     model: 'task-late-cancel-model',
     quantity: 1,
-    unit: 'token',
+    unit: 'video',
     maxFrozenCost: 1,
     pricingVersion: 'task-late-cancel-v1',
-    action: TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
+    action: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
     billingKey: taskId,
     freezeId: freeze.freezeId,
     modeSnapshot: 'ENFORCE',
@@ -423,12 +503,13 @@ export async function createTaskLateCancelFixture(): Promise<TaskLateCancelFixtu
   })
 
   const media = await ensureMediaObjectFromStorageKey(
-    `tests/temporal/task-late-cancel/${suffix}.png`,
+    `tests/temporal/task-late-cancel/${suffix}.mp4`,
     {
-      mimeType: 'image/png',
+      mimeType: 'video/mp4',
       sizeBytes: 1,
       width: 1,
       height: 1,
+      durationMs: 1_000,
     },
   )
   const checkpoint = await seedSuccessfulHandlerCheckpoint({
@@ -442,6 +523,7 @@ export async function createTaskLateCancelFixture(): Promise<TaskLateCancelFixtu
     checkpointId: checkpoint.id,
     freezeId: freeze.freezeId,
     mediaObjectId: media.id,
+    mediaObjectIds: [...sourceVideos.mediaObjectIds, media.id],
     resourceId: task.targetId,
   }
 }
@@ -449,15 +531,16 @@ export async function createTaskLateCancelFixture(): Promise<TaskLateCancelFixtu
 export async function removeTaskLateCancelFixture(
   fixture: TaskLateCancelFixture,
 ): Promise<void> {
-  await prisma.creativeResource.deleteMany({
-    where: { id: fixture.resourceId },
+  await prisma.workspaceResourceLineage.deleteMany({
+    where: { outputResourceId: fixture.resourceId },
+  })
+  await prisma.workspaceResource.deleteMany({
+    where: { projectId: fixture.projectId },
   })
   await prisma.task.deleteMany({
     where: { id: fixture.taskId },
   })
-  await prisma.mediaObject.deleteMany({
-    where: { id: fixture.mediaObjectId },
-  })
+  await prisma.mediaObject.deleteMany({ where: { id: { in: [...fixture.mediaObjectIds] } } })
   await prisma.balanceTransaction.deleteMany({
     where: { userId: fixture.userId },
   })
@@ -475,7 +558,7 @@ export async function removeTaskLateCancelFixture(
 export async function removeTaskWorkerKillFixture(
   fixture: TaskWorkerKillFixture,
 ): Promise<void> {
-  await prisma.creativeResource.deleteMany({
+  await prisma.workspaceResource.deleteMany({
     where: { projectId: fixture.projectId },
   })
   await prisma.task.deleteMany({
@@ -487,6 +570,7 @@ export async function removeTaskWorkerKillFixture(
   await prisma.user.deleteMany({
     where: { id: fixture.userId },
   })
+  await prisma.mediaObject.deleteMany({ where: { id: { in: [...fixture.mediaObjectIds] } } })
 }
 
 export async function removeTaskDurabilityFixture(
@@ -498,7 +582,7 @@ export async function removeTaskDurabilityFixture(
   await prisma.projectAssistantThread.deleteMany({
     where: { id: fixture.threadId },
   })
-  await prisma.creativeResource.deleteMany({
+  await prisma.workspaceResource.deleteMany({
     where: { projectId: fixture.projectId },
   })
   await prisma.task.deleteMany({
@@ -514,4 +598,5 @@ export async function removeTaskDurabilityFixture(
   await prisma.user.deleteMany({
     where: { id: fixture.userId },
   })
+  await prisma.mediaObject.deleteMany({ where: { id: { in: [...fixture.mediaObjectIds] } } })
 }

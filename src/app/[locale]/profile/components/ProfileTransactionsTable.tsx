@@ -17,8 +17,6 @@ export type ProfileTransactionItem = {
   description?: string | null
   action?: string | null
   projectName?: string | null
-  episodeNumber?: number | null
-  episodeName?: string | null
   billingMeta?: Record<string, unknown> | null
   target?: {
     targetType: string

@@ -1,7 +1,7 @@
 import {
-  CREATIVE_RESOURCE_SCHEMA,
-  type CreativeResourceSchemaId,
-} from '@/lib/creative-resource/schema-registry'
+  WORKSPACE_RESOURCE_SCHEMA,
+  type WorkspaceResourceSchemaId,
+} from '@/lib/workspace-resource/schema-registry'
 import type { CreativeDirection } from '@/lib/creative-direction/contracts'
 
 export type AssetImageKind = 'character' | 'location' | 'prop'
@@ -10,7 +10,7 @@ const ASSET_IMAGE_ASPECT_RATIO = '4:3' as const
 
 interface AssetImageFormatPolicy {
   readonly kind: AssetImageKind
-  readonly schemaId: CreativeResourceSchemaId
+  readonly schemaId: WorkspaceResourceSchemaId
   readonly aspectRatio: typeof ASSET_IMAGE_ASPECT_RATIO
   readonly instruction: Readonly<Record<AssetImageFormatLocale, string>>
 }
@@ -19,7 +19,7 @@ interface AssetImageFormatPolicy {
 export const ASSET_IMAGE_FORMAT_POLICIES = {
   character: {
     kind: 'character',
-    schemaId: CREATIVE_RESOURCE_SCHEMA.CHARACTER_IMAGE,
+    schemaId: WORKSPACE_RESOURCE_SCHEMA.CHARACTER_IMAGE,
     aspectRatio: ASSET_IMAGE_ASPECT_RATIO,
     instruction: {
       zh: `【角色资产图固定版式】只生成一张完整的 ${ASSET_IMAGE_ASPECT_RATIO} 横向长方形资产图，画面严格分为左右两半：左半边只展示该角色的脸部特写，右半边只展示同一角色从头到脚无遮挡的完整全身。背景必须为纯白色。画面中只能出现同一个角色，不得出现其他人物、任何道具或场景环境。`,
@@ -28,7 +28,7 @@ export const ASSET_IMAGE_FORMAT_POLICIES = {
   },
   location: {
     kind: 'location',
-    schemaId: CREATIVE_RESOURCE_SCHEMA.LOCATION_IMAGE,
+    schemaId: WORKSPACE_RESOURCE_SCHEMA.LOCATION_IMAGE,
     aspectRatio: ASSET_IMAGE_ASPECT_RATIO,
     instruction: {
       zh: `【场景资产图固定版式】只生成一张完整的 ${ASSET_IMAGE_ASPECT_RATIO} 横向长方形场景资产图，使用正前方视角完整展示整个场景，不得拆分成多视图。画面中不得出现任何人物、松散家具或独立道具资产；墙体、门窗、楼梯等属于场景本体的固定结构与内建要素可以正常出现。`,
@@ -37,7 +37,7 @@ export const ASSET_IMAGE_FORMAT_POLICIES = {
   },
   prop: {
     kind: 'prop',
-    schemaId: CREATIVE_RESOURCE_SCHEMA.PROP_IMAGE,
+    schemaId: WORKSPACE_RESOURCE_SCHEMA.PROP_IMAGE,
     aspectRatio: ASSET_IMAGE_ASPECT_RATIO,
     instruction: {
       zh: `【道具资产图固定版式】只生成一张完整的 ${ASSET_IMAGE_ASPECT_RATIO} 横向长方形资产图，只展示一个摆放方正、方向明确、居中且完整无遮挡的道具。背景必须为纯白色。画面中不得出现人物、其他道具或场景环境。`,
@@ -46,7 +46,7 @@ export const ASSET_IMAGE_FORMAT_POLICIES = {
   },
 } as const satisfies Record<AssetImageKind, AssetImageFormatPolicy>
 
-const ASSET_IMAGE_KIND_BY_SCHEMA_ID = new Map<CreativeResourceSchemaId, AssetImageKind>(
+const ASSET_IMAGE_KIND_BY_SCHEMA_ID = new Map<WorkspaceResourceSchemaId, AssetImageKind>(
   Object.values(ASSET_IMAGE_FORMAT_POLICIES).map((policy) => [policy.schemaId, policy.kind]),
 )
 
@@ -59,7 +59,7 @@ export function getAssetImageFormatPolicy(kind: AssetImageKind): AssetImageForma
 }
 
 export function resolveAssetImageKindForSchemaId(schemaId: string): AssetImageKind | null {
-  return ASSET_IMAGE_KIND_BY_SCHEMA_ID.get(schemaId as CreativeResourceSchemaId) ?? null
+  return ASSET_IMAGE_KIND_BY_SCHEMA_ID.get(schemaId as WorkspaceResourceSchemaId) ?? null
 }
 
 /** The only compiler that turns stable asset facts into an executable asset-image prompt. */

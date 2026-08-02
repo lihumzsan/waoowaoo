@@ -8,30 +8,24 @@ import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import { useAssetActions } from '@/lib/query/hooks'
 
 export interface PropEditModalProps {
-  mode: 'asset-hub' | 'project'
   propId: string
   propName: string
   summary: string
   description: string
   variantId?: string
-  projectId?: string
   onClose: () => void
 }
 
 export function PropEditModal({
-  mode,
   propId,
   propName,
   summary,
   description,
   variantId,
-  projectId,
   onClose,
 }: PropEditModalProps) {
   const t = useTranslations('assets')
   const actions = useAssetActions({
-    scope: mode === 'asset-hub' ? 'global' : 'project',
-    projectId,
     kind: 'prop',
   })
   const [editingName, setEditingName] = useState(propName)

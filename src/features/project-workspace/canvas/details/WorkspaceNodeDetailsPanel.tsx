@@ -6,17 +6,17 @@ import { AppIcon, type AppIconName } from '@/components/ui/icons'
 import { useToast } from '@/contexts/ToastContext'
 import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
 import type {
-  CreativeResourceInputSummaryView,
-  CreativeResourceMediaType,
-} from '@/lib/creative-resource/contracts'
+  WorkspaceResourceInputSummary,
+  WorkspaceResourceMediaType,
+} from '@/lib/workspace-resource/contracts'
 import { workspaceCanvasScrollableRegionProps } from '../canvas-scroll-lock'
 import { PreviewableImage, SELECTABLE_TEXT_CLASS } from '../nodes/renderers/renderer-shared'
 import type { WorkspaceNodeDetailsActions } from './WorkspaceNodeDetailsCard'
-import type { WorkspaceCreativeResourceCardView } from '../contracts/workspace-canvas-interactions'
+import type { WorkspaceResourceCardView } from '../contracts/workspace-canvas-interactions'
 import { WorkspaceNodeActionBar } from './WorkspaceNodeActionBar'
 
 /** Media-family icon for tiles that have no visual thumbnail of their own. */
-const INPUT_MEDIA_ICONS: Record<CreativeResourceMediaType, AppIconName> = {
+const INPUT_MEDIA_ICONS: Record<WorkspaceResourceMediaType, AppIconName> = {
   image: 'image',
   video: 'video',
   audio: 'audioWave',
@@ -25,7 +25,7 @@ const INPUT_MEDIA_ICONS: Record<CreativeResourceMediaType, AppIconName> = {
 
 const TILE_BOX_CLASS = 'relative h-[76px] w-[76px] overflow-hidden rounded-[12px] bg-white'
 
-function inputKey(input: CreativeResourceInputSummaryView): string {
+function inputKey(input: WorkspaceResourceInputSummary): string {
   return `${input.role}:${String(input.position)}:${input.resourceId}`
 }
 
@@ -104,7 +104,7 @@ function InputTile({
 }
 
 /** Small media-family marker, kept in the corner so it never sits under a control. */
-function MediaTypeBadge({ mediaType }: { readonly mediaType: CreativeResourceMediaType }) {
+function MediaTypeBadge({ mediaType }: { readonly mediaType: WorkspaceResourceMediaType }) {
   return (
     <span className="absolute left-1 top-1 inline-flex h-4 w-4 items-center justify-center rounded-[6px] bg-white/85 text-[var(--glass-text-tertiary)] shadow-sm">
       <AppIcon name={INPUT_MEDIA_ICONS[mediaType]} className="h-2.5 w-2.5" />
@@ -128,7 +128,7 @@ function AudioInputTile({
   onToggle,
   onPlaybackStopped,
 }: {
-  readonly input: CreativeResourceInputSummaryView
+  readonly input: WorkspaceResourceInputSummary
   readonly mediaUrl: string
   readonly mediaTypeLabel: string
   readonly isPlaying: boolean
@@ -202,7 +202,7 @@ function VideoInputTile({
   playLabel,
   onOpen,
 }: {
-  readonly input: CreativeResourceInputSummaryView
+  readonly input: WorkspaceResourceInputSummary
   readonly mediaUrl: string
   readonly mediaTypeLabel: string
   readonly isActive: boolean
@@ -244,7 +244,7 @@ function VideoPlayerSlot({
   closeLabel,
   onClose,
 }: {
-  readonly input: CreativeResourceInputSummaryView
+  readonly input: WorkspaceResourceInputSummary
   readonly mediaUrl: string
   readonly mediaTypeLabel: string
   readonly closeLabel: string
@@ -297,10 +297,10 @@ export function WorkspaceNodeDetailsPanel({
   inputs,
   actions,
 }: {
-  readonly card: WorkspaceCreativeResourceCardView
+  readonly card: WorkspaceResourceCardView
   readonly prompt: string | null
   readonly modelKey: string | null
-  readonly inputs: readonly CreativeResourceInputSummaryView[]
+  readonly inputs: readonly WorkspaceResourceInputSummary[]
   readonly actions: WorkspaceNodeDetailsActions
 }) {
   const t = useTranslations('projectWorkflow.canvas.workspace.details')
@@ -315,7 +315,7 @@ export function WorkspaceNodeDetailsPanel({
   // playing audio tile and vice versa.
   const [activeInputKey, setActiveInputKey] = useState<string | null>(null)
   const activeInput = inputs.find((input) => inputKey(input) === activeInputKey) ?? null
-  const activeVideoUrl = activeInput?.mediaType === 'video' ? activeInput.media?.url ?? null : null
+  const activeVideoUrl = activeInput?.mediaType === 'video' ? activeInput.previewUrl : null
   const failedErrorMessage = card.resource.error?.code
     ? resolveClientError(new Error(card.resource.error.code), errorLabels('unknown'))
     : card.resource.status === 'failed'
@@ -363,7 +363,7 @@ export function WorkspaceNodeDetailsPanel({
             {inputs.map((input) => {
               const key = inputKey(input)
               const mediaTypeLabel = mediaTypeLabels(input.mediaType)
-              const mediaUrl = input.media?.url ?? null
+              const mediaUrl = input.previewUrl
               if (mediaUrl && input.mediaType === 'audio') {
                 return (
                   <AudioInputTile

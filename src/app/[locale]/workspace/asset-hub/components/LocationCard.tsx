@@ -39,7 +39,7 @@ export function LocationCard({ location, assetType = 'location', onImageClick, o
   const undoImage = useUndoLocationImage()
   const uploadImage = useUploadLocationImage()
   const deleteLocation = useDeleteLocation()
-  const propActions = useAssetActions({ scope: 'global', kind: 'prop' })
+  const propActions = useAssetActions({ kind: 'prop' })
   const t = useTranslations('assetHub')
   const tAssets = useTranslations('assets')
   const { showError } = useToast()
@@ -74,13 +74,13 @@ export function LocationCard({ location, assetType = 'location', onImageClick, o
   const handleUpload = () => {
     const file = fileInputRef.current?.files?.[0]
     if (!file) return
-    if (assetType === 'prop') {
-      void propActions.uploadRender(location.id, file, currentImageIndex)
-        .catch((error: unknown) => showError(error, t('uploadFailed')))
-        .finally(() => { if (fileInputRef.current) fileInputRef.current.value = '' })
-      return
-    }
-    uploadImage.mutate({ file, locationId: location.id, labelText: location.name, imageIndex: currentImageIndex }, {
+    uploadImage.mutate({
+      file,
+      locationId: location.id,
+      labelText: location.name,
+      imageIndex: currentImageIndex,
+      assetType,
+    }, {
       onError: (error) => showError(error, t('uploadFailed')),
       onSettled: () => { if (fileInputRef.current) fileInputRef.current.value = '' },
     })

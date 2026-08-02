@@ -4,10 +4,12 @@ import { z } from 'zod'
 import { prisma } from '../../helpers/prisma'
 import { resetBillingState } from '../../helpers/db-reset'
 import { createTestProject, createTestUser } from '../../helpers/billing-fixtures'
-import { makeTestOperation, EFFECTS_BILLABLE } from '../../helpers/project-agent-operations'
 import { persistOperationPlanSnapshot } from '@/lib/operations/operation-plan-snapshot'
 import { invokeApprovedOperationPlan, issueApprovalGrant } from '@/lib/operations/planned-operation-invocation'
 import { quoteOperationPlan, type OperationPlan } from '@/lib/operations/planning'
+import { defineOperation } from '@/lib/operations/define-operation'
+import { withOperationPack } from '@/lib/operations/pack'
+import { isBillablePlannedOperation } from '@/lib/operations/types'
 
 const OPERATION_ID = 'approval_plan_change_fixture'
 const PLAN_CONTRACT_REVISION = 'approval-plan-change-fixture/v1'
@@ -26,7 +28,7 @@ async function seedGrant() {
   const snapshot = await persistOperationPlanSnapshot({
     plan,
     executionContractRevision: PLAN_CONTRACT_REVISION,
-    normalizedInput: { episodeId: null },
+    normalizedInput: {},
     quote,
   })
   const issued = await issueApprovalGrant({
@@ -42,17 +44,39 @@ function buildOperation(params: {
   commit: ReturnType<typeof vi.fn<() => Promise<{ durable: string }>>>
   planContractRevision?: string
 }) {
-  return makeTestOperation({
+  const operation = defineOperation({
     id: OPERATION_ID,
+    summary: 'Exercise immutable approval replay against a real database transaction.',
     intent: 'act',
-    effects: EFFECTS_BILLABLE,
+    effects: {
+      writes: false,
+      billable: true,
+      destructive: false,
+      overwrite: false,
+      bulk: false,
+      externalSideEffects: true,
+      longRunning: true,
+    },
+    resourceContract: {
+      kind: 'none',
+      reason: 'The fixture proves approval transaction semantics without producing a Resource.',
+    },
     confirmation: { kind: 'billable_media', required: true },
     planContractRevision: params.planContractRevision ?? PLAN_CONTRACT_REVISION,
-    inputSchema: z.object({ episodeId: z.null() }),
+    inputSchema: z.object({}).strict(),
     outputSchema: z.object({ durable: z.string() }),
     plan: async () => await params.plan(),
     commit: async () => await params.commit(),
   })
+  const packed = withOperationPack({ [OPERATION_ID]: operation }, {
+    groupPath: ['test'],
+    channels: { tool: true, api: true, mcp: false },
+    confirmation: { kind: 'none', required: false },
+  })[OPERATION_ID]
+  if (!packed || !isBillablePlannedOperation(packed)) {
+    throw new Error('APPROVAL_PLAN_CHANGE_FIXTURE_OPERATION_INVALID')
+  }
+  return packed
 }
 
 function invocationParams(input: {
@@ -70,7 +94,7 @@ function invocationParams(input: {
       writer: null,
       toolCallId: null,
     },
-    normalizedInput: { episodeId: null },
+    normalizedInput: {},
     invocation: {
       approvalGrantId: input.seeded.issued.approvalGrantId,
       requestId: input.seeded.issued.operationRequestId,

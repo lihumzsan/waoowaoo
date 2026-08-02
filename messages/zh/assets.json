@@ -228,9 +228,7 @@
     "createFailed": "创建失败"
   },
   "filterBar": {
-    "all": "全部",
-    "allEpisodes": "全部集数",
-    "episodeLabel": "第{number}集 · {name}"
+    "all": "全部"
   },
   "assetLibrary": {
     "button": "资产库",
