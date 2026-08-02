@@ -6,13 +6,13 @@
 
 Codex app-server 是唯一 Agent Runtime；Wao 保留产品 View、WorkspaceResource、Capability Service、计费、审批、Task 和 Temporal。Runtime 可被替换，但 UI 和业务服务不直接依赖 Codex 进程细节，统一经 `RuntimeAdapter` 与 `AssistantRuntime`。
 
-开发环境可用本地进程；云端多租户必须在项目级隔离容器中运行。容器是租户和资源边界，Codex 内层 sandbox 是纵深防御，两者职责不同。
+开发环境可显式使用本地进程，包括加载 Cloud 产品配置的 `dev:cloud`；Cloud 正式多租户部署必须在项目级隔离容器中运行。容器是租户和资源边界，Codex 内层 sandbox 是纵深防御，两者职责不同。
 
 ## 不变量
 
 - **CRR-01 — 唯一 Runtime。** 每个活跃 `(userId, projectId)` 最多一个 Runtime session；同一 Project 同时最多一个活跃 Turn。旧 Agents SDK、Primary 模型循环和 Temporal Agent coordinator 不得执行 Turn。
 - **CRR-02 — 适配器隔离协议。** UI、route 和业务 service 只能通过 `AssistantRuntime`；Codex JSON-RPC 方法、版本差异和进程生命周期收敛在 `RuntimeAdapter` / Session Manager。
-- **CRR-03 — 双层隔离。** 云端 driver 必须为 Docker，限制 CPU、内存、PID、磁盘/工作目录和网络；Codex 使用 `workspace-write`，只能写临时 Project workspace。开发 driver 可显式选择 local，不能在 cloud 静默降级。
+- **CRR-03 — 双层隔离。** Cloud production driver 必须为 Docker，限制 CPU、内存、PID、磁盘/工作目录和网络；Codex 使用 `workspace-write`，只能写临时 Project workspace。development 可显式选择 local，即使产品 edition 为 Cloud 也不等同正式多租户部署；production 不能静默降级。
 - **CRR-04 — WorkspaceResource 才是持久事实。** 启动时从 Catalog/对象存储 materialize 普通目录，Turn checkpoint 时以完整基线 CAS 原子 capture；Runtime 文件夹、inode 和临时 Codex home 都不是产品权威。
 - **CRR-05 — 系统字段不可写。** Runtime 可自由组织用户工作区文件和目录，但不能修改 Resource status、Task、Artifact、Billing、media identity 或系统投影。媒体文件是受保护引用；改写、伪造或删除 pending 媒体必须失败。
 - **CRR-06 — Codex 状态与产品 View 分权。** 不透明 Codex session state 只用于 resume；MySQL Assistant View 是聊天、审批、计费归因和刷新显示的产品事实。两者必须先持久化再绑定 runtimeThreadId。
@@ -54,7 +54,11 @@ Codex app-server 是唯一 Agent Runtime；Wao 保留产品 View、WorkspaceReso
 
 ## 验证
 
-真实 app-server smoke 覆盖 initialize、thread start/resume/read、turn、steer、interrupt、skills/list 与关键 event。Session Manager 需验证同 scope 互斥、进程退出、Manager 重启、binding 顺序、idle stop/restart；Workspace 需以真实数据库和对象存储边界验证目录 rename、内容版本、baseline divergence 和系统字段保护。云端容器资源限制与网络只能在目标部署复验。
+真实 app-server smoke 覆盖 initialize、thread start/resume/read、turn、steer、interrupt、skills/list 与关键 event。Session Manager 需验证同 scope 互斥、进程退出、Manager 重启、binding 顺序、idle stop/restart；Workspace 需以真实数据库和对象存储边界验证目录 rename、内容版本、baseline divergence 和系统字段保护。配置复验必须同时证明 `dev:cloud + local` 可启动，以及 `cloud + production + local` 原地拒绝；云端容器资源限制与网络只能在目标部署复验。
+
+## 历史回归
+
+- Codex clean cutover 首版让 Cloud edition 无条件要求 Docker，但 `dev:cloud` 的开发 preflight 又明确要求 local driver，导致所有本地 Cloud 首条消息都在 Runtime materialize 前失败。根因是把产品 edition 误当成运行环境 profile；当前只有 Cloud production 强制 Docker，development 仍须显式选择 local，不存在自动降级。
 
 ## 修改检查表
 

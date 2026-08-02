@@ -12,7 +12,8 @@ import type { WorkspaceAssistantActiveFocusRequest } from './workspace-assistant
 import type { ProjectWorkspaceProps } from './types'
 import '@/styles/animations.css'
 
-function ProjectWorkspaceContent({ projectId }: ProjectWorkspaceProps) {
+function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
+  const { projectId } = props
   const [selection, setSelection] = useState<WorkspaceCanvasSelection | null>(null)
   const [draft, setDraft] = useState<WorkspaceAssistantDraftRequest | null>(null)
   const [activeFocus, setActiveFocus] = useState<WorkspaceAssistantActiveFocusRequest | null>(null)
@@ -26,6 +27,9 @@ function ProjectWorkspaceContent({ projectId }: ProjectWorkspaceProps) {
           setDraft((current) => current?.requestId === requestId ? null : current)
         }}
         onClearSelection={() => setSelection(null)}
+        autoStartDraft={props.assistantAutoStartDraft ?? null}
+        autoStartKey={props.assistantAutoStartKey ?? null}
+        onAutoStartConsumed={props.onAssistantAutoStartConsumed}
         onActiveOperationChange={setActiveFocus}
       />
       <div className="h-full min-w-0 overflow-hidden pr-[var(--workspace-assistant-panel-width,420px)]">

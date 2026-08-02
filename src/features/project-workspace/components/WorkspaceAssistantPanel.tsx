@@ -15,6 +15,7 @@ import {
 import {
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_ACCEPT,
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES,
+  type ProjectAssistantTextAttachment,
 } from '@/lib/project-agent/text-attachments'
 import {
   uploadProjectAssistantTextAttachment,
@@ -73,6 +74,13 @@ interface WorkspaceAssistantPanelProps {
   draftRequest: WorkspaceAssistantDraftRequest | null
   onDraftRequestConsumed: (requestId: string) => void
   onClearSelection: () => void
+  autoStartDraft?: {
+    readonly message: string
+    readonly attachments: readonly ProjectAssistantTextAttachment[]
+    readonly mediaAttachments: readonly ProjectAssistantMediaAttachment[]
+  } | null
+  autoStartKey?: string | null
+  onAutoStartConsumed?: () => void
   onActiveOperationChange?: (focusRequest: WorkspaceAssistantActiveFocusRequest | null) => void
 }
 
@@ -573,6 +581,9 @@ export default function WorkspaceAssistantPanel({
   draftRequest,
   onDraftRequestConsumed,
   onClearSelection,
+  autoStartDraft,
+  autoStartKey,
+  onAutoStartConsumed,
   onActiveOperationChange,
 }: WorkspaceAssistantPanelProps) {
   const t = useTranslations('assistantAgent')
@@ -667,6 +678,37 @@ export default function WorkspaceAssistantPanel({
     setMediaUploadPending(false)
     setAttachmentError(null)
   }, [panelScopeKey])
+  const sendAutoStartMessage = assistantRuntime.sendMessage
+  const autoStartBlocked = assistantRuntime.viewLoading || assistantRuntime.pending
+  const attemptedAutoStartKeysRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (
+      !autoStartDraft
+      || !autoStartKey
+      || autoStartBlocked
+      || attemptedAutoStartKeysRef.current.has(autoStartKey)
+    ) {
+      return
+    }
+    attemptedAutoStartKeysRef.current.add(autoStartKey)
+    void sendAutoStartMessage({
+      text: autoStartDraft.message,
+      attachments: autoStartDraft.attachments,
+      mediaAttachments: autoStartDraft.mediaAttachments,
+      sourceKey: autoStartKey,
+    }).then(() => {
+      onAutoStartConsumed?.()
+    }).catch(() => {
+      // sendMessage owns the visible failure state. Keep the Home draft in
+      // sessionStorage so a refresh can retry the same idempotent source key.
+    })
+  }, [
+    autoStartBlocked,
+    autoStartDraft,
+    autoStartKey,
+    onAutoStartConsumed,
+    sendAutoStartMessage,
+  ])
 
   useWorkspaceAssistantCanvasFocus({
     view: assistantRuntime.view,

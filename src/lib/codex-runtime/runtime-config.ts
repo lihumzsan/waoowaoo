@@ -45,7 +45,11 @@ export function readCodexRuntimeConfig(
   deployment: DeploymentConfig = getDeploymentConfig(),
 ): CodexRuntimeConfig {
   const driver = requireDriver(environment.CODEX_RUNTIME_DRIVER)
-  if (deployment.edition === 'cloud' && driver !== 'docker') {
+  if (
+    deployment.edition === 'cloud'
+    && environment.NODE_ENV === 'production'
+    && driver !== 'docker'
+  ) {
     throw new Error('CODEX_RUNTIME_CLOUD_REQUIRES_DOCKER')
   }
   const base: RuntimeConfigBase = {

@@ -57,6 +57,7 @@
 
 ## 历史回归
 
+- WorkspaceResource clean cutover 删除 Episode 页面时一并删掉了 Home 首条消息的消费接线，但 Home 仍写入同一 `sessionStorage` 草稿并携带自动启动 query，导致项目创建成功后输入不可见、也没有进入 Assistant Turn。当前项目页在 Project 鉴权成功后读取一次项目级草稿，使用稳定 source key 提交；只有命令被接受后才清除草稿与 query，失败则保留以供刷新重试。
 - 首次全产品 i18n Journey 发现英文页面的语言按钮使用目标语言生成 `aria-label`，视觉文字虽然是英文，可访问名称却是中文；按当前语言查询的真实浏览器因此无法操作。根因是把“当前界面语言”和“准备切换到的目标语言”混成一个 copy owner。
 - 真实退出 Journey 先发现 NextAuth CSRF GET 与页面导航竞争；手写 POST 虽清除了服务端 Cookie，却又让 SessionProvider 保持已登录，进一步证明登出不能有第二客户端 writer。Profile 现在用 NextAuth `signOut({redirect:false})` 同时更新协议、Cookie 和客户端缓存，再由 locale router 导航；Journey 同时验证 Navbar 未登录与 session 为空。
 - 项目创建 Journey 发现“创建后引导模型配置”同时启动项目列表 refetch 和 Profile 导航，页面中止自己的 refetch 后又记录错误；创建动作现在根据唯一后继决定是刷新列表还是离开页面。
