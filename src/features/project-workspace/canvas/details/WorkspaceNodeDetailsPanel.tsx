@@ -322,10 +322,6 @@ export function WorkspaceNodeDetailsPanel({
       ? errorLabels('unknown')
       : null
 
-  const prefill = (key: 'modifyImage' | 'useReference' | 'imageToVideo' | 'modifyVideo' | 'modifyText') => {
-    actions.onAssistantPrefill(actionLabels(`prompts.${key}`))
-  }
-
   const copyPrompt = async () => {
     if (!prompt) return
     try {
@@ -436,7 +432,24 @@ export function WorkspaceNodeDetailsPanel({
       {prompt ? (
         <SectionShell
           title={labels('generationPrompt')}
-          trailing={modelKey ? <ModelKeyLine label={labels('generationModel')} modelKey={modelKey} /> : undefined}
+          trailing={(
+            <span className="flex min-w-0 items-center gap-2">
+              {modelKey ? <ModelKeyLine label={labels('generationModel')} modelKey={modelKey} /> : null}
+              <button
+                type="button"
+                aria-label={actionLabels('copyPrompt')}
+                title={actionLabels('copyPrompt')}
+                className="nodrag shrink-0 rounded-md p-1 text-[var(--glass-text-tertiary)] transition hover:bg-white hover:text-[var(--glass-text-secondary)]"
+                onMouseDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  void copyPrompt()
+                }}
+              >
+                <AppIcon name="copy" className="h-3.5 w-3.5" />
+              </button>
+            </span>
+          )}
         >
           <div
             {...workspaceCanvasScrollableRegionProps<HTMLDivElement>()}
@@ -470,12 +483,6 @@ export function WorkspaceNodeDetailsPanel({
         busy={actions.busy}
         hidden={actions.hidden}
         onDiscuss={() => actions.onAssistantPrefill(null)}
-        onModifyImage={() => prefill('modifyImage')}
-        onUseReference={() => prefill('useReference')}
-        onImageToVideo={() => prefill('imageToVideo')}
-        onModifyVideo={() => prefill('modifyVideo')}
-        onModifyText={() => prefill('modifyText')}
-        onCopyPrompt={() => { void copyPrompt() }}
         onDownload={download}
         onPreview={actions.onPreview}
         onOperation={actions.onOperation}

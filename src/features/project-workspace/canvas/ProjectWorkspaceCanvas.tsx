@@ -12,6 +12,7 @@ import {
   Panel,
   ReactFlow,
   ReactFlowProvider,
+  ViewportPortal,
   type NodeMouseHandler,
   type OnNodeDrag,
   type Viewport,
@@ -65,17 +66,12 @@ import { CanvasOperationConfirmationModal } from './actions/CanvasOperationConfi
 import { WorkspaceResourcePreviewModal } from './preview/WorkspaceResourcePreviewModal'
 import { useCanvasResourceArchive } from './actions/useCanvasResourceArchive'
 import { useCanvasActions } from '@/lib/query/hooks/useCanvasActions'
-import {
-  WorkspaceCanvasCreateMenu,
-  WorkspaceCanvasCreateModal,
-  type WorkspaceCanvasCreateAnchor,
-} from './create/WorkspaceCanvasCreate'
+import { WorkspaceCanvasCreateDock } from './create/WorkspaceCanvasCreateDock'
 import type {
   WorkspaceCanvasCreateCapabilityView,
   WorkspaceCanvasCreateRequest,
 } from './contracts/workspace-canvas-interactions'
 import { workspaceNodeId } from './workspace-canvas-node-ids'
-import { CanvasEditRegenerateModal } from './actions/CanvasEditRegenerateModal'
 import { useCanvasUploadQueue, type CanvasUploadQueueItem } from './upload/useCanvasUploadQueue'
 import { CanvasUploadQueue } from './upload/CanvasUploadQueue'
 import { CanvasViewportControls } from './controls/CanvasViewportControls'
@@ -137,15 +133,10 @@ function ProjectWorkspaceCanvasContent({
     isError: canvasActionsFailed,
     refetch: retryCanvasActions,
   } = useCanvasActions(projectId)
-  const [createAnchor, setCreateAnchor] = useState<WorkspaceCanvasCreateAnchor | null>(null)
-  const [createCapability, setCreateCapability] = useState<{
-    readonly capability: WorkspaceCanvasCreateCapabilityView
+  const [createDrafts, setCreateDrafts] = useState<readonly {
+    readonly id: string
     readonly position: WorkspaceCanvasCreateRequest['position']
-  } | null>(null)
-  const [editOperation, setEditOperation] = useState<{
-    readonly operation: WorkspaceCanvasResourceOperationView
-    readonly countRange: { readonly min: number; readonly max: number }
-  } | null>(null)
+  }[]>([])
   const { data: creativeResourcesResponse } = useCreativeResources(
     projectId,
     episodeId ?? null,
@@ -229,11 +220,11 @@ function ProjectWorkspaceCanvasContent({
         node,
         statesByQueryKey: workspaceTaskStateMap.byQueryKey,
       })
-      const zIndex = node.id === selection?.nodeId ? 30 : undefined
+      const isSelected = node.id === selection?.nodeId
       return {
         ...node,
-        zIndex,
-        data: { ...resolvedData },
+        zIndex: isSelected ? 30 : undefined,
+        data: { ...resolvedData, uiSelected: isSelected },
       }
     })
   }, [
@@ -450,16 +441,14 @@ function ProjectWorkspaceCanvasContent({
   const handlePaneClick = useCallback((event: ReactMouseEvent<Element, globalThis.MouseEvent>) => {
     canvasRef.current?.focus()
     onSelectionChange(null)
-    if (event.detail !== 2) {
-      setCreateAnchor(null)
-      return
-    }
+    if (event.detail !== 2) return
     notifyCanvasUserInteraction()
-    setCreateAnchor({
-      client: { x: event.clientX, y: event.clientY },
-      flow: reactFlow.screenToFlowPosition({ x: event.clientX, y: event.clientY }),
-    })
+    const flow = reactFlow.screenToFlowPosition({ x: event.clientX, y: event.clientY })
+    setCreateDrafts((current) => [...current, { id: crypto.randomUUID(), position: flow }])
   }, [notifyCanvasUserInteraction, onSelectionChange, reactFlow])
+  const closeCreateDraft = useCallback((draftId: string) => {
+    setCreateDrafts((current) => current.filter((draft) => draft.id !== draftId))
+  }, [])
   const handleMoveStart = useCallback((event: MouseEvent | TouchEvent | null) => {
     if (event) notifyCanvasUserInteraction()
   }, [notifyCanvasUserInteraction])
@@ -563,23 +552,12 @@ function ProjectWorkspaceCanvasContent({
   }, [onSelectionChange, persistCurrentLayout, selection?.nodeId, showError, showHiddenNodes, t])
 
   const beginResourceOperation = useCallback((operation: WorkspaceCanvasResourceOperationView) => {
-    if (operation.kind === 'edit_regenerate') {
-      const capability = canvasActions?.creation.find((candidate) => (
-        candidate.operationId === operation.operationId
-      ))
-      if (!capability || !operation.editableInputPath) {
-        showError(new Error('CANVAS_EDIT_REGENERATE_CAPABILITY_UNAVAILABLE'), t('actions.unavailable'))
-        return
-      }
-      setEditOperation({ operation, countRange: capability.alternatives })
-      return
-    }
     void operationAction.begin({
       operationId: operation.operationId,
       input: operation.input,
       confirmation: operation.confirmation,
     })
-  }, [canvasActions?.creation, operationAction, showError, t])
+  }, [operationAction])
 
   const placePlannedResources = useCallback((
     request: WorkspaceCanvasCreateRequest,
@@ -600,19 +578,19 @@ function ProjectWorkspaceCanvasContent({
     })
   }, [])
 
-  const submitCanvasCreation = useCallback((request: WorkspaceCanvasCreateRequest) => {
-    setCreateCapability(null)
+  const submitCanvasCreation = useCallback((draftId: string, request: WorkspaceCanvasCreateRequest) => {
     const input = buildWorkspaceCanvasCreateOperationInput(request, episodeId ?? '')
     void operationAction.begin({
       operationId: request.capability.operationId,
       input,
       confirmation: 'billable_media',
       onAccepted: (plan) => {
+        closeCreateDraft(draftId)
         if (!plan) return
         placePlannedResources(request, plan.tasks.map((task) => task.targetId))
       },
     })
-  }, [episodeId, operationAction, placePlannedResources])
+  }, [closeCreateDraft, episodeId, operationAction, placePlannedResources])
 
   const selectionForCard = useCallback((card: WorkspaceCreativeResourceCardMemberView): WorkspaceCanvasSelection | null => {
     const node = flowNodes.find((candidate) => candidate.data.targetId === card.resource.resourceId)
@@ -671,6 +649,24 @@ function ProjectWorkspaceCanvasContent({
           proOptions={WORKSPACE_REACT_FLOW_PRO_OPTIONS}
         >
           <Background variant={BackgroundVariant.Dots} gap={24} size={1} />
+          {createDrafts.map((draft) => (
+            <ViewportPortal key={draft.id}>
+              <WorkspaceCanvasCreateDock
+                position={draft.position}
+                capabilities={canvasActions?.creation ?? []}
+                loading={canvasActionsLoading}
+                loadFailed={canvasActionsFailed}
+                projectAspectRatio={projectAspectRatio}
+                onRetryCapabilities={() => { void retryCanvasActions() }}
+                onSubmit={(request) => submitCanvasCreation(draft.id, request)}
+                onUpload={() => {
+                  openUploadPicker(draft.position)
+                  closeCreateDraft(draft.id)
+                }}
+                onClose={() => closeCreateDraft(draft.id)}
+              />
+            </ViewportPortal>
+          ))}
           {selectedNode ? (
             <WorkspaceNodeDetailsCard
               node={selectedNode}
@@ -764,48 +760,6 @@ function ProjectWorkspaceCanvasContent({
             setPreview(null)
             requestAssistantDraft(null)
           }}
-        />
-      ) : null}
-      {createAnchor ? (
-        <WorkspaceCanvasCreateMenu
-          anchor={createAnchor}
-          capabilities={canvasActions?.creation ?? []}
-          loading={canvasActionsLoading}
-          loadFailed={canvasActionsFailed}
-          onRetry={() => { void retryCanvasActions() }}
-          onSelect={(capability) => {
-            setCreateCapability({ capability, position: createAnchor.flow })
-            setCreateAnchor(null)
-          }}
-          onUpload={() => {
-            openUploadPicker(createAnchor.flow)
-            setCreateAnchor(null)
-          }}
-          onClose={() => setCreateAnchor(null)}
-        />
-      ) : null}
-      {createCapability ? (
-        <WorkspaceCanvasCreateModal
-          capability={createCapability.capability}
-          position={createCapability.position}
-          projectAspectRatio={projectAspectRatio}
-          onSubmit={submitCanvasCreation}
-          onClose={() => setCreateCapability(null)}
-        />
-      ) : null}
-      {editOperation ? (
-        <CanvasEditRegenerateModal
-          operation={editOperation.operation}
-          countRange={editOperation.countRange}
-          onSubmit={(operation) => {
-            setEditOperation(null)
-            void operationAction.begin({
-              operationId: operation.operationId,
-              input: operation.input,
-              confirmation: operation.confirmation,
-            })
-          }}
-          onClose={() => setEditOperation(null)}
         />
       ) : null}
       {operationAction.pending ? (

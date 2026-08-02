@@ -26,17 +26,10 @@ export type WorkspaceCanvasResourceOperationKind = CreativeResourceCanvasOperati
 
 export type WorkspaceCanvasNodeActionKey =
   | 'discuss'
-  | 'modify_image'
-  | 'use_reference'
-  | 'image_to_video'
-  | 'modify_video'
-  | 'modify_text'
-  | 'copy_prompt'
   | 'download'
   | 'preview_alternatives'
   | 'retry'
   | 'variant'
-  | 'edit_regenerate'
   | 'archive'
   | 'restore'
   | 'hide'

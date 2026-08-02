@@ -30,15 +30,11 @@ function readJsonRecord(value: Prisma.JsonValue | undefined, field: string): Cre
 
 function buildRegenerationInput(input: CreativeResourceJsonObject): {
   readonly input: CreativeResourceJsonObject
-  readonly editableInputPath: readonly string[]
 } | null {
   const request = readJsonRecord(input.request, 'request')
   if (request.kind === 'new') {
     if (typeof request.prompt !== 'string' || !request.prompt.trim()) return null
-    return {
-      input: { ...input, request: { ...request, count: 1 } },
-      editableInputPath: ['request', 'prompt'],
-    }
+    return { input: { ...input, request: { ...request, count: 1 } } }
   }
   if (request.kind === 'single') {
     const target = readJsonRecord(request.target, 'request.target')
@@ -49,10 +45,7 @@ function buildRegenerationInput(input: CreativeResourceJsonObject): {
     ) {
       return null
     }
-    return {
-      input: { ...input, request: { ...request, count: 1 } },
-      editableInputPath: ['request', 'description'],
-    }
+    return { input: { ...input, request: { ...request, count: 1 } } }
   }
   return null
 }
@@ -126,25 +119,14 @@ export async function loadCreativeResourceCanvasOperationViews(
         operationId: row.operationId ?? '',
         confirmation: 'billable_media',
         input: { request: { kind: 'retry', resourceIds: [row.id] } },
-        editableInputPath: null,
       })
     }
-    if (root?.regeneration) {
-      if (row.status === 'ready') {
-        operations.push({
-          kind: 'variant',
-          operationId: root.operationId,
-          confirmation: 'billable_media',
-          input: root.regeneration.input,
-          editableInputPath: null,
-        })
-      }
+    if (root?.regeneration && row.status === 'ready') {
       operations.push({
-        kind: 'edit_regenerate',
+        kind: 'variant',
         operationId: root.operationId,
         confirmation: 'billable_media',
         input: root.regeneration.input,
-        editableInputPath: root.regeneration.editableInputPath,
       })
     }
     result.set(row.id, operations)

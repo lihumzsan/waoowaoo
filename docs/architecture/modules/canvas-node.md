@@ -38,7 +38,8 @@ Canvas 是正式领域 View 与持久 Resource View 的可视化投影，不是�
 - 新批次整体视口定位：`src/features/project-workspace/canvas/hooks/useCanvasFocusFollow.ts`；批次身份与 durable target 只来自 Assistant Session View。
 - 投影编排：`src/features/project-workspace/canvas/projection/workspace-node-canvas-projection.ts`。
 - Resource 投影与通用 fallback renderer：`workspace-node-resource-projection.ts`、`nodes/renderers/resource-card.tsx`、`nodes/renderers/resource-media-shell.tsx`；Resource View 来自 `src/lib/creative-resource/view-service.ts`。
-- 选中详情卡：`src/features/project-workspace/canvas/details/WorkspaceNodeDetailsCard.tsx` 负责 viewport 定位与宽度，唯一展示实现在同目录 `WorkspaceNodeDetailsPanel.tsx`；数据只来自 card View（prompt provenance + `inputSummaries`）。
+- 选中详情卡：`src/features/project-workspace/canvas/details/WorkspaceNodeDetailsCard.tsx` 负责 viewport 定位与宽度，唯一展示实现在同目录 `WorkspaceNodeDetailsPanel.tsx`；数据只来自 card View（prompt provenance + `inputSummaries`）。详情卡提示词只读可复制；已有 Resource 的修改一律经 Assistant 通道产生新 Resource，Canvas 不提供人工改写历史输入的入口。
+- 画布创建占位卡：`create/WorkspaceCanvasCreateDock.tsx`。双击空白产生的多实例纯 UI 草稿（不注册节点 kind、不写任何持久层），提交只走通用 Operation 通道（能力来自服务端 creation 声明），上传只走既有上传队列两段式协议；刷新丢弃未提交草稿属预期。
 - Canvas 直接动作、创建、上传和 Assistant 预填：`src/features/project-workspace/canvas/actions/**`、`canvas/upload/**` 与 `ProjectWorkspace` 的受控 selection/draft bridge；服务端写入仍只走 Operation adapter。
 - 节点位置与隐藏：`src/lib/project-canvas/layout/**` 与 `/api/projects/[projectId]/canvas-layout`；不存在第二隐藏集合或 route。
 - 可选领域事实投影必须先对齐 Resource origin/lineage；不存在 planning/asset-execution/video-stage projector。

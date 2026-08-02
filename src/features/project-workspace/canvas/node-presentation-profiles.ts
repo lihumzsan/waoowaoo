@@ -28,10 +28,14 @@ export interface WorkspaceCanvasNodePresentationProfile {
   readonly media: Record<CreativeResourceMediaType, WorkspaceCanvasMediaPresentation>
 }
 
-/** Card chrome around the media area: horizontal padding + border. */
-const NODE_CHROME_WIDTH = 42
-/** Header block + content vertical padding + border. */
-const NODE_CHROME_HEIGHT = 139
+/** Card chrome around the media area: horizontal padding (14px × 2) + border. */
+const NODE_CHROME_WIDTH = 30
+/**
+ * Header block + content vertical padding + border for the compact card
+ * chrome: 10 (header top) + 24 (fixed header row) + 6 (header bottom)
+ * + 2 (content top) + 14 (content bottom) + 2 (borders).
+ */
+const NODE_CHROME_HEIGHT = 58
 
 /**
  * Project video ratios are `W:H` strings validated by the project settings

@@ -42,22 +42,20 @@ export const WORKSPACE_CANVAS_NODE_DEFINITIONS = {
     rendererKey: 'resourceCard',
     actionKeysByMediaType: {
       text: [
-        'discuss', 'modify_text', 'copy_prompt', 'preview_alternatives',
-        'retry', 'variant', 'edit_regenerate', 'archive', 'restore', 'hide', 'show',
+        'discuss', 'preview_alternatives',
+        'retry', 'variant', 'archive', 'restore', 'hide', 'show',
       ],
       image: [
-        'discuss', 'modify_image', 'image_to_video', 'use_reference', 'preview_alternatives',
-        'copy_prompt', 'download', 'retry', 'variant', 'edit_regenerate',
-        'archive', 'restore', 'hide', 'show',
+        'discuss', 'preview_alternatives', 'download',
+        'retry', 'variant', 'archive', 'restore', 'hide', 'show',
       ],
       audio: [
-        'discuss', 'use_reference', 'preview_alternatives', 'copy_prompt', 'download',
-        'retry', 'variant', 'edit_regenerate', 'archive', 'restore', 'hide', 'show',
+        'discuss', 'preview_alternatives', 'download',
+        'retry', 'variant', 'archive', 'restore', 'hide', 'show',
       ],
       video: [
-        'discuss', 'modify_video', 'use_reference', 'preview_alternatives',
-        'copy_prompt', 'download', 'retry', 'variant', 'edit_regenerate',
-        'archive', 'restore', 'hide', 'show',
+        'discuss', 'preview_alternatives', 'download',
+        'retry', 'variant', 'archive', 'restore', 'hide', 'show',
       ],
     },
     presentation: {

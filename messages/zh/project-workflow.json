@@ -39,11 +39,6 @@
       },
       "actions": {
         "discuss": "和 AI 讨论",
-        "modifyImage": "修改图片",
-        "imageToVideo": "生成视频",
-        "useReference": "用作参考",
-        "modifyVideo": "修改视频",
-        "modifyText": "修改文本",
         "preview": "预览",
         "copyPrompt": "复制提示词",
         "copyPromptSuccess": "提示词已复制",
@@ -51,27 +46,11 @@
         "download": "下载",
         "retry": "重试",
         "variant": "生成变体",
-        "edit_regenerate": "编辑后重新生成",
         "archive": "归档",
         "restore": "恢复",
         "show": "显示",
         "hide": "隐藏",
-        "unavailable": "当前无法执行此操作",
-        "prompts": {
-          "modifyImage": "请修改这张图片，同时保留当前结果中有用的部分。",
-          "useReference": "请把这个资源作为下一次创作的参考。",
-          "imageToVideo": "请基于这张图片生成视频。",
-          "modifyVideo": "请修改这个视频，同时保留当前结果中有用的部分。",
-          "modifyText": "请帮我修改这段文本。"
-        },
-        "editModal": {
-          "title": "编辑后重新生成",
-          "description": "调整生成要求，并选择要生成的结果数量。",
-          "cancel": "取消",
-          "continue": "继续",
-          "instruction": "生成要求",
-          "count": "结果数量"
-        }
+        "unavailable": "当前无法执行此操作"
       },
       "errors": {
         "unknown": "这个资源生成失败，你可以重新尝试。"
@@ -102,21 +81,15 @@
         "destructiveBody": "此操作会修改当前选中的资源。"
       },
       "create": {
-        "menuTitle": "新建或上传",
         "loading": "正在读取能力…",
         "loadFailed": "生成能力读取失败。",
         "retry": "重试",
-        "title": "新建{kind}",
-        "description": "填写基础生成信息，提交前可以确认报价。",
-        "cancel": "取消",
-        "continue": "继续",
-        "name": "名称",
+        "close": "关闭",
+        "submit": "生成",
+        "frameHint": "生成结果将出现在这里",
         "namePlaceholder": "可选的资源名称",
-        "voiceDescription": "声音描述",
-        "prompt": "提示词",
         "voiceDescriptionPlaceholder": "描述音色、语气、口音和表达方式",
-        "promptPlaceholder": "描述你想生成的内容",
-        "voicePreviewText": "试听文本",
+        "promptPlaceholder": "描述你想生成的内容，或点上传添加本地素材",
         "voicePreviewPlaceholder": "输入一小段用于生成声音的文本",
         "count": "结果数量",
         "countRange": "{min}–{max}",
@@ -124,8 +97,6 @@
         "durationPlaceholder": "秒数",
         "durationHelp": "请输入整数秒。",
         "durationRange": "请输入 {min}–{max} 秒的整数。",
-        "projectRatio": "项目画幅",
-        "projectRatioUnset": "未设置",
         "kind": {
           "image": "图片",
           "video": "视频",

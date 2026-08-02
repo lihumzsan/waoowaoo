@@ -230,14 +230,13 @@ export interface CreativeResourceDownloadView {
   readonly fileName: string
 }
 
-export type CreativeResourceCanvasOperationKind = 'retry' | 'variant' | 'edit_regenerate'
+export type CreativeResourceCanvasOperationKind = 'retry' | 'variant'
 
 export interface CreativeResourceCanvasOperationView {
   readonly kind: CreativeResourceCanvasOperationKind
   readonly operationId: string
   readonly confirmation: 'billable_media'
   readonly input: CreativeResourceJsonObject
-  readonly editableInputPath: readonly string[] | null
 }
 
 export interface CreativeResourceCardMemberView {

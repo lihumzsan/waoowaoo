@@ -12,12 +12,6 @@ export function WorkspaceNodeActionBar({
   busy,
   hidden,
   onDiscuss,
-  onModifyImage,
-  onUseReference,
-  onImageToVideo,
-  onModifyVideo,
-  onModifyText,
-  onCopyPrompt,
   onDownload,
   onPreview,
   onOperation,
@@ -28,12 +22,6 @@ export function WorkspaceNodeActionBar({
   readonly busy: boolean
   readonly hidden: boolean
   readonly onDiscuss: () => void
-  readonly onModifyImage: () => void
-  readonly onUseReference: () => void
-  readonly onImageToVideo: () => void
-  readonly onModifyVideo: () => void
-  readonly onModifyText: () => void
-  readonly onCopyPrompt: () => void
   readonly onDownload: (() => void) | null
   readonly onPreview: () => void
   readonly onOperation: WorkspaceNodeDetailsActions['onOperation']
@@ -42,7 +30,6 @@ export function WorkspaceNodeActionBar({
 }) {
   const t = useTranslations('projectWorkflow.canvas.workspace.actions')
   const resource = card.resource
-  const prompt = resource.materialization?.provenance.prompt ?? resource.pendingGeneration?.prompt ?? null
   const hasPreview = card.presentation.summary.kind !== 'empty'
   const declared = new Set(
     getWorkspaceCanvasNodeDefinition('resourceCard').actionKeysByMediaType[resource.mediaType],
@@ -56,31 +43,13 @@ export function WorkspaceNodeActionBar({
   }
 
   add('discuss', 'sparkles', t('discuss'), onDiscuss)
-  if (resource.mediaType === 'image') {
-    add('modify_image', 'edit', t('modifyImage'), onModifyImage)
-    add('image_to_video', 'video', t('imageToVideo'), onImageToVideo)
-    add('use_reference', 'link', t('useReference'), onUseReference)
-  } else if (resource.mediaType === 'video') {
-    add('modify_video', 'edit', t('modifyVideo'), onModifyVideo)
-    add('use_reference', 'link', t('useReference'), onUseReference)
-  } else if (resource.mediaType === 'audio') {
-    add('use_reference', 'link', t('useReference'), onUseReference)
-  } else {
-    add('modify_text', 'edit', t('modifyText'), onModifyText)
-  }
   if (hasPreview) add('preview_alternatives', 'searchPlus', t('preview'), onPreview)
-  if (prompt) add('copy_prompt', 'copy', t('copyPrompt'), onCopyPrompt)
   if (onDownload) add('download', 'download', t('download'), onDownload)
 
-  for (const kind of ['retry', 'variant', 'edit_regenerate'] as const) {
+  for (const kind of ['retry', 'variant'] as const) {
     const operation = operationByKind.get(kind)
     if (!operation) continue
-    add(
-      kind,
-      kind === 'edit_regenerate' ? 'edit' : 'refresh',
-      t(kind),
-      () => onOperation(operation),
-    )
+    add(kind, 'refresh', t(kind), () => onOperation(operation))
   }
   if (resource.archivedAt) {
     add('restore', 'undo', t('restore'), () => onSetArchived(false))

@@ -46,6 +46,8 @@ export interface WorkspaceCanvasNodeData {
     readonly y: number
   }
   readonly readOnly?: boolean
+  /** Pure UI selection flag mirrored from the workspace selection state. */
+  readonly uiSelected?: boolean
   readonly resourceDetails: WorkspaceCreativeResourceCardView
 }
 

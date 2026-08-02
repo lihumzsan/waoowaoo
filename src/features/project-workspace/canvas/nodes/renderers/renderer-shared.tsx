@@ -6,7 +6,13 @@ import { toDisplayImageUrl } from '@/lib/media/image-url'
 import { isWorkspaceCanvasLifecycleRunning } from '../../lifecycle/workspace-canvas-lifecycle'
 import type { WorkspaceCanvasFlowNode } from '../../node-canvas-types'
 
-export const SELECTABLE_TEXT_CLASS = 'select-none'
+/**
+ * Text content inside canvas nodes must stay selectable/copyable. React Flow
+ * disables text selection on node wrappers, so this class re-enables it and
+ * opts the element out of node dragging (a drag that starts on text would
+ * otherwise swallow the selection gesture).
+ */
+export const SELECTABLE_TEXT_CLASS = 'nodrag select-text cursor-text'
 
 export type ImagePreviewHandler = (imageUrl: string) => void
 export const WorkspaceNodeImagePreviewContext = React.createContext<ImagePreviewHandler | null>(null)
