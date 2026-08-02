@@ -413,8 +413,31 @@ services:
 
   app:
     <<: *app-service
+    environment:
+      <<: *app-environment
+      CODEX_RUNTIME_DRIVER: docker
+      CODEX_RUNTIME_HOST_ROOT: "${CODEX_RUNTIME_HOST_ROOT:-/tmp/wao-codex-runtime}"
+      CODEX_RUNTIME_IDLE_TIMEOUT_MS: "${CODEX_RUNTIME_IDLE_TIMEOUT_MS:-900000}"
+      CODEX_RUNTIME_IMAGE: "${CODEX_RUNTIME_IMAGE:-ghcr.io/saturndec/waoowaoo-codex-runtime@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
+      CODEX_RUNTIME_NETWORK: "${COMPOSE_PROJECT_NAME:-waoowaoo}_codex-runtime"
+      CODEX_RUNTIME_CPU_LIMIT: "${CODEX_RUNTIME_CPU_LIMIT:-2}"
+      CODEX_RUNTIME_MEMORY_BYTES: "${CODEX_RUNTIME_MEMORY_BYTES:-2147483648}"
+      CODEX_RUNTIME_PIDS_LIMIT: "${CODEX_RUNTIME_PIDS_LIMIT:-256}"
+      CODEX_RUNTIME_WAO_BASE_URL: "http://app:3000"
     ports:
       - "${APP_BIND_ADDRESS:-127.0.0.1}:${APP_HOST_PORT:-13000}:3000"
+    volumes:
+      - ./data:/app/data
+      - ./docker-logs:/app/logs
+      - "${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock"
+      # The daemon and Web container must resolve the exact same absolute host
+      # paths because Codex runtime bind mounts are created by the daemon.
+      - type: bind
+        source: "${CODEX_RUNTIME_HOST_ROOT:-/tmp/wao-codex-runtime}"
+        target: "${CODEX_RUNTIME_HOST_ROOT:-/tmp/wao-codex-runtime}"
+    networks:
+      - default
+      - codex-runtime
     depends_on:
       mysql:
         condition: service_healthy
@@ -456,3 +479,8 @@ volumes:
   mysql_data:
   redis_data:
   temporal_config:
+
+networks:
+  codex-runtime:
+    name: "${COMPOSE_PROJECT_NAME:-waoowaoo}_codex-runtime"
+    internal: true

@@ -20,6 +20,10 @@ const COMMON_REQUIRED_KEYS = [
   'TENCENTCLOUD_SMS_DOMESTIC_TEMPLATE_ID',
   'TENCENTCLOUD_SMS_INTERNATIONAL_TEMPLATE_ID',
   'INTERNAL_APP_URL',
+  'CODEX_RUNTIME_DRIVER',
+  'CODEX_RUNTIME_HOST_ROOT',
+  'CODEX_RUNTIME_IDLE_TIMEOUT_MS',
+  'CODEX_RUNTIME_WAO_BASE_URL',
   'OFFICIAL_CONTENT_DIR',
   'PAYMENT_MIN_CREDITS',
   'PAYMENT_MAX_CREDITS',
@@ -39,6 +43,11 @@ const PRODUCTION_REQUIRED_KEYS = [
   'TEMPORAL_WORKER_DEPLOYMENT_NAME',
   'TEMPORAL_WORKER_BUILD_ID',
   'TEMPORAL_WORKER_VERSIONING_ENABLED',
+  'CODEX_RUNTIME_IMAGE',
+  'CODEX_RUNTIME_NETWORK',
+  'CODEX_RUNTIME_CPU_LIMIT',
+  'CODEX_RUNTIME_MEMORY_BYTES',
+  'CODEX_RUNTIME_PIDS_LIMIT',
 ]
 
 const VALIDATION_MODES = new Set(['development', 'production'])
@@ -125,6 +134,19 @@ function isDevelopmentUrl(value) {
   }
 }
 
+function isHttpUrl(value) {
+  try {
+    const url = new URL(value)
+    return (url.protocol === 'http:' || url.protocol === 'https:')
+      && !url.username
+      && !url.password
+      && !url.search
+      && !url.hash
+  } catch {
+    return false
+  }
+}
+
 function readModelProvider(modelKey) {
   if (isMissing(modelKey)) return null
   const separatorIndex = modelKey.indexOf('::')
@@ -163,6 +185,56 @@ if (env.PROVIDER_CREDENTIAL_MODE !== 'platform-key') {
 }
 if (env.BILLING_MODE !== 'ENFORCE') {
   missing.push('BILLING_MODE=ENFORCE')
+}
+
+if (validationMode === 'production' && env.CODEX_RUNTIME_DRIVER !== 'docker') {
+  missing.push('CODEX_RUNTIME_DRIVER=docker')
+} else if (
+  validationMode === 'development'
+  && env.CODEX_RUNTIME_DRIVER !== 'local'
+) {
+  missing.push('CODEX_RUNTIME_DRIVER=local')
+}
+if (
+  !isMissing(env.CODEX_RUNTIME_HOST_ROOT)
+  && (!env.CODEX_RUNTIME_HOST_ROOT.startsWith('/') || env.CODEX_RUNTIME_HOST_ROOT === '/')
+) {
+  missing.push('CODEX_RUNTIME_HOST_ROOT=absolute-non-root-path')
+}
+const codexIdleTimeoutMs = Number(env.CODEX_RUNTIME_IDLE_TIMEOUT_MS)
+if (
+  !isMissing(env.CODEX_RUNTIME_IDLE_TIMEOUT_MS)
+  && (!Number.isSafeInteger(codexIdleTimeoutMs) || codexIdleTimeoutMs < 10_000)
+) {
+  missing.push('CODEX_RUNTIME_IDLE_TIMEOUT_MS=integer-at-least-10000')
+}
+if (
+  !isMissing(env.CODEX_RUNTIME_WAO_BASE_URL)
+  && !isHttpUrl(env.CODEX_RUNTIME_WAO_BASE_URL)
+) {
+  missing.push('CODEX_RUNTIME_WAO_BASE_URL=http(s)-runtime-reachable-url')
+}
+if (validationMode === 'production') {
+  const runtimeImage = env.CODEX_RUNTIME_IMAGE?.trim() || ''
+  const imageMatch = /^.+@sha256:([a-f0-9]{64})$/u.exec(runtimeImage)
+  if (!imageMatch || imageMatch[1] === '0'.repeat(64)) {
+    missing.push('CODEX_RUNTIME_IMAGE=immutable-repository-sha256-digest')
+  }
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/u.test(env.CODEX_RUNTIME_NETWORK || '')) {
+    missing.push('CODEX_RUNTIME_NETWORK=valid-docker-network')
+  }
+  const runtimeCpuLimit = Number(env.CODEX_RUNTIME_CPU_LIMIT)
+  if (!Number.isFinite(runtimeCpuLimit) || runtimeCpuLimit <= 0) {
+    missing.push('CODEX_RUNTIME_CPU_LIMIT=positive-number')
+  }
+  const runtimeMemoryBytes = Number(env.CODEX_RUNTIME_MEMORY_BYTES)
+  if (!Number.isSafeInteger(runtimeMemoryBytes) || runtimeMemoryBytes < 268_435_456) {
+    missing.push('CODEX_RUNTIME_MEMORY_BYTES=integer-at-least-268435456')
+  }
+  const runtimePidsLimit = Number(env.CODEX_RUNTIME_PIDS_LIMIT)
+  if (!Number.isSafeInteger(runtimePidsLimit) || runtimePidsLimit < 32) {
+    missing.push('CODEX_RUNTIME_PIDS_LIMIT=integer-at-least-32')
+  }
 }
 
 for (const key of ['NEXTAUTH_SECRET', 'CRON_SECRET', 'API_ENCRYPTION_KEY']) {

@@ -1,3 +1,6 @@
+# ==================== Docker CLI used by the Web runtime manager ====================
+FROM docker:27.5.1-cli@sha256:851f91d241214e7c6db86513b270d58776379aacc5eb9c4a87e5b47115e3065c AS docker-cli
+
 # ==================== Shared glibc/OpenSSL base ====================
 FROM node:22-bookworm-slim AS base
 
@@ -50,6 +53,11 @@ COPY --from=builder /app/tsconfig.json ./tsconfig.json
 COPY --from=builder /app/next.config.ts ./next.config.ts
 COPY --from=builder /app/middleware.ts ./middleware.ts
 COPY --from=builder /app/postcss.config.mjs ./postcss.config.mjs
+
+# The Web process starts one short-lived, restricted Codex container only while
+# a project is active. The Docker daemon remains a host concern; this image only
+# carries the client used by the Runtime Session Manager.
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 
 RUN mkdir -p /app/data /app/logs \
     && touch /app/.env \
