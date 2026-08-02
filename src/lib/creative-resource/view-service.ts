@@ -174,7 +174,6 @@ export function projectCreativeResourceView(
         })
       : null,
     memberIndex: row.memberIndex,
-    archivedAt: row.archivedAt?.toISOString() ?? null,
     creativeDataVersion: row.creativeDataVersion,
     creativeDataKeys: Object.keys(jsonObject(row.creativeData)).sort(),
     materialization: materializationView(row),
@@ -350,7 +349,6 @@ async function projectCreativeResourceCards(
   client: CreativeResourceReadClient,
   primaryRows: readonly ResourceRow[],
   userId: string,
-  includeArchived: boolean,
 ): Promise<CreativeResourceCardView[]> {
   if (primaryRows.length === 0) return []
   const groupExecutionIds = Array.from(new Set(primaryRows.flatMap((row) => (
@@ -384,11 +382,8 @@ async function projectCreativeResourceCards(
     assertAlternativeGroupRows(executionId, allRowsByGroup.get(executionId) ?? [])
   }
 
-  const visibleGroupRows = includeArchived
-    ? allGroupRows
-    : allGroupRows.filter((row) => row.archivedAt === null)
   const combinedRowsById = new Map<string, ResourceRow>()
-  for (const row of [...primaryRows, ...visibleGroupRows]) combinedRowsById.set(row.id, row)
+  for (const row of [...primaryRows, ...allGroupRows]) combinedRowsById.set(row.id, row)
   const combinedRows = [...combinedRowsById.values()]
   const pending = await loadPendingGenerations(client, combinedRows.map((row) => row.id))
   const resources = combinedRows.map((row) => (
@@ -412,7 +407,7 @@ async function projectCreativeResourceCards(
     userId,
   )
   const visibleMembersByGroup = new Map<string, CreativeResourceCardMemberView[]>()
-  for (const row of visibleGroupRows) {
+  for (const row of allGroupRows) {
     const executionId = row.alternativeGroupExecutionId
     const member = membersByResourceId.get(row.id)
     if (!executionId || !member) {
@@ -453,7 +448,6 @@ export async function listProjectCreativeResourceCards(input: {
   readonly status?: CreativeResourceStatus | null
   readonly limit?: number
   readonly includeParentScopes?: boolean
-  readonly includeArchived?: boolean
   readonly client?: CreativeResourceReadClient
 }): Promise<CreativeResourceCardView[]> {
   const limit = Math.max(1, Math.min(input.limit ?? 100, 200))
@@ -478,7 +472,6 @@ export async function listProjectCreativeResourceCards(input: {
       ...(input.mediaType ? { mediaType: input.mediaType } : {}),
       ...(input.schemaId?.trim() ? { schemaId: input.schemaId.trim() } : {}),
       ...(input.status ? { status: input.status } : {}),
-      ...(input.includeArchived ? {} : { archivedAt: null }),
     },
     include: resourceInclude,
     orderBy: [
@@ -488,12 +481,7 @@ export async function listProjectCreativeResourceCards(input: {
     ],
     take: limit,
   })
-  return await projectCreativeResourceCards(
-    client,
-    rows,
-    input.userId,
-    input.includeArchived === true,
-  )
+  return await projectCreativeResourceCards(client, rows, input.userId)
 }
 
 export async function getProjectCreativeResourceCard(input: {
@@ -515,7 +503,7 @@ export async function getProjectCreativeResourceCard(input: {
     include: resourceInclude,
   })
   if (!row) return null
-  const [card] = await projectCreativeResourceCards(client, [row], input.userId, true)
+  const [card] = await projectCreativeResourceCards(client, [row], input.userId)
   if (!card) throw new Error(`CREATIVE_RESOURCE_CARD_VIEW_MISSING:${row.id}`)
   return card
 }
@@ -622,7 +610,6 @@ export async function readProjectCreativeResourceWorkingSet(input: {
       where: {
         userId: input.userId,
         projectId: input.projectId,
-        archivedAt: null,
         OR: resourceScopeWhere,
       },
       _count: { _all: true },

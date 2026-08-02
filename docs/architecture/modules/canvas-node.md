@@ -29,7 +29,7 @@ Canvas 是正式领域 View 与持久 Resource View 的可视化投影，不是�
 - **CN-14 — Canvas 直接动作只复用正式 Operation。** 卡片 retry、variant、edit、创建与上传必须从最终 Card/Action View 构造 exact Resource scope，经同一个 plan/snapshot/grant/execute 或 direct Operation adapter 写入；UI 不插入假 Resource、不改本地生命周期，只把成功 execute ACK、mutation receipt 或 SSE 作为正式 Query 失效信号。付费动作一次用户意图持有稳定 `Idempotency-Key/operationRequestId`，并只批准当前展示的完整计划。
 - **CN-14A — Canvas 表单只消费服务端能力边界。** 新建菜单与基础表单只消费生产 Operation registry 投影的 capability catalog，包括候选数量、时长与 Voice 文本上限；catalog 失败必须显式提供重试，不得静默表现为只剩上传。表单校验只改善即时反馈，最终业务输入仍由同一个 Operation schema 与 planner 裁决。
 - **CN-15 — 选择与 Assistant 草稿各有唯一 UI owner。** `ProjectWorkspace` 持有唯一 Canvas selection，Canvas、Context Chip 与 send context 都消费同一值；清除 Chip 必须清除 Canvas 选中。快捷语义动作只发送一次性受控 draft-prefill/focus 命令，不创建全局事件总线或第二份 selection。
-- **CN-16 — 隐藏只属于 layout，归档只属于 Resource。** 节点 `hidden` 与位置共用 canvas-layout row、snapshot 和唯一 PATCH writer；全部节点在持久化输入中保留，渲染层才过滤 hidden，显示隐藏只是 UI override。Resource `archivedAt` 是可恢复的组织事实，默认不投影但可显式查询用于恢复；二者不得互相写入或改变 Resource status、Lineage、Binding、Task 与内容。归档 active Resource 必须拒绝，不能隐式取消 Task。
+- **CN-16 — Canvas 没有可见性覆盖层。** 节点隐藏与 Resource 归档两个组织动作已整体删除:详情操作栏不再提供 hide/show/archive/restore，节点 action key 联合类型与 registry 声明同步收敛，canvas-layout 契约不再携带 `hidden`，Canvas 只按投影结果渲染全部节点。渲染层不得重新引入第二可见性解释(本地 override、隐藏集合或按 `archivedAt` 过滤);`project_canvas_node_layouts.hidden` 列待独立授权 migration 清理前必须保持无 writer、无 reader。
 
 ## 权威入口
 

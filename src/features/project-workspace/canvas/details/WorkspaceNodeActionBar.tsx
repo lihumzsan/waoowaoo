@@ -10,23 +10,17 @@ import type { WorkspaceNodeDetailsActions } from './WorkspaceNodeDetailsCard'
 export function WorkspaceNodeActionBar({
   card,
   busy,
-  hidden,
   onDiscuss,
   onDownload,
   onPreview,
   onOperation,
-  onSetArchived,
-  onVisibilityChange,
 }: {
   readonly card: CreativeResourceCardView
   readonly busy: boolean
-  readonly hidden: boolean
   readonly onDiscuss: () => void
   readonly onDownload: (() => void) | null
   readonly onPreview: () => void
   readonly onOperation: WorkspaceNodeDetailsActions['onOperation']
-  readonly onSetArchived: WorkspaceNodeDetailsActions['onSetArchived']
-  readonly onVisibilityChange: WorkspaceNodeDetailsActions['onVisibilityChange']
 }) {
   const t = useTranslations('projectWorkflow.canvas.workspace.actions')
   const resource = card.resource
@@ -51,13 +45,6 @@ export function WorkspaceNodeActionBar({
     if (!operation) continue
     add(kind, 'refresh', t(kind), () => onOperation(operation))
   }
-  if (resource.archivedAt) {
-    add('restore', 'undo', t('restore'), () => onSetArchived(false))
-  } else {
-    add('archive', 'trash', t('archive'), () => onSetArchived(true), 'danger')
-  }
-  add(hidden ? 'show' : 'hide', hidden ? 'eye' : 'eyeOff', t(hidden ? 'show' : 'hide'), () => onVisibilityChange(!hidden))
-
   return (
     <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-2.5">
       {actions.map((action) => (

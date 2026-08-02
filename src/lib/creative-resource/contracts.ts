@@ -143,7 +143,6 @@ export interface CreativeResourceView {
   readonly status: CreativeResourceStatus
   readonly alternativeGroupId: string | null
   readonly memberIndex: number | null
-  readonly archivedAt: string | null
   readonly creativeDataVersion: number
   readonly creativeDataKeys: readonly string[]
   readonly materialization: CreativeResourceMaterializationView | null

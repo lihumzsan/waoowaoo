@@ -30,10 +30,6 @@ export type WorkspaceCanvasNodeActionKey =
   | 'preview_alternatives'
   | 'retry'
   | 'variant'
-  | 'archive'
-  | 'restore'
-  | 'hide'
-  | 'show'
 
 /**
  * Exact server-owned action input for a Resource card. Keeping the normalized

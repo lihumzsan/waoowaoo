@@ -26,7 +26,7 @@
 - **CR-14 — `mediaType` 是 fallback，`schemaId` 是专业语义。** 每个 Resource 必须声明 `text|image|audio|video` 和生产 registry 中的 schemaId。专业 renderer 优先，缺失时才使用媒体 renderer。新增专业结果优先增加 registry 声明，不得复制 Resource、Lineage、当前选择或生命周期。
 - **CR-15 — 专业投影不复制产物身份。** `ProjectEpisodeSourceDocument.sourceResourceId` 和 `ProjectStoryCanon.storyCanonResourceId` 只保存精确 Resource ID；结构化字段是其领域查询投影。screenplay、Chapter Continuity Plan、Creative Direction 和 Asset Manifest 的 Resource scope 由 Creative Work output registry 裁决。采用 `chapter_continuity_plan` 时，Story Canon 与全部 Chapter 投影必须保存同一个计划 Resource/version；不存在独立 Canon 或 Chapter 产物。成功 screenplay Resource 可直接使用，不存在 confirmed screenplay 或“正式版本”副本。
 - **CR-16 — 外部素材登记与物化两步分离，最终仍只创建 Resource。** 网页导入经唯一入口完成安全抓取、MediaObject 登记与异步物化。用户上传拆成两步：`api_project_upload_media` 是唯一登记入口，只做嗅探、重编码、内容寻址存储与 MediaObject 登记，并签发绑定 `userId + projectId + 媒体 identity + 预定域 Resource ID` 的附件 receipt（HMAC token）——不创建 CreativeResource、不广播画布；`register_uploaded_media` 是唯一物化入口，Tool 与 Project UI API 只是两个授权 channel，二者都调用同一个 Operation transaction。服务端验证 receipt 的 owner/scope 与登记媒体一致后按 `user_upload + projectId:sha256` 域 identity reserve + materialize 唯一 Resource并广播。同一内容任何时刻物化都收敛到同一 Resource ID。第一段成功而第二段失败时 receipt 是唯一恢复交接，重试只执行物化；不增加清理 timer。出处、sha256、MIME、大小和原文件名属于 provenance/执行参数。物化后下游仍只使用 Resource ID；receipt 不是第二引用协议，生成入口不能铸造 import schema。从未物化也从未被消息引用的登记（MediaObject + 存储对象）没有 TTL 生命周期，是已知边界。
-- **CR-17 — 当前角色音色由 typed current selection 裁决。** `generate_voice.request.kind=single` 的 standalone target 可按显式 count 生成 alternatives；绑定到角色的 single target 仍只生成一个成员。`request.kind=characters` 在一次 Operation、一次报价和一次审批中展开多个明确角色成员，每个成员分别拥有一个新的音频 Resource 和一个 Task。成员终态彼此独立，批次可部分成功且只重试失败成员；`bind_voice` 由服务端替换当前选择，各成员生成终态 CAS 只在仍匹配计划时冻结的内部旧 version 时更新 `character_voice`，不能覆盖更晚的人工选择。新生成不是原位写入。物理删除必须拒绝 active Task、任何当前选择、下游 Lineage 和 alternatives 成员，并且不能删除共享 MediaObject；Canvas 组织动作只使用可恢复归档。
+- **CR-17 — 当前角色音色由 typed current selection 裁决。** `generate_voice.request.kind=single` 的 standalone target 可按显式 count 生成 alternatives；绑定到角色的 single target 仍只生成一个成员。`request.kind=characters` 在一次 Operation、一次报价和一次审批中展开多个明确角色成员，每个成员分别拥有一个新的音频 Resource 和一个 Task。成员终态彼此独立，批次可部分成功且只重试失败成员；`bind_voice` 由服务端替换当前选择，各成员生成终态 CAS 只在仍匹配计划时冻结的内部旧 version 时更新 `character_voice`，不能覆盖更晚的人工选择。新生成不是原位写入。物理删除必须拒绝 active Task、任何当前选择、下游 Lineage 和 alternatives 成员，并且不能删除共享 MediaObject。
 - **CR-18 — 开放创作文档与不可变内容隔离。** `creativeData` 是 Resource 上单独的 schema-open CAS 文档，仅由 `edit_resource` 按 `creativeDataVersion` 做最小路径 Patch。内嵌 `$resourceRef` 只含 Resource ID并经过 owner/scope 校验。它不能改写 Resource 内容、provenance、Lineage、当前选择、Task 或生命周期。
 - **CR-19 — UI 只消费最终 View。** Resource View 是卡片的唯一读模型；pending 摘要只从预留 Resource 和唯一 active Task 的冻结 payload 派生，ready 摘要从同一 Resource 的物化内容派生（未物化 Resource 的内容摘要为 empty，生成 prompt 属于 provenance，只在详情视图展示，不充当卡片内容）。card View 附带服务端一次性解析的 `inputSummaries`（引用输入的 name、mediaType、受保护媒体预览 URL）以及可选 `alternativeGroup`（opaque groupId、当前 member index/total、完整稳定有序 sibling View）；消费方不得从 operation name/memberIndex 推断组、按 resourceId 零散请求或用名称二次定位。materialized Lineage 输入缺行必须显式失败，不得回退显示领域 ID。Assistant Link View 只接受精确 Resource ID，文件名来自 Resource name，href 来自受保护媒体投影。Canvas edge 只来自持久 Lineage，同组不造 edge。
 - **CR-20 — Resource 不裁决流程。** Resource 存在、缺失、旧生成结果或 Lineage 都只是事实。Operation 可调用性只由 registry channel、显式 input schema、scope、provider capability、审批和破坏性确认裁决；Workflow step、Canvas 位置或推荐顺序不能成为隐藏门槛。
@@ -34,7 +34,7 @@
 - **CR-22 — 配乐 cue 按引用执行。** `music_direction.cues[]` 是唯一最终配乐执行指令集合；空数组表示刻意不配乐且不存在下游音乐生成。`create_audio.request.kind=music_direction` 每次只接受该方向 Resource ID、一个精确 `cueKey` 与精确目标视频 Resource；服务端原样读取该 cue 的 `generationPrompt`，从 `startSeconds/endSeconds` 导出单次 duration 与 canonical `scoreCue` 窗口并按 music capability 校验，`maxReferenceVideos` 声明允许时把视频冻结为 `videoInputPositions`，否则只作为 Lineage 上下文。方向与视频 Resource 都进入该 BGM Task 的 Lineage。空 cues、未知 cue、窗口非法、视频时长缺失或窗口超出视频范围必须在计划阶段失败；Primary 不改写、不压缩、不合并或补充 cue 指令。当前 `merge_videos` 只有一个 music 输入，不拥有多个 cue 的时间线装配；没有显式装配能力时不得把多个独立 cue Resource 解释为已完成的整片配乐。
 - **CR-23 — 用户来源转录仍由 `create_text` 唯一写入。** 当前消息附带图片中的原文只能通过 `create_text.content.kind=current_user_media_transcription` 物化为文本 Resource；服务端必须证明 `sourceResourceId` 属于该 exact user turn、回库验证 owner/project/ready/image，并把原图以 `role=source, position=0` 写入输出 Lineage。完整剧本仍使用同一个 `project.screenplay` schema，不创建 OCR Resource、正式副本、确认态或第二 writer；模型转录文本不能反向充当图片 identity 或校验依据。
 - **CR-24 — Resource View 顺序来自创建事实。** Project Resource 列表按批次创建时间、批次内 `memberIndex`、最后才按 Resource ID 稳定排序；alternatives sibling View 按同一初始 OperationExecution 内的 `memberIndex`、Resource ID 排序。nullable `memberIndex` 的位置必须由查询显式声明，禁止依赖数据库默认 NULL 顺序。Canvas 与其他消费者直接使用该 View 顺序，不得按 hash ID、Task 完成时间或名称中的数字重新猜测。
-- **CR-25 — 归档是可恢复的组织事实。** `archivedAt` 不属于 Resource 生命周期，不改变不可变内容、status、media、Lineage 或 Binding。唯一 writer 是 `set_resource_archived` Operation 的 archive service；默认 list、WorkingSet 与 Project Lite 资源统计排除归档项，exact get 与 typed current selection 仍可读取，Canvas 可显式 includeArchived 用于恢复。pending 或仍有 queued/processing owner Task 的 Resource 必须拒绝归档且不取消 Task；restore 幂等。归档不是删除、权限隔离或引用失效，新旧 exact Resource 引用仍按 CR-10 校验。
+- **CR-25 — Resource 没有归档语义。** 产品删除了 Canvas 的归档/恢复与节点隐藏两个组织动作:`set_resource_archived` Operation、archive service、Project UI archive route、`includeArchived` 读参数与 `hidden` 布局字段全部删除,Resource View 不再投影 `archivedAt`,默认列表、alternatives 成员、WorkingSet 与 Project Lite 统计一律返回全部未删除行,不存在第二种可见性解释。`creative_resources.archivedAt` 与 `project_canvas_node_layouts.hidden` 两个数据库列尚未 drop(需要单独授权的 migration),但已无 writer、无 reader,不得被任何新逻辑重新解释为可见性事实。物理删除仍按 CR-17 的既有约束执行。
 
 ## 状态与写入者
 
@@ -44,7 +44,6 @@
 | Resource 不可变内容、媒体与 provenance | 同步 Operation 或 Task terminal materializer | Lineage、后续生成、Assistant |
 | failed / canceled | Task terminal writer，仅限未物化 Resource | retry、Resource View |
 | alternatives 成员归属 | 初始 approved Operation commit / Resource persistence | Resource View、Canvas preview |
-| 可恢复归档时间 | archive service / `set_resource_archived` | 默认列表过滤、Canvas 恢复 |
 | 精确依赖 | Resource materialization transaction 写 Lineage | planner、Canvas、诊断 |
 | typed current selection | Binding service CAS；具体领域入口拥有输入 | Project Context、后续 Task |
 | 专业当前结构 | 领域 service / terminal success projector | 领域 Query 与 renderer |
@@ -57,7 +56,6 @@
 - 同步创建：`create_text`、`register_uploaded_media`（Agent 与 Project UI 共用的附件物化）、领域导入 service；`api_project_upload_media` 只登记附件，不创建 Resource。
 - 异步创建：`create_image`、`create_audio`、`create_video`、`merge_videos`、`creative_work` 以及外部图片导入；全部复用 Operation plan/commit、Task 和 terminal materializer。
 - alternatives group identity、reserve membership 与最终 group View：`src/lib/creative-resource/{identity,persistence,view-service}.ts`；生成 Operation 只通过统一 reserve 参数声明初始 group owner。
-- 归档：`src/lib/creative-resource/archive-service.ts`；唯一公开动作是 `set_resource_archived`，Project UI route 只负责授权与调用 adapter。
 - 当前选择：`adopt_chapter_continuity_plan` 的单事务领域 service；`adopt_creative_direction`、`adopt_asset_manifest`、`bind_voice` 与资产图片终态入口复用服务端内部 Binding service，不存在 generic adopt Operation。
 - 读取：Resource View、Assistant Link View、`list_resources`、Project Context 和领域投影。
 - 编辑开放文档：`edit_resource`，只写 `creativeData`。
@@ -121,7 +119,7 @@ Prompt Set Resource 本身和实际媒体 Resource 都写入每段视频的 Line
 
 ## 历史回归
 
-- Resource 归档首次接入时，默认 Canvas list 与 WorkingSet 已排除归档项，但 Project Lite 的 total/ready/failed 仍统计全部行，导致右侧 Assistant 看见的活跃资源摘要与画布不一致。当前所有默认资源集合与 Project Lite 统计都显式使用 `archivedAt=null`；只有 exact lookup、typed current selection 与显式 `includeArchived` 恢复视图读取归档项。
+- Resource 归档首次接入时，默认 Canvas list 与 WorkingSet 已排除归档项，但 Project Lite 的 total/ready/failed 仍统计全部行，导致右侧 Assistant 看见的活跃资源摘要与画布不一致；随后统一为所有默认集合显式 `archivedAt=null`。产品复盘后判定归档与节点隐藏都没有真实用户价值,且画布工具栏的可见性开关删除后会让两者变成不可逆操作,因此整层删除了 UI 入口、client hook、API route、Operation、archive service 与全部读过滤,而不是只摘掉按钮留下半截能力。删除时库中归档资源与隐藏节点均为 0 行,因此取消过滤没有数据可见性后果;两个数据库列保留待独立授权的 migration 清理。
 
 - `CR-03` 已把 retry 定义为失败 Resource 的冻结输入重放，但旧 Primary Prompt 为阻止自主重复扣费，曾把所有 retry 一概限制为“修正输入且请求必须变化”。用户明确要求重新提交时，Primary 因而只读取旧 Task 并拒绝调用已有 retry 分支；planner、Task 和 Resource 防线本身都没有被触达。当前 Codex 运行指令与 Assistant Runtime 契约共同区分活动 Task 的队列 attempt、用户明确授权后以新报价和新 Task 执行的 exact retry、以及创建新 Resource 的 corrected-input regenerate；exact retry 仍只接受失败 Resource ID，不增加第二执行入口或输入 writer。
 - Resource Lineage 的首次共享校验只验证 `userId + ready`，而 Binding 与 creativeData 又各自维护局部 Project/Episode 条件；同一用户可把另一 Project/Episode 的 ready Resource 冻结进生成输入，materializer 还会再次通过同一不完整校验。根因是 CR-10 没有落实为一个接收目标 scope 的权威裁判。当前 persistence validator 以输出 Resource 的 canonical scope 统一裁决 user/project/episode 兼容性，初次生成、retry、merge、creativeData 与终态物化全部复用；局部 scope 查询已删除。

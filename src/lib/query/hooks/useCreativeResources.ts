@@ -13,19 +13,15 @@ interface CreativeResourcesResponse {
 export function useCreativeResources(
   projectId: string,
   episodeId: string | null,
-  options: { readonly includeArchived?: boolean } = {},
 ) {
-  const includeArchived = options.includeArchived === true
   return useQuery({
     queryKey: [
       ...queryKeys.project.creativeResources(projectId, episodeId),
-      { includeArchived },
     ] as const,
     queryFn: async (): Promise<CreativeResourcesResponse> => {
       const search = new URLSearchParams()
       search.set('episodeId', episodeId ?? '')
       search.set('includeProjectScope', 'true')
-      if (includeArchived) search.set('includeArchived', 'true')
       const response = await apiFetch(`/api/projects/${projectId}/resources?${search.toString()}`)
       if (!response.ok) throw new Error('CREATIVE_RESOURCES_LOAD_FAILED')
       return await response.json() as CreativeResourcesResponse

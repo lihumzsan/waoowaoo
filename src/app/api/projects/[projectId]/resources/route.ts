@@ -24,7 +24,6 @@ export const GET = apiHandler(async (
   }
   const status = rawStatus !== null && isCreativeResourceStatus(rawStatus) ? rawStatus : null
   const schemaId = request.nextUrl.searchParams.get('schemaId')?.trim() || null
-  const includeArchived = request.nextUrl.searchParams.get('includeArchived') === 'true'
   const resources = await listProjectCreativeResourceCards({
     projectId,
     userId: auth.session.user.id,
@@ -32,7 +31,6 @@ export const GET = apiHandler(async (
     mediaType,
     schemaId,
     status,
-    includeArchived,
     limit: 200,
   })
   const projectResources = request.nextUrl.searchParams.get('includeProjectScope') === 'true' && episodeId
@@ -43,7 +41,6 @@ export const GET = apiHandler(async (
         mediaType,
         schemaId,
         status,
-        includeArchived,
         limit: 200,
       })
     : []

@@ -42,16 +42,11 @@
         "download": "下载",
         "retry": "重试",
         "variant": "生成变体",
-        "archive": "归档",
-        "restore": "恢复",
-        "show": "显示",
-        "hide": "隐藏",
         "unavailable": "当前无法执行此操作"
       },
       "errors": {
         "unknown": "这个资源生成失败，你可以重新尝试。"
       },
-      "layoutSaveFailed": "画布布局保存失败，刚才的显示或隐藏操作已撤销。",
       "preview": {
         "position": "{current} / {total}",
         "discuss": "讨论这个结果",

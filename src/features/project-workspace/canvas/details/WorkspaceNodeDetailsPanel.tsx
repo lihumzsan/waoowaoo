@@ -481,13 +481,10 @@ export function WorkspaceNodeDetailsPanel({
       <WorkspaceNodeActionBar
         card={card}
         busy={actions.busy}
-        hidden={actions.hidden}
         onDiscuss={() => actions.onAssistantPrefill(null)}
         onDownload={download}
         onPreview={actions.onPreview}
         onOperation={actions.onOperation}
-        onSetArchived={actions.onSetArchived}
-        onVisibilityChange={actions.onVisibilityChange}
       />
     </section>
   )

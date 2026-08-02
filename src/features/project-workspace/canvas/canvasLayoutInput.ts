@@ -5,7 +5,6 @@ import type { WorkspaceCanvasFlowNode } from './node-canvas-types'
 export function buildWorkspaceCanvasLayoutInput(params: {
   readonly episodeId: string
   readonly nodes: readonly WorkspaceCanvasFlowNode[]
-  readonly hiddenNodeKeys?: ReadonlySet<string>
 }): UpsertCanvasLayoutInput {
   return {
     episodeId: params.episodeId,
@@ -22,7 +21,6 @@ export function buildWorkspaceCanvasLayoutInput(params: {
       zIndex: typeof node.zIndex === 'number' ? node.zIndex : index,
       locked: false,
       collapsed: false,
-      hidden: params.hiddenNodeKeys?.has(node.id) ?? false,
     })),
   }
 }

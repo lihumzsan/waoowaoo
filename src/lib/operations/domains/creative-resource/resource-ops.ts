@@ -23,7 +23,6 @@ import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import {
   CREATIVE_RESOURCE_SCHEMAS,
 } from '@/lib/creative-resource/schema-registry'
-import { setCreativeResourceArchivedInTransaction } from '@/lib/creative-resource/archive-service'
 
 const creativeResourceSchemaIds = CREATIVE_RESOURCE_SCHEMAS.map((definition) => definition.schemaId)
 
@@ -65,18 +64,6 @@ const editResourceInputSchema = z.object({
     }).strict(),
   ])).min(1).max(50)
     .describe('Minimal object-path changes only. Preserve every unrelated field from the Resource you read.'),
-}).strict()
-
-const setResourceArchivedInputSchema = z.object({
-  resourceId: z.string().trim().min(1),
-  archived: z.boolean(),
-}).strict()
-
-const setResourceArchivedOutputSchema = z.object({
-  success: z.literal(true),
-  resourceId: z.string().min(1),
-  archivedAt: z.string().datetime().nullable(),
-  changed: z.boolean(),
 }).strict()
 
 export function projectCreativeResourceMaterializationForAgent(
@@ -153,7 +140,6 @@ const resourceCardSchema = z.object({
     status: z.enum(CREATIVE_RESOURCE_STATUSES),
     memberIndex: z.number().int().min(0).nullable(),
     alternativeGroupId: z.string().min(1).nullable(),
-    archivedAt: z.string().datetime().nullable(),
     creativeDataVersion: z.number().int().min(0),
     creativeDataKeys: z.array(z.string()),
     materialization: z.unknown().nullable(),
@@ -327,38 +313,6 @@ export function createCreativeResourceOperations(): ProjectAgentOperationRegistr
           edits,
         })
         return editResourceOutputSchema.parse({ success: true, ...result })
-      },
-    }),
-    set_resource_archived: defineOperation({
-      id: 'set_resource_archived',
-      summary: 'Archive or restore one exact project Resource without changing its immutable content, lifecycle, current bindings, or lineage.',
-      intent: 'act',
-      channels: { tool: false, api: true },
-      effects: {
-        writes: true,
-        workspaceResourceImpact: 'creative_resources',
-        billable: false,
-        destructive: false,
-        overwrite: true,
-        bulk: false,
-        externalSideEffects: false,
-        longRunning: false,
-      },
-      resourceContract: {
-        kind: 'none',
-        reason: 'changes only reversible Resource archive visibility metadata',
-      },
-      confirmation: { kind: 'none', required: false },
-      inputSchema: setResourceArchivedInputSchema,
-      outputSchema: setResourceArchivedOutputSchema,
-      executeInTransaction: async (ctx, input, tx) => {
-        const result = await setCreativeResourceArchivedInTransaction(tx, {
-          userId: ctx.userId,
-          projectId: ctx.projectId,
-          resourceId: input.resourceId,
-          archived: input.archived,
-        })
-        return setResourceArchivedOutputSchema.parse({ success: true, ...result })
       },
     }),
   }

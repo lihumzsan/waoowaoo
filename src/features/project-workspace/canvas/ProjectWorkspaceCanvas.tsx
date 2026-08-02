@@ -64,7 +64,6 @@ import type {
 import { useCanvasOperationAction } from './actions/useCanvasOperationAction'
 import { CanvasOperationConfirmationModal } from './actions/CanvasOperationConfirmationModal'
 import { WorkspaceResourcePreviewModal } from './preview/WorkspaceResourcePreviewModal'
-import { useCanvasResourceArchive } from './actions/useCanvasResourceArchive'
 import { useCanvasActions } from '@/lib/query/hooks/useCanvasActions'
 import { WorkspaceCanvasCreateDock } from './create/WorkspaceCanvasCreateDock'
 import type {
@@ -77,7 +76,6 @@ import { CanvasUploadQueue } from './upload/CanvasUploadQueue'
 import { CanvasViewportControls } from './controls/CanvasViewportControls'
 import { buildWorkspaceCanvasCreateOperationInput } from './create/canvas-create-input'
 import { useCanvasUploadBridge } from './upload/useCanvasUploadBridge'
-import { useToast } from '@/contexts/ToastContext'
 
 const EMPTY_SAVED_NODE_LAYOUTS: readonly CanvasNodeLayout[] = []
 const CANVAS_FLOATING_PANEL_BOTTOM_OFFSET_PX = 56
@@ -120,7 +118,6 @@ function ProjectWorkspaceCanvasContent({
   activeAssistantFocusRequest = null,
 }: ProjectWorkspaceCanvasContentProps) {
   const t = useTranslations('projectWorkflow.canvas.workspace')
-  const { showError } = useToast()
   const { projectId, episodeId } = useWorkspaceProvider()
   const { data: episodeData } = useEpisodeData(projectId, episodeId ?? null)
   const episodeName = typeof episodeData?.name === 'string' ? episodeData.name : undefined
@@ -139,12 +136,10 @@ function ProjectWorkspaceCanvasContent({
   const { data: creativeResourcesResponse } = useCreativeResources(
     projectId,
     episodeId ?? null,
-    { includeArchived: true },
   )
   const reactFlow = useReactFlow<WorkspaceCanvasFlowNode>()
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const [userNodePositions, setUserNodePositions] = useState<ReadonlyMap<string, WorkspaceCanvasUserPosition>>(() => new Map())
-  const [hiddenNodeKeys, setHiddenNodeKeys] = useState<ReadonlySet<string>>(() => new Set())
   const [preview, setPreview] = useState<{
     readonly members: readonly WorkspaceCreativeResourceCardMemberView[]
     readonly initialResourceId: string
@@ -160,15 +155,12 @@ function ProjectWorkspaceCanvasContent({
   const reactFlowRef = useRef(reactFlow)
   reactFlowRef.current = reactFlow
   const userNodePositionsRef = useRef<ReadonlyMap<string, WorkspaceCanvasUserPosition>>(new Map())
-  const hiddenNodeKeysRef = useRef<ReadonlySet<string>>(new Set())
   const layoutWriteChainRef = useRef<Promise<void>>(Promise.resolve())
-  hiddenNodeKeysRef.current = hiddenNodeKeys
   const pendingPlacementNodeIdsRef = useRef<Set<string>>(new Set())
   const operationAction = useCanvasOperationAction({
     projectId,
     episodeId: episodeId ?? null,
   })
-  const archiveAction = useCanvasResourceArchive({ projectId })
   const placeUploadedResource = useCallback((item: CanvasUploadQueueItem, resourceId: string, reused: boolean) => {
     if (reused) return
     const nodeId = workspaceNodeId.resourceCard(resourceId)
@@ -233,13 +225,7 @@ function ProjectWorkspaceCanvasContent({
   )
   resolvedProjectedNodesRef.current = resolvedProjectedNodes
   userNodePositionsRef.current = userNodePositions
-  const visibleResolvedProjectedNodes = useMemo(
-    () => resolvedProjectedNodes.filter((node) => (
-      !hiddenNodeKeys.has(node.id)
-      && !node.data.resourceDetails.resource.archivedAt
-    )),
-    [hiddenNodeKeys, resolvedProjectedNodes],
-  )
+  const visibleResolvedProjectedNodes = resolvedProjectedNodes
   const candidateFlowNodes = useMemo(() => applyWorkspaceCanvasUserPositions({
     nodes: visibleResolvedProjectedNodes,
     positions: userNodePositions,
@@ -338,24 +324,14 @@ function ProjectWorkspaceCanvasContent({
     })
   }, [projectedNodes, projectionNodeSignature])
 
-  useEffect(() => {
-    setHiddenNodeKeys(new Set(
-      savedNodeLayouts
-        .filter((nodeLayout) => nodeLayout.hidden)
-        .map((nodeLayout) => nodeLayout.nodeKey),
-    ))
-  }, [savedNodeLayouts])
-
   const persistCurrentLayout = useCallback(async (
     nextNodes: readonly WorkspaceCanvasFlowNode[],
-    nextHiddenNodeKeys: ReadonlySet<string> = hiddenNodeKeysRef.current,
   ) => {
     if (!episodeId) return
 
     const input = buildWorkspaceCanvasLayoutInput({
       episodeId,
       nodes: nextNodes,
-      hiddenNodeKeys: nextHiddenNodeKeys,
     })
 
     const write = layoutWriteChainRef.current
@@ -508,24 +484,6 @@ function ProjectWorkspaceCanvasContent({
     })
   }, [onAssistantDraftRequest])
 
-  const changeNodeVisibility = useCallback((nodeId: string, hidden: boolean) => {
-    const previous = hiddenNodeKeysRef.current
-    const next = new Set(previous)
-    if (hidden) next.add(nodeId)
-    else next.delete(nodeId)
-    setHiddenNodeKeys(next)
-    if (hidden && selection?.nodeId === nodeId) onSelectionChange(null)
-    const positionedNodes = applyWorkspaceCanvasUserPositions({
-      nodes: resolvedProjectedNodesRef.current,
-      positions: userNodePositionsRef.current,
-    })
-    void persistCurrentLayout(positionedNodes, next).catch((error: unknown) => {
-      _ulogWarn('[ProjectWorkspaceCanvas] canvas visibility save failed', error)
-      setHiddenNodeKeys((current) => current === next ? previous : current)
-      showError(error, t('layoutSaveFailed'))
-    })
-  }, [onSelectionChange, persistCurrentLayout, selection?.nodeId, showError, t])
-
   const beginResourceOperation = useCallback((operation: WorkspaceCanvasResourceOperationView) => {
     void operationAction.begin({
       operationId: operation.operationId,
@@ -646,29 +604,17 @@ function ProjectWorkspaceCanvasContent({
             <WorkspaceNodeDetailsCard
               node={selectedNode}
               actions={{
-                busy: operationAction.busy || archiveAction.busy,
-                hidden: hiddenNodeKeys.has(selectedNode.id),
+                busy: operationAction.busy,
                 onAssistantPrefill: requestAssistantDraft,
                 onPreview: () => {
                   const card = selectedNode.data.resourceDetails
-                  const members = (card.alternativeGroup?.members ?? [card])
-                    .filter((member) => (
-                      !member.resource.archivedAt
-                      && !hiddenNodeKeys.has(workspaceNodeId.resourceCard(member.resource.resourceId))
-                    ))
+                  const members = card.alternativeGroup?.members ?? [card]
                   setPreview({
                     members,
                     initialResourceId: card.resource.resourceId,
                   })
                 },
                 onOperation: beginResourceOperation,
-                onSetArchived: (archived) => {
-                  void archiveAction.request(
-                    selectedNode.data.resourceDetails.resource.resourceId,
-                    archived,
-                  )
-                },
-                onVisibilityChange: (hidden) => changeNodeVisibility(selectedNode.id, hidden),
               }}
             />
           ) : null}
@@ -730,15 +676,6 @@ function ProjectWorkspaceCanvasContent({
           executing={operationAction.phase === 'executing'}
           onConfirm={() => { void operationAction.confirm() }}
           onCancel={operationAction.cancel}
-        />
-      ) : null}
-      {archiveAction.pending ? (
-        <CanvasOperationConfirmationModal
-          plan={null}
-          destructive
-          executing={archiveAction.executing}
-          onConfirm={() => { void archiveAction.confirm() }}
-          onCancel={archiveAction.cancel}
         />
       ) : null}
       <CanvasUploadQueue

@@ -7,7 +7,6 @@ export interface CanvasNodeLayout {
   readonly zIndex: number
   readonly locked: boolean
   readonly collapsed: boolean
-  readonly hidden: boolean
 }
 
 export interface CanvasViewportLayout {

@@ -42,16 +42,11 @@
         "download": "Download",
         "retry": "Retry",
         "variant": "Create variant",
-        "archive": "Archive",
-        "restore": "Restore",
-        "show": "Show",
-        "hide": "Hide",
         "unavailable": "This action is unavailable"
       },
       "errors": {
         "unknown": "This Resource could not be generated. You can retry it."
       },
-      "layoutSaveFailed": "The Canvas layout could not be saved. Your last visibility change was reverted.",
       "preview": {
         "position": "{current} / {total}",
         "discuss": "Discuss this result",

@@ -24,12 +24,9 @@ const DETAILS_CARD_MIN_WIDTH = 720
  */
 export interface WorkspaceNodeDetailsActions {
   readonly busy: boolean
-  readonly hidden: boolean
   readonly onAssistantPrefill: (text: string | null) => void
   readonly onPreview: () => void
   readonly onOperation: (operation: WorkspaceCanvasResourceOperationView) => void
-  readonly onSetArchived: (archived: boolean) => void
-  readonly onVisibilityChange: (hidden: boolean) => void
 }
 
 export function WorkspaceNodeDetailsCard({
