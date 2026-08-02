@@ -7,8 +7,6 @@ import { projectErrorForModel, projectModelErrorDetails } from '@/lib/errors/pro
 
 const logger = createScopedLogger({ module: 'assistant.tool' })
 
-type SuspensionKind = 'choice'
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
@@ -37,21 +35,8 @@ export function buildToolError(params: {
   }
 }
 
-export function withOperationErrorDetails(
-  operation: { agentFlow?: { suspendsFor?: SuspensionKind | null } },
-  details?: Record<string, unknown> | null,
-): Record<string, unknown> | null {
-  const suspendsFor = operation.agentFlow?.suspendsFor ?? null
-  if (!suspendsFor) return details ?? null
-  return {
-    ...(details ?? {}),
-    suspendsFor,
-  }
-}
-
 export function normalizeOperationExecutionToolError(params: {
   error: unknown
-  operation: { agentFlow?: { suspendsFor?: SuspensionKind | null } }
   operationId: string
 }): ProjectAgentToolError {
   const toolError = buildOperationExecutionToolError(params)
@@ -71,7 +56,6 @@ export function normalizeOperationExecutionToolError(params: {
 
 function buildOperationExecutionToolError(params: {
   error: unknown
-  operation: { agentFlow?: { suspendsFor?: SuspensionKind | null } }
   operationId: string
 }): ProjectAgentToolError {
   const normalized = params.error instanceof ApiError
@@ -90,10 +74,10 @@ function buildOperationExecutionToolError(params: {
     code: 'OPERATION_EXECUTION_FAILED',
     message: getErrorSpec(failure.code).defaultMessage,
     operationId: params.operationId,
-    details: withOperationErrorDetails(params.operation, {
+    details: {
       failure,
       ...safeDetails,
       ...(reasonCode ? { reasonCode } : {}),
-    }),
+    },
   })
 }

@@ -25,7 +25,6 @@ export function buildOpenRouterSessionId(input: {
   kind: 'llm' | 'vision' | 'project-agent'
   userId?: string | null
   projectId?: string | null
-  episodeId?: string | null
   assistantId?: string | null
   action?: string | null
   modelKey?: string | null
@@ -34,7 +33,6 @@ export function buildOpenRouterSessionId(input: {
     input.kind,
     input.userId,
     input.projectId,
-    input.episodeId,
     input.assistantId,
     input.action,
     input.modelKey,

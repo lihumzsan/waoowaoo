@@ -5,6 +5,7 @@ import type {
   RuntimeJsonValue,
   RuntimeServerRequestResponse,
   RuntimeSandboxMode,
+  RuntimeSkillsListEntry,
   RuntimeThread,
   RuntimeThreadResumeParams,
   RuntimeThreadStartParams,
@@ -87,7 +88,7 @@ export type RuntimeSessionLaunchOptions = {
 }
 
 export type RuntimeThreadSessionOptions = {
-  /** Canonical Wao ProjectAssistantThread identity; never inferred from episode fields. */
+  /** Canonical Wao ProjectAssistantThread identity; never inferred from workspace paths. */
   readonly productThreadId: string
   /** Only a runtime thread with a durably captured rollout may be resumed. */
   readonly recoveryThreadId: string | null
@@ -149,7 +150,6 @@ type ManagedThread = {
   readonly configuration: RuntimeSessionThreadConfiguration
   resumable: boolean
   checkpointRequired: boolean
-  initialItems: readonly RuntimeJsonValue[] | null
 }
 
 type ThreadSlot = {
@@ -175,6 +175,7 @@ type SessionEntry = {
   status: SessionStatus
   lastActivityAt: number
   activeTurn: ActiveTurn | null
+  skillsStale: boolean
   persistenceQueue: Promise<void>
   transition: Promise<void> | null
 }
@@ -189,7 +190,6 @@ type ThreadRecoverySpec = {
   readonly productThreadId: string
   readonly recoveryThreadId: string | null
   readonly configuration: RuntimeSessionThreadConfiguration
-  readonly initialItems: readonly RuntimeJsonValue[] | null
 }
 
 export class RuntimeSessionManager {
@@ -312,19 +312,6 @@ export class RuntimeSessionManager {
     }
   }
 
-  async injectInitialItems(
-    scope: RuntimeSessionScope,
-    productThreadId: string,
-    items: readonly RuntimeJsonValue[],
-  ): Promise<void> {
-    const { session, thread } = await this.requireManagedThread(scope, productThreadId)
-    if (thread.disposition !== 'started') throw new Error('CODEX_RUNTIME_THREAD_ALREADY_RESUMED')
-    if (thread.initialItems !== null) throw new Error('CODEX_RUNTIME_THREAD_INITIAL_ITEMS_ALREADY_INJECTED')
-    session.lastActivityAt = Date.now()
-    await session.container.runtime.injectThreadItems({ threadId: thread.thread.id, items })
-    thread.initialItems = [...items]
-  }
-
   async readThread(
     scope: RuntimeSessionScope,
     productThreadId: string,
@@ -336,6 +323,26 @@ export class RuntimeSessionManager {
       threadId: thread.thread.id,
       includeTurns,
     })
+  }
+
+  async listSkills(
+    scope: RuntimeSessionScope,
+    forceReload = false,
+  ): Promise<RuntimeSkillsListEntry> {
+    const session = await this.requireReadyEntry(scope)
+    session.lastActivityAt = Date.now()
+    const response = await session.container.runtime.listSkills({
+      cwds: [session.container.runtimeWorkspaceDirectory],
+      forceReload: forceReload || session.skillsStale,
+    })
+    if (
+      response.data.length !== 1
+      || response.data[0].cwd !== session.container.runtimeWorkspaceDirectory
+    ) {
+      throw new Error('CODEX_RUNTIME_SKILLS_LIST_SCOPE_DIVERGED')
+    }
+    session.skillsStale = false
+    return response.data[0]
   }
 
   async startTurn(
@@ -501,6 +508,7 @@ export class RuntimeSessionManager {
         status: 'ready',
         lastActivityAt: Date.now(),
         activeTurn: null,
+        skillsStale: false,
         persistenceQueue: Promise.resolve(),
         transition: null,
       }
@@ -545,7 +553,6 @@ export class RuntimeSessionManager {
       configuration: options.configuration,
       resumable: options.recoveryThreadId !== null,
       checkpointRequired: false,
-      initialItems: null,
     }
   }
 
@@ -579,6 +586,10 @@ export class RuntimeSessionManager {
       return
     }
     if (event.type !== 'notification') return
+    if (event.method === 'skills/changed') {
+      entry.skillsStale = true
+      return
+    }
     if (event.method === 'turn/started') {
       const productThreadId = this.resolveProductThreadId(entry, event)
       const turn = getRecord(event.params.turn)
@@ -716,7 +727,6 @@ export class RuntimeSessionManager {
           })
           thread.checkpointRequired = false
           thread.resumable = true
-          thread.initialItems = null
           this.publishThreadCheckpointed(entry, thread)
         }
         await entry.container.stop('graceful')
@@ -757,7 +767,6 @@ export class RuntimeSessionManager {
       })
       thread.checkpointRequired = false
       thread.resumable = true
-      thread.initialItems = null
       this.publishThreadCheckpointed(entry, thread)
     })
   }
@@ -783,9 +792,6 @@ export class RuntimeSessionManager {
   private async restoreThreads(scope: RuntimeSessionScope, specs: readonly ThreadRecoverySpec[]): Promise<void> {
     for (const spec of specs) {
       await this.ensureThread(scope, spec)
-      if (!spec.recoveryThreadId && spec.initialItems) {
-        await this.injectInitialItems(scope, spec.productThreadId, spec.initialItems)
-      }
     }
   }
 
@@ -918,6 +924,5 @@ function buildRecoverySpecsFromThreads(threads: readonly ManagedThread[]): Threa
     productThreadId: thread.productThreadId,
     recoveryThreadId: thread.resumable ? thread.thread.id : null,
     configuration: thread.configuration,
-    initialItems: thread.initialItems,
   }))
 }

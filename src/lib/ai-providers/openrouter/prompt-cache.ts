@@ -6,8 +6,6 @@ import {
 
 export type OpenRouterPromptCacheFamily = 'anthropic' | 'google' | 'openai' | 'none'
 
-export type OpenRouterPromptCacheExecutionMode = 'sync' | 'stream' | 'vision' | 'agent'
-
 export type OpenRouterCacheControl = {
   type: 'ephemeral'
   ttl?: '1h'
@@ -24,30 +22,7 @@ export type OpenRouterChatMessage = {
   content: string | OpenRouterTextContentPart[]
 }
 
-/**
- * A 1h cache write costs 2x base input against 1.25x for 5m, while every hit
- * costs 0.1x either way, so the longer TTL only pays off when the same prefix
- * is read again after the 5m window has lapsed. Hits refresh the TTL, so an
- * Agents loop never expires mid-run; the gap that matters is between user
- * turns, which routinely exceeds 5m in an authoring session.
- *
- * Execution mode cannot decide this. The Primary Agent and the Creative Worker
- * are both `agent`, yet a Worker Task ends when it ends and the next Task
- * carries a different prefix, so it never collects that later read and the 2x
- * write would be a pure loss. Only a caller that can promise the read declares
- * the long TTL; everything else stays on the provider default.
- */
 const DEFAULT_ANTHROPIC_CACHE_CONTROL: OpenRouterCacheControl = {
-  type: 'ephemeral',
-}
-
-const LONG_TTL_ANTHROPIC_CACHE_CONTROL: OpenRouterCacheControl = {
-  type: 'ephemeral',
-  ttl: '1h',
-}
-
-/** Gemini has no 1h option; `ttl` is Anthropic-only on this wire. */
-const DEFAULT_GEMINI_CACHE_CONTROL: OpenRouterCacheControl = {
   type: 'ephemeral',
 }
 
@@ -197,50 +172,9 @@ function applyExplicitSourceMessages(input: {
   })
 }
 
-/**
- * Gemini has no automatic top-level cache form: without an explicit breakpoint
- * an Agents loop resends the whole prefix uncached on every step. Claude keeps
- * using the top-level automatic form, which advances its own breakpoint as the
- * conversation grows and is the provider's recommendation for multi-turn.
- *
- * The breakpoint is derived from this request's wire body — never from a
- * caller-held snapshot, which is the 2026-07-19 defect — and lands on the
- * system message, the one block that is byte-identical on every step. Anything
- * that moves per step would invalidate the prefix it is meant to preserve.
- */
-function applyGeminiSystemPrefixBreakpoint(wireMessages: unknown): unknown {
-  if (!Array.isArray(wireMessages)) return wireMessages
-  const systemIndex = wireMessages.findIndex((message) => {
-    const record = asRecord(message)
-    return !!record && record.role === 'system'
-  })
-  if (systemIndex < 0) return wireMessages
-  const systemMessage = asRecord(wireMessages[systemIndex])
-  if (!systemMessage) return wireMessages
-
-  const parts = typeof systemMessage.content === 'string'
-    ? [{ type: 'text', text: systemMessage.content }]
-    : Array.isArray(systemMessage.content)
-      ? systemMessage.content
-      : null
-  if (!parts || parts.length === 0) return wireMessages
-  const lastIndex = parts.length - 1
-  const lastPart = asRecord(parts[lastIndex])
-  if (!lastPart || lastPart.type !== 'text') return wireMessages
-
-  const nextParts = parts.map((part, index) => (
-    index === lastIndex ? { ...lastPart, cache_control: DEFAULT_GEMINI_CACHE_CONTROL } : part
-  ))
-  return wireMessages.map((message, index) => (
-    index === systemIndex ? { ...systemMessage, content: nextParts } : message
-  ))
-}
-
 export function applyOpenRouterPromptCaching(input: {
   modelId: string
   body: Record<string, unknown>
-  executionMode: OpenRouterPromptCacheExecutionMode
-  promptCacheTtl?: '1h'
   sourceMessages?: readonly ProviderChatMessage[]
 }): Record<string, unknown> {
   const family = resolveOpenRouterPromptCacheFamily(input.modelId)
@@ -263,25 +197,12 @@ export function applyOpenRouterPromptCaching(input: {
   const shouldUseClaudeAutomaticCache = family === 'anthropic'
     && !hasOwnCacheControl(input.body)
     && !hasExplicitCacheControl
-  // Gemini has no top-level automatic form at all, so the breakpoint is worth
-  // placing for any Agents loop regardless of TTL: without it those steps are
-  // uncached outright, not merely short-lived.
-  const shouldAddGeminiPrefixBreakpoint = family === 'google'
-    && input.executionMode === 'agent'
-    && !hasOwnCacheControl(input.body)
-    && !hasExplicitCacheControl
-  const cachedMessages = shouldAddGeminiPrefixBreakpoint
-    ? applyGeminiSystemPrefixBreakpoint(messages)
-    : messages
-
   return {
     ...input.body,
-    ...(cachedMessages !== input.body.messages ? { messages: cachedMessages } : {}),
+    ...(messages !== input.body.messages ? { messages } : {}),
     ...(shouldUseClaudeAutomaticCache
       ? {
-        cache_control: input.promptCacheTtl === '1h'
-          ? LONG_TTL_ANTHROPIC_CACHE_CONTROL
-          : DEFAULT_ANTHROPIC_CACHE_CONTROL,
+        cache_control: DEFAULT_ANTHROPIC_CACHE_CONTROL,
       }
       : {}),
   }

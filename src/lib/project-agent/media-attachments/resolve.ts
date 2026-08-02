@@ -1,6 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { resolveUserUploadAcceptedMedia } from '@/lib/creative-resource/upload-contract'
+import { resolveUserUploadAcceptedMedia } from '@/lib/workspace-resource/upload-contract'
 import {
   verifyProjectAssistantAttachmentToken,
   type ProjectAssistantAttachmentTokenPayload,

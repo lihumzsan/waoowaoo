@@ -1,4 +1,3 @@
-import type { UIMessage } from 'ai'
 import type {
   RuntimeEvent,
   RuntimeSandboxMode,
@@ -32,10 +31,7 @@ import type {
   AssistantRuntimeTurnIdentity,
 } from './contracts'
 import { AssistantRuntimeEventProjector } from './event-projector'
-import {
-  buildAssistantRuntimeLegacyInjection,
-  prepareAssistantRuntimeUserInput,
-} from './message-input'
+import { prepareAssistantRuntimeUserInput } from './message-input'
 import {
   admitAssistantRuntimeTaskFollowUp,
   admitAssistantRuntimeTurn,
@@ -47,6 +43,7 @@ import {
   getOrCreateAssistantRuntimeThread,
   loadAssistantRuntimeTaskFollowUp,
   persistAssistantRuntimeInteraction,
+  persistAssistantRuntimeMessageSnapshot,
   readAssistantRuntimeActiveTurn,
   replaceAssistantRuntimePlan,
   requestAssistantRuntimeInterrupt,
@@ -136,9 +133,6 @@ export class AssistantRuntimeService {
   private readonly access: AssistantRuntimeAccessProvider
   private readonly models: AssistantRuntimeModelResolver
   private readonly liveTurns = new Map<string, StartedProjection>()
-  private readonly initializedRuntimeThreads = new Set<string>()
-  private readonly initializingRuntimeThreads = new Map<string, Promise<void>>()
-
   constructor(options: AssistantRuntimeServiceOptions) {
     this.manager = options.manager
     this.access = options.access
@@ -185,7 +179,6 @@ export class AssistantRuntimeService {
         scope: command,
         threadId: thread.threadId,
         recoveryThreadId: thread.runtimeThreadId,
-        legacyMessages: thread.messages.filter((message) => message.id !== prepared.message.id),
       })
     } catch (error) {
       await failAssistantRuntimeTurnStart({
@@ -340,7 +333,6 @@ export class AssistantRuntimeService {
         scope: followUp,
         threadId: thread.threadId,
         recoveryThreadId: thread.runtimeThreadId,
-        legacyMessages: thread.messages,
       })
     } catch (error) {
       await rollbackAssistantRuntimeTaskFollowUpPreparation({
@@ -383,7 +375,6 @@ export class AssistantRuntimeService {
     readonly scope: AssistantRuntimeSubmitCommand | AssistantRuntimeTaskFollowUp
     readonly threadId: string
     readonly recoveryThreadId: string | null
-    readonly legacyMessages: readonly UIMessage[]
   }): Promise<PreparedThread> {
     const scope = runtimeScope(input.scope)
     const access = await this.access.get(scope)
@@ -394,29 +385,6 @@ export class AssistantRuntimeService {
       recoveryThreadId: input.recoveryThreadId,
       configuration: model.thread,
     })
-    if (runtime.disposition === 'started' && !runtime.durable) {
-      const runtimeThreadId = runtime.runtimeThreadId
-      const existingInitialization = this.initializingRuntimeThreads.get(runtimeThreadId)
-      if (existingInitialization) {
-        await existingInitialization
-      } else if (!this.initializedRuntimeThreads.has(runtimeThreadId)) {
-        const initialization = (async () => {
-          const migration = buildAssistantRuntimeLegacyInjection(input.legacyMessages)
-          if (migration.items.length > 0) {
-            await this.manager.injectInitialItems(scope, input.threadId, migration.items)
-          }
-          this.initializedRuntimeThreads.add(runtimeThreadId)
-        })()
-        this.initializingRuntimeThreads.set(runtimeThreadId, initialization)
-        try {
-          await initialization
-        } finally {
-          if (this.initializingRuntimeThreads.get(runtimeThreadId) === initialization) {
-            this.initializingRuntimeThreads.delete(runtimeThreadId)
-          }
-        }
-      }
-    }
     return { threadId: input.threadId, runtime, model }
   }
 
@@ -437,7 +405,6 @@ export class AssistantRuntimeService {
         void publishAgentSessionViewChanged({
           projectId: input.scope.projectId,
           userId: input.scope.userId,
-          episodeId: input.scope.episodeId,
           threadId: input.preparedThread.threadId,
           turnId: input.turn.turnId,
           attempt: input.turn.attempt || null,
@@ -451,6 +418,7 @@ export class AssistantRuntimeService {
     })
     let runtimeTurnId: string | null = null
     try {
+      const initialSkills = await this.manager.listSkills(scope)
       const runtimeTurn = await this.manager.startTurn(scope, input.preparedThread.threadId, {
         clientUserMessageId: input.sourceId,
         input: withTurnContext(input.inputs, input.locale),
@@ -477,7 +445,6 @@ export class AssistantRuntimeService {
       const publisher = createAgentTurnStreamPublisher({
         projectId: identity.projectId,
         userId: identity.userId,
-        episodeId: identity.episodeId,
         threadId: identity.threadId,
         turnId: identity.turnId,
         attempt: identity.attempt,
@@ -497,7 +464,6 @@ export class AssistantRuntimeService {
           publishViewChanged: async (reason) => await publishAgentSessionViewChanged({
             projectId: identity.projectId,
             userId: identity.userId,
-            episodeId: identity.episodeId,
             threadId: identity.threadId,
             turnId: identity.turnId,
             attempt: identity.attempt,
@@ -514,14 +480,19 @@ export class AssistantRuntimeService {
           threadId: identity.threadId,
           plan,
         }),
+        onMessageSnapshot: async (message) => await persistAssistantRuntimeMessageSnapshot({
+          identity,
+          message,
+        }),
+        onSkillsList: async (forceReload) => await this.manager.listSkills(scope, forceReload),
       })
+      projector.setInitialSkillsInventory(initialSkills)
       for (const event of pendingEvents.splice(0)) projector.consume(event)
       this.liveTurns.set(identity.turnId, started)
       void this.monitorProjection({ started, projector, publisher, unsubscribe })
       await publishAgentSessionViewChanged({
         projectId: identity.projectId,
         userId: identity.userId,
-        episodeId: identity.episodeId,
         threadId: identity.threadId,
         turnId: identity.turnId,
         attempt: identity.attempt,
@@ -569,7 +540,6 @@ export class AssistantRuntimeService {
       await publishAgentSessionViewChanged({
         projectId: input.started.identity.projectId,
         userId: input.started.identity.userId,
-        episodeId: input.started.identity.episodeId,
         threadId: input.started.identity.threadId,
         turnId: input.started.identity.turnId,
         attempt: input.started.identity.attempt,

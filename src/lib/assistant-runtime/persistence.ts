@@ -50,10 +50,6 @@ function runtimeResponseRequestId(value: unknown): string {
   return String(id)
 }
 
-function scopeRef(scope: AssistantRuntimeScope): string {
-  return scope.episodeId ? `episode:${scope.episodeId}` : `project:${scope.projectId}`
-}
-
 function toJson(value: unknown): Prisma.InputJsonValue {
   const serialized = JSON.stringify(value)
   if (serialized === undefined) throw new Error('ASSISTANT_RUNTIME_JSON_INVALID')
@@ -94,6 +90,19 @@ function appendMessages(existing: readonly UIMessage[], appended: readonly UIMes
   return next
 }
 
+function upsertMessage(existing: readonly UIMessage[], message: UIMessage): UIMessage[] {
+  const index = existing.findIndex((candidate) => candidate.id === message.id)
+  if (index < 0) return [...existing, message]
+  const prior = existing[index]
+  if (isDeepStrictEqual(prior, message)) return [...existing]
+  if (prior.role !== 'assistant' || message.role !== 'assistant') {
+    throw new Error(`ASSISTANT_RUNTIME_MESSAGE_ID_CONFLICT:${message.id}`)
+  }
+  const next = [...existing]
+  next[index] = message
+  return next
+}
+
 function normalizePlanForStorage(value: unknown): Prisma.InputJsonValue | typeof Prisma.JsonNull {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('ASSISTANT_RUNTIME_PLAN_INVALID')
@@ -131,7 +140,6 @@ function threadView(row: ProjectAssistantThread, messages: readonly UIMessage[])
   return {
     projectId: row.projectId,
     userId: row.userId,
-    episodeId: row.episodeId,
     assistantId: 'workspace-command',
     threadId: row.id,
     runtimeThreadId: row.runtimeThreadId,
@@ -145,7 +153,6 @@ function turnIdentity(row: ProjectAgentTurn): AssistantRuntimeTurnIdentity {
   return {
     projectId: row.projectId,
     userId: row.userId,
-    episodeId: row.episodeId,
     assistantId: 'workspace-command',
     threadId: row.threadId,
     runtimeThreadId: null,
@@ -189,13 +196,6 @@ async function lockProjectScope(tx: TransactionClient, scope: AssistantRuntimeSc
     FOR UPDATE
   `)
   if (projects.length !== 1) throw new Error('ASSISTANT_RUNTIME_PROJECT_SCOPE_INVALID')
-  if (!scope.episodeId) return
-  const episodes = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-    SELECT id FROM project_episodes
-    WHERE id = ${scope.episodeId} AND projectId = ${scope.projectId}
-    FOR UPDATE
-  `)
-  if (episodes.length !== 1) throw new Error('ASSISTANT_RUNTIME_EPISODE_SCOPE_INVALID')
 }
 
 async function lockThread(
@@ -213,9 +213,7 @@ async function lockThread(
     !row
     || row.projectId !== scope.projectId
     || row.userId !== scope.userId
-    || row.episodeId !== scope.episodeId
     || row.assistantId !== 'workspace-command'
-    || row.scopeRef !== scopeRef(scope)
   ) {
     throw new Error('ASSISTANT_RUNTIME_THREAD_SCOPE_DIVERGED')
   }
@@ -227,23 +225,19 @@ export async function getOrCreateAssistantRuntimeThread(
 ): Promise<ThreadView> {
   return await prisma.$transaction(async (tx) => {
     await lockProjectScope(tx, scope)
-    const ref = scopeRef(scope)
     const row = await tx.projectAssistantThread.upsert({
       where: {
-        projectId_userId_assistantId_scopeRef: {
+        projectId_userId_assistantId: {
           projectId: scope.projectId,
           userId: scope.userId,
           assistantId: 'workspace-command',
-          scopeRef: ref,
         },
       },
       update: {},
       create: {
         projectId: scope.projectId,
         userId: scope.userId,
-        episodeId: scope.episodeId,
         assistantId: 'workspace-command',
-        scopeRef: ref,
         messagesJson: serializeMessages([]),
       },
     })
@@ -330,7 +324,6 @@ export async function admitAssistantRuntimeTurn(input: {
         threadId: thread.id,
         projectId: command.projectId,
         userId: command.userId,
-        episodeId: command.episodeId,
         sourceKind: 'user',
         sourceId: command.sourceId,
         payloadHash,
@@ -457,7 +450,6 @@ export async function readAssistantRuntimeActiveTurn(input: {
     !thread
     || thread.projectId !== input.scope.projectId
     || thread.userId !== input.scope.userId
-    || thread.episodeId !== input.scope.episodeId
     || thread.assistantId !== 'workspace-command'
   ) {
     throw new Error('ASSISTANT_RUNTIME_THREAD_SCOPE_DIVERGED')
@@ -616,6 +608,41 @@ export async function replaceAssistantRuntimePlan(input: {
   })
 }
 
+export async function persistAssistantRuntimeMessageSnapshot(input: {
+  readonly identity: AssistantRuntimeTurnIdentity
+  readonly message: UIMessage
+}): Promise<void> {
+  const expectedMessageId = `workspace-assistant-turn:${input.identity.turnId}:attempt:${String(input.identity.attempt)}`
+  if (input.message.id !== expectedMessageId || input.message.role !== 'assistant') {
+    throw new Error('ASSISTANT_RUNTIME_MESSAGE_SNAPSHOT_INVALID')
+  }
+  await prisma.$transaction(async (tx) => {
+    await lockProjectScope(tx, input.identity)
+    const thread = await lockThread(tx, input.identity, input.identity.threadId)
+    const rows = await tx.$queryRaw<ProjectAgentTurn[]>(Prisma.sql`
+      SELECT * FROM project_agent_turns WHERE id = ${input.identity.turnId} FOR UPDATE
+    `)
+    const turn = rows[0]
+    if (
+      !turn
+      || turn.threadId !== thread.id
+      || turn.runtimeTurnId !== input.identity.runtimeTurnId
+      || turn.attempt !== input.identity.attempt
+      || !ACTIVE_TURN_STATUSES.includes(turn.status as (typeof ACTIVE_TURN_STATUSES)[number])
+    ) {
+      throw new Error('ASSISTANT_RUNTIME_MESSAGE_SNAPSHOT_SCOPE_DIVERGED')
+    }
+    const messages = await parseMessages(thread.messagesJson)
+    const nextMessages = upsertMessage(messages, input.message)
+    if (!isDeepStrictEqual(nextMessages, messages)) {
+      await tx.projectAssistantThread.update({
+        where: { id: thread.id },
+        data: { messagesJson: serializeMessages(nextMessages) },
+      })
+    }
+  })
+}
+
 export async function settleAssistantRuntimeTurn(input: {
   readonly identity: AssistantRuntimeTurnIdentity
   readonly projection: AssistantRuntimeTerminalProjection
@@ -645,9 +672,9 @@ export async function settleAssistantRuntimeTurn(input: {
     }
     const messages = await parseMessages(thread.messagesJson)
     const nextMessages = input.projection.assistantMessage
-      ? appendMessages(messages, [input.projection.assistantMessage])
+      ? upsertMessage(messages, input.projection.assistantMessage)
       : messages
-    if (nextMessages.length !== messages.length) {
+    if (!isDeepStrictEqual(nextMessages, messages)) {
       await tx.projectAssistantThread.update({
         where: { id: thread.id },
         data: { messagesJson: serializeMessages(nextMessages) },
@@ -722,7 +749,6 @@ export async function clearAssistantRuntimeThread(input: {
       if (
         archived.projectId !== input.scope.projectId
         || archived.userId !== input.scope.userId
-        || archived.episodeId !== input.scope.episodeId
         || archived.assistantId !== 'workspace-command'
         || archived.clearRequestId !== input.requestId
       ) {
@@ -743,9 +769,7 @@ export async function clearAssistantRuntimeThread(input: {
         threadId: thread.id,
         projectId: thread.projectId,
         userId: thread.userId,
-        episodeId: thread.episodeId,
         assistantId: thread.assistantId,
-        scopeRef: thread.scopeRef,
         runtimeThreadId: thread.runtimeThreadId,
         messagesJson: serializeMessages(messages),
         clearRequestId: input.requestId,
@@ -781,7 +805,7 @@ export async function markAssistantRuntimeProjectTurnsInterrupted(input: {
   readonly reason: string
 }): Promise<void> {
   await prisma.$transaction(async (tx) => {
-    await lockProjectScope(tx, { ...input.scope, episodeId: null })
+    await lockProjectScope(tx, input.scope)
     const turns = await tx.projectAgentTurn.findMany({
       where: {
         projectId: input.scope.projectId,
@@ -891,7 +915,6 @@ function toTaskFollowUp(batch: FollowUpBatchWithTasks): AssistantRuntimeTaskFoll
   return {
     projectId: batch.projectId,
     userId: batch.userId,
-    episodeId: batch.episodeId,
     assistantId: 'workspace-command',
     batchId: batch.id,
     threadId: batch.threadId,
@@ -960,7 +983,6 @@ export async function admitAssistantRuntimeTaskFollowUp(input: {
     const scope: AssistantRuntimeScope = {
       projectId: seed.projectId,
       userId: seed.userId,
-      episodeId: seed.episodeId,
     }
     await lockProjectScope(tx, scope)
     const batch = await tx.followUpBatch.findUnique({
@@ -1038,7 +1060,6 @@ export async function admitAssistantRuntimeTaskFollowUp(input: {
         threadId: thread.id,
         projectId: batch.projectId,
         userId: batch.userId,
-        episodeId: batch.episodeId,
         sourceKind: 'task_follow_up',
         sourceId: batch.id,
         payloadHash,

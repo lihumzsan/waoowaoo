@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { MessagePrimitive, useMessage, type DataMessagePartProps } from '@assistant-ui/react'
+import { MessagePrimitive, useMessage } from '@assistant-ui/react'
 import type { ComponentProps } from 'react'
 import { useMemo } from 'react'
 import { useTranslations } from 'next-intl'
@@ -15,7 +15,6 @@ import {
   buildBillingActionQuotePreviewFromQuote,
   type BillingActionQuotePreview,
 } from '@/lib/billing/action-quote-preview'
-import type { ProjectContextPartData, TaskBatchSubmittedPartData } from '@/lib/project-agent/types'
 import type { OperationPlanView } from '@/lib/operations/planning'
 import { MarkdownTextPart } from './MarkdownTextPart'
 import { readProjectAssistantTextAttachmentsFromMetadata } from '@/lib/project-agent/text-attachments'
@@ -31,10 +30,11 @@ import { summarizeBillingActionItems, type BillingActionItemSummary } from './bi
 import { WorkspaceAssistantToolCallCard } from './WorkspaceAssistantToolCall'
 import {
   AssistantContextCompactedDataCard,
+  AssistantRuntimeGoalDataCard,
+  AssistantRuntimeProgressDataCard,
+  AssistantRuntimeSkillsDataCard,
   HiddenRuntimeContextDataCard,
 } from './WorkspaceAssistantNotices'
-import { WebSearchDataCard } from './WorkspaceAssistantWebSearch'
-import { WorkspaceAssistantResourceLinks } from './WorkspaceAssistantResourceLinks'
 import { isWorkspaceAssistantHiddenThreadMessageMetadata } from './workspace-assistant-panel-state'
 
 type StandardMessagePartComponents = NonNullable<
@@ -131,6 +131,7 @@ export function ConfirmationActionCard(props: {
     operationId: string
     title: string
     operationPlan: OperationPlanView | null
+    details?: readonly string[]
   }[]
   subtitle: string
   onConfirm: () => Promise<void>
@@ -180,6 +181,14 @@ export function ConfirmationActionCard(props: {
             <div className="text-sm font-semibold text-[var(--glass-text-primary)]">
               {member.title}
             </div>
+            {member.details?.map((detail, index) => (
+              <div
+                key={`${String(index)}:${detail}`}
+                className="mt-1 break-all rounded-lg bg-neutral-100 px-2 py-1 font-mono text-[11px] leading-4 text-[var(--glass-text-tertiary)]"
+              >
+                {detail}
+              </div>
+            ))}
             <BillingQuoteBlock preview={member.quotePreview} />
           </div>
         ))}
@@ -189,7 +198,7 @@ export function ConfirmationActionCard(props: {
           type="button"
           icon="arrowRight"
           label={
-            decision === 'confirming' ? t('cards.choiceSubmitting') : t('cards.confirmContinue')
+            decision === 'confirming' ? t('cards.interactionSubmitting') : t('cards.confirmContinue')
           }
           quote={members.length === 1 ? (members[0]?.quotePreview ?? null) : null}
           className="flex-1 rounded-xl py-2 text-sm"
@@ -206,36 +215,10 @@ export function ConfirmationActionCard(props: {
             submitDecision('cancel')
           }}
         >
-          {decision === 'cancelling' ? t('cards.choiceSubmitting') : t('cards.cancelAction')}
+          {decision === 'cancelling' ? t('cards.interactionSubmitting') : t('cards.cancelAction')}
         </button>
       </div>
     </div>
-  )
-}
-
-function TaskBatchSubmittedDataCard({ data }: DataMessagePartProps<TaskBatchSubmittedPartData>) {
-  void data
-  return null
-}
-
-function ProjectContextDataCard({ data }: DataMessagePartProps<ProjectContextPartData>) {
-  const t = useTranslations('assistantAgent')
-  return (
-    <details className="group text-sm leading-5 text-[var(--glass-text-tertiary)]">
-      <summary className="flex cursor-pointer list-none items-center gap-2">
-        <AppIcon name="folder" className="h-3.5 w-3.5 shrink-0" />
-        <span className="min-w-0 truncate">
-          {t('cards.projectContext')} · {data.context.projectName} · {data.context.episodeName}
-        </span>
-        <AppIcon
-          name="chevronDown"
-          className="h-3 w-3 shrink-0 transition-transform group-open:rotate-180"
-        />
-      </summary>
-      <div className="ml-5 mt-1 text-xs">
-        {t('cards.workspaceLabel')}: {t('panel.workspaceStatus')}
-      </div>
-    </details>
   )
 }
 
@@ -253,10 +236,9 @@ export function useWorkspaceAssistantMessagePartComponents(): WorkspaceAssistant
     const data = {
       by_name: {
         'assistant-context-compacted': AssistantContextCompactedDataCard,
-        'assistant-resource-links': WorkspaceAssistantResourceLinks,
-        'task-batch-submitted': TaskBatchSubmittedDataCard,
-        'project-context': ProjectContextDataCard,
-        'web-search': WebSearchDataCard,
+        'assistant-runtime-goal': AssistantRuntimeGoalDataCard,
+        'assistant-runtime-progress': AssistantRuntimeProgressDataCard,
+        'assistant-runtime-skills': AssistantRuntimeSkillsDataCard,
       },
     }
     return {

@@ -13,6 +13,10 @@ import type {
   RuntimeRequestId,
   RuntimeSandboxPolicy,
   RuntimeServerRequestResponse,
+  RuntimeSkillMetadata,
+  RuntimeSkillsListEntry,
+  RuntimeSkillsListParams,
+  RuntimeSkillsListResponse,
   RuntimeThread,
   RuntimeThreadInjectItemsParams,
   RuntimeThreadReadParams,
@@ -106,6 +110,11 @@ function requireSafeInteger(value: unknown, code: string): number {
   return parsed
 }
 
+function requireBoolean(value: unknown, code: string): boolean {
+  if (typeof value !== 'boolean') throw new CodexAppServerProtocolError(code)
+  return value
+}
+
 function requireRequestId(value: unknown, code: string): RuntimeRequestId {
   if (typeof value === 'string' && value.length > 0) return value
   if (typeof value === 'number' && Number.isSafeInteger(value)) return value
@@ -152,6 +161,56 @@ function parseTurn(value: unknown): RuntimeTurn {
     id: requireString(raw.id, 'TURN_ID_INVALID'),
     status: requireTurnStatus(raw.status),
     raw,
+  }
+}
+
+function parseSkillScope(value: unknown): RuntimeSkillMetadata['scope'] {
+  if (value === 'user' || value === 'repo' || value === 'system' || value === 'admin') return value
+  throw new CodexAppServerProtocolError('SKILLS_LIST_SKILL_SCOPE_INVALID')
+}
+
+function parseSkill(value: unknown): RuntimeSkillMetadata {
+  if (!isRecord(value)) throw new CodexAppServerProtocolError('SKILLS_LIST_SKILL_INVALID')
+  assertOnlyKeys(
+    value,
+    ['name', 'description', 'shortDescription', 'interface', 'dependencies', 'path', 'scope', 'enabled'],
+    'SKILLS_LIST_SKILL_FIELDS_INVALID',
+  )
+  if (hasOwn(value, 'shortDescription') && value.shortDescription !== undefined) {
+    requireString(value.shortDescription, 'SKILLS_LIST_SKILL_SHORT_DESCRIPTION_INVALID')
+  }
+  if (hasOwn(value, 'interface') && value.interface !== undefined) {
+    requireJsonValue(value.interface, 'SKILLS_LIST_SKILL_INTERFACE_INVALID')
+  }
+  if (hasOwn(value, 'dependencies') && value.dependencies !== undefined) {
+    requireJsonValue(value.dependencies, 'SKILLS_LIST_SKILL_DEPENDENCIES_INVALID')
+  }
+  return {
+    name: requireString(value.name, 'SKILLS_LIST_SKILL_NAME_INVALID'),
+    description: requireString(value.description, 'SKILLS_LIST_SKILL_DESCRIPTION_INVALID'),
+    path: requireString(value.path, 'SKILLS_LIST_SKILL_PATH_INVALID'),
+    scope: parseSkillScope(value.scope),
+    enabled: requireBoolean(value.enabled, 'SKILLS_LIST_SKILL_ENABLED_INVALID'),
+  }
+}
+
+function parseSkillsListEntry(value: unknown): RuntimeSkillsListEntry {
+  if (!isRecord(value)) throw new CodexAppServerProtocolError('SKILLS_LIST_ENTRY_INVALID')
+  assertOnlyKeys(value, ['cwd', 'skills', 'errors'], 'SKILLS_LIST_ENTRY_FIELDS_INVALID')
+  if (!Array.isArray(value.skills) || !Array.isArray(value.errors)) {
+    throw new CodexAppServerProtocolError('SKILLS_LIST_ENTRY_COLLECTION_INVALID')
+  }
+  return {
+    cwd: requireString(value.cwd, 'SKILLS_LIST_ENTRY_CWD_INVALID'),
+    skills: value.skills.map(parseSkill),
+    errors: value.errors.map((error) => {
+      if (!isRecord(error)) throw new CodexAppServerProtocolError('SKILLS_LIST_ERROR_INVALID')
+      assertOnlyKeys(error, ['path', 'message'], 'SKILLS_LIST_ERROR_FIELDS_INVALID')
+      return {
+        path: requireString(error.path, 'SKILLS_LIST_ERROR_PATH_INVALID'),
+        message: requireString(error.message, 'SKILLS_LIST_ERROR_MESSAGE_INVALID'),
+      }
+    }),
   }
 }
 
@@ -347,6 +406,24 @@ export class CodexAppServerClient implements RuntimeAdapter {
     return this.parseProtocolResponse(() => {
       const result = requireJsonObject(response, 'THREAD_READ_RESPONSE_INVALID')
       return parseThread(result.thread)
+    })
+  }
+
+  async listSkills(params: RuntimeSkillsListParams): Promise<RuntimeSkillsListResponse> {
+    await this.requireInitialized()
+    const requestParams: RuntimeJsonObject = {}
+    putOptional(requestParams, 'cwds', params.cwds
+      ? params.cwds.map((cwd) => requireString(cwd, 'SKILLS_LIST_CWD_INVALID'))
+      : undefined)
+    putOptional(requestParams, 'forceReload', params.forceReload)
+    const response = await this.request('skills/list', requestParams)
+    return this.parseProtocolResponse(() => {
+      const result = requireJsonObject(response, 'SKILLS_LIST_RESPONSE_INVALID')
+      assertOnlyKeys(result, ['data'], 'SKILLS_LIST_RESPONSE_FIELDS_INVALID')
+      if (!Array.isArray(result.data)) {
+        throw new CodexAppServerProtocolError('SKILLS_LIST_RESPONSE_DATA_INVALID')
+      }
+      return { data: result.data.map(parseSkillsListEntry) }
     })
   }
 

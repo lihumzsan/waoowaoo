@@ -29,7 +29,6 @@ interface ExecuteProjectAgentOperationFromApiParams {
   userId: string
   context?: {
     locale?: string | null
-    episodeId?: string | null
     selectedScopeRef?: string | null
     selectedAssetId?: string | null
   }
@@ -82,7 +81,6 @@ export async function executeProjectAgentOperationFromApi(
     projectId: params.projectId,
     context: {
       ...(params.context?.locale ? { locale: params.context.locale } : {}),
-      ...(params.context?.episodeId ? { episodeId: params.context.episodeId } : {}),
       ...(params.context?.selectedScopeRef ? { selectedScopeRef: params.context.selectedScopeRef } : {}),
       ...(params.context?.selectedAssetId ? { selectedAssetId: params.context.selectedAssetId } : {}),
     },

@@ -6,7 +6,6 @@ import type { RuntimeJsonValue } from '@/lib/codex-runtime/runtime-adapter'
 import {
   parseProjectAgentPlanSnapshot,
 } from '@/lib/project-agent/plan'
-import type { AssistantRuntimeScope } from './contracts'
 import type {
   AssistantRuntimePendingInteractionView,
   AssistantRuntimeSessionTurnView,
@@ -19,10 +18,6 @@ const RECENT_BATCH_LIMIT = 24
 const ACTIVE_STATUSES = ['queued', 'running', 'waiting_approval'] as const
 const TERMINAL_TASK_STATUSES = new Set(['completed', 'failed', 'canceled', 'dismissed'])
 
-function scopeRef(scope: AssistantRuntimeScope): string {
-  return scope.episodeId ? `episode:${scope.episodeId}` : `project:${scope.projectId}`
-}
-
 function parseTurnStatus(value: string): AssistantRuntimeSessionTurnView['status'] {
   if (
     value === 'queued' || value === 'running' || value === 'waiting_approval'
@@ -33,7 +28,7 @@ function parseTurnStatus(value: string): AssistantRuntimeSessionTurnView['status
 }
 
 function parseSourceKind(value: string): AssistantRuntimeSessionTurnView['sourceKind'] {
-  if (value === 'user' || value === 'task_follow_up' || value === 'choice_response') return value
+  if (value === 'user' || value === 'task_follow_up') return value
   throw new Error(`ASSISTANT_RUNTIME_VIEW_SOURCE_KIND_INVALID:${value}`)
 }
 
@@ -129,11 +124,10 @@ export async function getAssistantRuntimeSessionView(
   return await prisma.$transaction(async (tx): Promise<AssistantRuntimeSessionView> => {
     const thread = await tx.projectAssistantThread.findUnique({
       where: {
-        projectId_userId_assistantId_scopeRef: {
+        projectId_userId_assistantId: {
           projectId: input.projectId,
           userId: input.userId,
           assistantId: input.assistantId,
-          scopeRef: scopeRef(input),
         },
       },
     })
@@ -152,7 +146,6 @@ export async function getAssistantRuntimeSessionView(
     if (
       thread.projectId !== input.projectId
       || thread.userId !== input.userId
-      || thread.episodeId !== input.episodeId
       || thread.assistantId !== input.assistantId
     ) throw new Error('ASSISTANT_RUNTIME_VIEW_THREAD_SCOPE_DIVERGED')
 

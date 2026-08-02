@@ -9,8 +9,7 @@ export NPM_CONFIG_CACHE=/tmp/npm-cache
 export PYTHONPYCACHEPREFIX=/tmp/pycache
 
 test -d /workspace
-test -d /workspace/authoring
-test -w /workspace/authoring
+test -w /workspace
 test -d "$CODEX_HOME"
 test -w "$CODEX_HOME"
 

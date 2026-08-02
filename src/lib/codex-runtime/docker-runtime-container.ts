@@ -75,10 +75,6 @@ export class DockerRuntimeContainerAdapter implements RuntimeContainerAdapter {
       request.materialization.hostCodexHomeDirectory,
       'CODEX_DOCKER_RUNTIME_HOME_INVALID',
     )
-    const authoringDirectory = requireAbsolutePath(
-      path.join(workspaceDirectory, 'authoring'),
-      'CODEX_DOCKER_RUNTIME_AUTHORING_INVALID',
-    )
     const containerName = `wao-codex-${scopeId.slice(0, 20)}-${randomUUID().slice(0, 8)}`
     const environment = normalizeRuntimeScopedEnvironment(request.environment)
     const dockerProcessEnvironment = {
@@ -113,9 +109,7 @@ export class DockerRuntimeContainerAdapter implements RuntimeContainerAdapter {
       '--tmpfs',
       '/tmp:rw,nosuid,nodev,noexec,size=268435456',
       '--mount',
-      buildBindMount(workspaceDirectory, CONTAINER_WORKSPACE_DIRECTORY, 'readonly'),
-      '--mount',
-      buildBindMount(authoringDirectory, `${CONTAINER_WORKSPACE_DIRECTORY}/authoring`, 'readwrite'),
+      buildBindMount(workspaceDirectory, CONTAINER_WORKSPACE_DIRECTORY, 'readwrite'),
       '--mount',
       buildBindMount(codexHomeDirectory, CONTAINER_CODEX_HOME_DIRECTORY, 'readwrite'),
       '--workdir',
@@ -210,8 +204,8 @@ function validateOptions(options: DockerRuntimeContainerOptions): void {
     throw new Error('CODEX_DOCKER_RUNTIME_PIDS_LIMIT_INVALID')
   }
   if (
-    options.initializeCapabilities.experimentalApi
-    || options.initializeCapabilities.mcpServerOpenaiFormElicitation !== true
+    options.initializeCapabilities.experimentalApi !== true
+    || options.initializeCapabilities.mcpServerOpenaiFormElicitation !== false
   ) {
     throw new Error('CODEX_DOCKER_RUNTIME_INITIALIZE_CAPABILITIES_INVALID')
   }

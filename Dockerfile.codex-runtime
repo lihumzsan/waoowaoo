@@ -7,6 +7,8 @@ RUN apt-get update \
       bash \
       bubblewrap \
       ca-certificates \
+      ffmpeg \
+      jq \
       python3 \
       ripgrep \
       tini \

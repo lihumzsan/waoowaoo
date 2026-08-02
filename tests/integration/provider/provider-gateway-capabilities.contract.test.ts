@@ -30,7 +30,6 @@ import { listBuiltinCapabilityCatalog } from '@/lib/ai-registry/capabilities-cat
 import {
   OPENROUTER_CLAUDE_FABLE_5_MODEL_ID,
   OPENROUTER_CLAUDE_SONNET_5_MODEL_ID,
-  OPENROUTER_GEMINI_3_5_FLASH_MODEL_ID,
   OPENROUTER_GPT_IMAGE_2_MODEL_ID,
   OPENROUTER_GPT_5_6_LUNA_MODEL_ID,
   OPENROUTER_GPT_5_6_REASONING_EFFORT_OPTIONS,
@@ -471,130 +470,6 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
       expect(result.providerMetadata?.openrouter?.usage).toMatchObject({ cost: 0.25 })
     })
 
-    it('enables Claude automatic caching on every growing Agent request body', async () => {
-      const response = () => jsonResponse({
-        id: 'openrouter-agent-response',
-        model: OPENROUTER_CLAUDE_SONNET_5_MODEL_ID,
-        provider: 'Anthropic',
-        choices: [{
-          index: 0,
-          finish_reason: 'stop',
-          message: { role: 'assistant', content: 'ok' },
-        }],
-        usage: {
-          prompt_tokens: 100,
-          completion_tokens: 2,
-          total_tokens: 102,
-          cost: 0.01,
-        },
-      })
-      fetchMock.mockResolvedValueOnce(response()).mockResolvedValueOnce(response())
-      const model = createAiLanguageModel({
-        providerKey: 'openrouter',
-        selection: {
-          provider: 'openrouter',
-          modelId: OPENROUTER_CLAUDE_SONNET_5_MODEL_ID,
-          modelKey: `openrouter::${OPENROUTER_CLAUDE_SONNET_5_MODEL_ID}`,
-        },
-        providerConfig: {
-          id: 'openrouter',
-          name: 'OpenRouter',
-          apiKey: 'test-key',
-          baseUrl: 'https://openrouter.ai/api/v1',
-        },
-        executionMode: 'agent',
-        reasoning: false,
-        reasoningEffort: 'medium',
-        promptCacheTtl: '1h',
-        openRouterSessionId: 'agent-session',
-      })
-      const firstTurn = [
-        { role: 'system' as const, content: 'stable system and tool context' },
-        { role: 'user' as const, content: 'turn one' },
-      ]
-      const secondTurn = [
-        ...firstTurn,
-        { role: 'assistant' as const, content: 'ok' },
-        { role: 'user' as const, content: 'turn two' },
-      ]
-
-      await generateText({ model, messages: firstTurn, maxRetries: 0 })
-      await generateText({ model, messages: secondTurn, maxRetries: 0 })
-
-      const firstBody = await requestBodyOf(fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit?])
-      const secondBody = await requestBodyOf(fetchMock.mock.calls[1] as [RequestInfo | URL, RequestInit?])
-      // A conversation prefix is re-read across user turns, and those gaps
-      // routinely exceed the 5m default, so the 1h write premium is earned.
-      expect(firstBody.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' })
-      expect(secondBody.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' })
-      const firstWireMessages = [
-        {
-          role: 'system',
-          content: [{ type: 'text', text: 'stable system and tool context' }],
-        },
-        { role: 'user', content: 'turn one' },
-      ]
-      expect(firstBody.messages).toEqual(firstWireMessages)
-      expect(secondBody.messages).toEqual([
-        ...firstWireMessages,
-        { role: 'assistant', content: 'ok' },
-        { role: 'user', content: 'turn two' },
-      ])
-      const headers = new Headers((fetchMock.mock.calls[1] as [RequestInfo | URL, RequestInit?])[1]?.headers)
-      expect(headers.get('x-session-id')).toBe('agent-session')
-    })
-
-    it('keeps an undeclared Claude Agent loop on the 5m default', async () => {
-      fetchMock.mockResolvedValueOnce(jsonResponse({
-        id: 'openrouter-worker-response',
-        model: OPENROUTER_CLAUDE_SONNET_5_MODEL_ID,
-        provider: 'Anthropic',
-        choices: [{
-          index: 0,
-          finish_reason: 'stop',
-          message: { role: 'assistant', content: 'ok' },
-        }],
-        usage: {
-          prompt_tokens: 100,
-          completion_tokens: 2,
-          total_tokens: 102,
-          cost: 0.01,
-        },
-      }))
-      const model = createAiLanguageModel({
-        providerKey: 'openrouter',
-        selection: {
-          provider: 'openrouter',
-          modelId: OPENROUTER_CLAUDE_SONNET_5_MODEL_ID,
-          modelKey: `openrouter::${OPENROUTER_CLAUDE_SONNET_5_MODEL_ID}`,
-        },
-        providerConfig: {
-          id: 'openrouter',
-          name: 'OpenRouter',
-          apiKey: 'test-key',
-          baseUrl: 'https://openrouter.ai/api/v1',
-        },
-        executionMode: 'agent',
-        reasoning: false,
-        reasoningEffort: 'medium',
-      })
-      await generateText({
-        model,
-        messages: [
-          { role: 'system' as const, content: 'stable system and tool context' },
-          { role: 'user' as const, content: 'background task' },
-        ],
-        maxRetries: 0,
-      })
-
-      const body = await requestBodyOf(fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit?])
-      // The Creative Worker runs the same Agents loop under the same execution
-      // mode as the Primary Agent, but its Task ends when it ends and the next
-      // Task carries a different prefix. Execution mode must never be read as
-      // an implicit opt-in to the higher write multiplier.
-      expect(body.cache_control).toEqual({ type: 'ephemeral' })
-    })
-
     it('keeps Claude one-shot sync caching on the 5m default', async () => {
       fetchMock.mockResolvedValueOnce(jsonResponse({
         id: 'openrouter-sync-response',
@@ -636,84 +511,8 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
       })
 
       const body = await requestBodyOf(fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit?])
-      // A one-shot call has no second read, so the 1h write premium would be a
-      // pure loss. Execution mode is the declared authority for this choice —
-      // it must never be inferred from model id or message shape.
+      // Claude's provider-owned automatic cache uses its default ephemeral TTL.
       expect(body.cache_control).toEqual({ type: 'ephemeral' })
-    })
-
-    it('pins a stable Gemini Agent cache breakpoint on the system prefix', async () => {
-      const response = () => jsonResponse({
-        id: 'openrouter-gemini-agent-response',
-        model: OPENROUTER_GEMINI_3_5_FLASH_MODEL_ID,
-        provider: 'Google',
-        choices: [{
-          index: 0,
-          finish_reason: 'stop',
-          message: { role: 'assistant', content: 'ok' },
-        }],
-        usage: {
-          prompt_tokens: 100,
-          completion_tokens: 2,
-          total_tokens: 102,
-          cost: 0.01,
-        },
-      })
-      fetchMock.mockResolvedValueOnce(response()).mockResolvedValueOnce(response())
-      const model = createAiLanguageModel({
-        providerKey: 'openrouter',
-        selection: {
-          provider: 'openrouter',
-          modelId: OPENROUTER_GEMINI_3_5_FLASH_MODEL_ID,
-          modelKey: `openrouter::${OPENROUTER_GEMINI_3_5_FLASH_MODEL_ID}`,
-        },
-        providerConfig: {
-          id: 'openrouter',
-          name: 'OpenRouter',
-          apiKey: 'test-key',
-          baseUrl: 'https://openrouter.ai/api/v1',
-        },
-        executionMode: 'agent',
-        reasoning: false,
-        reasoningEffort: 'medium',
-      })
-      const firstTurn = [
-        { role: 'system' as const, content: 'stable system and tool context' },
-        { role: 'user' as const, content: 'turn one' },
-      ]
-      await generateText({ model, messages: firstTurn, maxRetries: 0 })
-      await generateText({
-        model,
-        messages: [
-          ...firstTurn,
-          { role: 'assistant' as const, content: 'ok' },
-          { role: 'user' as const, content: 'turn two' },
-        ],
-        maxRetries: 0,
-      })
-
-      const firstBody = await requestBodyOf(fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit?])
-      const secondBody = await requestBodyOf(fetchMock.mock.calls[1] as [RequestInfo | URL, RequestInit?])
-      // Gemini has no top-level automatic form, so without this breakpoint an
-      // Agents loop resends the whole prefix uncached on every step.
-      const cachedSystemMessage = {
-        role: 'system',
-        content: [{
-          type: 'text',
-          text: 'stable system and tool context',
-          cache_control: { type: 'ephemeral' },
-        }],
-      }
-      expect(firstBody.cache_control).toBeUndefined()
-      // Byte-identical across a growing conversation: a breakpoint that moved
-      // per step would invalidate the prefix it exists to preserve.
-      expect(Array.isArray(firstBody.messages) && firstBody.messages[0]).toEqual(cachedSystemMessage)
-      expect(Array.isArray(secondBody.messages) && secondBody.messages[0]).toEqual(cachedSystemMessage)
-      expect(Array.isArray(secondBody.messages) && secondBody.messages.slice(1)).toEqual([
-        { role: 'user', content: 'turn one' },
-        { role: 'assistant', content: 'ok' },
-        { role: 'user', content: 'turn two' },
-      ])
     })
 
     it('passes Google thinking configuration through the Google AI SDK', async () => {
@@ -880,7 +679,7 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
       expect(visionBody.reasoning).toEqual({ effort: 'max', summary: 'auto' })
     })
 
-    it('injects max into the internal Assistant language-model request', async () => {
+    it('injects max into a background streaming language-model request', async () => {
       fetchMock.mockResolvedValueOnce(chatCompletionResponse(OPENROUTER_GPT_5_6_SOL_MODEL_ID, 'ok'))
       const model = createAiLanguageModel({
         providerKey: 'openrouter',
@@ -895,7 +694,7 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
           apiKey: 'test-key',
           baseUrl: 'https://openrouter.ai/api/v1',
         },
-        executionMode: 'agent',
+        executionMode: 'stream',
         reasoning: true,
         reasoningEffort: 'max',
       })

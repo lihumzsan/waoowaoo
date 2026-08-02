@@ -24,7 +24,6 @@ export interface WaoMcpTrustedCallContext {
   readonly projectId: string
   readonly source: string
   readonly locale?: string | null
-  readonly episodeId?: string | null
   readonly selectedScopeRef?: string | null
   readonly selectedAssetId?: string | null
   readonly userTurnText?: string | null

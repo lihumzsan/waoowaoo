@@ -7,7 +7,6 @@ const FOLLOW_UP_BATCH_MAX_MEMBERS = 64
 
 interface FollowUpBatchContext {
   locale: string | null
-  episodeId: string | null
   selectedScopeRef: string | null
   selectedAssetId: string | null
 }
@@ -60,7 +59,6 @@ function parseContext(value: unknown): FollowUpBatchContext {
   }
   return {
     locale: nullable('locale'),
-    episodeId: nullable('episodeId'),
     selectedScopeRef: nullable('selectedScopeRef'),
     selectedAssetId: nullable('selectedAssetId'),
   }
@@ -125,11 +123,10 @@ async function createFollowUpBatchInTransaction(params: {
       id: string
       projectId: string
       userId: string
-      episodeId: string | null
       assistantId: string
     }>
   >(Prisma.sql`
-    SELECT id, projectId, userId, episodeId, assistantId
+    SELECT id, projectId, userId, assistantId
     FROM project_assistant_threads
     WHERE id = ${turnIdentity.threadId}
     FOR UPDATE
@@ -141,12 +138,11 @@ async function createFollowUpBatchInTransaction(params: {
       threadId: string
       projectId: string
       userId: string
-      episodeId: string | null
       status: string
       contextJson: Prisma.JsonValue
     }>
   >(Prisma.sql`
-    SELECT id, threadId, projectId, userId, episodeId, status, contextJson
+    SELECT id, threadId, projectId, userId, status, contextJson
     FROM project_agent_turns
     WHERE id = ${turnId}
     FOR UPDATE
@@ -162,7 +158,6 @@ async function createFollowUpBatchInTransaction(params: {
     thread.id !== turn.threadId ||
     thread.projectId !== turn.projectId ||
     thread.userId !== turn.userId ||
-    thread.episodeId !== turn.episodeId ||
     thread.assistantId !== 'workspace-command'
   ) {
     throw new Error(`FOLLOW_UP_BATCH_THREAD_SCOPE_DIVERGED:${turnId}`)
@@ -218,7 +213,6 @@ async function createFollowUpBatchInTransaction(params: {
       existing.threadId !== turn.threadId ||
       existing.projectId !== turn.projectId ||
       existing.userId !== turn.userId ||
-      existing.episodeId !== turn.episodeId ||
       existing.status !== 'pending' ||
       existing.members.length !== taskIds.length ||
       existing.members.some((member, index) => member.taskId !== taskIds[index])
@@ -228,9 +222,6 @@ async function createFollowUpBatchInTransaction(params: {
     return existing.id
   }
   const context = parseContext(turn.contextJson)
-  if (context.episodeId !== turn.episodeId) {
-    throw new Error(`FOLLOW_UP_BATCH_CONTEXT_SCOPE_DIVERGED:${turnId}`)
-  }
   await params.tx.followUpBatch.create({
     data: {
       id: batchId,
@@ -240,7 +231,6 @@ async function createFollowUpBatchInTransaction(params: {
       callId,
       projectId: turn.projectId,
       userId: turn.userId,
-      episodeId: turn.episodeId,
       assistantId: 'workspace-command',
       operationId,
       contextJson: toJson(context),

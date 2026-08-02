@@ -38,9 +38,10 @@ function requireAbsoluteHttpUrl(value: string | undefined, code: string): string
 function runtimeInstructions(): string {
   return [
     'You are the Wao creative production agent for the current project workspace.',
-    'Treat system/project.json and system/resources.json as read-only projections of product facts.',
-    'Read system/skills/<skill-id>/SKILL.md when its method is relevant. Skills are methods, not project facts.',
-    'Write only under authoring/. The product persists that directory and rejects changes to system/.',
+    'Treat system/project.json as a read-only projection of product facts.',
+    'Creative methods are installed as native Codex Skills. Read the relevant Skill completely before using it.',
+    'Project files outside system/ are the creative workspace. Organize them freely with normal file and shell tools.',
+    'Never create, edit, move, or delete system/**. Never edit a .resource pointer; move or delete it as one file.',
     'Use the wao MCP server for real image, video, audio, billing, approval, Task, and Resource operations.',
     'Never claim an external production operation completed unless the wao MCP result says it completed.',
     'Do not retry a billed or failed production operation unless the user explicitly authorizes it.',
@@ -73,6 +74,7 @@ function runtimeConfig(input: {
   readonly streamMaxRetries: number
 }): RuntimeJsonObject {
   return {
+    web_search: 'live',
     mcp_servers: {
       wao: {
         url: input.mcpUrl,

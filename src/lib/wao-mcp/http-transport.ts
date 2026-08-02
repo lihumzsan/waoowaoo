@@ -320,12 +320,10 @@ async function resolveActiveRuntimeTurnBinding(
       executionOwnerId: true,
       contextJson: true,
       threadId: true,
-      episodeId: true,
       runtimeTurnId: true,
       thread: {
         select: {
           id: true,
-          episodeId: true,
           runtimeThreadId: true,
         },
       },
@@ -355,23 +353,12 @@ async function resolveActiveRuntimeTurnBinding(
     turn.executionOwnerId,
     'ACTIVE_TURN_IDENTITY_INVALID',
   )
-  if (
-    turn.threadId !== turn.thread.id
-    || turn.episodeId !== turn.thread.episodeId
-  ) {
+  if (turn.threadId !== turn.thread.id) {
     throw new WaoMcpHttpBindingError('ACTIVE_TURN_IDENTITY_INVALID')
   }
   if (!isRecord(turn.contextJson)) {
     throw new WaoMcpHttpBindingError('ACTIVE_TURN_CONTEXT_INVALID')
   }
-  const contextEpisodeId = parseOptionalIdentity(
-    turn.contextJson.episodeId,
-    'ACTIVE_TURN_CONTEXT_INVALID',
-  )
-  if (contextEpisodeId !== turn.episodeId) {
-    throw new WaoMcpHttpBindingError('ACTIVE_TURN_CONTEXT_INVALID')
-  }
-
   return {
     runtimeTurnId,
     base: {
@@ -389,7 +376,6 @@ async function resolveActiveRuntimeTurnBinding(
         turn.contextJson.locale,
         'ACTIVE_TURN_CONTEXT_INVALID',
       ),
-      episodeId: turn.episodeId,
       selectedScopeRef: parseOptionalIdentity(
         turn.contextJson.selectedScopeRef,
         'ACTIVE_TURN_CONTEXT_INVALID',

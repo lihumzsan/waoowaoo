@@ -73,7 +73,7 @@ function normalizeNowSeconds(now: Date): number {
 
 /**
  * Issues a short-lived capability token for one Wao project runtime. Thread
- * and episode identities deliberately stay out of the token: one project
+ * and directory identities deliberately stay out of the token: one project
  * container may host multiple Codex Threads, while the unique running product
  * Turn remains the per-call execution fence resolved from MySQL.
  * The runtime container receives this token, never database/provider/auth keys.

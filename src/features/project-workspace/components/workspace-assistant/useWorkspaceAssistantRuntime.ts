@@ -18,7 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAgentSessionView } from '@/lib/query/hooks'
 import {
   isAssistantRuntimeApprovalRequest,
-  isAssistantRuntimeChoiceRequest,
+  isAssistantRuntimeInputRequest,
   type AgentSessionPendingInteractionView,
   type AgentSessionView,
 } from '@/lib/assistant-runtime/view-contract'
@@ -49,7 +49,6 @@ export interface WorkspaceAssistantSendMessageInput {
 
 interface UseWorkspaceAssistantRuntimeParams {
   projectId: string
-  episodeId?: string
   selectedScopeRef?: string | null
   selectedAssetId?: string | null
 }
@@ -69,10 +68,9 @@ interface UseWorkspaceAssistantRuntimeResult {
   sendMessage: (input: WorkspaceAssistantSendMessageInput) => Promise<void>
   sendHiddenMessage: (text: string, sourceKey?: string) => Promise<void>
   stopReply: () => Promise<void>
-  submitChoiceResponse: (params: { response: Record<string, unknown> }) => Promise<void>
+  submitInteractionResponse: (params: { response: Record<string, unknown> }) => Promise<void>
   resolveApproval: (params: {
     decision: 'approve' | 'reject'
-    reason?: string | null
   }) => Promise<void>
 }
 
@@ -234,7 +232,6 @@ function isActiveTurn(view: AgentSessionView | null): boolean {
 
 function useAgentTurnOverlay(params: {
   projectId: string
-  episodeId: string | null
   view: AgentSessionView | null
 }): UIMessage | null {
   const { subscribeTaskEvents } = useWorkspaceProvider()
@@ -302,7 +299,7 @@ function useAgentTurnOverlay(params: {
     () =>
       subscribeTaskEvents((event) => {
         if (event.type !== WORKSPACE_SSE_EVENT_TYPE.AGENT_TURN_STREAM) return
-        if (event.projectId !== params.projectId || event.episodeId !== params.episodeId) {
+        if (event.projectId !== params.projectId) {
           return
         }
         const identity = `${event.turnId}:${String(event.attempt)}:${event.messageId}`
@@ -321,7 +318,7 @@ function useAgentTurnOverlay(params: {
           close()
         }
       }),
-    [close, params.episodeId, params.projectId, start, subscribeTaskEvents],
+    [close, params.projectId, start, subscribeTaskEvents],
   )
 
   useEffect(() => {
@@ -348,20 +345,18 @@ function useAgentTurnOverlay(params: {
 
 export function useWorkspaceAssistantRuntime({
   projectId,
-  episodeId,
   selectedScopeRef,
   selectedAssetId,
 }: UseWorkspaceAssistantRuntimeParams): UseWorkspaceAssistantRuntimeResult {
   const locale = useLocale()
-  const viewQuery = useAgentSessionView(projectId, episodeId)
+  const viewQuery = useAgentSessionView(projectId)
   const refetchAgentSessionView = viewQuery.refetch
   const view = viewQuery.data ?? null
-  const scopeKey = `${projectId}:${episodeId ?? ''}`
+  const scopeKey = projectId
   const scopeKeyRef = useRef(scopeKey)
   scopeKeyRef.current = scopeKey
   const overlay = useAgentTurnOverlay({
     projectId,
-    episodeId: episodeId ?? null,
     view,
   })
   const [optimisticState, setOptimisticState] = useState<{
@@ -480,7 +475,6 @@ export function useWorkspaceAssistantRuntime({
               message,
               context: {
                 locale,
-                episodeId: episodeId ?? null,
                 selectedScopeRef: selectedScopeRef ?? null,
                 selectedAssetId: selectedAssetId ?? null,
               },
@@ -513,7 +507,6 @@ export function useWorkspaceAssistantRuntime({
       }
     },
     [
-      episodeId,
       locale,
       projectId,
       selectedAssetId,
@@ -556,7 +549,6 @@ export function useWorkspaceAssistantRuntime({
             threadId,
             requestId: `turn-cancel:${turn.turnId}:user`,
             reason: 'user_cancelled',
-            episodeId: episodeId ?? null,
           }),
         },
       )
@@ -575,10 +567,10 @@ export function useWorkspaceAssistantRuntime({
         setCommandPending(false)
       }
     }
-  }, [episodeId, projectId, refetchView, scopeKey, setCommandError, setCommandPending, view])
+  }, [projectId, refetchView, scopeKey, setCommandError, setCommandPending, view])
 
   const resolveApproval = useCallback(
-    async (params: { decision: 'approve' | 'reject'; reason?: string | null }) => {
+    async (params: { decision: 'approve' | 'reject' }) => {
       const interaction = isAssistantRuntimeApprovalRequest(view?.pendingInteraction ?? null)
         ? view?.pendingInteraction ?? null
         : null
@@ -591,17 +583,14 @@ export function useWorkspaceAssistantRuntime({
       setCommandPending(true)
       try {
         const response = await apiFetch(
-          `/api/projects/${encodeURIComponent(projectId)}/assistant/turns/${encodeURIComponent(interaction.turnId)}/approval`,
+          `/api/projects/${encodeURIComponent(projectId)}/assistant/interactions/${encodeURIComponent(interaction.interactionId)}`,
           {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
               threadId,
-              interactionId: interaction.interactionId,
               requestId: `approval:${interaction.interactionId}:${params.decision}`,
-              decision: params.decision,
-              reason: params.reason ?? null,
-              episodeId: episodeId ?? null,
+              result: { decision: params.decision === 'approve' ? 'accept' : 'decline' },
             }),
           },
         )
@@ -623,7 +612,6 @@ export function useWorkspaceAssistantRuntime({
     },
     [
       projectId,
-      episodeId,
       refetchView,
       scopeKey,
       setCommandError,
@@ -633,34 +621,33 @@ export function useWorkspaceAssistantRuntime({
     ],
   )
 
-  const submitChoiceResponse = useCallback(
+  const submitInteractionResponse = useCallback(
     async (params: { response: Record<string, unknown> }) => {
-      const interaction = isAssistantRuntimeChoiceRequest(view?.pendingInteraction ?? null)
+      const interaction = isAssistantRuntimeInputRequest(view?.pendingInteraction ?? null)
         ? view?.pendingInteraction ?? null
         : null
       const threadId = view?.thread?.threadId
       if (!interaction || !threadId) {
-        throw new Error('AGENT_TURN_CHOICE_NOT_PENDING')
+        throw new Error('ASSISTANT_RUNTIME_INTERACTION_NOT_PENDING')
       }
       const commandScopeKey = scopeKey
       setCommandError(null)
       setCommandPending(true)
       try {
         const response = await apiFetch(
-          `/api/projects/${encodeURIComponent(projectId)}/assistant/choices/${encodeURIComponent(interaction.interactionId)}`,
+          `/api/projects/${encodeURIComponent(projectId)}/assistant/interactions/${encodeURIComponent(interaction.interactionId)}`,
           {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
               threadId,
-              requestId: `choice:${interaction.interactionId}`,
-              response: params.response,
-              episodeId: episodeId ?? null,
+              requestId: `interaction:${interaction.interactionId}`,
+              result: params.response,
             }),
           },
         )
         if (!response.ok) {
-          throw await readCommandError(response, 'AGENT_TURN_CHOICE_REQUEST_FAILED')
+          throw await readCommandError(response, 'ASSISTANT_RUNTIME_INTERACTION_REQUEST_FAILED')
         }
         await refetchView()
       } catch (error) {
@@ -677,7 +664,6 @@ export function useWorkspaceAssistantRuntime({
     },
     [
       projectId,
-      episodeId,
       refetchView,
       scopeKey,
       setCommandError,
@@ -722,7 +708,7 @@ export function useWorkspaceAssistantRuntime({
     sendMessage,
     sendHiddenMessage,
     stopReply,
-    submitChoiceResponse,
+    submitInteractionResponse,
     resolveApproval,
   }
 }

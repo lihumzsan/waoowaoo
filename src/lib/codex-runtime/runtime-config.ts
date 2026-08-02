@@ -35,9 +35,9 @@ export type CodexRuntimeContainerFactoryParams = {
 }
 
 export const PRODUCTION_CODEX_INITIALIZE_CAPABILITIES: RuntimeInitializeCapabilities = Object.freeze({
-  experimentalApi: false,
+  experimentalApi: true,
   requestAttestation: false,
-  mcpServerOpenaiFormElicitation: true,
+  mcpServerOpenaiFormElicitation: false,
 })
 
 export function readCodexRuntimeConfig(

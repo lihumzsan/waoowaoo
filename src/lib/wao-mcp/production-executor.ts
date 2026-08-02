@@ -109,7 +109,6 @@ function normalizeTrustedContext(
       projectId,
       context: {
         ...(context.locale?.trim() ? { locale: context.locale.trim() } : {}),
-        episodeId: context.episodeId?.trim() || null,
         turnId,
         userTurnText: context.userTurnText ?? null,
         userTurnMediaResourceIds: context.userTurnMediaResourceIds ?? [],
@@ -150,7 +149,6 @@ function failedResult(params: {
 }): WaoMcpOperationExecutorResult {
   const error = normalizeOperationExecutionToolError({
     error: params.error,
-    operation: params.operation,
     operationId: params.operation.id,
   })
   return {
@@ -370,7 +368,6 @@ async function authorizeBillableOperation(params: {
           plan,
           executionContractRevision: planContractRevision,
           normalizedInput: prepared.input,
-          episodeId: params.context.episodeId ?? null,
           apiRequestId: approvalRequestId,
           apiRequestContext,
         })

@@ -5,6 +5,7 @@ import type {
   RuntimeJsonObject,
   RuntimeJsonValue,
   RuntimeServerRequest,
+  RuntimeSkillsListEntry,
 } from '@/lib/codex-runtime/runtime-adapter'
 import type {
   AssistantRuntimeEventSink,
@@ -22,6 +23,8 @@ export type AssistantRuntimeProjectorOptions = {
   readonly onInteraction: (interaction: AssistantRuntimeInteractionView) => Promise<void>
   readonly onInteractionResolved: (runtimeRequestId: string) => Promise<void>
   readonly onPlan: (plan: RuntimeJsonValue) => Promise<void>
+  readonly onMessageSnapshot: (message: UIMessage) => Promise<void>
+  readonly onSkillsList: (forceReload: boolean) => Promise<RuntimeSkillsListEntry>
   readonly modelKey: string
 }
 
@@ -73,6 +76,31 @@ function stringifySummary(value: RuntimeJsonValue | undefined): string {
 
 function safeToolOutput(item: RuntimeJsonObject): RuntimeJsonValue {
   const status = readString(item, 'status') ?? 'unknown'
+  const type = readString(item, 'type')
+  if (type === 'commandExecution') {
+    return {
+      status,
+      output: item.aggregatedOutput ?? null,
+      exitCode: item.exitCode ?? null,
+      durationMs: item.durationMs ?? null,
+    }
+  }
+  if (type === 'fileChange') return { status, changes: item.changes ?? [] }
+  if (type === 'mcpToolCall') {
+    return {
+      status,
+      result: item.result ?? null,
+      error: item.error ?? null,
+      durationMs: item.durationMs ?? null,
+    }
+  }
+  if (type === 'collabAgentToolCall') {
+    return { status, agentsStates: item.agentsStates ?? {} }
+  }
+  if (type === 'subAgentActivity') {
+    return { status: 'completed', kind: item.kind ?? null, agentPath: item.agentPath ?? null }
+  }
+  if (type === 'webSearch') return { status: 'completed', action: item.action ?? null }
   if (status !== 'completed') return { status }
   const result = item.result
   if (result !== undefined) return { status, result }
@@ -110,8 +138,10 @@ function toolNameForItem(item: RuntimeJsonObject): string | null {
       return 'shell'
     case 'fileChange':
       return 'file_change'
-    case 'collabToolCall':
+    case 'collabAgentToolCall':
       return readString(item, 'tool') ?? 'delegate'
+    case 'subAgentActivity':
+      return 'subagent_activity'
     case 'webSearch':
       return 'web_search'
     case 'imageView':
@@ -131,8 +161,21 @@ function toolInputForItem(item: RuntimeJsonObject): RuntimeJsonValue {
       return { command: item.command ?? null, cwd: item.cwd ?? null }
     case 'fileChange':
       return { changes: item.changes ?? [] }
-    case 'collabToolCall':
-      return { prompt: item.prompt ?? null, receiverThreadId: item.receiverThreadId ?? null }
+    case 'collabAgentToolCall':
+      return {
+        prompt: item.prompt ?? null,
+        senderThreadId: item.senderThreadId ?? null,
+        receiverThreadIds: item.receiverThreadIds ?? [],
+        model: item.model ?? null,
+        reasoningEffort: item.reasoningEffort ?? null,
+        agentsStates: item.agentsStates ?? {},
+      }
+    case 'subAgentActivity':
+      return {
+        kind: item.kind ?? null,
+        agentThreadId: item.agentThreadId ?? null,
+        agentPath: item.agentPath ?? null,
+      }
     case 'webSearch':
       return { query: item.query ?? null, action: item.action ?? null }
     case 'imageView':
@@ -174,7 +217,13 @@ export class AssistantRuntimeEventProjector {
   private readonly partsByItemId = new Map<string, UIMessagePart>()
   private readonly partOrder: string[] = []
   private readonly pendingText = new Map<string, PendingTextPart>()
+  private readonly progressByItem = new Map<string, string>()
   private terminalProjection: AssistantRuntimeTerminalProjection | null = null
+  private finalizing = false
+  private persistenceFailureReason: string | null = null
+  private skillsRefreshFailed = false
+  private persistenceTail: Promise<void> = Promise.resolve()
+  private skillsRefreshTail: Promise<void> = Promise.resolve()
   private terminalResolve: ((value: AssistantRuntimeTerminalProjection) => void) | null = null
   private readonly terminalPromise: Promise<AssistantRuntimeTerminalProjection>
   private usageBase: {
@@ -201,7 +250,7 @@ export class AssistantRuntimeEventProjector {
   }
 
   consume(event: RuntimeEvent): void {
-    if (this.terminalProjection) return
+    if (this.terminalProjection || this.finalizing) return
     if (event.type === 'serverRequest') {
       if (!this.matchesRequest(event.request)) return
       if (!isAssistantRuntimeSupportedRequestMethod(event.request.method)) {
@@ -211,9 +260,10 @@ export class AssistantRuntimeEventProjector {
         })
         return
       }
-      void this.persistInteraction(event.request).catch(() => {
-        this.finish({ status: 'failed', stopReason: 'interaction_persistence_failed' })
-      })
+      this.queueCriticalPersistence(
+        async () => await this.persistInteraction(event.request),
+        'interaction_persistence_failed',
+      )
       return
     }
     if (event.type === 'processExited') {
@@ -224,8 +274,17 @@ export class AssistantRuntimeEventProjector {
       this.finish({ status: 'failed', stopReason: 'runtime_protocol_error' })
       return
     }
+    if (event.type === 'notification' && event.method === 'skills/changed') {
+      this.refreshSkillsInventory()
+      return
+    }
     if (event.type !== 'notification' || !this.matchesNotification(event.params)) return
     this.consumeNotification(event.method, event.params)
+  }
+
+  setInitialSkillsInventory(entry: RuntimeSkillsListEntry): void {
+    if (this.terminalProjection || this.finalizing) return
+    this.consumeSkillsInventory(entry, false)
   }
 
   private consumeNotification(method: string, params: RuntimeJsonObject): void {
@@ -236,6 +295,9 @@ export class AssistantRuntimeEventProjector {
       case 'item/reasoning/summaryTextDelta':
         this.consumeDelta('reasoning', params)
         return
+      case 'item/plan/delta':
+        this.consumeDelta('reasoning', params)
+        return
       case 'item/started':
         this.consumeItemStarted(params)
         return
@@ -243,9 +305,44 @@ export class AssistantRuntimeEventProjector {
         this.consumeItemCompleted(params)
         return
       case 'turn/plan/updated':
-        void this.options.onPlan(normalizePlan(params)).catch(() => {
-          this.finish({ status: 'failed', stopReason: 'plan_persistence_failed' })
+        this.queueCriticalPersistence(async () => {
+          await this.options.onPlan(normalizePlan(params))
+          await this.options.sink.publishViewChanged('runtime_plan_updated').catch(() => undefined)
+        }, 'plan_persistence_failed')
+        return
+      case 'thread/goal/updated':
+        this.consumeGoal(params)
+        return
+      case 'thread/goal/cleared':
+        this.upsertAndPublishDataPart('runtime-goal', {
+          type: 'data-assistant-runtime-goal',
+          id: 'runtime-goal',
+          data: { goal: null },
         })
+        this.queueMessageSnapshot()
+        return
+      case 'item/commandExecution/outputDelta':
+        this.consumeProgress(params, 'shell', 'delta')
+        return
+      case 'item/fileChange/outputDelta':
+        this.consumeProgress(params, 'file', 'delta')
+        return
+      case 'item/fileChange/patchUpdated':
+        this.consumeProgress(params, 'file', 'changes')
+        return
+      case 'item/mcpToolCall/progress':
+        this.consumeProgress(params, 'mcp', 'message')
+        return
+      case 'turn/diff/updated':
+        this.consumeTurnDiff(params)
+        return
+      case 'thread/compacted':
+        this.upsertAndPublishDataPart('runtime-compaction', {
+          type: 'data-assistant-context-compacted',
+          id: 'runtime-compaction',
+          data: { replacedItemCount: 0 },
+        })
+        this.queueMessageSnapshot()
         return
       case 'thread/tokenUsage/updated':
         this.consumeTokenUsage(params)
@@ -253,9 +350,10 @@ export class AssistantRuntimeEventProjector {
       case 'serverRequest/resolved': {
         const requestId = params.requestId
         if (typeof requestId !== 'string' && typeof requestId !== 'number') return
-        void this.options.onInteractionResolved(String(requestId)).catch(() => {
-          this.finish({ status: 'failed', stopReason: 'interaction_resolution_failed' })
-        })
+        this.queueCriticalPersistence(async () => {
+          await this.options.onInteractionResolved(String(requestId))
+          await this.options.sink.publishViewChanged('runtime_server_request_resolved').catch(() => undefined)
+        }, 'interaction_resolution_failed')
         return
       }
       case 'turn/completed':
@@ -264,6 +362,78 @@ export class AssistantRuntimeEventProjector {
       default:
         return
     }
+  }
+
+  private consumeGoal(params: RuntimeJsonObject): void {
+    if (!isRecord(params.goal)) return
+    this.upsertAndPublishDataPart('runtime-goal', {
+      type: 'data-assistant-runtime-goal',
+      id: 'runtime-goal',
+      data: { goal: params.goal },
+    })
+    this.queueMessageSnapshot()
+  }
+
+  private consumeSkillsInventory(entry: RuntimeSkillsListEntry, changed: boolean): void {
+    this.upsertAndPublishDataPart('runtime-skills', {
+      type: 'data-assistant-runtime-skills',
+      id: 'runtime-skills',
+      data: {
+        changed,
+        skills: entry.skills.map((skill) => ({
+          name: skill.name,
+          description: skill.description,
+          enabled: skill.enabled,
+          scope: skill.scope,
+        })),
+        errorCount: entry.errors.length,
+      },
+    })
+    this.queueMessageSnapshot()
+  }
+
+  private refreshSkillsInventory(): void {
+    const operation = this.skillsRefreshTail.then(async () => {
+      const entry = await this.options.onSkillsList(true)
+      if (this.terminalProjection || this.finalizing) return
+      this.consumeSkillsInventory(entry, true)
+    })
+    this.skillsRefreshTail = operation.catch(() => {
+      this.skillsRefreshFailed = true
+    })
+    void operation.catch(() => {
+      this.finish({ status: 'failed', stopReason: 'skills_list_failed' })
+    })
+  }
+
+  private consumeProgress(
+    params: RuntimeJsonObject,
+    kind: 'shell' | 'file' | 'mcp',
+    field: 'delta' | 'changes' | 'message',
+  ): void {
+    const itemId = readString(params, 'itemId')
+    if (!itemId) return
+    const raw = params[field]
+    const fragment = typeof raw === 'string' ? raw : JSON.stringify(raw ?? null)
+    const previous = this.progressByItem.get(itemId) ?? ''
+    const combined = field === 'delta' ? `${previous}${fragment}` : fragment
+    const message = combined.slice(-12_000)
+    this.progressByItem.set(itemId, message)
+    this.upsertAndPublishDataPart(`${itemId}:progress`, {
+      type: 'data-assistant-runtime-progress',
+      id: `${itemId}:progress`,
+      data: { itemId, kind, message },
+    })
+  }
+
+  private consumeTurnDiff(params: RuntimeJsonObject): void {
+    const diff = typeof params.diff === 'string' ? params.diff : ''
+    if (!diff) return
+    this.upsertAndPublishDataPart('runtime-turn-diff', {
+      type: 'data-assistant-runtime-progress',
+      id: 'runtime-turn-diff',
+      data: { itemId: 'turn-diff', kind: 'diff', message: diff.slice(-12_000) },
+    })
   }
 
   private consumeDelta(kind: PendingTextPart['kind'], params: RuntimeJsonObject): void {
@@ -315,22 +485,34 @@ export class AssistantRuntimeEventProjector {
     if (itemType === 'agentMessage') {
       const text = readString(item, 'text') ?? this.pendingText.get(itemId)?.value ?? ''
       this.completeTextPart('text', itemId, text)
+      this.queueMessageSnapshot()
       return
     }
     if (itemType === 'reasoning') {
       const summary = stringifySummary(item.summary) || this.pendingText.get(itemId)?.value || ''
       this.completeTextPart('reasoning', itemId, summary)
+      this.queueMessageSnapshot()
+      return
+    }
+    if (itemType === 'plan') {
+      const text = readString(item, 'text') ?? this.pendingText.get(itemId)?.value ?? ''
+      this.completeTextPart('reasoning', itemId, text)
+      this.queueMessageSnapshot()
       return
     }
     if (itemType === 'contextCompaction') {
-      this.upsertPart(itemId, {
+      this.upsertAndPublishDataPart('runtime-compaction', {
         type: 'data-assistant-context-compacted',
+        id: 'runtime-compaction',
         data: { replacedItemCount: 0 },
       })
+      this.queueMessageSnapshot()
       return
     }
     const part = finalToolPart(item)
     if (!part) return
+    this.removePart(`${itemId}:progress`)
+    this.progressByItem.delete(itemId)
     this.upsertPart(itemId, part)
     this.options.sink.publishChunk({
       type: 'tool-output-available',
@@ -338,6 +520,7 @@ export class AssistantRuntimeEventProjector {
       output: safeToolOutput(item),
       dynamic: true,
     })
+    this.queueMessageSnapshot()
   }
 
   private completeTextPart(kind: PendingTextPart['kind'], itemId: string, value: string): void {
@@ -417,18 +600,24 @@ export class AssistantRuntimeEventProjector {
     readonly status: AssistantRuntimeTerminalProjection['status']
     readonly stopReason: string
   }): void {
-    if (this.terminalProjection) return
-    const parts = this.partOrder.flatMap((itemId): UIMessagePart[] => {
-      const part = this.partsByItemId.get(itemId)
-      return part ? [part] : []
+    if (this.terminalProjection || this.finalizing) return
+    this.finalizing = true
+    void this.skillsRefreshTail.then(async () => await this.persistenceTail).then(() => {
+      this.finishAfterPersistence({
+        status: this.persistenceFailureReason || this.skillsRefreshFailed ? 'failed' : input.status,
+        stopReason: this.skillsRefreshFailed
+          ? 'skills_list_failed'
+          : this.persistenceFailureReason ?? input.stopReason,
+      })
     })
-    const assistantMessage = parts.length > 0
-      ? {
-          id: `workspace-assistant-turn:${this.options.identity.turnId}:attempt:${String(this.options.identity.attempt)}`,
-          role: 'assistant' as const,
-          parts,
-        }
-      : null
+  }
+
+  private finishAfterPersistence(input: {
+    readonly status: AssistantRuntimeTerminalProjection['status']
+    readonly stopReason: string
+  }): void {
+    if (this.terminalProjection) return
+    const assistantMessage = this.buildAssistantMessage()
     const projection: AssistantRuntimeTerminalProjection = {
       status: input.status,
       stopReason: input.stopReason,
@@ -454,6 +643,53 @@ export class AssistantRuntimeEventProjector {
     this.partsByItemId.set(itemId, part)
   }
 
+  private upsertAndPublishDataPart(
+    itemId: string,
+    part: Extract<UIMessagePart, { type: `data-${string}` }>,
+  ): void {
+    this.upsertPart(itemId, part)
+    this.options.sink.publishChunk(part)
+  }
+
+  private removePart(itemId: string): void {
+    this.partsByItemId.delete(itemId)
+  }
+
+  private buildAssistantMessage(): UIMessage | null {
+    const parts = this.partOrder.flatMap((itemId): UIMessagePart[] => {
+      const part = this.partsByItemId.get(itemId)
+      return part ? [part] : []
+    })
+    if (parts.length === 0) return null
+    return {
+      id: `workspace-assistant-turn:${this.options.identity.turnId}:attempt:${String(this.options.identity.attempt)}`,
+      role: 'assistant',
+      parts,
+    }
+  }
+
+  private queueMessageSnapshot(): void {
+    const message = this.buildAssistantMessage()
+    if (!message) return
+    this.queueCriticalPersistence(async () => {
+      await this.options.onMessageSnapshot(message)
+      await this.options.sink.publishViewChanged('runtime_item_completed').catch(() => undefined)
+    }, 'message_snapshot_persistence_failed')
+  }
+
+  private queueCriticalPersistence(
+    action: () => Promise<void>,
+    failureReason: string,
+  ): void {
+    const operation = this.persistenceTail.then(action)
+    this.persistenceTail = operation.catch(() => {
+      this.persistenceFailureReason ??= failureReason
+    })
+    void operation.catch(() => {
+      this.finish({ status: 'failed', stopReason: failureReason })
+    })
+  }
+
   private matchesNotification(params: RuntimeJsonObject): boolean {
     const threadId = readThreadId(params)
     const turnId = readTurnId(params)
@@ -465,12 +701,6 @@ export class AssistantRuntimeEventProjector {
   private matchesRequest(request: RuntimeServerRequest): boolean {
     const threadId = readThreadId(request.params)
     const turnId = readTurnId(request.params)
-    if (request.method === 'mcpServer/elicitation/request' && threadId === null) {
-      // app-server's MCP elicitation schema has no threadId and turnId may be
-      // null. RuntimeSessionManager enforces one active Turn per Project
-      // container, so the sole live projector is the unique request owner.
-      return turnId === null || turnId === this.options.identity.runtimeTurnId
-    }
     return threadId === this.options.identity.runtimeThreadId
       && (turnId === null || turnId === this.options.identity.runtimeTurnId)
   }

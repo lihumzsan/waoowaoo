@@ -9,13 +9,14 @@ import {
 import path from 'node:path'
 
 export const WORKSPACE_BUNDLE_SCHEMA_VERSION = 1 as const
-export const WORKSPACE_BUNDLE_MAX_FILES = 1_000
-export const WORKSPACE_BUNDLE_MAX_FILE_BYTES = 1024 * 1024
-export const WORKSPACE_BUNDLE_MAX_TOTAL_BYTES = 10 * 1024 * 1024
+export const WORKSPACE_BUNDLE_MAX_FILES = 5_256
+export const WORKSPACE_BUNDLE_MAX_DIRECTORIES = 5_256
+export const WORKSPACE_BUNDLE_MAX_FILE_BYTES = 4 * 1024 * 1024
+export const WORKSPACE_BUNDLE_MAX_TOTAL_BYTES = 64 * 1024 * 1024
 export const WORKSPACE_BUNDLE_MAX_PATH_BYTES = 512
 export const WORKSPACE_BUNDLE_MAX_ENCODED_BYTES = 64 * 1024 * 1024
 
-const ALLOWED_EXTENSIONS = new Set(['.json', '.md', '.txt'])
+const ALLOWED_EXTENSIONS = new Set(['.json', '.md', '.txt', '.resource'])
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true })
 
 export type WorkspaceBundleFile = {
@@ -23,8 +24,11 @@ export type WorkspaceBundleFile = {
   readonly content: string
 }
 
+export type WorkspaceBundleDirectory = string
+
 export type WorkspaceBundleV1 = {
   readonly schemaVersion: typeof WORKSPACE_BUNDLE_SCHEMA_VERSION
+  readonly directories: readonly WorkspaceBundleDirectory[]
   readonly files: readonly WorkspaceBundleFile[]
 }
 
@@ -32,6 +36,7 @@ export type WorkspaceBundleErrorCode =
   | 'WORKSPACE_BUNDLE_INVALID'
   | 'WORKSPACE_BUNDLE_PATH_INVALID'
   | 'WORKSPACE_BUNDLE_FILE_TYPE_INVALID'
+  | 'WORKSPACE_BUNDLE_DIRECTORY_LIMIT_EXCEEDED'
   | 'WORKSPACE_BUNDLE_FILE_LIMIT_EXCEEDED'
   | 'WORKSPACE_BUNDLE_FILE_TOO_LARGE'
   | 'WORKSPACE_BUNDLE_TOTAL_SIZE_EXCEEDED'
@@ -155,8 +160,38 @@ export function validateWorkspaceFilePath(rawPath: string): string {
   return normalizedPath
 }
 
-function validateWorkspaceDirectoryPath(rawPath: string): string {
+export function validateWorkspaceDirectoryPath(rawPath: string): string {
   return validatePathComponents(rawPath)
+}
+
+function normalizeBundleDirectories(directories: readonly string[]): string[] {
+  if (directories.length > WORKSPACE_BUNDLE_MAX_DIRECTORIES) {
+    throw new WorkspaceBundleError(
+      'WORKSPACE_BUNDLE_DIRECTORY_LIMIT_EXCEEDED',
+      `Workspace contains more than ${String(WORKSPACE_BUNDLE_MAX_DIRECTORIES)} directories`,
+    )
+  }
+  const seenPaths = new Set<string>()
+  const normalized = directories.map((directory, index) => {
+    if (typeof directory !== 'string') {
+      throw new WorkspaceBundleError(
+        'WORKSPACE_BUNDLE_INVALID',
+        `Workspace directory at index ${String(index)} must be a string`,
+      )
+    }
+    const directoryPath = validateWorkspaceDirectoryPath(directory)
+    if (seenPaths.has(directoryPath)) {
+      throw new WorkspaceBundleError(
+        'WORKSPACE_BUNDLE_PATH_INVALID',
+        `Duplicate workspace directory path: ${directoryPath}`,
+      )
+    }
+    seenPaths.add(directoryPath)
+    return directoryPath
+  })
+  return normalized.sort((left, right) => (
+    left < right ? -1 : left > right ? 1 : 0
+  ))
 }
 
 function normalizeBundleFiles(files: readonly WorkspaceBundleFile[]): WorkspaceBundleFile[] {
@@ -221,17 +256,51 @@ export function validateWorkspaceBundle(value: unknown): WorkspaceBundleV1 {
   if (!isRecord(value)) {
     throw new WorkspaceBundleError('WORKSPACE_BUNDLE_INVALID', 'Workspace bundle must be an object')
   }
-  requireExactKeys(value, ['schemaVersion', 'files'], 'Workspace bundle')
-  if (value.schemaVersion !== WORKSPACE_BUNDLE_SCHEMA_VERSION || !Array.isArray(value.files)) {
+  requireExactKeys(value, ['schemaVersion', 'directories', 'files'], 'Workspace bundle')
+  if (
+    value.schemaVersion !== WORKSPACE_BUNDLE_SCHEMA_VERSION
+    || !Array.isArray(value.directories)
+    || !Array.isArray(value.files)
+  ) {
     throw new WorkspaceBundleError(
       'WORKSPACE_BUNDLE_INVALID',
-      `Workspace bundle must use schemaVersion ${String(WORKSPACE_BUNDLE_SCHEMA_VERSION)} and contain files`,
+      `Workspace bundle must use schemaVersion ${String(WORKSPACE_BUNDLE_SCHEMA_VERSION)} and contain directories and files`,
     )
+  }
+
+  const directories = normalizeBundleDirectories(value.directories)
+  const files = normalizeBundleFiles(value.files as readonly WorkspaceBundleFile[])
+  const directoryPaths = new Set(directories)
+  const filePaths = new Set(files.map((file) => file.path))
+  for (const directory of directories) {
+    if (filePaths.has(directory)) {
+      throw new WorkspaceBundleError(
+        'WORKSPACE_BUNDLE_PATH_INVALID',
+        `Workspace path cannot be both a file and directory: ${directory}`,
+      )
+    }
+    const parent = path.posix.dirname(directory)
+    if (parent !== '.' && !directoryPaths.has(parent)) {
+      throw new WorkspaceBundleError(
+        'WORKSPACE_BUNDLE_PATH_INVALID',
+        `Workspace directory parent must be explicit: ${directory} requires ${parent}`,
+      )
+    }
+  }
+  for (const file of files) {
+    const parent = path.posix.dirname(file.path)
+    if (parent !== '.' && !directoryPaths.has(parent)) {
+      throw new WorkspaceBundleError(
+        'WORKSPACE_BUNDLE_PATH_INVALID',
+        `Workspace file parent must be explicit: ${file.path} requires ${parent}`,
+      )
+    }
   }
 
   return {
     schemaVersion: WORKSPACE_BUNDLE_SCHEMA_VERSION,
-    files: normalizeBundleFiles(value.files as readonly WorkspaceBundleFile[]),
+    directories,
+    files,
   }
 }
 
@@ -333,6 +402,9 @@ export async function materializeWorkspaceBundle(
   const normalized = validateWorkspaceBundle(bundle)
   await requireEmptyMaterializationRoot(rootDir)
 
+  for (const directory of normalized.directories) {
+    await ensureMaterializationDirectory(rootDir, directory)
+  }
   for (const file of normalized.files) {
     const parentDir = path.posix.dirname(file.path)
     await ensureMaterializationDirectory(rootDir, parentDir === '.' ? '' : parentDir)
@@ -386,6 +458,7 @@ async function readRegularUtf8File(absolutePath: string, relativePath: string): 
 async function collectWorkspaceFiles(
   rootDir: string,
   relativeDir: string,
+  directories: string[],
   files: WorkspaceBundleFile[],
   byteCounter: { value: number },
 ): Promise<void> {
@@ -408,8 +481,15 @@ async function collectWorkspaceFiles(
       )
     }
     if (entryStat.isDirectory() && entry.isDirectory()) {
-      validateWorkspaceDirectoryPath(relativePath)
-      await collectWorkspaceFiles(rootDir, relativePath, files, byteCounter)
+      const directoryPath = validateWorkspaceDirectoryPath(relativePath)
+      if (directories.length >= WORKSPACE_BUNDLE_MAX_DIRECTORIES) {
+        throw new WorkspaceBundleError(
+          'WORKSPACE_BUNDLE_DIRECTORY_LIMIT_EXCEEDED',
+          `Workspace contains more than ${String(WORKSPACE_BUNDLE_MAX_DIRECTORIES)} directories`,
+        )
+      }
+      directories.push(directoryPath)
+      await collectWorkspaceFiles(rootDir, relativePath, directories, files, byteCounter)
       continue
     }
     if (!entryStat.isFile() || !entry.isFile()) {
@@ -454,9 +534,11 @@ export async function captureWorkspaceBundle(rootDir: string): Promise<Workspace
   }
 
   const files: WorkspaceBundleFile[] = []
-  await collectWorkspaceFiles(rootDir, '', files, { value: 0 })
+  const directories: string[] = []
+  await collectWorkspaceFiles(rootDir, '', directories, files, { value: 0 })
   return validateWorkspaceBundle({
     schemaVersion: WORKSPACE_BUNDLE_SCHEMA_VERSION,
+    directories,
     files,
   })
 }

@@ -35,7 +35,6 @@ export interface AgentTurnStreamPublisher {
 export function createAgentTurnStreamPublisher(params: {
   projectId: string
   userId: string
-  episodeId: string | null
   threadId: string
   turnId: string
   attempt: number
@@ -80,7 +79,6 @@ export function createAgentTurnStreamPublisher(params: {
         type: WORKSPACE_SSE_EVENT_TYPE.AGENT_TURN_STREAM,
         projectId: params.projectId,
         userId: params.userId,
-        episodeId: params.episodeId,
         assistantId: 'workspace-command',
         threadId: params.threadId,
         turnId: params.turnId,
@@ -122,7 +120,6 @@ export function createAgentTurnStreamPublisher(params: {
 export async function publishAgentSessionViewChanged(params: {
   projectId: string
   userId: string
-  episodeId: string | null
   threadId: string
   turnId: string | null
   attempt: number | null
@@ -135,7 +132,6 @@ export async function publishAgentSessionViewChanged(params: {
       type: WORKSPACE_SSE_EVENT_TYPE.AGENT_SESSION_VIEW_CHANGED,
       projectId: params.projectId,
       userId: params.userId,
-      episodeId: params.episodeId,
       assistantId: 'workspace-command',
       threadId: params.threadId,
       turnId: params.turnId,

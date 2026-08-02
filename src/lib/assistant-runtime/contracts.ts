@@ -19,7 +19,6 @@ export class AssistantRuntimeProjectBusyError extends Error {
 export type AssistantRuntimeScope = {
   readonly projectId: string
   readonly userId: string
-  readonly episodeId: string | null
 }
 
 export type AssistantRuntimeTurnContext = {
@@ -128,10 +127,6 @@ export type AssistantRuntimeTaskFollowUp = AssistantRuntimeScope & {
   readonly requestId: string
   readonly context: AssistantRuntimeTurnContext
   readonly inputs: readonly RuntimeUserInput[]
-}
-
-export type AssistantRuntimeLegacyInjection = {
-  readonly items: readonly RuntimeJsonValue[]
 }
 
 export type AssistantRuntimeInteractionView = {

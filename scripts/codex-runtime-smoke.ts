@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { cp, mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
@@ -15,6 +15,7 @@ import {
   type WorkspaceBundleV1,
 } from '@/lib/codex-runtime/workspace-bundle'
 import { LocalRuntimeManager } from '@/lib/codex-runtime/local-runtime-manager'
+import { PRODUCTION_CODEX_INITIALIZE_CAPABILITIES } from '@/lib/codex-runtime/runtime-config'
 import type {
   RuntimeAdapter,
   RuntimeEvent,
@@ -24,6 +25,10 @@ import { createWaoMcpOperationCatalog } from '@/lib/wao-mcp/operation-catalog'
 import { createWaoMcpServer } from '@/lib/wao-mcp/server'
 import type { WaoMcpOperationExecutorResult } from '@/lib/wao-mcp/contracts'
 import { inspectCapturedCodexState } from '@/lib/assistant-runtime/runtime-persistence'
+import {
+  ASSISTANT_RUNTIME_APPROVAL_METHODS,
+  ASSISTANT_RUNTIME_INPUT_METHODS,
+} from '@/lib/assistant-runtime/view-contract'
 
 const VALIDATED_CODEX_VERSION = 'codex-cli 0.144.1'
 const DEFAULT_MODEL = 'gpt-5.6-sol'
@@ -38,6 +43,8 @@ type AppServerSmokeResult = {
   readonly streamedText: string
   readonly capturedStateBytes: number
   readonly customResponsesProvider: boolean
+  readonly skillsListed: readonly string[]
+  readonly protocolSurfaceValidated: boolean
 }
 
 function requireObject(value: unknown, label: string): RuntimeJsonObject {
@@ -59,14 +66,60 @@ function createSignal(): { readonly promise: Promise<void>; readonly resolve: ()
   }
 }
 
+async function assertPinnedProtocolSurface(rootDir: string): Promise<void> {
+  const schemaDirectory = path.join(rootDir, 'protocol-schema')
+  execFileSync('codex', [
+    'app-server',
+    'generate-json-schema',
+    '--experimental',
+    '--out',
+    schemaDirectory,
+  ], { encoding: 'utf8' })
+  const [requests, notifications] = await Promise.all([
+    readFile(path.join(schemaDirectory, 'ServerRequest.json'), 'utf8'),
+    readFile(path.join(schemaDirectory, 'ServerNotification.json'), 'utf8'),
+  ])
+  for (const method of [
+    ...ASSISTANT_RUNTIME_APPROVAL_METHODS,
+    ...ASSISTANT_RUNTIME_INPUT_METHODS,
+  ]) {
+    assert.ok(requests.includes(`\"${method}\"`), `Pinned Codex protocol no longer exposes ${method}`)
+  }
+  for (const method of [
+    'skills/changed',
+    'thread/goal/updated',
+    'thread/goal/cleared',
+    'turn/plan/updated',
+    'item/commandExecution/outputDelta',
+    'item/fileChange/outputDelta',
+    'item/fileChange/patchUpdated',
+    'item/mcpToolCall/progress',
+    'turn/diff/updated',
+    'thread/compacted',
+  ]) {
+    assert.ok(notifications.includes(`\"${method}\"`), `Pinned Codex protocol no longer exposes ${method}`)
+  }
+  for (const itemType of [
+    'commandExecution',
+    'fileChange',
+    'mcpToolCall',
+    'collabAgentToolCall',
+    'subAgentActivity',
+    'webSearch',
+  ]) {
+    assert.ok(notifications.includes(`\"${itemType}\"`), `Pinned Codex protocol no longer exposes ${itemType}`)
+  }
+}
+
 async function runWorkspaceSmoke(rootDir: string): Promise<void> {
-  const authoringDir = path.join(rootDir, 'authoring')
+  const workspaceDir = path.join(rootDir, 'workspace')
   const bundle: WorkspaceBundleV1 = {
     schemaVersion: 1,
+    directories: ['project', 'project/empty'],
     files: [
       {
         path: 'project/brief.md',
-        content: '# Runtime smoke\n\nThe Canvas is a projection of this authoring directory.\n',
+        content: '# Runtime smoke\n\nThe Canvas is a projection of this project workspace.\n',
       },
       {
         path: 'project/resources.json',
@@ -75,8 +128,8 @@ async function runWorkspaceSmoke(rootDir: string): Promise<void> {
     ],
   }
 
-  await materializeWorkspaceBundle(authoringDir, bundle)
-  const captured = await captureWorkspaceBundle(authoringDir)
+  await materializeWorkspaceBundle(workspaceDir, bundle)
+  const captured = await captureWorkspaceBundle(workspaceDir)
   assert.deepEqual(encodeWorkspaceBundle(captured), encodeWorkspaceBundle(bundle))
 }
 
@@ -255,9 +308,27 @@ async function runAppServerSmoke(params: {
     process.env.CODEX_RUNTIME_EXPECTED_VERSION?.trim() || VALIDATED_CODEX_VERSION,
     'Codex CLI version differs from the Stage 0 validated protocol version',
   )
+  await assertPinnedProtocolSurface(params.rootDir)
 
   const codexHome = path.join(params.rootDir, 'codex-home')
   await mkdir(codexHome, { recursive: true, mode: 0o700 })
+  const smokeSkillDirectory = path.join(codexHome, 'skills', 'runtime-smoke')
+  await mkdir(smokeSkillDirectory, { recursive: true, mode: 0o700 })
+  await writeFile(
+    path.join(smokeSkillDirectory, 'SKILL.md'),
+    [
+      '---',
+      'name: runtime-smoke',
+      'description: Verifies that Wao can expose versioned Creative Skills through the native Codex skills protocol.',
+      '---',
+      '',
+      '# Runtime smoke',
+      '',
+      'Use only for the Codex app-server integration smoke.',
+      '',
+    ].join('\n'),
+    { encoding: 'utf8', mode: 0o600 },
+  )
   const createManager = (home: string) => new LocalRuntimeManager({
     clientInfo: {
       name: 'wao-runtime-smoke',
@@ -270,11 +341,12 @@ async function runAppServerSmoke(params: {
       HOME: home,
       WAO_MCP_RUNTIME_BEARER_TOKEN: 'runtime-smoke-token',
     },
+    initializeCapabilities: PRODUCTION_CODEX_INITIALIZE_CAPABILITIES,
   })
   const manager = createManager(codexHome)
   let restoredManager: LocalRuntimeManager | null = null
   const runtimeKey = 'stage-0-smoke'
-  const cwd = path.join(params.rootDir, 'authoring')
+  const cwd = path.join(params.rootDir, 'workspace')
   const customProviderConfig = {
     model_providers: {
       'wao-runtime-smoke': {
@@ -294,6 +366,18 @@ async function runAppServerSmoke(params: {
   try {
     const firstRuntime = await manager.ensure({ runtimeKey, cwd })
     const initialized = await firstRuntime.initialize()
+    const listedSkills = await firstRuntime.listSkills({
+      cwds: [cwd],
+      forceReload: true,
+    })
+    assert.equal(listedSkills.data.length, 1)
+    assert.equal(listedSkills.data[0]?.cwd, cwd)
+    assert.deepEqual(listedSkills.data[0]?.errors, [])
+    assert.ok(listedSkills.data[0]?.skills.some((skill) => (
+      skill.name === 'runtime-smoke'
+      && skill.enabled
+      && skill.scope === 'user'
+    )))
     const thread = await firstRuntime.startThread({
       model: process.env.CODEX_RUNTIME_SMOKE_MODEL?.trim() || DEFAULT_MODEL,
       modelProvider: 'wao-runtime-smoke',
@@ -385,6 +469,8 @@ async function runAppServerSmoke(params: {
       streamedText,
       capturedStateBytes,
       customResponsesProvider: true,
+      skillsListed: listedSkills.data[0]?.skills.map((skill) => skill.name) ?? [],
+      protocolSurfaceValidated: true,
     }
   } finally {
     await Promise.allSettled([

@@ -1,7 +1,7 @@
 import { safeValidateUIMessages, type UIMessage } from 'ai'
 import { MAX_IMAGE_BYTES } from '@/lib/http/body-limits'
 import { normalizeToOriginalMediaUrl } from '@/lib/media/outbound-image'
-import type { RuntimeJsonValue, RuntimeUserInput } from '@/lib/codex-runtime/runtime-adapter'
+import type { RuntimeUserInput } from '@/lib/codex-runtime/runtime-adapter'
 import {
   readProjectAssistantMediaAttachmentsFromMessage,
   withProjectAssistantMediaAttachments,
@@ -15,10 +15,7 @@ import {
   appendProjectAssistantTextAttachmentsToUserText,
   readProjectAssistantTextAttachmentsFromMessage,
 } from '@/lib/project-agent/text-attachments'
-import type {
-  AssistantRuntimeLegacyInjection,
-  AssistantRuntimePreparedInput,
-} from './contracts'
+import type { AssistantRuntimePreparedInput } from './contracts'
 
 const CODEX_SUPPORTED_IMAGE_MIME_TYPES = new Set([
   'image/jpeg',
@@ -139,37 +136,4 @@ export async function prepareAssistantRuntimeUserInput(input: {
   }
   if (visibleText) runtimeInputs.unshift({ type: 'text', text: visibleText })
   return { message, inputs: runtimeInputs, visibleText }
-}
-
-function legacyMessageItem(message: UIMessage): RuntimeJsonValue | null {
-  const text = textFromMessage(message)
-  if (!text) return null
-  if (message.role === 'system') return null
-  if (message.role === 'user') {
-    return {
-      type: 'message',
-      role: 'user',
-      content: [{ type: 'input_text', text }],
-    }
-  }
-  return {
-    type: 'message',
-    role: 'assistant',
-    content: [{ type: 'output_text', text }],
-  }
-}
-
-/**
- * One-time migration bridge for user-visible messages that predate a Codex
- * rollout. It only injects plain text; Tool/Approval state keeps its product
- * owner and is never reconstructed from UI history.
- */
-export function buildAssistantRuntimeLegacyInjection(
-  messages: readonly UIMessage[],
-): AssistantRuntimeLegacyInjection {
-  const items = messages.flatMap((message): RuntimeJsonValue[] => {
-    const item = legacyMessageItem(message)
-    return item ? [item] : []
-  })
-  return { items }
 }

@@ -6,7 +6,6 @@ import {
   assertProjectAgentCommandKeys,
   mapProjectAgentCommandError,
   readNullableProjectAgentCommandString,
-  readProjectAgentCommandEpisodeId,
   readProjectAgentCommandHttpBody,
   readRequiredProjectAgentCommandString,
 } from '../../../command-http'
@@ -25,13 +24,12 @@ export const POST = apiHandler(async (
     const body = await readProjectAgentCommandHttpBody(request)
     assertProjectAgentCommandKeys(
       body,
-      ['threadId', 'requestId', 'reason', 'episodeId'],
+      ['threadId', 'requestId', 'reason'],
       'AGENT_TURN_CANCEL_FIELDS_INVALID',
     )
     const receipt = await getAssistantRuntimeService().interrupt({
       projectId,
       userId: authResult.session.user.id,
-      episodeId: readProjectAgentCommandEpisodeId(body),
       assistantId: 'workspace-command',
       threadId: readRequiredProjectAgentCommandString(
         body.threadId,

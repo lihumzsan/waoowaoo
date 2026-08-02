@@ -9,19 +9,11 @@ import {
 import { ensureUniqueUIMessages } from '@/lib/project-agent/ui-message-validation'
 import {
   mapProjectAgentCommandError,
-  readProjectAgentCommandEpisodeId,
   readProjectAgentCommandHttpBody,
   readNullableProjectAgentCommandString,
   readRequiredProjectAgentCommandString,
   type ProjectAgentCommandHttpBody,
 } from '../command-http'
-
-function readEpisodeIdFromQuery(request: NextRequest): string | null {
-  return readNullableProjectAgentCommandString(
-    request.nextUrl.searchParams.get('episodeId'),
-    'AGENT_TURN_EPISODE_ID_INVALID',
-  )
-}
 
 async function validateUserMessage(message: unknown): Promise<UIMessage> {
   const validation = await safeValidateUIMessages({ messages: [message] })
@@ -50,7 +42,6 @@ function assertExactKeys(
 
 function readUserTurnContext(body: ProjectAgentCommandHttpBody): {
   locale: string
-  episodeId: string | null
   selectedScopeRef: string | null
   selectedAssetId: string | null
 } {
@@ -68,7 +59,6 @@ function readUserTurnContext(body: ProjectAgentCommandHttpBody): {
     contextRecord,
     new Set([
       'locale',
-      'episodeId',
       'selectedScopeRef',
       'selectedAssetId',
     ]),
@@ -80,7 +70,6 @@ function readUserTurnContext(body: ProjectAgentCommandHttpBody): {
       'AGENT_TURN_LOCALE_INVALID',
       64,
     ),
-    episodeId: readProjectAgentCommandEpisodeId(body),
     selectedScopeRef: readNullableProjectAgentCommandString(
       contextRecord.selectedScopeRef,
       'AGENT_TURN_SCOPE_REF_INVALID',
@@ -95,11 +84,10 @@ function readUserTurnContext(body: ProjectAgentCommandHttpBody): {
 function readClearCommand(body: ProjectAgentCommandHttpBody): {
   threadId: string
   requestId: string
-  episodeId: string | null
 } {
   assertExactKeys(
     body,
-    new Set(['threadId', 'requestId', 'episodeId']),
+    new Set(['threadId', 'requestId']),
     'AGENT_THREAD_CLEAR_FIELDS_INVALID',
   )
   return {
@@ -112,7 +100,6 @@ function readClearCommand(body: ProjectAgentCommandHttpBody): {
       'AGENT_THREAD_CLEAR_REQUEST_ID_INVALID',
       128,
     ),
-    episodeId: readProjectAgentCommandEpisodeId(body),
   }
 }
 
@@ -130,7 +117,6 @@ export const GET = apiHandler(async (
     const view = await getAssistantRuntimeSessionView({
       projectId,
       userId: authResult.session.user.id,
-      episodeId: readEpisodeIdFromQuery(request),
       assistantId: 'workspace-command',
     })
     return NextResponse.json(view)
@@ -153,7 +139,6 @@ export const DELETE = apiHandler(async (
     const receipt = await getAssistantRuntimeService().clear({
       projectId,
       userId: authResult.session.user.id,
-      episodeId: command.episodeId,
       assistantId: 'workspace-command',
       threadId: command.threadId,
       requestId: command.requestId,
@@ -183,7 +168,6 @@ export const POST = apiHandler(async (
     const receipt = await getAssistantRuntimeService().submit({
       projectId,
       userId: authResult.session.user.id,
-      episodeId: turnContext.episodeId,
       assistantId: 'workspace-command',
       sourceId,
       requestId: sourceId,

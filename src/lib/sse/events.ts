@@ -28,7 +28,6 @@ export interface TaskSSEEvent {
   taskType?: string | null
   targetType?: string | null
   targetId?: string | null
-  episodeId?: string | null
   payload?: (Record<string, unknown> & {
     lifecycleType?: TaskLifecycleEventType
     coveredTargets?: readonly {
@@ -54,7 +53,6 @@ export interface AgentSessionViewChangedSSEEvent {
   type: typeof WORKSPACE_SSE_EVENT_TYPE.AGENT_SESSION_VIEW_CHANGED
   projectId: string
   userId: string
-  episodeId: string | null
   assistantId: 'workspace-command'
   threadId: string
   turnId: string | null
@@ -69,7 +67,6 @@ export interface AgentTurnStreamSSEEvent {
   type: typeof WORKSPACE_SSE_EVENT_TYPE.AGENT_TURN_STREAM
   projectId: string
   userId: string
-  episodeId: string | null
   assistantId: 'workspace-command'
   threadId: string
   turnId: string

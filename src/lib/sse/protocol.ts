@@ -77,7 +77,6 @@ export function isWorkspaceSseEvent(value: unknown): value is SSEEvent {
       )
       && typeof record.reason === 'string'
       && record.reason.length > 0
-      && (typeof record.episodeId === 'string' || record.episodeId === null)
   }
   if (record.type === WORKSPACE_SSE_EVENT_TYPE.AGENT_TURN_STREAM) {
     return record.protocol === 'agent_turn_stream_v1'
@@ -98,7 +97,6 @@ export function isWorkspaceSseEvent(value: unknown): value is SSEEvent {
       && !!record.chunk
       && typeof record.chunk === 'object'
       && !Array.isArray(record.chunk)
-      && (typeof record.episodeId === 'string' || record.episodeId === null)
   }
   const type = record.type
   return typeof type === 'string'

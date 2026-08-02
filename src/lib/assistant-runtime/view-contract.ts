@@ -13,7 +13,7 @@ export type AssistantRuntimeSessionViewScope = AssistantRuntimeScope & {
 export type AssistantRuntimeSessionTurnView = {
   readonly turnId: string
   readonly requestId: string
-  readonly sourceKind: 'user' | 'task_follow_up' | 'choice_response'
+  readonly sourceKind: 'user' | 'task_follow_up'
   readonly sourceId: string
   readonly status: 'queued' | 'running' | 'waiting_approval' | 'completed' | 'failed' | 'interrupted' | 'cancelled'
   readonly attempt: number
@@ -108,16 +108,17 @@ function assertExactKeys(
 export const ASSISTANT_RUNTIME_APPROVAL_METHODS = [
   'item/commandExecution/requestApproval',
   'item/fileChange/requestApproval',
+  'item/permissions/requestApproval',
 ] as const
 
-export const ASSISTANT_RUNTIME_CHOICE_METHODS = [
+export const ASSISTANT_RUNTIME_INPUT_METHODS = [
   'item/tool/requestUserInput',
   'mcpServer/elicitation/request',
 ] as const
 
 export function isAssistantRuntimeSupportedRequestMethod(method: string): boolean {
   return (ASSISTANT_RUNTIME_APPROVAL_METHODS as readonly string[]).includes(method)
-    || (ASSISTANT_RUNTIME_CHOICE_METHODS as readonly string[]).includes(method)
+    || (ASSISTANT_RUNTIME_INPUT_METHODS as readonly string[]).includes(method)
 }
 
 export function isAssistantRuntimeApprovalRequest(
@@ -127,10 +128,10 @@ export function isAssistantRuntimeApprovalRequest(
     .includes(interaction.method))
 }
 
-export function isAssistantRuntimeChoiceRequest(
+export function isAssistantRuntimeInputRequest(
   interaction: AssistantRuntimePendingInteractionView | null,
 ): interaction is AssistantRuntimePendingInteractionView {
-  return Boolean(interaction && (ASSISTANT_RUNTIME_CHOICE_METHODS as readonly string[])
+  return Boolean(interaction && (ASSISTANT_RUNTIME_INPUT_METHODS as readonly string[])
     .includes(interaction.method))
 }
 
@@ -162,13 +163,19 @@ export function readAssistantRuntimeUserInputQuestions(
     const options = value.options === null
       ? null
       : Array.isArray(value.options)
-        ? value.options.map((option) => {
-            if (!isRecord(option)) throw new Error('ASSISTANT_RUNTIME_REQUEST_USER_INPUT_INVALID')
-            return {
-              label: requireString(option.label, 'ASSISTANT_RUNTIME_REQUEST_USER_INPUT_INVALID'),
-              description: typeof option.description === 'string' ? option.description : '',
-            }
-          })
+        ? (() => {
+            const labels = new Set<string>()
+            return value.options.map((option) => {
+              if (!isRecord(option)) throw new Error('ASSISTANT_RUNTIME_REQUEST_USER_INPUT_INVALID')
+              const label = requireString(option.label, 'ASSISTANT_RUNTIME_REQUEST_USER_INPUT_INVALID')
+              if (labels.has(label)) throw new Error('ASSISTANT_RUNTIME_REQUEST_USER_INPUT_INVALID')
+              labels.add(label)
+              return {
+                label,
+                description: typeof option.description === 'string' ? option.description : '',
+              }
+            })
+          })()
         : (() => { throw new Error('ASSISTANT_RUNTIME_REQUEST_USER_INPUT_INVALID') })()
     return {
       id,
@@ -350,6 +357,26 @@ export function buildAssistantRuntimeServerResponse(input: {
       throw new Error('ASSISTANT_RUNTIME_APPROVAL_RESPONSE_INVALID')
     }
     result = { decision: input.result.decision }
+  } else if (interaction.method === 'item/permissions/requestApproval') {
+    if (!isRecord(input.result)) throw new Error('ASSISTANT_RUNTIME_APPROVAL_RESPONSE_INVALID')
+    assertExactKeys(input.result, ['decision'], 'ASSISTANT_RUNTIME_APPROVAL_RESPONSE_INVALID')
+    if (input.result.decision !== 'accept' && input.result.decision !== 'decline') {
+      throw new Error('ASSISTANT_RUNTIME_APPROVAL_RESPONSE_INVALID')
+    }
+    if (!isRecord(interaction.params) || !isRecord(interaction.params.permissions)) {
+      throw new Error('ASSISTANT_RUNTIME_PERMISSION_REQUEST_INVALID')
+    }
+    const requested = interaction.params.permissions
+    const permissions: Record<string, RuntimeJsonValue> = {}
+    if (input.result.decision === 'accept' && requested.network !== null) {
+      if (!isRecord(requested.network)) throw new Error('ASSISTANT_RUNTIME_PERMISSION_REQUEST_INVALID')
+      permissions.network = requested.network
+    }
+    if (input.result.decision === 'accept' && requested.fileSystem !== null) {
+      if (!isRecord(requested.fileSystem)) throw new Error('ASSISTANT_RUNTIME_PERMISSION_REQUEST_INVALID')
+      permissions.fileSystem = requested.fileSystem
+    }
+    result = { permissions, scope: 'turn' }
   } else if (interaction.method === 'item/tool/requestUserInput') {
     result = validateRequestUserInputResult(interaction, input.result)
   } else if (interaction.method === 'mcpServer/elicitation/request') {

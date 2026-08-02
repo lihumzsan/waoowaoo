@@ -1,7 +1,4 @@
-import { createReadOperations } from './domains/project/read-ops'
-import { createGuiOperations } from './domains/gui/gui-ops'
 import { createConfigOperations } from './domains/config/config-ops'
-import { createProjectDataOperations } from './domains/project/project-data-ops'
 import { createProjectCrudOperations } from './domains/project/project-crud-ops'
 import { createSystemProjectOperations } from './domains/project/system-project-ops'
 import { createTaskOperations } from './domains/task/task-ops'
@@ -15,214 +12,141 @@ import { createUserPreferenceOperations } from './domains/config/user-preference
 import { createUserModelsOperations } from './domains/config/user-models-ops'
 import { createUserBillingOperations } from './domains/billing/user-billing-ops'
 import { createUserApiConfigOperations } from './domains/config/user-api-config-ops'
-import { createCreativeResourceGenerationOperations } from './domains/creative-resource/generation-ops'
-import { createCreativeResourceOperations } from './domains/creative-resource/resource-ops'
-import { createCreativeResourceUploadedMediaOperations } from './domains/creative-resource/uploaded-media-ops'
-import { createCreativeResourceVideoMergeOperations } from './domains/creative-resource/video-merge-ops'
-import { createAssistantPlanOperations } from './domains/assistant/plan-ops'
-import { createAssistantCreativeOperations } from './domains/assistant/creative-ops'
-import { createAssistantStoryCanonOperations } from './domains/assistant/creative-story-canon-ops'
-import { createAssistantCreativeDirectionOperations } from './domains/assistant/creative-direction-ops'
-import { createAssistantCreativeAssetOperations } from './domains/assistant/creative-asset-ops'
-import { createAssistantChoiceOperations } from './domains/assistant/choice-ops'
+import { createWorkspaceResourceGenerationOperations } from './domains/workspace-resource/generation-ops'
+import { createWorkspaceResourceOperations } from './domains/workspace-resource/resource-ops'
+import { createWorkspaceResourceUploadedMediaOperations } from './domains/workspace-resource/uploaded-media-ops'
+import { createWorkspaceResourceVideoMergeOperations } from './domains/workspace-resource/video-merge-ops'
+import { createWorkspaceResourceReferenceImageOperations } from './domains/workspace-resource/reference-image-ops'
 import { createVoiceOperations } from './domains/voice/voice-ops'
-import { createWebSearchOperations } from './domains/web-search/web-search-ops'
-import { createCreativeResourceReferenceImageOperations } from './domains/creative-resource/reference-image-ops'
 import { createAssetDeleteOperations } from './domains/asset/delete'
 import { withOperationPack } from './pack'
 import type { ProjectAgentOperationRegistry } from './types'
 
-export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegistry {
-  const CONFIRM_NONE = { kind: 'none', required: false, summary: null, budget: null } as const
-  const CHANNELS_TOOL_API = { tool: true, api: true } as const
-  const CHANNELS_API_ONLY = { tool: false, api: true } as const
-  const PREREQ_EPISODE_OPTIONAL = { episodeId: 'optional' } as const
+const CONFIRM_NONE = {
+  kind: 'none',
+  required: false,
+  summary: null,
+  budget: null,
+} as const
 
+const API_ONLY = { tool: false, api: true, mcp: false } as const
+const CAPABILITY_API = { tool: true, api: true, mcp: false } as const
+const CAPABILITY_ONLY = { tool: true, api: false, mcp: false } as const
+
+/**
+ * The complete Wao Capability registry.
+ *
+ * `api` is the product UI/HTTP surface. `mcp` is an explicit per-operation
+ * opt-in consumed by Codex. There is no longer a model-visible generic read,
+ * model-side interaction, Web Search, Canon, or Worker pack here; ordinary
+ * project knowledge is the WorkspaceResource folder and Codex owns those
+ * native interaction/research capabilities.
+ */
+export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegistry {
   return {
-    ...withOperationPack(createAssistantChoiceOperations(), {
-      groupPath: ['assistant', 'choice'],
-      channels: { tool: true, api: false },
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createAssistantPlanOperations(), {
-      groupPath: ['assistant', 'plan'],
-      channels: { tool: true, api: false },
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createAssistantCreativeOperations(), {
-      groupPath: ['assistant', 'creative'],
-      channels: { tool: true, api: false },
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createAssistantStoryCanonOperations(), {
-      groupPath: ['assistant', 'creative'],
-      channels: { tool: true, api: false },
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createAssistantCreativeDirectionOperations(), {
-      groupPath: ['assistant', 'creative'],
-      channels: { tool: true, api: false },
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createAssistantCreativeAssetOperations(), {
-      groupPath: ['assistant', 'creative'],
-      channels: { tool: true, api: false },
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createWebSearchOperations(), {
-      groupPath: ['web', 'search'],
-      channels: { tool: true, api: false },
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createCreativeResourceReferenceImageOperations(), {
-      groupPath: ['web', 'search'],
-      channels: { tool: true, api: false },
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
     ...withOperationPack(createAssetDeleteOperations(), {
       groupPath: ['asset'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      channels: CAPABILITY_API,
       confirmation: CONFIRM_NONE,
     }),
     ...withOperationPack(createSystemProjectOperations(), {
       groupPath: ['project', 'system'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      channels: API_ONLY,
       confirmation: CONFIRM_NONE,
     }),
     ...withOperationPack(createTaskOperations(), {
       groupPath: ['task'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      channels: CAPABILITY_API,
       confirmation: CONFIRM_NONE,
     }),
     ...withOperationPack(createSseOperations(), {
       groupPath: ['debug', 'sse'],
-      channels: CHANNELS_API_ONLY,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      channels: API_ONLY,
       confirmation: CONFIRM_NONE,
     }),
     ...withOperationPack(createUserPreferenceOperations(), {
       groupPath: ['config', 'preference'],
-      channels: CHANNELS_API_ONLY,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      channels: API_ONLY,
       confirmation: CONFIRM_NONE,
     }),
     ...withOperationPack(createUserModelsOperations(), {
       groupPath: ['config', 'models'],
-      channels: CHANNELS_API_ONLY,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      channels: API_ONLY,
       confirmation: CONFIRM_NONE,
     }),
     ...withOperationPack(createUserBillingOperations(), {
       groupPath: ['billing'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      channels: API_ONLY,
       confirmation: CONFIRM_NONE,
     }),
     ...withOperationPack(createUserApiConfigOperations(), {
       groupPath: ['config', 'api'],
-      channels: CHANNELS_API_ONLY,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      channels: API_ONLY,
       confirmation: CONFIRM_NONE,
     }),
     ...withOperationPack(createAssetHubFolderOperations(), {
       groupPath: ['asset-hub', 'folder'],
-      channels: CHANNELS_API_ONLY,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      channels: API_ONLY,
       confirmation: CONFIRM_NONE,
     }),
     ...withOperationPack(createAssetHubCharacterLibraryOperations(), {
       groupPath: ['asset-hub', 'character-library'],
-      channels: CHANNELS_API_ONLY,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      channels: API_ONLY,
       confirmation: CONFIRM_NONE,
     }),
     ...withOperationPack(createAssetHubCharacterAppearanceOperations(), {
       groupPath: ['asset-hub', 'character-appearance'],
-      channels: CHANNELS_API_ONLY,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      channels: API_ONLY,
       confirmation: CONFIRM_NONE,
     }),
     ...withOperationPack(createAssetHubLocationLibraryOperations(), {
       groupPath: ['asset-hub', 'location-library'],
-      channels: CHANNELS_API_ONLY,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      channels: API_ONLY,
       confirmation: CONFIRM_NONE,
     }),
     ...withOperationPack(createAssetHubPickerOperations(), {
       groupPath: ['asset-hub', 'picker'],
-      channels: CHANNELS_API_ONLY,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createReadOperations(), {
-      groupPath: ['project', 'read'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      channels: API_ONLY,
       confirmation: CONFIRM_NONE,
     }),
     ...withOperationPack(createProjectCrudOperations(), {
       groupPath: ['project', 'crud'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      channels: API_ONLY,
       confirmation: CONFIRM_NONE,
     }),
     ...withOperationPack(createVoiceOperations(), {
       groupPath: ['media', 'voice'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      channels: CAPABILITY_API,
       confirmation: CONFIRM_NONE,
     }),
     ...withOperationPack(createConfigOperations(), {
       groupPath: ['config'],
-      channels: CHANNELS_API_ONLY,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      channels: API_ONLY,
       confirmation: CONFIRM_NONE,
     }),
-    ...withOperationPack(createProjectDataOperations(), {
-      groupPath: ['project', 'data'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createGuiOperations(), {
-      groupPath: ['gui'],
-      channels: CHANNELS_API_ONLY,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createCreativeResourceGenerationOperations(), {
+    ...withOperationPack(createWorkspaceResourceGenerationOperations(), {
       groupPath: ['resource'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      channels: CAPABILITY_API,
       confirmation: CONFIRM_NONE,
     }),
-    ...withOperationPack(createCreativeResourceOperations(), {
+    ...withOperationPack(createWorkspaceResourceOperations(), {
       groupPath: ['resource'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      channels: CAPABILITY_API,
       confirmation: CONFIRM_NONE,
     }),
-    ...withOperationPack(createCreativeResourceVideoMergeOperations(), {
+    ...withOperationPack(createWorkspaceResourceVideoMergeOperations(), {
       groupPath: ['resource'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      channels: CAPABILITY_API,
       confirmation: CONFIRM_NONE,
     }),
-    ...withOperationPack(createCreativeResourceUploadedMediaOperations(), {
+    ...withOperationPack(createWorkspaceResourceUploadedMediaOperations(), {
       groupPath: ['resource'],
-      channels: { tool: true, api: false },
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      channels: CAPABILITY_ONLY,
+      confirmation: CONFIRM_NONE,
+    }),
+    ...withOperationPack(createWorkspaceResourceReferenceImageOperations(), {
+      groupPath: ['resource', 'import'],
+      channels: CAPABILITY_ONLY,
       confirmation: CONFIRM_NONE,
     }),
   }

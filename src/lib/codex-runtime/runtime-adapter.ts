@@ -143,6 +143,34 @@ export type RuntimeThreadReadParams = {
   readonly includeTurns?: boolean
 }
 
+export type RuntimeSkillsListParams = {
+  readonly cwds?: readonly string[]
+  readonly forceReload?: boolean
+}
+
+export type RuntimeSkillMetadata = {
+  readonly name: string
+  readonly description: string
+  readonly path: string
+  readonly scope: 'user' | 'repo' | 'system' | 'admin'
+  readonly enabled: boolean
+}
+
+export type RuntimeSkillError = {
+  readonly path: string
+  readonly message: string
+}
+
+export type RuntimeSkillsListEntry = {
+  readonly cwd: string
+  readonly skills: readonly RuntimeSkillMetadata[]
+  readonly errors: readonly RuntimeSkillError[]
+}
+
+export type RuntimeSkillsListResponse = {
+  readonly data: readonly RuntimeSkillsListEntry[]
+}
+
 export type RuntimeThreadInjectItemsParams = {
   readonly threadId: string
   readonly items: readonly RuntimeJsonValue[]
@@ -225,6 +253,7 @@ export interface RuntimeAdapter {
   startThread(params: RuntimeThreadStartParams): Promise<RuntimeThread>
   resumeThread(params: RuntimeThreadResumeParams): Promise<RuntimeThread>
   readThread(params: RuntimeThreadReadParams): Promise<RuntimeThread>
+  listSkills(params: RuntimeSkillsListParams): Promise<RuntimeSkillsListResponse>
   injectThreadItems(params: RuntimeThreadInjectItemsParams): Promise<void>
   startTurn(params: RuntimeTurnStartParams): Promise<RuntimeTurn>
   steerTurn(params: RuntimeTurnSteerParams): Promise<string>

@@ -1,11 +1,4 @@
-import { Prisma, type PrismaClient } from '@prisma/client'
 import { z } from 'zod'
-import { prisma } from '@/lib/prisma'
-import {
-  buildProjectAssistantScopeRef,
-  replaceProjectAssistantThreadPlanInTransaction,
-} from './persistence'
-import type { ProjectAssistantId } from './types'
 
 export const PROJECT_AGENT_PLAN_STATUSES = [
   'pending',
@@ -93,15 +86,6 @@ export const projectAgentPlanSnapshotSchema = z.object({
   }
 })
 
-interface ProjectAgentPlanIdentity {
-  projectId: string
-  userId: string
-  episodeId?: string | null
-  assistantId: ProjectAssistantId
-}
-
-type ProjectAgentPlanReader = Pick<PrismaClient, 'projectAssistantThread'>
-
 function normalizeProjectAgentPlanSnapshot(
   input: z.infer<typeof projectAgentPlanInputSchema>,
 ): ProjectAgentPlanSnapshot {
@@ -139,35 +123,4 @@ export function parseProjectAgentPlanSnapshot(value: unknown): ProjectAgentPlanS
     return null
   }
   return projectAgentPlanSnapshotSchema.parse(stored)
-}
-
-export async function readProjectAgentPlan(
-  input: ProjectAgentPlanIdentity,
-  reader: ProjectAgentPlanReader = prisma,
-): Promise<ProjectAgentPlanSnapshot | null> {
-  const record = await reader.projectAssistantThread.findUnique({
-    where: {
-      projectId_userId_assistantId_scopeRef: {
-        projectId: input.projectId,
-        userId: input.userId,
-        assistantId: input.assistantId,
-        scopeRef: buildProjectAssistantScopeRef(input),
-      },
-    },
-    select: { planJson: true },
-  })
-  return parseProjectAgentPlanSnapshot(record?.planJson)
-}
-
-export async function replaceProjectAgentPlanInTransaction(
-  transaction: Prisma.TransactionClient,
-  input: ProjectAgentPlanIdentity,
-  snapshot: ProjectAgentPlanSnapshot,
-): Promise<void> {
-  await replaceProjectAssistantThreadPlanInTransaction(transaction, {
-    ...input,
-    planJson: snapshot.plan.length === 0
-      ? Prisma.DbNull
-      : JSON.parse(JSON.stringify(snapshot)) as Prisma.InputJsonValue,
-  })
 }

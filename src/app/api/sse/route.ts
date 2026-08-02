@@ -5,7 +5,6 @@ import { apiHandler, ApiError, getRequestId } from '@/lib/api-errors'
 import { executeProjectAgentOperationFromApi } from '@/lib/adapters/api/execute-project-agent-operation'
 import { isErrorResponse, requireProjectAuthLight, requireUserAuth } from '@/lib/api-auth'
 import {
-  WORKSPACE_SSE_EVENT_TYPE,
   isAgentScopedSseEvent,
   type SSEEvent,
 } from '@/lib/sse/events'
@@ -38,7 +37,6 @@ function formatHeartbeat() {
 
 export const GET = apiHandler(async (request: NextRequest) => {
   const projectId = request.nextUrl.searchParams.get('projectId')
-  const episodeId = request.nextUrl.searchParams.get('episodeId')
   if (!projectId) {
     throw new ApiError('INVALID_PARAMS')
   }
@@ -197,13 +195,6 @@ export const GET = apiHandler(async (request: NextRequest) => {
             if (isAgentScopedSseEvent(payload)) {
               if (payload.userId !== session.user.id) return
               if (payload.assistantId !== 'workspace-command') return
-              if (
-                payload.type
-                  !== WORKSPACE_SSE_EVENT_TYPE.AGENT_SESSION_VIEW_CHANGED
-                || payload.episodeId !== null
-              ) {
-                if ((payload.episodeId ?? null) !== (episodeId ?? null)) return
-              }
             }
             if (projectId === GLOBAL_ASSET_PROJECT_ID && payload.userId !== session.user.id) {
               logger.error({
@@ -238,7 +229,6 @@ export const GET = apiHandler(async (request: NextRequest) => {
           projectId,
           userId: session.user.id,
           input: {
-            episodeId: episodeId || null,
             lastEventId: requestCursor,
             includeRecoverableSnapshot: true,
           },

@@ -62,7 +62,13 @@ function isSubmittedToolResult(result: unknown): boolean {
 }
 
 function isFailedToolResult(result: unknown): boolean {
-  return readPart(result)?.ok === false
+  const record = readPart(result)
+  return record?.ok === false || record?.status === 'failed' || record?.status === 'errored'
+}
+
+function isInterruptedToolResult(result: unknown): boolean {
+  const status = readPart(result)?.status
+  return status === 'declined' || status === 'interrupted' || status === 'cancelled'
 }
 
 export function resolveWorkspaceAssistantToolCallDisplayState(
@@ -74,6 +80,7 @@ export function resolveWorkspaceAssistantToolCallDisplayState(
   if (status === 'requires-action') return 'needsAction'
   if (status !== 'complete') return 'running'
   if (part?.isError === true || isFailedToolResult(part?.result)) return 'failed'
+  if (isInterruptedToolResult(part?.result)) return 'interrupted'
   return isSubmittedToolResult(part?.result) ? 'submitted' : 'success'
 }
 

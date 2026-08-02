@@ -1,12 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, readFile, rename, rm, rmdir, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
   captureWorkspaceBundle,
-  encodeWorkspaceBundle,
   materializeWorkspaceBundle,
-  parseWorkspaceBundle,
 } from '@/lib/codex-runtime/workspace-bundle'
+import type { WorkspaceBundleV1 } from '@/lib/codex-runtime/workspace-bundle'
 import type {
   RuntimeSessionMaterialization,
   RuntimeSessionOwnership,
@@ -15,13 +14,11 @@ import type {
   RuntimeSessionScope,
 } from '@/lib/codex-runtime/runtime-session-manager'
 import {
-  extractCodexAuthoringWriteback,
-  initializeCodexAuthoringBundle,
-  loadCodexAuthoringBundle,
+  captureCodexWorkspace,
   readCodexRuntimeWorkspace,
-  saveCodexAuthoringWriteback,
+  type CodexWorkspaceBaseline,
+  type CodexWorkspaceDirectoryIdentity,
 } from '@/lib/codex-workspace'
-import { WorkspaceStoreError } from '@/lib/codex-runtime/workspace-store'
 import { redis } from '@/lib/redis'
 import { prisma } from '@/lib/prisma'
 import { captureCodexStateBundle, restoreCodexStateBundle, saveCodexStateBundle } from './codex-state-store'
@@ -86,14 +83,112 @@ function layoutFromMaterialization(
   return { root, workspace, codexHome, baseline: path.join(root, BASELINE_FILE_NAME) }
 }
 
-async function loadOrInitializeAuthoring(scope: RuntimeSessionScope) {
-  try {
-    return await loadCodexAuthoringBundle(scope)
-  } catch (error) {
-    if (!(error instanceof WorkspaceStoreError) || error.code !== 'WORKSPACE_NOT_INITIALIZED') {
-      throw error
+type RuntimeBaselineFile = {
+  readonly runtimeBundle: WorkspaceBundleV1
+  readonly baseline: CodexWorkspaceBaseline
+}
+
+function parseRuntimeBaseline(value: string): RuntimeBaselineFile {
+  const parsed: unknown = JSON.parse(value)
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('ASSISTANT_RUNTIME_BASELINE_INVALID')
+  }
+  const record = parsed as Record<string, unknown>
+  if (!record.runtimeBundle || !record.baseline) throw new Error('ASSISTANT_RUNTIME_BASELINE_INVALID')
+  return record as RuntimeBaselineFile
+}
+
+async function writeRuntimeBaseline(filePath: string, value: RuntimeBaselineFile, exclusive: boolean): Promise<void> {
+  const bytes = `${JSON.stringify(value)}\n`
+  if (exclusive) {
+    await writeFile(filePath, bytes, { flag: 'wx', mode: 0o600 })
+    return
+  }
+  const temporary = `${filePath}.${randomUUID()}.tmp`
+  await writeFile(temporary, bytes, { flag: 'wx', mode: 0o600 })
+  await rename(temporary, filePath)
+}
+
+async function readDirectoryIdentities(
+  rootDirectory: string,
+  directories: readonly string[],
+): Promise<readonly CodexWorkspaceDirectoryIdentity[]> {
+  return await Promise.all(directories.map(async (relativePath) => {
+    const stats = await lstat(path.join(rootDirectory, ...relativePath.split('/')))
+    if (!stats.isDirectory() || stats.isSymbolicLink()) {
+      throw new Error(`ASSISTANT_RUNTIME_DIRECTORY_IDENTITY_INVALID:${relativePath}`)
     }
-    return await initializeCodexAuthoringBundle(scope)
+    return {
+      path: relativePath,
+      runtimeIdentity: `${String(stats.dev)}:${String(stats.ino)}`,
+    }
+  }))
+}
+
+function hydrateFolderRuntimeIdentities(
+  baseline: CodexWorkspaceBaseline,
+  identities: readonly CodexWorkspaceDirectoryIdentity[],
+): CodexWorkspaceBaseline {
+  const identityByPath = new Map(identities.map((entry) => [entry.path, entry.runtimeIdentity]))
+  return {
+    ...baseline,
+    resources: baseline.resources.map((resource) => ({
+      ...resource,
+      runtimeIdentity: resource.resourceKind === 'folder'
+        ? identityByPath.get(resource.workspacePath) ?? null
+        : null,
+    })),
+  }
+}
+
+async function synchronizeRuntimeWorkspace(
+  directory: string,
+  before: WorkspaceBundleV1,
+  after: WorkspaceBundleV1,
+): Promise<void> {
+  const nextPaths = new Set(after.files.map((file) => file.path))
+  await Promise.all(before.files
+    .filter((file) => !nextPaths.has(file.path))
+    .map(async (file) => {
+      await unlink(path.join(directory, ...file.path.split('/'))).catch((error: unknown) => {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      })
+    }))
+  const nextDirectories = new Set(after.directories)
+  const removedDirectories = before.directories
+    .filter((directory) => !nextDirectories.has(directory))
+    .sort((left, right) => {
+      const depth = right.split('/').length - left.split('/').length
+      return depth || right.localeCompare(left)
+    })
+  for (const relativeDirectory of removedDirectories) {
+    await rmdir(path.join(directory, ...relativeDirectory.split('/'))).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    })
+  }
+  for (const relativeDirectory of after.directories) {
+    await mkdir(path.join(directory, ...relativeDirectory.split('/')), { recursive: true, mode: 0o700 })
+  }
+  for (const file of after.files) {
+    const target = path.join(directory, ...file.path.split('/'))
+    await mkdir(path.dirname(target), { recursive: true, mode: 0o700 })
+    await writeFile(target, file.content, { mode: 0o600 })
+  }
+}
+
+async function materializeNativeSkills(
+  codexHomeDirectory: string,
+  runtimeBundle: WorkspaceBundleV1,
+): Promise<void> {
+  const prefix = 'system/skills/'
+  for (const file of runtimeBundle.files.filter((entry) => entry.path.startsWith(prefix))) {
+    const relative = file.path.slice(prefix.length)
+    if (!/^[A-Za-z0-9_-]+\/SKILL\.md$/u.test(relative)) {
+      throw new Error(`ASSISTANT_RUNTIME_SKILL_PATH_INVALID:${file.path}`)
+    }
+    const target = path.join(codexHomeDirectory, 'skills', ...relative.split('/'))
+    await mkdir(path.dirname(target), { recursive: true, mode: 0o700 })
+    await writeFile(target, file.content, { mode: 0o600 })
   }
 }
 
@@ -148,20 +243,21 @@ export class AssistantRuntimePersistence implements RuntimeSessionPersistence {
     const workspace = path.join(root, 'workspace')
     const codexHome = path.join(root, 'codex-home')
     try {
-      const authoring = await loadOrInitializeAuthoring(scope)
       const projection = await readCodexRuntimeWorkspace({
         projectId: scope.projectId,
         userId: scope.userId,
-        episodeId: null,
-        authoringBundle: authoring.bundle,
       })
       await materializeWorkspaceBundle(workspace, projection.runtimeBundle)
       await restoreCodexStateBundle({ scope, codexHomeDirectory: codexHome })
-      await writeFile(
-        path.join(root, BASELINE_FILE_NAME),
-        encodeWorkspaceBundle(projection.runtimeBundle),
-        { flag: 'wx', mode: 0o600 },
+      await materializeNativeSkills(codexHome, projection.runtimeBundle)
+      const directoryIdentities = await readDirectoryIdentities(
+        workspace,
+        projection.runtimeBundle.directories,
       )
+      await writeRuntimeBaseline(path.join(root, BASELINE_FILE_NAME), {
+        runtimeBundle: projection.runtimeBundle,
+        baseline: hydrateFolderRuntimeIdentities(projection.baseline, directoryIdentities),
+      }, true)
       return {
         hostWorkspaceDirectory: workspace,
         hostCodexHomeDirectory: codexHome,
@@ -174,15 +270,32 @@ export class AssistantRuntimePersistence implements RuntimeSessionPersistence {
 
   async captureWorkspace(params: Parameters<RuntimeSessionPersistence['captureWorkspace']>[0]): Promise<void> {
     const layout = layoutFromMaterialization(params.materialization, this.hostRoot)
-    const [baselineBytes, captured] = await Promise.all([
-      readFile(layout.baseline),
+    const [baselineText, captured] = await Promise.all([
+      readFile(layout.baseline, 'utf8'),
       captureWorkspaceBundle(layout.workspace),
     ])
-    const writeback = extractCodexAuthoringWriteback({
-      baselineRuntimeBundle: parseWorkspaceBundle(baselineBytes),
+    const capturedDirectoryIdentities = await readDirectoryIdentities(
+      layout.workspace,
+      captured.directories,
+    )
+    const baseline = parseRuntimeBaseline(baselineText)
+    const writeback = await captureCodexWorkspace({
+      userId: params.scope.userId,
+      projectId: params.scope.projectId,
+      baselineRuntimeBundle: baseline.runtimeBundle,
+      baseline: baseline.baseline,
       capturedRuntimeBundle: captured,
+      capturedDirectoryIdentities,
     })
-    await saveCodexAuthoringWriteback(params.scope, writeback)
+    await synchronizeRuntimeWorkspace(layout.workspace, captured, writeback.runtimeBundle)
+    const refreshedDirectoryIdentities = await readDirectoryIdentities(
+      layout.workspace,
+      writeback.runtimeBundle.directories,
+    )
+    await writeRuntimeBaseline(layout.baseline, {
+      runtimeBundle: writeback.runtimeBundle,
+      baseline: hydrateFolderRuntimeIdentities(writeback.baseline, refreshedDirectoryIdentities),
+    }, false)
   }
 
   async checkpointRuntime(params: Parameters<RuntimeSessionPersistence['checkpointRuntime']>[0]): Promise<void> {

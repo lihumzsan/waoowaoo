@@ -46,32 +46,6 @@ export async function readProjectAgentCommandHttpBody(
   }
 }
 
-export function readProjectAgentCommandEpisodeId(
-  body: ProjectAgentCommandHttpBody,
-): string | null {
-  const bodyEpisodeId = readNullableProjectAgentCommandString(
-    body.episodeId,
-    'AGENT_TURN_EPISODE_ID_INVALID',
-  )
-  const contextEpisodeId = isRecord(body.context)
-    ? readNullableProjectAgentCommandString(
-        body.context.episodeId,
-        'AGENT_TURN_EPISODE_ID_INVALID',
-      )
-    : null
-  if (
-    bodyEpisodeId !== null
-    && contextEpisodeId !== null
-    && bodyEpisodeId !== contextEpisodeId
-  ) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'AGENT_TURN_EPISODE_SCOPE_DIVERGED',
-      message: 'AGENT_TURN_EPISODE_SCOPE_DIVERGED',
-    })
-  }
-  return bodyEpisodeId ?? contextEpisodeId
-}
-
 export function readProjectAgentCommandString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
@@ -219,20 +193,11 @@ export function mapProjectAgentCommandError(error: unknown): ApiError {
     if (
       error.message === 'PROJECT_AGENT_INVALID_MESSAGES'
       || error.message === 'PROJECT_ASSISTANT_INVALID_THREAD_MESSAGES'
-      || error.message === 'PROJECT_AGENT_CHOICE_RESPONSE_INVALID'
       || error.message === 'PROJECT_ASSISTANT_TEXT_ATTACHMENTS_INVALID'
       || error.message === 'PROJECT_ASSISTANT_TEXT_ATTACHMENTS_TOO_MANY'
       || error.message === 'PROJECT_ASSISTANT_TEXT_ATTACHMENT_INVALID'
     ) {
       return new ApiError('INVALID_PARAMS', {
-        code: error.message,
-        message: error.message,
-      })
-    }
-    if (
-      error.message === 'PROJECT_AGENT_CHOICE_OFFER_STALE'
-    ) {
-      return new ApiError('CONFLICT', {
         code: error.message,
         message: error.message,
       })
