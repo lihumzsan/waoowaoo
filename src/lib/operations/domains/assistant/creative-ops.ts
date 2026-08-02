@@ -572,6 +572,7 @@ export function createAssistantCreativeOperations(): ProjectAgentOperationRegist
       summary:
         'Delegate one or more bounded professional creative reasoning requests to background Subagents. Set delegation.source=requests with a one-or-more requests list for caller-supplied contexts, or delegation.source=chapters to compile persisted Chapter contexts server-side. Every request becomes one independent Creative Task; its output kind binds exactly one professional Skill, while frozen project resources remain context rather than Skills. The Worker returns structured advice until a normal project Operation adopts or executes it.',
       intent: 'act',
+      channels: { tool: true, api: false, mcp: true },
       effects: EFFECTS_CREATIVE_TASK,
       assistantWriteAuthority: {
         kind: 'temporal_operation_execution',

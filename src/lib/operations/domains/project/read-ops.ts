@@ -39,6 +39,7 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
       id: 'get_project_snapshot',
       summary: 'Read the current project projection only when the injected project_state_snapshot and conversation context are insufficient for a concrete user request or user-intent tool input. Do not call merely to confirm general status, projectId, episodeId, approval state, or system-derived tool parameters.',
       intent: 'query',
+      channels: { tool: true, api: true, mcp: true },
       effects: EFFECTS_NONE,
       inputSchema: z.object({
         detail: z.enum(['lite', 'full']).optional(),
@@ -60,6 +61,7 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
       id: 'get_project_context',
       summary: 'Read the compact current project working set: exact screenplay and Story Canon Resources, typed current Resource selections, optional Chapter context units, project configuration, and active work. Use list_resources to browse durable outputs and get_resource to read one exact full Resource; never infer current selection from latest resources, history, Canvas, or chat.',
       intent: 'query',
+      channels: { tool: true, api: true, mcp: true },
       toolExposure: 'direct',
       effects: EFFECTS_NONE,
       inputSchema: z.object({

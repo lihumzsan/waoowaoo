@@ -6,6 +6,7 @@ import type {
   RuntimeClientInfo,
   RuntimeEvent,
   RuntimeEventListener,
+  RuntimeInitializeCapabilities,
   RuntimeInitializeResult,
   RuntimeJsonObject,
   RuntimeJsonValue,
@@ -13,6 +14,7 @@ import type {
   RuntimeSandboxPolicy,
   RuntimeServerRequestResponse,
   RuntimeThread,
+  RuntimeThreadInjectItemsParams,
   RuntimeThreadReadParams,
   RuntimeThreadResumeParams,
   RuntimeThreadStartParams,
@@ -43,6 +45,7 @@ type RpcError = {
 export type CodexAppServerClientOptions = {
   readonly cwd: string
   readonly clientInfo: RuntimeClientInfo
+  readonly initializeCapabilities?: RuntimeInitializeCapabilities | null
   readonly command?: string
   readonly args?: readonly string[]
   readonly env?: NodeJS.ProcessEnv
@@ -235,6 +238,7 @@ export class CodexAppServerClient implements RuntimeAdapter {
   private readonly child: ChildProcessWithoutNullStreams
   private readonly reader: ReadlineInterface
   private readonly clientInfo: RuntimeClientInfo
+  private readonly initializeCapabilities: RuntimeInitializeCapabilities | null
   private readonly shutdownTimeoutMs: number
   private readonly pendingRequests = new Map<RuntimeRequestId, PendingRequest>()
   private readonly pendingServerRequests = new Set<RuntimeRequestId>()
@@ -250,6 +254,7 @@ export class CodexAppServerClient implements RuntimeAdapter {
   constructor(options: CodexAppServerClientOptions) {
     validateOptions(options)
     this.clientInfo = options.clientInfo
+    this.initializeCapabilities = options.initializeCapabilities ?? null
     this.shutdownTimeoutMs = options.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS
     this.child = spawn(options.command ?? DEFAULT_COMMAND, [...(options.args ?? DEFAULT_ARGS)], {
       cwd: options.cwd,
@@ -345,6 +350,18 @@ export class CodexAppServerClient implements RuntimeAdapter {
     })
   }
 
+  async injectThreadItems(params: RuntimeThreadInjectItemsParams): Promise<void> {
+    await this.requireInitialized()
+    const response = await this.request('thread/inject_items', {
+      threadId: requireString(params.threadId, 'THREAD_INJECT_ITEMS_ID_INVALID'),
+      items: params.items.map((item) => requireJsonValue(item, 'THREAD_INJECT_ITEMS_ITEM_INVALID')),
+    })
+    this.parseProtocolResponse(() => {
+      const result = requireJsonObject(response, 'THREAD_INJECT_ITEMS_RESPONSE_INVALID')
+      if (Object.keys(result).length !== 0) throw new CodexAppServerProtocolError('THREAD_INJECT_ITEMS_RESPONSE_NOT_EMPTY')
+    })
+  }
+
   async startTurn(params: RuntimeTurnStartParams): Promise<RuntimeTurn> {
     await this.requireInitialized()
     const requestParams: RuntimeJsonObject = {
@@ -398,21 +415,26 @@ export class CodexAppServerClient implements RuntimeAdapter {
 
   async respondToServerRequest(response: RuntimeServerRequestResponse): Promise<void> {
     this.assertUsable()
-    if (!this.pendingServerRequests.delete(response.id)) {
+    if (!this.pendingServerRequests.has(response.id)) {
       throw new Error('CODEX_RUNTIME_SERVER_REQUEST_UNKNOWN')
     }
 
+    let outbound: RuntimeJsonObject
     if ('result' in response) {
-      this.writeMessage({ id: response.id, result: requireJsonValue(response.result, 'SERVER_REQUEST_RESULT_INVALID') })
-      return
+      outbound = {
+        id: response.id,
+        result: requireJsonValue(response.result, 'SERVER_REQUEST_RESULT_INVALID'),
+      }
+    } else {
+      const error: RuntimeJsonObject = {
+        code: requireSafeInteger(response.error.code, 'SERVER_REQUEST_ERROR_CODE_INVALID'),
+        message: requireString(response.error.message, 'SERVER_REQUEST_ERROR_MESSAGE_INVALID'),
+      }
+      putOptional(error, 'data', response.error.data)
+      outbound = { id: response.id, error }
     }
-
-    const error: RuntimeJsonObject = {
-      code: requireSafeInteger(response.error.code, 'SERVER_REQUEST_ERROR_CODE_INVALID'),
-      message: requireString(response.error.message, 'SERVER_REQUEST_ERROR_MESSAGE_INVALID'),
-    }
-    putOptional(error, 'data', response.error.data)
-    this.writeMessage({ id: response.id, error })
+    this.writeMessage(outbound)
+    this.pendingServerRequests.delete(response.id)
   }
 
   subscribe(listener: RuntimeEventListener): () => void {
@@ -436,7 +458,9 @@ export class CodexAppServerClient implements RuntimeAdapter {
         title: this.clientInfo.title,
         version: requireString(this.clientInfo.version, 'INITIALIZE_CLIENT_VERSION_INVALID'),
       },
-      capabilities: null,
+      capabilities: this.initializeCapabilities
+        ? requireJsonObject(this.initializeCapabilities, 'INITIALIZE_CAPABILITIES_INVALID')
+        : null,
     })
     const result = this.parseProtocolResponse<RuntimeInitializeResult>(() => {
       const raw = requireJsonObject(response, 'INITIALIZE_RESPONSE_INVALID')

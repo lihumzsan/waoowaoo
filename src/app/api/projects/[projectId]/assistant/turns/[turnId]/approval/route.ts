@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuth } from '@/lib/api-auth'
-import { resolveAgentTurnApprovalViaTemporal } from '@/lib/temporal/agent-thread/client'
+import {
+  buildAssistantRuntimeServerResponse,
+  getAssistantRuntimeService,
+  getAssistantRuntimeSessionView,
+  isAssistantRuntimeApprovalRequest,
+} from '@/lib/assistant-runtime'
 import {
   assertProjectAgentCommandKeys,
   mapProjectAgentCommandError,
   readNullableProjectAgentCommandString,
+  readProjectAgentCommandEpisodeId,
   readProjectAgentCommandHttpBody,
   readRequiredProjectAgentCommandString,
 } from '../../../command-http'
@@ -24,42 +30,63 @@ export const POST = apiHandler(async (
     const body = await readProjectAgentCommandHttpBody(request)
     assertProjectAgentCommandKeys(
       body,
-      ['threadId', 'interactionId', 'requestId', 'decision', 'reason'],
+      ['threadId', 'interactionId', 'requestId', 'decision', 'reason', 'episodeId'],
       'AGENT_TURN_APPROVAL_FIELDS_INVALID',
     )
     const decision = body.decision
     if (decision !== 'approve' && decision !== 'reject') {
       throw new Error('AGENT_TURN_APPROVAL_DECISION_INVALID')
     }
-    const receipt = await resolveAgentTurnApprovalViaTemporal({
-      protocol: 'agent_turn_approval_response_v1',
-      threadId: readRequiredProjectAgentCommandString(
+    const threadId = readRequiredProjectAgentCommandString(
         body.threadId,
         'AGENT_TURN_APPROVAL_THREAD_ID_INVALID',
-      ),
-      turnId: readRequiredProjectAgentCommandString(
+      )
+    const canonicalTurnId = readRequiredProjectAgentCommandString(
         turnId,
         'AGENT_TURN_APPROVAL_TURN_ID_INVALID',
-      ),
-      interactionId: readRequiredProjectAgentCommandString(
+      )
+    const interactionId = readRequiredProjectAgentCommandString(
         body.interactionId,
         'AGENT_TURN_APPROVAL_INTERACTION_ID_INVALID',
-      ),
+      )
+    readRequiredProjectAgentCommandString(
+      body.requestId,
+      'AGENT_TURN_APPROVAL_REQUEST_ID_INVALID',
+      128,
+    )
+    readNullableProjectAgentCommandString(
+      body.reason,
+      'AGENT_TURN_APPROVAL_REASON_INVALID',
+      2_000,
+    )
+    const episodeId = readProjectAgentCommandEpisodeId(body)
+    const scope = {
       projectId,
       userId: authResult.session.user.id,
-      requestId: readRequiredProjectAgentCommandString(
-        body.requestId,
-        'AGENT_TURN_APPROVAL_REQUEST_ID_INVALID',
-        128,
-      ),
-      decision,
-      reason: readNullableProjectAgentCommandString(
-        body.reason,
-        'AGENT_TURN_APPROVAL_REASON_INVALID',
-        2_000,
-      ),
+      episodeId,
+      assistantId: 'workspace-command' as const,
+    }
+    const view = await getAssistantRuntimeSessionView(scope)
+    const interaction = view.pendingInteraction
+    if (
+      !isAssistantRuntimeApprovalRequest(interaction)
+      || view.thread?.threadId !== threadId
+      || interaction.turnId !== canonicalTurnId
+      || interaction.interactionId !== interactionId
+    ) {
+      throw new Error('ASSISTANT_RUNTIME_APPROVAL_NOT_PENDING')
+    }
+    await getAssistantRuntimeService().respondToServerRequest({
+      ...scope,
+      threadId,
+      turnId: canonicalTurnId,
+      interactionId,
+      response: buildAssistantRuntimeServerResponse({
+        interaction,
+        result: { decision: decision === 'approve' ? 'accept' : 'decline' },
+      }),
     })
-    return NextResponse.json(receipt, { status: 202 })
+    return NextResponse.json({ accepted: true, interactionId }, { status: 202 })
   } catch (error) {
     throw mapProjectAgentCommandError(error)
   }

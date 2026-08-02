@@ -3,7 +3,6 @@ import type { WorkflowHandle } from '@temporalio/client'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { connectTemporalClient } from '@/lib/temporal/client'
 import {
-  buildAgentThreadWorkflowId,
   buildTaskWorkflowId,
   buildUserTaskSchedulerWorkflowId,
 } from '@/lib/temporal/identity'
@@ -116,9 +115,7 @@ describe('Temporal Task terminal and follow-up durability', () => {
     const firstWorkflowId = buildTaskWorkflowId(fixture.firstTaskId)
     const secondWorkflowId = buildTaskWorkflowId(fixture.secondTaskId)
     const schedulerWorkflowId = buildUserTaskSchedulerWorkflowId(fixture.userId)
-    const agentWorkflowId = buildAgentThreadWorkflowId(fixture.threadId)
     let schedulerHandle: WorkflowHandle | null = null
-    let agentHandle: WorkflowHandle | null = null
     try {
       worker = await startTaskDurabilityWorker({
         faultTaskId: fixture.firstTaskId,
@@ -202,7 +199,6 @@ describe('Temporal Task terminal and follow-up durability', () => {
         attempts: 1,
       })
 
-      agentHandle = connected.client.workflow.getHandle(agentWorkflowId)
       const [
         firstFinalTask,
         firstTerminalEvents,
@@ -264,10 +260,6 @@ describe('Temporal Task terminal and follow-up durability', () => {
     } finally {
       requireWorker().releaseFollowUpNotification()
       await terminateQuietly(schedulerHandle, 'TASK_DURABILITY_SCHEDULER_TEST_COMPLETE')
-      await terminateQuietly(
-        agentHandle ?? connected.client.workflow.getHandle(agentWorkflowId),
-        'TASK_DURABILITY_AGENT_TEST_COMPLETE',
-      )
       await worker?.close()
       worker = null
       await connected.close()

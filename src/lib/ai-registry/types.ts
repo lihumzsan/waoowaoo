@@ -12,6 +12,9 @@ export type AiLlmProtocol =
   | 'openrouter-chat'
   | 'google-generative-ai'
 
+/** Provider wire verified specifically for Codex custom model providers. */
+export type AiCodexRuntimeWireApi = 'responses'
+
 export type AiPublicReasoningMode = 'none' | 'native' | 'summary_auto'
 
 export type AiOptionValidationResult =
@@ -230,6 +233,7 @@ export type CapabilityFieldI18nMap = Record<string, CapabilityFieldI18n>
 
 export interface LLMCapabilities {
   protocol: AiLlmProtocol
+  codexRuntimeWireApi?: AiCodexRuntimeWireApi
   publicReasoningMode?: AiPublicReasoningMode
   reasoningEffortOptions?: ReasoningEffort[]
   /**
@@ -308,6 +312,7 @@ const CAPABILITY_NAMESPACES = new Set<keyof ModelCapabilities>([
 
 const LLM_ALLOWED_FIELDS = new Set<keyof LLMCapabilities>([
   'protocol',
+  'codexRuntimeWireApi',
   'publicReasoningMode',
   'reasoningEffortOptions',
   'contextWindow',
@@ -515,6 +520,16 @@ function validateLLMCapabilities(issues: CapabilityValidationIssue[], raw: unkno
   ]
   if (!allowedProtocols.includes(protocol as AiLlmProtocol)) {
     issues.push(makeAllowedIssue('capabilities.llm.protocol', protocol, allowedProtocols))
+  }
+  if (
+    raw.codexRuntimeWireApi !== undefined
+    && raw.codexRuntimeWireApi !== 'responses'
+  ) {
+    issues.push(makeAllowedIssue(
+      'capabilities.llm.codexRuntimeWireApi',
+      raw.codexRuntimeWireApi,
+      ['responses'],
+    ))
   }
   const publicReasoningModes: readonly AiPublicReasoningMode[] = [
     'none',

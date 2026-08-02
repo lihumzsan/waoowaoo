@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef } from 'react'
-import type { AgentSessionView } from '@/lib/agent-turn/view-contract'
+import type { AgentSessionView } from '@/lib/assistant-runtime/view-contract'
 import type {
   WorkspaceAssistantActiveFocusRequest,
   WorkspaceAssistantActiveTaskTarget,

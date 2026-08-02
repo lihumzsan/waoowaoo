@@ -31,7 +31,11 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
     for (const segment of op.groupPath) {
       mustTrimmedString(segment, 'GROUP_PATH_SEGMENT')
     }
-    const channels = op.channels as { tool?: unknown; api?: unknown } | undefined
+    const channels = op.channels as {
+      tool?: unknown
+      api?: unknown
+      mcp?: unknown
+    } | undefined
     if (!channels || typeof channels !== 'object' || Array.isArray(channels)) {
       throw new Error(`PROJECT_AGENT_OPERATION_CHANNELS_MISSING:${operationId}`)
     }
@@ -40,6 +44,14 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
     }
     if (channels.api !== true && channels.api !== false) {
       throw new Error(`PROJECT_AGENT_OPERATION_CHANNELS_API_INVALID:${operationId}`)
+    }
+    if (channels.mcp !== true && channels.mcp !== false) {
+      throw new Error(`PROJECT_AGENT_OPERATION_CHANNELS_MCP_INVALID:${operationId}`)
+    }
+    if (channels.mcp === true && channels.tool !== true) {
+      throw new Error(
+        `PROJECT_AGENT_OPERATION_CHANNELS_MCP_TOOL_REQUIRED:${operationId}`,
+      )
     }
     const prerequisites = op.prerequisites as { episodeId?: unknown } | undefined
     const episodeId = prerequisites?.episodeId

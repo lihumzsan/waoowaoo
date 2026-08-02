@@ -1,12 +1,17 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { useLocale, useTranslations } from 'next-intl'
+import { useTranslations } from 'next-intl'
 import { AssistantRuntimeProvider, ThreadPrimitive } from '@assistant-ui/react'
 import { AppIcon } from '@/components/ui/icons'
 import { useAttachmentFilePicker } from '@/components/project-assistant/useAttachmentFilePicker'
-import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
-import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
+import {
+  isAssistantRuntimeApprovalRequest,
+  isAssistantRuntimeChoiceRequest,
+  readAssistantRuntimeMcpElicitation,
+  readAssistantRuntimeUserInputQuestions,
+  type AssistantRuntimePendingInteractionView,
+} from '@/lib/assistant-runtime/view-contract'
 import {
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_ACCEPT,
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES,
@@ -38,18 +43,12 @@ import {
   WorkspaceAssistantPendingTurnPlaceholder,
   WorkspaceAssistantThreadMessage,
 } from './workspace-assistant/WorkspaceAssistantRenderers'
-import { AssistantChoiceCardView } from './workspace-assistant/WorkspaceAssistantChoiceCard'
 import { WorkspaceAssistantActiveRunCard } from './workspace-assistant/WorkspaceAssistantActiveRunCard'
 import { WorkspaceAssistantPlanCard } from './workspace-assistant/WorkspaceAssistantPlanCard'
 import { WorkspaceAssistantSettings } from './workspace-assistant/WorkspaceAssistantSettings'
 import { WorkspaceAssistantComposer } from './workspace-assistant/WorkspaceAssistantComposer'
 import { WorkspaceAssistantRepeatedToolCallGroupProvider } from './workspace-assistant/WorkspaceAssistantToolCall'
 import { WorkspaceAssistantRunningSurfaceProvider } from './workspace-assistant/WorkspaceAssistantReasoning'
-import {
-  WorkspaceAssistantRunningSubagentDock,
-  WorkspaceAssistantSubagentTabs,
-} from './workspace-assistant/WorkspaceAssistantSubagents'
-import { WorkspaceAssistantSubagentView } from './workspace-assistant/WorkspaceAssistantSubagentDetail'
 import {
   buildWorkspaceAssistantPanelLayout,
   WORKSPACE_ASSISTANT_TOP_OFFSET,
@@ -132,6 +131,433 @@ function WorkspaceAssistantRunFailureNotice({
   )
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function runtimeApprovalTitle(
+  interaction: AssistantRuntimePendingInteractionView,
+  fallback: string,
+): string {
+  if (!isRecord(interaction.params)) return fallback
+  const network = interaction.params.networkApprovalContext
+  if (isRecord(network) && typeof network.host === 'string' && network.host.trim()) {
+    const protocol = typeof network.protocol === 'string' ? network.protocol.trim() : ''
+    return protocol ? `${protocol}://${network.host.trim()}` : network.host.trim()
+  }
+  const command = interaction.params.command
+  if (typeof command === 'string' && command.trim()) return command
+  if (Array.isArray(command) && command.every((value) => typeof value === 'string')) {
+    const joined = command.join(' ').trim()
+    if (joined) return joined
+  }
+  const reason = interaction.params.reason
+  if (typeof reason === 'string' && reason.trim()) return reason
+  const path = interaction.params.path
+  if (typeof path === 'string' && path.trim()) return path
+  return fallback
+}
+
+type RuntimeRequestContent =
+  | {
+      readonly kind: 'questions'
+      readonly questions: ReturnType<typeof readAssistantRuntimeUserInputQuestions>
+    }
+  | {
+      readonly kind: 'elicitation'
+      readonly elicitation: ReturnType<typeof readAssistantRuntimeMcpElicitation>
+    }
+  | { readonly kind: 'invalid' }
+
+function parseRuntimeRequestContent(
+  interaction: AssistantRuntimePendingInteractionView,
+): RuntimeRequestContent {
+  try {
+    if (interaction.method === 'item/tool/requestUserInput') {
+      return {
+        kind: 'questions',
+        questions: readAssistantRuntimeUserInputQuestions(interaction),
+      }
+    }
+    if (interaction.method === 'mcpServer/elicitation/request') {
+      return {
+        kind: 'elicitation',
+        elicitation: readAssistantRuntimeMcpElicitation(interaction),
+      }
+    }
+  } catch {
+    return { kind: 'invalid' }
+  }
+  return { kind: 'invalid' }
+}
+
+function runtimeEnumOptions(schema: Record<string, unknown>): readonly {
+  readonly value: string
+  readonly label: string
+}[] {
+  if (Array.isArray(schema.enum)) {
+    const values = schema.enum.filter((entry): entry is string => typeof entry === 'string')
+    const labels = Array.isArray(schema.enumNames)
+      ? schema.enumNames.filter((entry): entry is string => typeof entry === 'string')
+      : []
+    return values.map((value, index) => ({ value, label: labels[index] ?? value }))
+  }
+  if (!Array.isArray(schema.oneOf)) return []
+  return schema.oneOf.flatMap((entry) => {
+    if (!isRecord(entry) || typeof entry.const !== 'string') return []
+    return [{
+      value: entry.const,
+      label: typeof entry.title === 'string' && entry.title.trim() ? entry.title : entry.const,
+    }]
+  })
+}
+
+function initialRuntimeRequestValues(content: RuntimeRequestContent): Record<string, unknown> {
+  if (content.kind !== 'elicitation' || content.elicitation.mode !== 'form') return {}
+  const schema = content.elicitation.requestedSchema
+  if (!schema || !isRecord(schema.properties)) return {}
+  return Object.fromEntries(
+    Object.entries(schema.properties).flatMap(([key, property]) => {
+      if (!isRecord(property) || property.default === undefined) return []
+      const value = property.type === 'number' || property.type === 'integer'
+        ? String(property.default)
+        : property.default
+      return [[key, value]]
+    }),
+  )
+}
+
+function WorkspaceAssistantRuntimeRequestCard(props: {
+  interaction: AssistantRuntimePendingInteractionView
+  onSubmit: (params: { response: Record<string, unknown> }) => Promise<void>
+}) {
+  const t = useTranslations('assistantAgent')
+  const content = useMemo(
+    () => parseRuntimeRequestContent(props.interaction),
+    [props.interaction],
+  )
+  const [values, setValues] = useState<Record<string, unknown>>(
+    () => initialRuntimeRequestValues(content),
+  )
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState(false)
+
+  const submit = (response: Record<string, unknown>): void => {
+    if (submitting) return
+    setSubmitting(true)
+    setError(false)
+    void props.onSubmit({ response })
+      .catch(() => {
+        setError(true)
+        setSubmitting(false)
+      })
+  }
+
+  if (content.kind === 'invalid') {
+    return (
+      <div
+        role="alert"
+        className="rounded-md border border-[var(--glass-tone-warn-fg)]/25 bg-[var(--glass-tone-warn-bg)]/70 px-3 py-2 text-sm text-[var(--glass-tone-warn-fg)]"
+      >
+        {t('panel.sessionStateError')}
+      </div>
+    )
+  }
+
+  if (content.kind === 'questions') {
+    const ready = content.questions.every((question) => {
+      const value = values[question.id]
+      return typeof value === 'string' && value.trim().length > 0
+    })
+    return (
+      <div className="space-y-3 rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-sm text-[var(--glass-text-primary)]">
+        {content.questions.map((question) => (
+          <fieldset key={question.id} className="space-y-2">
+            <legend className="font-semibold">{question.header}</legend>
+            <p className="text-xs leading-5 text-[var(--glass-text-secondary)]">
+              {question.question}
+            </p>
+            {question.options ? (
+              <div className="grid gap-2">
+                {question.options.map((option) => {
+                  const selected = values[question.id] === option.label
+                  return (
+                    <button
+                      key={option.label}
+                      type="button"
+                      disabled={submitting}
+                      className={`rounded-xl border px-3 py-2 text-left transition-colors ${selected ? 'border-neutral-900 bg-neutral-50' : 'border-[var(--glass-stroke-base)] bg-white hover:bg-neutral-100'}`}
+                      onClick={() => {
+                        setValues((current) => ({ ...current, [question.id]: option.label }))
+                        setError(false)
+                      }}
+                    >
+                      <span className="block font-medium">{option.label}</span>
+                      {option.description ? (
+                        <span className="mt-0.5 block text-xs text-[var(--glass-text-secondary)]">
+                          {option.description}
+                        </span>
+                      ) : null}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : null}
+            {question.isOther || !question.options ? (
+              <input
+                type={question.isSecret ? 'password' : 'text'}
+                value={typeof values[question.id] === 'string' ? String(values[question.id]) : ''}
+                disabled={submitting}
+                className="w-full rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 py-2 outline-none focus:border-neutral-700"
+                onChange={(event) => {
+                  setValues((current) => ({ ...current, [question.id]: event.target.value }))
+                  setError(false)
+                }}
+              />
+            ) : null}
+          </fieldset>
+        ))}
+        {error ? (
+          <div role="alert" className="text-xs text-[var(--glass-tone-warn-fg)]">
+            {t('cards.choiceSubmitErrorFallback')}
+          </div>
+        ) : null}
+        <button
+          type="button"
+          disabled={!ready || submitting}
+          className="w-full rounded-xl bg-neutral-900 px-3 py-2 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => {
+            submit({
+              answers: Object.fromEntries(
+                content.questions.map((question) => [
+                  question.id,
+                  { answers: [String(values[question.id]).trim()] },
+                ]),
+              ),
+            })
+          }}
+        >
+          {submitting ? t('cards.choiceSubmitting') : t('cards.confirmContinue')}
+        </button>
+      </div>
+    )
+  }
+
+  const elicitation = content.elicitation
+  const schema = elicitation.requestedSchema
+  const properties = schema && isRecord(schema.properties)
+    ? Object.entries(schema.properties)
+    : []
+  const required = new Set(
+    schema && Array.isArray(schema.required)
+      ? schema.required.filter((key): key is string => typeof key === 'string')
+      : [],
+  )
+  const schemaSupported = elicitation.mode === 'url' || (
+    schema?.type === 'object'
+    && properties.every(([, property]) => {
+      if (!isRecord(property)) return false
+      if (property.type === 'boolean' || property.type === 'string') return true
+      if (property.type === 'number' || property.type === 'integer') return true
+      return property.type === 'array'
+        && isRecord(property.items)
+        && runtimeEnumOptions(property.items).length > 0
+    })
+  )
+  const formReady = schemaSupported && properties.every(([key, property]) => {
+    if (!required.has(key)) return true
+    if (!isRecord(property)) return false
+    const value = values[key]
+    if (property.type === 'boolean') return typeof value === 'boolean'
+    if (property.type === 'array') return Array.isArray(value) && value.length > 0
+    if (property.type === 'number' || property.type === 'integer') {
+      if (typeof value !== 'string' || !value.trim()) return false
+      const parsed = Number(value)
+      return Number.isFinite(parsed)
+        && (property.type !== 'integer' || Number.isInteger(parsed))
+    }
+    return typeof value === 'string' && value.trim().length > 0
+  })
+  const formContent = (): Record<string, unknown> => {
+    const result: Record<string, unknown> = {}
+    for (const [key, property] of properties) {
+      if (!isRecord(property)) continue
+      const value = values[key]
+      if (property.type === 'boolean') {
+        result[key] = value === true
+        continue
+      }
+      if (property.type === 'number' || property.type === 'integer') {
+        if (typeof value === 'string' && value.trim()) result[key] = Number(value)
+        continue
+      }
+      if (property.type === 'array') {
+        if (Array.isArray(value)) result[key] = value
+        continue
+      }
+      if (typeof value === 'string' && value.trim()) result[key] = value.trim()
+    }
+    return result
+  }
+
+  return (
+    <div className="space-y-3 rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-sm text-[var(--glass-text-primary)]">
+      <p className="leading-5">{elicitation.message}</p>
+      {elicitation.mode === 'url' && elicitation.url ? (
+        <a
+          href={elicitation.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block break-all rounded-xl border border-[var(--glass-stroke-base)] px-3 py-2 text-xs underline"
+        >
+          {elicitation.url}
+        </a>
+      ) : null}
+      {elicitation.mode === 'form' && schemaSupported ? (
+        <div className="space-y-3">
+          {properties.map(([key, property]) => {
+            if (!isRecord(property)) return null
+            const label = typeof property.title === 'string' && property.title.trim()
+              ? property.title
+              : key
+            const description = typeof property.description === 'string'
+              ? property.description
+              : null
+            const enumOptions = runtimeEnumOptions(property)
+            if (property.type === 'boolean') {
+              return (
+                <label key={key} className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    checked={values[key] === true}
+                    disabled={submitting}
+                    onChange={(event) => {
+                      setValues((current) => ({ ...current, [key]: event.target.checked }))
+                      setError(false)
+                    }}
+                  />
+                  <span>
+                    <span className="block font-medium">{label}</span>
+                    {description ? (
+                      <span className="block text-xs text-[var(--glass-text-secondary)]">
+                        {description}
+                      </span>
+                    ) : null}
+                  </span>
+                </label>
+              )
+            }
+            if (property.type === 'array' && isRecord(property.items)) {
+              const options = runtimeEnumOptions(property.items)
+              const selected = Array.isArray(values[key])
+                ? values[key].filter((entry): entry is string => typeof entry === 'string')
+                : []
+              return (
+                <fieldset key={key} className="space-y-1">
+                  <legend className="font-medium">{label}</legend>
+                  {options.map((option) => (
+                    <label key={option.value} className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={selected.includes(option.value)}
+                        disabled={submitting}
+                        onChange={(event) => {
+                          setValues((current) => ({
+                            ...current,
+                            [key]: event.target.checked
+                              ? [...selected, option.value]
+                              : selected.filter((value) => value !== option.value),
+                          }))
+                          setError(false)
+                        }}
+                      />
+                      {option.label}
+                    </label>
+                  ))}
+                </fieldset>
+              )
+            }
+            return (
+              <label key={key} className="block space-y-1">
+                <span className="block font-medium">{label}</span>
+                {description ? (
+                  <span className="block text-xs text-[var(--glass-text-secondary)]">
+                    {description}
+                  </span>
+                ) : null}
+                {enumOptions.length > 0 ? (
+                  <select
+                    value={typeof values[key] === 'string' ? values[key] : ''}
+                    disabled={submitting}
+                    className="w-full rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 py-2"
+                    onChange={(event) => {
+                      setValues((current) => ({ ...current, [key]: event.target.value }))
+                      setError(false)
+                    }}
+                  >
+                    <option value="" />
+                    {enumOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type={property.type === 'number' || property.type === 'integer' ? 'number' : 'text'}
+                    step={property.type === 'integer' ? 1 : 'any'}
+                    min={typeof property.minimum === 'number' ? property.minimum : undefined}
+                    max={typeof property.maximum === 'number' ? property.maximum : undefined}
+                    minLength={typeof property.minLength === 'number' ? property.minLength : undefined}
+                    maxLength={typeof property.maxLength === 'number' ? property.maxLength : undefined}
+                    value={typeof values[key] === 'string' ? values[key] : ''}
+                    disabled={submitting}
+                    className="w-full rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 py-2 outline-none focus:border-neutral-700"
+                    onChange={(event) => {
+                      setValues((current) => ({ ...current, [key]: event.target.value }))
+                      setError(false)
+                    }}
+                  />
+                )}
+              </label>
+            )
+          })}
+        </div>
+      ) : null}
+      {!schemaSupported ? (
+        <div role="alert" className="text-xs text-[var(--glass-tone-warn-fg)]">
+          {t('panel.sessionStateError')}
+        </div>
+      ) : null}
+      {error ? (
+        <div role="alert" className="text-xs text-[var(--glass-tone-warn-fg)]">
+          {t('cards.choiceSubmitErrorFallback')}
+        </div>
+      ) : null}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={submitting || (elicitation.mode === 'form' && !formReady)}
+          className="flex-1 rounded-xl bg-neutral-900 px-3 py-2 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => submit({
+            action: 'accept',
+            content: elicitation.mode === 'form' ? formContent() : null,
+            _meta: null,
+          })}
+        >
+          {submitting ? t('cards.choiceSubmitting') : t('cards.confirmContinue')}
+        </button>
+        <button
+          type="button"
+          disabled={submitting}
+          className="rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 py-2 font-medium hover:bg-neutral-100 disabled:opacity-50"
+          onClick={() => submit({ action: 'decline', content: null, _meta: null })}
+        >
+          {t('cards.cancelAction')}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function WorkspaceAssistantPanel({
   projectId,
   episodeId,
@@ -147,7 +573,6 @@ export default function WorkspaceAssistantPanel({
   const t = useTranslations('assistantAgent')
   const tErrors = useTranslations('errors')
   const resolveClientError = useClientErrorMessage()
-  const locale = normalizeProjectAgentLocale(useLocale())
   const assistantRuntime = useWorkspaceAssistantRuntime({
     projectId,
     episodeId,
@@ -225,36 +650,11 @@ export default function WorkspaceAssistantPanel({
       void uploadAttachmentFiles(files)
     },
   })
-  const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null)
-  const [dismissedSubagentIds, setDismissedSubagentIds] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  )
-  const visibleSubagents = useMemo(
-    () =>
-      assistantRuntime.subagents.filter(
-        (subagent) => !dismissedSubagentIds.has(subagent.subagentId),
-      ),
-    [assistantRuntime.subagents, dismissedSubagentIds],
-  )
-
   useEffect(() => {
     panelScopeKeyRef.current = panelScopeKey
     setMediaUploadPending(false)
     setAttachmentError(null)
-    setSelectedSubagentId(null)
-    setDismissedSubagentIds(new Set())
   }, [panelScopeKey])
-
-  useEffect(() => {
-    if (!selectedSubagentId) return
-    if (visibleSubagents.some((item) => item.subagentId === selectedSubagentId)) return
-    setSelectedSubagentId(null)
-  }, [selectedSubagentId, visibleSubagents])
-
-  const dismissSubagent = (subagentId: string): void => {
-    setDismissedSubagentIds((current) => new Set([...current, subagentId]))
-    if (selectedSubagentId === subagentId) setSelectedSubagentId(null)
-  }
 
   useWorkspaceAssistantMessageDispatch({
     autoStartDraft,
@@ -275,12 +675,13 @@ export default function WorkspaceAssistantPanel({
     [assistantRuntime.view?.followUpBatches],
   )
   const pendingInteraction = assistantRuntime.pendingInteraction
-  const serverPendingApproval = pendingInteraction?.kind === 'approval' ? pendingInteraction : null
-  const activeChoiceCard =
-    pendingInteraction?.kind === 'choice'
-      ? { key: pendingInteraction.interactionId, data: pendingInteraction.card }
-      : null
-  const displayedActiveChoiceCard = serverPendingApproval ? null : activeChoiceCard
+  const serverPendingApproval = isAssistantRuntimeApprovalRequest(pendingInteraction)
+    ? pendingInteraction
+    : null
+  const activeRuntimeRequest = isAssistantRuntimeChoiceRequest(pendingInteraction)
+    ? pendingInteraction
+    : null
+  const displayedRuntimeRequest = serverPendingApproval ? null : activeRuntimeRequest
   const partComponents = useWorkspaceAssistantMessagePartComponents()
   const showAssistantReplyLoading = shouldShowWorkspaceAssistantReplyLoading({
     storageLoading: assistantRuntime.viewLoading,
@@ -421,43 +822,20 @@ export default function WorkspaceAssistantPanel({
                 className="relative flex h-full min-h-0 flex-col"
               >
                 <WorkspaceAssistantSettings />
-                <WorkspaceAssistantSubagentTabs
-                  subagents={visibleSubagents}
-                  selectedSubagentId={selectedSubagentId}
-                  onSelect={setSelectedSubagentId}
-                  onDismiss={dismissSubagent}
-                  primaryNeedsAttention={Boolean(
-                    displayedActiveChoiceCard || serverPendingApproval,
-                  )}
-                />
                 <ThreadPrimitive.Viewport
                   autoScroll
-                  className={`min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 pb-4 ${visibleSubagents.length > 0 ? 'pt-4' : 'pt-12'}`}
+                  className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 pb-4 pt-12"
                   style={WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE}
                 >
-                  {selectedSubagentId ? (
-                    <WorkspaceAssistantSubagentView
-                      projectId={projectId}
-                      subagent={
-                        visibleSubagents.find((item) => item.subagentId === selectedSubagentId) ??
-                        null
-                      }
-                      structuredOutputText={
-                        assistantRuntime.subagentStructuredOutputs.get(selectedSubagentId) ?? null
-                      }
-                    />
-                  ) : (
-                    <WorkspaceAssistantRunningSurfaceProvider
-                      activeTurn={assistantRuntime.replyInFlight}
-                    >
-                      <div className="min-w-0">
-                        <div className="space-y-3">
+                  <WorkspaceAssistantRunningSurfaceProvider
+                    activeTurn={assistantRuntime.replyInFlight}
+                  >
+                    <div className="min-w-0">
+                      <div className="space-y-3">
                           <ThreadPrimitive.Messages>
                             {() => (
                               <WorkspaceAssistantThreadMessage
                                 messagePartComponents={partComponents}
-                                subagents={visibleSubagents}
-                                onSelectSubagent={setSelectedSubagentId}
                                 undeliveredUserMessageId={undeliveredUserMessage?.id ?? null}
                               />
                             )}
@@ -526,14 +904,14 @@ export default function WorkspaceAssistantPanel({
                             : null}
                           {serverPendingApproval ? (
                             <ConfirmationActionCard
-                              members={serverPendingApproval.members.map((member) => ({
-                                operationId: member.operationId,
-                                title: localizeProjectAgentOperationTitle(
-                                  member.operationId,
-                                  locale,
+                              members={[{
+                                operationId: serverPendingApproval.method,
+                                title: runtimeApprovalTitle(
+                                  serverPendingApproval,
+                                  t('cards.confirmationRequired'),
                                 ),
-                                operationPlan: member.operationPlan,
-                              }))}
+                                operationPlan: null,
+                              }]}
                               subtitle={t('cards.confirmationRequired')}
                               onConfirm={() =>
                                 assistantRuntime.resolveApproval({
@@ -547,34 +925,29 @@ export default function WorkspaceAssistantPanel({
                               }
                             />
                           ) : null}
-                        </div>
                       </div>
-                    </WorkspaceAssistantRunningSurfaceProvider>
-                  )}
+                    </div>
+                  </WorkspaceAssistantRunningSurfaceProvider>
                 </ThreadPrimitive.Viewport>
 
-                {selectedSubagentId === null ? (
-                  <div className="mx-4 mb-2 shrink-0">
-                    <WorkspaceAssistantRunningSubagentDock
-                      subagents={visibleSubagents}
-                      onSelect={setSelectedSubagentId}
-                    />
-                    {displayedActiveChoiceCard ? (
-                      <div className="mb-2">
-                        <AssistantChoiceCardView
-                          data={displayedActiveChoiceCard.data}
-                          onSubmitChoiceResponse={assistantRuntime.submitChoiceResponse}
-                        />
-                      </div>
+                <div className="mx-4 mb-2 shrink-0">
+                  {displayedRuntimeRequest ? (
+                    <div className="mb-2">
+                      <WorkspaceAssistantRuntimeRequestCard
+                        key={displayedRuntimeRequest.interactionId}
+                        interaction={displayedRuntimeRequest}
+                        onSubmit={assistantRuntime.submitChoiceResponse}
+                      />
+                    </div>
+                  ) : null}
+                  <div className="relative">
+                    {assistantRuntime.view?.thread?.plan ? (
+                      <WorkspaceAssistantPlanCard
+                        plan={assistantRuntime.view.thread.plan}
+                        isRunActive={assistantRuntime.view.currentTurn?.status === 'running'}
+                      />
                     ) : null}
-                    <div className="relative">
-                      {assistantRuntime.view?.thread?.plan ? (
-                        <WorkspaceAssistantPlanCard
-                          plan={assistantRuntime.view.thread.plan}
-                          isRunActive={assistantRuntime.view.currentTurn?.status === 'running'}
-                        />
-                      ) : null}
-                      <WorkspaceAssistantComposer
+                    <WorkspaceAssistantComposer
                         value={composer.text}
                         textareaRef={composer.textareaRef}
                         selection={selection}
@@ -632,10 +1005,9 @@ export default function WorkspaceAssistantPanel({
                           void uploadAttachmentFiles(files)
                         }}
                         onClearSelection={onClearSelection}
-                      />
-                    </div>
+                    />
                   </div>
-                ) : null}
+                </div>
               </ThreadPrimitive.Root>
             </AssistantRuntimeProvider>
           </WorkspaceAssistantRepeatedToolCallGroupProvider>

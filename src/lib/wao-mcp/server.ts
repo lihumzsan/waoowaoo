@@ -5,31 +5,22 @@ import {
   type CallToolResult,
   type ListToolsResult,
 } from '@modelcontextprotocol/sdk/types.js'
-import type { JsonObject } from '@/lib/operations/types'
-import {
-  createWaoMcpOperationCatalog,
-  type WaoMcpStage0OperationId,
-} from './operation-catalog'
-
-export interface WaoMcpOperationExecutorResult {
-  /** Executor-owned, model-safe result. Never return credentials or raw keys. */
-  readonly structuredContent: JsonObject
-  /** Concise model-visible summary of the same structured result. */
-  readonly text: string
-  readonly isError?: boolean
-}
-
-export interface WaoMcpOperationExecutor {
-  execute(params: {
-    readonly operationId: WaoMcpStage0OperationId
-    readonly input: Readonly<Record<string, unknown>>
-  }): Promise<WaoMcpOperationExecutorResult>
-}
+import type {
+  WaoMcpCallContextResolver,
+  WaoMcpOperationExecutor,
+  WaoMcpOperationExecutorResult,
+} from './contracts'
+import { createWaoMcpOperationCatalog } from './operation-catalog'
 
 export interface CreateWaoMcpServerParams {
   readonly executor: WaoMcpOperationExecutor
+  readonly contextResolver: WaoMcpCallContextResolver
   readonly name?: string
   readonly version?: string
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
 function errorResult(code: string, message: string): CallToolResult {
@@ -61,10 +52,11 @@ function projectExecutorResult(
 }
 
 /**
- * Creates the transport-independent Stage 0 MCP protocol server. The injected
- * executor owns authentication, canonical Operation validation, approvals and
- * execution. This layer only advertises registry-derived tools and forwards
- * calls; it never reads or writes DB, Task, billing, or provider state.
+ * Creates the transport-independent MCP protocol server. The context resolver
+ * binds each request to trusted Wao scope and stable Turn/call identity. The
+ * executor owns canonical Operation validation, approvals and execution. This
+ * layer only advertises registry-derived tools and forwards calls; it never
+ * reads or writes DB, Task, billing, or provider state.
  */
 export function createWaoMcpServer(
   params: CreateWaoMcpServerParams,
@@ -81,7 +73,7 @@ export function createWaoMcpServer(
     {
       capabilities: { tools: {} },
       instructions:
-        'Wao Stage 0 creative production tools. Tool schemas and descriptions come from the canonical Operation registry.',
+        'Wao creative production tools. Tool schemas and descriptions come from the canonical Operation registry.',
     },
   )
 
@@ -94,23 +86,49 @@ export function createWaoMcpServer(
 
   server.setRequestHandler(
     CallToolRequestSchema,
-    async (request): Promise<CallToolResult> => {
-      const entry = entryByName.get(request.params.name as WaoMcpStage0OperationId)
+    async (request, extra): Promise<CallToolResult> => {
+      const entry = entryByName.get(request.params.name)
       if (!entry) {
         return errorResult(
           'WAO_MCP_OPERATION_NOT_ALLOWED',
-          'This operation is not available through the Stage 0 Wao MCP server.',
+          'This operation is not available through Wao MCP.',
         )
       }
 
       try {
+        const context = await params.contextResolver.resolve({
+          operationId: entry.operationId,
+          requestId: extra.requestId,
+          sessionId: extra.sessionId?.trim() || null,
+          signal: extra.signal,
+        })
+        if (!context) {
+          return errorResult(
+            'WAO_MCP_TRUSTED_CONTEXT_REQUIRED',
+            'This tool call is not bound to an active Wao turn.',
+          )
+        }
         return projectExecutorResult(
           await params.executor.execute({
             operationId: entry.operationId,
             input: request.params.arguments ?? {},
+            context,
+            signal: extra.signal,
+            elicit: async (elicitation) => {
+              const result = await server.elicitInput(elicitation, {
+                signal: extra.signal,
+              })
+              return {
+                action: result.action,
+                ...(isRecord(result.content)
+                  ? { content: result.content }
+                  : {}),
+              }
+            },
           }),
         )
       } catch {
+        extra.signal.throwIfAborted()
         return errorResult(
           'WAO_MCP_EXECUTION_FAILED',
           'The operation could not be executed.',

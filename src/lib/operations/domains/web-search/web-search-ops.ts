@@ -4,8 +4,8 @@
  * Search is exposed as an Operation rather than hung off the Primary model,
  * because the Primary may run on OpenRouter or Claude while the hosted
  * `web_search` tool only exists inside OpenAI's Responses boundary. Routing
- * through the fixed `load_tools + execute_operation` gateway keeps the model
- * choice independent of the research capability.
+ * through the registry-backed Wao MCP capability keeps the model choice
+ * independent of the research provider.
  *
  * It writes nothing and is not billable at the Task layer; the cost is the
  * provider call itself.

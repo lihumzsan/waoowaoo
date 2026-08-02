@@ -20,6 +20,7 @@ export function createProjectDataOperations(): ProjectAgentOperationRegistryDraf
       id: 'get_project_assets',
       summary: 'Load project assets (characters, locations, props) with stable media URLs.',
       intent: 'query',
+      channels: { tool: true, api: true, mcp: true },
       effects: {
         writes: false,
         billable: false,
@@ -74,6 +75,7 @@ export function createProjectDataOperations(): ProjectAgentOperationRegistryDraf
       id: 'get_project_costs',
       summary: 'Load project cost breakdown for the project owner.',
       intent: 'query',
+      channels: { tool: true, api: true, mcp: true },
       effects: {
         writes: false,
         billable: false,

@@ -2521,6 +2521,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
       id: 'create_text',
       summary: 'Persist one generic text Resource authored in this Agent turn; persist an exact contiguous excerpt of the current visible user turn with content.kind=current_user_text; or faithfully transcribe an image attached to this exact user turn with content.kind=current_user_media_transcription and its sourceResourceId. Classify a complete project screenplay as content.classification.kind=screenplay so it becomes the same project.screenplay Resource contract without a Creative Subagent; use generic_text otherwise. Choice options belong to request_choice and are not durable text Resources.',
       intent: 'act',
+      channels: { tool: true, api: true, mcp: true },
       toolContractRevision: 'create_text/v2',
       effects: {
         writes: true,
@@ -2551,6 +2552,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
       id: 'create_image',
       summary: 'Generate image Resources. Use request.kind=new with count 1-6 for independent alternatives from one exact input; every result is a separate Resource and Task. Use request.kind=manifest_assets with only the adopted project.asset_manifest resourceId to generate Project asset reference images; the server compiles every selected asset from its stable design, frozen Creative Direction, fixed format, ratio, and defaults. Use request.kind=asset with the exact assetBinding only for one asset image that has no manifest entry. To retry, use request.kind=retry with only exact failed Resource IDs.',
       intent: 'act',
+      channels: { tool: true, api: true, mcp: true },
       effects: MEDIA_EFFECTS,
       resourceContract: {
         kind: 'resource',
@@ -2577,6 +2579,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
       id: 'create_audio',
       summary: 'Generate project.bgm_audio music Resources. For independent music, use request.kind=new with count 1-6; every alternative is a separate Resource and Task. To execute a completed music direction, use request.kind=music_direction with only the direction resourceId, one exact cueKey, and the exact final video Resource; that domain cue remains one Resource per call. The server reads the cue instruction unchanged, derives duration from its time window, freezes the window, and lets a video-capable music model watch only that portion. To retry, provide only exact failed Resource IDs in request.kind=retry; the server restores every frozen generation input.',
       intent: 'act',
+      channels: { tool: true, api: true, mcp: true },
       effects: MEDIA_EFFECTS,
       resourceContract: {
         kind: 'resource',
@@ -2606,6 +2609,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
       id: 'create_video',
       summary: 'Generate video Resources. Use request.kind=new with count 1-6 for independent alternatives from one exact input; every result is a separate Resource and Task. Use request.kind=prompt_set with one exact project.video_prompt_set Resource to let the server directly validate and execute every distinct stored segment without Primary-Agent mapping. To retry, provide only exact failed Resource IDs; the server restores every frozen input.',
       intent: 'act',
+      channels: { tool: true, api: true, mcp: true },
       effects: MEDIA_EFFECTS,
       resourceContract: {
         kind: 'resource',

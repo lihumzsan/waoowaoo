@@ -7,10 +7,6 @@ import { deleteProjectNarrativeProjections } from '@/lib/story-canon/project-del
 import { addSignedUrlsToProject } from '@/lib/storage'
 import { logProjectAction } from '@/lib/logging/semantic'
 import { resolveTaskLocale } from '@/lib/task/resolve-locale'
-import {
-  AGENT_TURN_ACTIVE_STATUSES,
-  AGENT_TURN_INTERACTION_STATUS,
-} from '@/lib/agent-turn/contracts'
 import { TASK_STATUS } from '@/lib/task/types'
 import {
   formatProjectValidationIssue,
@@ -26,6 +22,17 @@ import {
   type ProjectAgentOperationRegistryDraft,
 } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
+
+const ACTIVE_ASSISTANT_TURN_STATUSES = [
+  'queued',
+  'running',
+  'waiting_approval',
+] as const
+
+const PENDING_ASSISTANT_INTERACTION_STATUSES = [
+  'pending',
+  'decided',
+] as const
 
 const updateProjectInputSchema: z.ZodType<ProjectUpdateInput> = z
   .object({
@@ -106,6 +113,7 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
       id: 'update_project',
       summary: 'Update project name/description for the project owner.',
       intent: 'act',
+      channels: { tool: true, api: true, mcp: true },
       toolContractRevision: 'update_project/v1',
       effects: {
         writes: true,
@@ -241,25 +249,13 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
           transaction.projectAgentTurn.count({
             where: {
               projectId: ctx.projectId,
-              status: { in: [...AGENT_TURN_ACTIVE_STATUSES] },
+              status: { in: [...ACTIVE_ASSISTANT_TURN_STATUSES] },
             },
           }),
           transaction.agentTurnInteraction.count({
             where: {
               turn: { projectId: ctx.projectId },
-              OR: [
-                { status: AGENT_TURN_INTERACTION_STATUS.PENDING },
-                {
-                  kind: 'approval',
-                  status: {
-                    in: [
-                      AGENT_TURN_INTERACTION_STATUS.APPROVED,
-                      AGENT_TURN_INTERACTION_STATUS.REJECTED,
-                    ],
-                  },
-                  runState: { not: null },
-                },
-              ],
+              status: { in: [...PENDING_ASSISTANT_INTERACTION_STATUSES] },
             },
           }),
         ])

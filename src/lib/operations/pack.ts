@@ -1,6 +1,7 @@
 import type {
   OperationApprovalKind,
   OperationChannels,
+  OperationChannelsDraft,
   OperationConfirmation,
   OperationGroupPath,
   OperationPrerequisites,
@@ -12,7 +13,7 @@ import { createProjectAgentToolInputSchema } from './tool-input-schema'
 
 export interface OperationPackDefaults {
   groupPath: OperationGroupPath
-  channels: OperationChannels
+  channels: OperationChannelsDraft
   prerequisites: OperationPrerequisites
   confirmation: OperationConfirmation
 }
@@ -33,10 +34,11 @@ function normalizeOperationSummary(operation: { id: string; summary: string }): 
   return trimmed
 }
 
-function normalizeChannels(channels: OperationChannels): OperationChannels {
+function normalizeChannels(channels: OperationChannelsDraft): OperationChannels {
   return {
     tool: channels.tool === true,
     api: channels.api === true,
+    mcp: channels.mcp === true,
   }
 }
 

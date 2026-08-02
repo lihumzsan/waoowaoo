@@ -160,6 +160,12 @@ export interface OperationPrerequisites {
 export interface OperationChannels {
   tool: boolean
   api: boolean
+  /** Advertise this existing Tool capability through the Wao MCP transport. */
+  mcp: boolean
+}
+
+export type OperationChannelsDraft = Omit<OperationChannels, 'mcp'> & {
+  mcp?: boolean
 }
 
 export type OperationToolExposure = 'direct' | 'on_demand'
@@ -303,7 +309,7 @@ interface ProjectAgentOperationDefinitionFields<
   summary: string
   intent: OperationIntent
   groupPath?: OperationGroupPath
-  channels?: OperationChannels
+  channels?: OperationChannelsDraft
   /**
    * Stable model transport for this Operation. Direct Operations are always
    * present as full SDK tools; on-demand Operations are loaded through the

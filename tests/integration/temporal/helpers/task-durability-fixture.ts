@@ -241,9 +241,8 @@ export async function createTaskDurabilityFixture(): Promise<TaskDurabilityFixtu
       projectId,
       userId,
       assistantId: 'workspace-command',
-      scopeRef: 'project',
+      scopeRef: `project:${projectId}`,
       messagesJson: [],
-      modelHistoryJson: [],
     },
   })
   await prisma.projectAgentTurn.create({
@@ -256,17 +255,16 @@ export async function createTaskDurabilityFixture(): Promise<TaskDurabilityFixtu
       sourceId: `task-durability-source-${suffix}`,
       payloadHash: 'a'.repeat(64),
       requestId: `task-durability-origin-${suffix}`,
-      status: 'running',
+      status: 'completed',
       attempt: 1,
-      executionOwnerId: `task-durability-owner-${suffix}`,
       contextJson: {
         locale: 'en',
         episodeId: null,
         selectedScopeRef: null,
         selectedAssetId: null,
       },
-      modelHistoryBaseVersion: 0,
       startedAt: new Date(),
+      finishedAt: new Date(),
     },
   })
 

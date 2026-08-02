@@ -319,7 +319,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
       summary: 'Persist one explicit project output aspect ratio. This is the sole writer for that project fact and may be committed atomically by a generic Choice answer.',
       intent: 'act',
       toolContractRevision: 'update_project_config/v1',
-      channels: { tool: true, api: true },
+      channels: { tool: true, api: true, mcp: true },
       effects: {
         writes: true,
         workspaceResourceImpact: 'project_data',

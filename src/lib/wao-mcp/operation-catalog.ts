@@ -2,25 +2,10 @@ import type { Tool, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import type { ProjectAgentOperationDefinition } from '@/lib/operations/types'
 
-/**
- * Stage 0 intentionally proves the MCP transport with the smallest useful
- * production surface. Before the production cutover, MCP exposure must become
- * a declaration owned by the Operation registry and this temporary allowlist
- * must be deleted rather than growing into a second capability registry.
- */
-export const WAO_MCP_STAGE_0_OPERATION_IDS = [
-  'create_image',
-  'create_video',
-  'create_audio',
-  'generate_voice',
-  'merge_videos',
-] as const
-
-export type WaoMcpStage0OperationId =
-  (typeof WAO_MCP_STAGE_0_OPERATION_IDS)[number]
+export type WaoMcpOperationId = string
 
 export interface WaoMcpOperationCatalogEntry {
-  readonly operationId: WaoMcpStage0OperationId
+  readonly operationId: WaoMcpOperationId
   readonly operation: ProjectAgentOperationDefinition
   readonly tool: Tool
 }
@@ -53,17 +38,18 @@ function projectTool(
 
 export function createWaoMcpOperationCatalog(): readonly WaoMcpOperationCatalogEntry[] {
   const registry = createProjectAgentOperationRegistry()
+  const exposed = Object.values(registry).filter(
+    (operation) => operation.channels.mcp,
+  )
 
-  return WAO_MCP_STAGE_0_OPERATION_IDS.map((operationId) => {
-    const operation = registry[operationId]
-    if (!operation) {
-      throw new Error(`WAO_MCP_OPERATION_NOT_REGISTERED:${operationId}`)
-    }
+  return exposed.map((operation) => {
     if (!operation.channels.tool) {
-      throw new Error(`WAO_MCP_OPERATION_TOOL_CHANNEL_REQUIRED:${operationId}`)
+      throw new Error(
+        `WAO_MCP_OPERATION_TOOL_CHANNEL_REQUIRED:${operation.id}`,
+      )
     }
     return {
-      operationId,
+      operationId: operation.id,
       operation,
       tool: projectTool(operation),
     }

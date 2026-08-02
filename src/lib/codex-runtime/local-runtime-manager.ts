@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { CodexAppServerClient, type CodexAppServerClientOptions } from './app-server-client'
-import type { RuntimeAdapter, RuntimeClientInfo } from './runtime-adapter'
+import type { RuntimeAdapter, RuntimeClientInfo, RuntimeInitializeCapabilities } from './runtime-adapter'
 
 type RuntimeEntry = {
   readonly cwd: string
@@ -10,6 +10,7 @@ type RuntimeEntry = {
 
 export type LocalRuntimeManagerOptions = {
   readonly clientInfo: RuntimeClientInfo
+  readonly initializeCapabilities?: RuntimeInitializeCapabilities | null
   readonly command?: string
   readonly args?: readonly string[]
   readonly env?: NodeJS.ProcessEnv
@@ -97,6 +98,7 @@ export class LocalRuntimeManager {
     return {
       cwd,
       clientInfo: this.options.clientInfo,
+      initializeCapabilities: this.options.initializeCapabilities,
       command: this.options.command,
       args: this.options.args,
       env: this.options.env,

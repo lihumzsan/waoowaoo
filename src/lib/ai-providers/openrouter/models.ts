@@ -272,6 +272,7 @@ const OPENROUTER_LLM_CAPABILITY_CATALOG_ENTRIES = OPENROUTER_LLM_MODEL_DEFINITIO
   capabilities: {
     llm: {
       protocol: 'openrouter-chat' as const,
+      codexRuntimeWireApi: 'responses' as const,
       ...(model.publicReasoningMode === 'none'
         ? {}
         : { publicReasoningMode: model.publicReasoningMode }),

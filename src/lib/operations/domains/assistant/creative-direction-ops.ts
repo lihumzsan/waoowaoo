@@ -29,6 +29,7 @@ export function createAssistantCreativeDirectionOperations(): ProjectAgentOperat
       id: 'adopt_creative_direction',
       summary: 'Select one exact project.creative_direction Resource as the project\'s current Creative Direction. The Creative Task already materialized it; this operation starts no downstream work.',
       intent: 'act',
+      channels: { tool: true, api: false, mcp: true },
       toolContractRevision: 'adopt_creative_direction/v2',
       effects: {
         writes: true,

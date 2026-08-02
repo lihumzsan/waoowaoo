@@ -1,7 +1,24 @@
+import {
+  createServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { resolve } from 'node:path'
 import type { History } from '@temporalio/common/lib/proto-utils'
 import { CancelledFailure, Context, heartbeat } from '@temporalio/activity'
 import { NativeConnection, Worker } from '@temporalio/worker'
+import {
+  admitAssistantRuntimeTaskFollowUp,
+  getOrCreateAssistantRuntimeThread,
+  loadAssistantRuntimeTaskFollowUp,
+} from '@/lib/assistant-runtime/persistence'
+import {
+  ASSISTANT_RUNTIME_TASK_FOLLOW_UP_PATH,
+  parseAssistantRuntimeTaskFollowUpHttpRequest,
+  verifyAssistantRuntimeTaskFollowUpAuthorization,
+} from '@/lib/assistant-runtime/task-follow-up-http'
 import * as productionActivities from '@/lib/temporal/activities'
 import { buildTemporalConnectionOptions, getTemporalRuntimeConfig } from '@/lib/temporal/config'
 import type {
@@ -15,6 +32,148 @@ import type {
 interface Deferred<T> {
   readonly promise: Promise<T>
   resolve(value: T): void
+}
+
+interface FollowUpAdmissionServer {
+  close(): Promise<void>
+}
+
+async function readJsonRequest(request: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = []
+  for await (const chunk of request) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+  }
+  return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown
+}
+
+function writeJson(
+  response: ServerResponse,
+  status: number,
+  body: unknown,
+): void {
+  response.writeHead(status, {
+    'Cache-Control': 'no-store',
+    'Content-Type': 'application/json',
+  })
+  response.end(JSON.stringify(body))
+}
+
+async function listen(server: Server): Promise<AddressInfo> {
+  await new Promise<void>((resolveListen, rejectListen) => {
+    server.once('error', rejectListen)
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', rejectListen)
+      resolveListen()
+    })
+  })
+  const address = server.address()
+  if (!address || typeof address === 'string') {
+    throw new Error('TASK_FOLLOW_UP_TEST_SERVER_ADDRESS_INVALID')
+  }
+  return address
+}
+
+async function closeServer(server: Server): Promise<void> {
+  await new Promise<void>((resolveClose, rejectClose) => {
+    server.close((error) => {
+      if (error) rejectClose(error)
+      else resolveClose()
+    })
+  })
+}
+
+function restoreEnvironment(name: 'INTERNAL_APP_URL' | 'CRON_SECRET', value: string | undefined): void {
+  if (value === undefined) delete process.env[name]
+  else process.env[name] = value
+}
+
+/**
+ * Real HTTP transport plus the production FollowUpBatch admission owner. The
+ * Codex runtime process itself is outside this Task durability oracle; this
+ * boundary deliberately stops after the unique Batch/Turn transaction.
+ */
+async function startFollowUpAdmissionServer(): Promise<FollowUpAdmissionServer> {
+  const previousBaseUrl = process.env.INTERNAL_APP_URL
+  const previousSecret = process.env.CRON_SECRET
+  process.env.CRON_SECRET = 'task-durability-follow-up-secret'
+  const server = createServer((request, response) => {
+    void (async () => {
+      if (
+        request.method !== 'POST'
+        || request.url !== ASSISTANT_RUNTIME_TASK_FOLLOW_UP_PATH
+        || !verifyAssistantRuntimeTaskFollowUpAuthorization(
+          typeof request.headers.authorization === 'string'
+            ? request.headers.authorization
+            : null,
+        )
+      ) {
+        writeJson(response, 401, {
+          ok: false,
+          code: 'ASSISTANT_RUNTIME_INTERNAL_AUTHENTICATION_FAILED',
+          retryable: false,
+        })
+        return
+      }
+      const input = parseAssistantRuntimeTaskFollowUpHttpRequest(
+        await readJsonRequest(request),
+      )
+      const loaded = await loadAssistantRuntimeTaskFollowUp(input.batchId)
+      if (loaded.kind === 'cancelled') {
+        writeJson(response, 200, {
+          ok: true,
+          receipt: { outcome: 'cancelled', batchId: input.batchId },
+        })
+        return
+      }
+      const thread = await getOrCreateAssistantRuntimeThread(loaded.followUp)
+      const admission = await admitAssistantRuntimeTaskFollowUp({
+        batchId: input.batchId,
+        expected: loaded.followUp,
+      })
+      writeJson(response, 200, {
+        ok: true,
+        receipt: {
+          outcome: admission.replayed ? 'replayed' : 'accepted',
+          batchId: input.batchId,
+          threadId: thread.threadId,
+          turnId: admission.turn.turnId,
+          runtimeThreadId: admission.thread.runtimeThreadId,
+          runtimeTurnId: admission.turn.runtimeTurnId,
+        },
+      })
+    })().catch(() => {
+      if (!response.headersSent) {
+        writeJson(response, 500, {
+          ok: false,
+          code: 'ASSISTANT_RUNTIME_FOLLOW_UP_FAILED',
+          retryable: true,
+        })
+      } else {
+        response.destroy()
+      }
+    })
+  })
+  try {
+    const address = await listen(server)
+    process.env.INTERNAL_APP_URL = `http://127.0.0.1:${String(address.port)}`
+  } catch (error) {
+    restoreEnvironment('INTERNAL_APP_URL', previousBaseUrl)
+    restoreEnvironment('CRON_SECRET', previousSecret)
+    throw error
+  }
+  let closed = false
+  return {
+    async close() {
+      if (closed) return
+      closed = true
+      try {
+        await closeServer(server)
+      } finally {
+        restoreEnvironment('INTERNAL_APP_URL', previousBaseUrl)
+        restoreEnvironment('CRON_SECRET', previousSecret)
+      }
+    },
+  }
 }
 
 function deferred<T>(): Deferred<T> {
@@ -290,6 +449,7 @@ export async function startTaskDurabilityWorker(input: {
   requireTemporalTestRuntime()
   const config = getTemporalRuntimeConfig()
   const connection = await NativeConnection.connect(buildTemporalConnectionOptions(config))
+  const followUpServer = await startFollowUpAdmissionServer()
   const terminalFault = deferred<TaskTerminalReceipt>()
   const notificationBlocked = deferred<void>()
   const notificationRelease = deferred<void>()
@@ -325,18 +485,24 @@ export async function startTaskDurabilityWorker(input: {
     }
   }
 
-  const worker = await Worker.create({
-    connection,
-    namespace: config.namespace,
-    taskQueue: config.taskQueue,
-    workflowsPath: resolve(process.cwd(), 'src/lib/temporal/workflows/index.ts'),
-    activities: {
-      ...productionActivities,
-      commitTaskTerminal,
-      notifyTaskFollowUp,
-    },
-    shutdownGraceTime: '5 seconds',
-  })
+  let worker: Worker
+  try {
+    worker = await Worker.create({
+      connection,
+      namespace: config.namespace,
+      taskQueue: config.taskQueue,
+      workflowsPath: resolve(process.cwd(), 'src/lib/temporal/workflows/index.ts'),
+      activities: {
+        ...productionActivities,
+        commitTaskTerminal,
+        notifyTaskFollowUp,
+      },
+      shutdownGraceTime: '5 seconds',
+    })
+  } catch (error) {
+    await Promise.allSettled([connection.close(), followUpServer.close()])
+    throw error
+  }
   const run = worker.run()
   let closed = false
 
@@ -366,7 +532,11 @@ export async function startTaskDurabilityWorker(input: {
       try {
         await run
       } finally {
-        await connection.close()
+        try {
+          await connection.close()
+        } finally {
+          await followUpServer.close()
+        }
       }
     },
   }

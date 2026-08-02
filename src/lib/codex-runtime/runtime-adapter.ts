@@ -15,6 +15,13 @@ export type RuntimeClientInfo = {
   readonly version: string
 }
 
+export type RuntimeInitializeCapabilities = {
+  readonly experimentalApi: boolean
+  readonly requestAttestation: boolean
+  readonly mcpServerOpenaiFormElicitation?: boolean
+  readonly optOutNotificationMethods?: readonly string[] | null
+}
+
 export type RuntimeInitializeResult = {
   readonly userAgent: string
   readonly codexHome: string
@@ -136,6 +143,11 @@ export type RuntimeThreadReadParams = {
   readonly includeTurns?: boolean
 }
 
+export type RuntimeThreadInjectItemsParams = {
+  readonly threadId: string
+  readonly items: readonly RuntimeJsonValue[]
+}
+
 export type RuntimeTurnStartParams = {
   readonly threadId: string
   readonly clientUserMessageId?: string
@@ -213,6 +225,7 @@ export interface RuntimeAdapter {
   startThread(params: RuntimeThreadStartParams): Promise<RuntimeThread>
   resumeThread(params: RuntimeThreadResumeParams): Promise<RuntimeThread>
   readThread(params: RuntimeThreadReadParams): Promise<RuntimeThread>
+  injectThreadItems(params: RuntimeThreadInjectItemsParams): Promise<void>
   startTurn(params: RuntimeTurnStartParams): Promise<RuntimeTurn>
   steerTurn(params: RuntimeTurnSteerParams): Promise<string>
   interruptTurn(params: RuntimeTurnInterruptParams): Promise<void>

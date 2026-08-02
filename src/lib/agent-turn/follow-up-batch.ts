@@ -1,29 +1,22 @@
 import { createHash } from 'node:crypto'
 import { Prisma } from '@prisma/client'
-import type { AgentInputItem } from '@openai/agents'
 import { prisma } from '@/lib/prisma'
 import type { ProjectAgentFollowUpBatchBinding } from '@/lib/operations/types'
-import type { AgentTurnContextSnapshot } from './contracts'
-import { projectErrorForModel } from '@/lib/errors/projection'
 
 const FOLLOW_UP_BATCH_MAX_MEMBERS = 64
-const FOLLOW_UP_INPUT_MAX_BYTES = 512 * 1_024
+
+interface FollowUpBatchContext {
+  locale: string | null
+  episodeId: string | null
+  selectedScopeRef: string | null
+  selectedAssetId: string | null
+}
 
 export interface AgentFollowUpBatchOrigin {
   executionKey: string
   turnId: string
   callId: string
   operationId: string
-}
-
-export interface FollowUpBatchNotification {
-  batchId: string
-  threadId: string
-  projectId: string
-  userId: string
-  episodeId: string | null
-  assistantId: 'workspace-command'
-  context: AgentTurnContextSnapshot
 }
 
 function requireIdentity(value: string, code: string, maxLength = 191): string {
@@ -48,7 +41,7 @@ function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(serialized) as Prisma.InputJsonValue
 }
 
-function parseContext(value: unknown): AgentTurnContextSnapshot {
+function parseContext(value: unknown): FollowUpBatchContext {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('FOLLOW_UP_BATCH_CONTEXT_INVALID')
   }
@@ -396,42 +389,6 @@ export async function recordFollowUpBatchTaskTerminalInTransaction(params: {
   return readyBatchIds
 }
 
-export async function loadFollowUpBatchNotification(
-  batchIdValue: string,
-): Promise<
-  | { kind: 'cancelled' }
-  | { kind: 'notified'; turnId: string }
-  | { kind: 'ready'; notification: FollowUpBatchNotification }
-> {
-  const batchId = requireIdentity(batchIdValue, 'FOLLOW_UP_BATCH_ID_INVALID')
-  const batch = await prisma.followUpBatch.findUnique({
-    where: { id: batchId },
-  })
-  if (!batch) throw new Error(`FOLLOW_UP_BATCH_NOT_FOUND:${batchId}`)
-  if (batch.status === 'cancelled') return { kind: 'cancelled' }
-  if (batch.status === 'notified' && batch.notifiedTurnId) {
-    return { kind: 'notified', turnId: batch.notifiedTurnId }
-  }
-  if (batch.status !== 'ready') {
-    throw new Error(`FOLLOW_UP_BATCH_NOT_READY:${batchId}:${batch.status}`)
-  }
-  if (batch.assistantId !== 'workspace-command') {
-    throw new Error(`FOLLOW_UP_BATCH_ASSISTANT_INVALID:${batchId}`)
-  }
-  return {
-    kind: 'ready',
-    notification: {
-      batchId,
-      threadId: batch.threadId,
-      projectId: batch.projectId,
-      userId: batch.userId,
-      episodeId: batch.episodeId,
-      assistantId: 'workspace-command',
-      context: parseContext(batch.contextJson),
-    },
-  }
-}
-
 export async function loadReadyFollowUpBatchIdsForTerminal(params: {
   taskId: string
   terminalEventId: number
@@ -445,78 +402,4 @@ export async function loadReadyFollowUpBatchIdsForTerminal(params: {
     orderBy: { id: 'asc' },
   })
   return batches.map((batch) => batch.id)
-}
-
-export async function loadAgentTurnFollowUpInput(params: {
-  turnId: string
-  batchId: string
-}): Promise<AgentInputItem> {
-  const [turn, batch] = await Promise.all([
-    prisma.projectAgentTurn.findUnique({
-      where: { id: params.turnId },
-      select: { threadId: true, sourceKind: true, sourceId: true },
-    }),
-    prisma.followUpBatch.findUnique({
-      where: { id: params.batchId },
-      include: {
-        members: {
-          orderBy: { taskId: 'asc' },
-          include: {
-            task: {
-              select: {
-                id: true,
-                type: true,
-                status: true,
-                targetType: true,
-                targetId: true,
-                result: true,
-                errorCode: true,
-              },
-            },
-          },
-        },
-      },
-    }),
-  ])
-  if (
-    !turn ||
-    !batch ||
-    turn.threadId !== batch.threadId ||
-    turn.sourceKind !== 'task_follow_up' ||
-    turn.sourceId !== batch.id ||
-    (batch.status !== 'ready' && batch.status !== 'notified') ||
-    batch.members.some((member) => member.status === 'pending')
-  ) {
-    throw new Error(
-      `FOLLOW_UP_BATCH_INPUT_NOT_READY:${params.turnId}:${params.batchId}`,
-    )
-  }
-  const facts = batch.members.map((member) => ({
-    taskId: member.task.id,
-    taskType: member.task.type,
-    status: member.task.status,
-    targetType: member.task.targetType,
-    targetId: member.task.targetId,
-    result: member.task.result,
-    failure: member.task.status === 'failed'
-      ? projectErrorForModel(member.task.errorCode)
-      : null,
-  }))
-  const content = [
-    '[task_follow_up]',
-    `batchId=${batch.id}`,
-    `originTurnId=${batch.originTurnId}`,
-    `toolCallId=${batch.callId}`,
-    `operationId=${batch.operationId}`,
-    `tasks=${JSON.stringify(facts)}`,
-    'A failed task never authorizes automatic resubmission or new billing. Explain the structured failure and wait for explicit user direction.',
-    '[/task_follow_up]',
-  ].join('\n')
-  if (Buffer.byteLength(content, 'utf8') > FOLLOW_UP_INPUT_MAX_BYTES) {
-    throw new Error(`FOLLOW_UP_BATCH_MODEL_INPUT_TOO_LARGE:${batch.id}`)
-  }
-  return {
-    role: 'user',
-    content,
-  } satisfies AgentInputItem
 }

@@ -566,6 +566,7 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
       id: 'generate_voice',
       summary: 'Design reusable voices and render short preview audio Resources. Use request.kind=single with a standalone target and count 1-6 for independent alternatives; count defaults to 1 and every result is a separate Resource and Task. A character target requires count=1 because generation may update that character current voice. Use request.kind=characters for distinct character targets; those members are a domain batch, not alternatives. Use request.kind=retry with only exact failed voice Resource IDs; the server restores each original frozen generation input and submits a new Task for the same Resource.',
       intent: 'act',
+      channels: { tool: true, api: true, mcp: true },
       effects: {
         writes: true,
         workspaceResourceImpact: 'none',
@@ -605,6 +606,7 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
       id: 'bind_voice',
       summary: 'Select, replace, or clear the exact immutable audio Resource currently used as one project character\'s voice. Accepts a designed project.voice_reference Resource or a user-uploaded project.upload_audio Resource. Use selection.kind=none to clear it. This never generates audio and never creates another voice Resource.',
       intent: 'act',
+      channels: { tool: true, api: true, mcp: true },
       toolContractRevision: 'bind_voice/v2',
       effects: {
         writes: true,

@@ -247,23 +247,20 @@ model MutationEntry {
 }
 
 model ProjectAssistantThread {
-  id                  String             @id @default(uuid())
-  projectId           String
-  userId              String
-  episodeId           String?
-  assistantId         String
-  scopeRef            String
-  messagesJson        Json
-  /// Complete OpenAI Agents SDK transcript. This is the sole model-history
-  /// authority; messagesJson remains the independent UI projection.
-  modelHistoryJson    Json
-  modelHistoryVersion Int                @default(0)
-  planJson            Json?
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
-  project             Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user                User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  turns               ProjectAgentTurn[]
+  id              String             @id @default(uuid())
+  projectId       String
+  userId          String
+  episodeId       String?
+  assistantId     String
+  scopeRef        String
+  runtimeThreadId String?            @unique @db.VarChar(191)
+  messagesJson    Json
+  planJson        Json?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  project         Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  turns           ProjectAgentTurn[]
 
   @@unique([projectId, userId, assistantId, scopeRef])
   @@index([projectId, episodeId, updatedAt])
@@ -286,7 +283,7 @@ model ProjectAgentTurn {
   executionOwnerId        String?                @db.VarChar(191)
   userMessageJson         Json?
   contextJson             Json
-  modelHistoryBaseVersion Int?
+  runtimeTurnId           String?                @unique @db.VarChar(191)
   assistantMessageId      String?                @db.VarChar(191)
   stopReason              String?                @db.VarChar(64)
   errorCode               String?                @db.VarChar(128)
@@ -330,7 +327,7 @@ model AgentTurnInteraction {
   kind         String           @db.VarChar(32)
   status       String           @default("pending") @db.VarChar(32)
   payloadJson  Json
-  runState     String?          @db.LongText
+  runtimeRequestId String?      @db.VarChar(191)
   responseJson Json?
   version      Int              @default(0)
   resolvedAt   DateTime?
@@ -339,6 +336,7 @@ model AgentTurnInteraction {
   turn         ProjectAgentTurn @relation(fields: [turnId], references: [id], onDelete: Cascade)
 
   @@index([turnId, status, createdAt])
+  @@unique([turnId, runtimeRequestId])
   @@map("agent_turn_interactions")
 }
 
@@ -352,8 +350,8 @@ model ProjectAssistantThreadArchive {
   episodeId        String?
   assistantId      String
   scopeRef         String
+  runtimeThreadId  String?  @db.VarChar(191)
   messagesJson     Json
-  modelHistoryJson Json
   clearRequestId   String?  @db.VarChar(128)
   cancelledTurnIds Json?
   threadCreatedAt  DateTime

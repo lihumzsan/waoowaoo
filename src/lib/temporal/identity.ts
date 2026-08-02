@@ -10,12 +10,6 @@ function hashIdentity(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('base64url')
 }
 
-export function buildAgentThreadWorkflowId(threadId: string): string {
-  return `agent-thread:v1:${hashIdentity(
-    requireIdentityPart(threadId, 'AGENT_THREAD_ID_INVALID'),
-  )}`
-}
-
 export function buildTaskWorkflowId(taskId: string): string {
   return `task:v1:${hashIdentity(
     requireIdentityPart(taskId, 'TASK_ID_INVALID'),

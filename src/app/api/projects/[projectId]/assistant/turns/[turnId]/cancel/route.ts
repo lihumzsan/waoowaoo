@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuth } from '@/lib/api-auth'
-import { cancelAgentTurnViaTemporal } from '@/lib/temporal/agent-thread/client'
+import { getAssistantRuntimeService } from '@/lib/assistant-runtime'
 import {
   assertProjectAgentCommandKeys,
   mapProjectAgentCommandError,
   readNullableProjectAgentCommandString,
+  readProjectAgentCommandEpisodeId,
   readProjectAgentCommandHttpBody,
   readRequiredProjectAgentCommandString,
 } from '../../../command-http'
@@ -24,11 +25,14 @@ export const POST = apiHandler(async (
     const body = await readProjectAgentCommandHttpBody(request)
     assertProjectAgentCommandKeys(
       body,
-      ['threadId', 'requestId', 'reason'],
+      ['threadId', 'requestId', 'reason', 'episodeId'],
       'AGENT_TURN_CANCEL_FIELDS_INVALID',
     )
-    const receipt = await cancelAgentTurnViaTemporal({
-      protocol: 'agent_turn_cancel_v1',
+    const receipt = await getAssistantRuntimeService().interrupt({
+      projectId,
+      userId: authResult.session.user.id,
+      episodeId: readProjectAgentCommandEpisodeId(body),
+      assistantId: 'workspace-command',
       threadId: readRequiredProjectAgentCommandString(
         body.threadId,
         'AGENT_TURN_CANCEL_THREAD_ID_INVALID',
@@ -37,8 +41,6 @@ export const POST = apiHandler(async (
         turnId,
         'AGENT_TURN_CANCEL_TURN_ID_INVALID',
       ),
-      projectId,
-      userId: authResult.session.user.id,
       requestId: readRequiredProjectAgentCommandString(
         body.requestId,
         'AGENT_TURN_CANCEL_REQUEST_ID_INVALID',

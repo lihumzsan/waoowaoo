@@ -1,9 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { ApiError } from '@/lib/api-errors'
-import {
-  TemporalAgentTurnCommandConflictError,
-  TemporalAgentTurnCommandUnconfirmedError,
-} from '@/lib/temporal/agent-thread/client'
+import { AssistantRuntimeProjectBusyError } from '@/lib/assistant-runtime'
 
 export type ProjectAgentCommandHttpBody = Record<string, unknown>
 
@@ -142,28 +139,32 @@ function collectErrorText(error: unknown): string {
 
 function readAgentTurnErrorCode(text: string): string | null {
   return text.match(
-    /\b(?:AGENT|TEMPORAL|PROJECT_AGENT|PROJECT_ASSISTANT)_[A-Z0-9_]+\b/,
+    /\b(?:AGENT|TEMPORAL|PROJECT_AGENT|PROJECT_ASSISTANT|ASSISTANT_RUNTIME|CODEX_RUNTIME|CODEX_MODEL_GATEWAY)_[A-Z0-9_]+\b/,
   )?.[0] ?? null
 }
 
 export function mapProjectAgentCommandError(error: unknown): ApiError {
   if (error instanceof ApiError) return error
-  if (error instanceof TemporalAgentTurnCommandUnconfirmedError) {
-    return new ApiError('EXTERNAL_ERROR', {
-      code: 'AGENT_TEMPORAL_UNAVAILABLE',
-      message: 'AGENT_TEMPORAL_UNAVAILABLE',
-      commandId: error.commandId,
-    })
-  }
-  if (error instanceof TemporalAgentTurnCommandConflictError) {
+  if (error instanceof AssistantRuntimeProjectBusyError) {
     return new ApiError('CONFLICT', {
-      code: error.code,
-      message: error.code,
-      commandId: error.commandId,
+      code: error.message,
+      message: error.message,
     })
   }
   const errorText = collectErrorText(error)
   const agentTurnCode = readAgentTurnErrorCode(errorText)
+  if (
+    agentTurnCode === 'CODEX_MODEL_GATEWAY_ASSISTANT_MODEL_NOT_CONFIGURED'
+    || agentTurnCode === 'CODEX_MODEL_GATEWAY_ASSISTANT_MODEL_UNSUPPORTED'
+    || agentTurnCode === 'CODEX_MODEL_GATEWAY_PROVIDER_RESPONSES_UNSUPPORTED'
+    || agentTurnCode === 'CODEX_MODEL_GATEWAY_PROVIDER_CONFIG_UNAVAILABLE'
+    || agentTurnCode === 'CODEX_MODEL_GATEWAY_PROVIDER_BASE_URL_INVALID'
+  ) {
+    return new ApiError('MISSING_CONFIG', {
+      code: agentTurnCode,
+      message: agentTurnCode,
+    })
+  }
   if (
     agentTurnCode
     && (
@@ -182,12 +183,14 @@ export function mapProjectAgentCommandError(error: unknown): ApiError {
     agentTurnCode
     && (
       agentTurnCode === 'AGENT_THREAD_BUSY'
+      || agentTurnCode === 'ASSISTANT_RUNTIME_PROJECT_BUSY'
       || agentTurnCode === 'AGENT_THREAD_CLEARED'
       || agentTurnCode === 'AGENT_THREAD_CLEAR_ALREADY_IN_FLIGHT'
       || agentTurnCode === 'AGENT_TURN_COMMAND_REPLAY_DIVERGED'
       || agentTurnCode.endsWith('_SCOPE_DIVERGED')
       || agentTurnCode.endsWith('_NOT_FOUND')
       || agentTurnCode.endsWith('_NOT_READY')
+      || agentTurnCode.endsWith('_NOT_PENDING')
       || agentTurnCode.endsWith('_REJECTED')
       || agentTurnCode.endsWith('_REPLAY_DIVERGED')
       || agentTurnCode.endsWith('_RESPONSE_DIVERGED')

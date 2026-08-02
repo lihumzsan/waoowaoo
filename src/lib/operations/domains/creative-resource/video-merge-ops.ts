@@ -87,6 +87,7 @@ export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperat
       summary:
         'Merge one or more exact ready video Resources into one ordinary video Resource, in the provided order, optionally mixing one exact ready audio Resource under the whole timeline as background music. This preserves and loudness-normalizes source audio, ducks music under source dialogue, performs no generative model call, and does not require the professional chapter pipeline. A single video is only accepted together with music.',
       intent: 'act',
+      channels: { tool: true, api: true, mcp: true },
       effects: {
         writes: true,
         workspaceResourceImpact: 'none',

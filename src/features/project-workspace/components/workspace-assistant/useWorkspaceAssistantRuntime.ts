@@ -16,11 +16,12 @@ import {
 import { useLocale } from 'next-intl'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAgentSessionView } from '@/lib/query/hooks'
-import type {
-  AgentSessionPendingInteractionView,
-  AgentSessionSubagentView,
-  AgentSessionView,
-} from '@/lib/agent-turn/view-contract'
+import {
+  isAssistantRuntimeApprovalRequest,
+  isAssistantRuntimeChoiceRequest,
+  type AgentSessionPendingInteractionView,
+  type AgentSessionView,
+} from '@/lib/assistant-runtime/view-contract'
 import { apiFetch } from '@/lib/api-fetch'
 import {
   buildProjectAssistantTextAttachmentMetadata,
@@ -37,7 +38,6 @@ import {
   clearWorkspaceAssistantUserMessageReceipt,
   resolveWorkspaceAssistantUserMessageId,
 } from './workspace-assistant-command-receipt'
-import { useWorkspaceAssistantSubagentStream } from './useWorkspaceAssistantSubagentStream'
 import { createClientApiError, parseClientError } from '@/lib/errors/client'
 
 export interface WorkspaceAssistantSendMessageInput {
@@ -66,8 +66,6 @@ interface UseWorkspaceAssistantRuntimeResult {
   error: Error | undefined
   viewError: string | null
   viewLoading: boolean
-  subagents: readonly AgentSessionSubagentView[]
-  subagentStructuredOutputs: ReadonlyMap<string, string>
   sendMessage: (input: WorkspaceAssistantSendMessageInput) => Promise<void>
   sendHiddenMessage: (text: string, sourceKey?: string) => Promise<void>
   stopReply: () => Promise<void>
@@ -187,7 +185,7 @@ function normalizeWorkspaceAssistantCommandError(error: unknown): {
     return { error, outcome: error.outcome }
   }
   return {
-    error: new WorkspaceAssistantCommandError('AGENT_TEMPORAL_UNAVAILABLE', null, 'unconfirmed'),
+    error: new WorkspaceAssistantCommandError('PROJECT_AGENT_RUNTIME_FAILED', null, 'unconfirmed'),
     outcome: 'unconfirmed',
   }
 }
@@ -418,13 +416,6 @@ export function useWorkspaceAssistantRuntime({
     if (result.error) return null
     return result.data ?? null
   }, [refetchAgentSessionView])
-  const subagentStream = useWorkspaceAssistantSubagentStream({
-    projectId,
-    episodeId: episodeId ?? null,
-    view,
-    refetchView,
-  })
-
   useEffect(() => {
     const persistedIds = new Set(persistedMessages.map((item) => item.id))
     for (const messageId of persistedIds) {
@@ -565,6 +556,7 @@ export function useWorkspaceAssistantRuntime({
             threadId,
             requestId: `turn-cancel:${turn.turnId}:user`,
             reason: 'user_cancelled',
+            episodeId: episodeId ?? null,
           }),
         },
       )
@@ -583,12 +575,13 @@ export function useWorkspaceAssistantRuntime({
         setCommandPending(false)
       }
     }
-  }, [projectId, refetchView, scopeKey, setCommandError, setCommandPending, view])
+  }, [episodeId, projectId, refetchView, scopeKey, setCommandError, setCommandPending, view])
 
   const resolveApproval = useCallback(
     async (params: { decision: 'approve' | 'reject'; reason?: string | null }) => {
-      const interaction =
-        view?.pendingInteraction?.kind === 'approval' ? view.pendingInteraction : null
+      const interaction = isAssistantRuntimeApprovalRequest(view?.pendingInteraction ?? null)
+        ? view?.pendingInteraction ?? null
+        : null
       const threadId = view?.thread?.threadId
       if (!interaction || !threadId) {
         throw new Error('AGENT_TURN_APPROVAL_NOT_PENDING')
@@ -608,6 +601,7 @@ export function useWorkspaceAssistantRuntime({
               requestId: `approval:${interaction.interactionId}:${params.decision}`,
               decision: params.decision,
               reason: params.reason ?? null,
+              episodeId: episodeId ?? null,
             }),
           },
         )
@@ -629,6 +623,7 @@ export function useWorkspaceAssistantRuntime({
     },
     [
       projectId,
+      episodeId,
       refetchView,
       scopeKey,
       setCommandError,
@@ -640,8 +635,9 @@ export function useWorkspaceAssistantRuntime({
 
   const submitChoiceResponse = useCallback(
     async (params: { response: Record<string, unknown> }) => {
-      const interaction =
-        view?.pendingInteraction?.kind === 'choice' ? view.pendingInteraction : null
+      const interaction = isAssistantRuntimeChoiceRequest(view?.pendingInteraction ?? null)
+        ? view?.pendingInteraction ?? null
+        : null
       const threadId = view?.thread?.threadId
       if (!interaction || !threadId) {
         throw new Error('AGENT_TURN_CHOICE_NOT_PENDING')
@@ -659,6 +655,7 @@ export function useWorkspaceAssistantRuntime({
               threadId,
               requestId: `choice:${interaction.interactionId}`,
               response: params.response,
+              episodeId: episodeId ?? null,
             }),
           },
         )
@@ -680,6 +677,7 @@ export function useWorkspaceAssistantRuntime({
     },
     [
       projectId,
+      episodeId,
       refetchView,
       scopeKey,
       setCommandError,
@@ -721,8 +719,6 @@ export function useWorkspaceAssistantRuntime({
     error: commandError ?? undefined,
     viewError: viewQuery.error ? parseClientError(viewQuery.error).code ?? 'INTERNAL_ERROR' : null,
     viewLoading: viewQuery.isLoading,
-    subagents: subagentStream.subagents,
-    subagentStructuredOutputs: subagentStream.structuredOutputs,
     sendMessage,
     sendHiddenMessage,
     stopReply,

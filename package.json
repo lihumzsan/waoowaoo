@@ -30,8 +30,6 @@
     "start:temporal-worker": "tsx --env-file=.env src/lib/temporal/worker.ts",
     "temporal:worker:rollout": "sh scripts/temporal/worker-rollout.sh",
     "db:push": "prisma db push --skip-generate",
-    "db:bplus-cutover-preflight": "tsx --env-file=.env scripts/bplus-cutover-preflight.ts",
-    "db:bplus-cutover-apply": "tsx --env-file=.env scripts/bplus-cutover-apply.ts",
     "stats:errors": "tsx scripts/task-error-stats.ts",
     "architecture:impact": "node scripts/architecture-impact.mjs",
     "architecture:durable-budget": "node scripts/check-durable-kernel-budget.mjs",

@@ -116,6 +116,7 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
       id: 'list_tasks',
       summary: 'List tasks for the current user with optional filters.',
       intent: 'query',
+      channels: { tool: true, api: true, mcp: true },
       effects: {
         writes: false,
         billable: false,
@@ -157,6 +158,7 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
       id: 'get_task',
       summary: 'Get task detail for the current user; optionally includes lifecycle events.',
       intent: 'query',
+      channels: { tool: true, api: true, mcp: true },
       effects: {
         writes: false,
         billable: false,

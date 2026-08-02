@@ -68,9 +68,8 @@ Promise<OperationExecutionDurabilityFixture> {
       projectId,
       userId,
       assistantId: 'workspace-command',
-      scopeRef: 'project',
+      scopeRef: `project:${projectId}`,
       messagesJson: [],
-      modelHistoryJson: [],
     },
   })
   await prisma.projectAgentTurn.create({
@@ -92,7 +91,6 @@ Promise<OperationExecutionDurabilityFixture> {
         selectedScopeRef: null,
         selectedAssetId: null,
       },
-      modelHistoryBaseVersion: 0,
       startedAt: new Date(),
     },
   })

@@ -31,11 +31,12 @@ import {
   type TaskTerminalCommitResult,
 } from '@/lib/task/terminal'
 import {
-  loadFollowUpBatchNotification,
   loadReadyFollowUpBatchIdsForTerminal,
 } from '@/lib/agent-turn/follow-up-batch'
-import { AGENT_TURN_PROTOCOL } from '@/lib/agent-turn/contracts'
-import { submitAgentTurnViaTemporal } from '@/lib/temporal/agent-thread/client'
+import {
+  AssistantRuntimeTaskFollowUpHttpError,
+  requestAssistantRuntimeTaskFollowUp,
+} from '@/lib/assistant-runtime/task-follow-up-http'
 import { TASK_EVENT_TYPE, TASK_STATUS, type TaskExecutionData } from '@/lib/task/types'
 import { executeTaskHandler } from '@/lib/task/execution/registry'
 import { projectTaskProgress } from '@/lib/task/execution/progress'
@@ -1122,8 +1123,9 @@ export async function cancelTaskProviderJobs(input: CancelTaskProviderJobsInput)
 
 /**
  * Notify exactly one ready Batch after provider capacity has been released.
- * The Batch remains the durable retry authority; AgentTurn source identity
- * makes an accepted-but-unacknowledged Update an exact replay.
+ * The Batch remains the durable retry authority. The Web process owns the
+ * AssistantRuntime singleton; this Activity crosses that process boundary
+ * with only the stable Batch identity, so an ACK loss replays the same source.
  */
 export async function notifyTaskFollowUp(input: NotifyTaskFollowUpInput): Promise<void> {
   requireNonEmpty(input.workflowId, 'TASK_WORKFLOW_ID_INVALID')
@@ -1132,22 +1134,15 @@ export async function notifyTaskFollowUp(input: NotifyTaskFollowUpInput): Promis
   if (!input.terminal.readyFollowUpBatchIds.includes(input.batchId)) {
     return failNonRetryable('TASK_FOLLOW_UP_BATCH_RECEIPT_DIVERGED', input.batchId)
   }
-  const state = await loadFollowUpBatchNotification(input.batchId)
-  if (state.kind === 'cancelled' || state.kind === 'notified') return
-  const notification = state.notification
-  const receipt = await submitAgentTurnViaTemporal({
-    protocol: AGENT_TURN_PROTOCOL,
-    threadId: notification.threadId,
-    projectId: notification.projectId,
-    userId: notification.userId,
-    assistantId: notification.assistantId,
-    sourceKind: 'task_follow_up',
-    sourceId: notification.batchId,
-    requestId: `task-follow-up:${notification.batchId}`,
-    userMessage: null,
-    context: notification.context,
-  })
-  if (receipt.outcome === 'ignored' && receipt.ignoredReason !== 'source_cancelled') {
-    return failNonRetryable('TASK_FOLLOW_UP_IGNORED_REASON_DIVERGED', notification.batchId)
+  try {
+    await requestAssistantRuntimeTaskFollowUp(input.batchId)
+  } catch (error) {
+    if (error instanceof AssistantRuntimeTaskFollowUpHttpError) {
+      if (error.retryable) {
+        throw ApplicationFailure.retryable(error.code, error.code, input.batchId)
+      }
+      return failNonRetryable(error.code, input.batchId, error.httpStatus)
+    }
+    throw error
   }
 }

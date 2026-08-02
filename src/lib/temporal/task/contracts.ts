@@ -6,7 +6,6 @@ import type { WorkflowConcurrencyConfig } from '@/lib/workflow-concurrency'
 export type { TaskSchedulerClass } from '@/lib/task/definition'
 
 export const TEMPORAL_WORKFLOW_TYPE = {
-  AGENT_THREAD_COORDINATOR: 'agentThreadCoordinatorWorkflow',
   OPERATION_EXECUTION: 'operationExecutionWorkflow',
   TASK: 'taskWorkflow',
   USER_TASK_SCHEDULER: 'userTaskSchedulerWorkflow',

@@ -1,6 +1,6 @@
 import type { UIMessage } from 'ai'
 import { parseClientError } from '@/lib/errors/client'
-import type { AgentTurnSourceKind } from '@/lib/agent-turn/contracts'
+import type { AssistantRuntimeSessionTurnView } from '@/lib/assistant-runtime/view-contract'
 import {
   readProjectAssistantTextAttachmentsFromMessage,
   type ProjectAssistantTextAttachment,
@@ -9,10 +9,6 @@ import {
   readProjectAssistantMediaAttachmentsFromMessage,
   type ProjectAssistantMediaAttachment,
 } from '@/lib/project-agent/media-attachments'
-import type {
-  ProjectAgentSubagentEventPartData,
-  ProjectAgentSubagentStatus,
-} from '@/lib/project-agent/subagent-events'
 
 export const WORKSPACE_ASSISTANT_ACTIVE_OPERATION_PRESENTATIONS = {
 } as const
@@ -75,7 +71,7 @@ export function isWorkspaceAssistantHiddenThreadMessageMetadata(metadata: unknow
 export function resolveWorkspaceAssistantUndeliveredUserMessage(params: {
   readonly messages: readonly UIMessage[]
   readonly showDeliveryFailureNotice: boolean
-  readonly currentTurnSourceKind: AgentTurnSourceKind | null
+  readonly currentTurnSourceKind: AssistantRuntimeSessionTurnView['sourceKind'] | null
   readonly currentTurnSourceId: string | null
 }): UIMessage | null {
   if (!params.showDeliveryFailureNotice) return null
@@ -179,48 +175,4 @@ export function resolveWorkspaceAssistantFailureView(params: {
     headline,
     technical: facts.requestId ? params.formatReference(facts.requestId) : null,
   }
-}
-
-export type WorkspaceAssistantSubagentEventGlyph =
-  | 'alert'
-  | 'check'
-  | 'globe'
-  | 'loader'
-  | 'none'
-  | 'tool'
-
-export function resolveWorkspaceAssistantSubagentEventGlyph(params: {
-  readonly part: ProjectAgentSubagentEventPartData
-  readonly subagentStatus: ProjectAgentSubagentStatus
-  readonly isLast: boolean
-}): WorkspaceAssistantSubagentEventGlyph {
-  const event = params.part.event
-  if (
-    event.kind === 'tool_failed'
-    || event.kind === 'submission_rejected'
-    || (event.kind === 'research_completed' && event.status !== 'completed')
-  ) {
-    return 'alert'
-  }
-
-  const isOpen = event.kind === 'tool_called'
-    || event.kind === 'research_started'
-    || event.kind === 'submission_started'
-    || (event.kind === 'generation' && event.status === 'running')
-    || (event.kind === 'reasoning' && event.status === 'running')
-  if (isOpen && params.isLast) {
-    if (params.subagentStatus === 'running') return 'loader'
-    if (params.subagentStatus === 'failed' || params.subagentStatus === 'cancelled') {
-      return 'alert'
-    }
-  }
-
-  if (event.kind === 'research_started' || event.kind === 'research_completed') {
-    return 'globe'
-  }
-  if (event.kind === 'submission_accepted') return 'check'
-  if (event.kind === 'tool_called' || event.kind === 'tool_completed') {
-    return 'tool'
-  }
-  return 'none'
 }

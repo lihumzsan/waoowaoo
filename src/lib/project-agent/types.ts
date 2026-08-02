@@ -8,7 +8,6 @@ import type { ProjectAgentChoiceDecision } from './choice-result'
 import type { ProjectAgentChoiceCardDefinition } from './choice-offer'
 import type { BillingReceiptView } from '@/lib/billing/task-billing-view'
 import type { PlannedOperationInvocation } from '@/lib/operations/planned-operation-invocation'
-import type { ProjectAgentSubagentEventPartData } from './subagent-events'
 import type { CreativeResourceLinkView } from '@/lib/creative-resource/contracts'
 
 export type UnknownObject = { [key: string]: unknown }
@@ -30,8 +29,6 @@ export interface ProjectAgentContext {
   /** Exact approved invocation keyed by the SDK tool-call identity. */
   approvedInvocationByToolCallId?: Record<string, PlannedOperationInvocation>
 }
-
-export type ProjectAgentSubagentPartData = ProjectAgentSubagentEventPartData
 
 export interface ProjectContextPartData {
   context: ProjectAssistantContextSnapshot
@@ -130,7 +127,6 @@ export interface ProjectAssistantThreadSnapshot {
 }
 
 export type WorkspaceAssistantPartType =
-  | 'data-agent-subagent-event'
   | 'data-assistant-context-compacted'
   | 'data-assistant-resource-links'
   | 'data-task-batch-submitted'

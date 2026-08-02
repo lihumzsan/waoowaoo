@@ -3,16 +3,16 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api-fetch'
 import {
-  parseAgentSessionView,
-  type AgentSessionView,
-} from '@/lib/agent-turn/view-contract'
+  parseAssistantRuntimeSessionView,
+  type AssistantRuntimeSessionView,
+} from '@/lib/assistant-runtime/view-contract'
 import { queryKeys } from '../keys'
 
 export function useAgentSessionView(
   projectId: string | null,
   episodeId?: string | null,
 ) {
-  return useQuery<AgentSessionView>({
+  return useQuery<AssistantRuntimeSessionView>({
     queryKey: queryKeys.project.assistantThread(
       projectId ?? '',
       episodeId ?? '',
@@ -28,7 +28,7 @@ export function useAgentSessionView(
       if (!response.ok) {
         throw new Error(`AGENT_SESSION_VIEW_REQUEST_FAILED:${String(response.status)}`)
       }
-      const view = await parseAgentSessionView(
+      const view = await parseAssistantRuntimeSessionView(
         await response.json().catch(() => null),
       )
       if (

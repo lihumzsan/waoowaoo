@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildProjectAgentChoiceResponseInputItem,
   parseProjectAgentChoiceDecision,
   resolveProjectAgentChoiceCommitment,
 } from '@/lib/project-agent/choice-result'
@@ -84,23 +83,4 @@ describe('generic Project Agent Choice decisions', () => {
     expect(resolveProjectAgentChoiceCommitment({ offer: selectionOffer, decision })).toBeNull()
   })
 
-  it('adds the canonical decision as user input without fabricating a tool call', () => {
-    const item = buildProjectAgentChoiceResponseInputItem({
-      decision: { kind: 'text', text: 'Use a quieter palette.' },
-      toolCallId: 'tool-1',
-      cardId: 'choice-1',
-      visibleUserText: 'Use a quieter palette.',
-    })
-
-    expect(item).toMatchObject({ role: 'user' })
-    expect('type' in item ? item.type : undefined).not.toBe('function_call')
-    expect('content' in item ? item.content : '').toContain('toolCallId=tool-1')
-    expect('content' in item ? item.content : '').toContain('cardId=choice-1')
-    expect('content' in item ? item.content : '').toContain(
-      'decision={"kind":"text","text":"Use a quieter palette."}',
-    )
-    expect('content' in item ? item.content : '').toContain(
-      'visibleUserText="Use a quieter palette."',
-    )
-  })
 })

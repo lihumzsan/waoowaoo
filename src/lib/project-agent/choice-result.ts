@@ -1,4 +1,3 @@
-import type { AgentInputItem } from '@openai/agents'
 import type {
   ProjectAgentChoiceCardDefinition,
   ProjectAgentChoiceCommitment,
@@ -196,36 +195,4 @@ export function resolveProjectAgentChoiceCommitment(params: {
   })
   if (matching.length > 1) throw new Error('PROJECT_AGENT_CHOICE_COMMITMENT_AMBIGUOUS')
   return matching[0] ?? null
-}
-
-/**
- * A Choice answer is a new user fact. The original request_choice call and its
- * complete model-authored arguments already live in SDK Session history, so
- * fabricating a second empty function call would destroy that causality.
- */
-export function buildProjectAgentChoiceResponseInputItem(params: {
-  decision: ProjectAgentChoiceDecision
-  toolCallId: string
-  cardId: string
-  visibleUserText: string
-}): AgentInputItem {
-  const toolCallId = params.toolCallId.trim()
-  const cardId = params.cardId.trim()
-  if (!toolCallId) throw new Error('PROJECT_AGENT_CHOICE_TOOL_CALL_ID_REQUIRED')
-  if (!cardId) throw new Error('PROJECT_AGENT_CHOICE_CARD_ID_REQUIRED')
-  const visibleUserText = params.visibleUserText.trim()
-  if (!visibleUserText) {
-    throw new Error('PROJECT_AGENT_CHOICE_VISIBLE_USER_TEXT_REQUIRED')
-  }
-  return {
-    role: 'user',
-    content: [
-      '[choice_response]',
-      `toolCallId=${toolCallId}`,
-      `cardId=${cardId}`,
-      `decision=${JSON.stringify(params.decision)}`,
-      `visibleUserText=${JSON.stringify(visibleUserText)}`,
-      '[/choice_response]',
-    ].join('\n'),
-  } satisfies AgentInputItem
 }

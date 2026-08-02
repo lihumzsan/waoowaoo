@@ -83,6 +83,7 @@ export function createCreativeResourceReferenceImageOperations(): ProjectAgentOp
       summary:
         'Import one exact image returned by web_search into this project as an owned reference image Resource, so its revision can be passed as an image reference to later image or video generation. Use it only when the visual identity of an unfamiliar subject genuinely cannot be conveyed in words, and only for an image the current run actually received from web_search. The origin page is recorded, and the result is external reference material, never original project artwork.',
       intent: 'act',
+      channels: { tool: true, api: false, mcp: true },
       effects: {
         writes: true,
         workspaceResourceImpact: 'none',

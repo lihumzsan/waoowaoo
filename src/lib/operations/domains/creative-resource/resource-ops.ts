@@ -210,6 +210,7 @@ export function createCreativeResourceOperations(): ProjectAgentOperationRegistr
       id: 'list_resources',
       summary: 'Browse durable creative Resources and reusable outputs. Filter by media/schema/status, then call get_resource for one exact full Resource. This does not decide which Resource is current; get_project_context owns that compact projection.',
       intent: 'query',
+      channels: { tool: true, api: true, mcp: true },
       effects: {
         writes: false,
         billable: false,
@@ -243,6 +244,7 @@ export function createCreativeResourceOperations(): ProjectAgentOperationRegistr
       id: 'get_resource',
       summary: 'Read one durable immutable creative Resource with its content, provenance, lineage, and separately editable creativeData document/version. Call this immediately before edit_resource; never guess creativeDataVersion.',
       intent: 'query',
+      channels: { tool: true, api: true, mcp: true },
       toolExposure: 'direct',
       effects: {
         writes: false,
@@ -290,6 +292,7 @@ export function createCreativeResourceOperations(): ProjectAgentOperationRegistr
       id: 'edit_resource',
       summary: 'Edit only the AI/user-owned creativeData document of one existing Resource without generating media, creating a Task, charging credits, changing any current selection, or rewriting immutable history. Use this sparingly: call it only when the user explicitly asks to save or change Resource creative data, or when saving that data is strictly necessary to complete the user’s stated goal. If the user says not to modify or save Resource data, never call this tool. Do not call it to summarize conversation, restate facts already stored elsewhere, improve wording without a request, infer missing facts, manufacture provenance, or pre-emptively add speculative fields. Always call get_resource first, copy its exact creativeDataVersion into expectedVersion, preserve unrelated fields, and apply the smallest possible paths. Use exact $resourceRef objects for Resource references. This tool cannot modify Resource identity/scope/status, media, current selections, actual generation prompt/model/options, lineage, Task, billing, or timestamps. A successful edit is data storage only and must never be described as generation, selection, rendering, or completion.',
       intent: 'act',
+      channels: { tool: true, api: true, mcp: true },
       toolContractRevision: 'edit_resource/v1',
       effects: {
         writes: true,

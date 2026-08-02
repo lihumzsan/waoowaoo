@@ -20,7 +20,6 @@ import type { OperationPlanView } from '@/lib/operations/planning'
 import { MarkdownTextPart } from './MarkdownTextPart'
 import { readProjectAssistantTextAttachmentsFromMetadata } from '@/lib/project-agent/text-attachments'
 import { readProjectAssistantMediaAttachmentsFromMetadata } from '@/lib/project-agent/media-attachments'
-import { WorkspaceAssistantSubagentRecordsForMessage } from './WorkspaceAssistantSubagents'
 import {
   HiddenWorkspaceAssistantReasoning,
   WorkspaceAssistantReasoningPart,
@@ -253,7 +252,6 @@ export function useWorkspaceAssistantMessagePartComponents(): WorkspaceAssistant
     }
     const data = {
       by_name: {
-        'agent-subagent-event': HiddenRuntimeContextDataCard,
         'assistant-context-compacted': AssistantContextCompactedDataCard,
         'assistant-resource-links': WorkspaceAssistantResourceLinks,
         'task-batch-submitted': TaskBatchSubmittedDataCard,
@@ -332,8 +330,6 @@ function WorkspaceAssistantUserUndeliveredMarker(props: {
 
 export function WorkspaceAssistantThreadMessage(props: {
   messagePartComponents: WorkspaceAssistantMessagePartComponents
-  subagents: ComponentProps<typeof WorkspaceAssistantSubagentRecordsForMessage>['subagents']
-  onSelectSubagent: (subagentId: string) => void
   undeliveredUserMessageId?: string | null
 }) {
   return (
@@ -356,10 +352,6 @@ export function WorkspaceAssistantThreadMessage(props: {
         <div className="space-y-1">
           <MessagePrimitive.Root className={WORKSPACE_ASSISTANT_MESSAGE_CLASS}>
             <MessagePrimitive.Parts components={props.messagePartComponents.assistant} />
-            <WorkspaceAssistantSubagentRecordsForMessage
-              subagents={props.subagents}
-              onSelect={props.onSelectSubagent}
-            />
           </MessagePrimitive.Root>
         </div>
       </MessagePrimitive.If>
