@@ -21,7 +21,7 @@ npm run architecture:impact -- --changed
 | 改动范围 | 必读模块 | 主要权威入口 |
 | --- | --- | --- |
 | Temporal、Thread/Turn 执行许可、长期 Task 调度、恢复与跨系统交接 | [Temporal 持久执行边界](modules/durable-execution.md) | Thread Coordinator、TaskWorkflow、SchedulerWorkflow、业务幂等账本 |
-| AI Prompt、Prompt registry、结构化模型输出字段或 raw output 协议 | [AI Prompt 与模型输出契约](modules/ai-prompt-output-contract.md) | prompt catalog、生产 raw schema、parser/normalizer、stream adapter |
+| Agent 指令、Skill、结构化模型输出字段或 raw output 协议 | [Agent 指令、Skill 与模型输出契约](modules/ai-prompt-output-contract.md) | Runtime instructions、Skill registry、生产 raw schema、parser/normalizer、MCP adapter |
 | 图片、视频、音乐的报价、确认、提交、扣费 | [计费与审批](modules/billing-approval.md) | billing policy、operation plan、task submitter |
 | 创作产物身份、Lineage、Binding、通用媒体卡片 | [创作 Resource 与 Lineage](modules/creative-resource.md) | creative-resource persistence、Task terminal materializer、Resource View |
 | 新增或修改 Canvas 节点、节点身份、流式事件、展开态、重放 | [Canvas 节点与流式状态](modules/canvas-node.md) | node id、structured stream adapter、canvas projection、motion presence transition |
@@ -29,7 +29,7 @@ npm run architecture:impact -- --changed
 | 整集 BGM 规划、候选与最终混音 | [BGM 规划、生成与最终混音](modules/audio-production.md) | BgmDesign strict contract、candidate QC、design/timeline fence、final mix |
 | Operation → Temporal → Activity → DB 的任务提交、attempt、恢复与终态 | [Temporal 异步 Task 生命周期](modules/async-task-lifecycle.md) | Task registry、TaskWorkflow、SchedulerWorkflow、Terminal Service |
 | Agent Thread/Turn、工具调度、Approval/Choice、中断与任务完成后的新 Turn | [Assistant Thread、Turn 与交互生命周期](modules/assistant-run-lifecycle.md) | AgentTurn service、Thread Coordinator、operation registry |
-| Codex app-server 替换、临时创作目录、Wao MCP 与渐进切换 | [Codex Runtime 渐进替换](modules/codex-runtime-rollout.md) | RuntimeAdapter、单 S3 workspace bundle、Operation Registry 投影 |
+| Codex app-server、Creative Workspace、Wao MCP 与生产隔离 | [Codex Creative Runtime](modules/codex-runtime-rollout.md) | RuntimeAdapter、AssistantRuntime、单 S3 workspace bundle、Operation Registry 投影 |
 | Creative Skill、专业知识发现、无状态 Creative Worker 与主 Agent 委派 | [Creative Skill 与无状态 Worker](modules/creative-skill-worker.md) | Creative Skill registry、Creative Worker、`delegate_creative_work` |
 | 联网搜索、OpenAI 托管研究、研究预算、证据归档与不可信网页边界 | [Web Search](modules/web-search.md) | web-search service/provider、`web_search` Operation、Creative Worker research projector |
 | provider、模型选择、异步轮询、外部失败与降级 | [Provider Gateway](modules/provider-gateway.md) | ai-providers、ai-exec、ai-registry |

@@ -13,7 +13,7 @@ Search Agent 只生产本次调用的研究报告和结构化证据，不拥有 
 - **WS-01 — 一个业务执行入口。** `searchWeb` 是所有业务调用方的唯一搜索入口。Primary Operation 和 Creative Worker Tool 不得各自创建 OpenAI Client、Agent 或 `webSearchTool()`。
 - **WS-02 — 单 provider、托管检索、直连 Responses。** 当前唯一 provider 是 `openai`。Provider 直接调用 OpenAI Responses 接口挂载托管 `web_search`，不经 Agents SDK 的 Agent/Runner 包装，固定启用 live web、high search context、`text+image` 内容类型与 `web_search_call.action.sources`。公共请求只包含 research brief 和显式 `allowedDomains` 数组，`[]` 是开放网络研究的唯一表达；公共结果只包含 provider、原 brief、研究报告、真实 hosted queries、URL citations 与结构化 image 证据，不暴露任意 OpenAI payload、网页正文或模型推理。
 - **WS-03 — 独立凭据、独立模型角色、明确失败。** cloud 与 self-hosted 都只从服务端 `OPENAI_API_KEY` 读取搜索凭据。搜索模型是平台级角色 `OPENAI_WEB_SEARCH_MODEL`（裸 OpenAI 模型 id，有默认值），**不进用户可选模型注册表**——注册表内的 LLM 全部经 OpenRouter/Ark/Fal/Google 路由，无法运行托管工具；填入路由模型键必须明确失败。缺失凭据、401 或 403 返回 `WEB_SEARCH_UNAVAILABLE`；超时、网络、429、5xx 与非法响应返回 typed failure；不得从聊天、Resource、客户端参数或 Primary/analysis provider 凭据猜 key，也不得 fallback 到另一个 provider。
-- **WS-04 — Primary 仍经 Operation gateway。** `web_search` 是生产 Operation registry 中的 `query`、`on_demand`、零业务写入能力。Primary 当前可能通过 OpenRouter 或其他模型运行，因此 hosted search 不能直接挂到 Primary 模型；Operation 仍通过固定 `load_tools + execute_operation` gateway 调用 `searchWeb`。缺少 OpenAI 搜索配置必须明确失败。
+- **WS-04 — Primary 只经 Wao MCP。** `web_search` 是生产 Operation registry 中的 `query`、零业务写入能力，并以 `channels.mcp=true` 投影给 Codex。Primary 当前经 OpenRouter 运行，因此 hosted search 不能直接挂到 Primary 模型；MCP Operation 调用唯一 `searchWeb`。缺少 OpenAI 搜索配置必须明确失败。
 - **WS-05 — Worker 工具与提示暴露面由 output registry 穷尽。** `creative_direction.workerTools=['web_search']` 是 Creative Worker 搜索能力的唯一声明；运行时从该声明同时决定研究状态、函数 Tool 与搜索 system Prompt 片段。其他 output kind 只看到 `read_skill`，也不接收搜索说明。Worker 的预算函数 Tool 内部调用同一 `searchWeb`；不得把 OpenAI hosted tool 直接挂到可配置的 analysis 模型，也不得开放 URL fetch、Extract、Crawl 或 Deep Research。
 - **WS-06 — 外层判断可选，内层搜索必须真实。** Primary/Worker 只有在目标依赖最新、陌生、冷门、地域性、平台性、社群定义、含义不明或置信度不足的信息时才调用；熟悉且稳定的内容不得装饰性搜索。外层一旦调用，专用 Search Agent 必须真实使用 hosted `web_search`，没有 completed hosted call 或结构化 URL citation 的响应按非法失败，不能把模型记忆伪装成研究。
 - **WS-07 — Worker budget 约束 research invocation。** 每个 Creative Direction Task 冻结 `maxWebSearchCalls`；它限制 Worker 对统一研究 Tool 的外层调用次数。一次外层调用可由 hosted Agent 自主生成多个相关 query；运行时归档这些真实 query。预算耗尽不发 provider 请求。零调用是正常完成，research=`not_attempted` 且无 warning；实际尝试后的不可用、失败、部分完成或预算耗尽才产生确定性 warning。
@@ -30,16 +30,16 @@ Search Agent 只生产本次调用的研究报告和结构化证据，不拥有 
 - hosted research 执行边界：`src/lib/ai-exec/hosted-web-search.ts`。
 - OpenAI Responses 直调、hosted tool 请求形状、query/citation/image 投影、进度投影与错误归一：`src/lib/ai-providers/openai/hosted-web-search.ts`。
 - 搜索模型角色解析：`src/lib/web-search/service.ts` 的 `resolveWebSearchModel`（`OPENAI_WEB_SEARCH_MODEL`）。
-- Primary Operation：`src/lib/operations/domains/web-search/web-search-ops.ts`；能力发现与执行仍由生产 Operation registry 和固定 gateway 负责。
+- Primary Operation：`src/lib/operations/domains/web-search/web-search-ops.ts`；能力发现与执行由生产 Operation registry 的 Wao MCP 投影负责。
 - Worker 能力声明：`src/lib/creative-worker/output-registry.ts`；外层预算、工具执行与证据投影：`tools.ts`、`research.ts`、`runtime.ts`。
 - Task/Resource 研究元数据：`src/lib/creative-worker/task-contract.ts`、`src/lib/creative-resource/creative-work-materialization.ts`。
 - 网页图片导入：Operation `src/lib/operations/domains/creative-resource/reference-image-ops.ts`；payload 与出处契约 `src/lib/creative-resource/web-reference-contract.ts`；Task执行器 `src/lib/task/execution/handlers/creative-resource-web-reference.ts`；Task声明 `src/lib/task/definition.ts`。
-- 研究判断与翻译协议：双语 Primary Prompt、仅搜索能力 Worker 接收的 system Prompt 片段、`creative-direction` Skill。
+- 研究判断与翻译协议：Codex 运行指令、仅搜索能力 Worker 接收的 system Prompt 片段、`creative-direction` Skill。
 - 环境变量示例：`.env.example`、`.env.cloud.example`。真实 key 只能存在于忽略的环境配置。
 
 ## 生命周期
 
-Primary 需要当前资料时按需加载 `web_search`，提交一个明确 research brief。Operation executor 调用 `searchWeb`；Search Agent 在同一次托管 Responses run 中自主执行必要子查询、综合报告并附 citation。Primary 消费报告和来源后继续当前目标，不写项目事实。
+Primary 需要当前资料时直接从 Wao MCP 选择 `web_search`，提交一个明确 research brief。Operation executor 调用 `searchWeb`；Search Agent 在同一次托管 Responses run 中自主执行必要子查询、综合报告并附 citation。Primary 消费报告和来源后继续当前目标，不写项目事实。
 
 Creative Direction Task 启动时，output registry 决定 Worker 同时获得 `read_skill` 与预算函数 `web_search`；其他 Task 不创建研究状态。Worker 先判断是否确有研究必要；不调用时正常生成方向。调用时先占用一个 outer budget，将真实知识缺口交给 `searchWeb`；Search Agent 自主研究后返回 report + hosted queries + citations。Worker 评估证据、翻译为六领域 strict output；运行时只把 brief/query/source identity 归档。Task terminal 后 evidence 进入 `Task.result`，物化时复制到 Direction generation metadata，报告和 citation 不进入政策正文。
 
@@ -48,7 +48,7 @@ Primary 搜索失败是 Operation 失败。Creative Direction 搜索失败是显
 ## 验证
 
 - `tests/integration/provider/openai-hosted-web-search.contract.test.ts` 在付费外部 runner seam 注入 Responses output item shape，验证 hosted query、结构化 URL citation、image 证据、去重、非 HTTP 丢弃、无图正常完成、进度投影、模型角色拒绝路由键、报告边界、缺 key、拒绝凭据和无证据 fail-closed。
-- `tests/contracts/project-agent-toolset-conformance.test.ts` 只证明 Primary Operation 从生产 registry 可发现；Worker 工具暴露、研究预算、报告传递与 generation metadata 不再用同一实现的 Unit fixture 自证。
+- `npm run runtime:codex:smoke` 从生产 Operation registry 验证 Primary 可经 Wao MCP 发现 `web_search`；Worker 工具暴露、研究预算、报告传递与 generation metadata 不用同一实现的 Unit fixture 自证。
 - 真实 OpenAI 的中文论坛覆盖、登录墙、来源排序、延迟、成本，以及 `image_result` 与 annotation 的线上实际形状属于发布复验；本地 wire contract 不伪造这些质量结论。**`image_result` 字段名当前来自官方文档，装机 SDK 未定型该输出，首次真实调用必须核对后再收紧契约。**
 
 ## 历史回归

@@ -1,66 +1,91 @@
 <!-- architecture-module: ai-prompt-output-contract -->
 
-# AI Prompt 与模型输出契约
+# Agent 指令、Skill 与模型输出契约
 
 ## 设计理念
 
-Prompt 只告诉 Primary 如何判断、如何使用 Skill/Subagent 与注册式 Operation；它不实现工作流。专业创作输出由 Creative Worker 的严格 outputKind schema 裁决并物化为不可变 Resource。执行层只验证结构、scope、精确引用和 provider capability，不从自然语言内容猜业务状态。
+Wao 不再维护自研 Primary Agent Prompt、上下文压缩 Prompt、Tool discovery Prompt 或固定工作流。
+Codex app-server 拥有通用推理、上下文、工具选择和压缩；Wao 只向它投影项目文件、版本锁定的
+Creative Skills、用户 locale、安全政策和 MCP 能力。专业创作仍可委派给一次性 Creative Worker，
+其结果由严格 output registry 校验后物化为不可变 Resource。
 
 ## 不变量
 
-- **AP-01 — Primary 没有通用固定主链。** 系统 Prompt 不包含 stage、next action、剧本确认、风格专用卡、固定分段数量/时长或隐藏工具顺序。Primary 根据目标与当前 Resource 自由组合能力。窄化的产品规划纪律只有两条，外加一份交付性质核对：其一，当用户要求交付总时长超过 15 秒的完整视频作品时，Primary 在媒体执行前先创建或复用并采用匹配的 Creative Direction，再为最终成片真实会复用的可见实体建立 Asset Manifest 与必要参考资产；其二，总时长超过 60 秒的完整成片，配乐默认进入交付评估——先委派 `music_direction` 做 spotting 判断（空 `cues` 表示刻意不配乐并如实告知用户），非空 `cues` 经 `create_audio.request.kind=music_direction` 逐 cue 执行，每次只传方向 Resource ID、精确 `cueKey` 与成片视频引用，服务端直读该 cue 的最终指令并冻结其时间窗。当前确定性混音只接受一条 music Resource；多个 cue 在没有显式多轨时间线装配能力时不得被宣称已按窗口完成交付。交付性质核对（跨镜头参考资产、跨镜头音色、分段自带声音、统一画幅、配乐已判断）不规定顺序。以上全部只约束 Primary 的计划质量，不改变任一 Operation 的合法输入、不增加服务端前置门禁，也不让时长自动选择 Chapter、Worker 数量或分段配方。
-- **AP-02 — 专业判断只有 Skill + Creative Worker。** 当前专业输出只包括 screenplay 创作/修改、`chapter_continuity_plan`、Creative Direction、Asset Manifest、Video Prompt Set 与 Music Direction，并且每个 output kind 只加载 Registry 绑定的一个专业 Skill。公共 Worker system Prompt 不承载任一专业方法；结构和执行事实来自当前 strict output schema 与服务端编译输入，只有实际开放额外能力时才追加该能力的安全协议。跨 Chapter 的 Story Canon 与全部 Chapter 边界必须由同一个 `chapter-continuity-planning` Worker 一次生成；不存在独立 `story_canon`、`chapter_plan`、`continuity_analysis` 或成片审看职责。`create_text.current_user_text` 只允许保存当前用户消息的精确连续原文；`create_text.current_user_media_transcription` 只允许转录当前消息真实附带、经服务端校验的图片 Resource，并把该图写为 source Lineage。完整用户剧本必须显式标记 `classification.kind=screenplay` 并写 `project.screenplay`。两者都是来源捕获而不是第二创作 writer，不能为了读取、保存或确认原文委派 Creative Worker。`screenplay` 只拥有文本和写作元信息；`asset-development + outputKind=asset_manifest` 只决定生产资产范围和稳定可见设计，不写最终媒体 Prompt。
-- **AP-03 — outputKind 严格穷尽。** 每个 outputKind 在生产 output registry 声明 schema、唯一 `professionalSkillId` 与 Resource scope；当前剧本 kind 是 `screenplay`，不存在 `canonical_screenplay` 或额外 canonicalization Skill。完整 canonical JSON Schema作为 Worker attempt 输入数据，`submit_result({kind,...})` 的根参数对象从同一 schema 确定性派生，不存在 `output`/`outputJson` envelope；原始 registry schema和冻结上下文仍是唯一业务校验。未知字段、缺失字段、不支持组合或错误引用返回字段 issues，只有同一次 Run 修正通过才完成，不容忍字符串封装或兼容 JSON。
-- **AP-04 — 结果与过程分离。** reasoning/stream 只用于运行展示，不拥有领域事实；失败的 `submit_result` 候选与字段值只存在于本次模型 loop，不写 Task、stream 或领域状态。持久 lifecycle 只记录有界 issues 和参数类型/长度/顶层字段名，用于证明真实提交形状而不复制内容。Task terminal 的 strict accepted result 才能物化正式 Resource。UI 不从 reasoning、markdown 标题或文案推断完成状态。
-- **AP-05 — Choice 内容由模型填写，身份由服务端生成。** Primary 以 `confirm|select|select_with_actions|select_per_group_text` 穷尽 authoring 分支填写当前问题、说明、options、labels 与精确 subject；模型不提交 group key、option value 或跨列表 `when` 引用。服务端唯一 builder 生成 canonical group/option identity，并把确认或精确 option 内嵌的 commitment 转成现有持久 Offer。通用 Choice 不包含业务类型、固定按钮或未来步骤；原子 commitment 只能调用 registry 明示的当前非收费事务 Operation。用户关闭卡片投影 canonical `{kind:"cancelled"}`，只取消当前决定而不取消 Run/Task；Primary 必须尊重该结果并重新规划、等待或交付，不得立即重复强迫同一 Choice。
-- **AP-06 — 跨 Chapter 一致性只在确有多个 Chapter 时启用。** 只有 Primary 判断内容确实需要至少两个 Chapter，或用户明确要求分 Chapter，才委派一次 `chapter_continuity_plan`；服务端不得把固定时长自动变成 Chapter 分支。该唯一输出同时包含 Story Canon 与至少两个 Chapter 边界，随后只经 `adopt_chapter_continuity_plan` 一次事务共同采用。单 Chapter 或普通多片段内容不生成 Canon/Chapter 计划，也不存在独立连续性分析；局部视频单元的完整执行约束只属于同一 Video Prompt Set。
-- **AP-07 — Creative Direction 是单一纯文本/结构化 Resource。** 每个 Task 恰好返回并物化一份完整最终 Direction；Worker 内部完成取舍，输出契约不表达候选集合。只有用户明确要求预览时才调用普通图片 Operation，且预览不改变 Direction identity。
-- **AP-08 — 输入只用精确 Resource。** Creative Work request 与媒体 Operation 对 Resource 输入只传全局唯一 resourceId 及显式用途；服务端回库解析 schema、owner、scope 和真实内容。禁止附带调用方文本，或从最近记录、数组位置、历史消息与模型输出 offset 推断。下游参考资产生成经 `create_image.request.kind=manifest_assets` 只传 adopted Asset Manifest 的精确 Resource ID（可选 `manifestAssetIds` 子集）；服务端从 Manifest 读取 `stableDescription`，从其精确 Lineage 读取冻结 Creative Direction，再由唯一 Asset Prompt Compiler 叠加 Asset Format Policy，编译最终 Prompt。Manifest 与 Direction Resource 都进入 Task Lineage；Primary 不复制或改写 Prompt，也不得把文字 Resource 放进只接受真实图片 Resource 的 `imageReferences`。
-- **AP-09 — Provider 约束不升级为运行时流程。** 允许时长、画幅、参考数量与模型能力来自 capability registry；Prompt 可据此规划一次请求，但不能据此建立代码阶段、eligibility 或自动分支。AP-01 的 `>15s` 完整作品纪律是明确的 Primary 产品规划政策，不是由 Provider capability 推导的 Operation 门禁；它不规定段数、逐段时长或 Chapter。
-- **AP-10 — 单份模板与显式输出语言。** Primary System Prompt、context-checkpoint Prompt 与 Worker system prompt 都是单份英文的模型侧文本，不按 locale 分叉；Prompt 语言是实现细节，不决定用户可见语言。context checkpoint 不是常驻摘要或第二记忆，只在唯一模型输入预算先清理可恢复 Tool result 后仍超限时，由一份模板重写当前活跃上下文；旧 checkpoint 是可合并、去重和替换的输入，不得逐字追加。用户可见语言由显式规则拥有：模型的一切用户可见输出（回复、Choice 卡片文案、失败说明、Resource 显示名）跟随用户在对话中实际使用的语言，当前轮没有语言信号时默认英文；checkpoint 保留继续任务所需的用户语言事实。用户可见创作产物的语言由 creative-core 与各 Skill 的内容语言条款拥有：最终视频提示词和 Asset Manifest 的稳定可见描述与内容语言一致，最终资产图片 Prompt 由服务端 Compiler 组合；`music_direction.cues[].generationPrompt` 按音乐模型真实能力固定英文。Creative Skill 仍是不分语言的单份专业文档；UI 文案继续走 i18n（含 `copy.ts` 的 Operation 标题表与 session-state locale），与 Prompt 语言无关。
-- **AP-11 — Tool discovery 只读取能力，固定 gateway 只传输调用。** Primary 的每个模型步骤都看到稳定的 `load_tools + execute_operation`，另有 Registry 明示的少量 direct Operation 以完整 Schema 直接提供。`load_tools` 的 registry 派生目录只帮助选择 on-demand 能力；模型按精确 id 加载当前目标的最小充分集合，返回 `operationId + description + parameters`，其中 `parameters` 就是 registry canonical Schema，目录简介不能充当 eligibility、工作流、调用顺序或参数说明。后续调用只把精确 `operationId` 与符合该 Schema 的 `argumentsJson` 送入固定 gateway；协议没有 `kind`、`contractId`、revision、loaded ticket 或 execution-segment 状态。服务端始终以同一 canonical runtime schema 校验，direct/on-demand 只是传输差异。Task 提交回执不是终态，当前回合不得立即 `get_task` 或轮询；只在终态 continuation 后按需读取精确 taskId。工具选择仍由 Primary 根据用户目标与当前事实判断。
-- **AP-12 — 精确剧本独占派生时间线。** `durationIntent.mode=derive` 只声明用户没有指定总时长，不授权 Primary、Direction、画幅、题材、风格、示例、镜头数量或 Provider 分段创造时长。存在精确剧本时，剧本是内容与演出时间线的唯一事实来源，自动预加载的 `creative-core` 是唯一通用估算方法；`creative-direction` 只提供呈现政策，`video-direction` 必须先按剧本估算整片、再把导演设计装入既定时间线、最后依据 capability 按拉满规则装段——除尾部余量组合外每段取允许的最大时长，使独立生成接缝最少；装段偏好不得反向改变整片时长。服务端只校验 strict 结构、fixed 等值与 capability，不从 Prompt 文本猜测合理时长，也不为 derive 增加硬编码上限。
-- **AP-13 — 真人视觉安全政策只有一个正文。** `HUMAN_VISUAL_SAFETY_POLICY` 是可识别真人、公众人物、名人及有意代表或高度近似真人的脸部/身体相似物限制的唯一文字权威。Primary System Prompt 只通过 catalog 声明的变量投影该正文；`delegate_creative_work` 只按 output registry 的 `requiresHumanVisualSafety` 向 `creative_direction`、`asset_manifest` 与 `video_prompt_set` 请求注入同一字符串，Skill、Operation 描述和媒体 Compiler 不得复制或改写。虚构人物可以采用照片写实、数字人或写实 3D/CG/CGI 等任意视觉风格，只要不基于或近似可识别真人；该政策也不建立角色、作品、品牌、商业 IP、版权风格或歌曲模仿限制。Provider 自有审核拒绝继续走统一 typed failure。
+- **AP-01 — Primary 指令只有三个来源。** 产品级运行纪律由
+  `assistant-runtime/runtime-access.ts` 注入；项目事实与可写边界由 Creative Workspace 的
+  `AGENTS.md` 和 `system/*.json` 投影；专业方法只来自 `system/skills/*/SKILL.md`。不存在
+  `project-agent-system`、context checkpoint、双语 Primary 模板或第二套模型历史。
+- **AP-02 — Skill 是方法，不是状态或权限。** Skill 不能写 Resource、Task、Billing、Approval
+  或 Canvas；版本和目录由 Creative Skill registry 唯一声明。Codex 可按目标自由读取相关 Skill，
+  Creative Worker 只能读取 output registry 为当前 output kind 绑定的一个专业 Skill。
+- **AP-03 — MCP 是唯一产品能力目录。** Primary 不再调用 `load_tools/execute_operation` 或
+  Agents SDK Tool wrapper；Codex 从 Wao MCP 的 `tools/list` 发现 registry 中 `channels.mcp=true`
+  的能力，并以 canonical JSON Schema 调用。MCP 只传输调用，Operation invocation、计划、Grant、
+  Task、Billing、Provider 与 Resource owner 保持唯一。
+- **AP-04 — 专业输出由 strict registry 裁决。** `screenplay`、
+  `chapter_continuity_plan`、`creative_direction`、`asset_manifest`、`video_prompt_set` 与
+  `music_direction` 是穷尽 output kind。Worker 直接提交由同一 Zod schema 派生的根对象；禁止
+  `output`/`outputJson` 包装、字符串化 JSON、宽松字段、第二次 LLM repair 或从文本猜状态。
+- **AP-05 — 来源内容由服务端重读。** Creative Work 和媒体 Operation 只接收精确 Resource ID
+  与显式用途；服务端验证 owner、scope、schema、内容和 lineage。模型不得用最近记录、数组位置、
+  显示名称、历史消息或自报 fingerprint 代替正式 identity。
+- **AP-06 — 专业职责不重叠。** `story-development` 只创作/修改剧本；
+  `chapter-continuity-planning` 只在确有多个 Chapter 时一次生成 Canon 与边界；
+  `creative-direction` 只拥有全局呈现政策；`asset-development` 只筛选资产并写稳定可见设计；
+  `video-direction` 独占最终视频分段和 Prompt；`music-direction` 独占 spotting 与 cue 指令。
+  Operation、Codex 或另一个 Worker 不得重写这些结果。
+- **AP-07 — 自由规划不等于隐式工作流。** Codex 根据用户目标、Workspace 与正式 View 自由组合
+  Skill 和 MCP，不存在时长档位、固定段数、固定 next action、自动采用或隐藏串行链。产品交付纪律
+  可以进入运行指令或 Skill，但不得变成未声明的服务端前置条件。
+- **AP-08 — 过程与事实分离。** Codex reasoning、plan、command、file change、collaboration 和
+  MCP item 只投影为 Assistant View；Task terminal 与已采用 Resource 才是产品事实。UI 不从
+  Markdown、历史消息、文件中的 status 或模型措辞推断完成状态。
+- **AP-09 — 用户可见语言显式注入。** 每个 Turn 都注入当前 locale；模型用户可见回复遵守该
+  locale，UI 文案继续走 i18n。Skill 与模型侧英文指令不是用户可见语言的权威。
+- **AP-10 — 真人视觉安全政策只有一份正文。** `HUMAN_VISUAL_SAFETY_POLICY` 由
+  `src/lib/ai-prompts/human-visual-safety-policy.ts` 唯一拥有，并同时投影给 Codex Primary 与需要
+  视觉判断的 Creative Worker。Skill、Operation 描述和 Compiler 不复制或改写正文。
+- **AP-11 — Provider 能力不创建第二流程。** 模型、wire API、上下文窗、媒体时长、画幅与参考
+  数量来自 provider/capability registry。缺失能力原地失败；禁止按 Provider 名称猜测、静默降级、
+  切回 Chat Completions 或恢复旧 Primary runtime。
+- **AP-12 — 精确剧本独占派生时间线。** 用户未指定时长时，精确剧本与 `creative-core` 的真实语速、
+  动作和停顿方法决定总时长；Direction、题材、画幅、示例和 Provider 分段不得反向创造时长。
 
 ## 权威入口
 
-- Prompt catalog 与共享真人视觉政策：`src/lib/ai-prompts/registry.ts`、`ids.ts`、`human-visual-safety-policy.ts`。
-- Primary Prompt：`src/lib/ai-prompts/templates/project-agent/system/**`。
-- Skill catalog：`src/lib/creative-skills/**`。
-- Creative output registry 与唯一提交校验：`src/lib/creative-worker/output-registry.ts`、`output-submission.ts`、`task-contract.ts`。
-- Resource schema/materialization：`src/lib/creative-resource/schema-registry.ts`、`creative-work-materialization.ts`、`task-materializer.ts`。
-- 通用 Choice：`src/lib/project-agent/choice-offer.ts`、`choice-result.ts`。
-- Primary Tool discovery：`src/lib/project-agent/toolset.ts`、`tool-discovery.ts` 与单份 Primary Prompt。
+- Codex 运行指令与 locale：`src/lib/assistant-runtime/runtime-access.ts`。
+- Workspace 与 Skill 投影：`src/lib/codex-workspace/**`、`src/lib/creative-skills/**`。
+- Wao 能力目录：`src/lib/wao-mcp/**`、`src/lib/operations/registry.ts`。
+- Creative Worker strict 输出：`src/lib/creative-worker/output-registry.ts`、
+  `output-submission.ts`、`task-contract.ts`。
+- Resource 物化与 Lineage：`src/lib/creative-resource/**`。
+- 唯一真人视觉政策：`src/lib/ai-prompts/human-visual-safety-policy.ts`。
 
 ## 验证
 
-- `tests/contracts/project-agent-toolset-conformance.test.ts` 只从生产 registry 穷尽验证 Tool 暴露分区、目录同源和公开 Schema 不含匿名宽松节点。
-- Task/Operation registry conformance 负责接线完整性；Prompt、Skill、真实模型 Tool 服从度和创作质量没有可靠自动 oracle，必须通过真实模型抽样与人工产品复验验证。
+- `npm run runtime:codex:smoke` 使用真实 Codex app-server 验证自定义 Responses provider、
+  thread rollout、纯 JSONL 恢复，以及从生产 Operation registry 派生的 MCP 目录与 elicitation。
+- Operation/Task registry conformance 验证确定性接线；真实模型是否正确选择 Skill、规划镜头和遵守
+  创作方法没有可靠自动 oracle，必须用真实模型与媒体样片复验。
 
 ## 历史回归
 
-- 用户直接粘贴完整剧本时，Primary 曾仍委派 screenplay Worker 生成“正式版”；来源捕获随后以 `current_user_text + server exact excerpt` 收敛，但上传图片只进入媒体 Resource metadata，Prompt 和 `create_text` 契约都没有图片来源分支。真实清晰剧本图因此被误判为不可读并再次委派 Worker，属于新实例漏接同一来源捕获不变量。当前 Prompt 明确区分“创作/修改”与“读取/转录/保存”：当前附图由 Primary 直接观察并以 `current_user_media_transcription` 调用同一个 `create_text` writer，服务端绑定当前 turn 的精确 sourceResourceId 与 Lineage；看不清的内容不得臆造。真实模型的 OCR 准确率与指令服从度仍需图片样本人工复验。
-- Prompt 曾先被过度缩短而遗漏 Choice/Approval/Task 规则，随后又把 `allowedOperationIds`、固定下一步、固定段数/逐段时长和 15/180 秒三档配方写回系统 Prompt。当前删除通用时长路由与分段配方；`>15s` 只保留为“完整视频先统一方向并制作实际会用的参考资产”的 Primary 产品规划纪律，明确不增加 Operation 前置条件、服务端门禁、Chapter 分支或固定分段数量，semantic guard 同时拒绝旧配方与新纪律丢失。
-- 旧 script intake、Story Canon、Chapter Plan、连续性分析、核心剪辑、镜头计划、风格预览与 BGM 各有 prompt/schema/worker，和 Creative Skill 形成竞争 writer；其中连续性分析还会在没有多个 Chapter 且 Worker 无法读取成片媒体时产出类似审片的结论。当前独立 Canon、Chapter 与 continuity output 全部删除，只保留 `chapter_continuity_plan → chapter-continuity-planning` 的唯一映射，并经一次事务共同采用 Canon 与至少两个 Chapters；专业结果其余继续只经 output registry 物化。
-- 旧结构化 stream projector 把 token 增量当正式领域内容，刷新和并发会造成空窗或串流。当前 stream 只展示运行状态，正式 Resource 在 Task terminal 一次接手。
-- 旧 source script/Story Canon schema 要求模型回传系统 identity、版本标记或重复 persistent facts，服务端再用启发式校验，形成第二事实来源。当前 identity/fingerprint/lineage 由服务端构造，模型只输出创作内容。
-- 风格选择曾默认生成九宫格预览并进入专用 Choice，随后文字输出仍保留 final/candidates 双模式；真实方向任务会为一次请求写多份完整政策并放大 structured output 成本。当前每个 Creative Direction Task 只物化一个普通 Resource，预览图是用户明确要求时的独立图片 Operation。
-- 一分钟内容曾因 Beat 数量被固定估时扩大到数分钟。首次修正只发生在 Prompt 层（约束估时口径、删除逐拍固定时长先验），没有改动请求契约：`video_prompt_set` 仍要求调用方交出一个精确秒数，缺失即拒绝，运行时又强制分段之和精确等于该秒数。用户没有说明时长时，Primary 只能猜一个数，估算误差被下游强制转化为拖慢的表演；随后新增的 `screenplay.estimatedDurationSeconds` 又在无估时方法的新路径上长出第二个休眠时长解释源，构成同一不变量的换路径复发。当前把时长权威显式化为 `durationIntent`：`mode=fixed` 承载用户明确说明或近似表达的目标，故“一分钟”“约一分钟”“一分钟左右”统一解释为固定 60 秒；多个 Chapter/请求必须先分配固定份额且总和精确等于用户总时长，不能各自重复获得完整预算。`mode=derive` 只用于用户未说明时长，由导演 Worker 从真实对白语速、可见动作与必要停顿决定总时长；Beat/Chapter 估时降级为规划参考，`screenplay.estimatedDurationSeconds` 已删除。服务端保持既有单请求 strict 校验，不新增跨请求时长状态机或代码门禁；多请求分配服从度仍需真实模型抽样验证。
-- `durationIntent` 已正确表达 `derive` 后，真实短剧仍被同一个视频 Worker 拉长到接近两分钟；根因不是 contract 或服务端漏拦，而是 Skill 内部同时存在剧本估时、题材慢速、Direction 留白和“优先大分段”四种相互叠加的自然语言先验。旧防线覆盖了请求能否合法表达未知时长，却没有覆盖模型先按整片估时还是先按镜头/节拍分配 Provider 秒数，16:9 悬疑长段示例又强化了后一条错误路径。AP-12 现在将精确剧本确立为 derive 时间线唯一来源，Direction 只能改变呈现，视频 Worker 必须先整片估时再以总秒数最短为第一目标装段；不新增 derive 秒数上限、不修改 schema 或输出校验。提示词顺序服从度和真实估时仍是人工抽样盲区。
-- 完整 Operation registry 上线后，Prompt 的“所有工具可用”与 runtime 的全量 Schema 注入被绑定成同一个概念，导致每一步重复发送所有长描述和严格参数定义。首次按需加载又把“下一步新增具体 Operation tool”当作 Schema 交付方式：虽然减少首步 token，却改变多轮 tools 前缀并破坏缓存，且把所有加载后的复杂 Schema 重新交给不同 Provider 的 function validator。固定 gateway 初版进一步把所有 on-demand Operation 都签成 execution-segment 随机 contract，静态调用知识因此跨 segment 被错误判为 `NOT_LOADED/CONTRACT_UNKNOWN`；后续 static/bound 分流仍让公共 Schema 与 parser 对可选 `contractId` 的解释冲突。当前动态契约整层删除：`load_tools` 只读取 registry canonical Schema，`execute_operation` 只接收 `operationId + argumentsJson`，不保存 loaded 状态或临时 identity；Task 回执与终态读取规则保持不变。
-- 媒体段落后来仍把 `generate_voice` 写成可直接调用的顶层工具，模型因而跳过通用 discovery gateway 并得到 `PROJECT_AGENT_TOOL_NOT_FOUND`；旧语义 guard 只锁定通用 `load_tools + execute_operation` 说明，没有检查具体 Operation 示例是否违约。当前双语 Prompt 把两个音色调用位置都改成“加载精确 `generate_voice` id，后续步骤经 `execute_operation` 执行”，并由现有语义 guard 锁定，不新增语音专用入口。
-- 人物安全规则曾只出现在 Primary Prompt 末尾，但 Creative Worker 不读取 Primary System Prompt；随后又分别写进 Primary、Creative Direction Skill 与 `systemConstraints`，形成多份可漂移正文。一次范围过宽的删除把真人限制和 IP 限制同时移除；第一次恢复又误把照片写实、数字人、写实 3D/CG/CGI 等表现风格本身一并禁止，超出了 Seedance 不支持可识别真人的真实边界。当前唯一正文只限制可识别真人及其有意相似物，明确允许不基于真人的虚构人物使用任意视觉风格；由 Prompt 变量和视觉 Worker registry 两处投影，Creative Skill、网页参考图 Operation 与媒体 Compiler 不再复制政策。角色、作品、品牌、商业 IP、版权风格和歌曲模仿限制保持删除。真实模型服从度仍是生成复验盲区。
-- 剧本 canonicalization 曾在输出契约中同时拥有剧本文本、scene/entity registry 和生产资产候选；Primary 又被要求复制实体名单给 Asset Worker。真实“坠落到崖底”只在结尾出现一次，被前一 Worker 合并进山顶后，下游 exact coverage 反而禁止补回。Prompt 级地点细化只修正一次启发式，没有修正事实 owner。当前单份 Prompt 与 Registry 明确：`screenplay` 不登记生产资产，Primary 委派 `asset_manifest` 只传精确 screenplay Resource、用户目标和不能从该 Resource 推导的约束，绝不手写名单或手动附带 Creative Direction；已采纳方向由服务端向全部非方向生产者冻结完整精确内容，Asset Worker 自行完成资产筛选与稳定可见设计。最终媒体 Prompt 只由服务端 Compiler 生成。终态失败的 `errorCode` 由 Task View 确定性展示，Primary 在任何重派或重试前必须先给出用户可见解释；修正输入后创建新 Resource 必须发生真实变化，而当前用户明确授权的 canonical retry 只传失败 Resource ID 并有意重放冻结输入。模型叙述不再承担错误事实本身。
-- Creative Worker 为兼容 Azure/OpenAI Structured Outputs 曾把 canonical schema删除范围、长度、数组数量、pattern 等关键字后交给 Provider；结果是 transport 会接受本地 Zod 必然拒绝的组合，而本地校验只在 run 完成后发生，模型无法纠正。第一轮修复用 `outputJson:string` 把完整对象再次编码，真实长方向结果因单个缺失括号整份变成 `invalid_json`。第二轮虽改成对象，却保留额外 `output` envelope，真实模型连续提交时可省略该包装；同轮纠正确实最终成功，但额外消耗多轮且旧 trace 没有输入形状，排障仍只能推断。当前 Provider Tool 直接以 schema 派生的结果对象为参数根；兼容性投影只限制 transport 关键字，不拥有业务校验，原始 Zod 在同一 Agents loop 内返回有界字段 issues并接受纠正。旧 envelope 是明确拒绝的反例，拒绝 trace 可见实际参数结构；成功前没有 Task result writer，成功后也不再二次解析或另起 repair。
-- Prompt 语言曾按 UI locale 双份维护：Primary/summary 各两份模板、Worker prompt 三组 zh/en 常量、tool-discovery 与附件包装的双语文案，输出语言只是模板语言的隐性副作用。当前全部模型侧文本收敛为单份英文；独立 conversation-summary 已删除，只保留唯一预算超限路径使用的 bounded context-checkpoint 模板。输出语言由 AP-10 的显式规则拥有；Task locale作为正式 `TaskExecutionData` 继续服务用户可见进度投影，不再携带 queue/job 语义。
-- `music_direction` 从单个整片 `score` 切换为可执行 `cues[]` 后，strict schema、planner 与 Worker 已要求 `cueKey + 时间窗`，Primary Prompt 和 Operation 摘要却仍教模型提交一次整片请求，形成模型侧旧协议与执行层新协议的竞争解释。当前 Prompt、公开 Operation Schema/摘要和 Resource 契约统一为“一个 cue 一次调用、服务端原样读取并冻结窗口”；空 cues 明确无音乐。当前 `merge_videos` 仍只有单 music 输入，因此多个 cue 的时间线装配是显式未开放能力，不能用重复整片混音或成功文案掩盖。
+旧 Primary 先后拥有系统 Prompt、动态 Tool discovery、上下文 checkpoint、Agents SDK runner、
+MySQL model history 和 Temporal Turn Coordinator。每次修补模型服从、上下文或恢复问题都会增加
+新的状态解释者。当前防线是删除整套 Primary Prompt/runtime，只保留 Codex 的通用能力与 Wao 的
+产品事实边界；专业知识继续由版本锁定 Skill 和 strict Worker 输出拥有。
+
+真人视觉政策曾分别复制进 Primary Prompt、Skill 与 Worker constraints，内容发生漂移。当前正文
+只在一个常量中维护，由 Primary runtime 与 visual Worker 引用同一值。
+
+视频时长和分段曾被三档 Playbook、固定段数与 Provider 时长共同解释。当前没有 Primary 配方；
+derive 时间线只来自精确剧本与 `creative-core`，执行层只校验已选 Provider 的确定性 capability。
 
 ## 修改检查表
 
-1. 是否新增了专业输出却绕过 Creative output registry？
-2. 是否让 `create_text`、UI、route 或 worker 成为第二专业 writer？
-3. Prompt 是否恢复固定阶段、next action、确认门或固定分段配方；`>15s` 纪律是否仍只约束 Primary 规划而未变成 Operation/服务端门禁？
-4. Choice 是否只描述当前决定，Creative Direction 预览是否仍需用户明确请求？
-5. Resource 输入是否只使用精确 resourceId 并回库校验，结果是否保留真实 lineage？
-6. 单份 Primary Prompt 与 Skill 是否仍服从真实产品目标；若无法自动反证，是否明确记录真实模型复验盲区而不是新增自证测试？
-7. `mode=derive` 是否仍由精确剧本和 creative-core 唯一解释时长，Direction 与 Provider 分段没有变成第二时长来源，服务端也没有新增硬编码上限？
+1. 是否重新增加了自研 Primary Prompt、模型历史、Tool discovery 或固定工作流？
+2. 新能力是否来自 Operation registry 的 MCP 投影并继续经过原有 owner？
+3. 新专业输出是否在 output registry 穷尽声明唯一 Skill、schema、scope 与物化入口？
+4. Workspace 文件是否只表达创作内容/指针，未复制 Task、Billing 或 Resource status？
+5. 用户可见内容是否遵守 Turn locale，安全政策是否仍引用唯一正文？
+6. 无自动 oracle 的创作质量是否如实保留为真实模型/媒体复验盲区？
