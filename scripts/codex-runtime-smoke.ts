@@ -22,6 +22,7 @@ import type {
 } from '@/lib/codex-runtime/runtime-adapter'
 import { createWaoMcpOperationCatalog } from '@/lib/wao-mcp/operation-catalog'
 import { createWaoMcpServer } from '@/lib/wao-mcp/server'
+import type { WaoMcpOperationExecutorResult } from '@/lib/wao-mcp/contracts'
 import { inspectCapturedCodexState } from '@/lib/assistant-runtime/runtime-persistence'
 
 const VALIDATED_CODEX_VERSION = 'codex-cli 0.144.1'
@@ -42,6 +43,20 @@ type AppServerSmokeResult = {
 function requireObject(value: unknown, label: string): RuntimeJsonObject {
   assert(value !== null && typeof value === 'object' && !Array.isArray(value), `${label} must be an object`)
   return value as RuntimeJsonObject
+}
+
+function createSignal(): { readonly promise: Promise<void>; readonly resolve: () => void } {
+  let resolver: (() => void) | null = null
+  const promise = new Promise<void>((resolve) => {
+    resolver = () => resolve()
+  })
+  return {
+    promise,
+    resolve: () => {
+      if (!resolver) throw new Error('CODEX_RUNTIME_SMOKE_SIGNAL_UNINITIALIZED')
+      resolver()
+    },
+  }
 }
 
 async function runWorkspaceSmoke(rootDir: string): Promise<void> {
@@ -69,14 +84,8 @@ async function runMcpSmoke(): Promise<void> {
   const calls: string[] = []
   let completedCalls = 0
   let sessionClosed = false
-  let releaseApproval: (() => void) | null = null
-  let observeElicitation: (() => void) | null = null
-  const elicitationObserved = new Promise<void>((resolve) => {
-    observeElicitation = resolve
-  })
-  const approvalReleased = new Promise<void>((resolve) => {
-    releaseApproval = resolve
-  })
+  const elicitationObserved = createSignal()
+  const approvalReleased = createSignal()
   const operationIds = createWaoMcpOperationCatalog().map((entry) => entry.operationId)
   const server = createWaoMcpServer({
     contextResolver: {
@@ -92,7 +101,7 @@ async function runMcpSmoke(): Promise<void> {
       }),
     },
     executor: {
-      execute: async ({ operationId, elicit }) => {
+      execute: async ({ operationId, elicit }): Promise<WaoMcpOperationExecutorResult> => {
         calls.push(operationId)
         const decision = await elicit({
           mode: 'form',
@@ -151,8 +160,8 @@ async function runMcpSmoke(): Promise<void> {
   client.setRequestHandler(ElicitRequestSchema, async (request) => {
     assert.equal(request.params.mode, 'form')
     assert.equal(request.params.requestedSchema.type, 'object')
-    observeElicitation?.()
-    await approvalReleased
+    elicitationObserved.resolve()
+    await approvalReleased.promise
     return {
       action: 'accept',
       content: { confirmed: true },
@@ -175,10 +184,10 @@ async function runMcpSmoke(): Promise<void> {
     }).finally(() => {
       toolCallSettled = true
     })
-    await elicitationObserved
+    await elicitationObserved.promise
     assert.equal(completedCalls, 0)
     assert.equal(toolCallSettled, false)
-    releaseApproval?.()
+    approvalReleased.resolve()
     const result = await pendingResult
     assert.equal(result.isError, undefined)
     assert.deepEqual(calls, ['create_image'])
