@@ -1,16 +1,27 @@
 {
   "modules": [
     {
+      "id": "codex-runtime-rollout",
+      "document": "docs/architecture/modules/codex-runtime-rollout.md",
+      "title": "Codex Runtime 渐进替换",
+      "sourcePaths": [
+        "src/lib/codex-runtime",
+        "src/lib/wao-mcp",
+        "scripts/codex-runtime-smoke.ts"
+      ]
+    },
+    {
       "id": "durable-execution",
       "document": "docs/architecture/modules/durable-execution.md",
       "title": "Temporal 持久执行边界",
       "sourcePaths": [
-      "src/lib/temporal",
-      "src/lib/agent-turn",
-      "src/lib/adapters/operation-error-normalizer.ts",
-      "src/lib/operations/durable-dispatch.ts",
-      "src/lib/operations/durable-execution.ts",
-      "src/lib/adapters/api/execute-project-agent-operation.ts",
+        "src/lib/codex-runtime",
+        "src/lib/temporal",
+        "src/lib/agent-turn",
+        "src/lib/adapters/operation-error-normalizer.ts",
+        "src/lib/operations/durable-dispatch.ts",
+        "src/lib/operations/durable-execution.ts",
+        "src/lib/adapters/api/execute-project-agent-operation.ts",
         "src/lib/task/provider-invocation.ts",
         "src/lib/task/execution-checkpoint.ts",
         "src/lib/task/terminal",
@@ -39,6 +50,7 @@
       "document": "docs/architecture/modules/billing-approval.md",
       "title": "计费与审批",
       "sourcePaths": [
+        "src/lib/wao-mcp",
         "src/lib/billing",
         "src/lib/profile/billing-transaction-display.ts",
         "standards/pricing",
@@ -267,6 +279,8 @@
       "document": "docs/architecture/modules/assistant-run-lifecycle.md",
       "title": "Assistant Thread、Turn 与交互生命周期",
       "sourcePaths": [
+        "src/lib/codex-runtime",
+        "src/lib/wao-mcp",
         "src/lib/project-agent",
         "src/lib/agent-turn",
         "src/lib/temporal",

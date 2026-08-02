@@ -29,6 +29,7 @@ npm run architecture:impact -- --changed
 | 整集 BGM 规划、候选与最终混音 | [BGM 规划、生成与最终混音](modules/audio-production.md) | BgmDesign strict contract、candidate QC、design/timeline fence、final mix |
 | Operation → Temporal → Activity → DB 的任务提交、attempt、恢复与终态 | [Temporal 异步 Task 生命周期](modules/async-task-lifecycle.md) | Task registry、TaskWorkflow、SchedulerWorkflow、Terminal Service |
 | Agent Thread/Turn、工具调度、Approval/Choice、中断与任务完成后的新 Turn | [Assistant Thread、Turn 与交互生命周期](modules/assistant-run-lifecycle.md) | AgentTurn service、Thread Coordinator、operation registry |
+| Codex app-server 替换、临时创作目录、Wao MCP 与渐进切换 | [Codex Runtime 渐进替换](modules/codex-runtime-rollout.md) | RuntimeAdapter、单 S3 workspace bundle、Operation Registry 投影 |
 | Creative Skill、专业知识发现、无状态 Creative Worker 与主 Agent 委派 | [Creative Skill 与无状态 Worker](modules/creative-skill-worker.md) | Creative Skill registry、Creative Worker、`delegate_creative_work` |
 | 联网搜索、OpenAI 托管研究、研究预算、证据归档与不可信网页边界 | [Web Search](modules/web-search.md) | web-search service/provider、`web_search` Operation、Creative Worker research projector |
 | provider、模型选择、异步轮询、外部失败与降级 | [Provider Gateway](modules/provider-gateway.md) | ai-providers、ai-exec、ai-registry |
