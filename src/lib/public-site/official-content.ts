@@ -1,6 +1,10 @@
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { locales, type Locale } from '@/i18n/routing'
+import {
+  getSubscriptionPlan,
+  isSubscriptionPlanId,
+} from '@/lib/billing/subscription-plans'
 
 export const OFFICIAL_CONTENT_DIR_ENV = 'OFFICIAL_CONTENT_DIR'
 
@@ -97,13 +101,6 @@ function readRequiredString(record: Record<string, unknown>, key: string, schema
   return value
 }
 
-function readRequiredPositiveNumber(record: Record<string, unknown>, key: string, schema: string): number {
-  const value = record[key]
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
-    fail(schema, `${key} must be a positive number`)
-  }
-  return value
-}
 
 function readRequiredRecord(record: Record<string, unknown>, key: string, schema: string): Record<string, unknown> {
   const value = record[key]
@@ -210,14 +207,23 @@ export function readOfficialPricingPage(locale: Locale): OfficialPricingPageCont
   const record = readJsonRecord(schema)
   const plans = readRequiredRecord(record, 'plans', schema)
   const checkout = readRequiredRecord(record, 'checkout', schema)
+  // The content file supplies copy only. Every number comes from the same plan
+  // catalog that grants the credits and charges the card, so a marketing page
+  // cannot advertise a price the billing side has never heard of — which is
+  // exactly how the previous content ended up showing three identical ¥100
+  // plans against a catalog that had moved on.
   const planItems = Object.entries(plans).map(([planKey, planValue]) => {
     if (!isRecord(planValue)) fail(schema, `plans.${planKey} must be an object`)
+    if (!isSubscriptionPlanId(planKey)) {
+      fail(schema, `plans.${planKey} is not a declared subscription plan`)
+    }
+    const plan = getSubscriptionPlan(planKey)
     return {
       label: readRequiredString(planValue, 'label', `${schema}.plans.${planKey}`),
       name: readRequiredString(planValue, 'name', `${schema}.plans.${planKey}`),
-      price: readRequiredString(planValue, 'price', `${schema}.plans.${planKey}`),
+      price: `¥${plan.monthlyPriceCny.toLocaleString('en-US')}`,
       unit: readRequiredString(planValue, 'unit', `${schema}.plans.${planKey}`),
-      creditsAmount: readRequiredPositiveNumber(planValue, 'creditsAmount', `${schema}.plans.${planKey}`),
+      creditsAmount: plan.monthlyCredits,
       tagline: readRequiredString(planValue, 'tagline', `${schema}.plans.${planKey}`),
       status: readRequiredString(planValue, 'status', `${schema}.plans.${planKey}`),
       details: readStringArray(planValue, 'details', `${schema}.plans.${planKey}`),
