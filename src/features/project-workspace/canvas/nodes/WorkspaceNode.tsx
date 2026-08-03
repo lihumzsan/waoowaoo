@@ -51,7 +51,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
         <article
           className={`workspace-canvas-node-shell relative h-full overflow-visible rounded-[18px] border bg-white/92 shadow-[0_12px_36px_rgba(15,23,42,0.07)] backdrop-blur-xl transition-shadow ${
             data.uiSelected
-              ? 'border-slate-200/80 shadow-[0_0_0_1px_rgba(255,255,255,0.95),0_0_26px_5px_rgba(148,163,184,0.5),0_14px_40px_rgba(15,23,42,0.1)]'
+              ? 'border-slate-300 shadow-[0_0_0_5px_rgba(148,163,184,0.4),0_0_34px_10px_rgba(148,163,184,0.42),0_18px_48px_rgba(71,85,105,0.24)]'
               : isRunning
                 ? 'workspace-node-running-breathing border-sky-300'
                 : 'border-slate-200/80'
