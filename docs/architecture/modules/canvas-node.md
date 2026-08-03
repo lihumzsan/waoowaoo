@@ -45,7 +45,7 @@ Canvas 是 WorkspaceResource 文件树的空间化投影，不是第二套文件
 - 投影编排：`src/features/project-workspace/canvas/projection/workspace-node-canvas-projection.ts`。
 - Resource 投影与通用 fallback renderer：`workspace-node-resource-projection.ts`、`nodes/renderers/resource-card.tsx`、`nodes/renderers/resource-media-shell.tsx`；Resource View 来自 `src/lib/workspace-resource/view-service.ts`。
 - 选中详情卡：`src/features/project-workspace/canvas/details/WorkspaceNodeDetailsCard.tsx` 负责 viewport 定位与宽度，唯一展示实现在同目录 `WorkspaceNodeDetailsPanel.tsx`；数据只来自 card View（prompt provenance + `inputSummaries`）。详情卡提示词只读可复制；已有 Resource 的修改一律经 Assistant 通道产生新 Resource，Canvas 不提供人工改写历史输入的入口。
-- 画布创建占位卡：`create/WorkspaceCanvasCreateDock.tsx`。双击空白产生的多实例纯 UI 草稿分两步：先在原位选择类型（能力来自服务端 creation 声明），再展开单类型撰写面板（外壳与选中详情面板一致）；不注册节点 kind、不写任何持久层，提交只走通用 Operation 通道，上传只走既有上传队列两段式协议；刷新丢弃未提交草稿属预期。
+- 画布创建占位卡：`create/WorkspaceCanvasCreateDock.tsx`。双击空白产生单一临时纯 UI 草稿并分两步：先在原位选择类型（能力来自服务端 creation 声明），再展开单类型撰写面板（外壳与选中详情面板一致）；点击草稿外任意位置或按 Escape 直接丢弃，双击新位置替换旧草稿，不提供固定关闭按钮；不注册节点 kind、不写任何持久层，提交只走通用 Operation 通道，上传只走既有上传队列两段式协议；刷新丢弃未提交草稿属预期。
 - Canvas 直接动作、创建、上传和 Assistant 预填：`src/features/project-workspace/canvas/actions/**`、`canvas/upload/**` 与 `ProjectWorkspace` 的受控 selection/draft bridge；服务端写入仍只走 Operation adapter。
 - folder-scoped 节点位置与 viewport：`src/lib/project-canvas/layout/**` 与 `/api/projects/[projectId]/canvas-layout`；唯一 scope 是 `(projectId, folderKey)`，不存在第二隐藏集合或 Episode layout route。
 - 可选领域事实投影必须先对齐 Resource origin/lineage；不存在 planning/asset-execution/video-stage projector。

@@ -48,7 +48,6 @@
         "loading": "正在读取能力…",
         "loadFailed": "生成能力读取失败。",
         "retry": "重试",
-        "close": "关闭",
         "submit": "生成",
         "frameHint": "生成结果将出现在这里",
         "chooseTitle": "要创建什么？",

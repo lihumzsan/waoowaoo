@@ -205,10 +205,10 @@ function ProjectWorkspaceFolderCanvas({
     enabled: Boolean(normalizedSearch),
   })
   const searchResults = useMemo(() => flattenResources(searchQuery.data), [searchQuery.data])
-  const [createDrafts, setCreateDrafts] = useState<readonly {
+  const [createDraft, setCreateDraft] = useState<{
     readonly id: string
     readonly position: WorkspaceCanvasCreateRequest['position']
-  }[]>([])
+  } | null>(null)
   const reactFlow = useReactFlow<WorkspaceCanvasFlowNode>()
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const [userNodePositions, setUserNodePositions] = useState<ReadonlyMap<string, WorkspaceCanvasUserPosition>>(() => new Map())
@@ -517,10 +517,10 @@ function ProjectWorkspaceFolderCanvas({
     if (event.detail !== 2) return
     notifyCanvasUserInteraction()
     const flow = reactFlow.screenToFlowPosition({ x: event.clientX, y: event.clientY })
-    setCreateDrafts((current) => [...current, { id: crypto.randomUUID(), position: flow }])
+    setCreateDraft({ id: crypto.randomUUID(), position: flow })
   }, [notifyCanvasUserInteraction, onSelectionChange, reactFlow])
   const closeCreateDraft = useCallback((draftId: string) => {
-    setCreateDrafts((current) => current.filter((draft) => draft.id !== draftId))
+    setCreateDraft((current) => current?.id === draftId ? null : current)
   }, [])
   const handleMoveStart = useCallback((event: MouseEvent | TouchEvent | null) => {
     if (event) notifyCanvasUserInteraction()
@@ -718,24 +718,24 @@ function ProjectWorkspaceFolderCanvas({
               </span>
             </Panel>
           ) : null}
-          {createDrafts.map((draft) => (
-            <ViewportPortal key={draft.id}>
+          {createDraft ? (
+            <ViewportPortal key={createDraft.id}>
               <WorkspaceCanvasCreateDock
-                position={draft.position}
+                position={createDraft.position}
                 capabilities={canvasActions?.creation ?? []}
                 loading={canvasActionsLoading}
                 loadFailed={canvasActionsFailed}
                 projectAspectRatio={projectAspectRatio}
                 onRetryCapabilities={() => { void retryCanvasActions() }}
-                onSubmit={(request) => submitCanvasCreation(draft.id, request)}
+                onSubmit={(request) => submitCanvasCreation(createDraft.id, request)}
                 onUpload={() => {
-                  openUploadPicker(draft.position)
-                  closeCreateDraft(draft.id)
+                  openUploadPicker(createDraft.position)
+                  closeCreateDraft(createDraft.id)
                 }}
-                onClose={() => closeCreateDraft(draft.id)}
+                onClose={() => closeCreateDraft(createDraft.id)}
               />
             </ViewportPortal>
-          ))}
+          ) : null}
           {selectedNode ? (
             <WorkspaceNodeDetailsCard
               node={selectedNode}

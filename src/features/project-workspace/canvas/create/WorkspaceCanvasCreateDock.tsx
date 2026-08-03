@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { useTranslations } from 'next-intl'
 import { AppIcon, type AppIconName } from '@/components/ui/icons'
 import type {
@@ -23,8 +23,8 @@ const COMPOSE_PANEL_WIDTH = 480
  * 1. a compact type chooser (capabilities come from the server catalog);
  * 2. after picking a type, a placeholder media frame with a compose panel
  *    below it — the panel reuses the selected-card details panel shell.
- * Drafts are pure UI state; nothing persists until the create Operation is
- * confirmed or an upload lands, and refreshing discards unsubmitted drafts.
+ * The draft is pure UI state; nothing persists until the create Operation is
+ * confirmed or an upload lands, and refreshing discards it when unsubmitted.
  */
 export function WorkspaceCanvasCreateDock({
   position,
@@ -60,6 +60,16 @@ export function WorkspaceCanvasCreateDock({
   const [countText, setCountText] = useState('')
   const [durationText, setDurationText] = useState('')
   const [voicePreviewText, setVoicePreviewText] = useState('')
+  const dockRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const closeOnOutsidePointerDown = (event: PointerEvent) => {
+      if (!(event.target instanceof Node) || dockRef.current?.contains(event.target)) return
+      onClose()
+    }
+    window.addEventListener('pointerdown', closeOnOutsidePointerDown, true)
+    return () => window.removeEventListener('pointerdown', closeOnOutsidePointerDown, true)
+  }, [onClose])
 
   const closeOnEscape = (event: KeyboardEvent) => {
     if (event.key !== 'Escape') return
@@ -70,6 +80,7 @@ export function WorkspaceCanvasCreateDock({
   if (!capability) {
     return (
       <div
+        ref={dockRef}
         className="nodrag nopan pointer-events-auto absolute"
         style={{ transform: `translate(${position.x}px, ${position.y}px)`, width: 240, zIndex: 50 }}
         onClick={(event) => event.stopPropagation()}
@@ -77,19 +88,10 @@ export function WorkspaceCanvasCreateDock({
         onKeyDown={closeOnEscape}
       >
         <div className="rounded-[18px] border border-slate-200 bg-white/96 p-2 shadow-[0_18px_48px_rgba(15,23,42,0.14)] backdrop-blur-xl">
-          <div className="flex items-center justify-between px-2 pb-1 pt-1.5">
+          <div className="px-2 pb-1 pt-1.5">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--glass-text-tertiary)]">
               {t('chooseTitle')}
             </span>
-            <button
-              type="button"
-              aria-label={t('close')}
-              title={t('close')}
-              className="rounded-full p-1 text-[var(--glass-text-tertiary)] hover:bg-slate-100"
-              onClick={onClose}
-            >
-              <AppIcon name="close" className="h-3.5 w-3.5" />
-            </button>
           </div>
           {loading ? (
             <span className="flex items-center gap-2 px-2 py-2 text-xs text-[var(--glass-text-secondary)]">
@@ -187,6 +189,7 @@ export function WorkspaceCanvasCreateDock({
 
   return (
     <div
+      ref={dockRef}
       className="nodrag nopan pointer-events-auto absolute"
       style={{ transform: `translate(${position.x}px, ${position.y}px)`, width: FRAME_WIDTH, zIndex: 50 }}
       onClick={(event) => event.stopPropagation()}
@@ -218,16 +221,6 @@ export function WorkspaceCanvasCreateDock({
             <AppIcon name={MEDIA_ICON[mediaKind]} className="h-3.5 w-3.5 text-[var(--glass-text-secondary)]" />
             {t(`kind.${mediaKind}`)}
           </span>
-          <span className="flex-1" />
-          <button
-            type="button"
-            aria-label={t('close')}
-            title={t('close')}
-            className="rounded-full p-1 text-[var(--glass-text-tertiary)] hover:bg-slate-100"
-            onClick={onClose}
-          >
-            <AppIcon name="close" className="h-3.5 w-3.5" />
-          </button>
         </div>
 
         <textarea
