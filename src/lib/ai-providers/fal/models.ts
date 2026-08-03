@@ -15,7 +15,6 @@ import {
   buildGptImage2OptionSchema,
   IMAGE_OUTPUT_FORMAT_OPTIONS,
 } from '@/lib/ai-providers/shared/gpt-image-2'
-import { SEEDANCE_2_RETAIL_CREDITS_PER_SECOND } from '@/lib/ai-providers/shared/seedance-pricing'
 import { usdToCredits } from '@/lib/ai-registry/pricing-currency'
 import {
   PLATFORM_VOICE_DESIGN_MODEL_KEY,
@@ -267,16 +266,29 @@ function falGptImage2Pricing() {
   }
 }
 
+/**
+ * FAL publishes video pricing in USD. These helpers take the published USD
+ * figure and convert it, so the unit is visible at the call site — a raw
+ * literal here was previously read as CNY and understated FAL video cost by
+ * the exchange rate.
+ */
+function falUsdDurationPricing(tiers: ReadonlyArray<readonly [duration: number, amountUsd: number]>) {
+  return falDurationPricing(tiers.map(([duration, amountUsd]) => [duration, usdToCredits(amountUsd)] as const))
+}
+
+function falUsdDurationRatePricing(input: { durations: readonly number[]; amountUsdPerSecond: number }) {
+  return falDurationPricing(input.durations.map((duration) => [
+    duration,
+    usdToCredits(Number((duration * input.amountUsdPerSecond).toFixed(6))),
+  ] as const))
+}
+
 function falDurationPricing(tiers: ReadonlyArray<readonly [duration: number, amount: number]>) {
   return {
     mode: 'capability' as const,
     unit: 'per_call' as const,
     tiers: tiers.map(([duration, amount]) => ({ when: { duration }, amount })),
   }
-}
-
-function falDurationRatePricing(input: { durations: readonly number[]; amountPerSecond: number }) {
-  return falDurationPricing(input.durations.map((duration) => [duration, Number((duration * input.amountPerSecond).toFixed(4))] as const))
 }
 
 const FAL_KLING_EXTENDED_DURATIONS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const
@@ -323,23 +335,18 @@ export const FAL_BUILTIN_PRICING_CATALOG_ENTRIES = [
   {
     apiType: 'video',
     provider: 'fal',
+    // FAL resells Seedance at roughly twice what OpenRouter charges, and
+    // OpenRouter is the platform's production Seedance route. FAL therefore
+    // derives its own retail from its own cost instead of sharing the product
+    // rate — pricing it at the shared rate would sell it below cost.
     modelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID,
     cost: {
       mode: 'capability',
       unit: 'per_second',
       tiers: [
-        { when: { resolution: '480p' }, amount: 0.1346 },
-        { when: { resolution: '720p' }, amount: 0.3024 },
-        { when: { resolution: '1080p' }, amount: 0.6804 },
-      ],
-    },
-    retail: {
-      mode: 'capability',
-      unit: 'per_second',
-      tiers: [
-        { when: { resolution: '480p' }, amount: SEEDANCE_2_RETAIL_CREDITS_PER_SECOND.standard['480p'] },
-        { when: { resolution: '720p' }, amount: SEEDANCE_2_RETAIL_CREDITS_PER_SECOND.standard['720p'] },
-        { when: { resolution: '1080p' }, amount: SEEDANCE_2_RETAIL_CREDITS_PER_SECOND.standard['1080p'] },
+        { when: { resolution: '480p' }, amount: usdToCredits(0.1346) },
+        { when: { resolution: '720p' }, amount: usdToCredits(0.3024) },
+        { when: { resolution: '1080p' }, amount: usdToCredits(0.6804) },
       ],
     },
   },
@@ -351,43 +358,35 @@ export const FAL_BUILTIN_PRICING_CATALOG_ENTRIES = [
       mode: 'capability',
       unit: 'per_second',
       tiers: [
-        { when: { resolution: '480p' }, amount: 0.1077 },
-        { when: { resolution: '720p' }, amount: 0.2419 },
-      ],
-    },
-    retail: {
-      mode: 'capability',
-      unit: 'per_second',
-      tiers: [
-        { when: { resolution: '480p' }, amount: SEEDANCE_2_RETAIL_CREDITS_PER_SECOND.fast['480p'] },
-        { when: { resolution: '720p' }, amount: SEEDANCE_2_RETAIL_CREDITS_PER_SECOND.fast['720p'] },
+        { when: { resolution: '480p' }, amount: usdToCredits(0.1077) },
+        { when: { resolution: '720p' }, amount: usdToCredits(0.2419) },
       ],
     },
   },
-  { apiType: 'video', provider: 'fal', modelId: 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video', cost: falDurationPricing([[5, 0.35], [10, 0.7]]) },
+  { apiType: 'video', provider: 'fal', modelId: 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video', cost: falUsdDurationPricing([[5, 0.35], [10, 0.7]]) },
   {
     apiType: 'video',
     provider: 'fal',
     modelId: FAL_KLING_O3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
-    cost: falDurationRatePricing({ durations: FAL_KLING_EXTENDED_DURATIONS, amountPerSecond: 0.224 }),
+    cost: falUsdDurationRatePricing({ durations: FAL_KLING_EXTENDED_DURATIONS, amountUsdPerSecond: 0.224 }),
   },
   {
     apiType: 'video',
     provider: 'fal',
     modelId: FAL_KLING_O3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
-    cost: falDurationRatePricing({ durations: FAL_KLING_EXTENDED_DURATIONS, amountPerSecond: 0.35 }),
+    cost: falUsdDurationRatePricing({ durations: FAL_KLING_EXTENDED_DURATIONS, amountUsdPerSecond: 0.35 }),
   },
   {
     apiType: 'video',
     provider: 'fal',
     modelId: FAL_KLING_V3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
-    cost: falDurationPricing([[3, 0.504], [4, 0.672], [5, 0.84], [6, 1.008], [7, 1.176], [8, 1.344], [9, 1.512], [10, 1.68], [11, 1.848], [12, 2.016], [13, 2.184], [14, 2.352], [15, 2.52]]),
+    cost: falUsdDurationPricing([[3, 0.504], [4, 0.672], [5, 0.84], [6, 1.008], [7, 1.176], [8, 1.344], [9, 1.512], [10, 1.68], [11, 1.848], [12, 2.016], [13, 2.184], [14, 2.352], [15, 2.52]]),
   },
   {
     apiType: 'video',
     provider: 'fal',
     modelId: FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
-    cost: falDurationPricing([[3, 0.672], [4, 0.896], [5, 1.12], [6, 1.344], [7, 1.568], [8, 1.792], [9, 2.016], [10, 2.24], [11, 2.464], [12, 2.688], [13, 2.912], [14, 3.136], [15, 3.36]]),
+    cost: falUsdDurationPricing([[3, 0.672], [4, 0.896], [5, 1.12], [6, 1.344], [7, 1.568], [8, 1.792], [9, 2.016], [10, 2.24], [11, 2.464], [12, 2.688], [13, 2.912], [14, 3.136], [15, 3.36]]),
   },
 ] as const
 

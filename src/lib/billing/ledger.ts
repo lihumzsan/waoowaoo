@@ -8,6 +8,14 @@ import type { ApiType, UsageUnit } from './cost'
 import { BillingOperationError } from './errors'
 import { toMoneyNumber, type MoneyValue } from './money'
 import { assertCreditAmount, assertSignedCreditAmount, CreditAmountError } from './credits'
+import {
+  applyRefundExpiry,
+  planPoolDebit,
+  splitSettlement,
+  usableCredits,
+  usableSubscriptionCredits,
+  type CreditPoolState,
+} from './credit-pools'
 
 const ledgerLogger = createScopedLogger({ module: 'billing.ledger' })
 
@@ -61,7 +69,13 @@ export type FreezeBalanceResult =
 type BalanceSnapshot = {
   id: string
   userId: string
+  /** Spendable total: unexpired subscription credits plus permanent credits. */
   balance: number
+  /** Permanent pool only. */
+  rechargeCredits: number
+  /** Subscription pool, already zeroed if the period has ended. */
+  subscriptionCredits: number
+  subscriptionExpiresAt: Date | null
   frozenAmount: number
   totalSpent: number
   createdAt: Date
@@ -77,19 +91,42 @@ function normalizeMoney(value: number): number {
   return assertSignedCreditAmount(value, 'amount')
 }
 
+type UserBalanceRow = {
+  balance: MoneyValue
+  subscriptionCredits: MoneyValue
+  subscriptionExpiresAt: Date | null
+}
+
+function toPoolState(row: UserBalanceRow): CreditPoolState {
+  return {
+    rechargeCredits: toMoneyNumber(row.balance),
+    subscriptionCredits: toMoneyNumber(row.subscriptionCredits),
+    subscriptionExpiresAt: row.subscriptionExpiresAt,
+  }
+}
+
 function toBalanceSnapshot(balance: {
   id: string
   userId: string
   balance: MoneyValue
+  subscriptionCredits: MoneyValue
+  subscriptionExpiresAt: Date | null
   frozenAmount: MoneyValue
   totalSpent: MoneyValue
   createdAt: Date
   updatedAt: Date
 }): BalanceSnapshot {
+  const now = new Date()
+  const poolState = toPoolState(balance)
   return {
     id: balance.id,
     userId: balance.userId,
-    balance: toMoneyNumber(balance.balance),
+    // `balance` stays the spendable total so every existing consumer keeps
+    // working; the pools it is made of are reported alongside it.
+    balance: usableCredits(poolState, now),
+    rechargeCredits: toMoneyNumber(balance.balance),
+    subscriptionCredits: usableSubscriptionCredits(poolState, now),
+    subscriptionExpiresAt: balance.subscriptionExpiresAt,
     frozenAmount: toMoneyNumber(balance.frozenAmount),
     totalSpent: toMoneyNumber(balance.totalSpent),
     createdAt: balance.createdAt,
@@ -300,19 +337,44 @@ export async function freezeBalanceInTransaction(
   const balance = existingBalance ?? await tx.userBalance.create({
     data: { userId, balance: 0, frozenAmount: 0, totalSpent: 0 },
   })
+  const now = new Date()
+  const split = planPoolDebit(toPoolState(balance), normalizedAmount, now)
+  if (!split) {
+    return {
+      status: 'insufficient_balance',
+      required: normalizedAmount,
+      available: usableCredits(toPoolState(balance), now),
+    }
+  }
+  // Both pools move under one conditional update, so a concurrent freeze that
+  // drains either pool loses the race instead of overdrawing it. The expiry
+  // bound is part of the condition: a period that ends between planning the
+  // split and applying it must not fund the freeze.
   const updated = await tx.userBalance.updateMany({
-    where: { userId, balance: { gte: normalizedAmount } },
+    where: {
+      userId,
+      balance: { gte: split.recharge },
+      ...(split.subscription > 0
+        ? {
+            subscriptionCredits: { gte: split.subscription },
+            subscriptionExpiresAt: { gt: now },
+          }
+        : {}),
+    },
     data: {
-      balance: { decrement: normalizedAmount },
+      ...(split.recharge > 0 ? { balance: { decrement: split.recharge } } : {}),
+      ...(split.subscription > 0
+        ? { subscriptionCredits: { decrement: split.subscription } }
+        : {}),
       frozenAmount: { increment: normalizedAmount },
     },
   })
   if (updated.count === 0) {
-    const latest = await tx.userBalance.findUnique({ where: { userId }, select: { balance: true } })
+    const latest = await tx.userBalance.findUnique({ where: { userId } })
     return {
       status: 'insufficient_balance',
       required: normalizedAmount,
-      available: latest ? toMoneyNumber(latest.balance) : toMoneyNumber(balance.balance),
+      available: usableCredits(toPoolState(latest ?? balance), now),
     }
   }
   const freezeId = `freeze_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
@@ -321,6 +383,7 @@ export async function freezeBalanceInTransaction(
       id: freezeId,
       userId,
       amount: normalizedAmount,
+      subscriptionAmount: split.subscription,
       status: 'pending',
       source: options?.source || 'sync',
       taskId: options?.taskId || null,
@@ -329,8 +392,8 @@ export async function freezeBalanceInTransaction(
       metadata: options?.metadata ? JSON.stringify(options.metadata) : null,
     },
   })
-  const balanceRow = await tx.userBalance.findUnique({ where: { userId }, select: { balance: true } })
-  const balanceAfter = toMoneyNumber(balanceRow?.balance ?? 0)
+  const balanceRow = await tx.userBalance.findUnique({ where: { userId } })
+  const balanceAfter = balanceRow ? usableCredits(toPoolState(balanceRow), now) : 0
   const metadata = options?.metadata ?? null
   const action = readMetadataString(metadata, 'action') || readMetadataString(metadata, 'taskType')
   await appendFreezeAuditTransaction(tx, {
@@ -339,7 +402,10 @@ export async function freezeBalanceInTransaction(
     freezeId,
     balanceAfter,
     description: `[FREEZE] ${action || options?.source || 'sync'}`,
-    billingMeta: buildFreezeAuditMeta({ freezeAmount: normalizedAmount }, metadata),
+    billingMeta: buildFreezeAuditMeta({
+      freezeAmount: normalizedAmount,
+      ...(split.subscription > 0 ? { freezeSubscriptionAmount: split.subscription } : {}),
+    }, metadata),
     projectId: readScopedProjectId(metadata),
     taskType: readMetadataString(metadata, 'taskType') || action,
   })
@@ -468,15 +534,33 @@ export async function confirmChargeWithRecordInTransaction(
       status: latest?.status || null,
     })
   }
+  // The freeze recorded which pools funded it; the charge lands on the
+  // subscription portion first and whatever is left over goes back to the pool
+  // it came from. Subscription credits released after their period ended are
+  // not restored — they would be spendable past their expiry — and the dropped
+  // amount is recorded rather than silently lost.
+  const now = new Date()
+  const frozenSplit = {
+    subscription: toMoneyNumber(freeze.subscriptionAmount),
+    recharge: freezeAmount - toMoneyNumber(freeze.subscriptionAmount),
+  }
+  const settlement = splitSettlement(frozenSplit, chargedAmount)
+  const balanceBefore = await tx.userBalance.findUniqueOrThrow({ where: { userId: freeze.userId } })
+  const refundOutcome = applyRefundExpiry(settlement.refunded, toPoolState(balanceBefore), now)
   const updatedBalance = await tx.userBalance.update({
     where: { userId: freeze.userId },
     data: {
       frozenAmount: { decrement: freezeAmount },
       totalSpent: { increment: chargedAmount },
-      ...(refundAmount > 0 ? { balance: { increment: refundAmount } } : {}),
+      ...(refundOutcome.restored.recharge > 0
+        ? { balance: { increment: refundOutcome.restored.recharge } }
+        : {}),
+      ...(refundOutcome.restored.subscription > 0
+        ? { subscriptionCredits: { increment: refundOutcome.restored.subscription } }
+        : {}),
     },
   })
-  const balanceAfter = toMoneyNumber(updatedBalance.balance)
+  const balanceAfter = usableCredits(toPoolState(updatedBalance), now)
   // A zero charge still appends an amount = 0 consume row so every settlement
   // is visible in the ledger trail.
   await recordUsageCostOnly(tx, {
@@ -502,6 +586,10 @@ export async function confirmChargeWithRecordInTransaction(
           metadata: recordParams.metadata,
         }),
         refundedAmount: refundAmount,
+        ...(refundOutcome.restored.subscription > 0
+          ? { refundedSubscriptionAmount: refundOutcome.restored.subscription }
+          : {}),
+        ...(refundOutcome.expired > 0 ? { expiredSubscriptionRefund: refundOutcome.expired } : {}),
       }),
       projectId: isProjectScoped(recordParams.projectId) ? recordParams.projectId : null,
       taskType: recordParams.taskType || recordParams.action || null,
@@ -584,14 +672,26 @@ export async function rollbackFreezeInTransaction(
       status: latest?.status || null,
     })
   }
+  const now = new Date()
+  const frozenSplit = {
+    subscription: toMoneyNumber(freeze.subscriptionAmount),
+    recharge: freezeAmount - toMoneyNumber(freeze.subscriptionAmount),
+  }
+  const balanceBefore = await tx.userBalance.findUniqueOrThrow({ where: { userId: freeze.userId } })
+  const refundOutcome = applyRefundExpiry(frozenSplit, toPoolState(balanceBefore), now)
   const updatedBalance = await tx.userBalance.update({
     where: { userId: freeze.userId },
     data: {
-      balance: { increment: freezeAmount },
+      ...(refundOutcome.restored.recharge > 0
+        ? { balance: { increment: refundOutcome.restored.recharge } }
+        : {}),
+      ...(refundOutcome.restored.subscription > 0
+        ? { subscriptionCredits: { increment: refundOutcome.restored.subscription } }
+        : {}),
       frozenAmount: { decrement: freezeAmount },
     },
   })
-  const balanceAfter = toMoneyNumber(updatedBalance.balance)
+  const balanceAfter = usableCredits(toPoolState(updatedBalance), now)
   const storedMetadata = parseStoredFreezeMetadata(freeze.metadata)
   const action = readMetadataString(storedMetadata, 'action') || readMetadataString(storedMetadata, 'taskType')
   await appendFreezeAuditTransaction(tx, {
@@ -600,7 +700,13 @@ export async function rollbackFreezeInTransaction(
     freezeId: freeze.id,
     balanceAfter,
     description: `[REFUND] freeze rollback${action ? ` - ${action}` : ''}`,
-    billingMeta: buildFreezeAuditMeta({ refundedAmount: freezeAmount }, storedMetadata),
+    billingMeta: buildFreezeAuditMeta({
+      refundedAmount: freezeAmount,
+      ...(refundOutcome.restored.subscription > 0
+        ? { refundedSubscriptionAmount: refundOutcome.restored.subscription }
+        : {}),
+      ...(refundOutcome.expired > 0 ? { expiredSubscriptionRefund: refundOutcome.expired } : {}),
+    }, storedMetadata),
     projectId: readScopedProjectId(storedMetadata),
     taskType: readMetadataString(storedMetadata, 'taskType') || action,
   })
@@ -677,17 +783,39 @@ export async function increasePendingFreezeAmountInTransaction(
       status: freeze.status,
     })
   }
+  const now = new Date()
+  const balanceRow = await tx.userBalance.findUnique({ where: { userId: freeze.userId } })
+  if (!balanceRow) return false
+  const split = planPoolDebit(toPoolState(balanceRow), normalizedDelta, now)
+  if (!split) return false
   const updated = await tx.userBalance.updateMany({
-    where: { userId: freeze.userId, balance: { gte: normalizedDelta } },
+    where: {
+      userId: freeze.userId,
+      balance: { gte: split.recharge },
+      ...(split.subscription > 0
+        ? {
+            subscriptionCredits: { gte: split.subscription },
+            subscriptionExpiresAt: { gt: now },
+          }
+        : {}),
+    },
     data: {
-      balance: { decrement: normalizedDelta },
+      ...(split.recharge > 0 ? { balance: { decrement: split.recharge } } : {}),
+      ...(split.subscription > 0
+        ? { subscriptionCredits: { decrement: split.subscription } }
+        : {}),
       frozenAmount: { increment: normalizedDelta },
     },
   })
   if (updated.count === 0) return false
   const switched = await tx.balanceFreeze.updateMany({
     where: { id: freezeId, status: 'pending' },
-    data: { amount: { increment: normalizedDelta } },
+    data: {
+      amount: { increment: normalizedDelta },
+      ...(split.subscription > 0
+        ? { subscriptionAmount: { increment: split.subscription } }
+        : {}),
+    },
   })
   if (switched.count === 0) {
     throw new BillingOperationError('BILLING_FREEZE_NOT_PENDING', 'Freeze is not pending', { freezeId })

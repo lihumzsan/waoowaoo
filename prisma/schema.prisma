@@ -284,6 +284,7 @@ model User {
   sessions      Session[]
   usageCosts    UsageCost[]
   balance       UserBalance?
+  subscription  Subscription?
   preferences   UserPreference?
 
   // 资产中心
@@ -351,16 +352,65 @@ model VerificationToken {
 }
 
 model UserBalance {
-  id           String   @id @default(uuid())
-  userId       String   @unique
-  balance      Int      @default(0)
-  frozenAmount Int      @default(0)
-  totalSpent   Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @default(now()) @updatedAt
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                    String    @id @default(uuid())
+  userId                String    @unique
+  /// Permanent pool: top-ups, invite codes and manual grants. Never expires.
+  balance               Int       @default(0)
+  /// Subscription pool: granted each period, expires at `subscriptionExpiresAt`
+  /// and is always consumed before `balance` so it is not wasted.
+  subscriptionCredits   Int       @default(0)
+  subscriptionExpiresAt DateTime?
+  frozenAmount          Int       @default(0)
+  totalSpent            Int       @default(0)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @default(now()) @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_balances")
+}
+
+/// One user's subscription. A user has at most one; changing plan updates this
+/// row rather than creating a second one, so there is never a second opinion
+/// about which plan is in force.
+model Subscription {
+  id                   String              @id @default(uuid())
+  userId               String              @unique
+  planId               String              @db.VarChar(32)
+  interval             String              @db.VarChar(8)
+  /// Mirrors Stripe's subscription status; Stripe is the authority on it.
+  status               String              @db.VarChar(32)
+  stripeSubscriptionId String              @unique @db.VarChar(191)
+  stripeCustomerId     String              @db.VarChar(191)
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean             @default(false)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @default(now()) @updatedAt
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  grants               SubscriptionGrant[]
+
+  @@index([status])
+  @@index([stripeCustomerId])
+  @@map("subscriptions")
+}
+
+/// One credit grant for one month of a subscription. `periodIndex` counts
+/// months from the start of the paid term, so a yearly subscription grants
+/// twelve times from a single payment. The unique key makes a replayed or
+/// retried grant a no-op instead of free credits.
+model SubscriptionGrant {
+  id             String       @id @default(uuid())
+  subscriptionId String
+  periodIndex    Int
+  planId         String       @db.VarChar(32)
+  credits        Int
+  expiresAt      DateTime
+  grantedAt      DateTime     @default(now())
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, periodIndex])
+  @@index([expiresAt])
+  @@map("subscription_grants")
 }
 
 model InviteCode {
@@ -397,18 +447,22 @@ model InviteRedemption {
 }
 
 model BalanceFreeze {
-  id             String    @id @default(uuid())
-  userId         String
-  amount         Int
-  status         String    @default("pending")
-  source         String?   @db.VarChar(64)
-  taskId         String?
-  requestId      String?
-  idempotencyKey String?   @unique
-  metadata       String?   @db.Text
-  expiresAt      DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @default(now()) @updatedAt
+  id                 String    @id @default(uuid())
+  userId             String
+  amount             Int
+  /// Portion of `amount` taken from the subscription pool. The remainder came
+  /// from the permanent pool. Settlement and rollback return each portion to
+  /// the pool it came from.
+  subscriptionAmount Int       @default(0)
+  status             String    @default("pending")
+  source             String?   @db.VarChar(64)
+  taskId             String?
+  requestId          String?
+  idempotencyKey     String?   @unique
+  metadata           String?   @db.Text
+  expiresAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @default(now()) @updatedAt
 
   @@index([userId])
   @@index([status])
@@ -900,20 +954,20 @@ model ProjectCanvasNodeLayout {
 }
 
 model WorkspaceResourceVersion {
-  id           String            @id @default(uuid())
-  resourceId   String            @db.VarChar(32)
-  version      Int
-  contentKind  String            @db.VarChar(16)
-  mediaId      String
-  sha256       String?           @db.VarChar(64)
-  sizeBytes    BigInt?
+  id             String            @id @default(uuid())
+  resourceId     String            @db.VarChar(32)
+  version        Int
+  contentKind    String            @db.VarChar(16)
+  mediaId        String
+  sha256         String?           @db.VarChar(64)
+  sizeBytes      BigInt?
   /// Bounded text/structured preview materialized at write time so tree
   /// listings never read object storage (WR-13). Null for media versions.
-  contentPreview String?         @db.VarChar(512)
-  sourceTurnId String?           @db.VarChar(191)
-  createdAt    DateTime          @default(now())
-  resource     WorkspaceResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
-  media        MediaObject       @relation(fields: [mediaId], references: [id], onDelete: Restrict)
+  contentPreview String?           @db.VarChar(512)
+  sourceTurnId   String?           @db.VarChar(191)
+  createdAt      DateTime          @default(now())
+  resource       WorkspaceResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  media          MediaObject       @relation(fields: [mediaId], references: [id], onDelete: Restrict)
 
   @@unique([resourceId, version], map: "workspace_resource_versions_resource_version_key")
   @@index([mediaId], map: "workspace_resource_versions_media_idx")

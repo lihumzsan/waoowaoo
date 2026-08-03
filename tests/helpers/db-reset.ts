@@ -31,6 +31,8 @@ export async function resetBillingState() {
   await prisma.balanceTransaction.deleteMany()
   await prisma.balanceFreeze.deleteMany()
   await prisma.usageCost.deleteMany()
+  await prisma.subscriptionGrant.deleteMany()
+  await prisma.subscription.deleteMany()
   await resetAgentTurnState()
   await resetWorkspaceResourceState()
   await resetTaskExecutionState()

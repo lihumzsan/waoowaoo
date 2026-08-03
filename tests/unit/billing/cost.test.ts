@@ -72,17 +72,22 @@ describe('billing/cost charges the retail face of the provider catalog', () => {
     expect(cost).toBe(Math.ceil(usdToRetailCredits(0.04, 'image')))
   })
 
-  it('charges the same Seedance retail rate whichever provider serves it', () => {
+  it('charges the same Seedance retail rate on every route it actually bills', () => {
     const duration = 4
     const expected = SEEDANCE_2_RETAIL_CREDITS_PER_SECOND.fast['720p'] * duration
 
+    // OpenRouter serves Seedance in production and Ark is the same model at a
+    // comparable cost, so the user pays the same on either. FAL resells the
+    // same model at roughly twice the cost and is deliberately not held to the
+    // product rate — pricing it there would sell it below cost.
     for (const model of [
       'openrouter::bytedance/seedance-2.0-fast',
-      'fal::bytedance/seedance-2.0/fast',
       'ark::doubao-seedance-2-0-fast-260128',
     ]) {
       expect(calcVideo(model, '720p', 1, { duration })).toBe(expected)
     }
+    expect(calcVideo('fal::bytedance/seedance-2.0/fast', '720p', 1, { duration }))
+      .toBeGreaterThan(expected)
   })
 
   it('charges Seedance per second of output, not per call', () => {

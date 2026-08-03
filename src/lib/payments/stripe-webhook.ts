@@ -3,10 +3,25 @@ import { prisma } from '@/lib/prisma'
 import { addBalanceWithTransaction, applyBalanceAdjustmentWithTransaction } from '@/lib/billing/ledger'
 import { BillingOperationError } from '@/lib/billing/errors'
 import { toMoneyNumber } from '@/lib/billing/money'
+import { createStripeClient } from './stripe-client'
+import { SUBSCRIPTION_CHECKOUT_KIND } from './stripe-subscription-checkout'
+import {
+  endSubscriptionFromStripe,
+  recordInvoicePaymentFailure,
+  renewSubscriptionFromInvoice,
+  startSubscription,
+  updateSubscription,
+  type SubscriptionWebhookAction,
+} from './stripe-subscription-webhook'
 
 const STRIPE_SIGNATURE_TOLERANCE_SECONDS = 300
 
-type StripeWebhookAction = 'credited' | 'debited' | 'restored' | 'ignored'
+type StripeWebhookAction =
+  | 'credited'
+  | 'debited'
+  | 'restored'
+  | 'ignored'
+  | SubscriptionWebhookAction
 
 export interface StripeWebhookHandleResult {
   received: true
@@ -386,10 +401,76 @@ export async function handleStripeWebhook(rawBody: string, signatureHeader: stri
 
   if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
     const session = readCheckoutSession(event.data.object)
+    // A subscription session has no payment intent and must not reach the
+    // one-off recharge path, which requires one and would reject the event
+    // permanently.
+    if (session.metadata.waoowaoo_kind === SUBSCRIPTION_CHECKOUT_KIND) {
+      const stripeSubscriptionId = readExpandableId(
+        (event.data.object as unknown as { subscription?: string | { id: string } }).subscription,
+      )
+      if (!stripeSubscriptionId) throw new Error('STRIPE_CHECKOUT_SUBSCRIPTION_REQUIRED')
+      const subscription = await createStripeClient().subscriptions.retrieve(stripeSubscriptionId)
+      const result = await startSubscription(subscription)
+      return {
+        received: true,
+        action: result.action,
+        eventType: event.type,
+        sessionId: session.id,
+        objectId: result.subscriptionId,
+        credits: result.credits,
+        reason: result.reason,
+      }
+    }
     const result = await creditCheckoutSession(eventId, session)
     return {
       ...result,
       eventType: event.type,
+    }
+  }
+
+  if (event.type === 'invoice.paid') {
+    const result = await renewSubscriptionFromInvoice(event.data.object)
+    return {
+      received: true,
+      action: result.action,
+      eventType: event.type,
+      objectId: result.subscriptionId,
+      credits: result.credits,
+      reason: result.reason,
+    }
+  }
+
+  if (event.type === 'invoice.payment_failed') {
+    const result = await recordInvoicePaymentFailure(event.data.object)
+    return {
+      received: true,
+      action: result.action,
+      eventType: event.type,
+      objectId: result.subscriptionId,
+      reason: result.reason,
+    }
+  }
+
+  if (event.type === 'customer.subscription.updated') {
+    const result = await updateSubscription(event.data.object)
+    return {
+      received: true,
+      action: result.action,
+      eventType: event.type,
+      objectId: result.subscriptionId,
+      credits: result.credits,
+      reason: result.reason,
+    }
+  }
+
+  if (event.type === 'customer.subscription.deleted') {
+    const result = await endSubscriptionFromStripe(event.data.object)
+    return {
+      received: true,
+      action: result.action,
+      eventType: event.type,
+      objectId: result.subscriptionId,
+      reason: result.reason,
     }
   }
 
@@ -483,6 +564,7 @@ export function isPermanentStripeWebhookRejection(error: unknown): boolean {
   const code = readStripeWebhookErrorCode(error)
   return (
     code.startsWith('STRIPE_SIGNATURE_')
+    || code.startsWith('STRIPE_SUBSCRIPTION_METADATA_')
     || code.startsWith('STRIPE_CHECKOUT_METADATA_')
     || PERMANENT_WEBHOOK_REJECTION_CODES.has(code)
   )

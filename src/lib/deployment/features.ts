@@ -6,6 +6,7 @@ export interface DeploymentFeatures {
   showPricingPage: boolean
   showLegalPages: boolean
   showRecharge: boolean
+  showSubscription: boolean
   showInviteCode: boolean
   showBilling: boolean
   showApiConfig: boolean
@@ -26,6 +27,7 @@ const SELF_HOSTED_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   showPricingPage: false,
   showLegalPages: false,
   showRecharge: false,
+  showSubscription: false,
   showInviteCode: false,
   showBilling: false,
   showAccountSecurity: false,
@@ -42,6 +44,7 @@ const CLOUD_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   showPricingPage: true,
   showLegalPages: true,
   showRecharge: true,
+  showSubscription: true,
   showInviteCode: true,
   showBilling: true,
   showAccountSecurity: true,
