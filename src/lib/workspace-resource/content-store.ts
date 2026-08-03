@@ -59,6 +59,17 @@ export async function storeWorkspaceResourceContent(input: {
   })
 }
 
+/**
+ * Bounded preview persisted next to each text/structured version so list
+ * projections never touch object storage (WR-13). Single truncation rule for
+ * every version writer.
+ */
+export const WORKSPACE_RESOURCE_PREVIEW_MAX_CHARS = 500
+
+export function workspaceResourceContentPreview(serialized: string): string {
+  return serialized.slice(0, WORKSPACE_RESOURCE_PREVIEW_MAX_CHARS)
+}
+
 export async function readWorkspaceResourceTextContent(storageKey: string): Promise<string> {
   const bytes = await getObjectBuffer(storageKey)
   if (bytes.byteLength > MAX_TEXT_BYTES) throw new Error('WORKSPACE_RESOURCE_CONTENT_TOO_LARGE')

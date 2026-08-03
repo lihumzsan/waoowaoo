@@ -341,8 +341,8 @@ async function loadViews(
               durationMs: version.media.durationMs,
             }
           : version.contentKind === 'structured'
-            ? { kind: 'structured', preview: row.prompt?.slice(0, 500) ?? null }
-            : { kind: 'text', preview: row.prompt?.slice(0, 500) ?? null }
+            ? { kind: 'structured', preview: version.contentPreview }
+            : { kind: 'text', preview: version.contentPreview }
     return {
       resourceId: row.id,
       projectId: row.projectId,

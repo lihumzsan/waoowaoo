@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { storeWorkspaceResourceContent } from './content-store'
+import { storeWorkspaceResourceContent, workspaceResourceContentPreview } from './content-store'
 import type {
   WorkspaceResourceInputRef,
   WorkspaceResourceJsonValue,
@@ -314,6 +314,7 @@ export async function reconcileWorkspaceResourceTreeInTransaction(
                 mediaId: media.id,
                 sha256: media.sha256,
                 sizeBytes: media.sizeBytes === null || media.sizeBytes === undefined ? null : BigInt(media.sizeBytes),
+                contentPreview: workspaceResourceContentPreview(serialized),
                 sourceTurnId: input.sourceTurnId?.trim() || null,
               },
             },
@@ -353,6 +354,7 @@ export async function reconcileWorkspaceResourceTreeInTransaction(
           mediaId: media.id,
           sha256: media.sha256,
           sizeBytes: media.sizeBytes === null || media.sizeBytes === undefined ? null : BigInt(media.sizeBytes),
+          contentPreview: workspaceResourceContentPreview(serialized),
           sourceTurnId: input.sourceTurnId?.trim() || null,
         },
       })
@@ -669,6 +671,7 @@ export async function materializeWorkspaceResourceInTransaction(
   let mediaId: string
   let sha256: string | null
   let sizeBytes: bigint | null
+  let versionContentPreview: string | null = null
   if (input.content.kind === 'media') {
     const media = await tx.mediaObject.findUnique({ where: { id: input.content.mediaId } })
     if (!media) throw new Error(`WORKSPACE_RESOURCE_MEDIA_NOT_FOUND:${input.content.mediaId}`)
@@ -694,6 +697,7 @@ export async function materializeWorkspaceResourceInTransaction(
     mediaId = media.id
     sha256 = media.sha256 ?? null
     sizeBytes = media.sizeBytes === null || media.sizeBytes === undefined ? null : BigInt(media.sizeBytes)
+    versionContentPreview = workspaceResourceContentPreview(serialized)
   }
   await tx.workspaceResourceVersion.create({
     data: {
@@ -704,6 +708,7 @@ export async function materializeWorkspaceResourceInTransaction(
       mediaId,
       sha256,
       sizeBytes,
+      contentPreview: versionContentPreview,
       sourceTurnId: input.sourceTurnId?.trim() || null,
     },
   })
@@ -822,6 +827,7 @@ export async function appendWorkspaceResourceUserContentInTransaction(
         mediaId: media.id,
         sha256: media.sha256,
         sizeBytes: media.sizeBytes === null || media.sizeBytes === undefined ? null : BigInt(media.sizeBytes),
+        contentPreview: workspaceResourceContentPreview(serialized),
         sourceTurnId: input.sourceTurnId?.trim() || null,
       },
     })

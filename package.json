@@ -53,6 +53,7 @@
     "test:services:start": "tsx scripts/test-services.ts start",
     "test:services:stop": "tsx scripts/test-services.ts stop",
     "verify:push": "bash scripts/verify-push.sh",
+    "migrate:workspace-text-previews": "tsx --env-file=.env scripts/backfill-workspace-text-previews.ts",
     "migrate:image-urls-contract": "tsx scripts/migrate-image-urls-contract.ts",
     "migrate:graph-artifacts-unique-index": "tsx scripts/migrations/migrate-graph-artifacts-unique-index.ts",
     "backup:media-safety": "tsx scripts/media-safety-backup.ts",

@@ -907,6 +907,9 @@ model WorkspaceResourceVersion {
   mediaId      String
   sha256       String?           @db.VarChar(64)
   sizeBytes    BigInt?
+  /// Bounded text/structured preview materialized at write time so tree
+  /// listings never read object storage (WR-13). Null for media versions.
+  contentPreview String?         @db.VarChar(512)
   sourceTurnId String?           @db.VarChar(191)
   createdAt    DateTime          @default(now())
   resource     WorkspaceResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)

@@ -13,7 +13,7 @@
 - **WR-01 — Catalog 是路径与存在性的唯一持久权威。** `WorkspaceResource` 以稳定 `resourceId` 为身份，以 `(projectId, activePath)` 唯一约束当前路径。未删除资源有且只有一个 `workspacePath`；删除只清空 `activePath` 并保留最后路径用于恢复。对象存储拥有文件版本内容，Runtime 文件夹只是可销毁的工作副本，Canvas 只是 View。
 - **WR-02 — Project 是唯一作用域。** Resource 只有 `userId + projectId` 所有权。Episode、Chapter、Scene、Shot、Canon 和连续性都是用户目录与文件内容，不是系统 scope、外键或第二状态机。
 - **WR-03 — 文件夹也是 Resource。** `resourceKind=folder`、`mediaType=null`、`schemaId=system.folder`、`currentVersion=0`。虚拟根 `@root` 不持久化。每个非根父目录必须是同 Project 的未删除 Folder Resource；因此空目录可持久化和显示。
-- **WR-04 — 文件内容按版本冻结。** 文本、结构化文档和媒体文件都由 `WorkspaceResourceVersion(resourceId, version)` 指向不可变 MediaObject。用户编辑只追加版本；生成结果由 Task terminal materializer 追加版本。`resourceId + contentVersion` 是执行输入身份，当前路径只用于显示和审计。
+- **WR-04 — 文件内容按版本冻结。** 文本、结构化文档和媒体文件都由 `WorkspaceResourceVersion(resourceId, version)` 指向不可变 MediaObject。用户编辑只追加版本；生成结果由 Task terminal materializer 追加版本。`resourceId + contentVersion` 是执行输入身份，当前路径只用于显示和审计。文本/结构化版本在写入事务内同步物化有界 `contentPreview`（唯一截断规则在 content-store），媒体版本为 null；preview 是派生展示列，不是第二内容权威。
 - **WR-05 — 字段所有权明确。** Agent 可在用户树内创建、编辑、移动、改名和软删除用户内容；不可写 `resourceId`、status、Task、媒体指针内容、Lineage、模型、成本或系统投影。`system/**` 完全只读，`.resource` 内容由系统拥有但文件可随目录移动或删除。越界、隐藏路径、Traversal、非法后缀和系统字段篡改必须原地失败。
 - **WR-06 — Runtime checkpoint 是唯一文件写回入口。** Runtime materialize 时由 Catalog 和对象存储生成完整 Bundle；capture 时比较同一 baseline 并在一个事务内提交完整资源树。文件 identity 由文件内受保护的 Resource 标识维持；文件夹改名由本次 Runtime 的 inode identity 识别，该 identity 只存在于临时 baseline、绝不成为产品事实。并发路径、存在性、类型和 Agent 可写文本版本变化使整次 checkpoint 失败，不允许部分写回。媒体指针内容不可写且只编码稳定 Resource identity；Task terminal writer 在后台物化媒体版本不与未改动的 Runtime 指针竞争，不得仅因媒体 `currentVersion` 前进而拒绝 checkpoint。
 - **WR-07 — 所有生产能力强制 Placement。** 每个 `producesResources` Operation 必须在穷尽 registry 声明输出 kind/media/schema，并要求 `outputPath`。Plan 阶段验证父目录、路径、schema 和冲突；缺 placement 不报价、不提交，也不静默落收件箱。
@@ -22,7 +22,7 @@
 - **WR-10 — 批量生产是数据，不是 N 个 Agent 调用。** `submit_production_manifest` 一次冻结最多 registry 允许的显式条目、一个总报价和一个 Approval Grant，再由 Temporal 扇出 Task。成员有稳定 `itemId/resourceId`；部分失败只由 `rerun_failed_production_items` 重跑失败成员，成功成员不重提。FollowUpBatch 在全部终态后至多一次唤醒 Assistant。
 - **WR-11 — 移动、删除和恢复只有一套语义。** 文件移动只改自身路径；文件夹移动原子改写完整子树路径。活跃 Task 涉及的 Resource 不可移动或删除；pending Resource 不可删除。软删除文件夹原子删除子树。恢复默认回原路径，冲突时必须显式给新路径，禁止静默改名。永久删除是独立、需审批的系统能力。
 - **WR-12 — Canvas 不拥有 Resource。** Canvas 按当前文件夹以 `scope=subtree` 加载子树并由自身预算 policy 决定展开/收起，使用稳定 `resourceId` 作为卡片身份，目录决定导航与分组，布局只保存视图位置。拖动卡片不移动文件；改路径必须调用 Resource move 或由 Runtime `mv` 后 checkpoint。
-- **WR-13 — 大项目按目录读取。** Agent 通过普通 `rg/read/bash` 探索用户树；Canvas 和 API 用 cursor 分页与 bounded summary，不读取全部正文。Runtime Bundle 上限与 Canvas 5,000 项视图上限必须明确失败，不能恢复 200 条静默截断。
+- **WR-13 — 大项目按目录读取。** Agent 通过普通 `rg/read/bash` 探索用户树；Canvas 和 API 用 cursor 分页与 bounded summary，不读取全部正文——文本/结构化的列表摘要只来自版本行物化的 `contentPreview`，列表路径零对象存储读取。完整正文只经单资源读取入口（`readWorkspaceResource` 与其唯一 HTTP route）按需加载。Runtime Bundle 上限与 Canvas 5,000 项视图上限必须明确失败，不能恢复 200 条静默截断。
 - **WR-14 — Agent/Subagent 写入边界显式。** 主 Agent 是全局一致性文件的唯一 writer；并行 Subagent 只能写被分配的互斥目录。两个 writer 争用同路径由 `(projectId, activePath)` 与 checkpoint baseline fail closed，不靠最后写入覆盖。
 - **WR-15 — MCP 边界同步同一工作区。** Wao MCP Operation 开始前必须在 Session Manager 的唯一 persistence queue 中 capture Runtime，使本 Turn 新建目录和文本进入 Catalog；Operation 结束后只在 Runtime 自 preflight 后未变化时把最新 Catalog 投影（包括 pending `.resource` 和 Task 系统视图）刷新回 Runtime。任一同步失败都不得开始新的付费执行或伪装成功；Catalog、Task 与幂等执行身份仍是恢复权威。
 
