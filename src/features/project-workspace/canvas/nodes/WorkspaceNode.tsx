@@ -10,7 +10,6 @@ import type { WorkspaceCanvasFlowNode } from '../node-canvas-types'
 import { getWorkspaceCanvasNodeDefinition } from '../registry/workspace-canvas-node-registry'
 import {
   LoadingSpinner,
-  SELECTABLE_TEXT_CLASS,
   WorkspaceNodeImagePreviewContext,
   nodeIsRunning,
 } from './renderers/renderer-shared'
@@ -18,6 +17,8 @@ import { FolderSectionShell } from './renderers/folder-card'
 import { NodeContent } from './workspace-node-renderer-registry'
 import { isWorkspaceCanvasImagePreviewTarget } from '../canvas-interaction-target'
 import { WorkspaceCanvasResourceSelectionContext } from './workspace-node-selection'
+
+const SELECTABLE_CARD_CHROME_CLASS = 'nodrag select-text cursor-pointer active:cursor-grabbing'
 
 export default function WorkspaceNode({ data, id }: NodeProps<WorkspaceCanvasFlowNode>) {
   const labels = useTranslations('projectWorkflow.canvas.workspace.nodeFields')
@@ -55,7 +56,7 @@ export default function WorkspaceNode({ data, id }: NodeProps<WorkspaceCanvasFlo
         ) : null}
 
         <article
-          className={`workspace-canvas-node-shell relative h-full overflow-visible rounded-[18px] border bg-white/92 shadow-[0_12px_36px_rgba(15,23,42,0.07)] backdrop-blur-xl transition-[border-color,box-shadow] duration-150 ${
+          className={`workspace-canvas-node-shell relative h-full cursor-pointer overflow-visible rounded-[18px] border bg-white/92 shadow-[0_12px_36px_rgba(15,23,42,0.07)] backdrop-blur-xl transition-[border-color,box-shadow] duration-150 active:cursor-grabbing ${
             data.uiSelected
               ? 'border-slate-500 shadow-[0_0_0_2px_rgba(255,255,255,0.96),0_0_0_5px_rgba(100,116,139,0.5),0_18px_48px_rgba(15,23,42,0.18)]'
               : isRunning
@@ -79,13 +80,13 @@ export default function WorkspaceNode({ data, id }: NodeProps<WorkspaceCanvasFlo
               <AppIcon name={presentation.iconName} className="h-3 w-3" />
             </span>
             <h2
-              className={`${SELECTABLE_TEXT_CLASS} min-w-0 flex-1 truncate text-sm font-semibold tracking-tight text-[var(--glass-text-primary)]`}
+              className={`${SELECTABLE_CARD_CHROME_CLASS} min-w-0 flex-1 truncate text-sm font-semibold tracking-tight text-[var(--glass-text-primary)]`}
             >
               {data.title}
             </h2>
             {data.lifecycle.phase !== 'succeeded' ? (
               <span
-                className={`${SELECTABLE_TEXT_CLASS} inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                className={`${SELECTABLE_CARD_CHROME_CLASS} inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
                   isRunning
                     ? 'border-sky-200 bg-sky-50 text-sky-700'
                     : data.lifecycle.phase === 'failed'
