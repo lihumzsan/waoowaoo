@@ -113,6 +113,19 @@ export default function NavbarAccountMenu({
           <div className="glass-num mt-1.5 text-xl font-bold tracking-tight text-[var(--glass-text-primary)]">
             {formatCreditAmount(balance.balance, creditsUnit)}
           </div>
+          {balance.health === 'ok' ? null : (
+            <div
+              className={`mt-1.5 text-[11px] font-medium ${
+                balance.health === 'empty'
+                  ? 'text-[var(--glass-danger,#e5484d)]'
+                  : 'text-[var(--glass-warning,#f5a524)]'
+              }`}
+            >
+              {balance.health === 'empty'
+                ? t('account.emptyBalance')
+                : t('account.lowBalance', { clips: balance.referenceClipsRemaining })}
+            </div>
+          )}
           {showBilling ? (
             <>
               <div className="glass-meter-track mt-2.5" aria-hidden="true">

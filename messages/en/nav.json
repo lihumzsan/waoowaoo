@@ -1,21 +1,23 @@
 {
-    "workspace": "Workspace",
-    "assetHub": "Asset Hub",
-    "pricing": "Pricing",
-    "profile": "Settings",
-    "settingsMenu": {
-        "apiConfig": "API Configuration",
-        "personalCenter": "Profile",
-        "language": "Language"
-    },
-    "account": {
-        "balance": "Balance",
-        "upgrade": "Upgrade",
-        "frozen": "Frozen",
-        "totalSpent": "Spent",
-        "creditsUnit": "credits"
-    },
-    "downloadLogs": "Download Logs",
-    "authEntry": "Sign In / Sign Up",
-    "logout": "Logout"
+  "workspace": "Workspace",
+  "assetHub": "Asset Hub",
+  "pricing": "Pricing",
+  "profile": "Settings",
+  "settingsMenu": {
+    "apiConfig": "API Configuration",
+    "personalCenter": "Profile",
+    "language": "Language"
+  },
+  "account": {
+    "balance": "Balance",
+    "upgrade": "Upgrade",
+    "frozen": "Frozen",
+    "totalSpent": "Spent",
+    "creditsUnit": "credits",
+    "lowBalance": "Running low — about {clips} more standard clips",
+    "emptyBalance": "Out of credits. Add credits or subscribe to continue."
+  },
+  "downloadLogs": "Download Logs",
+  "authEntry": "Sign In / Sign Up",
+  "logout": "Logout"
 }

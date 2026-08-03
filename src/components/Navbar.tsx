@@ -152,6 +152,8 @@ export default function Navbar({
             balance: payload.balance,
             frozenAmount: payload.frozenAmount,
             totalSpent: payload.totalSpent,
+            health: payload.health,
+            referenceClipsRemaining: payload.referenceClipsRemaining,
           })
         }
       })

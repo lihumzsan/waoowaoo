@@ -2,6 +2,11 @@ import { NextResponse } from 'next/server'
 import { getBalance } from '@/lib/billing'
 import { BILLING_CURRENCY } from '@/lib/billing/currency'
 import { ensureCurrentPeriodGranted, getSubscriptionSnapshot } from '@/lib/billing/subscription-service'
+import {
+    LOW_BALANCE_THRESHOLD_CREDITS,
+    referenceClipsRemaining,
+    resolveBalanceHealth,
+} from '@/lib/billing/low-balance'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler } from '@/lib/api-errors'
 
@@ -33,6 +38,9 @@ export const GET = apiHandler(async () => {
         subscriptionExpiresAt: balance.subscriptionExpiresAt?.toISOString() ?? null,
         frozenAmount: balance.frozenAmount,
         totalSpent: balance.totalSpent,
+        health: resolveBalanceHealth(balance.balance),
+        lowBalanceThreshold: LOW_BALANCE_THRESHOLD_CREDITS,
+        referenceClipsRemaining: referenceClipsRemaining(balance.balance),
         subscription: subscription
             ? {
                 planId: subscription.planId,

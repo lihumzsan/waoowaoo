@@ -2,6 +2,7 @@ import type { AppIconName } from '@/components/ui/icons'
 import type { PublicDeploymentFeatures } from '@/lib/deployment/public-client'
 import type { ProfileSection } from '@/lib/profile/sections'
 import { formatCredits } from '@/lib/billing/credits'
+import type { BalanceHealth } from '@/lib/billing/low-balance'
 
 // Navbar 账户菜单的纯投影模型:仅根据 deployment features contract 与
 // 权威余额 payload 派生展示数据,不解释任何业务生命周期。
@@ -26,6 +27,10 @@ export interface NavbarUserBalance {
   balance: number
   frozenAmount: number
   totalSpent: number
+  /** Server-decided: whether the user can still afford ordinary work. */
+  health: BalanceHealth
+  /** Standard clips the balance still covers, for concrete warning copy. */
+  referenceClipsRemaining: number
 }
 
 export function isNavbarBalancePayload(value: unknown): value is { success: boolean } & NavbarUserBalance {
@@ -35,8 +40,14 @@ export function isNavbarBalancePayload(value: unknown): value is { success: bool
     record.success === true &&
     typeof record.balance === 'number' &&
     typeof record.frozenAmount === 'number' &&
-    typeof record.totalSpent === 'number'
+    typeof record.totalSpent === 'number' &&
+    isBalanceHealth(record.health) &&
+    typeof record.referenceClipsRemaining === 'number'
   )
+}
+
+function isBalanceHealth(value: unknown): value is BalanceHealth {
+  return value === 'ok' || value === 'low' || value === 'empty'
 }
 
 export function shouldCloseNavbarSettingsMenu(
