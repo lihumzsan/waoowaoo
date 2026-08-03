@@ -13,6 +13,7 @@ import {
   type WorkspaceCanvasLifecycle,
 } from '../../lifecycle/workspace-canvas-lifecycle'
 import type { WorkspaceCanvasMediaShell } from '../../node-canvas-types'
+import { workspaceCanvasScrollableRegionProps } from '../../canvas-scroll-lock'
 import { LoadingSpinner, PreviewableImage, SELECTABLE_TEXT_CLASS } from './renderer-shared'
 
 const OVERTIME_MINIMUM_MINUTES = 1
@@ -115,7 +116,10 @@ function MediaBody({
   }
   if (summary.kind === 'text') {
     return (
-      <p className={`${SELECTABLE_TEXT_CLASS} h-full w-full overflow-hidden whitespace-pre-wrap break-words p-4 text-sm leading-6 text-slate-700`}>
+      <p
+        {...workspaceCanvasScrollableRegionProps<HTMLParagraphElement>()}
+        className={`${SELECTABLE_TEXT_CLASS} nowheel h-full w-full overflow-y-auto whitespace-pre-wrap break-words p-4 text-sm leading-6 text-slate-700`}
+      >
         {summary.text}
       </p>
     )
@@ -136,7 +140,10 @@ function StructuredBody({
   const labels = useTranslations('projectWorkflow.canvas.workspace.nodeFields')
   if (preview) {
     return (
-      <p className={`${SELECTABLE_TEXT_CLASS} h-full w-full overflow-hidden whitespace-pre-wrap break-words p-4 text-sm leading-6 text-slate-700`}>
+      <p
+        {...workspaceCanvasScrollableRegionProps<HTMLParagraphElement>()}
+        className={`${SELECTABLE_TEXT_CLASS} nowheel h-full w-full overflow-y-auto whitespace-pre-wrap break-words p-4 text-sm leading-6 text-slate-700`}
+      >
         {preview}
       </p>
     )
