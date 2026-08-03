@@ -42,9 +42,9 @@ import {
   WORKSPACE_CANVAS_MIN_ZOOM,
 } from './canvasViewport'
 import { isWorkspaceCanvasWheelLockedTarget } from './canvas-scroll-lock'
-import { isWorkspaceCanvasImagePreviewTarget } from './canvas-interaction-target'
 import { WorkspaceNodeDetailsCard } from './details/WorkspaceNodeDetailsCard'
 import { workspaceNodeTypes } from './nodes/workspaceNodeTypes'
+import { WorkspaceCanvasResourceSelectionContext } from './nodes/workspace-node-selection'
 import {
   WorkspaceCanvasFolderActionsContext,
   type WorkspaceCanvasFolderOpenTarget,
@@ -497,25 +497,28 @@ function ProjectWorkspaceFolderCanvas({
       ancestors: parent,
     })
   }, [folder, onNavigate])
-  const handleNodeClick = useCallback<NodeMouseHandler<WorkspaceCanvasFlowNode>>((event, node) => {
-    if (isWorkspaceCanvasImagePreviewTarget(event.target)) return
+  const selectResourceNode = useCallback((nodeId: string) => {
     canvasRef.current?.focus()
-    if (isFolderNodeData(node.data)) {
-      // Expanded section frames behave like canvas background on single click;
-      // only the collapsed folder card keeps click-to-enter (CN-02C).
-      if (node.data.folder.display === 'section') {
-        onSelectionChange(null)
-        return
-      }
-      openProjectedFolder({
-        resourceId: node.data.folder.resourceId,
-        name: node.data.title,
-        workspacePath: node.data.folder.workspacePath,
-      })
+    const node = flowNodes.find((candidate) => candidate.id === nodeId)
+    if (!node) return
+    const nextSelection = selectionForNode(node)
+    if (nextSelection) onSelectionChange(nextSelection)
+  }, [flowNodes, onSelectionChange, selectionForNode])
+  const handleNodeClick = useCallback<NodeMouseHandler<WorkspaceCanvasFlowNode>>((_event, node) => {
+    canvasRef.current?.focus()
+    if (!isFolderNodeData(node.data)) return
+    // Expanded section frames behave like canvas background on single click;
+    // only the collapsed folder card keeps click-to-enter (CN-02C).
+    if (node.data.folder.display === 'section') {
+      onSelectionChange(null)
       return
     }
-    onSelectionChange(selectionForNode(node))
-  }, [onSelectionChange, openProjectedFolder, selectionForNode])
+    openProjectedFolder({
+      resourceId: node.data.folder.resourceId,
+      name: node.data.title,
+      workspacePath: node.data.folder.workspacePath,
+    })
+  }, [onSelectionChange, openProjectedFolder])
   const handleNodeDoubleClick = useCallback<NodeMouseHandler<WorkspaceCanvasFlowNode>>((_event, node) => {
     if (!isFolderNodeData(node.data)) return
     openProjectedFolder({
@@ -683,6 +686,7 @@ function ProjectWorkspaceFolderCanvas({
   }), [deleteAction, openProjectedFolder, operationAction.busy])
   return (
     <WorkspaceCanvasFolderActionsContext.Provider value={folderActions}>
+      <WorkspaceCanvasResourceSelectionContext.Provider value={selectResourceNode}>
       <div
       className="workspace-canvas-layout-animated relative h-full min-h-0 w-full overflow-hidden bg-[var(--glass-bg-canvas)]"
       onDragOver={handleCanvasDragOver}
@@ -713,7 +717,7 @@ function ProjectWorkspaceFolderCanvas({
           onMoveEnd={handleMoveEnd}
           nodesDraggable
           nodesConnectable={false}
-          elementsSelectable
+          elementsSelectable={false}
           onlyRenderVisibleElements
           minZoom={WORKSPACE_CANVAS_MIN_ZOOM}
           maxZoom={WORKSPACE_CANVAS_MAX_ZOOM}
@@ -880,6 +884,7 @@ function ProjectWorkspaceFolderCanvas({
       ) : null}
       <CanvasUploadQueue items={uploadQueue.items} onRetry={uploadQueue.retry} onDismiss={uploadQueue.dismiss} />
       </div>
+      </WorkspaceCanvasResourceSelectionContext.Provider>
     </WorkspaceCanvasFolderActionsContext.Provider>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useContext, useState } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { useTranslations } from 'next-intl'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
@@ -16,8 +16,10 @@ import {
 } from './renderers/renderer-shared'
 import { FolderSectionShell } from './renderers/folder-card'
 import { NodeContent } from './workspace-node-renderer-registry'
+import { isWorkspaceCanvasImagePreviewTarget } from '../canvas-interaction-target'
+import { WorkspaceCanvasResourceSelectionContext } from './workspace-node-selection'
 
-export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNode>) {
+export default function WorkspaceNode({ data, id }: NodeProps<WorkspaceCanvasFlowNode>) {
   const labels = useTranslations('projectWorkflow.canvas.workspace.nodeFields')
   const statusLabels = useTranslations('projectWorkflow.canvas.workspace.status')
   const nodeDefinition = getWorkspaceCanvasNodeDefinition(data.kind)
@@ -25,9 +27,13 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
   const isRunning = nodeIsRunning(data)
   const statusLabel = statusLabels(workspaceCanvasLifecycleStatusKey(data.lifecycle))
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
+  const selectResourceNode = useContext(WorkspaceCanvasResourceSelectionContext)
 
   if (data.kind === 'folder' && data.folder.display === 'section') {
     return <FolderSectionShell data={data} />
+  }
+  if (data.kind === 'resourceCard' && !selectResourceNode) {
+    throw new Error('WORKSPACE_CANVAS_RESOURCE_SELECTION_CONTEXT_REQUIRED')
   }
 
   return (
@@ -59,6 +65,11 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
           data-node-id={data.nodeId}
           data-lifecycle-phase={data.lifecycle.phase}
           data-lifecycle-task-id={data.lifecycle.taskId ?? ''}
+          onClick={(event) => {
+            if (data.kind !== 'resourceCard' || isWorkspaceCanvasImagePreviewTarget(event.target)) return
+            event.stopPropagation()
+            selectResourceNode?.(id)
+          }}
         >
           <header className="flex min-h-[24px] items-center gap-2 px-3.5 pb-1.5 pt-2.5">
             <span

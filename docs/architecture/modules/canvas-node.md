@@ -61,7 +61,7 @@ Canvas 是 WorkspaceResource 文件树的空间化投影，不是第二套文件
 
 ## 历史回归
 
-- 图片预览按钮从初版起就只在自身 `mousedown/click` handler 调用 `stopPropagation`，但 Resource tree 切换为 ReactFlow 节点级统一 selection owner 后，真实点击仍可能同时到达 `onNodeClick`，打开大图的同时唤起下方详情。旧防线只约束 renderer 的 DOM 冒泡，没有让 selection owner 识别这次交互的语义。当前图片按钮与 Canvas owner 复用同一个显式 interaction marker：renderer 只负责预览，唯一 selection owner 对该目标原地返回；不新增第二 selection 状态。真实 pointer/touch 组合仍是认证产品人工复验边界。
+- 图片预览按钮从初版起就只在自身 `mousedown/click` handler 调用 `stopPropagation`，但 Resource tree 切换后，ReactFlow NodeWrapper 仍同时拥有内建 element selection 与业务 `onNodeClick` Resource 选择入口；图片因此会在打开大图时同时唤起下方详情。第一轮修复只给图片加 interaction marker，并在业务 `onNodeClick` 中按事件 target 返回，仍依赖包装层回调保留子元素语义，没有移除这条 Resource 选择入口，用户复验确认无效。当前显式关闭 ReactFlow element selection，中央 `onNodeClick` 不再选择 Resource；只有卡片外壳经无状态 context bridge 调用 `ProjectWorkspace` 的唯一 controlled selection writer，图片按钮只负责预览。真实 pointer/touch 组合仍是认证产品人工复验边界。
 
 - 创建菜单改为“点击外部关闭”后，确认生成弹窗也位于草稿 DOM 外；用户点击确认时，全局 pointer capture 先删除草稿，而正式 pending Resource 尚未完成 Query 接手，画布出现确定性空窗。上一版只用 ESLint、类型和 locale 对齐验证静态接线，无法反证跨 portal 的真实指针顺序。当前草稿在 plan/确认/执行与 Query handoff 期间不可 dismiss，且只在计划目标已全部进入正式 Canvas 投影后关闭；没有 timer、假节点或本地终态。认证浏览器下的真实点击时序仍是人工复验边界。
 
