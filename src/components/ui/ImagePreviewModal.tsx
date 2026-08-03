@@ -15,10 +15,17 @@ interface ImagePreviewModalProps {
 export default function ImagePreviewModal({ imageUrl, onClose }: ImagePreviewModalProps) {
   const t = useTranslations('common')
   const [mounted, setMounted] = useState(false)
+  // 图片自然宽高比:容器按它显式定尺寸,按钮才能真正贴住图片右上角。
+  // (MediaImage 走 next/image,固定 width/height 属性,布局盒不等于可见图片。)
+  const [aspectRatio, setAspectRatio] = useState<number | null>(null)
 
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  useEffect(() => {
+    setAspectRatio(null)
+  }, [imageUrl])
 
   useEffect(() => {
     if (!imageUrl || !mounted) return
@@ -53,15 +60,27 @@ export default function ImagePreviewModal({ imageUrl, onClose }: ImagePreviewMod
       style={{ margin: 0, padding: 0 }}
     >
       <div
-        className="relative inline-block"
+        className="relative"
+        style={aspectRatio
+          ? {
+              width: `min(calc(100vw - 3rem), calc(90vh * ${aspectRatio}))`,
+              aspectRatio: String(aspectRatio),
+            }
+          : { width: 'min(60vw, 840px)', aspectRatio: '16 / 9' }}
         onClick={(event) => event.stopPropagation()}
       >
         <MediaImageWithLoading
           src={displayImageUrl}
           alt={t('preview')}
-          containerClassName="max-w-[calc(100vw-3rem)] max-h-[90vh] !bg-transparent"
-          className="block max-w-[calc(100vw-3rem)] max-h-[90vh] object-contain shadow-2xl"
+          containerClassName="h-full w-full !bg-transparent"
+          className="block h-full w-full object-contain shadow-2xl"
           onClick={(e) => e.stopPropagation()}
+          onLoad={(event) => {
+            const image = event.currentTarget
+            if (image.naturalWidth > 0 && image.naturalHeight > 0) {
+              setAspectRatio(image.naturalWidth / image.naturalHeight)
+            }
+          }}
         />
         {/* 操作按钮贴着图片右上角,随图片实际比例走 */}
         <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
