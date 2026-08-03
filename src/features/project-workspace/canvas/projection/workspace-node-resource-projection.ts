@@ -34,9 +34,9 @@ import { createEdge, createNode, layoutPosition } from './workspace-node-project
 
 const ELEMENT_GAP_X = 64
 const ELEMENT_GAP_Y = 96
-const SECTION_PADDING_X = 48
-const SECTION_HEADER_HEIGHT = 92
-const SECTION_PADDING_BOTTOM = 48
+const SECTION_PADDING_X = 16
+const SECTION_HEADER_HEIGHT = 64
+const SECTION_PADDING_BOTTOM = 8
 const SECTION_MIN_CONTENT_WIDTH = 280
 const TOP_LEVEL_ORIGIN_X = 260
 const TOP_LEVEL_ORIGIN_Y = 180
@@ -380,14 +380,22 @@ export function appendWorkspaceResourceProjection(context: WorkspaceNodeProjecti
       width,
       height,
       emit: (position, parentId) => {
-        nodes.push(createNode({
+        const sectionNode = createNode({
           id: nodeId,
           position,
           width,
           height,
           parentId: parentId ?? undefined,
           data: folderData(folderResource, 'section', treeNode.resources.length, titleLabel),
-        }))
+        })
+        // The group has no visual frame: the node ignores pointer events so
+        // blank space inside it still behaves as canvas; only the name pill
+        // (pointer-events-auto in the renderer) drags and double-clicks.
+        nodes.push({
+          ...sectionNode,
+          selectable: false,
+          style: { ...sectionNode.style, pointerEvents: 'none' },
+        })
         inner.forEach((el, index) => {
           el.emit({
             x: packed.positions[index].x + SECTION_PADDING_X,
@@ -414,7 +422,9 @@ export function appendWorkspaceResourceProjection(context: WorkspaceNodeProjecti
         continue
       }
       if (child.resources.length > 0) {
-        topElements.push(sectionElement(child, folderResource, titleLabel))
+        // Expanded groups show the folder name only; the relative path is
+        // reserved for collapsed cards, where context would otherwise vanish.
+        topElements.push(sectionElement(child, folderResource, folderResource.name))
       }
       collectFlatElements(child, childTrail)
     }

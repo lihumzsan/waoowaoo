@@ -49,22 +49,23 @@ export function FolderCardContent({ data }: WorkspaceCanvasNodeRendererProps) {
 }
 
 /**
- * Expanded-folder frame (budget projection `display: 'section'`): descendants
- * render as regular sibling nodes inside this frame's coordinates, so the
- * shell only draws the boundary and the folder identity pill.
+ * Expanded-folder group (budget projection `display: 'section'`): no frame,
+ * no border, no enter affordance — everything is already on the canvas. Only
+ * a minimal name pill marks the group; the node itself ignores pointer events
+ * (projection sets `pointerEvents: none`) so the canvas behaves as blank
+ * space inside the group, while the pill stays the drag handle and can be
+ * double-clicked to enter the folder.
  */
 export function FolderSectionShell({ data }: { readonly data: WorkspaceCanvasFolderNodeData }) {
   const t = useTranslations('projectWorkflow.canvas.workspace.folderNavigation')
-  const openFolder = useContext(WorkspaceCanvasFolderOpenContext)
-  if (!openFolder) throw new Error('WORKSPACE_CANVAS_FOLDER_OPEN_CONTEXT_REQUIRED')
   return (
     <section
-      className="relative h-full w-full rounded-[26px] border-2 border-dashed border-slate-300/75 bg-white/25"
+      className="relative h-full w-full"
       data-node-id={data.nodeId}
       data-workspace-folder-id={data.folder.resourceId}
       data-workspace-folder-path={data.folder.workspacePath}
     >
-      <header className="absolute left-6 top-5 flex max-w-[calc(100%-3rem)] items-center gap-2 rounded-full border border-white/80 bg-white/92 py-1.5 pl-3.5 pr-1.5 shadow-sm ring-1 ring-[var(--glass-stroke-base)]/60 backdrop-blur-xl">
+      <header className="pointer-events-auto absolute left-0 top-0 flex max-w-full cursor-grab items-center gap-2 rounded-full border border-white/80 bg-white/92 px-3.5 py-1.5 shadow-sm ring-1 ring-[var(--glass-stroke-base)]/60 backdrop-blur-xl active:cursor-grabbing">
         <AppIcon name="folder" className="h-3.5 w-3.5 shrink-0 text-amber-500" />
         <span className="min-w-0 truncate text-sm font-semibold text-[var(--glass-text-primary)]">
           {data.title}
@@ -72,21 +73,6 @@ export function FolderSectionShell({ data }: { readonly data: WorkspaceCanvasFol
         <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-[var(--glass-text-tertiary)]">
           {t('sectionCount', { count: data.folder.childCount })}
         </span>
-        <button
-          type="button"
-          className="nodrag nopan shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold text-[var(--glass-text-secondary)] hover:bg-slate-100 hover:text-[var(--glass-text-primary)]"
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation()
-            openFolder({
-              resourceId: data.folder.resourceId,
-              name: data.title,
-              workspacePath: data.folder.workspacePath,
-            })
-          }}
-        >
-          {t('openFolder')}
-        </button>
       </header>
     </section>
   )
