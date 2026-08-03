@@ -39,7 +39,7 @@ export function PreviewableImage({
     <button
       type="button"
       {...workspaceCanvasImagePreviewTargetProps}
-      className={`group relative nodrag nowheel border-0 bg-transparent p-0 ${buttonClassName}`}
+      className={`nodrag nowheel cursor-zoom-in border-0 bg-transparent p-0 ${buttonClassName}`}
       onPointerDown={(event) => event.stopPropagation()}
       onMouseDown={(event) => event.stopPropagation()}
       onClick={(event) => {
@@ -48,11 +48,6 @@ export function PreviewableImage({
       }}
     >
       <img src={resolvedDisplayImageUrl} alt={alt} className={imageClassName} />
-      <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-slate-950/0 opacity-0 transition duration-150 group-hover:bg-slate-950/20 group-hover:opacity-100 group-focus-visible:bg-slate-950/20 group-focus-visible:opacity-100">
-        <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/92 text-slate-700 shadow-lg ring-1 ring-white/80 backdrop-blur-sm">
-          <AppIcon name="searchPlus" className="h-5 w-5" />
-        </span>
-      </span>
     </button>
   )
 }
