@@ -5,6 +5,13 @@ import { apiHandler } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
+/**
+ * MediaObject bytes are immutable (versions freeze content), so browsers may
+ * cache aggressively. `private` keeps shared/CDN caches out — the scoped
+ * authorization above stays the only distribution gate.
+ */
+const MEDIA_CACHE_CONTROL = 'private, max-age=31536000, immutable'
+
 function buildEtag(media: { sha256?: string | null; id: string; updatedAt?: string | Date | null }) {
   if (media.sha256) return `"${media.sha256}"`
   return `W/"media-${media.id}-${media.updatedAt || '0'}"`
@@ -59,7 +66,7 @@ export const GET = apiHandler(async (
       status: 304,
       headers: {
         ETag: etag,
-        'Cache-Control': 'private, no-store',
+        'Cache-Control': MEDIA_CACHE_CONTROL,
       },
     })
   }
@@ -79,7 +86,7 @@ export const GET = apiHandler(async (
 
   const headers = new Headers()
   headers.set('Content-Type', contentType)
-  headers.set('Cache-Control', 'private, no-store')
+  headers.set('Cache-Control', MEDIA_CACHE_CONTROL)
   headers.set('ETag', etag)
   if (object.contentLength != null) headers.set('Content-Length', String(object.contentLength))
   if (object.contentRange) headers.set('Content-Range', object.contentRange)
@@ -111,7 +118,7 @@ export const HEAD = apiHandler(async (
   })
 
   const headers = new Headers()
-  headers.set('Cache-Control', 'private, no-store')
+  headers.set('Cache-Control', MEDIA_CACHE_CONTROL)
   headers.set('ETag', etag)
   if (media.mimeType) headers.set('Content-Type', media.mimeType)
   if (media.sizeBytes != null) headers.set('Content-Length', String(media.sizeBytes))

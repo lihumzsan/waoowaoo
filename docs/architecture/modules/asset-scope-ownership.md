@@ -13,7 +13,7 @@ Asset Hub 是用户级可复用角色、场景和道具库；Project 内的任�
 - **ASO-03 — 共享 resolver 唯一裁决。** Route 鉴权不是资产证明；read-for-write、update、select、revert 和 delete 都先调用 `asset-scope-ownership.ts`。
 - **ASO-04 — 不泄露存在性。** missing、foreign、wrong-kind 与 cross-parent 在副作用前统一 `NOT_FOUND`。
 - **ASO-05 — 导入 Project 生成 WorkspaceResource。** Hub asset 进入项目必须显式选择 Placement，并由 WorkspaceResource service 创建目录/文件或媒体引用与 Lineage；不得复制成项目资产表、从名称合并或自动改写原 Hub asset。
-- **ASO-06 — 媒体关系拥有访问权，不拥有物理回收权。** publicId、storageKey、签名 URL 和对象存在都不是授权；读取由 MediaObject active owner relation 证明。删除 Hub/Workspace 关系不能直接删除共享对象，物理 GC 只能在穷尽 relation registry 后执行。
+- **ASO-06 — 媒体关系拥有访问权，不拥有物理回收权。** publicId、storageKey、签名 URL 和对象存在都不是授权；读取由 MediaObject active owner relation 证明。删除 Hub/Workspace 关系不能直接删除共享对象，物理 GC 只能在穷尽 relation registry 后执行。`/m/` 响应缓存只允许 `private, max-age, immutable`（MediaObject 字节不可变），禁止 `public`/`s-maxage` 让共享或 CDN 缓存成为第二分发面；授权检查仍在每次未命中请求上执行。
 - **ASO-07 — 外部下载受 SSRF 边界。** 自有媒体先完成 owner 投影，再由统一 outbound fetch 逐跳验证 DNS/socket/redirect；内部 hostname 或签名 URL 不能成为私网 allowlist。
 - **ASO-08 — 顶层删除唯一。** Hub 角色、场景、道具删除统一经 `delete_asset → removeAsset`；variant 使用精确 parent/variant identity。Project Resource 删除走 WorkspaceResource 契约，不走 Asset Hub service。
 - **ASO-09 — 存储配置唯一。** 所有部署只使用 `src/lib/storage` 的 S3-compatible provider 与 `S3_*`；桶预建，endpoint 为 HTTPS，不回退本地目录或运行时建桶。
