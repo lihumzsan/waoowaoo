@@ -755,11 +755,6 @@ export default function WorkspaceAssistantPanel({
     currentTurnStatus: assistantRuntime.view?.currentTurn?.status ?? null,
   })
   const currentTurn = assistantRuntime.view?.currentTurn ?? null
-  const showUserStoppedNotice =
-    !assistantRuntime.viewLoading &&
-    !assistantRuntime.replyInFlight &&
-    currentTurn?.status === 'interrupted' &&
-    currentTurn.cancelReason === 'user_cancelled'
   const showInterruptedNotice =
     !assistantRuntime.viewLoading &&
     !assistantRuntime.replyInFlight &&
@@ -970,17 +965,6 @@ export default function WorkspaceAssistantPanel({
                               }
                             />
                           ) : null}
-                          {showUserStoppedNotice ? (
-                            <WorkspaceAssistantRunFailureNotice
-                              title={t('panel.turnStoppedTitle')}
-                              failure={{
-                                tone: 'info',
-                                headline: t('panel.turnStoppedDescription'),
-                                technical: null,
-                              }}
-                              resend={null}
-                            />
-                          ) : null}
                           {!assistantRuntime.viewLoading
                             ? taskBatchViews.map((view) => (
                                 <WorkspaceAssistantActiveRunCard
@@ -1060,8 +1044,6 @@ export default function WorkspaceAssistantPanel({
                             PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES
                         }
                         mediaUploadPending={mediaUploadPending}
-                        collaborationMode={composer.collaborationMode}
-                        collaborationModeLocked={assistantRuntime.replyInFlight}
                         attachmentError={attachmentError}
                         onChange={composer.setText}
                         onSubmit={async () => {
@@ -1104,7 +1086,6 @@ export default function WorkspaceAssistantPanel({
                           void uploadAttachmentFiles(files)
                         }}
                         onClearSelection={onClearSelection}
-                        onCollaborationModeChange={composer.setCollaborationMode}
                     />
                   </div>
                 </div>

@@ -1,8 +1,11 @@
+import { createHash } from 'node:crypto'
 import {
   readRequestBufferWithLimit,
   readResponseBufferWithLimit,
 } from '@/lib/http/body-limits'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
+import { fetchSafeOutboundMedia, assertSafeOutboundMediaUrl } from '@/lib/media/outbound-fetch'
+import { redis } from '@/lib/redis'
 import {
   CODEX_MODEL_GATEWAY_ASSISTANT_ID,
   CodexModelGatewayError,
@@ -13,6 +16,9 @@ import { requireCodexModelGatewayActiveTurn } from './active-turn-guard'
 const SEARCH_REQUEST_MAX_BYTES = 4 * 1024 * 1024
 const SEARCH_RESPONSE_MAX_BYTES = 8 * 1024 * 1024
 const MAX_SEARCH_QUERIES = 4
+const SEARCH_PREVIEW_HTML_MAX_BYTES = 256 * 1024
+const SEARCH_REUSE_TTL_SECONDS = 60 * 60
+const inFlightSearches = new Map<string, Promise<SearchProjection>>()
 
 type SearchQuery = {
   readonly q: string
@@ -23,10 +29,12 @@ type SearchQuery = {
 type SearchRequest = {
   readonly model: string
   readonly queries: readonly SearchQuery[]
+  readonly imageQueries: readonly SearchQuery[]
   readonly contextSize: 'low' | 'medium' | 'high'
   readonly allowedDomains: readonly string[]
   readonly userLocation: Readonly<Record<string, string>> | null
   readonly maxOutputTokens: number
+  readonly imageMaxResults: number
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -108,8 +116,16 @@ function parseSearchRequest(value: unknown): SearchRequest {
   if (!isRecord(value.commands)) {
     throw new CodexModelGatewayError('SEARCH_QUERY_INVALID', 422)
   }
-  assertOnlyKeys(value.commands, ['search_query', 'response_length'], 'SEARCH_COMMAND_UNSUPPORTED')
-  const queries = readQueries(value.commands.search_query)
+  assertOnlyKeys(value.commands, ['search_query', 'image_query', 'response_length'], 'SEARCH_COMMAND_UNSUPPORTED')
+  const queries = value.commands.search_query === undefined
+    ? []
+    : readQueries(value.commands.search_query)
+  const imageQueries = value.commands.image_query === undefined
+    ? []
+    : readQueries(value.commands.image_query)
+  if (queries.length + imageQueries.length < 1 || queries.length + imageQueries.length > MAX_SEARCH_QUERIES) {
+    throw new CodexModelGatewayError('SEARCH_QUERY_INVALID', 422)
+  }
 
   const settings = value.settings === undefined || value.settings === null
     ? {}
@@ -127,8 +143,22 @@ function parseSearchRequest(value: unknown): SearchRequest {
     ],
     'SEARCH_QUERY_INVALID',
   )
-  if (settings.image_settings !== undefined && settings.image_settings !== null) {
-    throw new CodexModelGatewayError('SEARCH_COMMAND_UNSUPPORTED', 422)
+  const imageSettings = settings.image_settings === undefined || settings.image_settings === null
+    ? {}
+    : settings.image_settings
+  if (!isRecord(imageSettings)) throw new CodexModelGatewayError('SEARCH_QUERY_INVALID', 422)
+  assertOnlyKeys(imageSettings, ['max_results', 'caption'], 'SEARCH_QUERY_INVALID')
+  if (imageSettings.caption !== undefined && typeof imageSettings.caption !== 'boolean') {
+    throw new CodexModelGatewayError('SEARCH_QUERY_INVALID', 422)
+  }
+  const requestedImageResults = imageSettings.max_results
+  const imageMaxResults = requestedImageResults === undefined
+    ? 6
+    : typeof requestedImageResults === 'number' && Number.isSafeInteger(requestedImageResults)
+      ? Math.min(Math.max(requestedImageResults, 1), 12)
+      : Number.NaN
+  if (!Number.isSafeInteger(imageMaxResults)) {
+    throw new CodexModelGatewayError('SEARCH_QUERY_INVALID', 422)
   }
   const contextSize = settings.search_context_size ?? 'medium'
   if (contextSize !== 'low' && contextSize !== 'medium' && contextSize !== 'high') {
@@ -149,24 +179,32 @@ function parseSearchRequest(value: unknown): SearchRequest {
   return {
     model: requireString(value.model, 'SEARCH_QUERY_INVALID'),
     queries,
+    imageQueries,
     contextSize,
     allowedDomains: readStringArray(filters.allowed_domains),
     userLocation: readLocation(settings.user_location),
     maxOutputTokens,
+    imageMaxResults,
   }
 }
 
-function buildSearchPrompt(queries: readonly SearchQuery[]): string {
-  const lines = queries.map((query, index) => {
+function buildSearchPrompt(input: SearchRequest): string {
+  const formatQuery = (query: SearchQuery, index: number, kind: 'web' | 'image'): string => {
     const qualifiers = [
       query.recency ? `within the last ${String(query.recency)} days` : null,
       query.domains.length > 0 ? `domains: ${query.domains.join(', ')}` : null,
     ].filter((value): value is string => value !== null)
-    return `${String(index + 1)}. ${query.q}${qualifiers.length ? ` (${qualifiers.join('; ')})` : ''}`
-  })
+    return `${String(index + 1)}. [${kind}] ${query.q}${qualifiers.length ? ` (${qualifiers.join('; ')})` : ''}`
+  }
+  const allQueries = [
+    ...input.queries.map((query) => ({ query, kind: 'web' as const })),
+    ...input.imageQueries.map((query) => ({ query, kind: 'image' as const })),
+  ]
+  const lines = allQueries.map((entry, index) => formatQuery(entry.query, index, entry.kind))
   return [
     'Use the provided web-search server tool now for every query below.',
     'Return a concise factual synthesis grounded only in the retrieved sources, with URL citations.',
+    'For [image] queries, prioritize public source pages that expose a representative Open Graph image.',
     ...lines,
   ].join('\n')
 }
@@ -184,18 +222,19 @@ function buildOpenRouterSearchBody(
   const domainSet = new Set([
     ...input.allowedDomains,
     ...input.queries.flatMap((query) => query.domains),
+    ...input.imageQueries.flatMap((query) => query.domains),
   ])
   const parameters: Record<string, unknown> = {
     engine: 'auto',
     max_results: maxResults(input.contextSize),
-    max_total_results: Math.min(maxResults(input.contextSize) * input.queries.length, 20),
+    max_total_results: Math.min(maxResults(input.contextSize) * (input.queries.length + input.imageQueries.length), 20),
     search_context_size: input.contextSize,
   }
   if (domainSet.size > 0) parameters.allowed_domains = [...domainSet]
   if (input.userLocation) parameters.user_location = input.userLocation
   return {
     model: upstreamModelId,
-    input: buildSearchPrompt(input.queries),
+    input: buildSearchPrompt(input),
     tools: [{ type: 'openrouter:web_search', parameters }],
     max_output_tokens: input.maxOutputTokens,
     stream: false,
@@ -231,10 +270,12 @@ function projectOpenRouterSearchResponse(value: unknown): SearchProjection {
           continue
         }
         const index = citations.size
+        const parsed = new URL(url)
         citations.set(url, {
           type: 'text_result',
           ref_id: `turn0search${String(index)}`,
           url,
+          source_domain: parsed.hostname.replace(/^www\./, ''),
           ...(typeof annotation.title === 'string' && annotation.title.trim()
             ? { title: annotation.title.trim() }
             : {}),
@@ -251,6 +292,143 @@ function projectOpenRouterSearchResponse(value: unknown): SearchProjection {
     throw new CodexModelGatewayError('PROVIDER_SEARCH_RESULT_MISSING', 502)
   }
   return { output, results: [...citations.values()] }
+}
+
+function readMetaContent(html: string, property: string): string | null {
+  const normalizedProperty = property.toLowerCase()
+  for (const match of html.matchAll(/<meta\s+[^>]*>/gi)) {
+    const tag = match[0]
+    const attributes = new Map<string, string>()
+    for (const attribute of tag.matchAll(/([:\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g)) {
+      attributes.set(attribute[1].toLowerCase(), attribute[2] ?? attribute[3] ?? attribute[4] ?? '')
+    }
+    const key = (attributes.get('property') ?? attributes.get('name') ?? '').toLowerCase()
+    if (key !== normalizedProperty) continue
+    const content = attributes.get('content')?.trim()
+    if (content) return content.replaceAll('&amp;', '&').replaceAll('&quot;', '"')
+  }
+  return null
+}
+
+async function readResponsePrefix(response: Response, maxBytes: number): Promise<Buffer> {
+  if (!response.body) return Buffer.alloc(0)
+  const reader = response.body.getReader()
+  const chunks: Buffer[] = []
+  let total = 0
+  try {
+    while (total < maxBytes) {
+      const next = await reader.read()
+      if (next.done) break
+      const available = maxBytes - total
+      const chunk = Buffer.from(next.value.subarray(0, available))
+      chunks.push(chunk)
+      total += chunk.byteLength
+      if (next.value.byteLength > available) break
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined)
+  }
+  return Buffer.concat(chunks, total)
+}
+
+async function readSourcePreviewImage(sourceUrl: string): Promise<string | null> {
+  try {
+    const response = await fetchSafeOutboundMedia(sourceUrl, {
+      headers: {
+        accept: 'text/html,application/xhtml+xml',
+        'user-agent': 'WaoSearchPreview/1.0',
+      },
+      signal: AbortSignal.timeout(3_500),
+    })
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => undefined)
+      return null
+    }
+    const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
+    if (!contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) {
+      await response.body?.cancel().catch(() => undefined)
+      return null
+    }
+    const body = await readResponsePrefix(response, SEARCH_PREVIEW_HTML_MAX_BYTES)
+    const html = body.toString('utf8')
+    const rawImage = readMetaContent(html, 'og:image')
+      ?? readMetaContent(html, 'twitter:image')
+    if (!rawImage) return null
+    const imageUrl = new URL(rawImage, response.url || sourceUrl)
+    if (imageUrl.protocol !== 'https:') return null
+    await assertSafeOutboundMediaUrl(imageUrl)
+    return imageUrl.toString()
+  } catch {
+    return null
+  }
+}
+
+async function enrichSearchProjection(
+  projection: SearchProjection,
+  imageMaxResults: number,
+): Promise<SearchProjection> {
+  const candidates = projection.results.slice(0, Math.max(6, imageMaxResults))
+  const previewImages = await Promise.all(candidates.map(async (result) => {
+    const url = typeof result.url === 'string' ? result.url : null
+    return url ? await readSourcePreviewImage(url) : null
+  }))
+  const enrichedResults = projection.results.map((result, index) => (
+    previewImages[index]
+      ? { ...result, preview_image_url: previewImages[index] }
+      : result
+  ))
+  const imageResults = enrichedResults.flatMap((result, index): Record<string, unknown>[] => {
+    const imageUrl = typeof result.preview_image_url === 'string' ? result.preview_image_url : null
+    const sourceUrl = typeof result.url === 'string' ? result.url : null
+    if (!imageUrl || !sourceUrl) return []
+    return [{
+      type: 'image_result',
+      ref_id: `turn0image${String(index)}`,
+      image_url: imageUrl,
+      source_url: sourceUrl,
+      source_domain: result.source_domain ?? null,
+      title: result.title ?? null,
+    }]
+  }).slice(0, imageMaxResults)
+  return {
+    output: projection.output,
+    results: [...enrichedResults, ...imageResults],
+  }
+}
+
+function canonicalSearchKey(turnId: string, request: SearchRequest): string {
+  const canonical = JSON.stringify({
+    model: request.model,
+    queries: [
+      ...request.queries.map((query) => ({ kind: 'web', query })),
+      ...request.imageQueries.map((query) => ({ kind: 'image', query })),
+    ].map(({ kind, query }) => ({
+      kind,
+      q: query.q.trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US'),
+      recency: query.recency,
+      domains: [...query.domains].map((domain) => domain.toLowerCase()).sort(),
+    })),
+    contextSize: request.contextSize,
+    allowedDomains: [...request.allowedDomains].map((domain) => domain.toLowerCase()).sort(),
+    userLocation: request.userLocation,
+    imageMaxResults: request.imageMaxResults,
+  })
+  const digest = createHash('sha256').update(canonical, 'utf8').digest('hex')
+  return `codex-search:${turnId}:${digest}`
+}
+
+function readCachedProjection(value: string | null): SearchProjection | null {
+  if (!value) return null
+  try {
+    const parsed = JSON.parse(value) as unknown
+    if (!isRecord(parsed) || typeof parsed.output !== 'string' || !Array.isArray(parsed.results)) {
+      return null
+    }
+    const results = parsed.results.filter(isRecord)
+    return { output: parsed.output, results }
+  } catch {
+    return null
+  }
 }
 
 function validateSearchEndpoint(request: Request): void {
@@ -283,7 +461,7 @@ export async function proxyCodexStandaloneSearchRequest(input: {
     projectId: input.scope.projectId,
     assistantId: CODEX_MODEL_GATEWAY_ASSISTANT_ID,
   } as const
-  await requireCodexModelGatewayActiveTurn(scope, input.scope.nonce)
+  const activeTurn = await requireCodexModelGatewayActiveTurn(scope, input.scope.nonce)
   const contentType = input.request.headers.get('content-type')?.toLowerCase() ?? ''
   if (!contentType.startsWith('application/json')) {
     throw new CodexModelGatewayError('REQUEST_BODY_INVALID', 400)
@@ -305,39 +483,63 @@ export async function proxyCodexStandaloneSearchRequest(input: {
     throw new CodexModelGatewayError('REQUEST_MODEL_MISMATCH', 403)
   }
 
-  let response: Response
-  try {
-    response = await fetchWithProviderProxy(upstream.responsesEndpoint, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Bearer ${upstream.providerApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(buildOpenRouterSearchBody(request, upstream.modelId)),
-      redirect: 'error',
-      signal: input.request.signal,
-    })
-  } catch {
-    input.request.signal.throwIfAborted()
-    throw new CodexModelGatewayError('PROVIDER_REQUEST_FAILED', 502)
+  const cacheKey = canonicalSearchKey(activeTurn.turnId, request)
+  const cached = await redis.get(cacheKey)
+    .then(readCachedProjection)
+    .catch(() => null)
+  let projected = cached
+  if (!projected) {
+    const existing = inFlightSearches.get(cacheKey)
+    const operation = existing ?? (async (): Promise<SearchProjection> => {
+      let response: Response
+      try {
+        response = await fetchWithProviderProxy(upstream.responsesEndpoint, {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            Authorization: `Bearer ${upstream.providerApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(buildOpenRouterSearchBody(request, upstream.modelId)),
+          redirect: 'error',
+          signal: input.request.signal,
+        })
+      } catch {
+        input.request.signal.throwIfAborted()
+        throw new CodexModelGatewayError('PROVIDER_REQUEST_FAILED', 502)
+      }
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined)
+        throw new CodexModelGatewayError('PROVIDER_REQUEST_FAILED', 502)
+      }
+      let upstreamValue: unknown
+      try {
+        const body = await readResponseBufferWithLimit(
+          response,
+          SEARCH_RESPONSE_MAX_BYTES,
+          'OpenRouter standalone search response',
+        )
+        upstreamValue = JSON.parse(body.toString('utf8')) as unknown
+      } catch {
+        throw new CodexModelGatewayError('PROVIDER_SEARCH_RESPONSE_INVALID', 502)
+      }
+      const result = await enrichSearchProjection(
+        projectOpenRouterSearchResponse(upstreamValue),
+        request.imageMaxResults,
+      )
+      await redis.set(cacheKey, JSON.stringify(result), 'EX', SEARCH_REUSE_TTL_SECONDS)
+        .catch(() => undefined)
+      return result
+    })()
+    if (!existing) inFlightSearches.set(cacheKey, operation)
+    try {
+      projected = await operation
+    } finally {
+      if (!existing && inFlightSearches.get(cacheKey) === operation) {
+        inFlightSearches.delete(cacheKey)
+      }
+    }
   }
-  if (!response.ok) {
-    await response.body?.cancel().catch(() => undefined)
-    throw new CodexModelGatewayError('PROVIDER_REQUEST_FAILED', 502)
-  }
-  let upstreamValue: unknown
-  try {
-    const body = await readResponseBufferWithLimit(
-      response,
-      SEARCH_RESPONSE_MAX_BYTES,
-      'OpenRouter standalone search response',
-    )
-    upstreamValue = JSON.parse(body.toString('utf8')) as unknown
-  } catch {
-    throw new CodexModelGatewayError('PROVIDER_SEARCH_RESPONSE_INVALID', 502)
-  }
-  const projected = projectOpenRouterSearchResponse(upstreamValue)
   return Response.json(
     {
       encrypted_output: null,

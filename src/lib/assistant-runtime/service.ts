@@ -22,7 +22,6 @@ import { createScopedLogger } from '@/lib/logging/core'
 import { CREATIVE_SKILL_IDS } from '@/lib/creative-skills'
 import type {
   AssistantRuntimeAdmissionReceipt,
-  AssistantRuntimeCollaborationMode,
   AssistantRuntimeClearCommand,
   AssistantRuntimeClearReceipt,
   AssistantRuntimeInterruptCommand,
@@ -108,6 +107,7 @@ type StartedProjection = {
 
 type LiveProjection = {
   readonly started: StartedProjection
+  readonly projector: AssistantRuntimeEventProjector
   readonly completion: Promise<void>
 }
 
@@ -262,9 +262,6 @@ export class AssistantRuntimeService {
       if (!active) {
         return await this.submitExclusive(normalizedCommand, prepared, clientPayloadHash)
       }
-      if (active.collaborationMode !== normalizedCommand.collaborationMode) {
-        throw new Error('ASSISTANT_RUNTIME_COLLABORATION_MODE_LOCKED')
-      }
       return await this.steerExclusive({
         projectId: normalizedCommand.projectId,
         userId: normalizedCommand.userId,
@@ -340,7 +337,6 @@ export class AssistantRuntimeService {
       sourceId: command.sourceId,
       locale: command.context.locale,
       inputs: prepared.inputs,
-      collaborationMode: command.collaborationMode,
     })
     return {
       outcome: 'accepted',
@@ -387,6 +383,11 @@ export class AssistantRuntimeService {
       }).catch(() => undefined)
     }
     try {
+      const live = this.liveTurns.get(command.turnId)
+      if (!live || live.started.runtimeTurnId !== turn.runtimeTurnId) {
+        throw new Error('ASSISTANT_RUNTIME_STEER_LIVE_PROJECTION_MISSING')
+      }
+      const assistantBoundaryMessageId = await live.projector.createSteerBoundary()
       const acceptedRuntimeTurnId = await this.manager.steerTurn(
         runtimeScope(command),
         command.threadId,
@@ -407,6 +408,7 @@ export class AssistantRuntimeService {
         runtimeTurnId: turn.runtimeTurnId,
         message: prepared.message,
         clientPayloadHash,
+        assistantBoundaryMessageId,
       })
     } catch (error) {
       await markUncertain()
@@ -620,7 +622,6 @@ export class AssistantRuntimeService {
       sourceId: followUp.batchId,
       locale: followUp.context.locale,
       inputs: followUp.inputs,
-      collaborationMode: 'default',
     })
     return {
       outcome: 'accepted',
@@ -718,7 +719,6 @@ export class AssistantRuntimeService {
     readonly sourceId: string
     readonly locale: string
     readonly inputs: readonly RuntimeUserInput[]
-    readonly collaborationMode: AssistantRuntimeCollaborationMode
   }): Promise<StartedProjection> {
     const scope = runtimeScope(input.scope)
     let resolveSettlement!: () => void
@@ -778,10 +778,10 @@ export class AssistantRuntimeService {
         summary: 'concise',
         personality: 'pragmatic',
         collaborationMode: {
-          mode: input.collaborationMode,
+          mode: 'default',
           settings: {
             model: input.preparedThread.model.runtimeModel,
-            reasoning_effort: input.collaborationMode === 'plan' ? 'medium' : null,
+            reasoning_effort: null,
             developer_instructions: null,
           },
         },
@@ -820,6 +820,7 @@ export class AssistantRuntimeService {
         modelKey: input.preparedThread.model.modelKey,
         sink: {
           reserveChunk: (chunk) => publisher.reserve(chunk),
+          setMessageId: (messageId) => publisher.setMessageId(messageId),
           publishChunksThrough: async (watermark) => await publisher.publishThrough(watermark),
           publishViewChanged: async (reason) => await publishAgentSessionViewChanged({
             projectId: identity.projectId,
@@ -854,7 +855,7 @@ export class AssistantRuntimeService {
       })
       for (const event of pendingEvents.splice(0)) projector.consume(event)
       const completion = this.monitorProjection({ started, projector, publisher, unsubscribe })
-      this.liveTurns.set(identity.turnId, { started, completion })
+      this.liveTurns.set(identity.turnId, { started, projector, completion })
       void completion.then(resolveSettlement, rejectSettlement)
       void completion
       await publishAgentSessionViewChanged({

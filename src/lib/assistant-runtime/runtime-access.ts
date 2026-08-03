@@ -52,7 +52,7 @@ function runtimeInstructions(): string {
     'Project files outside system/ are the creative workspace. Organize them freely with normal file and shell tools.',
     'Never create, edit, move, or delete system/**. Never edit a .resource pointer; move or delete it as one file.',
     'Use the wao MCP server for real image, video, audio, billing, approval, Task, and Resource operations.',
-    'The current native Web Search provider supports search_query only. Do not call image_query, open, click, find, screenshot, finance, weather, sports, or time through that tool; unsupported commands fail explicitly.',
+    'The native Web Search provider supports search_query and image_query. Search results may include public source-page image previews. Do not call open, click, find, screenshot, finance, weather, sports, or time through that tool; unsupported commands fail explicitly.',
     'The wao MCP server exposes tools, not MCP resources or resource templates. Explore project state through workspace files and use Wao tools directly; do not call list_mcp_resources or list_mcp_resource_templates for wao.',
     'Before a Wao operation creates a Resource, create every outputPath parent directory in the workspace; the MCP boundary flushes those directories before planning.',
     'Never claim an external production operation completed unless the wao MCP result says it completed.',

@@ -13,7 +13,6 @@ import type { ProjectAssistantMediaAttachment } from '@/lib/project-agent/media-
 import { isProjectAssistantMediaFile } from '@/lib/project-agent/media-attachments/client'
 import type { WorkspaceCanvasSelection } from '../../canvas/contracts/workspace-canvas-interactions'
 import type { WorkspaceAssistantFailureView } from './workspace-assistant-panel-state'
-import type { AssistantRuntimeCollaborationMode } from '@/lib/assistant-runtime/contracts'
 
 interface WorkspaceAssistantComposerProps {
   readonly value: string
@@ -31,8 +30,6 @@ interface WorkspaceAssistantComposerProps {
   readonly mediaAttachments?: readonly ProjectAssistantMediaAttachment[]
   readonly attachDisabled?: boolean
   readonly mediaUploadPending?: boolean
-  readonly collaborationMode: AssistantRuntimeCollaborationMode
-  readonly collaborationModeLocked: boolean
   readonly attachmentError?: string | null
   readonly onChange: (value: string) => void
   readonly onSubmit: () => Promise<void>
@@ -42,7 +39,6 @@ interface WorkspaceAssistantComposerProps {
   readonly onRemoveMediaAttachment?: (resourceId: string) => void
   readonly onPasteMediaFiles?: (files: readonly File[]) => void
   readonly onClearSelection: () => void
-  readonly onCollaborationModeChange: (mode: AssistantRuntimeCollaborationMode) => void
 }
 
 export function WorkspaceAssistantComposer({
@@ -56,8 +52,6 @@ export function WorkspaceAssistantComposer({
   mediaAttachments = [],
   attachDisabled = false,
   mediaUploadPending = false,
-  collaborationMode,
-  collaborationModeLocked,
   attachmentError = null,
   onChange,
   onSubmit,
@@ -67,7 +61,6 @@ export function WorkspaceAssistantComposer({
   onRemoveMediaAttachment,
   onPasteMediaFiles,
   onClearSelection,
-  onCollaborationModeChange,
 }: WorkspaceAssistantComposerProps) {
   const t = useTranslations('assistantAgent')
 
@@ -171,54 +164,36 @@ export function WorkspaceAssistantComposer({
             >
               <AppIcon name="plus" className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
-            <div
-              role="group"
-              aria-label={t('panel.collaborationMode')}
-              className="flex items-center rounded-lg bg-slate-100 p-0.5 text-[11px] font-medium"
-            >
-              {(['default', 'plan'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  disabled={pending || collaborationModeLocked}
-                  aria-pressed={collaborationMode === mode}
-                  onClick={() => onCollaborationModeChange(mode)}
-                  className={`rounded-md px-2 py-1 transition-colors ${collaborationMode === mode ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'} disabled:cursor-not-allowed disabled:opacity-50`}
-                >
-                  {t(`panel.collaborationModes.${mode}`)}
-                </button>
-              ))}
-            </div>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center">
             {canStopReply ? (
               <button
                 type="button"
                 aria-label={t('panel.stopGenerating')}
                 title={t('panel.stopGenerating')}
-                disabled={pending}
                 onClick={() => {
                   void onStopReply()
                 }}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--glass-stroke-base)] bg-white text-[var(--glass-text-primary)] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--glass-text-primary)] text-white transition hover:bg-slate-900"
               >
                 <span className="h-2.5 w-2.5 rounded-[2px] bg-current" aria-hidden="true" />
               </button>
-            ) : null}
-            <button
-              type="button"
-              aria-label={t('panel.send')}
-              disabled={
-                (!value.trim() && attachments.length === 0 && mediaAttachments.length === 0) ||
-                pending
-              }
-              onClick={() => {
-                void onSubmit()
-              }}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--glass-text-primary)] text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <AppIcon name="arrowRight" className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
+            ) : (
+              <button
+                type="button"
+                aria-label={t('panel.send')}
+                disabled={
+                  (!value.trim() && attachments.length === 0 && mediaAttachments.length === 0) ||
+                  pending
+                }
+                onClick={() => {
+                  void onSubmit()
+                }}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--glass-text-primary)] text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <AppIcon name="arrowRight" className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            )}
           </div>
         </div>
       </div>

@@ -129,47 +129,33 @@ function localizeSubagentLifecycle(
   })
 }
 
-function resolveWebSearchSummary(
-  args: unknown,
-  result: unknown,
-  t: AssistantAgentTranslator,
-): string {
-  const input = isRecord(args) ? args : null
-  const output = isRecord(result) ? result : null
-  const action = isRecord(output?.action)
-    ? output.action
-    : isRecord(input?.action)
-      ? input.action
-      : null
-  const type = readText(action?.type)
-  if (type === 'search') {
-    const query = readText(action?.query)
-      ?? (Array.isArray(action?.queries)
-        ? action.queries.flatMap((value) => readText(value) ?? []).join(', ')
-        : null)
-      ?? readText(input?.query)
-      ?? '…'
-    return t('runtime.native.web.search', { query })
-  }
-  if (type === 'openPage') {
-    return t('runtime.native.web.openPage', { value: readText(action?.url) ?? '…' })
-  }
-  if (type === 'findInPage') {
-    return t('runtime.native.web.findInPage', { value: readText(action?.pattern) ?? '…' })
-  }
-  return t('runtime.native.web.other')
+type WebSearchSource = {
+  readonly url: string
+  readonly title: string
+  readonly domain: string
+  readonly previewImageUrl: string | null
 }
 
-function resolveNativeDetail(toolName: string, args: unknown): string | null {
-  if (!isRecord(args)) return null
-  if (NATIVE_SUBAGENT_TOOL_NAMES.has(toolName)) {
-    return readText(args.prompt)
-      ?? readText(args.message)
-      ?? readText(args.agentPath)
-      ?? readText(args.target)
+function resolveWebSearchSources(result: unknown): WebSearchSource[] {
+  const output = isRecord(result) ? result : null
+  if (!Array.isArray(output?.results)) return []
+  const byUrl = new Map<string, WebSearchSource>()
+  for (const entry of output.results) {
+    if (!isRecord(entry)) continue
+    const url = readText(entry.source_url) ?? readText(entry.url)
+    if (!url || byUrl.has(url)) continue
+    try {
+      const parsed = new URL(url)
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') continue
+      byUrl.set(url, {
+        url,
+        title: readText(entry.title) ?? parsed.hostname.replace(/^www\./, ''),
+        domain: readText(entry.source_domain) ?? parsed.hostname.replace(/^www\./, ''),
+        previewImageUrl: readText(entry.preview_image_url) ?? readText(entry.image_url),
+      })
+    } catch {}
   }
-  if (toolName === 'shell') return readText(args.command)
-  return null
+  return [...byUrl.values()].slice(0, 6)
 }
 
 export function WorkspaceAssistantRepeatedToolCallGroupProvider({
@@ -193,6 +179,14 @@ export function WorkspaceAssistantRepeatedToolCallGroupProvider({
     const statusByAssistantMessageId = new Map(turns.flatMap((turn) => (
       turn.assistantMessageId ? [[turn.assistantMessageId, turn.status] as const] : []
     )))
+    const statusByTurnId = new Map(turns.map((turn) => [turn.turnId, turn.status] as const))
+    for (const message of messages) {
+      if (message.role !== 'assistant' || !isRecord(message.metadata)) continue
+      const custom = isRecord(message.metadata.custom) ? message.metadata.custom : null
+      const turnId = readText(custom?.waoAgentTurnId)
+      const status = turnId ? statusByTurnId.get(turnId) : null
+      if (status) statusByAssistantMessageId.set(message.id, status)
+    }
     const lifecycleByMessageId = resolveWorkspaceAssistantSubagentLifecycleViews(
       messages,
       statusByAssistantMessageId,
@@ -276,6 +270,11 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
     toolStatus === 'running' || toolStatus === 'requires-action',
   )
   if (groupView && groupView.leaderToolCallId !== props.toolCallId) return null
+  if (
+    subagentLifecycle
+    && NATIVE_SUBAGENT_TOOL_NAMES.has(props.toolName)
+    && props.toolName !== 'subagent_activity'
+  ) return null
 
   // Two failure shapes exist: the app-level ToolResult envelope ({ok:false})
   // and the terminal-closure/SDK error output ({error}, isError=true) written
@@ -301,7 +300,9 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
   const summaryText = nativeSummary ?? translateDisplayState(displayState, t)
   const iconName = failed || interrupted ? 'alert' : 'settingsHex'
   const displayTitle = groupView
-    ? t('toolCall.groupTitle', { title: operationTitle, count: groupView.total })
+    ? props.toolName === 'web_search'
+      ? operationTitle
+      : t('toolCall.groupTitle', { title: operationTitle, count: groupView.total })
     : operationTitle
   const mixedGroup = groupView && ([
     groupView.success,
@@ -311,10 +312,9 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
     groupView.running,
     groupView.needsAction,
   ].filter((count) => count > 0).length > 1)
-  const detailsAvailable = props.args !== undefined || props.result !== undefined
-  const nativeDetail = props.toolName === 'web_search'
-    ? resolveWebSearchSummary(props.args, props.result, t)
-    : resolveNativeDetail(props.toolName, props.args)
+  const webSearchSources = props.toolName === 'web_search'
+    ? resolveWebSearchSources(props.result)
+    : []
 
   return (
     <div className={`text-sm leading-5 ${failed || interrupted ? 'text-[var(--glass-tone-warn-fg)]' : 'text-[var(--glass-text-tertiary)]'}`}>
@@ -322,18 +322,62 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
         <AppIcon name={iconName} className="h-3.5 w-3.5 shrink-0" />
         <span className="min-w-0 truncate">{summaryText} · {displayTitle}</span>
       </div>
-      {nativeDetail && !(subagentLifecycle && props.toolName === 'subagent_activity') ? (
-        <div className="ml-5 mt-1 line-clamp-2 text-xs leading-4 text-[var(--glass-text-tertiary)]">
-          {nativeDetail}
+      {subagentLifecycle && props.toolName === 'subagent_activity' ? (
+        <div className="ml-5 mt-1.5">
+          <button
+            type="button"
+            onClick={() => setExpanded((value) => !value)}
+            className="inline-flex items-center gap-1 text-xs font-medium text-[var(--glass-text-secondary)] hover:text-[var(--glass-text-primary)]"
+          >
+            {expanded ? t('toolCall.hide') : t('toolCall.show')}
+            <AppIcon name="chevronDown" className={`h-3 w-3 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+          </button>
+          {expanded ? (
+            <div className="mt-2 space-y-3 rounded-xl bg-slate-50/80 px-3 py-2.5 ring-1 ring-slate-200/70">
+              {subagentLifecycle.agents.map((agent) => (
+                <div key={agent.agentThreadId} className="space-y-1.5">
+                  <div className="flex min-w-0 items-center justify-between gap-3 text-xs">
+                    <span className="truncate font-medium text-[var(--glass-text-secondary)]">{agent.agentPath}</span>
+                    <span className="shrink-0 text-[var(--glass-text-tertiary)]">{t(`runtime.native.subagentStatus.${agent.status}`)}</span>
+                  </div>
+                  {agent.activities.map((activity) => (
+                    <div key={activity.id} className="flex gap-2 text-xs leading-5 text-[var(--glass-text-tertiary)]">
+                      <span className={`mt-2 h-1.5 w-1.5 shrink-0 rounded-full ${activity.status === 'running' ? 'animate-pulse bg-blue-500' : activity.status === 'failed' ? 'bg-amber-500' : 'bg-slate-300'}`} />
+                      <span className="min-w-0 whitespace-pre-wrap break-words">
+                        {activity.text ?? activity.label ?? t(`runtime.native.subagentActivity.${activity.kind}`)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       ) : null}
-      {subagentLifecycle && props.toolName === 'subagent_activity' ? (
-        <div className="ml-5 mt-1 space-y-0.5 text-xs leading-4 text-[var(--glass-text-tertiary)]">
-          {subagentLifecycle.agents.map((agent) => (
-            <div key={agent.agentThreadId} className="flex min-w-0 items-center justify-between gap-3">
-              <span className="truncate">{agent.agentPath}</span>
-              <span className="shrink-0">{t(`runtime.native.subagentStatus.${agent.status}`)}</span>
-            </div>
+      {webSearchSources.length > 0 ? (
+        <div className="ml-5 mt-2 grid grid-cols-2 gap-2">
+          {webSearchSources.map((source) => (
+            <a
+              key={source.url}
+              href={source.url}
+              target="_blank"
+              rel="noreferrer"
+              className="group flex min-w-0 items-center gap-2 rounded-xl bg-slate-50/80 p-2 ring-1 ring-slate-200/70 transition hover:bg-white hover:ring-slate-300"
+            >
+              {source.previewImageUrl ? (
+                // Search previews are public source thumbnails, never workspace assets.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={source.previewImageUrl} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover bg-slate-100" />
+              ) : (
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-slate-400 ring-1 ring-slate-200">
+                  <AppIcon name="globe" className="h-4 w-4" />
+                </span>
+              )}
+              <span className="min-w-0">
+                <span className="line-clamp-2 text-xs font-medium leading-4 text-[var(--glass-text-secondary)] group-hover:text-[var(--glass-text-primary)]">{source.title}</span>
+                <span className="mt-0.5 block truncate text-[10px] text-[var(--glass-text-tertiary)]">{source.domain}</span>
+              </span>
+            </a>
           ))}
         </div>
       ) : null}
@@ -345,31 +389,6 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
       {failed ? (
         <div className="ml-5 mt-1 rounded-lg bg-[var(--glass-tone-warn-bg)]/45 px-2 py-1 text-xs leading-4">
           {t('toolCall.failedDetail')}
-        </div>
-      ) : null}
-      {detailsAvailable ? (
-        <div className="ml-5 mt-1.5">
-          <button
-            type="button"
-            className="text-xs font-medium text-[var(--glass-text-secondary)] hover:underline"
-            onClick={() => setExpanded((value) => !value)}
-          >
-            {expanded ? t('toolCall.hide') : t('toolCall.show')}
-          </button>
-          {expanded ? (
-            <div className="mt-2 space-y-2">
-              <div>
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide">{t('toolCall.arguments')}</div>
-                <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-neutral-100 p-2 text-[11px] text-[var(--glass-text-secondary)]">{JSON.stringify(props.args, null, 2)}</pre>
-              </div>
-              {props.result !== undefined ? (
-                <div>
-                  <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide">{t('toolCall.result')}</div>
-                  <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-neutral-100 p-2 text-[11px] text-[var(--glass-text-secondary)]">{typeof props.result === 'string' ? props.result : JSON.stringify(props.result, null, 2)}</pre>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
         </div>
       ) : null}
     </div>

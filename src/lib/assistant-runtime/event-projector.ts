@@ -7,6 +7,7 @@ import type {
   RuntimeServerRequest,
   RuntimeSkillsListEntry,
 } from '@/lib/codex-runtime/runtime-adapter'
+import { buildAgentTurnAssistantMessageId } from '@/lib/agent-turn/stream-publisher'
 import type {
   AssistantRuntimeEventSink,
   AssistantRuntimeInteractionView,
@@ -33,6 +34,22 @@ type PendingTextPart = {
   readonly itemId: string
   value: string
   started: boolean
+  completedPrefixLength: number
+}
+
+type SubagentActivity = {
+  readonly id: string
+  readonly kind: 'message' | 'reasoning' | 'tool'
+  readonly label: string | null
+  readonly text: string | null
+  readonly status: 'running' | 'completed' | 'failed'
+}
+
+type SubagentProjection = {
+  agentPath: string
+  status: 'active' | 'completed' | 'interrupted'
+  readonly activityOrder: string[]
+  readonly activitiesByItemId: Map<string, SubagentActivity>
 }
 
 function isRecord(value: RuntimeJsonValue | undefined): value is RuntimeJsonObject {
@@ -100,7 +117,13 @@ function safeToolOutput(item: RuntimeJsonObject): RuntimeJsonValue {
   if (type === 'subAgentActivity') {
     return { status: 'completed', kind: item.kind ?? null, agentPath: item.agentPath ?? null }
   }
-  if (type === 'webSearch') return { status: 'completed', action: item.action ?? null }
+  if (type === 'webSearch') {
+    return {
+      status: 'completed',
+      action: item.action ?? null,
+      results: item.results ?? [],
+    }
+  }
   if (status !== 'completed') return { status }
   const result = item.result
   if (result !== undefined) return { status, result }
@@ -219,10 +242,8 @@ export class AssistantRuntimeEventProjector {
   private readonly pendingText = new Map<string, PendingTextPart>()
   private readonly progressByItem = new Map<string, string>()
   private latestStreamSeq = 0
-  private readonly subagentsByThreadId = new Map<string, {
-    agentPath: string
-    status: 'active' | 'completed' | 'interrupted'
-  }>()
+  private segmentIndex = 0
+  private readonly subagentsByThreadId = new Map<string, SubagentProjection>()
   private readonly childTerminalStatus = new Map<string, 'completed' | 'interrupted'>()
   private terminalProjection: AssistantRuntimeTerminalProjection | null = null
   private finalizing = false
@@ -253,6 +274,35 @@ export class AssistantRuntimeEventProjector {
 
   get terminal(): Promise<AssistantRuntimeTerminalProjection> {
     return this.terminalPromise
+  }
+
+  async createSteerBoundary(): Promise<string | null> {
+    if (this.terminalProjection || this.finalizing) {
+      throw new Error('ASSISTANT_RUNTIME_STEER_BOUNDARY_TERMINAL')
+    }
+    const boundaryMessage = this.buildAssistantMessage()
+    const watermark = this.latestStreamSeq
+    this.segmentIndex += 1
+    this.partsByItemId.clear()
+    this.partOrder.splice(0)
+    this.progressByItem.clear()
+    for (const pending of this.pendingText.values()) {
+      pending.completedPrefixLength += pending.value.length
+      pending.value = ''
+      pending.started = false
+    }
+    this.options.sink.setMessageId(this.buildAssistantMessageId())
+    if (!boundaryMessage) return null
+    this.queueCriticalPersistence(async () => {
+      await this.options.onMessageSnapshot(boundaryMessage)
+      await this.options.sink.publishChunksThrough(watermark)
+      await this.options.sink.publishViewChanged('runtime_steer_boundary').catch(() => undefined)
+    }, 'steer_boundary_persistence_failed')
+    await this.persistenceTail
+    if (this.persistenceFailureReason) {
+      throw new Error('ASSISTANT_RUNTIME_STEER_BOUNDARY_PERSISTENCE_FAILED')
+    }
+    return boundaryMessage.id
   }
 
   consume(event: RuntimeEvent): void {
@@ -290,7 +340,7 @@ export class AssistantRuntimeEventProjector {
       return
     }
     if (event.type !== 'notification') return
-    if (this.consumeChildTurnLifecycle(event.method, event.params)) return
+    if (this.consumeChildNotification(event.method, event.params)) return
     if (!this.matchesNotification(event.params)) return
     this.consumeNotification(event.method, event.params)
   }
@@ -455,6 +505,7 @@ export class AssistantRuntimeEventProjector {
       itemId,
       value: '',
       started: false,
+      completedPrefixLength: 0,
     }
     if (pending.kind !== kind) return
     if (!pending.started) {
@@ -556,33 +607,112 @@ export class AssistantRuntimeEventProjector {
     const status = kind === 'interrupted'
       ? 'interrupted'
       : terminal ?? 'active'
-    this.subagentsByThreadId.set(agentThreadId, { agentPath, status })
+    const current = this.ensureSubagent(agentThreadId)
+    current.agentPath = agentPath
+    current.status = status
     this.publishSubagentLifecycle(agentThreadId)
   }
 
-  private consumeChildTurnLifecycle(method: string, params: RuntimeJsonObject): boolean {
-    if (method !== 'turn/started' && method !== 'turn/completed') return false
+  private ensureSubagent(agentThreadId: string): SubagentProjection {
+    const existing = this.subagentsByThreadId.get(agentThreadId)
+    if (existing) return existing
+    const created: SubagentProjection = {
+      agentPath: `/agent/${agentThreadId.slice(0, 8)}`,
+      status: 'active',
+      activityOrder: [],
+      activitiesByItemId: new Map(),
+    }
+    this.subagentsByThreadId.set(agentThreadId, created)
+    return created
+  }
+
+  private upsertSubagentActivity(
+    agentThreadId: string,
+    activity: SubagentActivity,
+  ): void {
+    const subagent = this.ensureSubagent(agentThreadId)
+    if (!subagent.activitiesByItemId.has(activity.id)) subagent.activityOrder.push(activity.id)
+    subagent.activitiesByItemId.set(activity.id, activity)
+    while (subagent.activityOrder.length > 80) {
+      const removed = subagent.activityOrder.shift()
+      if (removed) subagent.activitiesByItemId.delete(removed)
+    }
+    this.publishSubagentLifecycle(agentThreadId)
+    this.queueMessageSnapshot(false)
+  }
+
+  private consumeChildNotification(method: string, params: RuntimeJsonObject): boolean {
     const threadId = readThreadId(params)
     if (!threadId || threadId === this.options.identity.runtimeThreadId) return false
     if (method === 'turn/started') {
       this.childTerminalStatus.delete(threadId)
-      const current = this.subagentsByThreadId.get(threadId)
-      if (current) {
-        this.subagentsByThreadId.set(threadId, { ...current, status: 'active' })
-        this.publishSubagentLifecycle(threadId)
-        this.queueMessageSnapshot()
-      }
-      return true
-    }
-    const turn = isRecord(params.turn) ? params.turn : null
-    const runtimeStatus = turn ? readString(turn, 'status') : null
-    const status = runtimeStatus === 'completed' ? 'completed' : 'interrupted'
-    this.childTerminalStatus.set(threadId, status)
-    const current = this.subagentsByThreadId.get(threadId)
-    if (current) {
-      this.subagentsByThreadId.set(threadId, { ...current, status })
+      const current = this.ensureSubagent(threadId)
+      current.status = 'active'
       this.publishSubagentLifecycle(threadId)
       this.queueMessageSnapshot()
+      return true
+    }
+    if (method === 'turn/completed') {
+      const turn = isRecord(params.turn) ? params.turn : null
+      const runtimeStatus = turn ? readString(turn, 'status') : null
+      const status = runtimeStatus === 'completed' ? 'completed' : 'interrupted'
+      this.childTerminalStatus.set(threadId, status)
+      const current = this.ensureSubagent(threadId)
+      current.status = status
+      this.publishSubagentLifecycle(threadId)
+      this.queueMessageSnapshot()
+      return true
+    }
+    if (method === 'item/agentMessage/delta' || method === 'item/reasoning/summaryTextDelta') {
+      const itemId = readString(params, 'itemId')
+      const delta = readString(params, 'delta')
+      if (!itemId || !delta) return true
+      const current = this.ensureSubagent(threadId).activitiesByItemId.get(itemId)
+      const kind = method === 'item/agentMessage/delta' ? 'message' : 'reasoning'
+      this.upsertSubagentActivity(threadId, {
+        id: itemId,
+        kind,
+        label: null,
+        text: `${current?.text ?? ''}${delta}`.slice(-12_000),
+        status: 'running',
+      })
+      return true
+    }
+    if (method === 'item/started' || method === 'item/completed') {
+      const item = requireItem(params)
+      const itemId = item ? readString(item, 'id') : null
+      const itemType = item ? readString(item, 'type') : null
+      if (!item || !itemId || !itemType) return true
+      if (itemType === 'agentMessage' || itemType === 'reasoning' || itemType === 'plan') {
+        const text = itemType === 'agentMessage' || itemType === 'plan'
+          ? readString(item, 'text')
+          : stringifySummary(item.summary)
+        const prior = this.ensureSubagent(threadId).activitiesByItemId.get(itemId)
+        this.upsertSubagentActivity(threadId, {
+          id: itemId,
+          kind: itemType === 'agentMessage' ? 'message' : 'reasoning',
+          label: null,
+          text: (text ?? prior?.text ?? '').slice(-12_000) || null,
+          status: method === 'item/completed' ? 'completed' : 'running',
+        })
+        return true
+      }
+      const toolName = toolNameForItem(item)
+      if (toolName) {
+        const status = readString(item, 'status')
+        this.upsertSubagentActivity(threadId, {
+          id: itemId,
+          kind: 'tool',
+          label: toolName,
+          text: null,
+          status: method === 'item/started'
+            ? 'running'
+            : status === 'failed' || status === 'errored'
+              ? 'failed'
+              : 'completed',
+        })
+      }
+      return true
     }
     return true
   }
@@ -597,6 +727,10 @@ export class AssistantRuntimeEventProjector {
         agentThreadId,
         agentPath: subagent.agentPath,
         status: subagent.status,
+        activities: subagent.activityOrder.flatMap((itemId) => {
+          const activity = subagent.activitiesByItemId.get(itemId)
+          return activity ? [activity] : []
+        }),
       },
     })
   }
@@ -604,7 +738,7 @@ export class AssistantRuntimeEventProjector {
   private interruptActiveSubagents(): void {
     for (const [agentThreadId, subagent] of this.subagentsByThreadId) {
       if (subagent.status !== 'active') continue
-      this.subagentsByThreadId.set(agentThreadId, { ...subagent, status: 'interrupted' })
+      subagent.status = 'interrupted'
       this.publishSubagentLifecycle(agentThreadId)
     }
     if (this.subagentsByThreadId.size > 0) this.queueMessageSnapshot()
@@ -612,26 +746,31 @@ export class AssistantRuntimeEventProjector {
 
   private completeTextPart(kind: PendingTextPart['kind'], itemId: string, value: string): void {
     const pending = this.pendingText.get(itemId)
+    const segmentValue = pending && pending.completedPrefixLength > 0
+      ? value.length >= pending.completedPrefixLength
+        ? value.slice(pending.completedPrefixLength)
+        : pending.value
+      : value
     if (pending?.started) {
       this.publishChunk(kind === 'text'
         ? { type: 'text-end', id: itemId }
         : { type: 'reasoning-end', id: itemId })
-    } else if (value) {
+    } else if (segmentValue) {
       this.publishChunk(kind === 'text'
         ? { type: 'text-start', id: itemId }
         : { type: 'reasoning-start', id: itemId })
       this.publishChunk(kind === 'text'
-        ? { type: 'text-delta', id: itemId, delta: value }
-        : { type: 'reasoning-delta', id: itemId, delta: value })
+        ? { type: 'text-delta', id: itemId, delta: segmentValue }
+        : { type: 'reasoning-delta', id: itemId, delta: segmentValue })
       this.publishChunk(kind === 'text'
         ? { type: 'text-end', id: itemId }
         : { type: 'reasoning-end', id: itemId })
     }
     this.pendingText.delete(itemId)
-    if (!value) return
+    if (!segmentValue) return
     this.upsertPart(itemId, kind === 'text'
-      ? { type: 'text', text: value, state: 'done' }
-      : { type: 'reasoning', text: value, state: 'done' })
+      ? { type: 'text', text: segmentValue, state: 'done' }
+      : { type: 'reasoning', text: segmentValue, state: 'done' })
   }
 
   private consumeTurnCompleted(params: RuntimeJsonObject): void {
@@ -779,15 +918,26 @@ export class AssistantRuntimeEventProjector {
     })
     if (parts.length === 0) return null
     return {
-      id: `workspace-assistant-turn:${this.options.identity.turnId}:attempt:${String(this.options.identity.attempt)}`,
+      id: this.buildAssistantMessageId(),
       role: 'assistant',
       parts,
       metadata: {
         custom: {
           waoAgentTurnStreamSeq: this.latestStreamSeq,
+          waoAgentTurnId: this.options.identity.turnId,
+          waoAgentTurnAttempt: this.options.identity.attempt,
+          waoAgentTurnSegment: this.segmentIndex,
         },
       },
     }
+  }
+
+  private buildAssistantMessageId(): string {
+    return buildAgentTurnAssistantMessageId({
+      turnId: this.options.identity.turnId,
+      attempt: this.options.identity.attempt,
+      segment: this.segmentIndex,
+    })
   }
 
   private publishChunk(chunk: UIMessageChunk): void {

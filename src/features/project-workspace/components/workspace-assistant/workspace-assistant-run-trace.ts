@@ -5,6 +5,7 @@ export const WORKSPACE_ASSISTANT_HIDDEN_TRACE_TOOL_NAMES = [
 ] as const
 
 type MessagePartRecord = {
+  readonly id?: unknown
   readonly type?: unknown
   readonly state?: unknown
   readonly text?: unknown
@@ -16,6 +17,8 @@ type MessagePartRecord = {
   readonly input?: unknown
   readonly agentThreadId?: unknown
   readonly agentPath?: unknown
+  readonly activities?: unknown
+  readonly label?: unknown
   readonly kind?: unknown
   readonly result?: unknown
   readonly output?: unknown
@@ -36,6 +39,15 @@ export type WorkspaceAssistantSubagentView = {
   readonly agentThreadId: string
   readonly agentPath: string
   readonly status: WorkspaceAssistantSubagentStatus
+  readonly activities: readonly WorkspaceAssistantSubagentActivityView[]
+}
+
+export type WorkspaceAssistantSubagentActivityView = {
+  readonly id: string
+  readonly kind: 'message' | 'reasoning' | 'tool'
+  readonly label: string | null
+  readonly text: string | null
+  readonly status: 'running' | 'completed' | 'failed'
 }
 
 export type WorkspaceAssistantSubagentLifecycleView = {
@@ -95,6 +107,28 @@ function subagentStatusForTurn(status: WorkspaceAssistantMessageTurnStatus | und
   return 'completed'
 }
 
+function readSubagentActivities(value: unknown): WorkspaceAssistantSubagentActivityView[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((entry): WorkspaceAssistantSubagentActivityView[] => {
+    const activity = readPart(entry)
+    const id = readNonEmptyString(activity?.id)
+    const kind = readNonEmptyString(activity?.kind)
+    const status = readNonEmptyString(activity?.status)
+    if (
+      !id
+      || (kind !== 'message' && kind !== 'reasoning' && kind !== 'tool')
+      || (status !== 'running' && status !== 'completed' && status !== 'failed')
+    ) return []
+    return [{
+      id,
+      kind,
+      label: readNonEmptyString(activity?.label),
+      text: readNonEmptyString(activity?.text),
+      status,
+    }]
+  })
+}
+
 /**
  * Subagent activity items carry the stable child thread and path identities,
  * while the Wao Turn is the authority for whether that collaboration is still
@@ -122,7 +156,12 @@ export function resolveWorkspaceAssistantSubagentLifecycleViews(
           && agentPath
           && (childStatus === 'active' || childStatus === 'completed' || childStatus === 'interrupted')
         ) {
-          byThreadId.set(agentThreadId, { agentThreadId, agentPath, status: childStatus })
+          byThreadId.set(agentThreadId, {
+            agentThreadId,
+            agentPath,
+            status: childStatus,
+            activities: readSubagentActivities(data?.activities),
+          })
         }
         continue
       }
@@ -137,6 +176,7 @@ export function resolveWorkspaceAssistantSubagentLifecycleViews(
         agentThreadId,
         agentPath,
         status: kind === 'interrupted' ? 'interrupted' : status,
+        activities: [],
       })
     }
     if (byThreadId.size === 0) continue

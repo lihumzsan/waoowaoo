@@ -204,6 +204,7 @@
         "src/lib/assistant-runtime/view-contract.ts",
         "src/lib/codex-runtime/app-server-client.ts",
         "src/lib/codex-model-gateway/standalone-search.ts",
+        "src/lib/media/outbound-fetch.ts",
         "src/features/project-workspace/components/workspace-assistant"
       ]
     },

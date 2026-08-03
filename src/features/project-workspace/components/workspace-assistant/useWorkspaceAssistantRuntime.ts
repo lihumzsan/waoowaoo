@@ -22,7 +22,6 @@ import {
   type AgentSessionPendingInteractionView,
   type AgentSessionView,
 } from '@/lib/assistant-runtime/view-contract'
-import type { AssistantRuntimeCollaborationMode } from '@/lib/assistant-runtime/contracts'
 import { apiFetch } from '@/lib/api-fetch'
 import {
   buildProjectAssistantTextAttachmentMetadata,
@@ -46,7 +45,6 @@ export interface WorkspaceAssistantSendMessageInput {
   readonly attachments?: readonly ProjectAssistantTextAttachment[]
   readonly mediaAttachments?: readonly ProjectAssistantMediaAttachment[]
   readonly sourceKey?: string
-  readonly collaborationMode?: AssistantRuntimeCollaborationMode
 }
 
 interface UseWorkspaceAssistantRuntimeParams {
@@ -496,7 +494,6 @@ export function useWorkspaceAssistantRuntime({
       const text = input.text.trim()
       const attachments = input.attachments ?? []
       const mediaAttachments = input.mediaAttachments ?? []
-      const collaborationMode = input.collaborationMode ?? 'default'
       if (!text && attachments.length === 0 && mediaAttachments.length === 0) {
         return
       }
@@ -509,7 +506,6 @@ export function useWorkspaceAssistantRuntime({
           attachments,
           mediaAttachments,
           hidden,
-          collaborationMode,
         },
       })
       if (scopeKeyRef.current !== commandScopeKey) return
@@ -538,7 +534,6 @@ export function useWorkspaceAssistantRuntime({
                 locale,
                 selectedScopeRef: selectedScopeRef ?? null,
                 selectedAssetId: selectedAssetId ?? null,
-                collaborationMode,
               },
             }),
           },

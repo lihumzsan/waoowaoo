@@ -21,8 +21,6 @@ export type AssistantRuntimeScope = {
   readonly userId: string
 }
 
-export type AssistantRuntimeCollaborationMode = 'default' | 'plan'
-
 export type AssistantRuntimeTurnContext = {
   readonly locale: string
   readonly selectedScopeRef: string | null
@@ -35,7 +33,6 @@ export type AssistantRuntimeSubmitCommand = AssistantRuntimeScope & {
   readonly sourceId: string
   readonly message: UIMessage
   readonly context: AssistantRuntimeTurnContext
-  readonly collaborationMode: AssistantRuntimeCollaborationMode
 }
 
 export type AssistantRuntimeSteerCommand = AssistantRuntimeScope & {
@@ -149,6 +146,8 @@ export type AssistantRuntimeInteractionView = {
 export interface AssistantRuntimeEventSink {
   /** Returns the monotonic stream watermark, or null when streaming is disabled. */
   reserveChunk(chunk: UIMessageChunk): number | null
+  /** Route subsequent chunks to a new durable assistant segment after steer. */
+  setMessageId(messageId: string): void
   /** Publish only after the matching durable message watermark has committed. */
   publishChunksThrough(watermark: number): Promise<void>
   publishViewChanged(reason: string): Promise<void>

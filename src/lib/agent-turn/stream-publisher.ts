@@ -17,6 +17,7 @@ const logger = createScopedLogger({ module: 'agent-turn.stream-publisher' })
 export function buildAgentTurnAssistantMessageId(params: {
   turnId: string
   attempt: number
+  segment?: number
 }): string {
   if (!params.turnId || params.turnId !== params.turnId.trim()) {
     throw new Error('AGENT_TURN_STREAM_TURN_ID_INVALID')
@@ -24,11 +25,17 @@ export function buildAgentTurnAssistantMessageId(params: {
   if (!Number.isSafeInteger(params.attempt) || params.attempt <= 0) {
     throw new Error('AGENT_TURN_STREAM_ATTEMPT_INVALID')
   }
-  return `workspace-assistant-turn:${params.turnId}:attempt:${String(params.attempt)}`
+  const segment = params.segment ?? 0
+  if (!Number.isSafeInteger(segment) || segment < 0) {
+    throw new Error('AGENT_TURN_STREAM_SEGMENT_INVALID')
+  }
+  const base = `workspace-assistant-turn:${params.turnId}:attempt:${String(params.attempt)}`
+  return segment === 0 ? base : `${base}:segment:${String(segment)}`
 }
 
 export interface AgentTurnStreamPublisher {
   reserve: (chunk: UIMessageChunk) => number | null
+  setMessageId: (messageId: string) => void
   publishThrough: (watermark: number) => Promise<void>
   flush: () => Promise<void>
 }
@@ -42,6 +49,7 @@ export function createAgentTurnStreamPublisher(params: {
   messageId: string
 }): AgentTurnStreamPublisher {
   let nextSeq = 0
+  let currentMessageId = params.messageId
   const bufferedMessages = new Map<number, string>()
   let disabled = false
   let tail = Promise.resolve()
@@ -87,7 +95,7 @@ export function createAgentTurnStreamPublisher(params: {
         attempt: params.attempt,
         lane: 'ui',
         seq,
-        messageId: params.messageId,
+        messageId: currentMessageId,
         chunk,
         ts: new Date().toISOString(),
       }
@@ -102,6 +110,12 @@ export function createAgentTurnStreamPublisher(params: {
       nextSeq = seq
       bufferedMessages.set(seq, message)
       return seq
+    },
+    setMessageId(messageId) {
+      if (!messageId || messageId !== messageId.trim()) {
+        throw new Error('AGENT_TURN_STREAM_MESSAGE_ID_INVALID')
+      }
+      currentMessageId = messageId
     },
     async publishThrough(watermark) {
       if (disabled) return

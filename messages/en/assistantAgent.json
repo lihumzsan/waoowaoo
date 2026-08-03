@@ -5,11 +5,6 @@
     "composerPlaceholder": "Create with AI",
     "sending": "Sending...",
     "send": "Send",
-    "collaborationMode": "Conversation mode",
-    "collaborationModes": {
-      "default": "Agent",
-      "plan": "Plan"
-    },
     "stopGenerating": "Stop generating",
     "streaming": "Streaming",
     "loading": "Loading",
@@ -21,8 +16,6 @@
     "runFailedTitle": "Assistant run failed",
     "turnInterruptedTitle": "Assistant turn was interrupted",
     "turnInterruptedDescription": "The server stopped during this turn. Completed actions and long-running tasks were kept; send a new message to continue.",
-    "turnStoppedTitle": "Generation stopped",
-    "turnStoppedDescription": "This turn was stopped at your request. Completed work and long-running tasks were kept; send a new message to continue.",
     "resend": "Resend",
     "undelivered": "Not delivered",
     "sessionStateError": "Assistant status could not be refreshed. Retry or reload before continuing.",
@@ -144,6 +137,11 @@
         "active": "Active",
         "completed": "Done",
         "interrupted": "Interrupted"
+      },
+      "subagentActivity": {
+        "message": "Response",
+        "reasoning": "Reasoning",
+        "tool": "Tool call"
       },
       "web": {
         "search": "Search: {query}",

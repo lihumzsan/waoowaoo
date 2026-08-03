@@ -20,7 +20,7 @@ const MODEL_GATEWAY_ACTIVE_TURN_STATUSES = [
 export async function requireCodexModelGatewayActiveTurn(
   scope: CodexModelGatewayScope,
   ownerToken: string,
-): Promise<void> {
+): Promise<{ readonly turnId: string }> {
   if (!await hasAssistantRuntimeOwnership(scope, ownerToken)) {
     throw new CodexModelGatewayError('ACTIVE_TURN_REQUIRED', 403)
   }
@@ -53,4 +53,5 @@ export async function requireCodexModelGatewayActiveTurn(
   if (active.length !== 1) {
     throw new CodexModelGatewayError('ACTIVE_TURN_REQUIRED', 403)
   }
+  return { turnId: active[0].id }
 }

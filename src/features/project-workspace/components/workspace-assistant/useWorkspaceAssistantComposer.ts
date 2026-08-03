@@ -10,7 +10,6 @@ import {
   type ProjectAssistantMediaAttachment,
 } from '@/lib/project-agent/media-attachments'
 import type { WorkspaceAssistantSendMessageInput } from './useWorkspaceAssistantRuntime'
-import type { AssistantRuntimeCollaborationMode } from '@/lib/assistant-runtime/contracts'
 
 export function useWorkspaceAssistantComposer(
   sendMessage: (input: WorkspaceAssistantSendMessageInput) => Promise<void>,
@@ -19,7 +18,6 @@ export function useWorkspaceAssistantComposer(
   const [text, setText] = useState('')
   const [attachments, setAttachments] = useState<ProjectAssistantTextAttachment[]>([])
   const [mediaAttachments, setMediaAttachments] = useState<ProjectAssistantMediaAttachment[]>([])
-  const [collaborationMode, setCollaborationMode] = useState<AssistantRuntimeCollaborationMode>('default')
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const scopeKeyRef = useRef(scopeKey)
   scopeKeyRef.current = scopeKey
@@ -29,7 +27,6 @@ export function useWorkspaceAssistantComposer(
     setText('')
     setAttachments([])
     setMediaAttachments([])
-    setCollaborationMode('default')
   }, [scopeKey])
 
   const submit = useCallback(async (options?: {
@@ -51,7 +48,6 @@ export function useWorkspaceAssistantComposer(
         text: normalizedText,
         attachments,
         mediaAttachments: mergedMediaAttachments,
-        collaborationMode,
       })
     } catch (error) {
       if (scopeKeyRef.current === submitScopeKey) {
@@ -61,7 +57,7 @@ export function useWorkspaceAssistantComposer(
       }
       throw error
     }
-  }, [attachments, collaborationMode, mediaAttachments, scopeKey, sendMessage, text])
+  }, [attachments, mediaAttachments, scopeKey, sendMessage, text])
 
   const addAttachment = useCallback((attachment: ProjectAssistantTextAttachment) => {
     setAttachments((current) => {
@@ -116,8 +112,6 @@ export function useWorkspaceAssistantComposer(
     applyDraftRequest,
     attachments,
     mediaAttachments,
-    collaborationMode,
-    setCollaborationMode,
     submit,
     addAttachment,
     removeAttachment,

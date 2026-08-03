@@ -307,6 +307,7 @@ export async function fetchSafeOutboundMedia(
   options: {
     readonly headers?: HeadersInit
     readonly maxRedirects?: number
+    readonly signal?: AbortSignal
   } = {},
 ): Promise<Response> {
   const maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS
@@ -322,6 +323,7 @@ export async function fetchSafeOutboundMedia(
       headers,
       redirect: 'manual',
       dispatcher: safeOutboundDispatcher,
+      signal: options.signal,
     }
     const response = await fetch(currentUrl, requestInit)
     if (!REDIRECT_STATUSES.has(response.status)) return response

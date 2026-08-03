@@ -5,11 +5,6 @@
     "composerPlaceholder": "和 AI 一起创造",
     "sending": "发送中...",
     "send": "发送",
-    "collaborationMode": "对话模式",
-    "collaborationModes": {
-      "default": "Agent",
-      "plan": "Plan"
-    },
     "stopGenerating": "停止生成",
     "streaming": "流式响应中",
     "loading": "加载中",
@@ -21,8 +16,6 @@
     "runFailedTitle": "AI 运行失败",
     "turnInterruptedTitle": "本轮 AI 对话已中断",
     "turnInterruptedDescription": "服务器在本轮执行期间停止。已完成的操作和长期任务都已保留；发送一条新消息即可继续。",
-    "turnStoppedTitle": "已停止生成",
-    "turnStoppedDescription": "本轮已按你的要求停止。已完成的内容和长期任务会保留；发送新消息即可继续。",
     "resend": "重新发送",
     "undelivered": "未送达",
     "sessionStateError": "无法刷新助手状态，请重试或刷新页面后再继续。",
@@ -144,6 +137,11 @@
         "active": "进行中",
         "completed": "已完成",
         "interrupted": "已中断"
+      },
+      "subagentActivity": {
+        "message": "回复",
+        "reasoning": "思考",
+        "tool": "工具调用"
       },
       "web": {
         "search": "搜索：{query}",

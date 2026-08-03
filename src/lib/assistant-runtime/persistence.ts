@@ -4,10 +4,10 @@ import { Prisma, type ProjectAgentTurn, type ProjectAssistantThread } from '@pri
 import { safeValidateUIMessages, type UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
 import { recordAgentTurnUsageFactsInTransaction } from '@/lib/agent-turn/usage'
+import { buildAgentTurnAssistantMessageId } from '@/lib/agent-turn/stream-publisher'
 import { projectErrorForModel } from '@/lib/errors/projection'
 import type {
   AssistantRuntimeInteractionView,
-  AssistantRuntimeCollaborationMode,
   AssistantRuntimeMessageReceipt,
   AssistantRuntimeScope,
   AssistantRuntimeSubmitCommand,
@@ -123,10 +123,10 @@ function appendMessages(existing: readonly UIMessage[], appended: readonly UIMes
   return next
 }
 
-function insertMessageBefore(
+function insertMessageAfter(
   existing: readonly UIMessage[],
   message: UIMessage,
-  beforeMessageId: string,
+  afterMessageId: string | null,
 ): UIMessage[] {
   const prior = existing.find((candidate) => candidate.id === message.id)
   if (prior) {
@@ -135,12 +135,13 @@ function insertMessageBefore(
     }
     return [...existing]
   }
-  const insertionIndex = existing.findIndex((candidate) => candidate.id === beforeMessageId)
+  if (!afterMessageId) return [...existing, message]
+  const insertionIndex = existing.findIndex((candidate) => candidate.id === afterMessageId)
   if (insertionIndex < 0) return [...existing, message]
   return [
-    ...existing.slice(0, insertionIndex),
+    ...existing.slice(0, insertionIndex + 1),
     message,
-    ...existing.slice(insertionIndex),
+    ...existing.slice(insertionIndex + 1),
   ]
 }
 
@@ -185,17 +186,6 @@ function normalizePlanForStorage(value: unknown): Prisma.InputJsonValue | typeof
   })
   if (plan.length === 0 || plan.every((item) => item.status === 'completed')) return Prisma.JsonNull
   return toJson({ explanation, plan })
-}
-
-function parseTurnCollaborationMode(value: unknown): AssistantRuntimeCollaborationMode {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('ASSISTANT_RUNTIME_TURN_CONTEXT_INVALID')
-  }
-  const mode = (value as Record<string, unknown>).collaborationMode
-  if (mode !== 'default' && mode !== 'plan') {
-    throw new Error('ASSISTANT_RUNTIME_COLLABORATION_MODE_INVALID')
-  }
-  return mode
 }
 
 function threadView(row: ProjectAssistantThread, messages: readonly UIMessage[]): ThreadView {
@@ -559,10 +549,7 @@ export async function admitAssistantRuntimeTurn(input: {
         status: 'queued',
         attempt: 0,
         userMessageJson: toJson(command.message),
-        contextJson: toJson({
-          ...command.context,
-          collaborationMode: command.collaborationMode,
-        }),
+        contextJson: toJson(command.context),
       },
     })
     await tx.projectAssistantMessageCommand.create({
@@ -900,6 +887,7 @@ export async function acceptAssistantRuntimeSteer(input: {
   readonly runtimeTurnId: string
   readonly message: UIMessage
   readonly clientPayloadHash: string
+  readonly assistantBoundaryMessageId: string | null
 }): Promise<void> {
   const payloadHash = requireIdentity(
     input.clientPayloadHash,
@@ -948,8 +936,11 @@ export async function acceptAssistantRuntimeSteer(input: {
       throw new Error('ASSISTANT_RUNTIME_STEER_HANDOFF_UNCERTAIN')
     }
     const messages = await parseMessages(thread.messagesJson)
-    const assistantMessageId = `workspace-assistant-turn:${turn.id}:attempt:${String(turn.attempt)}`
-    const nextMessages = insertMessageBefore(messages, input.message, assistantMessageId)
+    const nextMessages = insertMessageAfter(
+      messages,
+      input.message,
+      input.assistantBoundaryMessageId,
+    )
     if (!isDeepStrictEqual(nextMessages, messages)) {
       await tx.projectAssistantThread.update({
         where: { id: thread.id },
@@ -995,9 +986,7 @@ export async function readAssistantRuntimeActiveTurn(input: {
 
 export async function resolveAssistantRuntimeMessageTarget(
   scope: AssistantRuntimeScope & { readonly sourceId: string },
-): Promise<(AssistantRuntimeTurnIdentity & {
-  readonly collaborationMode: AssistantRuntimeCollaborationMode
-}) | null> {
+): Promise<AssistantRuntimeTurnIdentity | null> {
   const thread = await prisma.projectAssistantThread.findUnique({
     where: {
       projectId_userId_assistantId: {
@@ -1029,7 +1018,6 @@ export async function resolveAssistantRuntimeMessageTarget(
   return {
     ...turnIdentity(turn),
     runtimeThreadId: thread.runtimeThreadId,
-    collaborationMode: parseTurnCollaborationMode(turn.contextJson),
   }
 }
 
@@ -1212,8 +1200,13 @@ export async function persistAssistantRuntimeMessageSnapshot(input: {
   readonly identity: AssistantRuntimeTurnIdentity
   readonly message: UIMessage
 }): Promise<void> {
-  const expectedMessageId = `workspace-assistant-turn:${input.identity.turnId}:attempt:${String(input.identity.attempt)}`
-  if (input.message.id !== expectedMessageId || input.message.role !== 'assistant') {
+  const baseMessageId = buildAgentTurnAssistantMessageId({
+    turnId: input.identity.turnId,
+    attempt: input.identity.attempt,
+  })
+  const isTurnSegment = input.message.id === baseMessageId
+    || new RegExp(`^${baseMessageId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:segment:[1-9][0-9]*$`).test(input.message.id)
+  if (!isTurnSegment || input.message.role !== 'assistant') {
     throw new Error('ASSISTANT_RUNTIME_MESSAGE_SNAPSHOT_INVALID')
   }
   await prisma.$transaction(async (tx) => {
@@ -1802,7 +1795,7 @@ export async function admitAssistantRuntimeTaskFollowUp(input: {
         status: 'queued',
         attempt: 0,
         userMessageJson: Prisma.JsonNull,
-        contextJson: toJson({ ...followUp.context, collaborationMode: 'default' }),
+        contextJson: toJson(followUp.context),
       },
     })
     const notified = await tx.followUpBatch.updateMany({
