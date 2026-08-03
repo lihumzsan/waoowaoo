@@ -55,9 +55,9 @@ export default function WorkspaceNode({ data, id }: NodeProps<WorkspaceCanvasFlo
         ) : null}
 
         <article
-          className={`workspace-canvas-node-shell relative h-full overflow-visible rounded-[18px] border bg-white/92 shadow-[0_12px_36px_rgba(15,23,42,0.07)] backdrop-blur-xl transition-shadow ${
+          className={`workspace-canvas-node-shell relative h-full overflow-visible rounded-[18px] border bg-white/92 shadow-[0_12px_36px_rgba(15,23,42,0.07)] backdrop-blur-xl transition-[border-color,box-shadow] duration-150 ${
             data.uiSelected
-              ? 'border-slate-300 shadow-[0_0_0_5px_rgba(148,163,184,0.4),0_0_34px_10px_rgba(148,163,184,0.42),0_18px_48px_rgba(71,85,105,0.24)]'
+              ? 'border-slate-500 shadow-[0_0_0_2px_rgba(255,255,255,0.96),0_0_0_5px_rgba(100,116,139,0.5),0_18px_48px_rgba(15,23,42,0.18)]'
               : isRunning
                 ? 'workspace-node-running-breathing border-sky-300'
                 : 'border-slate-200/80'
