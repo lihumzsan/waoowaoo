@@ -395,6 +395,10 @@ export function appendWorkspaceResourceProjection(context: WorkspaceNodeProjecti
     ...treeNode.folders.flatMap((child) => {
       const folderResource = child.folder
       if (!folderResource) return []
+      // Folders without any descendant file stay off the canvas entirely:
+      // the canvas shows content, not structure. The folder Resource still
+      // exists and remains reachable through search.
+      if (countWorkspaceFolderFiles(child) === 0) return []
       return [
         collapsedFolders.has(folderResource.resourceId)
           ? folderCardElement(child, folderResource)
