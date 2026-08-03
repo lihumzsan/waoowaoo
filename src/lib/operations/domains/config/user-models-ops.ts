@@ -238,8 +238,8 @@ export function createUserModelsOperations(): ProjectAgentOperationRegistryDraft
 
             if (modelType === 'video') {
               const pricingEntry = findBuiltinPricingCatalogEntry('video', provider, modelId)
-              if (pricingEntry?.pricing.mode === 'capability' && Array.isArray(pricingEntry.pricing.tiers)) {
-                option.videoPricingTiers = cloneVideoPricingTiers(pricingEntry.pricing.tiers)
+              if (pricingEntry?.retail.mode === 'capability' && Array.isArray(pricingEntry.retail.tiers)) {
+                option.videoPricingTiers = cloneVideoPricingTiers(pricingEntry.retail.tiers)
               }
             }
           }

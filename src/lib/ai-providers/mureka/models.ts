@@ -56,7 +56,7 @@ export const MUREKA_API_CONFIG_CATALOG_MODELS = [
 // the provisionally confirmed per-call price and must track the real console
 // figure before production billing relies on it.
 export const MUREKA_BUILTIN_PRICING_CATALOG_ENTRIES = [
-  { apiType: 'music', provider: 'mureka', modelId: MUREKA_9_MODEL_ID, pricing: { mode: 'flat' as const, flatAmount: usdToCredits(0.06) } },
+  { apiType: 'music', provider: 'mureka', modelId: MUREKA_9_MODEL_ID, cost: { mode: 'flat' as const, flatAmount: usdToCredits(0.06) } },
 ] as const
 
 export function resolveMurekaOptionSchema(modality: MediaModality, modelId: string): AiOptionSchema {

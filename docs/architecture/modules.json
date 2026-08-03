@@ -53,8 +53,11 @@
         "src/lib/task/approved-plan-submitter.ts",
         "src/lib/task/transactional-create.ts",
         "src/lib/task/submitter.ts",
-        "standards/pricing",
-        "scripts/check-pricing-catalog.mjs",
+        "src/lib/ai-registry/pricing-catalog.ts",
+        "src/lib/ai-registry/pricing-retail.ts",
+        "src/lib/ai-registry/pricing-coverage.ts",
+        "src/lib/ai-providers/shared/seedance-pricing.ts",
+        "scripts/check-pricing-catalog.ts",
         "tests/integration/billing"
       ]
     },

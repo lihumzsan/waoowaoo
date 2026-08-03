@@ -68,7 +68,8 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 - Provider 可选出站代理：`src/lib/http/outbound-proxy.ts`；请求/响应体积入口：`src/lib/http/body-limits.ts`。部署模式与用户 Provider 配置可用性的唯一裁决分别是 `src/lib/deployment/config.ts` 与 `src/lib/user-api/availability.ts`。
 - Provider-bound 私有媒体投影的唯一共享入口：`src/lib/media/outbound-owned-media.ts`；图片、音频和视频只在 `src/lib/media/outbound-{image,audio,video}.ts` 追加各自 MIME 与大小 policy，再输出 HTTPS URL。产品媒体协议的最终 HTTPS guard 与 durable request identity projector 都在 `src/lib/ai-exec/media-references.ts`；projector 只从 hash 输入剥离 URL query/hash，adapter wire request 仍消费完整新签名。adapter 内部 inline 转换不改变该协议。
 - Provider result 与外部媒体 body 的唯一下载入口：`src/lib/media/outbound-fetch.ts`；`outbound-image`、storage image/video import 与 audio result processing 只消费该安全 Response，再进入共享 body limit。
-- `standards/capabilities/**` 与 `standards/pricing/**` 当前分别由 catalog 检查脚本读取，不是生产 runtime registry 的 writer；运行时仍从 `src/lib/ai-providers/*/models.ts` 经 builtin catalog 注册。修改 standards 必须审计相应 runtime catalog，不能把校验通过解释为生产能力或价格已切换。
+- `standards/capabilities/**` 由 capability 检查脚本读取，不是生产 runtime registry 的 writer；运行时从 `src/lib/ai-providers/*/models.ts` 经 builtin catalog 注册。修改 standards 必须审计相应 runtime catalog，不能把校验通过解释为生产能力已切换。价格已不存在 standards 表示：`scripts/check-pricing-catalog.ts` 直接读取运行时 catalog。
+- 模型 identity 分布在 capability、pricing、API config 与 platform preset 四张数组，靠 `(type, provider, modelId)` 三元组联接。`src/lib/ai-registry/pricing-coverage.ts` 在注册末尾穷尽校验「可被用户选择的模型必须有价格」，缺价必须在注册期失败，不得留到用户选中后才在计费时报 `BILLING_UNKNOWN_MODEL`。
 
 ## 发布边界
 

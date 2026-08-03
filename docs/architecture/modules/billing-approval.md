@@ -8,7 +8,11 @@
 
 ## 不变量
 
-- **BA-01 — 价格唯一。** 价格目录、模型/参数和输入数量经 billing policy 计算；模型、UI、MCP schema 与客户端不得自行估价。
+- **BA-01 — 价格唯一。** 价格目录、模型/参数和输入数量经 billing policy 计算；模型、UI、MCP schema 与客户端不得自行估价。价格只有一份表示：各 provider `models.ts` 的 catalog 条目经 `catalog-bootstrap` 注册，不存在第二份 JSON、文档或脚本副本。
+- **BA-01A — 成本与零售是同一条目的两面。** 每个 catalog 条目同时声明 `cost`（CNY，付给供应商）与 `retail`（credits，向用户收取）；省略 `retail` 时按 apiType 加价率从 `cost` 派生，手写 `retail` 必须与 `cost` 同 mode、同 unit、同 tier 顺序与条件。计费只解析 `retail`，`cost` 只服务毛利报表与保险丝，永不进入用户可见金额。注册期必须校验每个价格点在最深套餐折扣下仍高于最低毛利线，不满足即启动失败。
+- **BA-01B — 同一产品能力跨 provider 同价。** 同一模型经不同 provider 提供时，`cost` 可以不同，`retail` 必须由共享声明拥有并完全一致；provider route set 的价格等价校验比较 `retail`。
+- **BA-01C — 可选模型必须有价。** 模型 identity 分布在 capability、pricing、API config 与 platform preset 四张数组，靠 `(type, provider, modelId)` 联接且无类型约束。注册末尾必须穷尽校验「用户可选的模型都有价格」，缺价在注册期失败，不得留到用户选中后才在计费时报 `BILLING_UNKNOWN_MODEL`。
+- **BA-01D — 计价单位必须是真实计价基准。** 供应商按 token 计价的媒体模型不得把「每百万 token 单价」注册成 `per_call` 金额。价格档位的 `unit` 与 `when` 必须能由报价时已冻结的输入穷尽解析；无法由输出秒数表达的计价基准（如按输入视频长度计费的 video-to-video）不得声明近似档位，必须缺档并 fail closed。
 - **BA-02 — 计划先于副作用。** 付费前完成权限、模型、参数、WorkspaceResource 引用、Placement、输出数量与路径冲突校验；PlanSnapshot 创建前不得提交 Provider 或创建 pending Resource。
 - **BA-03 — 冻结同一输入。** Snapshot 冻结实际读取的 `resourceId + contentVersion + workspacePath`、Operation revision、模型参数、输出 Placement 和 quote。Production Manifest 的执行快照就是该 Snapshot，不建立第二份冻结。
 - **BA-04 — Project scope。** 收费 Project Operation 只以 `userId + projectId` 授权；资源身份来自冻结引用，不存在 Episode/Chapter/scopeRef 推断。
@@ -28,6 +32,11 @@
 | 事实或动作 | 唯一入口 |
 | --- | --- |
 | 价格与 quote | `src/lib/billing/**`、pricing catalog |
+| 价格条目 shape、派生与保险丝 | `src/lib/ai-registry/pricing-catalog.ts`、`pricing-retail.ts` |
+| 可选模型价格覆盖校验 | `src/lib/ai-registry/pricing-coverage.ts`（由 `catalog-bootstrap` 注册末尾调用） |
+| 跨 provider 同能力零售价 | `src/lib/ai-providers/shared/*-pricing.ts` |
+| credit 单位与整数化边界 | `src/lib/billing/credits.ts` |
+| 套餐档位、发放额度、最低有效 credit 单价 | `src/lib/billing/subscription-plans.ts` |
 | PlanSnapshot 与 request identity | `src/lib/operations/planning.ts`、`operation-plan-snapshot.ts`、`api-request-identity.ts` |
 | Grant 与执行重验证 | operation approval routes + `operation-plan-revalidation.ts` |
 | Task/Batch 原子提交 | `src/lib/task/approved-plan-submitter.ts`、`transactional-create.ts`、Wao MCP production executor |
@@ -57,4 +66,7 @@
 - 浏览器审批证明首次只绑定 Turn、call 与 Operation，删除客户端可复用同一 request identity 替换目标输入。当前破坏性审批先规范化输入，将 canonical input hash 纳入 approval identity 并把精确目标展示给用户；执行路径复用该规范化值，不能在批准后重新解释原始参数。
 - Interrupt 首版只在 MCP 入口检查易失 AbortSignal；等待审批期间持久 cancel 已提交后，晚到 accept 仍可经过 browser proof 创建执行。当前 interaction、approval proof 与所有 effect transaction 都检查同一 `cancelRequestId`，并用 Project 锁确定 cancel/effect 的先后关系。
 - Thread clear 首版没有进入 approval/effect fence；清空已 claim 后，旧 Turn 的晚到 MCP 调用仍能签发 Grant 或提交 Task。当前浏览器证明、MCP binding 与事务 effect fence 都检查 `clearRequestId`，并共享 Project→Thread→Turn 锁序。
+- Ark 按「每百万 token」为 Seedance 2.0 计价，价格目录却把 ¥46/¥37 这两个每百万 token 单价注册成 `unit: 'per_call'` 的整次金额，因此每条视频无论 4 秒还是 15 秒都收 ¥46。项目同时实现了完整的 token 估算契约（分辨率×画幅×24fps 的像素公式与最小 token 下限表），但它从未被任何计费路径调用——`calcVideoByTokens` 显式丢弃传入的 token 数并回落到同一 per_call 金额，`resolveAiVideoTokenPricingContract` 零消费者。真实 720p 10 秒成本约 ¥9.94，实收 ¥46，超收约 4.6 倍；5 秒时超收 9 倍。旧防线只断言「calc 函数返回目录里的数」，与目录本身同源，无法反证单位语义错误。当前 Seedance 2.0 按输出秒数计价（由同一 token 公式在 16:9 下换算为每秒成本），整套 token 估算机器连同 `calcVideoByTokens` 一并删除，不保留第二条价格解释；video-to-video 因计价基准依赖输入片长而不声明档位，命中即 fail closed。同一修复顺带纠正了结算把 provider 返回的 token 数写进 `unit: 'video'` 的 `actualQuantity` 字段。
+- 价格长期存在两份表示：生产运行时读 TypeScript catalog，`check:pricing-catalog` 只读 `standards/pricing/**` 的 JSON 镜像。镜像停在 52 条而运行时已有 70 条，缺失 gpt-image-2、mureka、Lyria、Seedance、Kling O3、Claude 5 系列与 GPT-5.x，还保留了运行时已删除的 `fal-sora2`；脚本却始终报 OK。「校验通过」因此完全不能说明用户被收了多少钱。当前 JSON 镜像与 `.mjs` 脚本删除，`scripts/check-pricing-catalog.ts` 加载与计费同一个运行时 catalog 并输出毛利报表。
+- 四张模型数组（capability / pricing / API config / platform preset）只靠字符串三元组联接，没有任何类型或运行时校验。漂移因此可以长期存在：`fal::fal-sora2` 出现在 API 配置目录却既无能力也无价格，`openrouter::openai/gpt-5.4` 与 `google/gemini-3.1-flash-lite-preview` 可被用户选中但 `pricingUsdPerMillion: null`。用户选完模型后才在计费时撞 `BILLING_UNKNOWN_MODEL`，与历史上 ElevenLabs 幽灵目录项导致整笔配置保存被拒是同一根因的换形式复发。当前注册末尾穷尽校验价格覆盖：flash-lite 从本仓库 Google 目录同模型价格补齐，无可溯源价格的 gpt-5.4 保留声明但退出可选集合，幽灵 `fal-sora2` 目录项删除。
 - WorkspaceResource 图片生成首版绕过既有图片能力编译器，只把 `aspectRatio` 写进 Task；OpenRouter GPT Image 价格目录按 `resolution + quality + aspectRatio` 匹配，因此请求在 Provider 前被误报为 `BILLING_CAPABILITY_PRICE_NOT_FOUND`。当前该 producer 复用 `buildImageBillingPayload`，项目已配置的 1K/high/16:9 同时进入报价和执行 payload，显式请求只在同一 schema 内覆盖配置值。

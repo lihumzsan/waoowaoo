@@ -9,6 +9,7 @@ import {
   type MediaModality,
 } from '@/lib/ai-providers/shared/option-schema'
 import { buildGptImage2OptionSchema } from '@/lib/ai-providers/shared/gpt-image-2'
+import { SEEDANCE_2_RETAIL_CREDITS_PER_SECOND } from '@/lib/ai-providers/shared/seedance-pricing'
 import { usdToCredits } from '@/lib/ai-registry/pricing-currency'
 import type { ReasoningEffort } from '@/lib/ai-registry/reasoning-effort'
 
@@ -125,7 +126,8 @@ export const OPENROUTER_LLM_MODEL_DEFINITIONS = [
   {
     modelId: 'google/gemini-3.1-flash-lite-preview',
     name: 'Gemini 3.1 Flash Lite',
-    pricingUsdPerMillion: null,
+    // Same model Google's own catalog prices at ¥1.8 / ¥10.8 per million.
+    pricingUsdPerMillion: [0.25, 1.5],
     publicReasoningMode: 'native',
     reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'],
     contextWindow: null,
@@ -235,11 +237,14 @@ export const OPENROUTER_LLM_MODEL_DEFINITIONS = [
   {
     modelId: 'openai/gpt-5.4',
     name: 'GPT-5.4',
+    // No published price has been confirmed for this model. It stays declared
+    // but unselectable: offering a model we cannot bill would fail only after
+    // the user picked it. Set a price and flip `showInApiConfig` to restore it.
     pricingUsdPerMillion: null,
     publicReasoningMode: 'summary_auto',
     reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'],
     contextWindow: null,
-    showInApiConfig: true,
+    showInApiConfig: false,
     showInPlatform: false,
   },
 ] as const satisfies readonly OpenRouterLlmModelDefinition[]
@@ -261,7 +266,7 @@ const OPENROUTER_LLM_PRICING_CATALOG_ENTRIES = OPENROUTER_LLM_MODEL_DEFINITIONS.
     apiType: 'text' as const,
     provider: 'openrouter',
     modelId: model.modelId,
-    pricing: openrouterTokenPricing(inputUsdPerMillion, outputUsdPerMillion),
+    cost: openrouterTokenPricing(inputUsdPerMillion, outputUsdPerMillion),
   }]
 })
 
@@ -313,6 +318,14 @@ function openrouterVideoSecondPricing(tiers: ReadonlyArray<readonly [resolution:
   }
 }
 
+function openrouterVideoRetailPricing(tiers: ReadonlyArray<readonly [resolution: string, credits: number]>) {
+  return {
+    mode: 'capability' as const,
+    unit: 'per_second' as const,
+    tiers: tiers.map(([resolution, credits]) => ({ when: { resolution }, amount: credits })),
+  }
+}
+
 function openrouterGptImage2Pricing() {
   const rows = [
     ['1024x768', { low: 0.005, medium: 0.037, high: 0.145 }],
@@ -335,26 +348,35 @@ export const OPENROUTER_BUILTIN_PRICING_CATALOG_ENTRIES = [
     apiType: 'image',
     provider: 'openrouter',
     modelId: OPENROUTER_GPT_IMAGE_2_MODEL_ID,
-    pricing: openrouterGptImage2Pricing(),
+    cost: openrouterGptImage2Pricing(),
   },
   ...OPENROUTER_LLM_PRICING_CATALOG_ENTRIES,
   {
     apiType: 'video',
     provider: 'openrouter',
     modelId: OPENROUTER_SEEDANCE_2_VIDEO_MODEL_ID,
-    pricing: openrouterVideoSecondPricing([
+    cost: openrouterVideoSecondPricing([
       ['480p', 0.06726],
       ['720p', 0.151335],
       ['1080p', 0.3405386],
+    ]),
+    retail: openrouterVideoRetailPricing([
+      ['480p', SEEDANCE_2_RETAIL_CREDITS_PER_SECOND.standard['480p']],
+      ['720p', SEEDANCE_2_RETAIL_CREDITS_PER_SECOND.standard['720p']],
+      ['1080p', SEEDANCE_2_RETAIL_CREDITS_PER_SECOND.standard['1080p']],
     ]),
   },
   {
     apiType: 'video',
     provider: 'openrouter',
     modelId: OPENROUTER_SEEDANCE_2_FAST_VIDEO_MODEL_ID,
-    pricing: openrouterVideoSecondPricing([
+    cost: openrouterVideoSecondPricing([
       ['480p', 0.0538],
       ['720p', 0.12105],
+    ]),
+    retail: openrouterVideoRetailPricing([
+      ['480p', SEEDANCE_2_RETAIL_CREDITS_PER_SECOND.fast['480p']],
+      ['720p', SEEDANCE_2_RETAIL_CREDITS_PER_SECOND.fast['720p']],
     ]),
   },
 ] as const

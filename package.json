@@ -36,7 +36,7 @@
     "runtime:codex:smoke": "tsx scripts/codex-runtime-smoke.ts",
     "check:media-normalization": "tsx scripts/check-media-normalization.ts",
     "check:capability-catalog": "node scripts/check-capability-catalog.mjs",
-    "check:pricing-catalog": "node scripts/check-pricing-catalog.mjs",
+    "check:pricing-catalog": "tsx --tsconfig tsconfig.runtime-scripts.json scripts/check-pricing-catalog.ts",
     "check:model-config-contract": "node scripts/check-model-config-contract.mjs --strict",
     "check:outbound-image-runtime-sample": "tsx scripts/check-outbound-image-runtime-sample.ts",
     "check:outbound-image-success-rate": "tsx scripts/check-outbound-image-success-rate.ts",

@@ -1,4 +1,5 @@
 import type { MediaOptionSchemaConfig } from '@/lib/ai-providers/shared/media-option-schema-config'
+import { SEEDANCE_2_RETAIL_CREDITS_PER_SECOND } from '@/lib/ai-providers/shared/seedance-pricing'
 import type { AiOptionSchema } from '@/lib/ai-registry/types'
 import type { PlatformModelPreset } from '@/lib/platform-models/types'
 import {
@@ -16,11 +17,6 @@ export const ARK_IMAGE_RESOLUTIONS = ['4K', '3K'] as const
 export const ARK_VIDEO_SERVICE_TIERS = ['default', 'flex'] as const
 export const ARK_PROVIDER_DEFAULT_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
 export const ARK_PROVIDER_TEST_LLM_MODEL_ID = 'doubao-seed-2-0-lite-260215'
-export const ARK_TOKEN_PRICED_VIDEO_MODEL_IDS = [
-  'doubao-seedance-2-0-260128',
-  'doubao-seedance-2-0-fast-260128',
-] as const
-
 export const ARK_PLATFORM_MODEL_PRESETS = [
   { provider: 'ark', modelId: 'doubao-seedance-2-0-260128', name: 'Doubao Seedance 2.0', type: 'video' },
   { provider: 'ark', modelId: 'doubao-seedance-2-0-fast-260128', name: 'Doubao Seedance 2.0 Fast', type: 'video' },
@@ -270,6 +266,24 @@ function arkTokenPricing(input: number, output: number) {
   ])
 }
 
+/**
+ * Ark bills Seedance 2.0 per million tokens, and a video's token count is a
+ * fixed function of its pixel count: `width * height * fps / 1024` per second.
+ * At 16:9 that is 21,600 tokens/s for 720p and 10,046.25 tokens/s for 480p
+ * (fps 24), so the published ¥46/M (standard) and ¥37/M (fast) rates reduce to
+ * the per-second costs below. Other aspect ratios differ by under 1%, which
+ * only moves margin reporting — users are charged the retail per-second rate.
+ *
+ * Video-to-video carries a separate token rate whose cost depends on the input
+ * clip's length, which a per-output-second rate cannot express. No product path
+ * quotes video input today, so no tier is declared for it: an attempt to price
+ * one fails closed rather than resolving to a wrong rate.
+ */
+const SEEDANCE_2_COST_PER_SECOND_CNY = {
+  standard: { '480p': 0.4621, '720p': 0.9936 },
+  fast: { '480p': 0.3717, '720p': 0.7992 },
+} as const
+
 function arkResolutionPricing(tiers: ReadonlyArray<readonly [resolution: string, amount: number]>) {
   return arkCapabilityPricing(tiers.map(([resolution, amount]) => ({
     when: { resolution },
@@ -287,39 +301,44 @@ function arkResolutionAudioPricing(
 }
 
 export const ARK_BUILTIN_PRICING_CATALOG_ENTRIES = [
-  { apiType: 'text', provider: 'ark', modelId: 'doubao-seed-1-8-251228', pricing: arkTokenPricing(0.8, 2) },
-  { apiType: 'text', provider: 'ark', modelId: 'doubao-seed-2-0-pro-260215', pricing: arkTokenPricing(3.2, 16) },
-  { apiType: 'text', provider: 'ark', modelId: 'doubao-seed-2-0-lite-260215', pricing: arkTokenPricing(0.6, 3.6) },
-  { apiType: 'text', provider: 'ark', modelId: 'doubao-seed-2-0-mini-260215', pricing: arkTokenPricing(0.2, 2) },
-  { apiType: 'text', provider: 'ark', modelId: 'doubao-seed-1-6-251015', pricing: arkTokenPricing(0.8, 2) },
-  { apiType: 'text', provider: 'ark', modelId: 'doubao-seed-1-6-lite-251015', pricing: arkTokenPricing(0.3, 0.6) },
-  { apiType: 'image', provider: 'ark', modelId: 'doubao-seedream-4-5-251128', pricing: arkFlatPricing(0.25) },
-  { apiType: 'image', provider: 'ark', modelId: 'doubao-seedream-4-0-250828', pricing: arkFlatPricing(0.2) },
+  { apiType: 'text', provider: 'ark', modelId: 'doubao-seed-1-8-251228', cost: arkTokenPricing(0.8, 2) },
+  { apiType: 'text', provider: 'ark', modelId: 'doubao-seed-2-0-pro-260215', cost: arkTokenPricing(3.2, 16) },
+  { apiType: 'text', provider: 'ark', modelId: 'doubao-seed-2-0-lite-260215', cost: arkTokenPricing(0.6, 3.6) },
+  { apiType: 'text', provider: 'ark', modelId: 'doubao-seed-2-0-mini-260215', cost: arkTokenPricing(0.2, 2) },
+  { apiType: 'text', provider: 'ark', modelId: 'doubao-seed-1-6-251015', cost: arkTokenPricing(0.8, 2) },
+  { apiType: 'text', provider: 'ark', modelId: 'doubao-seed-1-6-lite-251015', cost: arkTokenPricing(0.3, 0.6) },
+  // Seedream 5.0 lists at US$0.045 per image up to 2.36MP; converted at the
+  // catalog's USD rate. Verify against the Ark console before launch.
+  { apiType: 'image', provider: 'ark', modelId: 'doubao-seedream-5-0-260128', cost: arkFlatPricing(0.324), retail: arkFlatPricing(7) },
+  { apiType: 'image', provider: 'ark', modelId: 'doubao-seedream-4-5-251128', cost: arkFlatPricing(0.25), retail: arkFlatPricing(5) },
+  { apiType: 'image', provider: 'ark', modelId: 'doubao-seedream-4-0-250828', cost: arkFlatPricing(0.2), retail: arkFlatPricing(4) },
   {
     apiType: 'video',
     provider: 'ark',
     modelId: 'doubao-seedance-2-0-260128',
-    pricing: arkCapabilityPricing([
-      { when: { containsVideoInput: false }, amount: 46 },
-      { when: { containsVideoInput: true }, amount: 28 },
-    ], 'per_call'),
+    cost: arkResolutionPricing([
+      ['480p', SEEDANCE_2_COST_PER_SECOND_CNY.standard['480p']],
+      ['720p', SEEDANCE_2_COST_PER_SECOND_CNY.standard['720p']],
+    ]),
+    retail: arkResolutionPricing([['480p', SEEDANCE_2_RETAIL_CREDITS_PER_SECOND.standard['480p']], ['720p', SEEDANCE_2_RETAIL_CREDITS_PER_SECOND.standard['720p']]]),
   },
   {
     apiType: 'video',
     provider: 'ark',
     modelId: 'doubao-seedance-2-0-fast-260128',
-    pricing: arkCapabilityPricing([
-      { when: { containsVideoInput: false }, amount: 37 },
-      { when: { containsVideoInput: true }, amount: 22 },
-    ], 'per_call'),
+    cost: arkResolutionPricing([
+      ['480p', SEEDANCE_2_COST_PER_SECOND_CNY.fast['480p']],
+      ['720p', SEEDANCE_2_COST_PER_SECOND_CNY.fast['720p']],
+    ]),
+    retail: arkResolutionPricing([['480p', SEEDANCE_2_RETAIL_CREDITS_PER_SECOND.fast['480p']], ['720p', SEEDANCE_2_RETAIL_CREDITS_PER_SECOND.fast['720p']]]),
   },
-  { apiType: 'video', provider: 'ark', modelId: 'doubao-seedance-1-0-pro-fast-251015', pricing: arkResolutionPricing([['480p', 0.2], ['720p', 0.43], ['1080p', 1.03]]) },
-  { apiType: 'video', provider: 'ark', modelId: 'doubao-seedance-1-0-pro-fast-251015-batch', pricing: arkResolutionPricing([['480p', 0.1], ['720p', 0.22], ['1080p', 0.51]]) },
+  { apiType: 'video', provider: 'ark', modelId: 'doubao-seedance-1-0-pro-fast-251015', cost: arkResolutionPricing([['480p', 0.2], ['720p', 0.43], ['1080p', 1.03]]) },
+  { apiType: 'video', provider: 'ark', modelId: 'doubao-seedance-1-0-pro-fast-251015-batch', cost: arkResolutionPricing([['480p', 0.1], ['720p', 0.22], ['1080p', 0.51]]) },
   {
     apiType: 'video',
     provider: 'ark',
     modelId: 'doubao-seedance-1-5-pro-251215',
-    pricing: arkResolutionAudioPricing([
+    cost: arkResolutionAudioPricing([
       ['480p', true, 0.8],
       ['720p', true, 1.73],
       ['1080p', true, 3.89],
@@ -332,7 +351,7 @@ export const ARK_BUILTIN_PRICING_CATALOG_ENTRIES = [
     apiType: 'video',
     provider: 'ark',
     modelId: 'doubao-seedance-1-5-pro-251215-batch',
-    pricing: arkResolutionAudioPricing([
+    cost: arkResolutionAudioPricing([
       ['480p', true, 0.4],
       ['720p', true, 0.86],
       ['1080p', true, 1.94],
@@ -341,10 +360,10 @@ export const ARK_BUILTIN_PRICING_CATALOG_ENTRIES = [
       ['1080p', false, 0.97],
     ]),
   },
-  { apiType: 'video', provider: 'ark', modelId: 'doubao-seedance-1-0-pro-250528', pricing: arkResolutionPricing([['480p', 0.73], ['720p', 1.54], ['1080p', 3.67]]) },
-  { apiType: 'video', provider: 'ark', modelId: 'doubao-seedance-1-0-pro-250528-batch', pricing: arkResolutionPricing([['480p', 0.36], ['720p', 0.77], ['1080p', 1.84]]) },
-  { apiType: 'video', provider: 'ark', modelId: 'doubao-seedance-1-0-lite-i2v-250428', pricing: arkResolutionPricing([['480p', 0.49], ['720p', 1.03], ['1080p', 2.45]]) },
-  { apiType: 'video', provider: 'ark', modelId: 'doubao-seedance-1-0-lite-i2v-250428-batch', pricing: arkResolutionPricing([['480p', 0.24], ['720p', 0.51], ['1080p', 1.22]]) },
+  { apiType: 'video', provider: 'ark', modelId: 'doubao-seedance-1-0-pro-250528', cost: arkResolutionPricing([['480p', 0.73], ['720p', 1.54], ['1080p', 3.67]]) },
+  { apiType: 'video', provider: 'ark', modelId: 'doubao-seedance-1-0-pro-250528-batch', cost: arkResolutionPricing([['480p', 0.36], ['720p', 0.77], ['1080p', 1.84]]) },
+  { apiType: 'video', provider: 'ark', modelId: 'doubao-seedance-1-0-lite-i2v-250428', cost: arkResolutionPricing([['480p', 0.49], ['720p', 1.03], ['1080p', 2.45]]) },
+  { apiType: 'video', provider: 'ark', modelId: 'doubao-seedance-1-0-lite-i2v-250428-batch', cost: arkResolutionPricing([['480p', 0.24], ['720p', 0.51], ['1080p', 1.22]]) },
 ] as const
 
 export const ARK_IMAGE_OPTION_SCHEMA_CONFIG = {

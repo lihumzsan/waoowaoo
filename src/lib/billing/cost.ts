@@ -115,6 +115,12 @@ function throwPricingResolutionError(
   )
 }
 
+/**
+ * Resolve the retail price of a model.
+ *
+ * Billing only ever reads the retail face — the cost face exists for margin
+ * reporting and never reaches a user-facing amount.
+ */
 function resolveCatalogPricing(input: {
   apiType: ApiType
   model: string
@@ -124,6 +130,7 @@ function resolveCatalogPricing(input: {
   const resolution = resolveBuiltinPricing({
     apiType: input.apiType,
     model: input.model,
+    face: 'retail',
     selections: input.selections,
   })
   if (resolution.status === 'resolved') return resolution
@@ -224,7 +231,7 @@ export function calcVideo(
     model,
     selections,
   })
-  if (pricing.mode === 'capability' && !pricing.entry.pricing.unit) {
+  if (pricing.mode === 'capability' && !pricing.unit) {
     throw new BillingOperationError(
       'BILLING_CAPABILITY_PRICE_NOT_FOUND',
       `BILLING_CAPABILITY_PRICE_NOT_FOUND: video ${model} missing pricing unit`,
@@ -232,7 +239,7 @@ export function calcVideo(
     )
   }
 
-  const pricingUnit = pricing.mode === 'flat' ? 'per_call' : pricing.entry.pricing.unit
+  const pricingUnit = pricing.mode === 'flat' ? 'per_call' : pricing.unit
   if (pricingUnit === 'per_second' && duration === null) {
     throw new BillingOperationError(
       'BILLING_CAPABILITY_PRICE_NOT_FOUND',
@@ -245,14 +252,6 @@ export function calcVideo(
     ? pricing.amount
     : pricing.amount * normalizePositiveNumber(duration || 0)
   return roundCredits(units * unitCost)
-}
-
-export function calcVideoByTokens(
-  model: string,
-  _totalTokens: number,
-  metadata?: BillingMetadata,
-): number {
-  return calcVideo(model, typeof metadata?.resolution === 'string' ? metadata.resolution : '720p', 1, metadata)
 }
 
 export function calcMusic(

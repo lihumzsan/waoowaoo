@@ -5,93 +5,99 @@ import {
   calcText,
   calcTextWithCache,
   calcVideo,
-  calcVideoByTokens,
 } from '@/lib/billing/cost'
+import { CREDITS_PER_CNY } from '@/lib/billing/credits'
+import { RETAIL_MARKUP_BY_API_TYPE } from '@/lib/ai-registry/pricing-retail'
+import { SEEDANCE_2_RETAIL_CREDITS_PER_SECOND } from '@/lib/ai-providers/shared/seedance-pricing'
+import { USD_TO_CNY } from '@/lib/ai-registry/pricing-currency'
 
-describe('billing/cost provider catalog pricing', () => {
+/**
+ * The oracle here is the arithmetic between a provider's published price and
+ * what we charge: `retail credits = provider USD * USD_TO_CNY * markup * 10`.
+ * Expectations are written as that expression against the published USD figure
+ * rather than as a literal, so a catalog edit that changes what a user pays
+ * fails here instead of being absorbed into a new magic number.
+ */
+function usdToRetailCredits(amountUsd: number, apiType: 'text' | 'image' | 'video' | 'music' | 'voice'): number {
+  return amountUsd * USD_TO_CNY * RETAIL_MARKUP_BY_API_TYPE[apiType] * CREDITS_PER_CNY
+}
+
+function cnyToRetailCredits(amountCny: number, apiType: 'text' | 'image' | 'video' | 'music' | 'voice'): number {
+  return amountCny * RETAIL_MARKUP_BY_API_TYPE[apiType] * CREDITS_PER_CNY
+}
+
+describe('billing/cost charges the retail face of the provider catalog', () => {
   it('charges text from provider input and output token tiers', () => {
+    // Claude Sonnet 4.6 lists at $3 / $15 per million tokens.
     const cost = calcText('openrouter::anthropic/claude-sonnet-4.6', 1_000_000, 1_000_000)
 
-    expect(cost).toBeCloseTo(129.6, 8)
-  })
-
-  it('charges GPT-5.6 Terra from its OpenRouter token tiers', () => {
-    const cost = calcText('openrouter::openai/gpt-5.6-terra', 1_000_000, 1_000_000)
-
-    expect(cost).toBeCloseTo(126, 8)
-  })
-
-  it('charges GPT-5.6 Luna and Sol from their OpenRouter token tiers', () => {
-    expect(calcText('openrouter::openai/gpt-5.6-luna', 1_000_000, 1_000_000))
-      .toBeCloseTo(50.4, 8)
-    expect(calcText('openrouter::openai/gpt-5.6-sol', 1_000_000, 1_000_000))
-      .toBeCloseTo(252, 8)
+    expect(cost).toBeCloseTo(usdToRetailCredits(3, 'text') + usdToRetailCredits(15, 'text'), 6)
   })
 
   it('charges Claude Fable 5 from its OpenRouter token tiers', () => {
+    // $10 / $50 per million tokens.
     expect(calcText('openrouter::anthropic/claude-fable-5', 1_000_000, 1_000_000))
-      .toBeCloseTo(432, 8)
+      .toBeCloseTo(usdToRetailCredits(10, 'text') + usdToRetailCredits(50, 'text'), 6)
   })
 
   it('discounts Google implicit cache hit input tokens', () => {
+    // Gemini 3.5 Flash input is ¥19.44 per million; cached input bills at 10%.
     const cost = calcTextWithCache('google::gemini-3.5-flash', 1_000_000, 0, {
       cachedInputTokens: 400_000,
     })
 
-    expect(cost).toBeCloseTo(12.4416, 8)
+    const fullRate = cnyToRetailCredits(19.44, 'text')
+    expect(cost).toBeCloseTo(fullRate * 0.6 + fullRate * 0.4 * 0.1, 6)
   })
 
-  it('charges images from provider size and quality tiers', () => {
+  it('charges images from provider size and quality tiers, rounded up to whole credits', () => {
+    // GPT Image 2 at 1024x1024 high lists at $0.211 per image.
+    const perImage = Math.ceil(usdToRetailCredits(0.211, 'image'))
     const cost = calcImage('fal::gpt-image-2', 2, {
       imageSize: '1024x1024',
       quality: 'high',
     })
 
-    expect(cost).toBeCloseTo(3.0384, 8)
+    expect(cost).toBe(perImage * 2)
   })
 
   it('derives GPT Image 2 image size from product resolution and aspect ratio', () => {
+    // 1K 16:9 resolves to the 1920x1080 tier, which lists at $0.040 medium.
     const cost = calcImage('fal::gpt-image-2', 1, {
       resolution: '1K',
       aspectRatio: '16:9',
       quality: 'medium',
     })
 
-    expect(cost).toBeCloseTo(0.288, 8)
+    expect(cost).toBe(Math.ceil(usdToRetailCredits(0.04, 'image')))
   })
 
-  it('charges OpenRouter GPT Image 2 at the underlying OpenAI image rate', () => {
-    const cost = calcImage('openrouter::openai/gpt-image-2', 1, {
-      resolution: '1K',
-      aspectRatio: '9:16',
-      quality: 'high',
-    })
+  it('charges the same Seedance retail rate whichever provider serves it', () => {
+    const duration = 4
+    const expected = SEEDANCE_2_RETAIL_CREDITS_PER_SECOND.fast['720p'] * duration
 
-    expect(cost).toBeCloseTo(1.188, 8)
+    for (const model of [
+      'openrouter::bytedance/seedance-2.0-fast',
+      'fal::bytedance/seedance-2.0/fast',
+      'ark::doubao-seedance-2-0-fast-260128',
+    ]) {
+      expect(calcVideo(model, '720p', 1, { duration })).toBe(expected)
+    }
   })
 
-  it('charges OpenRouter Seedance video by provider per-second tiers', () => {
-    const cost = calcVideo('openrouter::bytedance/seedance-2.0-fast', '720p', 1, {
-      duration: 4,
-    })
+  it('charges Seedance per second of output, not per call', () => {
+    const rate = SEEDANCE_2_RETAIL_CREDITS_PER_SECOND.standard['720p']
 
-    expect(cost).toBeCloseTo(3.48624, 8)
-  })
-
-  it('settles token-based video calls through the same provider video catalog', () => {
-    const cost = calcVideoByTokens('openrouter::bytedance/seedance-2.0-fast', 120_000, {
-      duration: 6,
-      resolution: '720p',
-    })
-
-    expect(cost).toBeCloseTo(5.22936, 8)
+    expect(calcVideo('ark::doubao-seedance-2-0-260128', '720p', 1, { duration: 5 })).toBe(rate * 5)
+    expect(calcVideo('ark::doubao-seedance-2-0-260128', '720p', 1, { duration: 10 })).toBe(rate * 10)
   })
 
   it('charges Lyria 3 Pro music as a provider-priced audio call', () => {
+    // $0.08 per generation.
     const cost = calcMusic('fal::fal-ai/lyria3/pro', 1, {
       durationSeconds: 180,
     })
 
-    expect(cost).toBeCloseTo(0.576, 8)
+    expect(cost).toBe(Math.ceil(usdToRetailCredits(0.08, 'music')))
   })
 })

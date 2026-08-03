@@ -10,7 +10,6 @@ import {
   calcText,
   calcTextWithCache,
   calcVideo,
-  calcVideoByTokens,
   calcVoice,
 } from './cost'
 import {
@@ -115,6 +114,15 @@ function asNumber(value: unknown): number | null {
   return n
 }
 
+/**
+ * Resolution drives every video price tier, so the quote and the settlement
+ * must read it the same way — otherwise a settlement could silently price a
+ * different tier than the one the user approved.
+ */
+function readMetadataResolution(metadata: Record<string, unknown> | undefined): string {
+  return typeof metadata?.resolution === 'string' ? metadata.resolution : '720p'
+}
+
 function readPayloadNumber(
   payload: Record<string, unknown> | null,
   fields: readonly string[],
@@ -155,11 +163,13 @@ function resolveCost(input: CostInput) {
     }
     case 'image':
       return asMoney(calcImage(input.model, input.quantity, input.metadata))
-    case 'video': {
-      const resolution =
-        typeof input.metadata?.resolution === 'string' ? input.metadata.resolution : '720p'
-      return asMoney(calcVideo(input.model, resolution, input.quantity, input.metadata))
-    }
+    case 'video':
+      return asMoney(calcVideo(
+        input.model,
+        readMetadataResolution(input.metadata),
+        input.quantity,
+        input.metadata,
+      ))
     case 'music':
       return asMoney(calcMusic(input.model, input.quantity, input.metadata))
     case 'voice':
@@ -416,9 +426,18 @@ function resolveTaskActual(
     ? asNumber((payload as Record<string, unknown>).actualVideoTokens)
     : null
   if (info.apiType === 'video' && actualVideoTokens !== null && actualVideoTokens >= 0) {
+    // Video is priced per second (or per call) against the duration frozen in
+    // the quote, so the provider's token count is an observability fact, not a
+    // price input. It stays in metadata; it must not become `actualQuantity`,
+    // whose declared unit is 'video'.
     return {
-      actualCost: calcVideoByTokens(info.model, actualVideoTokens, info.metadata),
-      actualQuantity: actualVideoTokens,
+      actualCost: calcVideo(
+        info.model,
+        readMetadataResolution(info.metadata),
+        info.quantity,
+        info.metadata,
+      ),
+      actualQuantity: info.quantity,
       metadata: {
         actualVideoTokens,
       },

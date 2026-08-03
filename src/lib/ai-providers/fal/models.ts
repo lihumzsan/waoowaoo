@@ -15,6 +15,7 @@ import {
   buildGptImage2OptionSchema,
   IMAGE_OUTPUT_FORMAT_OPTIONS,
 } from '@/lib/ai-providers/shared/gpt-image-2'
+import { SEEDANCE_2_RETAIL_CREDITS_PER_SECOND } from '@/lib/ai-providers/shared/seedance-pricing'
 import { usdToCredits } from '@/lib/ai-registry/pricing-currency'
 import {
   PLATFORM_VOICE_DESIGN_MODEL_KEY,
@@ -233,7 +234,6 @@ export const FAL_API_CONFIG_CATALOG_MODELS = [
   FAL_QWEN_3_TTS_VOICE_DESIGN_MODEL,
   { modelId: 'fal-wan25', name: 'Wan 2.6', type: 'video', provider: 'fal' },
   { modelId: 'fal-veo31', name: 'Veo 3.1', type: 'video', provider: 'fal' },
-  { modelId: 'fal-sora2', name: 'Sora 2', type: 'video', provider: 'fal' },
   { modelId: FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID, name: 'Happy Horse 1.0', type: 'video', provider: 'fal' },
   { modelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID, name: 'Seedance 2.0', type: 'video', provider: 'fal' },
   { modelId: FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID, name: 'Seedance 2.0 Fast', type: 'video', provider: 'fal' },
@@ -282,12 +282,12 @@ function falDurationRatePricing(input: { durations: readonly number[]; amountPer
 const FAL_KLING_EXTENDED_DURATIONS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const
 
 export const FAL_BUILTIN_PRICING_CATALOG_ENTRIES = [
-  { apiType: 'image', provider: 'fal', modelId: 'banana', pricing: falFlatPricing(0.9648) },
+  { apiType: 'image', provider: 'fal', modelId: 'banana', cost: falFlatPricing(0.9648) },
   {
     apiType: 'image',
     provider: 'fal',
     modelId: 'banana-2',
-    pricing: {
+    cost: {
       mode: 'capability',
       tiers: [
         { when: { resolution: '1K' }, amount: 0.576 },
@@ -296,22 +296,22 @@ export const FAL_BUILTIN_PRICING_CATALOG_ENTRIES = [
       ],
     },
   },
-  { apiType: 'image', provider: 'fal', modelId: FAL_GPT_IMAGE_2_MODEL_ID, pricing: falGptImage2Pricing() },
-  { apiType: 'music', provider: 'fal', modelId: FAL_LYRIA_3_PRO_MODEL_ID, pricing: falFlatPricing(usdToCredits(0.08)) },
+  { apiType: 'image', provider: 'fal', modelId: FAL_GPT_IMAGE_2_MODEL_ID, cost: falGptImage2Pricing() },
+  { apiType: 'music', provider: 'fal', modelId: FAL_LYRIA_3_PRO_MODEL_ID, cost: falFlatPricing(usdToCredits(0.08)) },
   {
     apiType: 'voice',
     provider: 'fal',
     modelId: FAL_QWEN_3_TTS_VOICE_DESIGN_1_7B_MODEL_ID,
-    pricing: falFlatPricing(usdToCredits(0.09 / 1_000)),
+    cost: falFlatPricing(usdToCredits(0.09 / 1_000)),
   },
-  { apiType: 'video', provider: 'fal', modelId: 'fal-wan25', pricing: falFlatPricing(1.8) },
-  { apiType: 'video', provider: 'fal', modelId: 'fal-veo31', pricing: falFlatPricing(2.88) },
-  { apiType: 'video', provider: 'fal', modelId: 'fal-kling25', pricing: falFlatPricing(2.16) },
+  { apiType: 'video', provider: 'fal', modelId: 'fal-wan25', cost: falFlatPricing(1.8) },
+  { apiType: 'video', provider: 'fal', modelId: 'fal-veo31', cost: falFlatPricing(2.88) },
+  { apiType: 'video', provider: 'fal', modelId: 'fal-kling25', cost: falFlatPricing(2.16) },
   {
     apiType: 'video',
     provider: 'fal',
     modelId: FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID,
-    pricing: {
+    cost: {
       mode: 'capability',
       unit: 'per_second',
       tiers: [
@@ -324,7 +324,7 @@ export const FAL_BUILTIN_PRICING_CATALOG_ENTRIES = [
     apiType: 'video',
     provider: 'fal',
     modelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID,
-    pricing: {
+    cost: {
       mode: 'capability',
       unit: 'per_second',
       tiers: [
@@ -333,12 +333,21 @@ export const FAL_BUILTIN_PRICING_CATALOG_ENTRIES = [
         { when: { resolution: '1080p' }, amount: 0.6804 },
       ],
     },
+    retail: {
+      mode: 'capability',
+      unit: 'per_second',
+      tiers: [
+        { when: { resolution: '480p' }, amount: SEEDANCE_2_RETAIL_CREDITS_PER_SECOND.standard['480p'] },
+        { when: { resolution: '720p' }, amount: SEEDANCE_2_RETAIL_CREDITS_PER_SECOND.standard['720p'] },
+        { when: { resolution: '1080p' }, amount: SEEDANCE_2_RETAIL_CREDITS_PER_SECOND.standard['1080p'] },
+      ],
+    },
   },
   {
     apiType: 'video',
     provider: 'fal',
     modelId: FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID,
-    pricing: {
+    cost: {
       mode: 'capability',
       unit: 'per_second',
       tiers: [
@@ -346,31 +355,39 @@ export const FAL_BUILTIN_PRICING_CATALOG_ENTRIES = [
         { when: { resolution: '720p' }, amount: 0.2419 },
       ],
     },
+    retail: {
+      mode: 'capability',
+      unit: 'per_second',
+      tiers: [
+        { when: { resolution: '480p' }, amount: SEEDANCE_2_RETAIL_CREDITS_PER_SECOND.fast['480p'] },
+        { when: { resolution: '720p' }, amount: SEEDANCE_2_RETAIL_CREDITS_PER_SECOND.fast['720p'] },
+      ],
+    },
   },
-  { apiType: 'video', provider: 'fal', modelId: 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video', pricing: falDurationPricing([[5, 0.35], [10, 0.7]]) },
+  { apiType: 'video', provider: 'fal', modelId: 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video', cost: falDurationPricing([[5, 0.35], [10, 0.7]]) },
   {
     apiType: 'video',
     provider: 'fal',
     modelId: FAL_KLING_O3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
-    pricing: falDurationRatePricing({ durations: FAL_KLING_EXTENDED_DURATIONS, amountPerSecond: 0.224 }),
+    cost: falDurationRatePricing({ durations: FAL_KLING_EXTENDED_DURATIONS, amountPerSecond: 0.224 }),
   },
   {
     apiType: 'video',
     provider: 'fal',
     modelId: FAL_KLING_O3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
-    pricing: falDurationRatePricing({ durations: FAL_KLING_EXTENDED_DURATIONS, amountPerSecond: 0.35 }),
+    cost: falDurationRatePricing({ durations: FAL_KLING_EXTENDED_DURATIONS, amountPerSecond: 0.35 }),
   },
   {
     apiType: 'video',
     provider: 'fal',
     modelId: FAL_KLING_V3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
-    pricing: falDurationPricing([[3, 0.504], [4, 0.672], [5, 0.84], [6, 1.008], [7, 1.176], [8, 1.344], [9, 1.512], [10, 1.68], [11, 1.848], [12, 2.016], [13, 2.184], [14, 2.352], [15, 2.52]]),
+    cost: falDurationPricing([[3, 0.504], [4, 0.672], [5, 0.84], [6, 1.008], [7, 1.176], [8, 1.344], [9, 1.512], [10, 1.68], [11, 1.848], [12, 2.016], [13, 2.184], [14, 2.352], [15, 2.52]]),
   },
   {
     apiType: 'video',
     provider: 'fal',
     modelId: FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
-    pricing: falDurationPricing([[3, 0.672], [4, 0.896], [5, 1.12], [6, 1.344], [7, 1.568], [8, 1.792], [9, 2.016], [10, 2.24], [11, 2.464], [12, 2.688], [13, 2.912], [14, 3.136], [15, 3.36]]),
+    cost: falDurationPricing([[3, 0.672], [4, 0.896], [5, 1.12], [6, 1.344], [7, 1.568], [8, 1.792], [9, 2.016], [10, 2.24], [11, 2.464], [12, 2.688], [13, 2.912], [14, 3.136], [15, 3.36]]),
   },
 ] as const
 

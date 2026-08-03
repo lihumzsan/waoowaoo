@@ -5,7 +5,6 @@ import type {
 } from '@/lib/ai-providers/async-task-types'
 import { arkAdapter } from '@/lib/ai-providers/ark/adapter'
 import { arkAsyncTaskProvider } from '@/lib/ai-providers/ark/async-task'
-import { arkSeedance2VideoTokenPricingContract } from '@/lib/ai-providers/ark/video-token-pricing'
 import { falAdapter } from '@/lib/ai-providers/fal/adapter'
 import { falAsyncTaskProvider } from '@/lib/ai-providers/fal/async-task'
 import { googleAdapter } from '@/lib/ai-providers/google/adapter'
@@ -26,7 +25,6 @@ import {
   resolveRegisteredLlmProtocol,
   resolveRegisteredPublicReasoningMode,
 } from '@/lib/ai-registry/llm-protocol'
-import type { VideoTokenPricingContract } from '@/lib/ai-providers/shared/video-token-pricing'
 
 const runtimeProviderRegistry = new AiRegistry<AiProviderAdapter>([
   arkAdapter,
@@ -43,10 +41,6 @@ const asyncTaskProviderRegistry: AsyncTaskProviderRegistration[] = [
   googleVideoAsyncTaskProvider,
   murekaAsyncTaskProvider,
   openRouterAsyncTaskProvider,
-]
-
-const videoTokenPricingContracts: VideoTokenPricingContract[] = [
-  arkSeedance2VideoTokenPricingContract,
 ]
 
 export function resolveAsyncTaskProviderByExternalId(externalId: string): AsyncTaskProviderRegistration {
@@ -66,10 +60,6 @@ export function resolveAsyncTaskProviderByCode(providerCode: AsyncExternalIdProv
     throw new Error(`未知的 Provider: ${providerCode}`)
   }
   return registration
-}
-
-export function resolveVideoTokenPricingContract(model: string): VideoTokenPricingContract | null {
-  return videoTokenPricingContracts.find((contract) => contract.supportsModel(model)) ?? null
 }
 
 export function resolveAiProviderAdapter(providerId: string): AiProviderAdapter {

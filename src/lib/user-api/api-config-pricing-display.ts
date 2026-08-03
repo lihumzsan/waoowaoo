@@ -81,12 +81,12 @@ export function buildPricingDisplayMap(): PricingDisplayMap {
     let max = 0
     let input: number | undefined
     let output: number | undefined
-    if (entry.pricing.mode === 'flat') {
-      const amount = entry.pricing.flatAmount ?? 0
+    if (entry.retail.mode === 'flat') {
+      const amount = entry.retail.flatAmount ?? 0
       min = amount
       max = amount
     } else {
-      const tiers = entry.pricing.tiers || []
+      const tiers = entry.retail.tiers || []
       const amounts = tiers.map((tier) => tier.amount)
       if (amounts.length === 0) continue
 
@@ -96,7 +96,7 @@ export function buildPricingDisplayMap(): PricingDisplayMap {
         modelId: entry.modelId,
         min: Math.min(...amounts),
         max: Math.max(...amounts),
-        unit: entry.pricing.unit,
+        unit: entry.retail.unit,
       })
       min = durationExpanded.min
       max = durationExpanded.max

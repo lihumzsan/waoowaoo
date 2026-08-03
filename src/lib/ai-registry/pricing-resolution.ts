@@ -4,15 +4,20 @@ import {
   findBuiltinPricingCatalogEntriesByModelId,
   findBuiltinPricingCatalogEntry,
   type BuiltinPricingCatalogEntry,
+  type BuiltinPricingDefinition,
   type BuiltinPricingTier,
   type PricingApiType,
+  type PricingFace,
 } from './pricing-catalog'
 
 export interface PricingResolutionResolved {
   status: 'resolved'
   entry: BuiltinPricingCatalogEntry
+  /** Amount on the requested face: credits for `retail`, CNY for `cost`. */
   amount: number
+  face: PricingFace
   mode: 'flat' | 'capability'
+  unit?: BuiltinPricingDefinition['unit']
   tier?: BuiltinPricingTier
 }
 
@@ -50,8 +55,11 @@ function cloneSelections(raw: Record<string, CapabilityValue> | undefined): Reco
   return next
 }
 
-function matchTier(entry: BuiltinPricingCatalogEntry, selections: Record<string, CapabilityValue>): BuiltinPricingTier | null {
-  const tiers = entry.pricing.tiers || []
+function matchTier(
+  definition: BuiltinPricingDefinition,
+  selections: Record<string, CapabilityValue>,
+): BuiltinPricingTier | null {
+  const tiers = definition.tiers || []
   for (const tier of tiers) {
     const matched = Object.entries(tier.when).every(([field, expectedValue]) => selections[field] === expectedValue)
     if (matched) return tier
@@ -59,11 +67,16 @@ function matchTier(entry: BuiltinPricingCatalogEntry, selections: Record<string,
   return null
 }
 
-function resolveEntryByModel(apiType: PricingApiType, model: string): PricingResolution {
+type EntryResolution =
+  | { status: 'resolved'; entry: BuiltinPricingCatalogEntry }
+  | PricingResolutionNotConfigured
+  | PricingResolutionAmbiguousModel
+
+function resolveEntryByModel(apiType: PricingApiType, model: string): EntryResolution {
   const parsed = parseModelKeyStrict(model)
   if (parsed) {
     const exact = findBuiltinPricingCatalogEntry(apiType, parsed.provider, parsed.modelId)
-    if (exact) return { status: 'resolved', entry: exact, amount: 0, mode: exact.pricing.mode }
+    if (exact) return { status: 'resolved', entry: exact }
     return { status: 'not_configured' }
   }
 
@@ -72,36 +85,55 @@ function resolveEntryByModel(apiType: PricingApiType, model: string): PricingRes
   if (candidates.length > 1) {
     return { status: 'ambiguous_model', apiType, modelId: model, candidates }
   }
-  return { status: 'resolved', entry: candidates[0], amount: 0, mode: candidates[0].pricing.mode }
+  return { status: 'resolved', entry: candidates[0] }
 }
 
+/**
+ * Resolve one model's price.
+ *
+ * `face` selects which side of the entry is wanted. Billing always asks for
+ * `retail` (credits); margin reporting asks for `cost` (CNY). Both faces share
+ * the same tier shape, so a selection that resolves on one resolves on the
+ * other.
+ */
 export function resolveBuiltinPricing(input: {
   apiType: PricingApiType
   model: string
+  face: PricingFace
   selections?: Record<string, CapabilityValue>
 }): PricingResolution {
   const entryResolution = resolveEntryByModel(input.apiType, input.model)
   if (entryResolution.status !== 'resolved') return entryResolution
 
   const { entry } = entryResolution
-  if (entry.pricing.mode === 'flat') {
-    const amount = entry.pricing.flatAmount
+  const definition = input.face === 'cost' ? entry.cost : entry.retail
+
+  if (definition.mode === 'flat') {
+    const amount = definition.flatAmount
     if (typeof amount !== 'number') {
       return { status: 'missing_capability_match', entry, selections: cloneSelections(input.selections) }
     }
-    return { status: 'resolved', entry, amount, mode: 'flat' }
+    return { status: 'resolved', entry, amount, face: input.face, mode: 'flat', unit: definition.unit }
   }
 
   const selections = cloneSelections(input.selections)
-  const tier = matchTier(entry, selections)
+  const tier = matchTier(definition, selections)
   if (tier === null) {
     return { status: 'missing_capability_match', entry, selections }
   }
-  return { status: 'resolved', entry, amount: tier.amount, mode: 'capability', tier }
+  return {
+    status: 'resolved',
+    entry,
+    amount: tier.amount,
+    face: input.face,
+    mode: 'capability',
+    unit: definition.unit,
+    tier,
+  }
 }
 
 /**
- * Built-in pricing catalog version used for billing traceability.
- * Bump this value whenever standards/pricing catalog changes semantically.
+ * Built-in pricing catalog version stamped onto billing records for
+ * traceability. Bump it whenever a registered price changes semantically.
  */
-export const BUILTIN_PRICING_VERSION = '2026-07-19'
+export const BUILTIN_PRICING_VERSION = '2026-08-03'

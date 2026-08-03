@@ -46,8 +46,11 @@ function assertFallbackPricingCoversPrimary(input: {
   if (!primaryEntry || !fallbackEntry) {
     throw new Error(`PROVIDER_ROUTE_PRICING_MISSING:${input.logicalCapabilityId}`)
   }
-  const primary = primaryEntry.pricing
-  const fallback = fallbackEntry.pricing
+  // Route equivalence is a promise to the user, not to the accountant: the
+  // frozen quote must be identical across routes. Provider cost legitimately
+  // differs between routes and is deliberately not compared here.
+  const primary = primaryEntry.retail
+  const fallback = fallbackEntry.retail
   if (primary.mode !== fallback.mode || primary.unit !== fallback.unit) {
     throw new Error(`PROVIDER_ROUTE_PRICING_CONFLICT:${input.logicalCapabilityId}`)
   }

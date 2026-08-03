@@ -119,27 +119,27 @@ function googleFlatPricing(flatAmount: number) {
 }
 
 export const GOOGLE_BUILTIN_PRICING_CATALOG_ENTRIES = [
-  { apiType: 'text', provider: 'google', modelId: 'gemini-3.1-pro-preview', pricing: googleTokenPricing(14.4, 86.4) },
-  { apiType: 'text', provider: 'google', modelId: 'gemini-3.1-flash-lite-preview', pricing: googleTokenPricing(1.8, 10.8) },
-  { apiType: 'text', provider: 'google', modelId: 'gemini-3-pro-preview', pricing: googleTokenPricing(14.4, 86.4) },
-  { apiType: 'text', provider: 'google', modelId: GOOGLE_GEMINI_3_5_FLASH_MODEL_ID, pricing: googleTokenPricing(19.44, 116.64) },
+  { apiType: 'text', provider: 'google', modelId: 'gemini-3.1-pro-preview', cost: googleTokenPricing(14.4, 86.4) },
+  { apiType: 'text', provider: 'google', modelId: 'gemini-3.1-flash-lite-preview', cost: googleTokenPricing(1.8, 10.8) },
+  { apiType: 'text', provider: 'google', modelId: 'gemini-3-pro-preview', cost: googleTokenPricing(14.4, 86.4) },
+  { apiType: 'text', provider: 'google', modelId: GOOGLE_GEMINI_3_5_FLASH_MODEL_ID, cost: googleTokenPricing(19.44, 116.64) },
   {
     apiType: 'image',
     provider: 'google',
     modelId: 'gemini-3-pro-image-preview',
-    pricing: { mode: 'capability', tiers: [{ when: { resolution: '1K' }, amount: 0.9648 }, { when: { resolution: '2K' }, amount: 0.9648 }, { when: { resolution: '4K' }, amount: 1.728 }] },
+    cost: { mode: 'capability', tiers: [{ when: { resolution: '1K' }, amount: 0.9648 }, { when: { resolution: '2K' }, amount: 0.9648 }, { when: { resolution: '4K' }, amount: 1.728 }] },
   },
   {
     apiType: 'image',
     provider: 'google',
     modelId: 'gemini-3-pro-image-preview-batch',
-    pricing: { mode: 'capability', tiers: [{ when: { resolution: '1K' }, amount: 0.4824 }, { when: { resolution: '2K' }, amount: 0.4824 }, { when: { resolution: '4K' }, amount: 0.864 }] },
+    cost: { mode: 'capability', tiers: [{ when: { resolution: '1K' }, amount: 0.4824 }, { when: { resolution: '2K' }, amount: 0.4824 }, { when: { resolution: '4K' }, amount: 0.864 }] },
   },
   {
     apiType: 'image',
     provider: 'google',
     modelId: 'gemini-3.1-flash-image-preview',
-    pricing: {
+    cost: {
       mode: 'capability',
       tiers: [
         { when: { resolution: '0.5K' }, amount: 0.324 },
@@ -149,17 +149,17 @@ export const GOOGLE_BUILTIN_PRICING_CATALOG_ENTRIES = [
       ],
     },
   },
-  { apiType: 'image', provider: 'google', modelId: 'gemini-2.5-flash-image', pricing: googleFlatPricing(0.2808) },
-  { apiType: 'image', provider: 'google', modelId: 'gemini-2.5-flash-image-preview', pricing: googleFlatPricing(0.2808) },
-  { apiType: 'image', provider: 'google', modelId: 'imagen-4.0-generate-001', pricing: googleFlatPricing(0.288) },
-  { apiType: 'image', provider: 'google', modelId: 'imagen-4.0-ultra-generate-001', pricing: googleFlatPricing(0.432) },
-  { apiType: 'image', provider: 'google', modelId: 'imagen-4.0-fast-generate-001', pricing: googleFlatPricing(0.144) },
-  { apiType: 'music', provider: 'google', modelId: 'lyria-3-pro-preview', pricing: googleFlatPricing(0.0192) },
+  { apiType: 'image', provider: 'google', modelId: 'gemini-2.5-flash-image', cost: googleFlatPricing(0.2808) },
+  { apiType: 'image', provider: 'google', modelId: 'gemini-2.5-flash-image-preview', cost: googleFlatPricing(0.2808) },
+  { apiType: 'image', provider: 'google', modelId: 'imagen-4.0-generate-001', cost: googleFlatPricing(0.288) },
+  { apiType: 'image', provider: 'google', modelId: 'imagen-4.0-ultra-generate-001', cost: googleFlatPricing(0.432) },
+  { apiType: 'image', provider: 'google', modelId: 'imagen-4.0-fast-generate-001', cost: googleFlatPricing(0.144) },
+  { apiType: 'music', provider: 'google', modelId: 'lyria-3-pro-preview', cost: googleFlatPricing(0.0192) },
   {
     apiType: 'video',
     provider: 'google',
     modelId: 'veo-3.1-generate-preview',
-    pricing: {
+    cost: {
       mode: 'capability',
       unit: 'per_call',
       tiers: [
@@ -178,7 +178,7 @@ export const GOOGLE_BUILTIN_PRICING_CATALOG_ENTRIES = [
     apiType: 'video',
     provider: 'google',
     modelId: 'veo-3.1-fast-generate-preview',
-    pricing: {
+    cost: {
       mode: 'capability',
       unit: 'per_call',
       tiers: [
@@ -197,7 +197,7 @@ export const GOOGLE_BUILTIN_PRICING_CATALOG_ENTRIES = [
     apiType: 'video',
     provider: 'google',
     modelId: 'veo-3.0-generate-001',
-    pricing: {
+    cost: {
       mode: 'capability',
       unit: 'per_call',
       tiers: [
@@ -213,7 +213,7 @@ export const GOOGLE_BUILTIN_PRICING_CATALOG_ENTRIES = [
     apiType: 'video',
     provider: 'google',
     modelId: 'veo-3.0-fast-generate-001',
-    pricing: {
+    cost: {
       mode: 'capability',
       unit: 'per_call',
       tiers: [
@@ -229,7 +229,7 @@ export const GOOGLE_BUILTIN_PRICING_CATALOG_ENTRIES = [
     apiType: 'video',
     provider: 'google',
     modelId: 'veo-2.0-generate-001',
-    pricing: {
+    cost: {
       mode: 'capability',
       unit: 'per_call',
       tiers: [
