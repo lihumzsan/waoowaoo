@@ -4,15 +4,15 @@
 
 ## 设计理念
 
-Canvas 是 WorkspaceResource 文件树的空间化投影，不是第二套文件系统或业务状态机。一个文件夹对应一个 Canvas；画布只展示该文件夹的直接子项。节点 identity、存在性、生命周期、动作能力和内容来自生产 registry、正式 Query、WorkspaceResource、Lineage 与 Task owner，Canvas 只拥有位置、视口、选择和临时创建草稿等纯展示状态。
+Canvas 是 WorkspaceResource 文件树的空间化投影，不是第二套文件系统或业务状态机。一个文件夹对应一个 Canvas；画布按预算投影该文件夹的整个子树：预算内的子文件夹在原地展开为分区框（内容卡直接可见），超预算时按确定性规则收起为文件夹卡。节点 identity、存在性、生命周期、动作能力和内容来自生产 registry、正式 Query、WorkspaceResource、Lineage 与 Task owner，Canvas 只拥有位置、视口、选择和临时创建草稿等纯展示状态。
 
 ## 不变量
 
 - **CN-01 — 节点种类穷尽注册。** 生产 registry 只声明 `resourceCard` 与 `folder`，并为每种 kind 穷尽 identity、layout、renderer、Task target、动作能力与 conformance fixture。新增同类实例不得通过分散 switch 或文件存在性接入。
 - **CN-02 — 一个文件夹就是一个 Canvas。** 持久 folder Resource 以自身 `resourceId` 作为 `folderKey`；项目根使用唯一虚拟 identity `@root`，永不创建伪 Resource。Canvas 不再按 Episode、Chapter、工作流阶段或媒体类别分区。
 - **CN-02A — 节点 canonical identity 只来自 Resource。** file 节点和 folder 节点都使用各自的 `resourceId`；不得使用路径、数组位置、最近记录、Prompt、DOM、历史消息或 Task 到达顺序推导 identity。路径变化不改变节点 identity。
-- **CN-02B — 当前 Canvas 只投影直接子项。** root 只显示根目录直接子项，folder Canvas 只显示 `workspacePath` 的直接子项；服务端从同一 Catalog 路径关系解析父目录，不能持久化第二份 parent 字段。后代必须进入对应文件夹后才显示。搜索可以跨项目返回结果，但选中结果前必须导航到其父文件夹，不能把后代临时混入当前 Canvas。
-- **CN-02C — folder 是正式 Resource 与导航入口。** folder 节点消费服务端投影的名称、路径和 ancestors，原生按钮的鼠标/键盘 click、ReactFlow 卡片单击与双击都调用 Canvas owner 注入的同一个导航 callback，面包屑返回；不得再用 `window` event 或 renderer 私有状态建立第二条导航路径。folder 不携带媒体、Task target、生成动作或 Lineage handle。Canvas 不维护第二份目录结构。
+- **CN-02B — 当前 Canvas 按预算投影子树，展开/收起只有一个裁判。** 当前文件夹的 Canvas 读取 `scope=subtree` 列表并由唯一 expansion policy（`workspace-canvas-expansion-policy.ts`）导出展示形态：全部文件夹默认展开为分区框；可见卡数超过显式预算（`WORKSPACE_CANVAS_EXPANSION_BUDGET`）时，后代文件最多的文件夹先收起为 folder 卡，收起的文件夹计 1 张卡，规则确定性收敛到预算以内。展开/收起不是持久状态、不落库、不由 renderer 或第二处逻辑再解释；父子关系仍只由 contracts 中共享的 Catalog 路径关系函数导出，不能持久化第二份 parent 字段。收起文件夹内的后代必须进入对应文件夹后才显示。搜索可以跨项目返回结果，但选中结果前必须导航到其父文件夹，不能把后代临时混入当前 Canvas 的顶层。
+- **CN-02C — folder 是正式 Resource 与导航入口。** folder 节点消费服务端投影的名称、路径和 ancestors，原生按钮的鼠标/键盘 click、ReactFlow 卡片单击与双击都调用 Canvas owner 注入的同一个导航 callback；展开分区框的"打开"按钮与双击走同一 callback，分区框单击等同画布空白（只清空选中）；返回上级由左上角唯一返回按钮承担，Canvas 不再渲染面包屑路径。不得再用 `window` event 或 renderer 私有状态建立第二条导航路径。folder 不携带媒体、Task target、生成动作或 Lineage handle。Canvas 不维护第二份目录结构。
 - **CN-02D — 布局不改变文件归属。** 普通节点拖拽只写当前 `folderKey` 下的位置，绝不修改 `workspacePath`；移动文件或文件夹只能走 WorkspaceResource 的显式 move 能力。路径移动后由目标文件夹的正式 Query 决定节点出现位置。
 - **CN-02E — 批次、alternatives 与当前选择不改变节点事实。** 每个 Resource 始终按自己的 identity 形成节点；Prompt Set、多角色音色和 Manifest 多资产等领域批次只用 `memberIndex` 保持稳定展示顺序，不合并成候选节点。只有一次 generation request 实际创建两个以上结果时，Resource View 才下发 opaque alternatives group identity 与完整有序成员；单结果不伪造组。组也不合并节点、不产生同组 edge、不保存 selected/current/adopt；预览左右浏览的 index 只是 modal UI 状态。当前项仍只来自服务端 typed current selection，renderer 不得通过数组位置、当前 head 或本地选中态覆盖它。
 - **CN-03 — 运行展示无裁决权。** Task runtime 只能覆盖已由正式 WorkspaceResource 物化的 file 节点运行展示，不能凭 Task、Creative reasoning 或本地 optimistic 结果创建 Canvas 节点或写业务状态。
@@ -22,7 +22,7 @@ Canvas 是 WorkspaceResource 文件树的空间化投影，不是第二套文件
 - **CN-07 — 专业文字结果仍是 Resource。** 剧本、连续性、资产/视频提示词与音乐方向都通过普通文本/结构化 Resource renderer 展示；不得恢复独立 Canon、连续性分析或专用制作阶段卡。
 - **CN-08 — 同步与异步写入都精确交接 Query。** 同步 Operation、异步 Resource 的提交事务和 Task Terminal 只通过注册的 `affectedResources` 发布可 replay 事实；提交事件只公布已经持久化的 pending Resource，终态事件只公布 Terminal 已结算事实。客户端只 invalidate/refetch 正式 Query，禁止从 TaskType、target、operation output 或本地 baseline 猜更新。
 - **CN-09 — 最终成片仍是普通视频。** 完成的章节视频与最终渲染都投影为普通 video ResourceCard，只由名称、schemaId 或 typed current-selection kind 表达用途；不得注册 `finalTimeline/finalOutput/finalArtifact` 专用节点或 renderer。渲染中的 Task 由通用 Task/Assistant 生命周期展示，成功媒体到达后才作为普通 VideoCard 进入 Canvas。
-- **CN-10 — 连线只表达当前文件夹内的真实 Lineage。** Resource edge 必须来自持久 `inputResourceId → outputResourceId` Lineage，且 source 与 target 都已作为当前文件夹的直接子节点出现；推荐顺序、Canvas 邻近、Workflow step、同批成员、跨文件夹引用或共享 Episode 都不能产生可见边。
+- **CN-10 — 连线只表达当前 Canvas 可见节点间的真实 Lineage。** Resource edge 必须来自持久 `inputResourceId → outputResourceId` Lineage，且 source 与 target 都已作为当前 Canvas 的可见 Resource 节点（顶层或展开分区内）出现；收起文件夹内的资源不参与连线。推荐顺序、Canvas 邻近、Workflow step、同批成员或共享 Episode 都不能产生可见边。
 - **CN-11 — 文件夹化不得降级原卡片能力。** file 节点继续复用既有 text/image/audio/video 卡片、媒体 profile、详情卡、alternatives 预览、上传、创建、直接动作、拖拽和视口行为。媒体尺寸仍按“冻结 aspectRatio → 已完成媒体尺寸 → Asset Format Policy → 项目 videoRatio”解析；folder 只增加导航，不得另造简化文件列表替代 ReactFlow Canvas。
 - **CN-12 — 详情卡是唯一展开机制。** 选中节点在其正下方渲染唯一详情卡（ReactFlow viewport 层，跟随画布坐标），内容只消费该卡 View 的 prompt provenance 与服务端一次性下发的 `inputSummaries`；UI 不得按 resourceId 零散请求或推断引用。取消选中或点击空白关闭。不存在第二种展开/收起或 disclosure 状态。
 - **CN-13 — 新批次只调整一次整体视口。** Assistant Session 投影的持久 Task batch identity 是自动定位的唯一请求身份；批次至少一个 durable target 物化成 Canvas 节点后，只对当前整个 Canvas 执行一次 `fitView`。同批成员的 queued/running/terminal 变化、查询刷新和节点顺序变化都不得再次移动视口；用户拖拽、平移或缩放立即终止本次动画并把该批次标记为已处理。禁止按第一个 running 节点轮换、单节点放大、timer 恢复跟随或从 Operation 名称推断焦点。
@@ -31,14 +31,15 @@ Canvas 是 WorkspaceResource 文件树的空间化投影，不是第二套文件
 - **CN-14B — 创建与上传显式落在当前文件夹。** Canvas 在用户提交意图时冻结完整 `outputPath`；异步上传重试沿用同一 outputPath，切换文件夹不能把进行中的任务移到新目录。文件名冲突与路径合法性仍由 WorkspaceResource 唯一写入口裁决。
 - **CN-15 — 选择与 Assistant 草稿各有唯一 UI owner。** `ProjectWorkspace` 持有唯一 Canvas selection，Canvas、Context Chip 与 send context 都消费同一值；清除 Chip 必须清除 Canvas 选中。快捷语义动作只发送一次性受控 draft-prefill/focus 命令，不创建全局事件总线或第二份 selection。
 - **CN-16 — Canvas 没有可见性覆盖层。** 节点隐藏与 Resource 归档不是 Canvas 状态；canvas-layout 契约与 clean-cutover schema 均不携带 `hidden`，Canvas 只按 WorkspaceResource 投影结果渲染全部节点。渲染层不得重新引入第二可见性解释（本地 override、隐藏集合或按归档字段过滤）。
-- **CN-17 — 布局按 project + folder 隔离。** `ProjectCanvasLayout` 的 canonical scope 是 `(projectId, folderKey)`；root 与每个 folder 分别拥有 viewport 和 node layouts。读写前必须验证非 root folder 是同项目、未删除的正式 folder Resource，禁止以路径、当前 Episode 或最近布局推断 scope。
+- **CN-17 — 布局按 project + folder 隔离，且只持久化顶层节点。** `ProjectCanvasLayout` 的 canonical scope 是 `(projectId, folderKey)`；root 与每个 folder 分别拥有 viewport 和 node layouts。当前 Canvas 只持久化顶层节点（直接子 Resource 卡、folder 卡与分区框自身）的位置；展开分区内部的后代使用投影计算的相对布局、不可单独拖拽、不得写入父 Canvas 的 layout scope——它们的持久布局只属于各自文件夹的 Canvas。读写前必须验证非 root folder 是同项目、未删除的正式 folder Resource，禁止以路径、当前 Episode 或最近布局推断 scope。
 - **CN-18 — 1,000–5,000 项必须保持 Canvas 语义。** Resource tree/search 使用稳定 cursor 分页，Canvas 逐页物化并启用 ReactFlow viewport virtualization；不得因规模退化为普通列表。完整替换布局只能在当前 folder 全部分页完成后执行，避免用前 200 项删除未加载节点布局。列表投影只消费 bounded summary，不能为 5,000 项读取对象存储全文。
 
 ## 权威入口
 
 - 节点 registry：`src/features/project-workspace/canvas/registry/workspace-canvas-node-registry.ts`。
-- folder/root scope、面包屑与搜索定位：`ProjectWorkspaceCanvas.tsx`、`controls/CanvasFolderNavigation.tsx`；root identity 只来自 `WORKSPACE_RESOURCE_ROOT_FOLDER_KEY`。
-- direct-child/search Query：`src/lib/query/hooks/useWorkspaceResources.ts` 与 `src/lib/workspace-resource/view-service.ts`；tree/search 返回 bounded summary，单资源读取才允许返回完整内容。
+- folder/root scope、返回与搜索定位：`ProjectWorkspaceCanvas.tsx`、`controls/CanvasFolderNavigation.tsx`（返回按钮 + 搜索，无面包屑）；root identity 只来自 `WORKSPACE_RESOURCE_ROOT_FOLDER_KEY`。
+- 子树展开/收起唯一裁判：`projection/workspace-canvas-expansion-policy.ts`（预算常量、树构建与确定性收起规则）；renderer 只消费 `folder.display`。
+- children/subtree/search Query：`src/lib/query/hooks/useWorkspaceResources.ts` 与 `src/lib/workspace-resource/view-service.ts`（`scope=children|subtree`）；tree/search 返回 bounded summary，单资源读取才允许返回完整内容。
 - 媒体 presentation 契约：`src/features/project-workspace/canvas/node-presentation-profiles.ts`（每媒体族 shell 声明与唯一尺寸 resolver）。
 - 新批次整体视口定位：`src/features/project-workspace/canvas/hooks/useCanvasFocusFollow.ts`；批次身份与 durable target 只来自 Assistant Session View。
 - 投影编排：`src/features/project-workspace/canvas/projection/workspace-node-canvas-projection.ts`。
@@ -55,7 +56,7 @@ Canvas 是 WorkspaceResource 文件树的空间化投影，不是第二套文件
 ## 验证
 
 - `tests/contracts/canvas-node-conformance.test.ts` 从生产 registry 穷尽校验 kind/capability/renderer/fixture，并校验媒体 presentation 契约对全部 media type 穷尽、frame shell 按画幅比解析。
-- folder 进入/返回、项目搜索定位、direct children、folder-scoped layout、分页完成前禁止布局覆盖、卡片刷新与真实 Resource/Task/Lineage 组合没有稳定独立 oracle，使用 authenticated 产品人工复验。
+- folder 进入/返回、项目搜索定位、预算展开/收起形态、folder-scoped layout、分页完成前禁止布局覆盖、卡片刷新与真实 Resource/Task/Lineage 组合没有稳定独立 oracle，使用 authenticated 产品人工复验。
 - alternatives 左右浏览、多媒体 renderer、付费确认、当前目录创建/上传及上传重试同样属于 authenticated 产品人工复验；静态验证只能证明 registry、类型和唯一协议接线。
 
 ## 历史回归
@@ -85,7 +86,7 @@ Canvas 是 WorkspaceResource 文件树的空间化投影，不是第二套文件
 
 ## 修改检查表
 
-1. 当前 Canvas 是否只由 `@root` 或正式 folder `resourceId` 定义，并且只显示直接子项？
+1. 当前 Canvas 是否只由 `@root` 或正式 folder `resourceId` 定义，子树展开/收起是否只由唯一 expansion policy 按显式预算导出？
 2. file/folder 节点 identity 是否只使用 `resourceId`，路径移动是否仍走唯一 WorkspaceResource move 入口？
 3. folder-scoped layout 是否验证项目归属，并在分页完整前拒绝全量覆盖？
 4. 是否保留原 Resource 卡片、详情、预览、上传、创建、动作、拖拽与视口能力，而没有退化成列表？

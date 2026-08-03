@@ -1,5 +1,21 @@
 export const WORKSPACE_RESOURCE_ROOT_FOLDER_KEY = '@root' as const
 
+/**
+ * Pure Catalog path relations. Server listing and client canvas projection
+ * must share these instead of re-deriving parent/subtree semantics locally.
+ */
+export function workspaceResourceParentPath(workspacePath: string): string | null {
+  const separator = workspacePath.lastIndexOf('/')
+  return separator === -1 ? null : workspacePath.slice(0, separator)
+}
+
+export function isWorkspaceResourceSubtreePath(candidate: string, root: string): boolean {
+  return candidate === root || candidate.startsWith(`${root}/`)
+}
+
+export const WORKSPACE_RESOURCE_TREE_SCOPES = ['children', 'subtree'] as const
+export type WorkspaceResourceTreeScope = (typeof WORKSPACE_RESOURCE_TREE_SCOPES)[number]
+
 export const WORKSPACE_RESOURCE_KINDS = ['file', 'folder'] as const
 export type WorkspaceResourceKind = (typeof WORKSPACE_RESOURCE_KINDS)[number]
 

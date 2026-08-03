@@ -120,7 +120,8 @@
         "loading": "正在加载文件…",
         "loadFailed": "文件加载失败",
         "retry": "重试",
-        "openFolder": "打开文件夹"
+        "openFolder": "打开文件夹",
+        "sectionCount": "{count} 项"
       },
       "nodes": {
         "resourceCard": {

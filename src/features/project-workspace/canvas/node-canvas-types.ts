@@ -63,6 +63,14 @@ export interface WorkspaceCanvasFolderNodeData extends WorkspaceCanvasBaseNodeDa
   readonly folder: {
     readonly resourceId: string
     readonly workspacePath: string
+    /**
+     * Budget-projection display form: `section` renders the folder expanded
+     * in place (descendants visible inside a frame), `card` is the collapsed
+     * folder card. Derived per render by the expansion policy, never stored.
+     */
+    readonly display: 'card' | 'section'
+    /** Descendant file count resolved by the same expansion policy. */
+    readonly childCount: number
   }
 }
 

@@ -67,10 +67,7 @@ import { workspaceNodeId } from './workspace-canvas-node-ids'
 import { useCanvasUploadQueue, type CanvasUploadQueueItem } from './upload/useCanvasUploadQueue'
 import { CanvasUploadQueue } from './upload/CanvasUploadQueue'
 import { CanvasViewportControls } from './controls/CanvasViewportControls'
-import {
-  CanvasFolderNavigation,
-  type CanvasFolderBreadcrumb,
-} from './controls/CanvasFolderNavigation'
+import { CanvasFolderNavigation } from './controls/CanvasFolderNavigation'
 import { buildWorkspaceCanvasCreateOperationInput } from './create/canvas-create-input'
 import { buildCanvasCreationOutputPath } from './create/canvas-output-path'
 import { useCanvasUploadBridge } from './upload/useCanvasUploadBridge'
@@ -188,6 +185,7 @@ function ProjectWorkspaceFolderCanvas({
     projectId,
     prefix: folder.workspacePath || null,
     search: null,
+    scope: 'subtree',
   })
   const resources = useMemo(() => flattenResources(folderQuery.data), [folderQuery.data])
   const fetchNextFolderPage = folderQuery.fetchNextPage
@@ -262,6 +260,7 @@ function ProjectWorkspaceFolderCanvas({
   const projection = useWorkspaceNodeCanvasProjection({
     projectId,
     projectAspectRatio,
+    currentFolderPath: folder.workspacePath || null,
     workspaceResources: resources,
     savedLayouts: savedNodeLayouts,
     translate: t,
@@ -474,6 +473,12 @@ function ProjectWorkspaceFolderCanvas({
   const handleNodeClick = useCallback<NodeMouseHandler<WorkspaceCanvasFlowNode>>((_event, node) => {
     canvasRef.current?.focus()
     if (isFolderNodeData(node.data)) {
+      // Expanded section frames behave like canvas background on single click;
+      // only the collapsed folder card keeps click-to-enter (CN-02C).
+      if (node.data.folder.display === 'section') {
+        onSelectionChange(null)
+        return
+      }
       openProjectedFolder({
         resourceId: node.data.folder.resourceId,
         name: node.data.title,
@@ -603,29 +608,21 @@ function ProjectWorkspaceFolderCanvas({
     const node = flowNodes.find((candidate) => candidate.data.targetId === card.resource.resourceId)
     return node ? selectionForNode(node) : null
   }, [flowNodes, selectionForNode])
-  const breadcrumbs = useMemo<CanvasFolderBreadcrumb[]>(() => [
-    { folderKey: WORKSPACE_RESOURCE_ROOT_FOLDER_KEY, name: rootName, workspacePath: '' },
-    ...folder.ancestors.map((ancestor) => ({
-      folderKey: ancestor.resourceId,
-      name: ancestor.name,
-      workspacePath: ancestor.workspacePath,
-    })),
-    ...(folder.folderKey === WORKSPACE_RESOURCE_ROOT_FOLDER_KEY ? [] : [{
-      folderKey: folder.folderKey,
-      name: folder.name,
-      workspacePath: folder.workspacePath,
-    }]),
-  ], [folder, rootName])
-  const handleBreadcrumb = useCallback((breadcrumb: CanvasFolderBreadcrumb) => {
-    if (breadcrumb.folderKey === folder.folderKey) return
-    const ancestorIndex = folder.ancestors.findIndex((candidate) => candidate.resourceId === breadcrumb.folderKey)
-    onNavigate({
-      folderKey: breadcrumb.folderKey,
-      name: breadcrumb.name,
-      workspacePath: breadcrumb.workspacePath,
-      ancestors: ancestorIndex >= 0 ? folder.ancestors.slice(0, ancestorIndex) : [],
+  const handleGoBack = useCallback(() => {
+    if (folder.folderKey === WORKSPACE_RESOURCE_ROOT_FOLDER_KEY) return
+    const parent = folder.ancestors.at(-1)
+    onNavigate(parent ? {
+      folderKey: parent.resourceId,
+      name: parent.name,
+      workspacePath: parent.workspacePath,
+      ancestors: folder.ancestors.slice(0, -1),
+    } : {
+      folderKey: WORKSPACE_RESOURCE_ROOT_FOLDER_KEY,
+      name: rootName,
+      workspacePath: '',
+      ancestors: [],
     })
-  }, [folder.ancestors, folder.folderKey, onNavigate])
+  }, [folder.ancestors, folder.folderKey, onNavigate, rootName])
   const handleSearchResult = useCallback((resource: WorkspaceResourceView) => {
     setSearch('')
     if (resource.resourceKind === 'folder') onNavigate(folderFromResource(resource))
@@ -678,7 +675,8 @@ function ProjectWorkspaceFolderCanvas({
           <Background variant={BackgroundVariant.Dots} gap={24} size={1} />
           <Panel position="top-left" className="!z-[80] !m-0" style={{ left: 16, top: 72 }}>
             <CanvasFolderNavigation
-              breadcrumbs={breadcrumbs}
+              canGoBack={folder.folderKey !== WORKSPACE_RESOURCE_ROOT_FOLDER_KEY}
+              onBack={handleGoBack}
               search={search}
               backLabel={t('folderNavigation.back')}
               searchPlaceholder={t('folderNavigation.searchPlaceholder')}
@@ -692,7 +690,6 @@ function ProjectWorkspaceFolderCanvas({
               searchLoading={searchQuery.isLoading || searchQuery.isFetching}
               searchFailed={searchQuery.isError}
               searchHasMore={Boolean(searchQuery.hasNextPage)}
-              onBreadcrumb={handleBreadcrumb}
               onSearchChange={setSearch}
               onSearchResult={handleSearchResult}
               onRetrySearch={() => { void searchQuery.refetch() }}

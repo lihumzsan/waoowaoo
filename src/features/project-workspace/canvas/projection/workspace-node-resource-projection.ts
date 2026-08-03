@@ -22,13 +22,24 @@ import {
   resolveWorkspaceCanvasNodeSize,
 } from '../node-presentation-profiles'
 import { getWorkspaceCanvasNodeDefinition } from '../registry/workspace-canvas-node-registry'
+import {
+  WORKSPACE_CANVAS_EXPANSION_BUDGET,
+  buildWorkspaceCanvasFolderTree,
+  computeCollapsedWorkspaceFolders,
+  countWorkspaceFolderFiles,
+  type WorkspaceCanvasFolderTreeNode,
+} from './workspace-canvas-expansion-policy'
 import type { WorkspaceNodeProjectionContext } from './workspace-node-projection-shared'
 import { createEdge, createNode, layoutPosition } from './workspace-node-projection-shared'
 
-const RESOURCE_COLUMNS = 3
-const RESOURCE_COLUMN_GAP = 460
-const RESOURCE_ROW_GAP = 620
-const RESOURCE_SECTION_GAP = 180
+const ELEMENT_GAP_X = 64
+const ELEMENT_GAP_Y = 96
+const SECTION_PADDING_X = 48
+const SECTION_HEADER_HEIGHT = 92
+const SECTION_PADDING_BOTTOM = 48
+const SECTION_MIN_CONTENT_WIDTH = 280
+const TOP_LEVEL_ORIGIN_X = 260
+const TOP_LEVEL_ORIGIN_Y = 180
 const FOLDER_WIDTH = 320
 const FOLDER_HEIGHT = 174
 const RESOURCE_CARD_DEFINITION = getWorkspaceCanvasNodeDefinition('resourceCard')
@@ -189,48 +200,66 @@ function mediaDimensions(resource: WorkspaceCanvasResourceFileView) {
     : { width: null, height: null }
 }
 
+interface ProjectionPoint {
+  readonly x: number
+  readonly y: number
+}
+
+interface ProjectionElement {
+  readonly nodeId: string
+  readonly width: number
+  readonly height: number
+  readonly emit: (position: ProjectionPoint, parentId: string | null) => void
+}
+
+/**
+ * Row packing over variable-size elements, aiming for a slightly-wide block.
+ * Used both for section interiors and as the top-level fallback layout when a
+ * node has no persisted position.
+ */
+function packProjectionElements(elements: readonly ProjectionElement[]): {
+  readonly width: number
+  readonly height: number
+  readonly positions: readonly ProjectionPoint[]
+} {
+  const totalArea = elements.reduce(
+    (sum, el) => sum + (el.width + ELEMENT_GAP_X) * (el.height + ELEMENT_GAP_Y),
+    0,
+  )
+  const maxElementWidth = elements.reduce((max, el) => Math.max(max, el.width), 0)
+  const rowMaxWidth = Math.max(maxElementWidth, Math.sqrt(totalArea * 2.2))
+  let x = 0
+  let y = 0
+  let rowHeight = 0
+  let width = 0
+  const positions: ProjectionPoint[] = []
+  for (const el of elements) {
+    if (x > 0 && x + el.width > rowMaxWidth) {
+      x = 0
+      y += rowHeight + ELEMENT_GAP_Y
+      rowHeight = 0
+    }
+    positions.push({ x, y })
+    x += el.width + ELEMENT_GAP_X
+    rowHeight = Math.max(rowHeight, el.height)
+    width = Math.max(width, x - ELEMENT_GAP_X)
+  }
+  return { width, height: y + rowHeight, positions }
+}
+
 export function appendWorkspaceResourceProjection(context: WorkspaceNodeProjectionContext): void {
   const { projectId, projectAspectRatio, workspaceResources, savedLayouts, translate, nodes, edges } = context
   if (workspaceResources.length === 0) return
   const nodeIdByResourceId = new Map<string, string>()
+  const tree = buildWorkspaceCanvasFolderTree({
+    currentFolderPath: context.currentFolderPath,
+    resources: workspaceResources,
+  })
+  const collapsedFolders = computeCollapsedWorkspaceFolders(tree, WORKSPACE_CANVAS_EXPANSION_BUDGET)
 
-  workspaceResources.forEach((resource, index) => {
-    const column = index % RESOURCE_COLUMNS
-    const row = Math.floor(index / RESOURCE_COLUMNS)
-    const fallback = {
-      x: 260 + column * RESOURCE_COLUMN_GAP,
-      y: RESOURCE_SECTION_GAP + row * RESOURCE_ROW_GAP,
-    }
-    if (resource.resourceKind === 'folder') {
-      const nodeId = workspaceNodeId.folder(resource.resourceId)
-      nodeIdByResourceId.set(resource.resourceId, nodeId)
-      nodes.push(createNode({
-        id: nodeId,
-        position: layoutPosition(savedLayouts, nodeId, fallback),
-        width: FOLDER_WIDTH,
-        height: FOLDER_HEIGHT,
-        data: {
-          projectId,
-          kind: 'folder',
-          layoutNodeType: 'folder',
-          targetType: 'folder',
-          targetId: resource.resourceId,
-          title: resource.name,
-          eyebrow: translate('nodes.folder.eyebrow'),
-          ...workspaceCanvasSucceededResourcePresentation(),
-          runtimeTargets: [],
-          folder: {
-            resourceId: resource.resourceId,
-            workspacePath: resource.workspacePath,
-          },
-        },
-      }))
-      return
-    }
-
+  const resourceElement = (resource: WorkspaceResourceView): ProjectionElement => {
     const card = resourceCard(resource)
     const nodeId = workspaceNodeId.resourceCard(resource.resourceId)
-    nodeIdByResourceId.set(resource.resourceId, nodeId)
     const dimensions = mediaDimensions(card.resource)
     const presentationInput = {
       kind: 'resourceCard' as const,
@@ -243,31 +272,141 @@ export function appendWorkspaceResourceProjection(context: WorkspaceNodeProjecti
     }
     const mediaShell = resolveWorkspaceCanvasMediaShell(presentationInput)
     const size = resolveWorkspaceCanvasNodeSize(presentationInput)
-    nodes.push(createNode({
-      id: nodeId,
-      position: layoutPosition(savedLayouts, nodeId, fallback),
+    return {
+      nodeId,
       width: size.width,
       height: size.height,
-      data: {
-        projectId,
-        kind: 'resourceCard',
-        layoutNodeType: 'resourceCard',
-        targetType: 'workspaceResource',
-        targetId: resource.resourceId,
-        title: resource.name,
-        eyebrow: translate('nodes.resourceCard.eyebrow', {
-          type: translate(`nodes.resourceCard.mediaType.${card.resource.mediaType}`),
-        }),
-        mediaShell,
-        ...resourcePresentation(resource),
-        runtimeTargets: [{
-          targetType: 'WorkspaceResource',
-          targetId: resource.resourceId,
-          types: RESOURCE_CARD_DEFINITION.taskTypes,
-        }],
-        resourceDetails: card,
+      emit: (position, parentId) => {
+        nodeIdByResourceId.set(resource.resourceId, nodeId)
+        nodes.push(createNode({
+          id: nodeId,
+          position,
+          width: size.width,
+          height: size.height,
+          parentId: parentId ?? undefined,
+          draggable: parentId ? false : undefined,
+          data: {
+            projectId,
+            kind: 'resourceCard',
+            layoutNodeType: 'resourceCard',
+            targetType: 'workspaceResource',
+            targetId: resource.resourceId,
+            title: resource.name,
+            eyebrow: translate('nodes.resourceCard.eyebrow', {
+              type: translate(`nodes.resourceCard.mediaType.${card.resource.mediaType}`),
+            }),
+            mediaShell,
+            ...resourcePresentation(resource),
+            runtimeTargets: [{
+              targetType: 'WorkspaceResource',
+              targetId: resource.resourceId,
+              types: RESOURCE_CARD_DEFINITION.taskTypes,
+            }],
+            resourceDetails: card,
+          },
+        }))
       },
-    }))
+    }
+  }
+
+  const folderData = (
+    folderResource: WorkspaceResourceView,
+    display: 'card' | 'section',
+    childCount: number,
+  ) => ({
+    projectId,
+    kind: 'folder' as const,
+    layoutNodeType: 'folder' as const,
+    targetType: 'folder' as const,
+    targetId: folderResource.resourceId,
+    title: folderResource.name,
+    eyebrow: translate('nodes.folder.eyebrow'),
+    ...workspaceCanvasSucceededResourcePresentation(),
+    runtimeTargets: [],
+    folder: {
+      resourceId: folderResource.resourceId,
+      workspacePath: folderResource.workspacePath,
+      display,
+      childCount,
+    },
+  })
+
+  const folderCardElement = (
+    treeNode: WorkspaceCanvasFolderTreeNode,
+    folderResource: WorkspaceResourceView,
+  ): ProjectionElement => {
+    const nodeId = workspaceNodeId.folder(folderResource.resourceId)
+    return {
+      nodeId,
+      width: FOLDER_WIDTH,
+      height: FOLDER_HEIGHT,
+      emit: (position, parentId) => {
+        nodes.push(createNode({
+          id: nodeId,
+          position,
+          width: FOLDER_WIDTH,
+          height: FOLDER_HEIGHT,
+          parentId: parentId ?? undefined,
+          draggable: parentId ? false : undefined,
+          data: folderData(folderResource, 'card', countWorkspaceFolderFiles(treeNode)),
+        }))
+      },
+    }
+  }
+
+  const sectionElement = (
+    treeNode: WorkspaceCanvasFolderTreeNode,
+    folderResource: WorkspaceResourceView,
+  ): ProjectionElement => {
+    const nodeId = workspaceNodeId.folder(folderResource.resourceId)
+    const inner = folderElements(treeNode)
+    const packed = packProjectionElements(inner)
+    const width = Math.max(packed.width, SECTION_MIN_CONTENT_WIDTH) + SECTION_PADDING_X * 2
+    const height = packed.height + SECTION_HEADER_HEIGHT + SECTION_PADDING_BOTTOM
+    return {
+      nodeId,
+      width,
+      height,
+      emit: (position, parentId) => {
+        nodes.push(createNode({
+          id: nodeId,
+          position,
+          width,
+          height,
+          parentId: parentId ?? undefined,
+          data: folderData(folderResource, 'section', countWorkspaceFolderFiles(treeNode)),
+        }))
+        inner.forEach((el, index) => {
+          el.emit({
+            x: packed.positions[index].x + SECTION_PADDING_X,
+            y: packed.positions[index].y + SECTION_HEADER_HEIGHT,
+          }, nodeId)
+        })
+      },
+    }
+  }
+
+  const folderElements = (treeNode: WorkspaceCanvasFolderTreeNode): ProjectionElement[] => [
+    ...treeNode.resources.map(resourceElement),
+    ...treeNode.folders.flatMap((child) => {
+      const folderResource = child.folder
+      if (!folderResource) return []
+      return [
+        collapsedFolders.has(folderResource.resourceId)
+          ? folderCardElement(child, folderResource)
+          : sectionElement(child, folderResource),
+      ]
+    }),
+  ]
+
+  const topElements = folderElements(tree)
+  const packedTop = packProjectionElements(topElements)
+  topElements.forEach((el, index) => {
+    const fallback = {
+      x: TOP_LEVEL_ORIGIN_X + packedTop.positions[index].x,
+      y: TOP_LEVEL_ORIGIN_Y + packedTop.positions[index].y,
+    }
+    el.emit(layoutPosition(savedLayouts, el.nodeId, fallback), null)
   })
 
   const edgeIds = new Set(edges.map((edge) => edge.id))

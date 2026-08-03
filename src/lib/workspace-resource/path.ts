@@ -1,6 +1,7 @@
 import path from 'node:path'
 import {
   WORKSPACE_RESOURCE_ROOT_FOLDER_KEY,
+  isWorkspaceResourceSubtreePath,
   type WorkspaceResourceKind,
   type WorkspaceResourceMediaType,
 } from './contracts'
@@ -112,22 +113,18 @@ export function resourceNameFromPath(
   return name
 }
 
-export function parentWorkspacePath(workspacePath: string): string | null {
-  const parent = path.posix.dirname(workspacePath)
-  return parent === '.' ? null : parent
-}
+export {
+  isWorkspaceResourceSubtreePath as isWorkspaceSubtreePath,
+  workspaceResourceParentPath as parentWorkspacePath,
+} from './contracts'
 
 export function workspacePathAncestors(workspacePath: string): readonly string[] {
   const segments = workspacePath.split('/')
   return segments.slice(0, -1).map((_, index) => segments.slice(0, index + 1).join('/'))
 }
 
-export function isWorkspaceSubtreePath(candidate: string, root: string): boolean {
-  return candidate === root || candidate.startsWith(`${root}/`)
-}
-
 export function replaceWorkspacePathPrefix(candidate: string, from: string, to: string): string {
-  if (!isWorkspaceSubtreePath(candidate, from)) {
+  if (!isWorkspaceResourceSubtreePath(candidate, from)) {
     throw new WorkspaceResourcePathError('WORKSPACE_RESOURCE_SUBTREE_PATH_INVALID', candidate)
   }
   return candidate === from ? to : `${to}${candidate.slice(from.length)}`

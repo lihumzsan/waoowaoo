@@ -16,6 +16,7 @@ import type {
   WorkspaceResourceStatus,
   WorkspaceResourceSummaryView,
   WorkspaceResourceTreePage,
+  WorkspaceResourceTreeScope,
   WorkspaceResourceVersionView,
   WorkspaceResourceView,
 } from './contracts'
@@ -25,6 +26,7 @@ import {
   isWorkspaceResourceStatus,
 } from './contracts'
 import {
+  isWorkspaceSubtreePath,
   parentWorkspacePath,
   validateWorkspaceResourceFilePath,
   validateWorkspaceResourceFolderPath,
@@ -412,6 +414,7 @@ export async function listWorkspaceResourceTreePage(input: {
   readonly cursor?: string | null
   readonly limit?: number
   readonly deleted?: boolean
+  readonly scope?: WorkspaceResourceTreeScope
 }): Promise<WorkspaceResourceTreePage> {
   const limit = requireLimit(input.limit)
   const cursor = decodeCursor(input.cursor)
@@ -439,7 +442,13 @@ export async function listWorkspaceResourceTreePage(input: {
       select: resourceSelect,
     })
     if (candidates.length > MAX_RUNTIME_RESOURCES) throw new Error('WORKSPACE_RESOURCE_RUNTIME_LIMIT_EXCEEDED')
-    const directChildren = candidates.filter((row) => parentWorkspacePath(row.workspacePath) === parentPath)
+    const directChildren = input.scope === 'subtree'
+      ? candidates.filter((row) => (
+          parentPath === null
+            ? true
+            : isWorkspaceSubtreePath(row.workspacePath, parentPath) && row.workspacePath !== parentPath
+        ))
+      : candidates.filter((row) => parentWorkspacePath(row.workspacePath) === parentPath)
     const afterCursor = cursor ? directChildren.filter((row) => (
       row.workspacePath > cursor.workspacePath
       || (row.workspacePath === cursor.workspacePath && row.id > cursor.id)

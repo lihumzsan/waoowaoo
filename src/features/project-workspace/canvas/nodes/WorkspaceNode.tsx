@@ -14,6 +14,7 @@ import {
   WorkspaceNodeImagePreviewContext,
   nodeIsRunning,
 } from './renderers/renderer-shared'
+import { FolderSectionShell } from './renderers/folder-card'
 import { NodeContent } from './workspace-node-renderer-registry'
 
 export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNode>) {
@@ -24,6 +25,10 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
   const isRunning = nodeIsRunning(data)
   const statusLabel = statusLabels(workspaceCanvasLifecycleStatusKey(data.lifecycle))
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
+
+  if (data.kind === 'folder' && data.folder.display === 'section') {
+    return <FolderSectionShell data={data} />
+  }
 
   return (
     <WorkspaceNodeImagePreviewContext.Provider value={setPreviewImageUrl}>

@@ -120,7 +120,8 @@
         "loading": "Loading files…",
         "loadFailed": "Files could not be loaded",
         "retry": "Retry",
-        "openFolder": "Open folder"
+        "openFolder": "Open folder",
+        "sectionCount": "{count} items"
       },
       "nodes": {
         "resourceCard": {

@@ -11,7 +11,9 @@ export function buildWorkspaceCanvasLayoutInput(params: {
   return {
     folderKey: params.folderKey,
     viewport: params.viewport ?? DEFAULT_WORKSPACE_CANVAS_VIEWPORT,
-    nodeLayouts: params.nodes.map((node, index) => ({
+    // Only top-level nodes persist here: section members live in their own
+    // folder's layout scope and use projection-computed relative positions.
+    nodeLayouts: params.nodes.filter((node) => !node.parentId).map((node, index) => ({
       nodeKey: node.id,
       nodeType: node.data.layoutNodeType,
       targetType: node.data.targetType,

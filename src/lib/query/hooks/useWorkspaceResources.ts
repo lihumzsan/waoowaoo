@@ -2,13 +2,14 @@
 
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api-fetch'
-import type { WorkspaceResourceTreePage } from '@/lib/workspace-resource/contracts'
+import type { WorkspaceResourceTreePage, WorkspaceResourceTreeScope } from '@/lib/workspace-resource/contracts'
 import { queryKeys } from '@/lib/query/keys'
 
 export function useWorkspaceResources(input: {
   readonly projectId: string
   readonly prefix: string | null
   readonly search: string | null
+  readonly scope?: WorkspaceResourceTreeScope
   readonly enabled?: boolean
 }) {
   return useInfiniteQuery({
@@ -16,12 +17,14 @@ export function useWorkspaceResources(input: {
       ...queryKeys.project.workspaceResources(input.projectId),
       input.prefix,
       input.search,
+      input.scope ?? 'children',
     ] as const,
     initialPageParam: null as string | null,
     queryFn: async ({ pageParam }): Promise<WorkspaceResourceTreePage> => {
       const search = new URLSearchParams({ limit: '200' })
       if (input.prefix) search.set('prefix', input.prefix)
       if (input.search) search.set('search', input.search)
+      if (input.scope) search.set('scope', input.scope)
       if (pageParam) search.set('cursor', pageParam)
       const response = await apiFetch(`/api/projects/${input.projectId}/resources?${search.toString()}`)
       if (!response.ok) throw new Error('WORKSPACE_RESOURCES_LOAD_FAILED')

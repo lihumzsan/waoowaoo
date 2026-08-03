@@ -3,14 +3,8 @@
 import { AppIcon } from '@/components/ui/icons'
 import type { WorkspaceResourceView } from '@/lib/workspace-resource/contracts'
 
-export interface CanvasFolderBreadcrumb {
-  readonly folderKey: string
-  readonly name: string
-  readonly workspacePath: string
-}
-
 export function CanvasFolderNavigation(props: {
-  readonly breadcrumbs: readonly CanvasFolderBreadcrumb[]
+  readonly canGoBack: boolean
   readonly search: string
   readonly searchPlaceholder: string
   readonly backLabel: string
@@ -24,47 +18,28 @@ export function CanvasFolderNavigation(props: {
   readonly searchLoading: boolean
   readonly searchFailed: boolean
   readonly searchHasMore: boolean
-  readonly onBreadcrumb: (breadcrumb: CanvasFolderBreadcrumb) => void
+  readonly onBack: () => void
   readonly onSearchChange: (value: string) => void
   readonly onSearchResult: (resource: WorkspaceResourceView) => void
   readonly onRetrySearch: () => void
   readonly onLoadMoreSearch: () => void
 }) {
   const hasSearch = props.search.trim().length > 0
-  const parentBreadcrumb = props.breadcrumbs.length > 1
-    ? props.breadcrumbs[props.breadcrumbs.length - 2] ?? null
-    : null
   return (
-    <div className="nodrag nopan nowheel w-[min(34rem,calc(100vw-8rem))] rounded-2xl border border-white/80 bg-white/88 p-2.5 shadow-lg ring-1 ring-[var(--glass-stroke-base)]/70 backdrop-blur-2xl">
-      <div className="flex min-w-0 items-center gap-1 overflow-x-auto pb-2">
-        {parentBreadcrumb ? (
-          <button
-            type="button"
-            aria-label={props.backLabel}
-            title={props.backLabel}
-            className="mr-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--glass-text-secondary)] hover:bg-slate-100 hover:text-[var(--glass-text-primary)]"
-            onClick={() => props.onBreadcrumb(parentBreadcrumb)}
-          >
-            <AppIcon name="chevronLeft" className="h-3.5 w-3.5" />
-          </button>
-        ) : null}
-        {props.breadcrumbs.map((breadcrumb, index) => (
-          <span key={breadcrumb.folderKey} className="flex shrink-0 items-center gap-1">
-            {index > 0 ? (
-              <AppIcon name="chevronRight" className="h-3 w-3 text-[var(--glass-text-tertiary)]" />
-            ) : null}
-            <button
-              type="button"
-              className="max-w-40 truncate rounded-lg px-2 py-1 text-xs font-medium text-[var(--glass-text-secondary)] hover:bg-slate-100 hover:text-[var(--glass-text-primary)]"
-              title={breadcrumb.workspacePath || breadcrumb.name}
-              onClick={() => props.onBreadcrumb(breadcrumb)}
-            >
-              {breadcrumb.name}
-            </button>
-          </span>
-        ))}
-      </div>
-      <label className="relative block">
+    <div className="nodrag nopan nowheel w-[min(24rem,calc(100vw-8rem))] rounded-2xl border border-white/80 bg-white/88 p-2 shadow-lg ring-1 ring-[var(--glass-stroke-base)]/70 backdrop-blur-2xl">
+      <div className="flex items-center gap-1.5">
+      {props.canGoBack ? (
+        <button
+          type="button"
+          aria-label={props.backLabel}
+          title={props.backLabel}
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[var(--glass-text-secondary)] hover:bg-slate-100 hover:text-[var(--glass-text-primary)]"
+          onClick={props.onBack}
+        >
+          <AppIcon name="chevronLeft" className="h-3.5 w-3.5" />
+        </button>
+      ) : null}
+      <label className="relative block min-w-0 flex-1">
         <AppIcon name="search" className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--glass-text-tertiary)]" />
         <input
           value={props.search}
@@ -82,6 +57,7 @@ export function CanvasFolderNavigation(props: {
           </button>
         ) : null}
       </label>
+      </div>
       {hasSearch ? (
         <div className="mt-2 overflow-hidden rounded-xl border border-[var(--glass-stroke-soft)] bg-white">
           <p className="border-b border-[var(--glass-stroke-soft)] px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--glass-text-tertiary)]">

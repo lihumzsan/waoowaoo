@@ -19,6 +19,8 @@ export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly projectId?: string
   /** Project `videoRatio` (`W:H`); media frame cards derive their size from it. */
   readonly projectAspectRatio?: string | null
+  /** Current canvas folder path (`null` = project root); subtree rows resolve against it. */
+  readonly currentFolderPath?: string | null
   readonly workspaceResources?: readonly WorkspaceResourceView[]
   readonly savedLayouts: readonly CanvasNodeLayout[]
   readonly translate: Translate
@@ -28,6 +30,7 @@ export function createWorkspaceNodeProjectionContext(input: BuildWorkspaceNodeCa
   return {
     projectId: input.projectId,
     projectAspectRatio: input.projectAspectRatio ?? null,
+    currentFolderPath: input.currentFolderPath ?? null,
     workspaceResources: input.workspaceResources ?? [],
     savedLayouts: input.savedLayouts,
     translate: input.translate,
@@ -59,6 +62,9 @@ export function createNode(input: {
     | Omit<WorkspaceCanvasFolderNodeData, 'nodeId' | 'width' | 'height'>
   readonly width: number
   readonly height: number
+  /** Section membership: children live in their section frame's coordinates. */
+  readonly parentId?: string
+  readonly draggable?: boolean
 }): WorkspaceCanvasFlowNode {
   const data = {
     ...input.data,
@@ -74,5 +80,7 @@ export function createNode(input: {
     position: input.position,
     style,
     data,
+    ...(input.parentId ? { parentId: input.parentId } : {}),
+    ...(input.draggable === undefined ? {} : { draggable: input.draggable }),
   }
 }

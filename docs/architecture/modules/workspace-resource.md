@@ -21,7 +21,7 @@
 - **WR-09 — 一个异步终态 writer。** 生成 Operation 的 commit 事务预留 pending Resource 与 Task。Task terminal success 在同一事务物化版本、Lineage、Resource 状态、Task 终态和通知；失败/取消只结算未物化 Resource。replay 返回同一事实，不能生成第二 Resource 或重复计费。
 - **WR-10 — 批量生产是数据，不是 N 个 Agent 调用。** `submit_production_manifest` 一次冻结最多 registry 允许的显式条目、一个总报价和一个 Approval Grant，再由 Temporal 扇出 Task。成员有稳定 `itemId/resourceId`；部分失败只由 `rerun_failed_production_items` 重跑失败成员，成功成员不重提。FollowUpBatch 在全部终态后至多一次唤醒 Assistant。
 - **WR-11 — 移动、删除和恢复只有一套语义。** 文件移动只改自身路径；文件夹移动原子改写完整子树路径。活跃 Task 涉及的 Resource 不可移动或删除；pending Resource 不可删除。软删除文件夹原子删除子树。恢复默认回原路径，冲突时必须显式给新路径，禁止静默改名。永久删除是独立、需审批的系统能力。
-- **WR-12 — Canvas 不拥有 Resource。** Canvas 按当前文件夹加载 direct children，使用稳定 `resourceId` 作为卡片身份，目录决定导航与分组，布局只保存视图位置。拖动卡片不移动文件；改路径必须调用 Resource move 或由 Runtime `mv` 后 checkpoint。
+- **WR-12 — Canvas 不拥有 Resource。** Canvas 按当前文件夹以 `scope=subtree` 加载子树并由自身预算 policy 决定展开/收起，使用稳定 `resourceId` 作为卡片身份，目录决定导航与分组，布局只保存视图位置。拖动卡片不移动文件；改路径必须调用 Resource move 或由 Runtime `mv` 后 checkpoint。
 - **WR-13 — 大项目按目录读取。** Agent 通过普通 `rg/read/bash` 探索用户树；Canvas 和 API 用 cursor 分页与 bounded summary，不读取全部正文。Runtime Bundle 上限与 Canvas 5,000 项视图上限必须明确失败，不能恢复 200 条静默截断。
 - **WR-14 — Agent/Subagent 写入边界显式。** 主 Agent 是全局一致性文件的唯一 writer；并行 Subagent 只能写被分配的互斥目录。两个 writer 争用同路径由 `(projectId, activePath)` 与 checkpoint baseline fail closed，不靠最后写入覆盖。
 - **WR-15 — MCP 边界同步同一工作区。** Wao MCP Operation 开始前必须在 Session Manager 的唯一 persistence queue 中 capture Runtime，使本 Turn 新建目录和文本进入 Catalog；Operation 结束后只在 Runtime 自 preflight 后未变化时把最新 Catalog 投影（包括 pending `.resource` 和 Task 系统视图）刷新回 Runtime。任一同步失败都不得开始新的付费执行或伪装成功；Catalog、Task 与幂等执行身份仍是恢复权威。
@@ -67,7 +67,7 @@ Route、UI、MCP 和未来 CLI 都只能调用这些入口，不能直接写 Wor
 - Runtime Bundle：显式空目录、非法父目录、symlink、系统投影篡改、文件/目录冲突、两轮 canonical round-trip。
 - Runtime checkpoint：文件编辑、文件移动、空文件夹改名、并发 baseline 冲突、失败无部分提交。
 - Registry conformance：每个 Resource-producing Operation 都有 placement/schema/freeze；Task definition 与 handler 穷尽。
-- Canvas：direct children、面包屑、搜索定位、folder-scoped layout、1,000–5,000 条 cursor/virtualization、原卡片动作不回归。
+- Canvas：children/subtree scope、预算展开/收起、返回与搜索定位、folder-scoped layout、1,000–5,000 条 cursor/virtualization、原卡片动作不回归。
 - Production Manifest：同一快照报价、成员稳定 identity、成功不重跑、失败成员续跑、FollowUp 至多一次。
 
 ## 历史回归
