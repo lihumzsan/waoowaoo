@@ -42,6 +42,7 @@ import {
   WORKSPACE_CANVAS_MIN_ZOOM,
 } from './canvasViewport'
 import { isWorkspaceCanvasWheelLockedTarget } from './canvas-scroll-lock'
+import { isWorkspaceCanvasImagePreviewTarget } from './canvas-interaction-target'
 import { WorkspaceNodeDetailsCard } from './details/WorkspaceNodeDetailsCard'
 import { workspaceNodeTypes } from './nodes/workspaceNodeTypes'
 import {
@@ -496,7 +497,8 @@ function ProjectWorkspaceFolderCanvas({
       ancestors: parent,
     })
   }, [folder, onNavigate])
-  const handleNodeClick = useCallback<NodeMouseHandler<WorkspaceCanvasFlowNode>>((_event, node) => {
+  const handleNodeClick = useCallback<NodeMouseHandler<WorkspaceCanvasFlowNode>>((event, node) => {
+    if (isWorkspaceCanvasImagePreviewTarget(event.target)) return
     canvasRef.current?.focus()
     if (isFolderNodeData(node.data)) {
       // Expanded section frames behave like canvas background on single click;

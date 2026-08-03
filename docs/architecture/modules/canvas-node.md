@@ -24,7 +24,7 @@ Canvas 是 WorkspaceResource 文件树的空间化投影，不是第二套文件
 - **CN-09 — 最终成片仍是普通视频。** 完成的章节视频与最终渲染都投影为普通 video ResourceCard，只由名称、schemaId 或 typed current-selection kind 表达用途；不得注册 `finalTimeline/finalOutput/finalArtifact` 专用节点或 renderer。渲染中的 Task 由通用 Task/Assistant 生命周期展示，成功媒体到达后才作为普通 VideoCard 进入 Canvas。
 - **CN-10 — 连线只表达当前 Canvas 可见节点间的真实 Lineage。** Resource edge 必须来自持久 `inputResourceId → outputResourceId` Lineage，且 source 与 target 都已作为当前 Canvas 的可见 Resource 节点（顶层或展开分区内）出现；收起文件夹内的资源不参与连线。推荐顺序、Canvas 邻近、Workflow step、同批成员或共享 Episode 都不能产生可见边。
 - **CN-11 — 文件夹化不得降级原卡片能力。** file 节点继续复用既有 text/image/audio/video 卡片、媒体 profile、详情卡、alternatives 预览、上传、创建、删除、直接动作、拖拽和视口行为；可见 folder 卡与展开分区同样投影正式软删除能力。媒体尺寸仍按“冻结 aspectRatio → 已完成媒体尺寸 → Asset Format Policy → 项目 videoRatio”解析；folder 只增加导航和同一 Resource 动作，不得另造简化文件列表替代 ReactFlow Canvas。
-- **CN-12 — 详情卡是唯一展开机制。** 选中节点在其正下方渲染唯一详情卡（ReactFlow viewport 层，跟随画布坐标），内容消费该卡 View 的 prompt provenance 与服务端一次性下发的 `inputSummaries`；text/structured 资源的完整正文只经唯一单资源读取 route 按需加载（详情卡与预览弹窗共用同一 hook），UI 不得按 resourceId 零散请求 inputs 或推断引用。取消选中或点击空白关闭。不存在第二种展开/收起或 disclosure 状态。
+- **CN-12 — 详情卡是唯一展开机制。** 点击 Resource 卡片的外壳、标题或边缘才选中节点，并在其正下方渲染唯一详情卡（ReactFlow viewport 层，跟随画布坐标）；点击图片内容只打开大图预览，不得同时改变 selection 或唤起详情。内容消费该卡 View 的 prompt provenance 与服务端一次性下发的 `inputSummaries`；text/structured 资源的完整正文只经唯一单资源读取 route 按需加载（详情卡与预览弹窗共用同一 hook），UI 不得按 resourceId 零散请求 inputs 或推断引用。取消选中或点击空白关闭。不存在第二种展开/收起或 disclosure 状态。
 - **CN-13 — 新批次只调整一次整体视口。** Assistant Session 投影的持久 Task batch identity 是自动定位的唯一请求身份；批次至少一个 durable target 物化成 Canvas 节点后，只对当前整个 Canvas 执行一次 `fitView`。同批成员的 queued/running/terminal 变化、查询刷新和节点顺序变化都不得再次移动视口；用户拖拽、平移或缩放立即终止本次动画并把该批次标记为已处理。禁止按第一个 running 节点轮换、单节点放大、timer 恢复跟随或从 Operation 名称推断焦点。
 - **CN-14 — Canvas 直接动作只复用正式 Operation。** 卡片 retry、variant、edit、创建与上传必须从最终 Card/Action View 构造 exact Resource scope，经同一个 plan/snapshot/grant/execute 或 direct Operation adapter 写入；UI 不插入假 Resource、不改本地生命周期，只把成功 execute ACK、mutation receipt 或 SSE 作为正式 Query 失效信号。付费动作一次用户意图持有稳定 `Idempotency-Key/operationRequestId`，并只批准当前展示的完整计划。
 - **CN-14A — Canvas 表单只消费服务端能力边界。** 新建菜单与基础表单只消费生产 Operation registry 投影的 capability catalog，包括候选数量、时长与 Voice 文本上限；catalog 失败必须显式提供重试，不得静默表现为只剩上传。表单校验只改善即时反馈，最终业务输入仍由同一个 Operation schema 与 planner 裁决。
@@ -57,9 +57,11 @@ Canvas 是 WorkspaceResource 文件树的空间化投影，不是第二套文件
 
 - `tests/contracts/canvas-node-conformance.test.ts` 从生产 registry 穷尽校验 kind/capability/renderer/fixture，并校验媒体 presentation 契约对全部 media type 穷尽、frame shell 按画幅比解析。
 - folder 进入/返回、项目搜索定位、预算展开/收起形态、folder-scoped layout、分页完成前禁止布局覆盖、卡片刷新与真实 Resource/Task/Lineage 组合没有稳定独立 oracle，使用 authenticated 产品人工复验。
-- alternatives 左右浏览、多媒体 renderer、付费确认、当前目录创建/上传、创建草稿到 pending Resource 的无缝接力、软删除确认及上传重试同样属于 authenticated 产品人工复验；静态验证只能证明 registry、类型和唯一协议接线。
+- alternatives 左右浏览、多媒体 renderer、图片点击仅预览而卡片边缘点击选中、付费确认、当前目录创建/上传、创建草稿到 pending Resource 的无缝接力、软删除确认及上传重试同样属于 authenticated 产品人工复验；静态验证只能证明 registry、类型和唯一协议接线。
 
 ## 历史回归
+
+- 图片预览按钮从初版起就只在自身 `mousedown/click` handler 调用 `stopPropagation`，但 Resource tree 切换为 ReactFlow 节点级统一 selection owner 后，真实点击仍可能同时到达 `onNodeClick`，打开大图的同时唤起下方详情。旧防线只约束 renderer 的 DOM 冒泡，没有让 selection owner 识别这次交互的语义。当前图片按钮与 Canvas owner 复用同一个显式 interaction marker：renderer 只负责预览，唯一 selection owner 对该目标原地返回；不新增第二 selection 状态。真实 pointer/touch 组合仍是认证产品人工复验边界。
 
 - 创建菜单改为“点击外部关闭”后，确认生成弹窗也位于草稿 DOM 外；用户点击确认时，全局 pointer capture 先删除草稿，而正式 pending Resource 尚未完成 Query 接手，画布出现确定性空窗。上一版只用 ESLint、类型和 locale 对齐验证静态接线，无法反证跨 portal 的真实指针顺序。当前草稿在 plan/确认/执行与 Query handoff 期间不可 dismiss，且只在计划目标已全部进入正式 Canvas 投影后关闭；没有 timer、假节点或本地终态。认证浏览器下的真实点击时序仍是人工复验边界。
 

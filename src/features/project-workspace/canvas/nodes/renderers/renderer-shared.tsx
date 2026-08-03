@@ -3,6 +3,7 @@
 import React, { useContext } from 'react'
 import { AppIcon } from '@/components/ui/icons'
 import { toDisplayImageUrl } from '@/lib/media/image-url'
+import { workspaceCanvasImagePreviewTargetProps } from '../../canvas-interaction-target'
 import { isWorkspaceCanvasLifecycleRunning } from '../../lifecycle/workspace-canvas-lifecycle'
 import type { WorkspaceCanvasFlowNode } from '../../node-canvas-types'
 
@@ -37,7 +38,9 @@ export function PreviewableImage({
   return (
     <button
       type="button"
+      {...workspaceCanvasImagePreviewTargetProps}
       className={`nodrag nowheel border-0 bg-transparent p-0 ${buttonClassName}`}
+      onPointerDown={(event) => event.stopPropagation()}
       onMouseDown={(event) => event.stopPropagation()}
       onClick={(event) => {
         event.stopPropagation()
