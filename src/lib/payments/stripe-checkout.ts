@@ -28,7 +28,7 @@ function buildCheckoutMetadata(quote: RechargeQuote, userId: string): Stripe.Met
   return {
     waoowaoo_kind: 'credit_recharge',
     user_id: userId,
-    credits: quote.credits.toFixed(2),
+    credits: String(quote.credits),
     credit_value_currency: quote.creditValueCurrency,
     payment_amount: quote.paymentAmount.toFixed(2),
     payment_currency: quote.paymentCurrency.toLowerCase(),
@@ -39,12 +39,12 @@ function getCheckoutProductText(locale: 'zh' | 'en', quote: RechargeQuote): { na
   if (locale === 'en') {
     return {
       name: 'WaooAI Credits',
-      description: `${quote.credits.toFixed(2)} credits, billed in ${quote.paymentCurrency}`,
+      description: `${quote.credits} credits, billed in ${quote.paymentCurrency}`,
     }
   }
   return {
     name: 'WaooAI 额度',
-    description: `${quote.credits.toFixed(2)} 额度，使用人民币支付`,
+    description: `${quote.credits} 额度，使用人民币支付`,
   }
 }
 

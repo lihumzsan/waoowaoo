@@ -39,7 +39,7 @@ function checkoutEvent(input: {
         metadata: input.managed === false ? {} : {
           waoowaoo_kind: 'credit_recharge',
           user_id: input.userId,
-          credits: input.credits || '100.00',
+          credits: input.credits || '100',
           credit_value_currency: 'CNY',
           payment_amount: input.credits || '100.00',
           payment_currency: 'cny',
@@ -106,7 +106,7 @@ describe('billing/stripe recharge integration', () => {
   it('credits a paid Stripe Checkout session and records an idempotent transaction', async () => {
     const user = await createTestUser()
     const timestamp = currentStripeTimestamp()
-    const payload = checkoutEvent({ sessionId: 'cs_live_paid', userId: user.id, credits: '88.88' })
+    const payload = checkoutEvent({ sessionId: 'cs_live_paid', userId: user.id, credits: '888' })
     const signature = signPayload(payload, timestamp)
 
     const first = await handleStripeWebhook(payload, signature)
@@ -117,12 +117,12 @@ describe('billing/stripe recharge integration', () => {
       action: 'credited',
       eventType: 'checkout.session.completed',
       sessionId: 'cs_live_paid',
-      credits: 88.88,
+      credits: 888,
     })
     expect(second.action).toBe('credited')
 
     const balance = await getBalance(user.id)
-    expect(balance.balance).toBeCloseTo(88.88, 8)
+    expect(balance.balance).toBe(888)
     expect(await prisma.balanceTransaction.count({
       where: {
         userId: user.id,
@@ -172,7 +172,7 @@ describe('billing/stripe recharge integration', () => {
   it('reverses a partial refund once and restores credits when the refund fails', async () => {
     const user = await createTestUser()
     const timestamp = currentStripeTimestamp()
-    const checkout = checkoutEvent({ sessionId: 'cs_refund', userId: user.id, credits: '100.00' })
+    const checkout = checkoutEvent({ sessionId: 'cs_refund', userId: user.id, credits: '100' })
     await handleStripeWebhook(checkout, signPayload(checkout, timestamp))
 
     const refund = refundEvent({
@@ -209,7 +209,7 @@ describe('billing/stripe recharge integration', () => {
   it('changes credits only when Stripe withdraws or reinstates dispute funds', async () => {
     const user = await createTestUser()
     const timestamp = currentStripeTimestamp()
-    const checkout = checkoutEvent({ sessionId: 'cs_dispute', userId: user.id, credits: '80.00' })
+    const checkout = checkoutEvent({ sessionId: 'cs_dispute', userId: user.id, credits: '80' })
     await handleStripeWebhook(checkout, signPayload(checkout, timestamp))
 
     const created = disputeEvent({

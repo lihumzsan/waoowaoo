@@ -20,6 +20,7 @@ import { validateProjectDraft, type ProjectUpdateInput } from '@/lib/projects/va
 import {
   type WorkspaceProjectListItem,
 } from '@/lib/projects/workspace-list-item'
+import { formatCredits } from '@/lib/billing/credits'
 import {
   requestOperationMutationVoidWithError,
 } from '@/lib/query/mutations/mutation-shared'
@@ -38,7 +39,7 @@ const DEFAULT_BILLING_CURRENCY = 'CREDITS'
 
 function formatProjectCost(amount: number, currency = DEFAULT_BILLING_CURRENCY): string {
   if (currency === 'USD') return `$${amount.toFixed(2)}`
-  if (currency === 'CREDITS') return `${amount.toFixed(2)} credits`
+  if (currency === 'CREDITS') return `${formatCredits(amount)} credits`
   return `${amount.toFixed(2)} ${currency}`
 }
 

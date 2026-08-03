@@ -5,7 +5,7 @@
   "betaNotice": "自助充值已开放。当前支持 Stripe 已启用的银行卡、Link、Apple Pay 等支付方式；微信支付和支付宝会在支付机构审核通过后自动出现在结账页。邀请码和管理员人工发放仅作为体验、测试或运营补贴方式。",
   "checkout": {
     "title": "立即充值并开始生成",
-    "body": "充值会进入真实 Stripe Checkout。1 额度按人民币 1 元支付；支付成功并收到 Stripe webhook 后，额度会自动入账。",
+    "body": "充值会进入真实 Stripe Checkout。1 credit 按人民币 0.1 元支付；支付成功并收到 Stripe webhook 后，额度会自动入账。",
     "primaryCta": "前往充值",
     "secondaryCta": "创建账户"
   },
@@ -66,7 +66,7 @@
     "checkoutCreateFailedFallback": "创建结账会话失败。",
     "estimatePrefix": "预计支付 {amount}",
     "estimateAmount": "{amount}",
-    "unitValue": "1 credit = ¥1",
+    "unitValue": "1 credit = ¥0.1",
     "paymentTitle": "充值与支付",
     "compareTitle": "套餐对比",
     "merchantMoreLink": "查看更多商户信息"

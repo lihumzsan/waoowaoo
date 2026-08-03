@@ -225,7 +225,7 @@ export async function recordUsageCostOnly(
   })
 
   _ulogInfo(
-    `[Billing] ${params.action} - ${params.model} - ${params.cost.toFixed(4)} credits (recorded${hasProject ? '' : ', no project scope'})`,
+    `[Billing] ${params.action} - ${params.model} - ${params.cost} credits (recorded${hasProject ? '' : ', no project scope'})`,
   )
 }
 

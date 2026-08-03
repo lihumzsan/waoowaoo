@@ -29,7 +29,7 @@ import type { FreezeBalanceResult } from './ledger'
 import type { ApiType, UsageUnit } from './cost'
 import { getBillingMode } from './mode'
 import { BillingOperationError, InsufficientBalanceError } from './errors'
-import { roundMoney } from './money'
+import { toChargeableCredits } from './credits'
 import { withTextUsageCollection, type TextUsageEntry } from './runtime-usage'
 import type { BillingRecordParams, TaskBillingInfo } from './types'
 import { BUILTIN_PRICING_VERSION } from '@/lib/ai-registry/pricing-resolution'
@@ -78,8 +78,6 @@ type UsageByModel = Record<
   }
 >
 
-const MONEY_SCALE = 6
-const MONEY_EPSILON = 1e-9
 
 const billingServiceLogger = createScopedLogger({ module: 'billing.service' })
 
@@ -102,10 +100,17 @@ function reportRollbackFreezeFailure(params: {
   })
 }
 
+/**
+ * Turn a computed price into a chargeable amount.
+ *
+ * Pricing rates may be fractional (per token, per character); ledger amounts
+ * never are. This is the single boundary where that conversion happens, so a
+ * quote and its settlement can never disagree about rounding.
+ */
 function normalizeMoney(value: number): number {
   const numeric = Number(value)
   if (!Number.isFinite(numeric)) return 0
-  return roundMoney(Math.max(0, numeric), MONEY_SCALE)
+  return toChargeableCredits(Math.max(0, numeric))
 }
 
 function asNumber(value: unknown): number | null {
@@ -205,21 +210,24 @@ function resolveTextCostFromUsage(usage: TextUsageEntry[]): ResolvedActual | nul
     const itemProviderCostCredits = Number(item.providerCostCredits)
     const model = item.model || 'unknown'
     const hasBillableTokens = inTokens > 0 || outTokens > 0
-    const itemCost =
-      Number.isFinite(itemProviderCostCredits) && itemProviderCostCredits >= 0
-        ? normalizeMoney(itemProviderCostCredits)
-        : hasBillableTokens
-          ? normalizeMoney(
-              calcTextWithCache(model, inTokens, outTokens, { cachedInputTokens: cachedTokens }),
-            )
-          : 0
+    // What a provider reports it charged us is a cost fact, not a price. The
+    // catalog is the only thing allowed to decide what a user pays, so
+    // `providerCostCredits` is carried into metadata for margin reporting and
+    // never becomes the charged amount — and it keeps its exact fractional
+    // value, because rounding it up to a whole credit would corrupt the cost
+    // side of every margin report.
+    const itemCost = hasBillableTokens
+      ? normalizeMoney(
+          calcTextWithCache(model, inTokens, outTokens, { cachedInputTokens: cachedTokens }),
+        )
+      : 0
 
     inputTokens += inTokens
     outputTokens += outTokens
     cachedInputTokens += cachedTokens
     cacheWriteTokens += writeTokens
     if (Number.isFinite(itemProviderCostCredits) && itemProviderCostCredits >= 0) {
-      providerCostCredits += normalizeMoney(itemProviderCostCredits)
+      providerCostCredits += itemProviderCostCredits
     }
     cost += itemCost
 
@@ -239,7 +247,7 @@ function resolveTextCostFromUsage(usage: TextUsageEntry[]): ResolvedActual | nul
     byModel[model].cachedInputTokens += cachedTokens
     byModel[model].cacheWriteTokens += writeTokens
     if (Number.isFinite(itemProviderCostCredits) && itemProviderCostCredits >= 0) {
-      byModel[model].providerCostCredits += normalizeMoney(itemProviderCostCredits)
+      byModel[model].providerCostCredits += itemProviderCostCredits
     }
     byModel[model].cacheHitRate =
       byModel[model].inputTokens > 0
@@ -313,7 +321,7 @@ async function executeWithUsage<T>(
 function clampChargedCost(actualCost: number, freezeCost: number) {
   const normalizedActual = normalizeMoney(actualCost)
   const normalizedFreeze = normalizeMoney(freezeCost)
-  if (normalizedActual <= normalizedFreeze + MONEY_EPSILON) {
+  if (normalizedActual <= normalizedFreeze) {
     return normalizedActual
   }
   _ulogError('[Billing] actual cost exceeds frozen max, overage freeze required', {
@@ -332,12 +340,12 @@ async function ensureFreezeCoverage(params: {
 }): Promise<number> {
   const normalizedQuoted = normalizeMoney(params.quotedCost)
   const chargedCost = clampChargedCost(params.actualCost, normalizedQuoted)
-  if (chargedCost <= normalizedQuoted + MONEY_EPSILON) {
+  if (chargedCost <= normalizedQuoted) {
     return chargedCost
   }
 
   const overage = normalizeMoney(chargedCost - normalizedQuoted)
-  if (overage <= MONEY_EPSILON) {
+  if (overage <= 0) {
     return chargedCost
   }
   const expanded = await increasePendingFreezeAmount(params.freezeId, overage)
@@ -1033,7 +1041,7 @@ export async function settleTaskBillingInTransaction(
         quotedCost,
         actualCost: actual.actualCost,
         chargedCost,
-        ...(unbilledOverage > MONEY_EPSILON ? { unbilledOverage } : {}),
+        ...(unbilledOverage > 0 ? { unbilledOverage } : {}),
         pricingVersion: info.pricingVersion || BUILTIN_PRICING_VERSION,
         pricingSelections: info.metadata || {},
         ...(recordModel.actualModels.length > 0 ? { actualModels: recordModel.actualModels } : {}),

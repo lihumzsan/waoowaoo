@@ -9,7 +9,7 @@ export interface BillingActionQuotePreview {
 
 export function formatBillingActionCost(value: number): string {
   if (!Number.isFinite(value)) return ''
-  return value.toFixed(2).replace(/\.?0+$/, '')
+  return String(value)
 }
 
 export function buildBillingActionQuotePreview(params: {

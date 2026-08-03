@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler } from '@/lib/api-errors'
-import { calcText } from '@/lib/billing/cost'
+import { calcText, calcTextWithCache } from '@/lib/billing/cost'
+import { toChargeableCredits } from '@/lib/billing/credits'
 import { recordTextUsage } from '@/lib/billing/runtime-usage'
 import { withTextBilling } from '@/lib/billing/service'
 import { prisma } from '../../helpers/prisma'
@@ -80,12 +81,12 @@ describe('billing/api contract integration', () => {
     expect(body2?.error?.details?.requestId).toBe('same_request_id')
 
     const balance = await prisma.userBalance.findUnique({ where: { userId: user.id } })
-    const expectedCharge = calcText('anthropic/claude-sonnet-4', 1000, 0)
-    expect(balance?.totalSpent).toBeCloseTo(expectedCharge, 8)
+    const expectedCharge = toChargeableCredits(calcText('anthropic/claude-sonnet-4', 1000, 0))
+    expect(balance?.totalSpent).toBe(expectedCharge)
     expect(await prisma.balanceFreeze.count()).toBe(1)
   })
 
-  it('settles cached OpenRouter text usage with provider reported cost credits', async () => {
+  it('charges the catalog price, not the cost the provider reports', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)
     await seedBalance(user.id, 10)
@@ -120,8 +121,17 @@ describe('billing/api contract integration', () => {
     const metadata = JSON.parse(cost.metadata || '{}') as Record<string, unknown>
     const balance = await prisma.userBalance.findUniqueOrThrow({ where: { userId: user.id } })
 
-    expect(Number(cost.cost)).toBeCloseTo(0.4321, 8)
-    expect(balance.totalSpent.toNumber()).toBeCloseTo(0.4321, 8)
+    // What OpenRouter says it charged us (0.4321 credits) is a cost fact. The
+    // amount billed must come from the catalog instead, or the platform would
+    // resell at cost.
+    const catalogPrice = toChargeableCredits(
+      calcTextWithCache('openrouter::anthropic/claude-sonnet-4.6', 4000, 100, {
+        cachedInputTokens: 3200,
+      }),
+    )
+    expect(catalogPrice).toBeGreaterThan(1)
+    expect(Number(cost.cost)).toBe(catalogPrice)
+    expect(balance.totalSpent).toBe(catalogPrice)
     expect(metadata.actualInputTokens).toBe(4000)
     expect(metadata.actualOutputTokens).toBe(100)
     expect(metadata.actualCachedInputTokens).toBe(3200)

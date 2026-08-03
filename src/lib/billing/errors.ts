@@ -4,7 +4,7 @@ export class InsufficientBalanceError extends Error {
 
   constructor(required: number, available: number) {
     super(
-      `INSUFFICIENT_CREDITS: required=${required.toFixed(4)}, available=${available.toFixed(4)}`,
+      `INSUFFICIENT_CREDITS: required=${required}, available=${available}`,
     )
     this.name = 'InsufficientBalanceError'
     this.required = required

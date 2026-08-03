@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { toChargeableCredits } from '@/lib/billing/credits'
 import { calcText } from '@/lib/billing/cost'
 import {
   confirmChargeWithRecord,
@@ -123,8 +124,8 @@ describe('billing/concurrency', () => {
     expect(results.some((item) => item.status === 'fulfilled')).toBe(true)
 
     const balance = await getBalance(user.id)
-    const expected = calcText('anthropic/claude-sonnet-4', 1000, 0)
-    expect(balance.totalSpent).toBeLessThanOrEqual(expected + 1e-8)
+    const expected = toChargeableCredits(calcText('anthropic/claude-sonnet-4', 1000, 0))
+    expect(balance.totalSpent).toBeLessThanOrEqual(expected)
     expect(await prisma.balanceFreeze.count()).toBe(1)
     expect(await prisma.balanceTransaction.count({ where: { type: 'consume' } })).toBeLessThanOrEqual(1)
     await expectNoNegativeLedger(user.id)

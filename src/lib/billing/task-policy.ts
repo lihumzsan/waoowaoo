@@ -6,6 +6,7 @@ import {
   calcVoice,
 } from './cost'
 import { BUILTIN_PRICING_VERSION } from '@/lib/ai-registry/pricing-resolution'
+import { toChargeableCredits } from './credits'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { getTaskDefinition } from '@/lib/task/definition'
 import type { TaskType } from '@/lib/task/types'
@@ -49,7 +50,7 @@ function buildTextTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBilling
   const model = pickFirstString([payload?.analysisModel, payload?.model])
   if (!model) return null
 
-  const maxFrozenCost = calcText(model, inputTokens, 0)
+  const maxFrozenCost = toChargeableCredits(calcText(model, inputTokens, 0))
 
   return {
     billable: true,
@@ -82,7 +83,7 @@ function buildImageTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillin
     ...(size ? { size } : {}),
     ...(aspectRatio ? { aspectRatio } : {}),
   }
-  const maxFrozenCost = calcImage(model, quantity, metadata)
+  const maxFrozenCost = toChargeableCredits(calcImage(model, quantity, metadata))
   return {
     billable: true,
     source: 'task',
@@ -122,7 +123,7 @@ function buildVideoTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillin
     ...(typeof generateAudio === 'boolean' ? { generateAudio } : {}),
     containsVideoInput: false,
   }
-  const maxFrozenCost = calcVideo(model, resolution || '720p', quantity, metadata)
+  const maxFrozenCost = toChargeableCredits(calcVideo(model, resolution || '720p', quantity, metadata))
   return {
     billable: true,
     source: 'task',
@@ -166,7 +167,7 @@ function buildMusicTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillin
     model,
     quantity,
     unit: 'call',
-    maxFrozenCost: calcMusic(model, quantity, metadata),
+    maxFrozenCost: toChargeableCredits(calcMusic(model, quantity, metadata)),
     pricingVersion: BUILTIN_PRICING_VERSION,
     action: String(taskType),
     metadata,
@@ -188,7 +189,7 @@ function buildVoiceTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillin
     model,
     quantity: characters,
     unit: 'character',
-    maxFrozenCost: calcVoice(model, characters),
+    maxFrozenCost: toChargeableCredits(calcVoice(model, characters)),
     pricingVersion: BUILTIN_PRICING_VERSION,
     action: String(taskType),
     metadata: {

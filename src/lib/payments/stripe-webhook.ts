@@ -2,7 +2,7 @@ import Stripe from 'stripe'
 import { prisma } from '@/lib/prisma'
 import { addBalanceWithTransaction, applyBalanceAdjustmentWithTransaction } from '@/lib/billing/ledger'
 import { BillingOperationError } from '@/lib/billing/errors'
-import { roundMoney, toMoneyNumber } from '@/lib/billing/money'
+import { toMoneyNumber } from '@/lib/billing/money'
 
 const STRIPE_SIGNATURE_TOLERANCE_SECONDS = 300
 
@@ -283,7 +283,10 @@ async function findRechargeByPaymentIntent(
 function creditsForMinorAmount(meta: RechargeBillingMeta, amountMinor: number, currency: string): number {
   if (currency !== meta.paymentCurrency) throw new Error('STRIPE_ADJUSTMENT_CURRENCY_MISMATCH')
   if (amountMinor > meta.paymentAmountMinor) throw new Error('STRIPE_ADJUSTMENT_AMOUNT_EXCEEDS_RECHARGE')
-  const credits = roundMoney(meta.credits * amountMinor / meta.paymentAmountMinor, 6)
+  // Credits are whole units, so a partial refund reverses whole credits. The
+  // proportion is rounded down: a partial refund never claws back more credits
+  // than the money returned paid for.
+  const credits = Math.floor(meta.credits * amountMinor / meta.paymentAmountMinor)
   if (credits <= 0) throw new Error('STRIPE_ADJUSTMENT_CREDITS_INVALID')
   return credits
 }

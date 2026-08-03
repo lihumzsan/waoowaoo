@@ -91,7 +91,7 @@
     "redeemFailed": "邀请码兑换失败"
   },
   "recharge": {
-    "unitValue": "1 额度 = ¥1",
+    "unitValue": "1 credit = ¥0.1",
     "successNotice": "支付已提交，余额会在 Stripe 确认后入账。可稍后刷新查看。",
     "cancelNotice": "支付已取消，未产生扣款。"
   },

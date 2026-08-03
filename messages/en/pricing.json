@@ -66,7 +66,7 @@
     "checkoutCreateFailedFallback": "Unable to create the checkout session.",
     "estimatePrefix": "Estimated charge {amount}",
     "estimateAmount": "{amount}",
-    "unitValue": "1 credit = ¥1",
+    "unitValue": "1 credit = ¥0.1",
     "paymentTitle": "Top-up and payment",
     "compareTitle": "Plan comparison",
     "merchantMoreLink": "More merchant details"

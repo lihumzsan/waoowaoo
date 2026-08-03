@@ -257,7 +257,7 @@ model UsageCost {
   action    String
   quantity  Int
   unit      String
-  cost      Decimal  @db.Decimal(18, 6)
+  cost      Int
   metadata  String?  @db.Text
   createdAt DateTime @default(now())
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -353,9 +353,9 @@ model VerificationToken {
 model UserBalance {
   id           String   @id @default(uuid())
   userId       String   @unique
-  balance      Decimal  @default(0) @db.Decimal(18, 6)
-  frozenAmount Decimal  @default(0) @db.Decimal(18, 6)
-  totalSpent   Decimal  @default(0) @db.Decimal(18, 6)
+  balance      Int      @default(0)
+  frozenAmount Int      @default(0)
+  totalSpent   Int      @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @default(now()) @updatedAt
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -366,7 +366,7 @@ model UserBalance {
 model InviteCode {
   id             String             @id @default(uuid())
   codeHash       String             @unique @db.VarChar(128)
-  amount         Decimal            @db.Decimal(18, 6)
+  amount         Int
   maxRedemptions Int?
   redeemedCount  Int                @default(0)
   expiresAt      DateTime?
@@ -386,7 +386,7 @@ model InviteRedemption {
   id           String     @id @default(uuid())
   inviteCodeId String
   userId       String
-  amount       Decimal    @db.Decimal(18, 6)
+  amount       Int
   createdAt    DateTime   @default(now())
   inviteCode   InviteCode @relation(fields: [inviteCodeId], references: [id], onDelete: Cascade)
   user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -399,7 +399,7 @@ model InviteRedemption {
 model BalanceFreeze {
   id             String    @id @default(uuid())
   userId         String
-  amount         Decimal   @db.Decimal(18, 6)
+  amount         Int
   status         String    @default("pending")
   source         String?   @db.VarChar(64)
   taskId         String?
@@ -420,8 +420,8 @@ model BalanceTransaction {
   id              String   @id @default(uuid())
   userId          String
   type            String
-  amount          Decimal  @db.Decimal(18, 6)
-  balanceAfter    Decimal  @db.Decimal(18, 6)
+  amount          Int
+  balanceAfter    Int
   description     String?  @db.Text
   relatedId       String?
   freezeId        String?
@@ -577,7 +577,7 @@ model ApprovalGrant {
   inputHash           String                @db.VarChar(64)
   planHash            String                @db.VarChar(64)
   quoteHash           String                @db.VarChar(64)
-  quoteCeiling        Decimal?              @db.Decimal(18, 6)
+  quoteCeiling        Int?
   currency            String?               @db.VarChar(16)
   issuedAt            DateTime              @default(now())
   revokedAt           DateTime?

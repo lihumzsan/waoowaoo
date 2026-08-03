@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { roundMoney, toMoneyNumber } from '@/lib/billing/money'
+import { toMoneyNumber } from '@/lib/billing/money'
 
 type UserLedgerRow = {
   userId: string
@@ -48,25 +48,27 @@ async function main() {
 
   const txNetByUser = new Map<string, number>()
   for (const row of txByUser) {
-    txNetByUser.set(row.userId, roundMoney(toMoneyNumber(row._sum.amount), 8))
+    txNetByUser.set(row.userId, toMoneyNumber(row._sum.amount))
   }
 
   const ledgerRows: UserLedgerRow[] = balances.map((row) => {
     const balance = toMoneyNumber(row.balance)
     const frozenAmount = toMoneyNumber(row.frozenAmount)
-    const txNetAmount = roundMoney(txNetByUser.get(row.userId) || 0, 8)
-    const ledgerAmount = roundMoney(balance + frozenAmount, 8)
+    const txNetAmount = txNetByUser.get(row.userId) || 0
+    const ledgerAmount = balance + frozenAmount
     return {
       userId: row.userId,
       balance,
       frozenAmount,
       txNetAmount,
       ledgerAmount,
-      diff: roundMoney(ledgerAmount - txNetAmount, 8),
+      diff: ledgerAmount - txNetAmount,
     }
   })
 
-  const nonZeroDiffUsers = ledgerRows.filter((row) => Math.abs(row.diff) > 1e-8)
+  // Credits are whole numbers, so the invariant holds exactly — any non-zero
+  // difference is a real ledger divergence, not rounding noise.
+  const nonZeroDiffUsers = ledgerRows.filter((row) => row.diff !== 0)
 
   const pendingTaskIds = pendingFreezes
     .map((row) => row.taskId)

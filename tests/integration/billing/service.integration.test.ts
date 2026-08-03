@@ -151,7 +151,7 @@ describe('billing/service integration', () => {
       action: 'assistant.run',
       model: usage.modelKey,
     })
-    expect(facts[0]!.cost.toNumber()).toBe(0)
+    expect(facts[0]!.cost).toBe(0)
     expect(await prisma.balanceTransaction.count()).toBe(0)
 
     await expect(record(31)).rejects.toMatchObject({
@@ -268,11 +268,11 @@ describe('billing/service integration', () => {
         where: { id: prepared.freezeId! },
       }),
     ])
-    expect(balance.balance.toNumber()).toBeCloseTo(0, 8)
-    expect(balance.frozenAmount.toNumber()).toBeCloseTo(0, 8)
-    expect(balance.totalSpent.toNumber()).toBeCloseTo(info.maxFrozenCost, 8)
+    expect(balance.balance).toBeCloseTo(0, 8)
+    expect(balance.frozenAmount).toBeCloseTo(0, 8)
+    expect(balance.totalSpent).toBeCloseTo(info.maxFrozenCost, 8)
     expect(freeze.status).toBe('confirmed')
-    expect(freeze.amount.toNumber()).toBeCloseTo(info.maxFrozenCost, 8)
+    expect(freeze.amount).toBeCloseTo(info.maxFrozenCost, 8)
   })
 
   it('rejects zero quoted task cost in ENFORCE mode instead of skipping billing', async () => {

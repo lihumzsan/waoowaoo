@@ -6,7 +6,8 @@ import { prisma } from '@/lib/prisma'
 import { recordUsageCostOnly, buildBillingMeta, buildBillingMetaRecord, isProjectScoped } from './reporting'
 import type { ApiType, UsageUnit } from './cost'
 import { BillingOperationError } from './errors'
-import { roundMoney, toMoneyNumber, type MoneyValue } from './money'
+import { toMoneyNumber, type MoneyValue } from './money'
+import { assertCreditAmount, assertSignedCreditAmount, CreditAmountError } from './credits'
 
 const ledgerLogger = createScopedLogger({ module: 'billing.ledger' })
 
@@ -67,11 +68,13 @@ type BalanceSnapshot = {
   updatedAt: Date
 }
 
-const MONEY_SCALE = 6
-const MONEY_EPSILON = 1e-9
-
+/**
+ * Credits are whole numbers everywhere in the ledger, so amounts are compared
+ * with `===` rather than against an epsilon, and any fractional value is a
+ * caller bug that must fail at this boundary instead of being rounded away.
+ */
 function normalizeMoney(value: number): number {
-  return roundMoney(value, MONEY_SCALE)
+  return assertSignedCreditAmount(value, 'amount')
 }
 
 function toBalanceSnapshot(balance: {
@@ -143,13 +146,20 @@ type FreezeBalanceOptions = {
 }
 
 function requirePositiveFreezeAmount(amount: number): number {
-  const normalizedAmount = normalizeMoney(Number(amount))
-  if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
-    throw new BillingOperationError('BILLING_INVALID_FREEZE_AMOUNT', 'freeze amount must be a positive number', {
-      amount,
-    })
+  try {
+    const normalizedAmount = assertCreditAmount(Number(amount), 'freezeAmount')
+    if (normalizedAmount <= 0) {
+      throw new CreditAmountError('freeze amount must be greater than zero', amount)
+    }
+    return normalizedAmount
+  } catch (error) {
+    if (!(error instanceof CreditAmountError)) throw error
+    throw new BillingOperationError(
+      'BILLING_INVALID_FREEZE_AMOUNT',
+      'freeze amount must be a positive whole number of credits',
+      { amount },
+    )
   }
-  return normalizedAmount
 }
 
 export type FreezeExpectation = {
@@ -159,7 +169,7 @@ export type FreezeExpectation = {
 }
 
 function assertFreezeExpectation(
-  freeze: { id: string; userId: string; taskId: string | null; amount: Prisma.Decimal },
+  freeze: { id: string; userId: string; taskId: string | null; amount: number },
   expected: FreezeExpectation,
 ): void {
   const amount = normalizeMoney(toMoneyNumber(freeze.amount))
@@ -167,7 +177,7 @@ function assertFreezeExpectation(
   if (
     freeze.userId !== expected.userId
     || freeze.taskId !== expected.taskId
-    || Math.abs(amount - expectedAmount) > MONEY_EPSILON
+    || amount !== expectedAmount
   ) {
     throw new BillingOperationError('BILLING_FREEZE_OWNERSHIP_MISMATCH', 'freeze ownership does not match task billing snapshot', {
       freezeId: freeze.id,
@@ -276,7 +286,7 @@ export async function freezeBalanceInTransaction(
         })
       }
       return existing.status === 'pending'
-        && Math.abs(existingAmount - normalizedAmount) <= MONEY_EPSILON
+        && existingAmount === normalizedAmount
         ? { status: 'already_frozen', freezeId: existing.id }
         : {
             status: 'conflict',
@@ -384,7 +394,7 @@ export async function freezeBalance(
           })
         }
         return existing.status === 'pending'
-          && Math.abs(existingAmount - normalizedAmount) <= MONEY_EPSILON
+          && existingAmount === normalizedAmount
           ? {
               status: 'already_frozen',
               freezeId: existing.id,
@@ -438,7 +448,7 @@ export async function confirmChargeWithRecordInTransaction(
   }
   const requested = Number(options?.chargedAmount)
   const chargedAmount = normalizeMoney(Number.isFinite(requested) ? requested : freezeAmount)
-  if (chargedAmount < 0 || chargedAmount - freezeAmount > MONEY_EPSILON) {
+  if (chargedAmount < 0 || chargedAmount > freezeAmount) {
     throw new BillingOperationError('BILLING_INVALID_CHARGED_AMOUNT', 'Invalid chargedAmount', {
       freezeId,
       chargedAmount,
@@ -732,7 +742,7 @@ export async function recordShadowUsageInTransaction(
       type: 'shadow_consume',
       amount: 0,
       balanceAfter: toMoneyNumber(balance.balance),
-      description: `[SHADOW] ${params.action} - ${params.model} - ${params.cost.toFixed(4)} credits${metadataSummary ? ` | ${metadataSummary}` : ''}`,
+      description: `[SHADOW] ${params.action} - ${params.model} - ${params.cost} credits${metadataSummary ? ` | ${metadataSummary}` : ''}`,
       relatedId: null,
       freezeId: null,
       projectId: params.projectId || null,
@@ -872,7 +882,7 @@ export async function applyBalanceAdjustmentWithTransaction(
   options: ApplyBalanceAdjustmentOptions,
 ): Promise<'applied' | 'already_applied'> {
   const normalizedAmount = normalizeMoney(signedAmount)
-  if (!Number.isFinite(normalizedAmount) || Math.abs(normalizedAmount) <= MONEY_EPSILON) {
+  if (normalizedAmount === 0) {
     throw new BillingOperationError('BILLING_INVALID_ADJUSTMENT_AMOUNT', 'adjustment amount must be a non-zero number', {
       signedAmount,
     })
@@ -889,7 +899,7 @@ export async function applyBalanceAdjustmentWithTransaction(
   if (existing) {
     const existingAmount = normalizeMoney(toMoneyNumber(existing.amount))
     if (
-      Math.abs(existingAmount - normalizedAmount) > MONEY_EPSILON
+      existingAmount !== normalizedAmount
       || existing.relatedId !== options.relatedId
     ) {
       throw new BillingOperationError('BILLING_ADJUSTMENT_IDEMPOTENCY_CONFLICT', 'adjustment idempotency identity has conflicting facts', {

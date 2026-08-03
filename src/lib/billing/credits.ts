@@ -59,6 +59,23 @@ export function toChargeableCredits(value: number): number {
   return rounded
 }
 
+/**
+ * Render a credit amount for display.
+ *
+ * Grouping is done by hand rather than through `Intl`, because this runs on
+ * both the server and the client and a locale-dependent separator would cause
+ * a hydration mismatch. A fractional value is a bug upstream, so it is shown
+ * as-is instead of being silently rounded into something that looks correct.
+ */
+export function formatCredits(value: number): string {
+  if (!Number.isFinite(value)) return '0'
+  if (!Number.isInteger(value)) return String(value)
+  const negative = value < 0
+  const digits = String(Math.abs(value))
+  const grouped = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  return negative ? `-${grouped}` : grouped
+}
+
 /** CNY payable for a credit amount, used only when building a payment intent. */
 export function creditsToPaymentCny(credits: number): number {
   assertCreditAmount(credits, 'credits')

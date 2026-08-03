@@ -5,6 +5,7 @@ import { Link } from '@/i18n/navigation'
 import { AppIcon } from '@/components/ui/icons'
 import ProfileTransactionsTable, { type ProfileTransactionItem } from './ProfileTransactionsTable'
 import ProfileInviteCodeCard from './ProfileInviteCodeCard'
+import { formatCredits } from '@/lib/billing/credits'
 
 // 账户概览:大数字额度 hero、用量进度、冻结/已消费统计块与最近流水。
 // 只消费 page 传入的权威 balance/transactions 投影,不发起请求。
@@ -21,7 +22,7 @@ function normalizeAmount(value: number | undefined): number {
 }
 
 function formatStatAmount(value: number | undefined): string {
-  return normalizeAmount(value).toFixed(2)
+  return formatCredits(normalizeAmount(value))
 }
 
 interface ProfileOverviewSectionProps {

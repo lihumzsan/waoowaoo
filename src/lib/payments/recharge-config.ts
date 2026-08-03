@@ -1,6 +1,6 @@
 import { getDeploymentConfig } from '@/lib/deployment/config'
 import { getDeploymentFeatures } from '@/lib/deployment/features'
-import { roundMoney } from '@/lib/billing/money'
+import { creditsToPaymentCny, creditsToPaymentMinorUnits } from '@/lib/billing/credits'
 
 export const CREDIT_VALUE_CURRENCY = 'CNY' as const
 export const STRIPE_PAYMENT_CURRENCY = 'CNY' as const
@@ -21,13 +21,13 @@ export interface RechargeQuote {
   paymentCurrency: typeof STRIPE_PAYMENT_CURRENCY
 }
 
-function readRequiredPositiveNumber(name: string): number {
+function readRequiredPositiveInteger(name: string): number {
   const raw = process.env[name]
   if (typeof raw !== 'string' || raw.trim() === '') {
     throw new Error(`${name}_REQUIRED`)
   }
   const value = Number(raw)
-  if (!Number.isFinite(value) || value <= 0) {
+  if (!Number.isSafeInteger(value) || value <= 0) {
     throw new Error(`${name}_INVALID`)
   }
   return value
@@ -46,8 +46,8 @@ function disabledRechargeConfig(): RechargeConfig {
 export function getRechargeConfig(): RechargeConfig {
   if (!getDeploymentFeatures(getDeploymentConfig()).showRecharge) return disabledRechargeConfig()
 
-  const minCredits = readRequiredPositiveNumber('PAYMENT_MIN_CREDITS')
-  const maxCredits = readRequiredPositiveNumber('PAYMENT_MAX_CREDITS')
+  const minCredits = readRequiredPositiveInteger('PAYMENT_MIN_CREDITS')
+  const maxCredits = readRequiredPositiveInteger('PAYMENT_MAX_CREDITS')
   if (maxCredits < minCredits) {
     throw new Error('PAYMENT_MAX_CREDITS_LESS_THAN_MIN')
   }
@@ -65,24 +65,27 @@ export function normalizeRechargeCredits(input: number, config: RechargeConfig):
   if (!config.enabled) {
     throw new Error('PAYMENT_RECHARGE_DISABLED')
   }
-  if (!Number.isFinite(input) || input <= 0) {
+  // Credits are whole units. A fractional request is rejected rather than
+  // rounded, so the amount the user sees is the amount that is charged.
+  if (!Number.isSafeInteger(input) || input <= 0) {
     throw new Error('PAYMENT_CREDITS_INVALID')
   }
-  const credits = roundMoney(input, 2)
-  if (credits < config.minCredits) {
+  if (input < config.minCredits) {
     throw new Error('PAYMENT_CREDITS_BELOW_MIN')
   }
-  if (credits > config.maxCredits) {
+  if (input > config.maxCredits) {
     throw new Error('PAYMENT_CREDITS_ABOVE_MAX')
   }
-  return credits
+  return input
 }
 
 export function quoteRecharge(inputCredits: number, config: RechargeConfig = getRechargeConfig()): RechargeQuote {
   const credits = normalizeRechargeCredits(inputCredits, config)
-  const paymentAmount = roundMoney(credits, 2)
-  const paymentUnitAmount = Math.round(paymentAmount * 100)
-  if (!Number.isInteger(paymentUnitAmount) || paymentUnitAmount <= 0) {
+  // Integer arithmetic all the way to the payment provider: one credit is
+  // 10 fen, so no floating point rounding can reach Stripe.
+  const paymentUnitAmount = creditsToPaymentMinorUnits(credits)
+  const paymentAmount = creditsToPaymentCny(credits)
+  if (!Number.isSafeInteger(paymentUnitAmount) || paymentUnitAmount <= 0) {
     throw new Error('PAYMENT_AMOUNT_INVALID')
   }
   return {

@@ -2,6 +2,7 @@
 
 import { useFormatter, useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
+import { formatCredits } from '@/lib/billing/credits'
 import {
   buildProfileBillingDetailParts,
   buildProfileTransactionScopeLines,
@@ -29,13 +30,12 @@ export type ProfileTransactionItem = {
 }
 
 function formatAmount(value: number | undefined): string {
-  const amount = typeof value === 'number' && Number.isFinite(value) ? value : 0
-  return amount.toFixed(2)
+  return formatCredits(typeof value === 'number' && Number.isFinite(value) ? value : 0)
 }
 
 function formatCreditDelta(value: number): string {
   const sign = value > 0 ? '+' : ''
-  return `${sign}${value.toFixed(2)}`
+  return `${sign}${formatCredits(value)}`
 }
 
 export default function ProfileTransactionsTable({
