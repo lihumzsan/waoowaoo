@@ -19,6 +19,7 @@ Codex app-server 是唯一通用 Agent Runtime。Wao 只注入产品边界、当
 - **APO-05 — Skills 按需读取。** Runtime 只收到 Skill 目录摘要；正文由 Agent/原生 Subagent按需读取。Skill 不定义第二输出协议。
 - **APO-06 — 用户可见内容本地化。** Wao UI 文案来自 i18n；Agent 输出遵循 Turn locale 或用户明确语言。
 - **APO-07 — 缺能力显式失败。** 未知 Codex event、缺失 MCP capability、无效 schema 或版本不兼容必须记录并显示明确失败，禁止 fallback 到旧工具或静默丢弃关键状态。
+- **APO-08 — Tool schema 是 Agent 的唯一媒体参数说明。** 每个媒体 Operation 以模态专属严格 schema 和字段 description 告知 Placement、Resource schema、引用 channel/role/position 与产品参数；developer instruction 只声明跨工具不变量（异步未就绪、失败不绕过、资产格式由服务端拥有），不得复制一份易漂移参数表。生成结果只有正式 `.resource` pointer 投影为 ready 且 `contentVersion > 0` 后才能被后续引用。
 
 ## 权威入口
 

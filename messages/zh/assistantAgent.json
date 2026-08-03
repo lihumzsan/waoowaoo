@@ -75,7 +75,6 @@
     "title": "工具调用",
     "success": "成功",
     "submitted": "已提交",
-    "progressSummary": "成功 {succeeded} · 失败 {failed} · 取消 {canceled} · 进行中 {running}",
     "groupTitle": "{title} × {count}",
     "groupProgressSummary": "成功 {success} · 已提交 {submitted} · 失败 {failed} · 已停止 {interrupted} · 待处理 {needsAction} · 进行中 {running}",
     "partial": "部分完成",

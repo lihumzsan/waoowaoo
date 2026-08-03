@@ -6,6 +6,7 @@ import WorkspaceAssistantPanel from './components/WorkspaceAssistantPanel'
 import ProjectWorkspaceCanvas from './canvas/ProjectWorkspaceCanvas'
 import type {
   WorkspaceAssistantDraftRequest,
+  WorkspaceCanvasPathFocusRequest,
   WorkspaceCanvasSelection,
 } from './canvas/contracts/workspace-canvas-interactions'
 import type { WorkspaceAssistantActiveFocusRequest } from './workspace-assistant-focus'
@@ -20,6 +21,7 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
   const [assistantContext, setAssistantContext] = useState<WorkspaceCanvasSelection | null>(null)
   const [draft, setDraft] = useState<WorkspaceAssistantDraftRequest | null>(null)
   const [activeFocus, setActiveFocus] = useState<WorkspaceAssistantActiveFocusRequest | null>(null)
+  const [pathFocus, setPathFocus] = useState<WorkspaceCanvasPathFocusRequest | null>(null)
   const selectionRef = useRef<WorkspaceCanvasSelection | null>(null)
   const changeSelection = useCallback((next: WorkspaceCanvasSelection | null) => {
     selectionRef.current = next
@@ -43,6 +45,9 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
         autoStartKey={props.assistantAutoStartKey ?? null}
         onAutoStartConsumed={props.onAssistantAutoStartConsumed}
         onActiveOperationChange={setActiveFocus}
+        onOpenWorkspacePath={(workspacePath) => {
+          setPathFocus({ requestId: crypto.randomUUID(), workspacePath })
+        }}
       />
       <div className="h-full min-w-0 overflow-hidden pr-[var(--workspace-assistant-panel-width,420px)]">
         <ProjectWorkspaceCanvas
@@ -50,6 +55,7 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
           onSelectionChange={changeSelection}
           onAssistantDraftRequest={requestAssistantDraft}
           activeAssistantFocusRequest={activeFocus}
+          workspacePathFocusRequest={pathFocus}
         />
       </div>
     </div>

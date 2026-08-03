@@ -1,8 +1,67 @@
 import { describe, expect, it } from 'vitest'
 import { normalizeAssistantRuntimeFailure } from '@/lib/assistant-runtime/runtime-error'
-import { AssistantRuntimeEventProjector } from '@/lib/assistant-runtime/event-projector'
+import {
+  AssistantRuntimeEventProjector,
+  projectAssistantRuntimeToolOutput,
+} from '@/lib/assistant-runtime/event-projector'
 
 describe('Codex runtime terminal error projection', () => {
+  it('projects canonical MCP structured output instead of the transport envelope', () => {
+    expect(projectAssistantRuntimeToolOutput({
+      id: 'tool-call',
+      type: 'mcpToolCall',
+      status: 'completed',
+      result: {
+        structuredContent: {
+          ok: true,
+          data: {
+            success: true,
+            async: true,
+            taskId: 'task-1',
+          },
+        },
+        content: [{ type: 'text', text: 'transport copy' }],
+      },
+    })).toEqual({
+      ok: true,
+      data: {
+        success: true,
+        async: true,
+        taskId: 'task-1',
+      },
+    })
+
+    expect(projectAssistantRuntimeToolOutput({
+      id: 'failed-tool-call',
+      type: 'mcpToolCall',
+      status: 'completed',
+      result: {
+        structuredContent: {
+          ok: false,
+          error: { code: 'INVALID_PARAMS', message: 'Correct the input.' },
+        },
+      },
+    })).toEqual({
+      ok: false,
+      error: { code: 'INVALID_PARAMS', message: 'Correct the input.' },
+    })
+
+    expect(projectAssistantRuntimeToolOutput({
+      id: 'interrupted-tool-call',
+      type: 'mcpToolCall',
+      status: 'interrupted',
+      result: {
+        structuredContent: {
+          ok: true,
+          data: { success: true },
+        },
+      },
+    })).toEqual({
+      status: 'interrupted',
+      error: null,
+    })
+  })
+
   it('classifies a stream disconnect as a retryable network failure fact', () => {
     expect(normalizeAssistantRuntimeFailure({
       message: 'stream disconnected before completion',

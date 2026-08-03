@@ -26,6 +26,7 @@ Codex app-server 拥有单个 Agent 进程内的 Thread/Turn 与原生交互；W
 - **ARL-15 — Secret input fail closed。** 当前没有独立 secret authority；`isSecret=true` 的原生输入请求在写普通消息/interaction JSON 前拒绝。普通 interaction 的 decided response 可持久化并在 runtime handoff 失败后只重放同一 response，UI 不允许改答。
 - **ARL-16 — SSE 重连替换旧连接而不扩容。** 浏览器标签页为每个 Project 持有稳定的 session connection identity；服务端另发本次连接的唯一 owner token。相同 identity 重连原子接管现有 user/project/global 租约，不增加 cardinality；旧 owner 之后不能 renew 或 release 新连接。不同标签页仍受既有三层上限约束，进程重启、页面刷新和 EventSource 重建不得依赖等待 TTL 才恢复。
 - **ARL-17 — Runtime 错误与继续动作都由持久事实裁决。** Projector 只按钉死 Codex 协议读取 `error` notification 与最终 `turn/completed.error`，将最终失败一次性写为稳定 error code 和受限诊断 message；UI 不解析流内容、日志或 Provider 文案猜测原因。尚可重试的 attempt 不是 Product Turn 终态。已进入 Runtime 且非用户取消的失败/中断只能以新 source identity 创建一个新 Product Turn，指令 Agent 先核对 WorkspaceResource、Task 与 Plan 后继续未完成部分；只有从未进入 Runtime 的消息才允许忠实重发原 source。
+- **ARL-18 — MCP 输出与长期 Task 展示分权。** Projector 只把 MCP `structuredContent` 作为业务输出；transport envelope、文本副本和 tool completion 不能把 `async=true` 的提交解释成媒体成功。聊天保留本 Turn 的工具调用与明确错误，但不永久渲染项目 Task 批次状态条；pending/running/terminal Resource 与当前 Task 状态只由 Canvas 正式 View 展示。Operation 标题来自 i18n registry，未知内部 tool name 不直接回显给用户。
 
 ## 状态所有权
 
@@ -63,6 +64,8 @@ Codex app-server 拥有单个 Agent 进程内的 Thread/Turn 与原生交互；W
 - Runtime 退出后 Task 是否仍可完成且只唤醒一次？
 
 ## 历史回归
+
+- Codex MCP 接通初版把 SDK `result` 外壳整体塞进动态工具 output，UI 与 Agent 看不到其中的 canonical `structuredContent`，异步提交又因 tool item completed 被误认为媒体已成功；聊天同时永久显示 FollowUp 批次，资源重试后形成与 Canvas 竞争的旧失败/成功汇总。当前 projector 只展开结构化业务结果并保留 `submitted/failed/declined`，聊天删除永久 Task 批次条，Canvas 继续由 WorkspaceResource + 当前 Task View 展示全部卡片状态。
 
 - Agents SDK 时代曾允许运行中追加，但 Codex clean cutover 只保留了底层 `turn/steer`，聊天 route 仍无条件 start，导致追加被 Project busy 映射成通用“资源状态冲突”。当前唯一发送入口显式选择 start/steer，并把真正无法接收的窄窗口投影为 `AGENT_THREAD_BUSY`。
 - Codex 通用 MCP approval 与 Wao 不可变计划审批曾串联出现两次确认。当前只对 Wao MCP server 关闭通用工具确认，Shell/patch/sandbox 的 Codex authority 保持不变。

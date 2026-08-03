@@ -33,6 +33,8 @@ Canvas 是 WorkspaceResource 文件树的空间化投影，不是第二套文件
 - **CN-16 — Canvas 没有可见性覆盖层。** 节点隐藏与 Resource 归档不是 Canvas 状态；canvas-layout 契约与 clean-cutover schema 均不携带 `hidden`，Canvas 只按 WorkspaceResource 投影结果渲染全部节点。渲染层不得重新引入第二可见性解释（本地 override、隐藏集合或按归档字段过滤）。
 - **CN-17 — 布局按 project + folder 隔离，且只持久化顶层节点。** `ProjectCanvasLayout` 的 canonical scope 是 `(projectId, folderKey)`；root 与每个 folder 分别拥有 viewport 和 node layouts。当前 Canvas 只持久化顶层节点（直接子 Resource 卡、folder 卡与分区框自身）的位置；展开分区内部的后代使用投影计算的相对布局、不可单独拖拽、不得写入父 Canvas 的 layout scope——它们的持久布局只属于各自文件夹的 Canvas。读写前必须验证非 root folder 是同项目、未删除的正式 folder Resource，禁止以路径、当前 Episode 或最近布局推断 scope。
 - **CN-18 — 1,000–5,000 项必须保持 Canvas 语义。** Resource tree/search 使用稳定 cursor 分页，Canvas 逐页物化并启用 ReactFlow viewport virtualization；不得因规模退化为普通列表。完整替换布局只能在当前 folder 全部分页完成后执行，避免用前 200 项删除未加载节点布局。列表投影只消费 bounded summary，不能为 5,000 项读取对象存储全文。
+- **CN-19 — Project-relative 链接只聚焦正式 Canvas。** 聊天中的合法 project-relative path 通过 `ProjectWorkspace` 的受控 callback 导航到其父 folder，并使用既有搜索/定位能力聚焦正式 Resource；不存在直接打开 Runtime 文件、临时页面或第二文件预览 route。folder path 导航到该 folder，无法定位时保持当前正式 Canvas，不得猜测另一目标。
+- **CN-20 — Canvas 创建只消费 Operation Capability。** 紧凑创建表单的 operation、media kind、count/时长边界与唯一默认 Resource schema 全部由服务端 Operation Registry 投影；浏览器只组装该 Operation 的当前公开输入，不能按 operation 名、数组顺序或旧字段猜 schema/model/格式。Registry conformance 必须穷尽验证每个已发布创建 action 的实际输入仍能通过对应 live schema。
 
 ## 权威入口
 
@@ -60,6 +62,10 @@ Canvas 是 WorkspaceResource 文件树的空间化投影，不是第二套文件
 - alternatives 左右浏览、多媒体 renderer、图片点击仅预览而卡片边缘点击选中、付费确认、当前目录创建/上传、创建草稿到 pending Resource 的无缝接力、软删除确认及上传重试同样属于 authenticated 产品人工复验；静态验证只能证明 registry、类型和唯一协议接线。
 
 ## 历史回归
+
+- 媒体 Operation 收敛为按模态严格 schema 后，Agent 工具已要求 `schemaId`，但 Canvas 创建 input builder 仍发送旧 `name/resource/target` 字段，Voice capability 仍声明已删除的 `single` request kind，视频/音乐没有发布表单必需的时长范围；这条真实 UI 入口不在原媒体 conformance 枚举中，会在付费计划前全部被 strict schema 拒绝。当前 alternative-generation capability 显式拥有且校验唯一 `defaultSchemaId`、`new` request kind 和真实输入边界，Canvas 删除旧字段并只消费该投影，Registry conformance 穷尽穿过 Catalog → builder → live Operation schema。
+
+- Agent 曾输出可点击的 Runtime 绝对文件路径，浏览器把宿主目录拼成 `/zh/tmp/...` 页面并 404；直接增加“文件 route”会让临时工作副本成为第二内容入口。当前 Markdown 只接受安全 project-relative path，Canvas owner 复用正式 folder/resource 搜索定位，绝对路径与 traversal 只显示为不可导航文本。
 
 - 图片预览按钮从初版起就只在自身 `mousedown/click` handler 调用 `stopPropagation`，但 Resource tree 切换后，ReactFlow NodeWrapper 仍同时拥有内建 element selection 与业务 `onNodeClick` Resource 选择入口；图片因此会在打开大图时同时唤起下方详情。第一轮修复只给图片加 interaction marker，并在业务 `onNodeClick` 中按事件 target 返回，仍依赖包装层回调保留子元素语义，没有移除这条 Resource 选择入口，用户复验确认无效。当前显式关闭 ReactFlow element selection，中央 `onNodeClick` 不再选择 Resource；只有卡片外壳经无状态 context bridge 调用 `ProjectWorkspace` 的唯一 controlled selection writer，图片按钮只负责预览。真实 pointer/touch 组合仍是认证产品人工复验边界。
 

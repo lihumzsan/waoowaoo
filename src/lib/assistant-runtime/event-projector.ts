@@ -96,7 +96,7 @@ function stringifySummary(value: RuntimeJsonValue | undefined): string {
     .join('\n\n')
 }
 
-function safeToolOutput(item: RuntimeJsonObject): RuntimeJsonValue {
+export function projectAssistantRuntimeToolOutput(item: RuntimeJsonObject): RuntimeJsonValue {
   const status = readString(item, 'status') ?? 'unknown'
   const type = readString(item, 'type')
   if (type === 'commandExecution') {
@@ -109,10 +109,24 @@ function safeToolOutput(item: RuntimeJsonObject): RuntimeJsonValue {
   }
   if (type === 'fileChange') return { status, changes: item.changes ?? [] }
   if (type === 'mcpToolCall') {
+    const result = isRecord(item.result) ? item.result : null
+    const structuredContent = result && isRecord(result.structuredContent)
+      ? result.structuredContent
+      : null
+    if (status === 'declined' || status === 'interrupted' || status === 'cancelled') {
+      return { status, error: item.error ?? null }
+    }
+    if (result?.isError === true || status === 'failed' || status === 'errored') {
+      return {
+        ok: false,
+        status,
+        error: item.error ?? structuredContent ?? result?.content ?? null,
+      }
+    }
+    if (structuredContent) return structuredContent
     return {
       status,
-      result: item.result ?? null,
-      error: item.error ?? null,
+      result: result ?? item.result ?? null,
       durationMs: item.durationMs ?? null,
     }
   }
@@ -223,7 +237,7 @@ function finalToolPart(item: RuntimeJsonObject): UIMessagePart | null {
     toolCallId,
     state: 'output-available',
     input: toolInputForItem(item),
-    output: safeToolOutput(item),
+    output: projectAssistantRuntimeToolOutput(item),
   }
 }
 
@@ -608,7 +622,7 @@ export class AssistantRuntimeEventProjector {
     this.publishChunk({
       type: 'tool-output-available',
       toolCallId: itemId,
-      output: safeToolOutput(item),
+      output: projectAssistantRuntimeToolOutput(item),
       dynamic: true,
     })
     this.queueMessageSnapshot()

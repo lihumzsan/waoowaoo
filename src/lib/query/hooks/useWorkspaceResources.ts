@@ -11,6 +11,8 @@ export function useWorkspaceResources(input: {
   readonly search: string | null
   readonly scope?: WorkspaceResourceTreeScope
   readonly enabled?: boolean
+  /** Optional one-shot UI identity when the caller must bypass a prior cached lookup. */
+  readonly refreshToken?: string | null
 }) {
   return useInfiniteQuery({
     queryKey: [
@@ -18,6 +20,7 @@ export function useWorkspaceResources(input: {
       input.prefix,
       input.search,
       input.scope ?? 'children',
+      input.refreshToken ?? null,
     ] as const,
     initialPageParam: null as string | null,
     queryFn: async ({ pageParam }): Promise<WorkspaceResourceTreePage> => {

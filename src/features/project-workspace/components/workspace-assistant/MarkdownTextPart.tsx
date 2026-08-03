@@ -6,6 +6,10 @@ import remarkGfm from 'remark-gfm'
 import type { TextMessagePartProps } from '@assistant-ui/react'
 import type { Components } from 'react-markdown'
 import { useWorkspaceAssistantTextPlayback } from './WorkspaceAssistantTextPlayback'
+import {
+  projectWorkspacePathFromHref,
+  useWorkspaceAssistantWorkspaceLink,
+} from './workspace-assistant-workspace-link'
 
 type StreamedHastNode = {
   type: string
@@ -51,6 +55,45 @@ function rehypeAnimateWorkspaceAssistantStreamedText() {
   return (tree: StreamedHastNode) => animateStreamedTextChildren(tree)
 }
 
+function isExternalWebHref(href: string): boolean {
+  try {
+    const url = new URL(href)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function WorkspaceMarkdownLink(props: { readonly href?: string; readonly children?: React.ReactNode }) {
+  const workspaceLink = useWorkspaceAssistantWorkspaceLink()
+  const href = props.href?.trim() ?? ''
+  if (isExternalWebHref(href)) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="break-words text-[var(--glass-accent-from)] underline underline-offset-2 [overflow-wrap:anywhere]"
+      >
+        {props.children}
+      </a>
+    )
+  }
+  const workspacePath = projectWorkspacePathFromHref(href)
+  if (workspaceLink && workspacePath) {
+    return (
+      <button
+        type="button"
+        className="break-words text-left text-[var(--glass-accent-from)] underline underline-offset-2 [overflow-wrap:anywhere]"
+        onClick={() => workspaceLink.openWorkspacePath(workspacePath)}
+      >
+        {props.children}
+      </button>
+    )
+  }
+  return <span className="break-words text-[var(--glass-text-tertiary)]">{props.children}</span>
+}
+
 const markdownComponents: Components = {
   p: ({ children }) => (
     <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>
@@ -89,16 +132,7 @@ const markdownComponents: Components = {
       {children}
     </blockquote>
   ),
-  a: ({ href, children }) => (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="break-words text-[var(--glass-accent-from)] underline underline-offset-2 [overflow-wrap:anywhere]"
-    >
-      {children}
-    </a>
-  ),
+  a: WorkspaceMarkdownLink,
   h1: ({ children }) => (
     <h1 className="mb-2 text-base font-semibold text-[var(--glass-text-primary)]">{children}</h1>
   ),

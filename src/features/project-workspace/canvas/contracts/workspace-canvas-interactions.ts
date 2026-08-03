@@ -16,6 +16,11 @@ export const WORKSPACE_CANVAS_CREATE_KINDS = [
 
 export type WorkspaceCanvasCreateKind = typeof WORKSPACE_CANVAS_CREATE_KINDS[number]
 
+export interface WorkspaceCanvasPathFocusRequest {
+  readonly requestId: string
+  readonly workspacePath: string
+}
+
 /**
  * Server-projected create capability. The browser renders the small 1.0 form,
  * but never guesses whether an Operation is available or what count range it

@@ -43,7 +43,6 @@ import {
   WorkspaceAssistantPendingTurnPlaceholder,
   WorkspaceAssistantThreadMessage,
 } from './workspace-assistant/WorkspaceAssistantRenderers'
-import { WorkspaceAssistantActiveRunCard } from './workspace-assistant/WorkspaceAssistantActiveRunCard'
 import { WorkspaceAssistantPlanCard } from './workspace-assistant/WorkspaceAssistantPlanCard'
 import { WorkspaceAssistantSettings } from './workspace-assistant/WorkspaceAssistantSettings'
 import { WorkspaceAssistantComposer } from './workspace-assistant/WorkspaceAssistantComposer'
@@ -68,6 +67,7 @@ import {
   type WorkspaceAssistantFailureView,
 } from './workspace-assistant/workspace-assistant-panel-state'
 import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
+import { WorkspaceAssistantWorkspaceLinkProvider } from './workspace-assistant/workspace-assistant-workspace-link'
 
 interface WorkspaceAssistantPanelProps {
   projectId: string
@@ -83,6 +83,7 @@ interface WorkspaceAssistantPanelProps {
   autoStartKey?: string | null
   onAutoStartConsumed?: () => void
   onActiveOperationChange?: (focusRequest: WorkspaceAssistantActiveFocusRequest | null) => void
+  onOpenWorkspacePath: (workspacePath: string) => void
 }
 
 export const WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE = {
@@ -606,6 +607,7 @@ export default function WorkspaceAssistantPanel({
   autoStartKey,
   onAutoStartConsumed,
   onActiveOperationChange,
+  onOpenWorkspacePath,
 }: WorkspaceAssistantPanelProps) {
   const t = useTranslations('assistantAgent')
   const tErrors = useTranslations('errors')
@@ -736,10 +738,6 @@ export default function WorkspaceAssistantPanel({
     storageLoading: assistantRuntime.viewLoading,
     onActiveOperationChange,
   })
-  const taskBatches = useMemo(
-    () => assistantRuntime.view?.followUpBatches ?? [],
-    [assistantRuntime.view?.followUpBatches],
-  )
   const pendingInteraction = assistantRuntime.pendingInteraction
   const serverPendingApproval = isAssistantRuntimeApprovalRequest(pendingInteraction)
     ? pendingInteraction
@@ -869,33 +867,6 @@ export default function WorkspaceAssistantPanel({
         onClick: resendUndeliveredMessage,
       }
     : null
-  const taskBatchViews = useMemo(
-    () =>
-      taskBatches.map((batch) => {
-        const operationIds = Array.from(
-          new Set(batch.tasks.flatMap((task) => (task.operationId ? [task.operationId] : []))),
-        ).sort()
-        const failures = Array.from(
-          new Map(
-            batch.tasks.flatMap((task) => {
-              if (!task.errorCode) return []
-              const failure = resolveWorkspaceAssistantFailureView({
-                facts: {
-                  code: task.errorCode?.trim() || null,
-                  requestId: task.taskId,
-                },
-                localizeCode: localizeErrorCode,
-                formatReference: formatFailureReference,
-                unknownFallback: unknownFailureFallback,
-              })
-              return [[`${failure.headline}\u0000${failure.technical ?? ''}`, failure] as const]
-            }),
-          ).values(),
-        )
-        return { batch, operationIds, failures }
-      }),
-    [formatFailureReference, localizeErrorCode, taskBatches, unknownFailureFallback],
-  )
   const assistantTurns = useMemo(() => {
     const byId = new Map((assistantRuntime.view?.recentTurns ?? []).map((turn) => [turn.turnId, turn] as const))
     const current = assistantRuntime.view?.currentTurn ?? null
@@ -928,11 +899,14 @@ export default function WorkspaceAssistantPanel({
             messages={assistantRuntime.messages}
             turns={assistantTurns}
           >
-            <AssistantRuntimeProvider runtime={assistantRuntime.runtime}>
-              <ThreadPrimitive.Root
-                key={projectId}
-                className="relative flex h-full min-h-0 flex-col"
-              >
+            <WorkspaceAssistantWorkspaceLinkProvider
+              openWorkspacePath={onOpenWorkspacePath}
+            >
+              <AssistantRuntimeProvider runtime={assistantRuntime.runtime}>
+                <ThreadPrimitive.Root
+                  key={projectId}
+                  className="relative flex h-full min-h-0 flex-col"
+                >
                 <WorkspaceAssistantSettings />
                 <ThreadPrimitive.Viewport
                   autoScroll
@@ -988,16 +962,6 @@ export default function WorkspaceAssistantPanel({
                               action={continueAction ?? resendAction}
                             />
                           ) : null}
-                          {!assistantRuntime.viewLoading
-                            ? taskBatchViews.map((view) => (
-                                <WorkspaceAssistantActiveRunCard
-                                  key={view.batch.batchId}
-                                  operationIds={view.operationIds}
-                                  progress={view.batch.progress}
-                                  failures={view.failures}
-                                />
-                              ))
-                            : null}
                           {serverPendingApproval ? (
                             <ConfirmationActionCard
                               members={[{
@@ -1112,8 +1076,9 @@ export default function WorkspaceAssistantPanel({
                     />
                   </div>
                 </div>
-              </ThreadPrimitive.Root>
-            </AssistantRuntimeProvider>
+                </ThreadPrimitive.Root>
+              </AssistantRuntimeProvider>
+            </WorkspaceAssistantWorkspaceLinkProvider>
           </WorkspaceAssistantRepeatedToolCallGroupProvider>
         </div>
       </div>

@@ -55,6 +55,7 @@ import { collectWorkspaceNodeRuntimeTargets, resolveWorkspaceCanvasNodeData } fr
 import type {
   WorkspaceAssistantDraftRequest,
   WorkspaceCanvasCreateRequest,
+  WorkspaceCanvasPathFocusRequest,
   WorkspaceCanvasResourceOperationView,
   WorkspaceCanvasSelection,
   WorkspaceResourceCardMemberView,
@@ -90,6 +91,7 @@ interface ProjectWorkspaceCanvasContentProps {
   readonly onSelectionChange: (selection: WorkspaceCanvasSelection | null) => void
   readonly onAssistantDraftRequest: (request: WorkspaceAssistantDraftRequest) => void
   readonly activeAssistantFocusRequest?: WorkspaceAssistantActiveFocusRequest | null
+  readonly workspacePathFocusRequest?: WorkspaceCanvasPathFocusRequest | null
 }
 
 interface WorkspaceCanvasUserPosition {
@@ -891,6 +893,7 @@ function ProjectWorkspaceFolderCanvas({
 
 function ProjectWorkspaceCanvasContent(props: ProjectWorkspaceCanvasContentProps) {
   const t = useTranslations('projectWorkflow.canvas.workspace')
+  const { projectId } = useWorkspaceProvider()
   const rootName = t('folderNavigation.root')
   const [folder, setFolder] = useState<CurrentCanvasFolder>({
     folderKey: WORKSPACE_RESOURCE_ROOT_FOLDER_KEY,
@@ -899,11 +902,34 @@ function ProjectWorkspaceCanvasContent(props: ProjectWorkspaceCanvasContentProps
     ancestors: [],
   })
   const [pendingLocateResourceId, setPendingLocateResourceId] = useState<string | null>(null)
+  const pathFocusQuery = useWorkspaceResources({
+    projectId,
+    prefix: null,
+    search: props.workspacePathFocusRequest?.workspacePath ?? null,
+    scope: 'subtree',
+    enabled: Boolean(props.workspacePathFocusRequest),
+    refreshToken: props.workspacePathFocusRequest?.requestId ?? null,
+  })
+  const handledPathFocusRequestId = useRef<string | null>(null)
   const navigate = useCallback((nextFolder: CurrentCanvasFolder, locateResourceId: string | null = null) => {
     props.onSelectionChange(null)
     setPendingLocateResourceId(locateResourceId)
     setFolder(nextFolder)
   }, [props])
+  useEffect(() => {
+    const request = props.workspacePathFocusRequest
+    if (!request || pathFocusQuery.isLoading || handledPathFocusRequestId.current === request.requestId) return
+    const resource = flattenResources(pathFocusQuery.data).find((entry) => (
+      entry.workspacePath === request.workspacePath
+    ))
+    handledPathFocusRequestId.current = request.requestId
+    if (!resource) return
+    if (resource.resourceKind === 'folder') {
+      navigate(folderFromResource(resource))
+      return
+    }
+    navigate(parentFolderFromResource(resource, rootName), resource.resourceId)
+  }, [navigate, pathFocusQuery.data, pathFocusQuery.isLoading, props.workspacePathFocusRequest, rootName])
   return (
     <ProjectWorkspaceFolderCanvas
       key={folder.folderKey}

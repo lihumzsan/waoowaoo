@@ -28,6 +28,7 @@ Codex app-server 是唯一 Agent Runtime；Wao 保留产品 View、WorkspaceReso
 - **CRR-10 — 不使用 Git。** 创作历史由 WorkspaceResourceVersion 拥有；Runtime 目录没有 Git、Commit Service、branch 或 CAS HEAD。并发安全来自 Project ownership、单 Turn 与 Catalog baseline CAS。
 - **CRR-11 — 进程内 Manager 唯一。** 所有 Next route bundle 在同一进程必须复用一个进程级 AssistantRuntime/Session Manager；开发热更新不能遗留仍续租的模块级 Manager。跨进程唯一性继续由外部 ownership claim 裁决，不能用第二个本地 singleton 竞争。
 - **CRR-12 — 当前控制面单进程。** app-server placement 与 Streamable HTTP MCP session 当前都是进程内对象，因此当前 Cloud Web 控制面只支持一个 Next Node 进程/replica；Temporal 媒体 Worker 可独立横向扩展。启用多个 Web replica 前必须先增加按 project owner 的请求路由与 MCP session affinity，禁止把 Redis ownership 误称为跨 replica 转发能力。
+- **CRR-13 — Runtime 路径不能成为产品链接。** app-server 的 materialization root、临时 Codex home、绝对路径和 `file://` 只属于可销毁执行环境。Agent 对用户只输出经过规范化的 project-relative workspace path；产品 Markdown 把它交给 Canvas 的唯一目录/Resource 定位入口，拒绝绝对路径、scheme、反斜线、编码后的 traversal 与运行时根路径。
 
 ## 生命周期
 
@@ -65,6 +66,8 @@ Codex app-server 是唯一 Agent Runtime；Wao 保留产品 View、WorkspaceReso
 真实 app-server smoke 覆盖 initialize、thread start/resume/read、turn、steer、interrupt、skills/list 与关键 event。Session Manager 需验证同 scope 互斥、进程退出、Manager 重启、binding 顺序、idle stop/restart；Workspace 需以真实数据库和对象存储边界验证目录 rename、内容版本、baseline divergence 和系统字段保护。配置复验必须同时证明 `dev:cloud + local` 可启动，以及 `cloud + production + local` 原地拒绝；云端容器资源限制与网络只能在目标部署复验。
 
 ## 历史回归
+
+- Codex 文件修改结果曾把 Runtime 的绝对 `/tmp/.../workspace/...` 路径直接写入 Markdown；浏览器把它当成站内 URL，既暴露临时宿主结构又只能得到 404。当前 developer instruction 只允许 project-relative path，Markdown renderer 对 decode/Unicode normalize 后的相对路径做 fail-closed 校验，并调用 Canvas 已有定位入口；Runtime 临时根永不进入产品导航。
 
 - Codex MCP 首版把 checkpoint 后才允许写入的 `ProjectAssistantThread.runtimeThreadId` 错当成当前 capability 调用身份；全新 Thread 的首个 Turn 因而在图片、视频和批量生产进入计划/计费前统一报 `ACTIVE_TURN_IDENTITY_INVALID`，而已有 checkpoint 的 Thread 正常。此前真实媒体验收复用了已持久 Thread，只证明恢复路径，遗漏首轮路径。当前 Responses、standalone search 与 MCP 共用一个 capability Turn resolver，只以 placement ownership、唯一活跃 Product Turn 和 `runtimeTurnId = executionOwnerId` 作为执行围栏；durable Thread identity 不再参与活跃 Turn 判定。
 

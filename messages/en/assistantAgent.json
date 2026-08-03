@@ -75,7 +75,6 @@
     "title": "Tool Call",
     "success": "Success",
     "submitted": "Submitted",
-    "progressSummary": "{succeeded} succeeded · {failed} failed · {canceled} canceled · {running} running",
     "groupTitle": "{title} × {count}",
     "groupProgressSummary": "{success} succeeded · {submitted} submitted · {failed} failed · {interrupted} stopped · {needsAction} need action · {running} running",
     "partial": "Partially completed",

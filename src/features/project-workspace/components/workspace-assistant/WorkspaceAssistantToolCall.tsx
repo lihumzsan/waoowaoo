@@ -67,6 +67,17 @@ function readText(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value : null
 }
 
+function readPublicWebUrl(value: unknown): string | null {
+  const raw = readText(value)
+  if (!raw) return null
+  try {
+    const url = new URL(raw)
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : null
+  } catch {
+    return null
+  }
+}
+
 function resolveNativeToolTitle(toolName: string, t: AssistantAgentTranslator): string | null {
   if (NATIVE_SUBAGENT_TOOL_NAMES.has(toolName)) {
     switch (toolName) {
@@ -89,7 +100,7 @@ function resolveNativeToolTitle(toolName: string, t: AssistantAgentTranslator): 
     case 'file_change': return t('runtime.native.fileChange')
     case 'web_search': return t('runtime.native.webSearch')
     case 'view_image': return t('runtime.native.viewImage')
-    default: return toolName.includes('.') ? toolName : null
+    default: return null
   }
 }
 
@@ -142,16 +153,15 @@ function resolveWebSearchSources(result: unknown): WebSearchSource[] {
   const byUrl = new Map<string, WebSearchSource>()
   for (const entry of output.results) {
     if (!isRecord(entry)) continue
-    const url = readText(entry.source_url) ?? readText(entry.url)
+    const url = readPublicWebUrl(entry.source_url) ?? readPublicWebUrl(entry.url)
     if (!url || byUrl.has(url)) continue
     try {
       const parsed = new URL(url)
-      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') continue
       byUrl.set(url, {
         url,
         title: readText(entry.title) ?? parsed.hostname.replace(/^www\./, ''),
         domain: readText(entry.source_domain) ?? parsed.hostname.replace(/^www\./, ''),
-        previewImageUrl: readText(entry.preview_image_url) ?? readText(entry.image_url),
+        previewImageUrl: readPublicWebUrl(entry.preview_image_url) ?? readPublicWebUrl(entry.image_url),
       })
     } catch {}
   }
@@ -262,8 +272,11 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
   const repeatedEntry = context.repeatedByToolCallId.get(props.toolCallId)
   const subagentLifecycle = context.subagentsByToolCallId.get(props.toolCallId) ?? null
   const groupView = repeatedEntry?.view ?? null
+  const operationId = props.toolName.startsWith('wao.')
+    ? props.toolName.slice('wao.'.length)
+    : props.toolName
   const operationTitle = resolveNativeToolTitle(props.toolName, t)
-    ?? localizeProjectAgentOperationTitle(props.toolName, locale)
+    ?? localizeProjectAgentOperationTitle(operationId, locale)
   const toolStatus = props.status.type
   useWorkspaceAssistantRunningSurface(
     `tool:${props.toolCallId}`,
