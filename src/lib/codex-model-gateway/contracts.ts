@@ -10,6 +10,8 @@ export type CodexModelGatewayScope = {
 }
 
 export type CodexModelGatewayRuntimeConfig = {
+  /** Codex capability-catalog identity; the gateway restores the selected upstream id. */
+  readonly runtimeModelId: string
   readonly modelId: string
   readonly modelKey: string
   readonly modelProviderId: typeof CODEX_MODEL_GATEWAY_PROVIDER_ID
@@ -33,10 +35,15 @@ export type CodexModelGatewayErrorCode =
   | 'PROVIDER_BASE_URL_INVALID'
   | 'RUNTIME_BASE_URL_INVALID'
   | 'RUNTIME_TOKEN_SCOPE_MISMATCH'
+  | 'ACTIVE_TURN_REQUIRED'
   | 'REQUEST_ENDPOINT_INVALID'
   | 'REQUEST_BODY_INVALID'
   | 'REQUEST_MODEL_MISMATCH'
   | 'PROVIDER_REQUEST_FAILED'
+  | 'SEARCH_COMMAND_UNSUPPORTED'
+  | 'SEARCH_QUERY_INVALID'
+  | 'PROVIDER_SEARCH_RESPONSE_INVALID'
+  | 'PROVIDER_SEARCH_RESULT_MISSING'
 
 export class CodexModelGatewayError extends Error {
   readonly code: CodexModelGatewayErrorCode

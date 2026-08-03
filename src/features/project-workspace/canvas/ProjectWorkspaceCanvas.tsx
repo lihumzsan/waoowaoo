@@ -44,6 +44,10 @@ import {
 import { isWorkspaceCanvasWheelLockedTarget } from './canvas-scroll-lock'
 import { WorkspaceNodeDetailsCard } from './details/WorkspaceNodeDetailsCard'
 import { workspaceNodeTypes } from './nodes/workspaceNodeTypes'
+import {
+  WorkspaceCanvasFolderOpenContext,
+  type WorkspaceCanvasFolderOpenTarget,
+} from './nodes/renderers/folder-card'
 import type { WorkspaceCanvasFlowEdge, WorkspaceCanvasFlowNode } from './node-canvas-types'
 import type { WorkspaceCanvasFolderNodeData, WorkspaceCanvasNodeRecord } from './node-canvas-types'
 import { collectWorkspaceNodeRuntimeTargets, resolveWorkspaceCanvasNodeData } from './workspace-node-runtime'
@@ -452,16 +456,41 @@ function ProjectWorkspaceFolderCanvas({
       previewUrl: summary.kind === 'media' ? summary.url : null,
     }
   }, [])
+  const openProjectedFolder = useCallback((target: WorkspaceCanvasFolderOpenTarget) => {
+    const parent: WorkspaceResourceAncestorView[] = folder.folderKey === WORKSPACE_RESOURCE_ROOT_FOLDER_KEY
+      ? []
+      : [...folder.ancestors, {
+          resourceId: folder.folderKey,
+          name: folder.name,
+          workspacePath: folder.workspacePath,
+        }]
+    onNavigate({
+      folderKey: target.resourceId,
+      name: target.name,
+      workspacePath: target.workspacePath,
+      ancestors: parent,
+    })
+  }, [folder, onNavigate])
   const handleNodeClick = useCallback<NodeMouseHandler<WorkspaceCanvasFlowNode>>((_event, node) => {
     canvasRef.current?.focus()
+    if (isFolderNodeData(node.data)) {
+      openProjectedFolder({
+        resourceId: node.data.folder.resourceId,
+        name: node.data.title,
+        workspacePath: node.data.folder.workspacePath,
+      })
+      return
+    }
     onSelectionChange(selectionForNode(node))
-  }, [onSelectionChange, selectionForNode])
+  }, [onSelectionChange, openProjectedFolder, selectionForNode])
   const handleNodeDoubleClick = useCallback<NodeMouseHandler<WorkspaceCanvasFlowNode>>((_event, node) => {
     if (!isFolderNodeData(node.data)) return
-    const folderResourceId = node.data.folder.resourceId
-    const resource = resources.find((candidate) => candidate.resourceId === folderResourceId)
-    if (resource) onNavigate(folderFromResource(resource))
-  }, [onNavigate, resources])
+    openProjectedFolder({
+      resourceId: node.data.folder.resourceId,
+      name: node.data.title,
+      workspacePath: node.data.folder.workspacePath,
+    })
+  }, [openProjectedFolder])
   const handlePaneClick = useCallback((event: ReactMouseEvent<Element, globalThis.MouseEvent>) => {
     canvasRef.current?.focus()
     onSelectionChange(null)
@@ -606,7 +635,8 @@ function ProjectWorkspaceFolderCanvas({
   const loading = folderQuery.isLoading || layoutLoading
   const failed = folderQuery.isError || Boolean(layoutLoadError)
   return (
-    <div
+    <WorkspaceCanvasFolderOpenContext.Provider value={openProjectedFolder}>
+      <div
       className="workspace-canvas-layout-animated relative h-full min-h-0 w-full overflow-hidden bg-[var(--glass-bg-canvas)]"
       onDragOver={handleCanvasDragOver}
       onDrop={handleCanvasDrop}
@@ -646,10 +676,11 @@ function ProjectWorkspaceFolderCanvas({
           proOptions={WORKSPACE_REACT_FLOW_PRO_OPTIONS}
         >
           <Background variant={BackgroundVariant.Dots} gap={24} size={1} />
-          <Panel position="top-left" className="!z-[80] !m-0" style={{ left: 16, top: 16 }}>
+          <Panel position="top-left" className="!z-[80] !m-0" style={{ left: 16, top: 72 }}>
             <CanvasFolderNavigation
               breadcrumbs={breadcrumbs}
               search={search}
+              backLabel={t('folderNavigation.back')}
               searchPlaceholder={t('folderNavigation.searchPlaceholder')}
               searchResultsLabel={t('folderNavigation.searchResults')}
               noResultsLabel={t('folderNavigation.noResults')}
@@ -787,7 +818,8 @@ function ProjectWorkspaceFolderCanvas({
         />
       ) : null}
       <CanvasUploadQueue items={uploadQueue.items} onRetry={uploadQueue.retry} onDismiss={uploadQueue.dismiss} />
-    </div>
+      </div>
+    </WorkspaceCanvasFolderOpenContext.Provider>
   )
 }
 

@@ -22,6 +22,7 @@ import {
   type AgentSessionPendingInteractionView,
   type AgentSessionView,
 } from '@/lib/assistant-runtime/view-contract'
+import type { AssistantRuntimeCollaborationMode } from '@/lib/assistant-runtime/contracts'
 import { apiFetch } from '@/lib/api-fetch'
 import {
   buildProjectAssistantTextAttachmentMetadata,
@@ -45,6 +46,7 @@ export interface WorkspaceAssistantSendMessageInput {
   readonly attachments?: readonly ProjectAssistantTextAttachment[]
   readonly mediaAttachments?: readonly ProjectAssistantMediaAttachment[]
   readonly sourceKey?: string
+  readonly collaborationMode?: AssistantRuntimeCollaborationMode
 }
 
 interface UseWorkspaceAssistantRuntimeParams {
@@ -230,17 +232,63 @@ function isActiveTurn(view: AgentSessionView | null): boolean {
   )
 }
 
+function readDecidedInteractionResult(
+  interaction: AgentSessionPendingInteractionView,
+): Record<string, unknown> | null {
+  if (interaction.status !== 'decided' || !isRecord(interaction.response)) return null
+  return isRecord(interaction.response.result) ? interaction.response.result : null
+}
+
+function readPersistedAgentTurnStreamSeq(message: UIMessage | undefined): number {
+  if (!message || !isRecord(message.metadata)) return 0
+  const custom = message.metadata.custom
+  if (!isRecord(custom)) return 0
+  const seq = custom.waoAgentTurnStreamSeq
+  return Number.isSafeInteger(seq) && Number(seq) >= 0 ? Number(seq) : 0
+}
+
+type AgentTurnOverlayController = {
+  identity: string
+  lastSeq: number
+  controller: ReadableStreamDefaultController<UIMessageChunk>
+  activeTextParts: Set<string>
+  activeReasoningParts: Set<string>
+}
+
+function enqueueAgentTurnOverlayChunk(
+  active: AgentTurnOverlayController,
+  chunk: UIMessageChunk,
+): void {
+  if (
+    (chunk.type === 'text-delta' || chunk.type === 'text-end')
+    && !active.activeTextParts.has(chunk.id)
+  ) {
+    active.controller.enqueue({ type: 'text-start', id: chunk.id })
+    active.activeTextParts.add(chunk.id)
+  } else if (chunk.type === 'text-start') {
+    active.activeTextParts.add(chunk.id)
+  }
+  if (
+    (chunk.type === 'reasoning-delta' || chunk.type === 'reasoning-end')
+    && !active.activeReasoningParts.has(chunk.id)
+  ) {
+    active.controller.enqueue({ type: 'reasoning-start', id: chunk.id })
+    active.activeReasoningParts.add(chunk.id)
+  } else if (chunk.type === 'reasoning-start') {
+    active.activeReasoningParts.add(chunk.id)
+  }
+  active.controller.enqueue(chunk)
+  if (chunk.type === 'text-end') active.activeTextParts.delete(chunk.id)
+  if (chunk.type === 'reasoning-end') active.activeReasoningParts.delete(chunk.id)
+}
+
 function useAgentTurnOverlay(params: {
   projectId: string
   view: AgentSessionView | null
 }): UIMessage | null {
   const { subscribeTaskEvents } = useWorkspaceProvider()
   const [message, setMessage] = useState<UIMessage | null>(null)
-  const activeRef = useRef<{
-    identity: string
-    lastSeq: number
-    controller: ReadableStreamDefaultController<UIMessageChunk>
-  } | null>(null)
+  const activeRef = useRef<AgentTurnOverlayController | null>(null)
   const generationRef = useRef(0)
 
   const close = useCallback(() => {
@@ -259,6 +307,9 @@ function useAgentTurnOverlay(params: {
     (event: AgentTurnStreamSSEEvent) => {
       close()
       const generation = generationRef.current
+      const persistedMessage = params.view?.thread?.messages.find(
+        (candidate) => candidate.id === event.messageId,
+      )
       let controller: ReadableStreamDefaultController<UIMessageChunk> | null = null
       const stream = new ReadableStream<UIMessageChunk>({
         start(nextController) {
@@ -270,8 +321,13 @@ function useAgentTurnOverlay(params: {
       }
       activeRef.current = {
         identity: `${event.turnId}:${String(event.attempt)}:${event.messageId}`,
-        lastSeq: 0,
+        // The persisted prefix and its watermark are one durable fact. SSE
+        // bootstrap buffers newer stream events, so duplicates are skipped
+        // and a real gap fails closed below instead of truncating the reply.
+        lastSeq: readPersistedAgentTurnStreamSeq(persistedMessage),
         controller,
+        activeTextParts: new Set(),
+        activeReasoningParts: new Set(),
       }
       void (async () => {
         try {
@@ -281,7 +337,10 @@ function useAgentTurnOverlay(params: {
             message: {
               id: event.messageId,
               role: 'assistant',
-              parts: [],
+              parts: persistedMessage?.parts ?? [],
+              ...(persistedMessage?.metadata === undefined
+                ? {}
+                : { metadata: persistedMessage.metadata }),
             },
           })) {
             if (generationRef.current !== generation) return
@@ -292,7 +351,7 @@ function useAgentTurnOverlay(params: {
         }
       })()
     },
-    [close],
+    [close, params.view?.thread?.messages],
   )
 
   useEffect(
@@ -313,7 +372,7 @@ function useAgentTurnOverlay(params: {
         }
         active.lastSeq = event.seq
         try {
-          active.controller.enqueue(event.chunk)
+          enqueueAgentTurnOverlayChunk(active, event.chunk)
         } catch {
           close()
         }
@@ -326,13 +385,9 @@ function useAgentTurnOverlay(params: {
     if (!active) return
     const turn = params.view?.currentTurn ?? null
     const expectedPrefix = turn ? `${turn.turnId}:${String(turn.attempt)}:` : null
-    const persisted = params.view?.thread?.messages.some(
-      (candidate) => candidate.id === message?.id,
-    )
     if (
-      persisted ||
       !turn ||
-      turn.status !== 'running' ||
+      (turn.status !== 'running' && turn.status !== 'waiting_approval') ||
       !active.identity.startsWith(expectedPrefix ?? '\u0000')
     ) {
       close()
@@ -428,7 +483,11 @@ export function useWorkspaceAssistantRuntime({
         ids.add(message.id)
       }
     }
-    if (overlay && !ids.has(overlay.id)) next.push(overlay)
+    if (overlay) {
+      const persistedIndex = next.findIndex((message) => message.id === overlay.id)
+      if (persistedIndex >= 0) next[persistedIndex] = overlay
+      else if (!ids.has(overlay.id)) next.push(overlay)
+    }
     return next
   }, [optimisticMessages, overlay, persistedMessages])
 
@@ -437,6 +496,7 @@ export function useWorkspaceAssistantRuntime({
       const text = input.text.trim()
       const attachments = input.attachments ?? []
       const mediaAttachments = input.mediaAttachments ?? []
+      const collaborationMode = input.collaborationMode ?? 'default'
       if (!text && attachments.length === 0 && mediaAttachments.length === 0) {
         return
       }
@@ -449,6 +509,7 @@ export function useWorkspaceAssistantRuntime({
           attachments,
           mediaAttachments,
           hidden,
+          collaborationMode,
         },
       })
       if (scopeKeyRef.current !== commandScopeKey) return
@@ -477,6 +538,7 @@ export function useWorkspaceAssistantRuntime({
                 locale,
                 selectedScopeRef: selectedScopeRef ?? null,
                 selectedAssetId: selectedAssetId ?? null,
+                collaborationMode,
               },
             }),
           },
@@ -582,6 +644,7 @@ export function useWorkspaceAssistantRuntime({
       setCommandError(null)
       setCommandPending(true)
       try {
+        const decidedResult = readDecidedInteractionResult(interaction)
         const response = await apiFetch(
           `/api/projects/${encodeURIComponent(projectId)}/assistant/interactions/${encodeURIComponent(interaction.interactionId)}`,
           {
@@ -590,7 +653,8 @@ export function useWorkspaceAssistantRuntime({
             body: JSON.stringify({
               threadId,
               requestId: `approval:${interaction.interactionId}:${params.decision}`,
-              result: { decision: params.decision === 'approve' ? 'accept' : 'decline' },
+              result: decidedResult
+                ?? { decision: params.decision === 'approve' ? 'accept' : 'decline' },
             }),
           },
         )
@@ -634,6 +698,7 @@ export function useWorkspaceAssistantRuntime({
       setCommandError(null)
       setCommandPending(true)
       try {
+        const decidedResult = readDecidedInteractionResult(interaction)
         const response = await apiFetch(
           `/api/projects/${encodeURIComponent(projectId)}/assistant/interactions/${encodeURIComponent(interaction.interactionId)}`,
           {
@@ -642,7 +707,7 @@ export function useWorkspaceAssistantRuntime({
             body: JSON.stringify({
               threadId,
               requestId: `interaction:${interaction.interactionId}`,
-              result: params.response,
+              result: decidedResult ?? params.response,
             }),
           },
         )
@@ -681,7 +746,9 @@ export function useWorkspaceAssistantRuntime({
     [sendMessage],
   )
   const replyInFlight =
-    view?.currentTurn?.status === 'queued' || view?.currentTurn?.status === 'running'
+    view?.currentTurn?.status === 'queued'
+    || view?.currentTurn?.status === 'running'
+    || view?.currentTurn?.status === 'waiting_approval'
   const runtime = useExternalStoreRuntime<UIMessage>({
     messages,
     isLoading: viewQuery.isLoading,

@@ -46,8 +46,10 @@ const PUBLIC_DETAIL_KEYS = new Set([
   'maxChars',
   'maxFiles',
   'required',
+  'reasonCode',
   'retryAfter',
   'retryAfterSeconds',
+  'workspacePath',
 ])
 
 function isPublicDetailValue(value: unknown): boolean {

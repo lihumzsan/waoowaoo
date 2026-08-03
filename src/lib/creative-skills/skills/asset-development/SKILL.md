@@ -1,3 +1,8 @@
+---
+name: asset-development
+description: Scope reusable production assets and define stable visible designs from an exact screenplay.
+---
+
 # 资产范围与视觉设计
 
 ## 作用

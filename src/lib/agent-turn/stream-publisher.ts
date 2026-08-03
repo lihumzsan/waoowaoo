@@ -28,7 +28,8 @@ export function buildAgentTurnAssistantMessageId(params: {
 }
 
 export interface AgentTurnStreamPublisher {
-  publish: (chunk: UIMessageChunk) => void
+  reserve: (chunk: UIMessageChunk) => number | null
+  publishThrough: (watermark: number) => Promise<void>
   flush: () => Promise<void>
 }
 
@@ -41,13 +42,14 @@ export function createAgentTurnStreamPublisher(params: {
   messageId: string
 }): AgentTurnStreamPublisher {
   let nextSeq = 0
-  let pendingEvents = 0
+  const bufferedMessages = new Map<number, string>()
   let disabled = false
   let tail = Promise.resolve()
 
   const disable = (reason: string, error?: unknown): void => {
     if (disabled) return
     disabled = true
+    bufferedMessages.clear()
     logger.warn({
       action: 'agent_turn.stream.disabled',
       message: 'agent turn ephemeral stream disabled',
@@ -66,11 +68,11 @@ export function createAgentTurnStreamPublisher(params: {
   }
 
   return {
-    publish(chunk) {
-      if (disabled) return
-      if (pendingEvents >= AGENT_TURN_STREAM_MAX_PENDING_EVENTS) {
+    reserve(chunk) {
+      if (disabled) return null
+      if (bufferedMessages.size >= AGENT_TURN_STREAM_MAX_PENDING_EVENTS) {
         disable('pending_event_limit')
-        return
+        return null
       }
       const seq = nextSeq + 1
       const event: AgentTurnStreamSSEEvent = {
@@ -95,24 +97,38 @@ export function createAgentTurnStreamPublisher(params: {
         > AGENT_TURN_STREAM_MAX_EVENT_BYTES
       ) {
         disable('event_byte_limit')
-        return
+        return null
       }
       nextSeq = seq
-      pendingEvents += 1
+      bufferedMessages.set(seq, message)
+      return seq
+    },
+    async publishThrough(watermark) {
+      if (disabled) return
+      if (!Number.isSafeInteger(watermark) || watermark < 0 || watermark > nextSeq) {
+        throw new Error('AGENT_TURN_STREAM_WATERMARK_INVALID')
+      }
+      const messages = [...bufferedMessages.entries()]
+        .filter(([seq]) => seq <= watermark)
+        .sort(([left], [right]) => left - right)
+      for (const [seq] of messages) bufferedMessages.delete(seq)
       tail = tail
         .then(async () => {
           if (disabled) return
-          await redis.publish(getProjectChannel(params.projectId), message)
+          for (const [, message] of messages) {
+            await redis.publish(getProjectChannel(params.projectId), message)
+          }
         })
         .catch((error: unknown) => {
           disable('redis_publish_failed', error)
         })
-        .finally(() => {
-          pendingEvents -= 1
-        })
+      await tail
     },
     async flush() {
       await tail
+      if (!disabled && bufferedMessages.size > 0) {
+        throw new Error('AGENT_TURN_STREAM_UNCOMMITTED_EVENTS')
+      }
     },
   }
 }

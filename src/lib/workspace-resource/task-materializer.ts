@@ -90,22 +90,22 @@ export async function materializeWorkspaceResourceTaskTerminalInTransaction(
   if (input.task.targetType !== 'WorkspaceResource') {
     throw new Error(`WORKSPACE_RESOURCE_TASK_TARGET_INVALID:${input.task.targetType}`)
   }
-  const payload = parseTerminalResourcePayload(input.task)
-  if (payload.resourceId !== input.task.targetId) {
-    throw new Error(`WORKSPACE_RESOURCE_TASK_TARGET_MISMATCH:${input.task.id}`)
-  }
   if (input.kind !== 'completed') {
     if (input.kind === 'failed' && (!input.errorCode || !input.errorMessage)) {
       throw new Error(`WORKSPACE_RESOURCE_TASK_FAILURE_REQUIRED:${input.task.id}`)
     }
     await settleWorkspaceResourceFailureInTransaction(tx, {
-      resourceId: payload.resourceId,
+      resourceId: input.task.targetId,
       userId: input.task.userId,
       status: input.kind === 'canceled' ? 'canceled' : 'failed',
       errorCode: input.kind === 'canceled' ? null : input.errorCode,
       errorMessage: input.kind === 'canceled' ? null : input.errorMessage,
     })
-    return { resourceId: payload.resourceId, resourceStatus: input.kind === 'canceled' ? 'canceled' : 'failed' }
+    return { resourceId: input.task.targetId, resourceStatus: input.kind === 'canceled' ? 'canceled' : 'failed' }
+  }
+  const payload = parseTerminalResourcePayload(input.task)
+  if (payload.resourceId !== input.task.targetId) {
+    throw new Error(`WORKSPACE_RESOURCE_TASK_TARGET_MISMATCH:${input.task.id}`)
   }
   if (!input.result) throw new Error(`WORKSPACE_RESOURCE_TASK_RESULT_REQUIRED:${input.task.id}`)
   const mediaId = readString(input.result, 'mediaId')

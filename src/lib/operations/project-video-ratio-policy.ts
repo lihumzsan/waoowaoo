@@ -1,16 +1,19 @@
 import { createHash } from 'node:crypto'
+import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
 import { ASPECT_RATIO_CONFIGS } from '@/lib/constants'
 import { prisma } from '@/lib/prisma'
 import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
 import type { OperationPlan } from './planning'
 
-const PROJECT_VIDEO_RATIO_METADATA_KEY = 'projectVideoRatio'
+export const PROJECT_VIDEO_RATIO_METADATA_KEY = 'projectVideoRatio'
 
-export interface ProjectVideoRatioSnapshot {
-  value: string
-  fingerprint: string
-}
+export const projectVideoRatioSnapshotSchema = z.object({
+  value: z.string().trim().min(1),
+  fingerprint: z.string().length(64),
+}).strict()
+
+export type ProjectVideoRatioSnapshot = z.infer<typeof projectVideoRatioSnapshotSchema>
 
 export function requireProjectVideoRatio(value: string | null | undefined): ProjectVideoRatioSnapshot {
   const videoRatio = value?.trim() || null
@@ -20,7 +23,8 @@ export function requireProjectVideoRatio(value: string | null | undefined): Proj
       field: 'videoRatio',
       allowedValues: Object.keys(ASPECT_RATIO_CONFIGS),
       correction: {
-        choiceOperationId: 'request_choice',
+        interaction: 'codex_request_user_input',
+        collaborationMode: 'plan',
         commitmentOperationId: 'update_project_config',
         commitmentInputField: 'videoRatio',
       },

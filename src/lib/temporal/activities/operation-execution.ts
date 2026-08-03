@@ -56,6 +56,16 @@ function deterministicScheduleFailure(error: unknown): string | null {
   return null
 }
 
+function throwByOperationExecutionRetryPolicy(error: unknown): never {
+  const deterministicCode = deterministicScheduleFailure(error)
+  if (deterministicCode) return failNonRetryable(deterministicCode)
+  if (error instanceof TemporalTaskCommandUnconfirmedError) throw error
+  if (error instanceof ApiError) return failNonRetryable(error.message)
+  const normalized = normalizeAnyError(error, { context: 'worker' })
+  if (normalized.retryable) throw error
+  return failNonRetryable(normalized.code, normalized.message, normalized.details)
+}
+
 function requireActivityIdentity(input: ExecuteOperationActivityInput): void {
   const expectedWorkflowId = buildOperationExecutionWorkflowId(input.envelope.command.executionId)
   if (input.workflowId !== expectedWorkflowId) {
@@ -163,13 +173,7 @@ async function executeApprovedPlanOperation(
       invocation,
     })
   } catch (error) {
-    const deterministicCode = deterministicScheduleFailure(error)
-    if (deterministicCode) return failNonRetryable(deterministicCode)
-    if (error instanceof TemporalTaskCommandUnconfirmedError) throw error
-    if (error instanceof ApiError) {
-      return failNonRetryable(error.message)
-    }
-    throw error
+    return throwByOperationExecutionRetryPolicy(error)
   }
   const parsedInput = operation.inputSchema.safeParse(normalizedInput)
   if (!parsedInput.success) {
@@ -242,13 +246,7 @@ async function executeApprovedPlanOperation(
       ...result.receipt,
     })
   } catch (error) {
-    const deterministicCode = deterministicScheduleFailure(error)
-    if (deterministicCode) return failNonRetryable(deterministicCode)
-    if (error instanceof TemporalTaskCommandUnconfirmedError) throw error
-    if (error instanceof ApiError) {
-      return failNonRetryable(error.message)
-    }
-    throw error
+    return throwByOperationExecutionRetryPolicy(error)
   }
 }
 
@@ -417,12 +415,7 @@ async function executeDirectTaskOperation(
       output: state.output,
     })
   } catch (error) {
-    const deterministicCode = deterministicScheduleFailure(error)
-    if (deterministicCode) return failNonRetryable(deterministicCode)
-    if (error instanceof TemporalTaskCommandUnconfirmedError) throw error
-    const normalized = normalizeAnyError(error, { context: 'worker' })
-    if (normalized.retryable) throw error
-    return failNonRetryable(normalized.code, normalized.message, normalized.details)
+    return throwByOperationExecutionRetryPolicy(error)
   }
 }
 

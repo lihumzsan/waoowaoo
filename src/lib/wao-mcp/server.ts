@@ -1,16 +1,27 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import {
   CallToolRequestSchema,
+  ElicitResultSchema,
   ListToolsRequestSchema,
   type CallToolResult,
   type ListToolsResult,
 } from '@modelcontextprotocol/sdk/types.js'
+import { normalizeOperationExecutionToolError } from '@/lib/adapters/operation-error-normalizer'
+import type { JsonObject } from '@/lib/operations/types'
 import type {
   WaoMcpCallContextResolver,
   WaoMcpOperationExecutor,
   WaoMcpOperationExecutorResult,
 } from './contracts'
 import { createWaoMcpOperationCatalog } from './operation-catalog'
+import { WAO_RUNTIME_TOKEN_MAX_TTL_SECONDS } from './runtime-token'
+
+// MCP server-to-client requests have their own 60 second SDK default, separate
+// from Codex's per-tool timeout. A billing elicitation is a user decision, so
+// keep it alive within (but safely below) the capability token lifetime.
+const WAO_MCP_ELICITATION_TIMEOUT_MS = (
+  WAO_RUNTIME_TOKEN_MAX_TTL_SECONDS - 5 * 60
+) * 1_000
 
 export interface CreateWaoMcpServerParams {
   readonly executor: WaoMcpOperationExecutor
@@ -21,6 +32,14 @@ export interface CreateWaoMcpServerParams {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function toJsonObject(value: unknown): JsonObject {
+  const serialized = JSON.stringify(value)
+  if (serialized === undefined) throw new Error('WAO_MCP_ERROR_RESULT_NOT_JSON')
+  const parsed: unknown = JSON.parse(serialized)
+  if (!isRecord(parsed)) throw new Error('WAO_MCP_ERROR_RESULT_NOT_OBJECT')
+  return parsed as JsonObject
 }
 
 function errorResult(code: string, message: string): CallToolResult {
@@ -115,8 +134,21 @@ export function createWaoMcpServer(
             context,
             signal: extra.signal,
             elicit: async (elicitation) => {
-              const result = await server.elicitInput(elicitation, {
+              // Keep the server request related to this tools/call request.
+              // Streamable HTTP routes related requests over the active POST
+              // response; Server.elicitInput has no parent request identity
+              // here and therefore targets a standalone SSE stream that the
+              // Codex MCP client does not keep open.
+              const result = await extra.sendRequest({
+                method: 'elicitation/create',
+                params: {
+                  ...elicitation,
+                  mode: 'form',
+                },
+              }, ElicitResultSchema, {
                 signal: extra.signal,
+                timeout: WAO_MCP_ELICITATION_TIMEOUT_MS,
+                maxTotalTimeout: WAO_MCP_ELICITATION_TIMEOUT_MS,
               })
               return {
                 action: result.action,
@@ -127,12 +159,20 @@ export function createWaoMcpServer(
             },
           }),
         )
-      } catch {
+      } catch (error) {
         extra.signal.throwIfAborted()
-        return errorResult(
-          'WAO_MCP_EXECUTION_FAILED',
-          'The operation could not be executed.',
-        )
+        const projected = normalizeOperationExecutionToolError({
+          error,
+          operationId: entry.operationId,
+        })
+        return projectExecutorResult({
+          structuredContent: {
+            ok: false,
+            error: toJsonObject(projected),
+          },
+          text: projected.message,
+          isError: true,
+        })
       }
     },
   )

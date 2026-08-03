@@ -1,3 +1,8 @@
+---
+name: music-direction
+description: Design continuous instrumental scoring, dynamics, silence, and dialogue-safe mixing.
+---
+
 # 音乐与配乐设计
 
 ## 作用

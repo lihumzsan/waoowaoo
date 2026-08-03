@@ -6,6 +6,7 @@ import {
   type CodexModelGatewayScope,
 } from './contracts'
 import { resolveCodexModelGatewayUpstream } from './selection'
+import { requireCodexModelGatewayActiveTurn } from './active-turn-guard'
 
 const CODEX_MODEL_REQUEST_MAX_BYTES = 16 * 1024 * 1024
 
@@ -26,7 +27,8 @@ function validateResponsesEndpoint(request: Request): void {
 
 async function readAndValidateBody(params: {
   readonly request: Request
-  readonly expectedModelId: string
+  readonly runtimeModelId: string
+  readonly upstreamModelId: string
 }): Promise<Buffer> {
   const contentType = params.request.headers.get('content-type')?.toLowerCase()
     || ''
@@ -52,10 +54,11 @@ async function readAndValidateBody(params: {
   if (!isRecord(parsed)) {
     throw new CodexModelGatewayError('REQUEST_BODY_INVALID', 400)
   }
-  if (parsed.model !== params.expectedModelId) {
+  if (parsed.model !== params.runtimeModelId) {
     throw new CodexModelGatewayError('REQUEST_MODEL_MISMATCH', 403)
   }
-  return body
+  parsed.model = params.upstreamModelId
+  return Buffer.from(JSON.stringify(parsed), 'utf8')
 }
 
 function projectProviderResponse(response: Response): Response {
@@ -83,6 +86,7 @@ export async function proxyCodexResponsesRequest(params: {
     readonly userId: string
     readonly projectId: string
     readonly assistantId: string
+    readonly nonce: string
   }
 }): Promise<Response> {
   validateResponsesEndpoint(params.request)
@@ -94,10 +98,12 @@ export async function proxyCodexResponsesRequest(params: {
     projectId: params.scope.projectId,
     assistantId: CODEX_MODEL_GATEWAY_ASSISTANT_ID,
   }
+  await requireCodexModelGatewayActiveTurn(scope, params.scope.nonce)
   const upstream = await resolveCodexModelGatewayUpstream(scope)
   const body = await readAndValidateBody({
     request: params.request,
-    expectedModelId: upstream.modelId,
+    runtimeModelId: upstream.runtimeModelId,
+    upstreamModelId: upstream.modelId,
   })
   const requestedAccept = params.request.headers.get('accept')?.toLowerCase()
     || ''

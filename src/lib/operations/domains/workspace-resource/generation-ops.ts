@@ -9,10 +9,12 @@ import type {
 import {
   workspaceResourceGenerationOptionsSchema,
   workspaceResourceInputRefSchema,
+  parseWorkspaceResourceGenerationRetrySource,
   parseWorkspaceResourceGenerationTaskPayload,
   type WorkspaceResourceGenerationTaskPayload,
 } from '@/lib/workspace-resource/generation-contract'
 import { buildWorkspaceResourceId } from '@/lib/workspace-resource/identity'
+import { resourceNameFromPath } from '@/lib/workspace-resource/path'
 import {
   materializeWorkspaceResourceInTransaction,
   reserveWorkspaceResourceInTransaction,
@@ -24,8 +26,13 @@ import {
   WORKSPACE_RESOURCE_SCHEMA,
   requireWorkspaceResourceSchema,
 } from '@/lib/workspace-resource/schema-registry'
+import { buildWorkspaceResourceLifecycleProjection } from '@/lib/workspace-resource/task-runtime-envelope'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { resolveOperationLocale } from '@/lib/operations/environment-input'
+import {
+  PROJECT_VIDEO_RATIO_METADATA_KEY,
+  projectVideoRatioSnapshotSchema,
+} from '@/lib/operations/project-video-ratio-policy'
 import {
   createPlannedTask,
   requirePlannedTaskBillingInfo,
@@ -38,11 +45,12 @@ import type {
   ProjectAgentOperationRegistryDraft,
 } from '@/lib/operations/types'
 import { prisma } from '@/lib/prisma'
-import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
+import { stableArgsFingerprint, stableArgsHash } from '@/lib/project-agent/stable-args-hash'
 import { TASK_TYPE, type TaskType } from '@/lib/task/types'
+import { OPERATION_EXECUTION_MAX_TASKS } from '@/lib/temporal/operation-execution/contracts'
 
 const MAX_ALTERNATIVES = 6
-const MAX_MANIFEST_ITEMS = 120
+const MAX_MANIFEST_ITEMS = OPERATION_EXECUTION_MAX_TASKS
 const MEDIA_GENERATION_PLAN_CONTRACT_REVISION = 'workspace-resource-production/v1'
 
 const workspaceResourceJsonValueSchema: z.ZodType<WorkspaceResourceJsonValue> = z.lazy(() => z.union([
@@ -176,6 +184,7 @@ const productionPlanMetadataSchema = z.object({
     taskPlanId: z.string().min(1),
     alternatives: z.boolean(),
   }).strict()).min(1),
+  [PROJECT_VIDEO_RATIO_METADATA_KEY]: projectVideoRatioSnapshotSchema.optional(),
 }).strict()
 
 const MEDIA_EFFECTS = {
@@ -243,6 +252,18 @@ function modelPayload(mediaType: PlannedResource['mediaType'], modelKey: string)
   if (mediaType === 'image') return { imageModel: modelKey }
   if (mediaType === 'audio') return { musicModel: modelKey }
   return { videoModel: modelKey }
+}
+
+function generationInputFingerprint(input: {
+  readonly mediaType: PlannedResource['mediaType']
+  readonly schemaId: string
+  readonly modelKey: string
+  readonly prompt: string
+  readonly references: readonly WorkspaceResourceInputRef[]
+  readonly generationOptions: z.infer<typeof workspaceResourceGenerationOptionsSchema>
+  readonly durationSeconds: number | null
+}): string {
+  return stableArgsFingerprint(input)
 }
 
 async function freezeReferences(
@@ -316,7 +337,7 @@ async function buildPlannedItem(input: {
     requestId: `${input.requestId}:${input.item.itemId}`,
     memberIndex: input.memberIndex,
   })
-  const inputHash = stableArgsHash({
+  const inputHash = generationInputFingerprint({
     mediaType,
     schemaId,
     modelKey,
@@ -341,6 +362,12 @@ async function buildPlannedItem(input: {
     sourceTurnId: input.ctx.context.turnId?.trim() || null,
   }
   const payload: WorkspaceResourceGenerationTaskPayload = {
+    lifecycleProjection: buildWorkspaceResourceLifecycleProjection([{
+      resourceId,
+      mediaType,
+      schemaId,
+      name: resourceNameFromPath(input.outputPath),
+    }]),
     protocol: 'workspace_resource_generation_v1',
     resource: resourcePayload,
     ...modelPayload(mediaType, modelKey),
@@ -353,8 +380,8 @@ async function buildPlannedItem(input: {
     ...(input.item.bpm ? { bpm: input.item.bpm } : {}),
     ...(input.item.outputFormat ? { outputFormat: input.item.outputFormat } : {}),
   }
-  if (mediaType === 'audio' && !payload.durationSeconds) {
-    throw new Error(`WORKSPACE_RESOURCE_AUDIO_DURATION_REQUIRED:${input.item.itemId}`)
+  if ((mediaType === 'audio' || mediaType === 'video') && !payload.durationSeconds) {
+    throw new Error(`WORKSPACE_RESOURCE_${mediaType.toUpperCase()}_DURATION_REQUIRED:${input.item.itemId}`)
   }
   const taskType = taskTypeForMedia(mediaType)
   const taskPlanId = `${input.operationId}:${resourceId}`
@@ -519,7 +546,60 @@ async function loadFailedTasks(
     if (!resource?.task || !resource.mediaType) throw new Error(`WORKSPACE_RESOURCE_RETRY_TARGET_INVALID:${resourceId}`)
     const taskType = taskTypeForMedia(resource.mediaType as PlannedResource['mediaType'])
     if (resource.task.type !== taskType) throw new Error(`WORKSPACE_RESOURCE_RETRY_TASK_TYPE_INVALID:${resourceId}`)
-    const payload = parseWorkspaceResourceGenerationTaskPayload(resource.task.payload)
+    const source = parseWorkspaceResourceGenerationRetrySource(resource.task.payload)
+    if (source.resource.resourceId !== resource.id) {
+      throw new Error(`WORKSPACE_RESOURCE_RETRY_TASK_TARGET_MISMATCH:${resourceId}`)
+    }
+    const mediaType = resource.mediaType as PlannedResource['mediaType']
+    const prompt = resource.prompt?.trim()
+    const modelKey = resource.modelKey?.trim()
+    if (!prompt || !modelKey) throw new Error(`WORKSPACE_RESOURCE_RETRY_FROZEN_INPUT_MISSING:${resourceId}`)
+    const generationOptions = workspaceResourceGenerationOptionsSchema.parse(resource.generationOptions ?? {})
+    if ((mediaType === 'audio' || mediaType === 'video') && !source.durationSeconds) {
+      throw new Error(`WORKSPACE_RESOURCE_RETRY_DURATION_MISSING:${resourceId}`)
+    }
+    const payload = parseWorkspaceResourceGenerationTaskPayload({
+      lifecycleProjection: buildWorkspaceResourceLifecycleProjection([{
+        resourceId: resource.id,
+        mediaType,
+        schemaId: resource.schemaId,
+        name: resourceNameFromPath(resource.workspacePath),
+      }]),
+      protocol: 'workspace_resource_generation_v1',
+      resource: {
+        resourceId: resource.id,
+        workspacePath: resource.workspacePath,
+        mediaType,
+        schemaId: resource.schemaId,
+        inputHash: generationInputFingerprint({
+          mediaType,
+          schemaId: resource.schemaId,
+          modelKey,
+          prompt,
+          references: source.resource.inputs,
+          generationOptions,
+          durationSeconds: source.durationSeconds ?? null,
+        }),
+        prompt,
+        modelKey,
+        inputs: source.resource.inputs,
+        imageInputPositions: source.resource.imageInputPositions,
+        audioInputPositions: source.resource.audioInputPositions,
+        videoInputPositions: source.resource.videoInputPositions,
+        toolCallId: ctx.toolCallId?.trim() || null,
+        sourceTurnId: ctx.context.turnId?.trim() || null,
+      },
+      ...modelPayload(mediaType, modelKey),
+      count: 1,
+      generationOptions,
+      ...(source.durationSeconds ? { durationSeconds: source.durationSeconds } : {}),
+      ...(source.vocalMode ? { vocalMode: source.vocalMode } : {}),
+      ...(source.genre ? { genre: source.genre } : {}),
+      ...(source.mood ? { mood: source.mood } : {}),
+      ...(source.bpm ? { bpm: source.bpm } : {}),
+      ...(source.outputFormat ? { outputFormat: source.outputFormat } : {}),
+      ...(source.scoreCue ? { scoreCue: source.scoreCue } : {}),
+    })
     const taskPlanId = `rerun_failed_production_items:${resourceId}`
     return {
       task: createPlannedTask({
@@ -531,7 +611,7 @@ async function loadFailedTasks(
         billingInfo: requirePlannedTaskBillingInfo({
           taskType,
           payload,
-          allowedApiTypes: [resource.mediaType === 'audio' ? 'music' : resource.mediaType as 'image' | 'video'],
+        allowedApiTypes: [mediaType === 'audio' ? 'music' : mediaType],
         }),
         locale: resolveOperationLocale(ctx.context),
         dedupeKey: `rerun:${resource.id}:${resource.task.id}`,
@@ -539,7 +619,7 @@ async function loadFailedTasks(
       resource: {
         resourceId: resource.id,
         workspacePath: resource.workspacePath,
-        mediaType: resource.mediaType as PlannedResource['mediaType'],
+        mediaType,
         schemaId: resource.schemaId,
         memberIndex: resource.memberIndex ?? 0,
         taskPlanId,
@@ -610,17 +690,33 @@ async function commitProductionPlan(
       })
     }
   } else {
-    const updated = await authorization.transaction.workspaceResource.updateMany({
-      where: {
-        id: { in: metadata.resources.map((resource) => resource.resourceId) },
-        userId: ctx.userId,
-        projectId: ctx.projectId,
-        status: { in: ['failed', 'canceled'] },
-        deletedAt: null,
-      },
-      data: { status: 'pending', errorCode: null, errorMessage: null, operationId },
-    })
-    if (updated.count !== metadata.resources.length) throw new Error('WORKSPACE_RESOURCE_RETRY_TARGET_CHANGED')
+    for (const resource of metadata.resources) {
+      const task = plan.tasks.find((candidate) => candidate.id === resource.taskPlanId)
+      if (!task) throw new Error(`WORKSPACE_RESOURCE_PLAN_TASK_MISSING:${resource.taskPlanId}`)
+      const payload = parseWorkspaceResourceGenerationTaskPayload(task.payload)
+      const updated = await authorization.transaction.workspaceResource.updateMany({
+        where: {
+          id: resource.resourceId,
+          userId: ctx.userId,
+          projectId: ctx.projectId,
+          status: { in: ['failed', 'canceled'] },
+          deletedAt: null,
+        },
+        data: {
+          status: 'pending',
+          errorCode: null,
+          errorMessage: null,
+          operationId,
+          operationExecutionId: authorization.operationExecutionId,
+          inputHash: payload.resource.inputHash,
+          prompt: payload.resource.prompt,
+          modelKey: payload.resource.modelKey,
+          generationOptions: payload.generationOptions,
+          toolCallId: ctx.toolCallId?.trim() || null,
+        },
+      })
+      if (updated.count !== 1) throw new Error(`WORKSPACE_RESOURCE_RETRY_TARGET_CHANGED:${resource.resourceId}`)
+    }
   }
   const submitted = await submitPlannedOperationTasks({ ctx, operationId })
   const results = plan.tasks.map((task) => {
@@ -754,7 +850,7 @@ export function createWorkspaceResourceGenerationOperations(): ProjectAgentOpera
           sourceTurnId: ctx.context.turnId?.trim() || null,
           provenance: {
             operationId: 'create_text',
-            inputHash: stableArgsHash(input),
+            inputHash: stableArgsFingerprint(input),
             taskId: null,
             operationExecutionId: ctx.operationExecutionId ?? null,
             toolCallId: ctx.toolCallId?.trim() || null,

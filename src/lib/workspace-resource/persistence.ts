@@ -19,6 +19,7 @@ import {
   validateWorkspaceResourceFilePath,
   validateWorkspaceResourceFolderPath,
   validateWorkspaceResourcePathForKind,
+  WorkspaceResourcePlacementError,
 } from './path'
 import {
   WORKSPACE_RESOURCE_FOLDER_SCHEMA_ID,
@@ -111,7 +112,12 @@ async function requireParentFolder(
     },
     select: { id: true },
   })
-  if (!parent) throw new Error(`WORKSPACE_RESOURCE_PARENT_FOLDER_NOT_FOUND:${parentPath}`)
+  if (!parent) {
+    throw new WorkspaceResourcePlacementError(
+      'WORKSPACE_RESOURCE_PARENT_FOLDER_NOT_FOUND',
+      parentPath,
+    )
+  }
 }
 
 async function requirePathAvailable(
@@ -128,7 +134,9 @@ async function requirePathAvailable(
     },
     select: { id: true },
   })
-  if (occupied) throw new Error(`WORKSPACE_RESOURCE_PATH_CONFLICT:${workspacePath}`)
+  if (occupied) {
+    throw new WorkspaceResourcePlacementError('WORKSPACE_RESOURCE_PATH_CONFLICT', workspacePath)
+  }
 }
 
 function assertExactTreeTargets(entries: readonly WorkspaceResourceTreeEntry[]): void {
@@ -136,7 +144,7 @@ function assertExactTreeTargets(entries: readonly WorkspaceResourceTreeEntry[]):
   for (const entry of entries) {
     const workspacePath = validateWorkspaceResourcePathForKind(entry.workspacePath, entry.resourceKind)
     if (workspacePath !== entry.workspacePath || byPath.has(workspacePath)) {
-      throw new Error(`WORKSPACE_RESOURCE_TREE_PATH_CONFLICT:${workspacePath}`)
+      throw new WorkspaceResourcePlacementError('WORKSPACE_RESOURCE_TREE_PATH_CONFLICT', workspacePath)
     }
     if ((entry.resourceKind === 'folder') !== (entry.mediaType === null)) {
       throw new Error(`WORKSPACE_RESOURCE_KIND_MEDIA_MISMATCH:${entry.resourceId}`)
@@ -151,7 +159,10 @@ function assertExactTreeTargets(entries: readonly WorkspaceResourceTreeEntry[]):
     if (!parentPath) continue
     const parent = byPath.get(parentPath)
     if (!parent || parent.resourceKind !== 'folder') {
-      throw new Error(`WORKSPACE_RESOURCE_PARENT_FOLDER_NOT_FOUND:${parentPath}`)
+      throw new WorkspaceResourcePlacementError(
+        'WORKSPACE_RESOURCE_PARENT_FOLDER_NOT_FOUND',
+        parentPath,
+      )
     }
   }
 }
@@ -191,7 +202,11 @@ export async function reconcileWorkspaceResourceTreeInTransaction(
       || row.activePath !== baseline.workspacePath
       || row.resourceKind !== baseline.resourceKind
       || row.mediaType !== baseline.mediaType
-      || row.currentVersion !== baseline.contentVersion
+      // User-owned text content participates in optimistic concurrency. A
+      // media pointer is immutable to the Runtime and contains only the stable
+      // Resource identity, so its Task terminal writer may materialize a new
+      // media version without conflicting with an unchanged Agent workspace.
+      || (baseline.mediaType === 'text' && row.currentVersion !== baseline.contentVersion)
     ) {
       throw new Error(`WORKSPACE_RESOURCE_BASELINE_DIVERGED:${baseline.resourceId}`)
     }
@@ -422,13 +437,20 @@ export async function validateWorkspaceResourcePlacement(
       },
       select: { id: true },
     })
-    if (!parent) throw new Error(`WORKSPACE_RESOURCE_PARENT_FOLDER_NOT_FOUND:${parentPath}`)
+    if (!parent) {
+      throw new WorkspaceResourcePlacementError(
+        'WORKSPACE_RESOURCE_PARENT_FOLDER_NOT_FOUND',
+        parentPath,
+      )
+    }
   }
   const occupied = await client.workspaceResource.findFirst({
     where: { projectId: input.projectId, activePath: workspacePath },
     select: { id: true },
   })
-  if (occupied) throw new Error(`WORKSPACE_RESOURCE_PATH_CONFLICT:${workspacePath}`)
+  if (occupied) {
+    throw new WorkspaceResourcePlacementError('WORKSPACE_RESOURCE_PATH_CONFLICT', workspacePath)
+  }
   return workspacePath
 }
 

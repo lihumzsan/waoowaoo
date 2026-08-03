@@ -1,3 +1,8 @@
+---
+name: video-direction
+description: Turn a screenplay into executable direction, generation segments, prompts, and continuity checks.
+---
+
 # 视频导演与生成设计
 
 ## 作用

@@ -24,6 +24,7 @@ export function buildWorkspaceResourceContentKey(input: {
   readonly resourceId: string
   readonly version: number
   readonly workspacePath: string
+  readonly sha256: string
 }): string {
   if (!Number.isSafeInteger(input.version) || input.version < 1) {
     throw new Error('WORKSPACE_RESOURCE_CONTENT_VERSION_INVALID')
@@ -32,8 +33,11 @@ export function buildWorkspaceResourceContentKey(input: {
   if (contentKindFromPath(input.workspacePath) === 'pointer') {
     throw new Error('WORKSPACE_RESOURCE_POINTER_CONTENT_NOT_STORED')
   }
+  if (!/^[a-f0-9]{64}$/u.test(input.sha256)) {
+    throw new Error('WORKSPACE_RESOURCE_CONTENT_SHA256_INVALID')
+  }
   const projectHash = createHash('sha256').update(input.projectId).digest('hex')
-  return `${STORAGE_PREFIX}/${projectHash}/${input.resourceId}/v${String(input.version)}${extension}`
+  return `${STORAGE_PREFIX}/${projectHash}/${input.resourceId}/v${String(input.version)}-${input.sha256}${extension}`
 }
 
 export async function storeWorkspaceResourceContent(input: {
@@ -46,7 +50,7 @@ export async function storeWorkspaceResourceContent(input: {
   const bytes = Buffer.from(input.content, 'utf8')
   if (bytes.byteLength > MAX_TEXT_BYTES) throw new Error('WORKSPACE_RESOURCE_CONTENT_TOO_LARGE')
   const digest = sha256(bytes)
-  const key = buildWorkspaceResourceContentKey(input)
+  const key = buildWorkspaceResourceContentKey({ ...input, sha256: digest })
   await uploadObject(bytes, key, 1, contentType(input.workspacePath))
   return await ensureMediaObjectFromStorageKey(key, {
     sha256: digest,

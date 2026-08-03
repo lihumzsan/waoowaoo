@@ -33,6 +33,20 @@ function cursorStorageKey(projectId: string): string {
   return `workspace-sse-cursor:v6:${projectId}`
 }
 
+function connectionIdStorageKey(projectId: string): string {
+  return `workspace-sse-connection:v1:${projectId}`
+}
+
+function readOrCreateConnectionId(projectId: string): string {
+  const storage = window.sessionStorage
+  const key = connectionIdStorageKey(projectId)
+  const existing = storage?.getItem(key)
+  if (existing) return existing
+  const connectionId = window.crypto.randomUUID()
+  storage?.setItem(key, connectionId)
+  return connectionId
+}
+
 function readStoredCursor(projectId: string): WorkspaceSseCursor {
   if (typeof window === 'undefined') return { ...EMPTY_WORKSPACE_SSE_CURSOR }
   const storage = window.sessionStorage
@@ -66,7 +80,10 @@ export function useSSE({ projectId, enabled = true, onEvent }: UseSSEOptions) {
   const connection = useMemo(() => {
     if (!projectId) return null
     const cursor = readStoredCursor(projectId)
-    const params = new URLSearchParams({ projectId })
+    const params = new URLSearchParams({
+      projectId,
+      connectionId: readOrCreateConnectionId(projectId),
+    })
     if (cursor.taskEventId > 0) {
       params.set('cursor', serializeWorkspaceSseCursor(cursor))
     }

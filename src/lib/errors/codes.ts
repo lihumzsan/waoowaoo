@@ -329,6 +329,8 @@ export const ERROR_CATALOG = {
   AGENT_TEMPORAL_UNAVAILABLE: defineErrorSpec('AGENT_TEMPORAL_UNAVAILABLE', 503, true, ERROR_CATEGORY.SYSTEM, 'Assistant execution service is unavailable'),
   AGENT_THREAD_BUSY: defineErrorSpec('AGENT_THREAD_BUSY', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant thread is busy'),
   AGENT_TURN_COMMAND_REPLAY_DIVERGED: defineErrorSpec('AGENT_TURN_COMMAND_REPLAY_DIVERGED', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant command identity conflicts with an earlier command'),
+  AGENT_STEER_HANDOFF_UNCERTAIN: defineErrorSpec('AGENT_STEER_HANDOFF_UNCERTAIN', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant steer handoff outcome is unknown'),
+  AGENT_START_HANDOFF_UNCERTAIN: defineErrorSpec('AGENT_START_HANDOFF_UNCERTAIN', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant turn start handoff outcome is unknown'),
   PROJECT_AGENT_RUNTIME_FAILED: defineErrorSpec('PROJECT_AGENT_RUNTIME_FAILED', 502, true, ERROR_CATEGORY.SYSTEM, 'Assistant runtime failed'),
   PROJECT_AGENT_ASSISTANT_MODEL_NOT_CONFIGURED: defineErrorSpec('PROJECT_AGENT_ASSISTANT_MODEL_NOT_CONFIGURED', 400, false, ERROR_CATEGORY.PROVIDER, 'Assistant model is not configured'),
   PROJECT_AGENT_ASSISTANT_MODEL_INVALID: defineErrorSpec('PROJECT_AGENT_ASSISTANT_MODEL_INVALID', 400, false, ERROR_CATEGORY.PROVIDER, 'Assistant model configuration is invalid'),

@@ -1,3 +1,8 @@
+---
+name: creative-direction
+description: Establish one coherent visual, narrative, directing, editing, sound, and asset direction.
+---
+
 # 创作方向
 
 ## 作用

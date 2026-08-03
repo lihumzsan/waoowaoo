@@ -17,6 +17,21 @@ export class WorkspaceResourcePathError extends Error {
   }
 }
 
+export type WorkspaceResourcePlacementErrorCode =
+  | 'WORKSPACE_RESOURCE_PARENT_FOLDER_NOT_FOUND'
+  | 'WORKSPACE_RESOURCE_PATH_CONFLICT'
+  | 'WORKSPACE_RESOURCE_TREE_PATH_CONFLICT'
+
+export class WorkspaceResourcePlacementError extends Error {
+  constructor(
+    readonly code: WorkspaceResourcePlacementErrorCode,
+    readonly workspacePath: string,
+  ) {
+    super(`${code}:${workspacePath}`)
+    this.name = 'WorkspaceResourcePlacementError'
+  }
+}
+
 function validateRelativePath(rawPath: string): string {
   if (
     rawPath === WORKSPACE_RESOURCE_ROOT_FOLDER_KEY

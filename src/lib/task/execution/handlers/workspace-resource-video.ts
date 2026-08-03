@@ -118,6 +118,10 @@ export async function handleWorkspaceResourceVideoTask(
     )
   }
   const options = payload.generationOptions
+  const durationSeconds = payload.durationSeconds
+  if (!durationSeconds) {
+    throw new Error(`WORKSPACE_RESOURCE_VIDEO_DURATION_REQUIRED:${data.taskId}`)
+  }
   await reportTaskProgress(context, 45, { stage: 'workspace_resource_generate' })
   const generated = await resolveVideoSourceFromGeneration(context, {
     userId: data.userId,
@@ -127,7 +131,7 @@ export async function handleWorkspaceResourceVideoTask(
     allowTextOnly: referenceImages.length === 0,
     options: {
       prompt: payload.resource.prompt,
-      ...(typeof options.duration === 'number' ? { duration: options.duration } : {}),
+      duration: durationSeconds,
       ...(typeof options.resolution === 'string' ? { resolution: options.resolution } : {}),
       ...(typeof options.aspectRatio === 'string' ? { aspectRatio: options.aspectRatio } : {}),
       ...(typeof options.generateAudio === 'boolean' ? { generateAudio: options.generateAudio } : {}),
@@ -146,10 +150,9 @@ export async function handleWorkspaceResourceVideoTask(
     generated.downloadHeaders,
     { taskId: data.taskId, artifact: `workspace-resource:${payload.resource.resourceId}` },
   )
-  const durationSeconds = typeof options.duration === 'number' ? options.duration : null
   const media = await ensureMediaObjectFromStorageKey(storageKey, {
     mimeType: 'video/mp4',
-    ...(durationSeconds ? { durationMs: durationSeconds * 1000 } : {}),
+    durationMs: durationSeconds * 1000,
   })
   return {
     mediaId: media.id,
@@ -157,7 +160,7 @@ export async function handleWorkspaceResourceVideoTask(
     storageKey: media.storageKey,
     modelKey: providerRoute.modelKey,
     provider: providerRoute.provider,
-    ...(durationSeconds ? { durationMs: durationSeconds * 1000 } : {}),
+    durationMs: durationSeconds * 1000,
     ...(typeof generated.actualVideoTokens === 'number'
       ? { actualVideoTokens: generated.actualVideoTokens }
       : {}),

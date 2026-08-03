@@ -62,6 +62,7 @@ import {
   resolveWorkspaceAssistantFailureView,
   resolveWorkspaceAssistantResendDraft,
   resolveWorkspaceAssistantUndeliveredUserMessage,
+  shouldShowWorkspaceAssistantDeliveryFailure,
   shouldShowWorkspaceAssistantReplyLoading,
   shouldShowWorkspaceAssistantRunFailureNotice,
   type WorkspaceAssistantFailureView,
@@ -268,6 +269,21 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
         setError(true)
         setSubmitting(false)
       })
+  }
+
+  if (props.interaction.status === 'decided') {
+    return (
+      <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-sm">
+        <button
+          type="button"
+          disabled={submitting}
+          className="w-full rounded-xl bg-neutral-900 px-3 py-2 font-medium text-white disabled:opacity-50"
+          onClick={() => submit({})}
+        >
+          {submitting ? t('cards.interactionSubmitting') : t('cards.confirmContinue')}
+        </button>
+      </div>
+    )
   }
 
   if (content.kind === 'invalid') {
@@ -738,10 +754,23 @@ export default function WorkspaceAssistantPanel({
     replyInFlight: assistantRuntime.replyInFlight,
     currentTurnStatus: assistantRuntime.view?.currentTurn?.status ?? null,
   })
+  const currentTurn = assistantRuntime.view?.currentTurn ?? null
+  const showUserStoppedNotice =
+    !assistantRuntime.viewLoading &&
+    !assistantRuntime.replyInFlight &&
+    currentTurn?.status === 'interrupted' &&
+    currentTurn.cancelReason === 'user_cancelled'
   const showInterruptedNotice =
     !assistantRuntime.viewLoading &&
     !assistantRuntime.replyInFlight &&
-    assistantRuntime.view?.currentTurn?.status === 'interrupted'
+    currentTurn?.status === 'interrupted' &&
+    currentTurn.cancelReason !== 'user_cancelled'
+  const showDeliveryFailureNotice = shouldShowWorkspaceAssistantDeliveryFailure({
+    storageLoading: assistantRuntime.viewLoading,
+    replyInFlight: assistantRuntime.replyInFlight,
+    currentTurnStatus: currentTurn?.status ?? null,
+    currentTurnStartedAt: currentTurn?.startedAt ?? null,
+  })
   // Run, send, and Task failures all resolve through the same view resolver,
   // so every failure surface uses the canonical error catalogue instead of
   // panel-local sentences or model-written guesses.
@@ -754,7 +783,6 @@ export default function WorkspaceAssistantPanel({
     (id: string) => tErrors('referenceId', { id }),
     [tErrors],
   )
-  const currentTurn = assistantRuntime.view?.currentTurn ?? null
   const runFailureView = resolveWorkspaceAssistantFailureView({
     facts: {
       code: currentTurn?.errorCode?.trim() || null,
@@ -773,15 +801,14 @@ export default function WorkspaceAssistantPanel({
           formatReference: formatFailureReference,
           unknownFallback: unknownFailureFallback,
         })
-  // Undelivered marker + resend draft are derived from persisted facts only
-  // (failed `user_turn` current run + rendered message order); see the
-  // resolver's doc comment for the attribution boundary. No second copy of
-  // the message or its attachments is stored anywhere.
+  // Undelivered marker + resend draft are derived from persisted facts only:
+  // exact source message identity plus the absence of runtime start. A Turn
+  // interrupted after it started is resumable work, never an undelivered send.
   const undeliveredUserMessage = useMemo(
     () =>
       resolveWorkspaceAssistantUndeliveredUserMessage({
         messages: assistantRuntime.messages,
-        showDeliveryFailureNotice: showRunFailureNotice || showInterruptedNotice,
+        showDeliveryFailureNotice,
         currentTurnSourceKind: currentTurn?.sourceKind ?? null,
         currentTurnSourceId: currentTurn?.sourceId ?? null,
       }),
@@ -789,8 +816,7 @@ export default function WorkspaceAssistantPanel({
       assistantRuntime.messages,
       currentTurn?.sourceId,
       currentTurn?.sourceKind,
-      showInterruptedNotice,
-      showRunFailureNotice,
+      showDeliveryFailureNotice,
     ],
   )
   const resendDraft = useMemo(
@@ -836,6 +862,12 @@ export default function WorkspaceAssistantPanel({
       }),
     [formatFailureReference, localizeErrorCode, taskBatches, unknownFailureFallback],
   )
+  const assistantTurns = useMemo(() => {
+    const byId = new Map((assistantRuntime.view?.recentTurns ?? []).map((turn) => [turn.turnId, turn] as const))
+    const current = assistantRuntime.view?.currentTurn ?? null
+    if (current) byId.set(current.turnId, current)
+    return [...byId.values()]
+  }, [assistantRuntime.view?.currentTurn, assistantRuntime.view?.recentTurns])
 
   return (
     <aside
@@ -858,7 +890,10 @@ export default function WorkspaceAssistantPanel({
           onPointerDown={panelResize.onResizePointerDown}
         />
         <div className="h-full opacity-100 transition-opacity duration-200">
-          <WorkspaceAssistantRepeatedToolCallGroupProvider messages={assistantRuntime.messages}>
+          <WorkspaceAssistantRepeatedToolCallGroupProvider
+            messages={assistantRuntime.messages}
+            turns={assistantTurns}
+          >
             <AssistantRuntimeProvider runtime={assistantRuntime.runtime}>
               <ThreadPrimitive.Root
                 key={projectId}
@@ -935,6 +970,17 @@ export default function WorkspaceAssistantPanel({
                               }
                             />
                           ) : null}
+                          {showUserStoppedNotice ? (
+                            <WorkspaceAssistantRunFailureNotice
+                              title={t('panel.turnStoppedTitle')}
+                              failure={{
+                                tone: 'info',
+                                headline: t('panel.turnStoppedDescription'),
+                                technical: null,
+                              }}
+                              resend={null}
+                            />
+                          ) : null}
                           {!assistantRuntime.viewLoading
                             ? taskBatchViews.map((view) => (
                                 <WorkspaceAssistantActiveRunCard
@@ -963,6 +1009,7 @@ export default function WorkspaceAssistantPanel({
                                 }),
                               }]}
                               subtitle={t('cards.confirmationRequired')}
+                              retryOnly={serverPendingApproval.status === 'decided'}
                               onConfirm={() =>
                                 assistantRuntime.resolveApproval({
                                   decision: 'approve',
@@ -1013,6 +1060,8 @@ export default function WorkspaceAssistantPanel({
                             PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES
                         }
                         mediaUploadPending={mediaUploadPending}
+                        collaborationMode={composer.collaborationMode}
+                        collaborationModeLocked={assistantRuntime.replyInFlight}
                         attachmentError={attachmentError}
                         onChange={composer.setText}
                         onSubmit={async () => {
@@ -1055,6 +1104,7 @@ export default function WorkspaceAssistantPanel({
                           void uploadAttachmentFiles(files)
                         }}
                         onClearSelection={onClearSelection}
+                        onCollaborationModeChange={composer.setCollaborationMode}
                     />
                   </div>
                 </div>

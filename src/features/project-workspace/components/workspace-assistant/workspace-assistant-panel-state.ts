@@ -86,6 +86,23 @@ export function resolveWorkspaceAssistantUndeliveredUserMessage(params: {
     : null
 }
 
+/**
+ * A message is undelivered only when its Turn never reached the runtime. Once
+ * `startedAt` exists the model may already have produced text, files or paid
+ * side effects, so offering "resend" would risk duplicating real work.
+ */
+export function shouldShowWorkspaceAssistantDeliveryFailure(params: {
+  readonly storageLoading: boolean
+  readonly replyInFlight: boolean
+  readonly currentTurnStatus?: string | null
+  readonly currentTurnStartedAt?: string | null
+}): boolean {
+  return !params.storageLoading
+    && !params.replyInFlight
+    && (params.currentTurnStatus === 'failed' || params.currentTurnStatus === 'interrupted')
+    && !params.currentTurnStartedAt
+}
+
 /** Send input rebuilt from an undelivered user message for a one-click resend. */
 export interface WorkspaceAssistantResendDraft {
   readonly text: string

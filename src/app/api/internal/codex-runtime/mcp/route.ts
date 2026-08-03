@@ -7,6 +7,7 @@ import {
   WaoRuntimeTokenError,
 } from '@/lib/wao-mcp/runtime-token'
 import type { WaoRuntimeTokenPayload } from '@/lib/wao-mcp/runtime-token'
+import { hasAssistantRuntimeOwnership } from '@/lib/assistant-runtime/runtime-ownership'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -48,6 +49,10 @@ async function handleAuthenticatedMcpRequest(
       return jsonError(401, 'WAO_RUNTIME_AUTHENTICATION_FAILED')
     }
     return jsonError(500, 'WAO_RUNTIME_AUTHENTICATION_UNAVAILABLE')
+  }
+
+  if (!await hasAssistantRuntimeOwnership(scope, scope.nonce)) {
+    return jsonError(403, 'WAO_RUNTIME_OWNERSHIP_REQUIRED')
   }
 
   try {

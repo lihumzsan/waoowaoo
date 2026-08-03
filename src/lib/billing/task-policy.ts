@@ -108,7 +108,7 @@ function buildVideoTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillin
   if (!model) return null
   const generationOptions = toRecord(payload?.generationOptions)
   const resolution = readString(generationOptions.resolution) || readString(payload?.resolution)
-  const duration = readNumber(generationOptions.duration) ?? readNumber(payload?.duration)
+  const duration = readNumber(payload?.durationSeconds)
   const aspectRatio = readString(generationOptions.aspectRatio) || readString(payload?.aspectRatio)
   const generateAudio = typeof generationOptions.generateAudio === 'boolean'
     ? generationOptions.generateAudio

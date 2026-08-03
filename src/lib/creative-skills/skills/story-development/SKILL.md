@@ -1,3 +1,8 @@
+---
+name: story-development
+description: Develop faithful, coherent, duration-aware, filmable stories and screenplays.
+---
+
 # 故事与剧本开发
 
 ## 作用

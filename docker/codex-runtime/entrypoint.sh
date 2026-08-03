@@ -12,6 +12,7 @@ test -d /workspace
 test -w /workspace
 test -d "$CODEX_HOME"
 test -w "$CODEX_HOME"
+command -v codex-code-mode-host >/dev/null 2>&1
 
 umask 077
-exec codex app-server --listen stdio:// "$@"
+exec codex app-server --listen stdio:// --enable code_mode_host "$@"

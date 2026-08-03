@@ -97,6 +97,15 @@ export type RuntimeSandboxPolicy =
 export type RuntimePersonality = 'none' | 'friendly' | 'pragmatic'
 export type RuntimeReasoningSummary = 'auto' | 'concise' | 'detailed' | 'none'
 export type RuntimeTurnStatus = 'completed' | 'interrupted' | 'failed' | 'inProgress'
+export type RuntimeCollaborationMode = {
+  readonly mode: 'default' | 'plan'
+  readonly settings: {
+    readonly model: string
+    readonly reasoning_effort: string | null
+    /** null selects Codex's built-in instructions for this native mode. */
+    readonly developer_instructions: string | null
+  }
+}
 
 export type RuntimeThread = {
   readonly id: string
@@ -189,6 +198,7 @@ export type RuntimeTurnStartParams = {
   readonly summary?: RuntimeReasoningSummary
   readonly personality?: RuntimePersonality
   readonly outputSchema?: RuntimeJsonValue
+  readonly collaborationMode?: RuntimeCollaborationMode
 }
 
 export type RuntimeTurnSteerParams = {

@@ -1,3 +1,8 @@
+---
+name: long-form-production
+description: Organize long-form creative work into resumable workspace folders and production manifests.
+---
+
 # 长篇连续制作
 
 ## 作用

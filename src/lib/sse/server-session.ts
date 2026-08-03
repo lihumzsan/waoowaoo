@@ -64,14 +64,9 @@ export class WorkspaceSseServerSession {
 
   receiveLiveEvent(event: SSEEvent): void {
     if (this.phase === 'closed') return
-    if (isAgentTurnStreamSseEvent(event)) {
-      if (this.phase === 'live') {
-        this.emit(event)
-      }
-      return
-    }
     if (this.phase === 'live') {
-      this.emitOnce(event)
+      if (isAgentTurnStreamSseEvent(event)) this.emit(event)
+      else this.emitOnce(event)
       return
     }
     if (this.bufferedEvents.length >= this.bufferLimit) {
@@ -94,7 +89,8 @@ export class WorkspaceSseServerSession {
     this.bufferedEvents = []
     this.phase = 'live'
     for (const event of buffered) {
-      this.emitOnce(event)
+      if (isAgentTurnStreamSseEvent(event)) this.emit(event)
+      else this.emitOnce(event)
     }
   }
 

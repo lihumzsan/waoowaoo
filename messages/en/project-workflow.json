@@ -112,6 +112,7 @@
       },
       "folderNavigation": {
         "root": "Project files",
+        "back": "Back to parent folder",
         "searchPlaceholder": "Search project files",
         "searchResults": "Search results",
         "noResults": "No matching files",

@@ -1,7 +1,7 @@
 'use client'
 
-import { useMessage, type ToolCallMessagePartProps } from '@assistant-ui/react'
-import type { UIMessage } from 'ai'
+import type { ToolCallMessagePartProps } from '@assistant-ui/react'
+import { getToolName, isToolUIPart, type UIMessage } from 'ai'
 import { useLocale, useTranslations } from 'next-intl'
 import {
   createContext,
@@ -13,26 +13,47 @@ import {
 import { AppIcon } from '@/components/ui/icons'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
+import type { AssistantRuntimeSessionTurnView } from '@/lib/assistant-runtime/view-contract'
 import { useWorkspaceAssistantRunningSurface } from './WorkspaceAssistantReasoning'
 import {
+  isWorkspaceAssistantRuntimeInterruptedToolPart,
   resolveWorkspaceAssistantRepeatedToolCallGroups,
+  resolveWorkspaceAssistantSubagentLifecycleViews,
   resolveWorkspaceAssistantToolCallDisplayState,
   resolveWorkspaceAssistantToolCallGroupView,
+  type WorkspaceAssistantSubagentLifecycleView,
   type WorkspaceAssistantRepeatedToolCallGroup,
   type WorkspaceAssistantToolCallDisplayState,
   type WorkspaceAssistantToolCallGroupView,
 } from './workspace-assistant-run-trace'
 
-const WorkspaceAssistantRepeatedToolCallGroupContext = createContext<
-  ReadonlyMap<string, WorkspaceAssistantRepeatedToolCallGroup>
->(new Map())
-const EMPTY_MESSAGE_PARTS: readonly unknown[] = []
+type RepeatedToolCallEntry = {
+  readonly group: WorkspaceAssistantRepeatedToolCallGroup
+  readonly view: WorkspaceAssistantToolCallGroupView
+}
+type WorkspaceAssistantToolCallContextValue = {
+  readonly repeatedByToolCallId: ReadonlyMap<string, RepeatedToolCallEntry>
+  readonly subagentsByToolCallId: ReadonlyMap<string, WorkspaceAssistantSubagentLifecycleView>
+  readonly interruptedToolCallIds: ReadonlySet<string>
+}
+const EMPTY_TOOL_CALL_CONTEXT: WorkspaceAssistantToolCallContextValue = {
+  repeatedByToolCallId: new Map(),
+  subagentsByToolCallId: new Map(),
+  interruptedToolCallIds: new Set(),
+}
+const WorkspaceAssistantToolCallContext = createContext<WorkspaceAssistantToolCallContextValue>(EMPTY_TOOL_CALL_CONTEXT)
 const NATIVE_SUBAGENT_TOOL_NAMES = new Set([
   'spawnAgent',
+  'spawn_agent',
   'sendInput',
+  'send_message',
   'resumeAgent',
+  'followup_task',
   'wait',
+  'wait_agent',
   'closeAgent',
+  'interrupt_agent',
+  'list_agents',
   'subagent_activity',
 ])
 
@@ -50,10 +71,16 @@ function resolveNativeToolTitle(toolName: string, t: AssistantAgentTranslator): 
   if (NATIVE_SUBAGENT_TOOL_NAMES.has(toolName)) {
     switch (toolName) {
       case 'spawnAgent': return t('runtime.native.subagentAction.spawnAgent')
+      case 'spawn_agent': return t('runtime.native.subagentAction.spawnAgent')
       case 'sendInput': return t('runtime.native.subagentAction.sendInput')
+      case 'send_message': return t('runtime.native.subagentAction.sendInput')
       case 'resumeAgent': return t('runtime.native.subagentAction.resumeAgent')
+      case 'followup_task': return t('runtime.native.subagentAction.resumeAgent')
       case 'wait': return t('runtime.native.subagentAction.wait')
+      case 'wait_agent': return t('runtime.native.subagentAction.wait')
       case 'closeAgent': return t('runtime.native.subagentAction.closeAgent')
+      case 'interrupt_agent': return t('runtime.native.subagentAction.interruptAgent')
+      case 'list_agents': return t('runtime.native.subagentAction.listAgents')
       case 'subagent_activity': return t('runtime.native.subagentAction.activity')
     }
   }
@@ -88,7 +115,18 @@ function resolveSubagentSummary(
     else if (status === 'completed' || status === 'shutdown') completed += 1
     else if (status === 'interrupted' || status === 'errored' || status === 'notFound') failed += 1
   }
-  return t('runtime.native.subagentSummary', { active, completed, failed })
+  return t('runtime.native.subagentSummary', { active, completed, interrupted: failed })
+}
+
+function localizeSubagentLifecycle(
+  lifecycle: WorkspaceAssistantSubagentLifecycleView,
+  t: AssistantAgentTranslator,
+): string {
+  return t('runtime.native.subagentSummary', {
+    active: lifecycle.active,
+    completed: lifecycle.completed,
+    interrupted: lifecycle.interrupted,
+  })
 }
 
 function resolveWebSearchSummary(
@@ -113,10 +151,10 @@ function resolveWebSearchSummary(
       ?? '…'
     return t('runtime.native.web.search', { query })
   }
-  if (type === 'open_page') {
+  if (type === 'openPage') {
     return t('runtime.native.web.openPage', { value: readText(action?.url) ?? '…' })
   }
-  if (type === 'find_in_page') {
+  if (type === 'findInPage') {
     return t('runtime.native.web.findInPage', { value: readText(action?.pattern) ?? '…' })
   }
   return t('runtime.native.web.other')
@@ -125,7 +163,10 @@ function resolveWebSearchSummary(
 function resolveNativeDetail(toolName: string, args: unknown): string | null {
   if (!isRecord(args)) return null
   if (NATIVE_SUBAGENT_TOOL_NAMES.has(toolName)) {
-    return readText(args.prompt) ?? readText(args.agentPath)
+    return readText(args.prompt)
+      ?? readText(args.message)
+      ?? readText(args.agentPath)
+      ?? readText(args.target)
   }
   if (toolName === 'shell') return readText(args.command)
   return null
@@ -133,22 +174,50 @@ function resolveNativeDetail(toolName: string, args: unknown): string | null {
 
 export function WorkspaceAssistantRepeatedToolCallGroupProvider({
   children,
-  messages,
+  messages = [],
+  turns = [],
 }: {
   readonly children: ReactNode
   readonly messages: readonly UIMessage[]
+  readonly turns: readonly AssistantRuntimeSessionTurnView[]
 }) {
-  const groupByToolCallId = useMemo(() => {
-    const next = new Map<string, WorkspaceAssistantRepeatedToolCallGroup>()
+  const value = useMemo((): WorkspaceAssistantToolCallContextValue => {
+    const repeatedByToolCallId = new Map<string, RepeatedToolCallEntry>()
     for (const group of resolveWorkspaceAssistantRepeatedToolCallGroups(messages)) {
-      for (const toolCallId of group.toolCallIds) next.set(toolCallId, group)
+      const entry = {
+        group,
+        view: resolveWorkspaceAssistantToolCallGroupView(messages, group),
+      }
+      for (const toolCallId of group.toolCallIds) repeatedByToolCallId.set(toolCallId, entry)
     }
-    return next
-  }, [messages])
+    const statusByAssistantMessageId = new Map(turns.flatMap((turn) => (
+      turn.assistantMessageId ? [[turn.assistantMessageId, turn.status] as const] : []
+    )))
+    const lifecycleByMessageId = resolveWorkspaceAssistantSubagentLifecycleViews(
+      messages,
+      statusByAssistantMessageId,
+    )
+    const subagentsByToolCallId = new Map<string, WorkspaceAssistantSubagentLifecycleView>()
+    const interruptedToolCallIds = new Set<string>()
+    for (const message of messages) {
+      for (const part of message.parts) {
+        if (isToolUIPart(part) && isWorkspaceAssistantRuntimeInterruptedToolPart(part)) {
+          interruptedToolCallIds.add(part.toolCallId)
+        }
+      }
+      const lifecycle = lifecycleByMessageId.get(message.id)
+      if (!lifecycle) continue
+      for (const part of message.parts) {
+        if (!isToolUIPart(part) || !NATIVE_SUBAGENT_TOOL_NAMES.has(getToolName(part))) continue
+        subagentsByToolCallId.set(part.toolCallId, lifecycle)
+      }
+    }
+    return { repeatedByToolCallId, subagentsByToolCallId, interruptedToolCallIds }
+  }, [messages, turns])
   return (
-    <WorkspaceAssistantRepeatedToolCallGroupContext.Provider value={groupByToolCallId}>
+    <WorkspaceAssistantToolCallContext.Provider value={value}>
       {children}
-    </WorkspaceAssistantRepeatedToolCallGroupContext.Provider>
+    </WorkspaceAssistantToolCallContext.Provider>
   )
 }
 
@@ -195,13 +264,10 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
   const t = useTranslations('assistantAgent')
   const locale = normalizeProjectAgentLocale(useLocale())
   const [expanded, setExpanded] = useState(false)
-  const repeatedGroup = useContext(WorkspaceAssistantRepeatedToolCallGroupContext).get(props.toolCallId)
-  const messageParts = useMessage((state) => (
-    'parts' in state && Array.isArray(state.parts) ? state.parts : EMPTY_MESSAGE_PARTS
-  ))
-  const groupView = repeatedGroup
-    ? resolveWorkspaceAssistantToolCallGroupView(messageParts, repeatedGroup)
-    : null
+  const context = useContext(WorkspaceAssistantToolCallContext)
+  const repeatedEntry = context.repeatedByToolCallId.get(props.toolCallId)
+  const subagentLifecycle = context.subagentsByToolCallId.get(props.toolCallId) ?? null
+  const groupView = repeatedEntry?.view ?? null
   const operationTitle = resolveNativeToolTitle(props.toolName, t)
     ?? localizeProjectAgentOperationTitle(props.toolName, locale)
   const toolStatus = props.status.type
@@ -217,18 +283,20 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
   // interrupted call must not keep spinning as if it were still running.
   const displayState = groupView
     ? resolveGroupDisplayState(groupView)
-    : resolveWorkspaceAssistantToolCallDisplayState({
-        type: 'tool-call',
-        status: props.status,
-        result: props.result,
-        isError: props.isError,
-      })
+    : context.interruptedToolCallIds.has(props.toolCallId)
+      ? 'interrupted'
+      : resolveWorkspaceAssistantToolCallDisplayState({
+          type: 'tool-call',
+          status: props.status,
+          result: props.result,
+          isError: props.isError,
+        })
   const failed = groupView ? groupView.failed > 0 : displayState === 'failed'
   const interrupted = groupView ? groupView.interrupted > 0 : displayState === 'interrupted'
-  const nativeSummary = props.toolName === 'web_search'
-    ? resolveWebSearchSummary(props.args, props.result, t)
-    : NATIVE_SUBAGENT_TOOL_NAMES.has(props.toolName)
-      ? resolveSubagentSummary(props.args, props.result, t)
+  const nativeSummary = NATIVE_SUBAGENT_TOOL_NAMES.has(props.toolName)
+      ? subagentLifecycle
+        ? localizeSubagentLifecycle(subagentLifecycle, t)
+        : resolveSubagentSummary(props.args, props.result, t)
       : null
   const summaryText = nativeSummary ?? translateDisplayState(displayState, t)
   const iconName = failed || interrupted ? 'alert' : 'settingsHex'
@@ -244,7 +312,9 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
     groupView.needsAction,
   ].filter((count) => count > 0).length > 1)
   const detailsAvailable = props.args !== undefined || props.result !== undefined
-  const nativeDetail = resolveNativeDetail(props.toolName, props.args)
+  const nativeDetail = props.toolName === 'web_search'
+    ? resolveWebSearchSummary(props.args, props.result, t)
+    : resolveNativeDetail(props.toolName, props.args)
 
   return (
     <div className={`text-sm leading-5 ${failed || interrupted ? 'text-[var(--glass-tone-warn-fg)]' : 'text-[var(--glass-text-tertiary)]'}`}>
@@ -252,9 +322,19 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
         <AppIcon name={iconName} className="h-3.5 w-3.5 shrink-0" />
         <span className="min-w-0 truncate">{summaryText} · {displayTitle}</span>
       </div>
-      {nativeDetail ? (
+      {nativeDetail && !(subagentLifecycle && props.toolName === 'subagent_activity') ? (
         <div className="ml-5 mt-1 line-clamp-2 text-xs leading-4 text-[var(--glass-text-tertiary)]">
           {nativeDetail}
+        </div>
+      ) : null}
+      {subagentLifecycle && props.toolName === 'subagent_activity' ? (
+        <div className="ml-5 mt-1 space-y-0.5 text-xs leading-4 text-[var(--glass-text-tertiary)]">
+          {subagentLifecycle.agents.map((agent) => (
+            <div key={agent.agentThreadId} className="flex min-w-0 items-center justify-between gap-3">
+              <span className="truncate">{agent.agentPath}</span>
+              <span className="shrink-0">{t(`runtime.native.subagentStatus.${agent.status}`)}</span>
+            </div>
+          ))}
         </div>
       ) : null}
       {mixedGroup ? (

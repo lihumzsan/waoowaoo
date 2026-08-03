@@ -136,6 +136,7 @@ export function ConfirmationActionCard(props: {
   subtitle: string
   onConfirm: () => Promise<void>
   onCancel: () => Promise<void>
+  retryOnly?: boolean
 }) {
   const t = useTranslations('assistantAgent')
   // A pending approval accepts exactly one decision: the first click disables
@@ -207,7 +208,7 @@ export function ConfirmationActionCard(props: {
             submitDecision('confirm')
           }}
         />
-        <button
+        {!props.retryOnly ? <button
           type="button"
           disabled={locked}
           className="shrink-0 whitespace-nowrap rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 py-2 text-sm font-medium text-[var(--glass-text-primary)] transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
@@ -216,7 +217,7 @@ export function ConfirmationActionCard(props: {
           }}
         >
           {decision === 'cancelling' ? t('cards.interactionSubmitting') : t('cards.cancelAction')}
-        </button>
+        </button> : null}
       </div>
     </div>
   )

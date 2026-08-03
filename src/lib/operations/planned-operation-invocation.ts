@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { ApiError } from '@/lib/api-errors'
 import { prisma } from '@/lib/prisma'
+import { lockAgentTurnEffectFence } from '@/lib/agent-turn/effect-fence'
 import {
   isBillablePlannedOperation,
   type ProjectAgentOperationContext,
@@ -17,9 +18,10 @@ import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impac
 import { schedulePersistedTask } from '@/lib/temporal/task-client'
 import type { PersistedTaskReference, ScheduledTaskReceipt } from '@/lib/temporal/task/contracts'
 import { isTaskType } from '@/lib/task/types'
+import { OPERATION_EXECUTION_MAX_TASKS } from '@/lib/temporal/operation-execution/contracts'
 
 const APPROVED_OPERATION_TRANSACTION_TIMEOUT_MS = 60_000
-const APPROVED_OPERATION_MAX_TASKS = 64
+const APPROVED_OPERATION_MAX_TASKS = OPERATION_EXECUTION_MAX_TASKS
 
 export interface PlannedOperationInvocation {
   approvalGrantId: string
@@ -502,6 +504,13 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
           )
         }
         return { kind: 'output' as const, output: existing.output as Output }
+      }
+      if (params.ctx.context.turnId) {
+        await lockAgentTurnEffectFence(tx, {
+          turnId: params.ctx.context.turnId,
+          projectId: params.ctx.projectId,
+          userId: params.ctx.userId,
+        })
       }
       if (grant.consumedAt || grant.consumedExecutionId) {
         throw new Error(`APPROVAL_GRANT_CONSUMED_WITHOUT_EXECUTION:${grant.id}`)

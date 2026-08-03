@@ -6,6 +6,7 @@
       "title": "Codex Creative Runtime",
       "sourcePaths": [
         "src/lib/codex-runtime",
+        "src/lib/codex-model-gateway",
         "src/lib/assistant-runtime",
         "src/lib/codex-workspace",
         "src/lib/wao-mcp",
@@ -83,6 +84,8 @@
       "sourcePaths": [
         "src/lib/workspace-resource",
         "src/lib/codex-workspace",
+        "src/lib/adapters/operation-error-normalizer.ts",
+        "src/lib/errors/projection.ts",
         "src/lib/operations/domains/workspace-resource",
         "src/lib/operations/api-only/media-upload-api-ops.ts",
         "src/app/api/projects/[projectId]/resources",
@@ -200,6 +203,7 @@
         "src/lib/assistant-runtime/event-projector.ts",
         "src/lib/assistant-runtime/view-contract.ts",
         "src/lib/codex-runtime/app-server-client.ts",
+        "src/lib/codex-model-gateway/standalone-search.ts",
         "src/features/project-workspace/components/workspace-assistant"
       ]
     },

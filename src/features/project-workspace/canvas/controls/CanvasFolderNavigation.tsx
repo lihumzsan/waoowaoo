@@ -13,6 +13,7 @@ export function CanvasFolderNavigation(props: {
   readonly breadcrumbs: readonly CanvasFolderBreadcrumb[]
   readonly search: string
   readonly searchPlaceholder: string
+  readonly backLabel: string
   readonly searchResultsLabel: string
   readonly noResultsLabel: string
   readonly loadingLabel: string
@@ -30,9 +31,23 @@ export function CanvasFolderNavigation(props: {
   readonly onLoadMoreSearch: () => void
 }) {
   const hasSearch = props.search.trim().length > 0
+  const parentBreadcrumb = props.breadcrumbs.length > 1
+    ? props.breadcrumbs[props.breadcrumbs.length - 2] ?? null
+    : null
   return (
-    <div className="nodrag nowheel w-[min(34rem,calc(100vw-8rem))] rounded-2xl border border-white/80 bg-white/88 p-2.5 shadow-lg ring-1 ring-[var(--glass-stroke-base)]/70 backdrop-blur-2xl">
+    <div className="nodrag nopan nowheel w-[min(34rem,calc(100vw-8rem))] rounded-2xl border border-white/80 bg-white/88 p-2.5 shadow-lg ring-1 ring-[var(--glass-stroke-base)]/70 backdrop-blur-2xl">
       <div className="flex min-w-0 items-center gap-1 overflow-x-auto pb-2">
+        {parentBreadcrumb ? (
+          <button
+            type="button"
+            aria-label={props.backLabel}
+            title={props.backLabel}
+            className="mr-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--glass-text-secondary)] hover:bg-slate-100 hover:text-[var(--glass-text-primary)]"
+            onClick={() => props.onBreadcrumb(parentBreadcrumb)}
+          >
+            <AppIcon name="chevronLeft" className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
         {props.breadcrumbs.map((breadcrumb, index) => (
           <span key={breadcrumb.folderKey} className="flex shrink-0 items-center gap-1">
             {index > 0 ? (

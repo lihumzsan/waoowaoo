@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto'
-import { Prisma, type AgentToolEffect, type ProjectAgentTurn } from '@prisma/client'
+import { Prisma, type AgentToolEffect } from '@prisma/client'
 import { canonicalJson } from '@/lib/operation-plan-contract/canonical-json'
 import { prisma } from '@/lib/prisma'
+import { lockAgentTurnEffectFence } from './effect-fence'
 
 const MAX_TOOL_EFFECT_RESULT_BYTES = 2 * 1_024 * 1_024
 
@@ -121,6 +122,7 @@ export async function executeAgentToolEffectTransaction(params: {
       id: true,
       threadId: true,
       projectId: true,
+      userId: true,
     },
   })
   if (!identity) throw new Error(`AGENT_TURN_NOT_FOUND:${turnId}`)
@@ -144,18 +146,13 @@ export async function executeAgentToolEffectTransaction(params: {
     if (threads.length !== 1) {
       throw new Error(`AGENT_TOOL_EFFECT_THREAD_NOT_FOUND:${identity.threadId}`)
     }
-    const turns = await tx.$queryRaw<ProjectAgentTurn[]>(Prisma.sql`
-      SELECT *
-      FROM project_agent_turns
-      WHERE id = ${turnId}
-      FOR UPDATE
-    `)
-    const turn = turns[0] ?? null
+    const turn = await lockAgentTurnEffectFence(tx, {
+      turnId,
+      projectId: identity.projectId,
+      userId: identity.userId,
+    })
     if (
-      !turn
-      || turn.threadId !== identity.threadId
-      || turn.projectId !== identity.projectId
-      || turn.status !== 'running'
+      turn.threadId !== identity.threadId
       || turn.executionOwnerId !== executionOwnerId
     ) {
       throw new Error(

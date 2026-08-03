@@ -2,8 +2,9 @@ import { createHash } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { ProjectAgentFollowUpBatchBinding } from '@/lib/operations/types'
+import { OPERATION_EXECUTION_MAX_TASKS } from '@/lib/temporal/operation-execution/contracts'
 
-const FOLLOW_UP_BATCH_MAX_MEMBERS = 64
+const FOLLOW_UP_BATCH_MAX_MEMBERS = OPERATION_EXECUTION_MAX_TASKS
 
 interface FollowUpBatchContext {
   locale: string | null

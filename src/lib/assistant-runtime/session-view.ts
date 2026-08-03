@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { safeValidateUIMessages, type UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
+import { buildAgentTurnAssistantMessageId } from '@/lib/agent-turn/stream-publisher'
 import { resolveUnifiedErrorCode } from '@/lib/errors/codes'
 import type { RuntimeJsonValue } from '@/lib/codex-runtime/runtime-adapter'
 import {
@@ -55,7 +56,9 @@ function toTurnView(row: {
     sourceId: row.sourceId,
     status: parseTurnStatus(row.status),
     attempt: row.attempt,
-    assistantMessageId: row.assistantMessageId,
+    assistantMessageId: row.assistantMessageId ?? (row.startedAt
+      ? buildAgentTurnAssistantMessageId({ turnId: row.id, attempt: row.attempt })
+      : null),
     stopReason: row.stopReason,
     errorCode: row.errorCode ? resolveUnifiedErrorCode(row.errorCode) ?? 'INTERNAL_ERROR' : null,
     cancelReason: row.cancelReason,
@@ -149,7 +152,7 @@ export async function getAssistantRuntimeSessionView(
       || thread.assistantId !== input.assistantId
     ) throw new Error('ASSISTANT_RUNTIME_VIEW_THREAD_SCOPE_DIVERGED')
 
-    const [openRows, recentRows, interactions, batches, messages] = await Promise.all([
+    const [openRows, recentRows, interactions, batches, currentResourceTaskRows, messages] = await Promise.all([
       tx.projectAgentTurn.findMany({
         where: { threadId: thread.id, status: { in: [...ACTIVE_STATUSES] } },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -175,6 +178,14 @@ export async function getAssistantRuntimeSessionView(
           },
         },
       }),
+      tx.workspaceResource.findMany({
+        where: {
+          projectId: input.projectId,
+          deletedAt: null,
+          taskId: { not: null },
+        },
+        select: { id: true, taskId: true },
+      }),
       parseMessages(thread.messagesJson),
     ])
     if (openRows.length > 65) throw new Error('ASSISTANT_RUNTIME_VIEW_OPEN_TURN_LIMIT_EXCEEDED')
@@ -186,8 +197,21 @@ export async function getAssistantRuntimeSessionView(
     const queued = open.filter((turn) => turn.status === 'queued')
     const current = executing[0] ?? queued[0] ?? recent[0] ?? null
 
-    const followUpBatches = batches.map((batch) => {
-      const tasks = batch.members.map(({ task }) => ({
+    const currentTaskByResourceId = new Map(
+      currentResourceTaskRows.flatMap((row) => row.taskId ? [[row.id, row.taskId] as const] : []),
+    )
+    const followUpBatches = batches.flatMap((batch) => {
+      // Follow-up batches are the live operational overlay, not a second Task
+      // history. A retried WorkspaceResource keeps the same Resource identity
+      // and rebinds taskId to the replacement attempt. Only positive evidence
+      // of that replacement suppresses an older member; missing/deleted targets
+      // stay visible so a real invariant failure can never disappear silently.
+      const tasks = batch.members.flatMap(({ task }) => {
+        const currentTaskId = task.targetType === 'WorkspaceResource'
+          ? currentTaskByResourceId.get(task.targetId)
+          : undefined
+        if (currentTaskId && currentTaskId !== task.id) return []
+        return [{
         taskId: task.id,
         operationId: task.operationId,
         taskType: task.type,
@@ -200,8 +224,10 @@ export async function getAssistantRuntimeSessionView(
           : null,
         createdAt: task.createdAt.toISOString(),
         finishedAt: task.finishedAt?.toISOString() ?? null,
-      }))
-      return {
+        }]
+      })
+      if (tasks.length === 0) return []
+      return [{
         batchId: batch.id,
         originTurnId: batch.originTurnId,
         callId: batch.callId,
@@ -219,7 +245,7 @@ export async function getAssistantRuntimeSessionView(
         readyAt: batch.readyAt?.toISOString() ?? null,
         notifiedAt: batch.notifiedAt?.toISOString() ?? null,
         cancelledAt: batch.cancelledAt?.toISOString() ?? null,
-      }
+      }]
     })
     return {
       protocol: 'assistant_runtime_session_view_v1',

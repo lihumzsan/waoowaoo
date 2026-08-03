@@ -112,6 +112,7 @@
       },
       "folderNavigation": {
         "root": "项目文件",
+        "back": "返回上一级",
         "searchPlaceholder": "搜索项目文件",
         "searchResults": "搜索结果",
         "noResults": "没有匹配的文件",

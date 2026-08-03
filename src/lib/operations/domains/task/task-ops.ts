@@ -3,7 +3,9 @@ import { ApiError } from '@/lib/api-errors'
 import { projectErrorForModel } from '@/lib/errors/projection'
 import { listTaskLifecycleEvents } from '@/lib/task/publisher'
 import { getTaskById, queryTasks } from '@/lib/task/service'
+import { queryTaskTargetStates } from '@/lib/task/state-service'
 import { cancelTemporalTask } from '@/lib/temporal/task-client'
+import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import {
   isTaskType,
   TASK_STATUS,
@@ -19,6 +21,11 @@ import { defineOperation } from '@/lib/operations/define-operation'
 
 const taskStatusSchema = z.enum(Object.values(TASK_STATUS) as [TaskStatus, ...TaskStatus[]])
 const taskTypeSchema = z.enum(Object.values(TASK_TYPE) as [TaskType, ...TaskType[]])
+const taskTargetSchema = z.object({
+  targetType: z.string().trim().min(1),
+  targetId: z.string().trim().min(1),
+  types: z.array(z.string().trim().min(1)).optional(),
+}).strict()
 
 const listTasksInputSchema = z
   .object({
@@ -110,6 +117,36 @@ function isTaskVisibleInOperationContext(
 
 export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
   return {
+    get_task_status: defineOperation({
+      id: 'get_task_status',
+      summary: 'API-only: Query current Task presentation state for exact project targets.',
+      intent: 'query',
+      channels: { tool: false, api: true, mcp: false },
+      effects: {
+        writes: false,
+        billable: false,
+        destructive: false,
+        overwrite: false,
+        bulk: false,
+        externalSideEffects: false,
+        longRunning: false,
+      },
+      inputSchema: z.object({
+        targets: z.array(taskTargetSchema).min(1).max(500),
+      }).strict(),
+      outputSchema: z.unknown(),
+      execute: async (ctx, input) => ({
+        states: await withRetry({
+          scope: 'prisma:get_task_status',
+          policy: RETRY_POLICY.prisma,
+          run: async () => await queryTaskTargetStates({
+            projectId: ctx.projectId,
+            userId: ctx.userId,
+            targets: input.targets,
+          }),
+        }),
+      }),
+    }),
     list_tasks: defineOperation({
       id: 'list_tasks',
       summary: 'List tasks for the current user with optional filters.',

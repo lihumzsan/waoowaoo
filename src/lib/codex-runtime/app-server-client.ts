@@ -31,7 +31,13 @@ import type {
 } from './runtime-adapter'
 
 const DEFAULT_COMMAND = 'codex'
-const DEFAULT_ARGS = ['app-server', '--listen', 'stdio://'] as const
+const DEFAULT_ARGS = [
+  'app-server',
+  '--listen',
+  'stdio://',
+  '--enable',
+  'code_mode_host',
+] as const
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 2_000
 
 type PendingRequest = {
@@ -319,6 +325,7 @@ export class CodexAppServerClient implements RuntimeAdapter {
       cwd: options.cwd,
       env: options.env ?? process.env,
       stdio: ['pipe', 'pipe', 'pipe'],
+      detached: process.platform !== 'win32',
     })
     this.reader = createInterface({ input: this.child.stdout, crlfDelay: Infinity })
     this.reader.on('line', (line) => this.handleLine(line))
@@ -455,6 +462,13 @@ export class CodexAppServerClient implements RuntimeAdapter {
     putOptional(requestParams, 'summary', params.summary)
     putOptional(requestParams, 'personality', params.personality)
     putOptional(requestParams, 'outputSchema', params.outputSchema)
+    putOptional(
+      requestParams,
+      'collaborationMode',
+      params.collaborationMode
+        ? requireJsonObject(params.collaborationMode, 'TURN_START_COLLABORATION_MODE_INVALID')
+        : undefined,
+    )
 
     const response = await this.request('turn/start', requestParams)
     return this.parseProtocolResponse(() => {
@@ -526,6 +540,27 @@ export class CodexAppServerClient implements RuntimeAdapter {
     const promise = this.performShutdown()
     this.shutdownPromise = promise
     return await promise
+  }
+
+  /** Immediately terminate the local app-server process group and its tools. */
+  async forceShutdown(): Promise<void> {
+    if (this.didExit) return
+    this.shuttingDown = true
+    this.rejectPending(new Error('CODEX_RUNTIME_FORCE_STOPPED'))
+    this.pendingServerRequests.clear()
+    const pid = this.child.pid
+    if (process.platform !== 'win32' && typeof pid === 'number') {
+      try {
+        process.kill(-pid, 'SIGKILL')
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
+      }
+    } else {
+      this.child.kill('SIGKILL')
+    }
+    if (!(await this.waitForExit(this.shutdownTimeoutMs))) {
+      throw new Error('CODEX_RUNTIME_FORCE_SHUTDOWN_TIMEOUT')
+    }
   }
 
   private async performInitialize(): Promise<RuntimeInitializeResult> {
@@ -610,7 +645,10 @@ export class CodexAppServerClient implements RuntimeAdapter {
       return
     }
     if (hasMethod && !hasId && !hasResult && !hasError) {
-      assertOnlyKeys(value, ['method', 'params'], 'NOTIFICATION_FIELDS_INVALID')
+      assertOnlyKeys(value, ['method', 'params', 'emittedAtMs'], 'NOTIFICATION_FIELDS_INVALID')
+      if (hasOwn(value, 'emittedAtMs')) {
+        requireSafeInteger(value.emittedAtMs, 'NOTIFICATION_EMITTED_AT_INVALID')
+      }
       this.emit({
         type: 'notification',
         method: requireString(value.method, 'NOTIFICATION_METHOD_INVALID'),

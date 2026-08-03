@@ -5,6 +5,11 @@
     "composerPlaceholder": "Create with AI",
     "sending": "Sending...",
     "send": "Send",
+    "collaborationMode": "Conversation mode",
+    "collaborationModes": {
+      "default": "Agent",
+      "plan": "Plan"
+    },
     "stopGenerating": "Stop generating",
     "streaming": "Streaming",
     "loading": "Loading",
@@ -16,6 +21,8 @@
     "runFailedTitle": "Assistant run failed",
     "turnInterruptedTitle": "Assistant turn was interrupted",
     "turnInterruptedDescription": "The server stopped during this turn. Completed actions and long-running tasks were kept; send a new message to continue.",
+    "turnStoppedTitle": "Generation stopped",
+    "turnStoppedDescription": "This turn was stopped at your request. Completed work and long-running tasks were kept; send a new message to continue.",
     "resend": "Resend",
     "undelivered": "Not delivered",
     "sessionStateError": "Assistant status could not be refreshed. Retry or reload before continuing.",
@@ -74,10 +81,10 @@
     "submitted": "Submitted",
     "progressSummary": "{succeeded} succeeded · {failed} failed · {canceled} canceled · {running} running",
     "groupTitle": "{title} × {count}",
-    "groupProgressSummary": "{success} succeeded · {submitted} submitted · {failed} failed · {interrupted} incomplete · {needsAction} need action · {running} running",
+    "groupProgressSummary": "{success} succeeded · {submitted} submitted · {failed} failed · {interrupted} stopped · {needsAction} need action · {running} running",
     "partial": "Partially completed",
     "failed": "Failed",
-    "interrupted": "Not completed",
+    "interrupted": "Stopped",
     "failedDetail": "The operation could not be completed. Please retry.",
     "running": "Running",
     "needsAction": "Needs Action",
@@ -128,14 +135,21 @@
         "resumeAgent": "Resume Subagent",
         "wait": "Wait for Subagent",
         "closeAgent": "Close Subagent",
+        "interruptAgent": "Interrupt Subagent",
+        "listAgents": "Check Subagent status",
         "activity": "Subagent activity"
       },
-      "subagentSummary": "{active} active · {completed} done · {failed} failed",
+      "subagentSummary": "{active} active · {completed} done · {interrupted} interrupted",
+      "subagentStatus": {
+        "active": "Active",
+        "completed": "Done",
+        "interrupted": "Interrupted"
+      },
       "web": {
-        "search": "Searching: {query}",
-        "openPage": "Opening page: {value}",
-        "findInPage": "Finding in page: {value}",
-        "other": "Working with web results"
+        "search": "Search: {query}",
+        "openPage": "Page: {value}",
+        "findInPage": "Find in page: {value}",
+        "other": "Web results"
       }
     }
   },

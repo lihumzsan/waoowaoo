@@ -1,7 +1,10 @@
+import type { UIMessage } from 'ai'
 import type {
   RuntimeEvent,
+  RuntimeJsonValue,
   RuntimeSandboxMode,
   RuntimeSandboxPolicy,
+  RuntimeSkillsListEntry,
   RuntimeUserInput,
 } from '@/lib/codex-runtime/runtime-adapter'
 import type {
@@ -16,12 +19,16 @@ import {
   publishAgentSessionViewChanged,
 } from '@/lib/agent-turn/stream-publisher'
 import { createScopedLogger } from '@/lib/logging/core'
+import { CREATIVE_SKILL_IDS } from '@/lib/creative-skills'
 import type {
   AssistantRuntimeAdmissionReceipt,
+  AssistantRuntimeCollaborationMode,
   AssistantRuntimeClearCommand,
   AssistantRuntimeClearReceipt,
   AssistantRuntimeInterruptCommand,
   AssistantRuntimeInterruptReceipt,
+  AssistantRuntimeMessageReceipt,
+  AssistantRuntimePreparedInput,
   AssistantRuntimeServerRequestCommand,
   AssistantRuntimeSteerCommand,
   AssistantRuntimeSteerReceipt,
@@ -33,23 +40,33 @@ import type {
 import { AssistantRuntimeEventProjector } from './event-projector'
 import { prepareAssistantRuntimeUserInput } from './message-input'
 import {
+  acceptAssistantRuntimeSteer,
   admitAssistantRuntimeTaskFollowUp,
   admitAssistantRuntimeTurn,
-  appendAssistantRuntimeSteerMessage,
   bindAssistantRuntimeTurn,
+  claimAssistantRuntimeSteer,
+  claimAssistantRuntimeTurnStart,
+  claimAssistantRuntimeThreadClear,
   clearAssistantRuntimeThread,
   decideAssistantRuntimeInteraction,
+  failAssistantRuntimeBoundTurnStart,
   failAssistantRuntimeTurnStart,
   getOrCreateAssistantRuntimeThread,
   loadAssistantRuntimeTaskFollowUp,
+  markAssistantRuntimeSteerUncertain,
   persistAssistantRuntimeInteraction,
   persistAssistantRuntimeMessageSnapshot,
   readAssistantRuntimeActiveTurn,
+  hashAssistantRuntimeSubmitCommand,
+  readAssistantRuntimeMessageReplay,
   replaceAssistantRuntimePlan,
+  rotateAssistantRuntimeThreadRevision,
+  resolveAssistantRuntimeMessageTarget,
   requestAssistantRuntimeInterrupt,
   resolveAssistantRuntimeInteraction,
   rollbackAssistantRuntimeTaskFollowUpPreparation,
   settleAssistantRuntimeTurn,
+  type AssistantRuntimeMessageReplayDecision,
 } from './persistence'
 import {
   buildAssistantRuntimeTurnContext,
@@ -89,8 +106,38 @@ type StartedProjection = {
   readonly runtimeTurnId: string
 }
 
+type LiveProjection = {
+  readonly started: StartedProjection
+  readonly completion: Promise<void>
+}
+
+function requireBoundTurnIdentity(
+  value: AssistantRuntimeTurnIdentity | null,
+): AssistantRuntimeTurnIdentity {
+  if (!value) throw new Error('ASSISTANT_RUNTIME_TURN_BINDING_MISSING')
+  return value
+}
+
+function assistantMessageText(message: UIMessage): string {
+  return message.parts
+    .flatMap((part) => part.type === 'text' ? [part.text.trim()] : [])
+    .filter(Boolean)
+    .join('\n\n')
+}
+
 function runtimeScope(input: { readonly userId: string; readonly projectId: string }): RuntimeSessionScope {
   return { userId: input.userId, projectId: input.projectId }
+}
+
+type AssistantRuntimeMessageReplayControl = {
+  readonly outcome: 'resume_queued' | 'reconcile_unbound_start'
+}
+
+function isMessageReplayControl(
+  value: AssistantRuntimeMessageReplayDecision | null,
+): value is AssistantRuntimeMessageReplayControl {
+  if (!value || !('outcome' in value)) return false
+  return value.outcome === 'resume_queued' || value.outcome === 'reconcile_unbound_start'
 }
 
 function withTurnContext(
@@ -128,32 +175,124 @@ function isRuntimeEvent(
   return event.type === 'runtime'
 }
 
+function assertProductionSkillsInventory(entry: RuntimeSkillsListEntry): void {
+  if (entry.errors.length > 0) {
+    throw new Error(`ASSISTANT_RUNTIME_SKILLS_LOAD_FAILED:${String(entry.errors.length)}`)
+  }
+  const enabledNames = new Set(
+    entry.skills.filter((skill) => skill.enabled).map((skill) => skill.name),
+  )
+  const missing = CREATIVE_SKILL_IDS.filter((skillId) => !enabledNames.has(skillId))
+  if (missing.length > 0) {
+    throw new Error(`ASSISTANT_RUNTIME_SKILLS_MISSING:${missing.join(',')}`)
+  }
+}
+
 export class AssistantRuntimeService {
   private readonly manager: RuntimeSessionManager
   private readonly access: AssistantRuntimeAccessProvider
   private readonly models: AssistantRuntimeModelResolver
-  private readonly liveTurns = new Map<string, StartedProjection>()
+  private readonly liveTurns = new Map<string, LiveProjection>()
+  private readonly projectTransitions = new Map<string, Promise<void>>()
+  private readonly settlementBarriers = new Map<string, {
+    readonly scope: RuntimeSessionScope
+    readonly promise: Promise<void>
+  }>()
   constructor(options: AssistantRuntimeServiceOptions) {
     this.manager = options.manager
     this.access = options.access
     this.models = options.models
   }
 
-  async submit(command: AssistantRuntimeSubmitCommand): Promise<AssistantRuntimeAdmissionReceipt> {
-    const prepared = await prepareAssistantRuntimeUserInput({
-      message: command.message,
-      userId: command.userId,
-      projectId: command.projectId,
+  async waitForTurnSettlements(scope: RuntimeSessionScope): Promise<void> {
+    const pending = [...this.settlementBarriers.values()]
+      .filter((entry) => (
+        entry.scope.userId === scope.userId
+        && entry.scope.projectId === scope.projectId
+      ))
+      .map((entry) => entry.promise)
+    await Promise.all(pending)
+  }
+
+  private async runProjectTransition<T>(
+    scope: RuntimeSessionScope,
+    action: () => Promise<T>,
+  ): Promise<T> {
+    const key = `${scope.userId.length}:${scope.userId}${scope.projectId.length}:${scope.projectId}`
+    const prior = this.projectTransitions.get(key) ?? Promise.resolve()
+    let release!: () => void
+    const current = new Promise<void>((resolve) => {
+      release = resolve
     })
+    this.projectTransitions.set(key, current)
+    await prior.catch(() => undefined)
+    try {
+      return await action()
+    } finally {
+      release()
+      if (this.projectTransitions.get(key) === current) this.projectTransitions.delete(key)
+    }
+  }
+
+  async send(command: AssistantRuntimeSubmitCommand): Promise<AssistantRuntimeMessageReceipt> {
+    return await this.runProjectTransition(runtimeScope(command), async () => {
+      const clientPayloadHash = hashAssistantRuntimeSubmitCommand(command)
+      let replay = await readAssistantRuntimeMessageReplay(command)
+      if (isMessageReplayControl(replay) && replay.outcome === 'reconcile_unbound_start') {
+        await this.ensureRuntimeForAdmission(command)
+        replay = await readAssistantRuntimeMessageReplay(command)
+        if (isMessageReplayControl(replay) && replay.outcome === 'reconcile_unbound_start') {
+          throw new Error('ASSISTANT_RUNTIME_START_HANDOFF_RECONCILE_FAILED')
+        }
+      }
+      if (replay && !isMessageReplayControl(replay)) return replay
+      const prepared = await prepareAssistantRuntimeUserInput({
+        message: command.message,
+        userId: command.userId,
+        projectId: command.projectId,
+      })
+      const normalizedCommand: AssistantRuntimeSubmitCommand = {
+        ...command,
+        message: prepared.message,
+      }
+      if (replay?.outcome === 'resume_queued') {
+        return await this.submitExclusive(normalizedCommand, prepared, clientPayloadHash)
+      }
+      const active = await resolveAssistantRuntimeMessageTarget(normalizedCommand)
+      if (!active) {
+        return await this.submitExclusive(normalizedCommand, prepared, clientPayloadHash)
+      }
+      if (active.collaborationMode !== normalizedCommand.collaborationMode) {
+        throw new Error('ASSISTANT_RUNTIME_COLLABORATION_MODE_LOCKED')
+      }
+      return await this.steerExclusive({
+        projectId: normalizedCommand.projectId,
+        userId: normalizedCommand.userId,
+        assistantId: normalizedCommand.assistantId,
+        threadId: active.threadId,
+        turnId: active.turnId,
+        sourceId: normalizedCommand.sourceId,
+        message: normalizedCommand.message,
+      }, prepared, clientPayloadHash)
+    })
+  }
+
+  private async submitExclusive(
+    command: AssistantRuntimeSubmitCommand,
+    preparedInput: AssistantRuntimePreparedInput,
+    clientPayloadHash: string,
+  ): Promise<AssistantRuntimeAdmissionReceipt> {
+    const prepared = preparedInput
     const normalizedCommand: AssistantRuntimeSubmitCommand = {
       ...command,
       message: prepared.message,
     }
-    await this.ensureRuntimeForAdmission(command)
     const thread = await getOrCreateAssistantRuntimeThread(command)
+    await this.ensureRuntimeForAdmission(command)
     const admission = await admitAssistantRuntimeTurn({
       command: normalizedCommand,
       threadId: thread.threadId,
+      clientPayloadHash,
     })
     if (admission.replayed && (
       admission.turn.status !== 'queued' || admission.turn.runtimeTurnId !== null
@@ -175,10 +314,15 @@ export class AssistantRuntimeService {
     })
     let preparedThread: PreparedThread
     try {
+      const historyMessages = admission.replayed
+        ? thread.messages.filter((message) => message.id !== normalizedCommand.message.id)
+        : thread.messages
       preparedThread = await this.prepareThread({
         scope: command,
         threadId: thread.threadId,
         recoveryThreadId: thread.runtimeThreadId,
+        runtimeRevision: thread.runtimeRevision,
+        historyMessages,
       })
     } catch (error) {
       await failAssistantRuntimeTurnStart({
@@ -196,6 +340,7 @@ export class AssistantRuntimeService {
       sourceId: command.sourceId,
       locale: command.context.locale,
       inputs: prepared.inputs,
+      collaborationMode: command.collaborationMode,
     })
     return {
       outcome: 'accepted',
@@ -206,29 +351,67 @@ export class AssistantRuntimeService {
     }
   }
 
-  async steer(command: AssistantRuntimeSteerCommand): Promise<AssistantRuntimeSteerReceipt> {
-    const prepared = await prepareAssistantRuntimeUserInput({
-      message: command.message,
-      userId: command.userId,
-      projectId: command.projectId,
-    })
+  private async steerExclusive(
+    command: AssistantRuntimeSteerCommand,
+    preparedInput: AssistantRuntimePreparedInput,
+    clientPayloadHash: string,
+  ): Promise<AssistantRuntimeSteerReceipt> {
+    const prepared = preparedInput
     const turn = await readAssistantRuntimeActiveTurn({
       scope: command,
       threadId: command.threadId,
       turnId: command.turnId,
     })
     if (!turn.runtimeTurnId) throw new Error('ASSISTANT_RUNTIME_STEER_RUNTIME_TURN_MISSING')
-    await this.manager.steerTurn(runtimeScope(command), command.threadId, {
-      expectedTurnId: turn.runtimeTurnId,
-      clientUserMessageId: command.sourceId,
-      input: prepared.inputs,
-    })
-    await appendAssistantRuntimeSteerMessage({
+    const claim = await claimAssistantRuntimeSteer({
       scope: command,
       threadId: command.threadId,
       turnId: command.turnId,
+      sourceId: command.sourceId,
       message: prepared.message,
+      clientPayloadHash,
     })
+    if (claim.outcome === 'replayed') {
+      return {
+        threadId: claim.threadId,
+        turnId: claim.turnId,
+        runtimeTurnId: claim.runtimeTurnId,
+      }
+    }
+    const markUncertain = async (): Promise<void> => {
+      await markAssistantRuntimeSteerUncertain({
+        scope: command,
+        threadId: command.threadId,
+        turnId: command.turnId,
+        sourceId: command.sourceId,
+      }).catch(() => undefined)
+    }
+    try {
+      const acceptedRuntimeTurnId = await this.manager.steerTurn(
+        runtimeScope(command),
+        command.threadId,
+        {
+          expectedTurnId: turn.runtimeTurnId,
+          clientUserMessageId: command.sourceId,
+          input: prepared.inputs,
+        },
+      )
+      if (acceptedRuntimeTurnId !== turn.runtimeTurnId) {
+        throw new Error('ASSISTANT_RUNTIME_STEER_RESPONSE_DIVERGED')
+      }
+      await acceptAssistantRuntimeSteer({
+        scope: command,
+        threadId: command.threadId,
+        turnId: command.turnId,
+        sourceId: command.sourceId,
+        runtimeTurnId: turn.runtimeTurnId,
+        message: prepared.message,
+        clientPayloadHash,
+      })
+    } catch (error) {
+      await markUncertain()
+      throw new Error('ASSISTANT_RUNTIME_STEER_HANDOFF_UNCERTAIN', { cause: error })
+    }
     await publishAgentSessionViewChanged({
       ...command,
       attempt: turn.attempt,
@@ -242,6 +425,14 @@ export class AssistantRuntimeService {
   }
 
   async interrupt(command: AssistantRuntimeInterruptCommand): Promise<AssistantRuntimeInterruptReceipt> {
+    return await this.runProjectTransition(runtimeScope(command), async () => (
+      await this.interruptExclusive(command)
+    ))
+  }
+
+  private async interruptExclusive(
+    command: AssistantRuntimeInterruptCommand,
+  ): Promise<AssistantRuntimeInterruptReceipt> {
     const requested = await requestAssistantRuntimeInterrupt({
       scope: command,
       threadId: command.threadId,
@@ -250,10 +441,18 @@ export class AssistantRuntimeService {
       reason: command.reason,
     })
     if (requested.terminal) {
+      await publishAgentSessionViewChanged({
+        ...command,
+        attempt: null,
+        reason: 'runtime_turn_cancelled_before_start',
+      })
       return { threadId: command.threadId, turnId: command.turnId, status: 'already_terminal' }
     }
     if (!requested.runtimeTurnId) {
-      throw new Error('ASSISTANT_RUNTIME_INTERRUPT_RUNTIME_TURN_MISSING')
+      // The product Turn has claimed startup but app-server has not returned
+      // its native id yet. bindStartedTurn will observe cancelRequestId, reject
+      // the binding, and discard the unbound materialization.
+      return { threadId: command.threadId, turnId: command.turnId, status: 'interrupt_requested' }
     }
     await this.manager.interruptTurn(
       runtimeScope(command),
@@ -263,7 +462,41 @@ export class AssistantRuntimeService {
     return { threadId: command.threadId, turnId: command.turnId, status: 'interrupt_requested' }
   }
 
+  async flushWorkspaceForMcp(input: {
+    readonly userId: string
+    readonly projectId: string
+    readonly threadId: string
+    readonly runtimeTurnId: string
+  }): Promise<void> {
+    await this.manager.flushWorkspaceForMcp(
+      runtimeScope(input),
+      input.threadId,
+      input.runtimeTurnId,
+    )
+  }
+
+  async refreshWorkspaceAfterMcp(input: {
+    readonly userId: string
+    readonly projectId: string
+    readonly threadId: string
+    readonly runtimeTurnId: string
+  }): Promise<void> {
+    await this.manager.refreshWorkspaceAfterMcp(
+      runtimeScope(input),
+      input.threadId,
+      input.runtimeTurnId,
+    )
+  }
+
   async respondToServerRequest(command: AssistantRuntimeServerRequestCommand): Promise<void> {
+    return await this.runProjectTransition(runtimeScope(command), async () => (
+      await this.respondToServerRequestExclusive(command)
+    ))
+  }
+
+  private async respondToServerRequestExclusive(
+    command: AssistantRuntimeServerRequestCommand,
+  ): Promise<void> {
     const decision = await decideAssistantRuntimeInteraction({
       scope: command,
       threadId: command.threadId,
@@ -285,7 +518,36 @@ export class AssistantRuntimeService {
   }
 
   async clear(command: AssistantRuntimeClearCommand): Promise<AssistantRuntimeClearReceipt> {
-    await this.manager.stop(runtimeScope(command), 'shutdown')
+    return await this.runProjectTransition(runtimeScope(command), async () => (
+      await this.clearExclusive(command)
+    ))
+  }
+
+  private async clearExclusive(
+    command: AssistantRuntimeClearCommand,
+  ): Promise<AssistantRuntimeClearReceipt> {
+    const claim = await claimAssistantRuntimeThreadClear({
+      scope: command,
+      threadId: command.threadId,
+      requestId: command.requestId,
+    })
+    if (claim === 'replayed') {
+      return { threadId: command.threadId, archived: true }
+    }
+    const expectedOwnerToken = await this.manager.readOwnerToken(runtimeScope(command))
+    const liveCompletions = [...this.liveTurns.values()]
+      .filter(({ started }) => (
+        started.identity.projectId === command.projectId
+        && started.identity.userId === command.userId
+        && started.identity.threadId === command.threadId
+      ))
+      .map(({ completion }) => completion)
+    await this.manager.stop(
+      runtimeScope(command),
+      'shutdown',
+      expectedOwnerToken ?? undefined,
+    )
+    await Promise.all(liveCompletions)
     this.access.invalidate(runtimeScope(command))
     await clearAssistantRuntimeThread({
       scope: command,
@@ -305,7 +567,15 @@ export class AssistantRuntimeService {
   async submitTaskFollowUp(batchId: string): Promise<AssistantRuntimeTaskFollowUpReceipt> {
     const loaded = await loadAssistantRuntimeTaskFollowUp(batchId)
     if (loaded.kind === 'cancelled') return { outcome: 'cancelled', batchId }
-    const followUp = loaded.followUp
+    return await this.runProjectTransition(runtimeScope(loaded.followUp), async () => (
+      await this.submitTaskFollowUpExclusive(batchId, loaded.followUp)
+    ))
+  }
+
+  private async submitTaskFollowUpExclusive(
+    batchId: string,
+    followUp: AssistantRuntimeTaskFollowUp,
+  ): Promise<AssistantRuntimeTaskFollowUpReceipt> {
     const thread = await getOrCreateAssistantRuntimeThread(followUp)
     if (thread.threadId !== followUp.threadId) {
       throw new Error('ASSISTANT_RUNTIME_FOLLOW_UP_THREAD_DIVERGED')
@@ -333,6 +603,8 @@ export class AssistantRuntimeService {
         scope: followUp,
         threadId: thread.threadId,
         recoveryThreadId: thread.runtimeThreadId,
+        runtimeRevision: thread.runtimeRevision,
+        historyMessages: thread.messages,
       })
     } catch (error) {
       await rollbackAssistantRuntimeTaskFollowUpPreparation({
@@ -348,6 +620,7 @@ export class AssistantRuntimeService {
       sourceId: followUp.batchId,
       locale: followUp.context.locale,
       inputs: followUp.inputs,
+      collaborationMode: 'default',
     })
     return {
       outcome: 'accepted',
@@ -368,23 +641,73 @@ export class AssistantRuntimeService {
   ): Promise<void> {
     const scope = runtimeScope(input)
     const access = await this.access.get(scope)
-    await this.manager.ensure(scope, { environment: access.environment })
+    await this.manager.ensure(scope, {
+      environment: access.environment,
+      ownerToken: access.ownerToken,
+    })
   }
 
   private async prepareThread(input: {
     readonly scope: AssistantRuntimeSubmitCommand | AssistantRuntimeTaskFollowUp
     readonly threadId: string
     readonly recoveryThreadId: string | null
+    readonly runtimeRevision: string | null
+    readonly historyMessages: readonly UIMessage[]
   }): Promise<PreparedThread> {
     const scope = runtimeScope(input.scope)
     const access = await this.access.get(scope)
     const model = await this.models.resolve({ scope, access })
-    await this.manager.ensure(scope, { environment: access.environment })
+    let recoveryThreadId = input.recoveryThreadId
+    if (input.runtimeRevision !== model.runtimeRevision) {
+      if (recoveryThreadId) await this.manager.stop(scope, 'recover')
+      const rotated = await rotateAssistantRuntimeThreadRevision({
+        scope: input.scope,
+        threadId: input.threadId,
+        expectedRuntimeThreadId: recoveryThreadId,
+        runtimeRevision: model.runtimeRevision,
+      })
+      recoveryThreadId = rotated.runtimeThreadId
+    }
+    await this.manager.ensure(scope, {
+      environment: access.environment,
+      ownerToken: access.ownerToken,
+    })
     const runtime = await this.manager.ensureThread(scope, {
       productThreadId: input.threadId,
-      recoveryThreadId: input.recoveryThreadId,
+      recoveryThreadId,
       configuration: model.thread,
     })
+    const historyItems: RuntimeJsonValue[] = []
+    for (const message of input.historyMessages) {
+      if (message.role === 'user') {
+        const prepared = await prepareAssistantRuntimeUserInput({
+          message,
+          userId: input.scope.userId,
+          projectId: input.scope.projectId,
+        })
+        const text = prepared.inputs
+          .flatMap((part) => part.type === 'text' ? [part.text] : [])
+          .join('\n\n')
+          .trim()
+        if (text) {
+          historyItems.push({
+            type: 'message',
+            role: 'user',
+            content: [{ type: 'input_text', text }],
+          })
+        }
+        continue
+      }
+      if (message.role !== 'assistant') continue
+      const text = assistantMessageText(message)
+      if (!text) continue
+      historyItems.push({
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'output_text', text }],
+      })
+    }
+    await this.manager.seedThreadHistory(scope, input.threadId, historyItems)
     return { threadId: input.threadId, runtime, model }
   }
 
@@ -395,8 +718,26 @@ export class AssistantRuntimeService {
     readonly sourceId: string
     readonly locale: string
     readonly inputs: readonly RuntimeUserInput[]
+    readonly collaborationMode: AssistantRuntimeCollaborationMode
   }): Promise<StartedProjection> {
     const scope = runtimeScope(input.scope)
+    let resolveSettlement!: () => void
+    let rejectSettlement!: (error: unknown) => void
+    const settlementPromise = new Promise<void>((resolve, reject) => {
+      resolveSettlement = resolve
+      rejectSettlement = reject
+    })
+    const settlementEntry = { scope, promise: settlementPromise }
+    this.settlementBarriers.set(input.turn.turnId, settlementEntry)
+    const removeSettlementBarrier = (): void => {
+      if (this.settlementBarriers.get(input.turn.turnId) === settlementEntry) {
+        this.settlementBarriers.delete(input.turn.turnId)
+      }
+    }
+    // A successful terminal write no longer needs to fence placement release.
+    // A failed write remains registered so stop/recovery observes the rejection
+    // and keeps the placement blocked instead of releasing an unsettled Turn.
+    void settlementPromise.then(removeSettlementBarrier, () => undefined)
     const pendingEvents: RuntimeEvent[] = []
     let projector: AssistantRuntimeEventProjector | null = null
     const unsubscribe = this.manager.subscribe(scope, (managerEvent) => {
@@ -417,8 +758,15 @@ export class AssistantRuntimeService {
       else pendingEvents.push(managerEvent.event)
     })
     let runtimeTurnId: string | null = null
+    const bindingState: { identity: AssistantRuntimeTurnIdentity | null } = { identity: null }
     try {
       const initialSkills = await this.manager.listSkills(scope)
+      assertProductionSkillsInventory(initialSkills)
+      await claimAssistantRuntimeTurnStart({
+        scope: input.scope,
+        threadId: input.preparedThread.threadId,
+        turnId: input.turn.turnId,
+      })
       const runtimeTurn = await this.manager.startTurn(scope, input.preparedThread.threadId, {
         clientUserMessageId: input.sourceId,
         input: withTurnContext(input.inputs, input.locale),
@@ -429,14 +777,25 @@ export class AssistantRuntimeService {
         ),
         summary: 'concise',
         personality: 'pragmatic',
+        collaborationMode: {
+          mode: input.collaborationMode,
+          settings: {
+            model: input.preparedThread.model.runtimeModel,
+            reasoning_effort: input.collaborationMode === 'plan' ? 'medium' : null,
+            developer_instructions: null,
+          },
+        },
+      }, async (startedTurn) => {
+        runtimeTurnId = startedTurn.id
+        bindingState.identity = await bindAssistantRuntimeTurn({
+          scope: input.scope,
+          threadId: input.preparedThread.threadId,
+          turnId: input.turn.turnId,
+          runtimeTurnId: startedTurn.id,
+        })
       })
       runtimeTurnId = runtimeTurn.id
-      const identity = await bindAssistantRuntimeTurn({
-        scope: input.scope,
-        threadId: input.preparedThread.threadId,
-        turnId: input.turn.turnId,
-        runtimeTurnId,
-      })
+      const identity = requireBoundTurnIdentity(bindingState.identity)
       const started: StartedProjection = {
         identity,
         runtimeThreadId: input.preparedThread.runtime.runtimeThreadId,
@@ -460,7 +819,8 @@ export class AssistantRuntimeService {
         },
         modelKey: input.preparedThread.model.modelKey,
         sink: {
-          publishChunk: (chunk) => publisher.publish(chunk),
+          reserveChunk: (chunk) => publisher.reserve(chunk),
+          publishChunksThrough: async (watermark) => await publisher.publishThrough(watermark),
           publishViewChanged: async (reason) => await publishAgentSessionViewChanged({
             projectId: identity.projectId,
             userId: identity.userId,
@@ -470,8 +830,14 @@ export class AssistantRuntimeService {
             reason,
           }),
         },
-        onInteraction: async (interaction) => await persistAssistantRuntimeInteraction(interaction),
+        onInteraction: async (interaction) => await persistAssistantRuntimeInteraction({
+          ...interaction,
+          projectId: identity.projectId,
+          userId: identity.userId,
+        }),
         onInteractionResolved: async (requestId) => await resolveAssistantRuntimeInteraction({
+          scope: input.scope,
+          threadId: identity.threadId,
           turnId: identity.turnId,
           runtimeRequestId: requestId,
         }),
@@ -486,10 +852,11 @@ export class AssistantRuntimeService {
         }),
         onSkillsList: async (forceReload) => await this.manager.listSkills(scope, forceReload),
       })
-      projector.setInitialSkillsInventory(initialSkills)
       for (const event of pendingEvents.splice(0)) projector.consume(event)
-      this.liveTurns.set(identity.turnId, started)
-      void this.monitorProjection({ started, projector, publisher, unsubscribe })
+      const completion = this.monitorProjection({ started, projector, publisher, unsubscribe })
+      this.liveTurns.set(identity.turnId, { started, completion })
+      void completion.then(resolveSettlement, rejectSettlement)
+      void completion
       await publishAgentSessionViewChanged({
         projectId: identity.projectId,
         userId: identity.userId,
@@ -502,15 +869,47 @@ export class AssistantRuntimeService {
     } catch (error) {
       unsubscribe()
       if (!runtimeTurnId) {
-        await failAssistantRuntimeTurnStart({
-          scope: input.scope,
-          threadId: input.preparedThread.threadId,
-          turnId: input.turn.turnId,
-          reason: 'runtime_turn_start_failed',
-        }).catch(() => undefined)
+        try {
+          await failAssistantRuntimeTurnStart({
+            scope: input.scope,
+            threadId: input.preparedThread.threadId,
+            turnId: input.turn.turnId,
+            reason: 'runtime_turn_start_failed',
+          })
+          resolveSettlement()
+        } catch (settlementError) {
+          rejectSettlement(settlementError)
+        }
+      } else if (!bindingState.identity) {
+        try {
+          await failAssistantRuntimeTurnStart({
+            scope: input.scope,
+            threadId: input.preparedThread.threadId,
+            turnId: input.turn.turnId,
+            reason: 'runtime_turn_binding_failed',
+          })
+          resolveSettlement()
+        } catch (settlementError) {
+          rejectSettlement(settlementError)
+        }
+        await this.manager.discardUnboundTurn(scope).catch(() => undefined)
       } else {
+        try {
+          await failAssistantRuntimeBoundTurnStart({
+            scope: input.scope,
+            threadId: input.preparedThread.threadId,
+            turnId: input.turn.turnId,
+            runtimeTurnId,
+            reason: 'runtime_projection_start_failed',
+          })
+          resolveSettlement()
+        } catch (settlementError) {
+          rejectSettlement(settlementError)
+        }
+        const access = await this.access.get(scope)
         await this.manager.recover(scope, {
-          environment: (await this.access.get(scope)).environment,
+          environment: access.environment,
+          ownerToken: access.ownerToken,
         }).catch(() => undefined)
       }
       throw error
@@ -565,6 +964,7 @@ export class AssistantRuntimeService {
       void this.access.get(scope)
         .then(async (access) => await this.manager.recover(scope, {
           environment: access.environment,
+          ownerToken: access.ownerToken,
         }))
         .catch((recoveryError: unknown) => {
           logger.error({
@@ -581,6 +981,7 @@ export class AssistantRuntimeService {
             },
           })
         })
+      throw error
     } finally {
       this.liveTurns.delete(input.started.identity.turnId)
       input.unsubscribe()

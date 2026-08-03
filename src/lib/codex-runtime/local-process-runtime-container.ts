@@ -70,7 +70,10 @@ export class LocalProcessRuntimeContainerAdapter implements RuntimeContainerAdap
       runtime,
       runtimeWorkspaceDirectory: workspaceDirectory,
       identity: `local:${request.scopeId}`,
-      stop: async () => await runtime.shutdown(),
+      stop: async (mode) => {
+        if (mode === 'force') return await runtime.forceShutdown()
+        await runtime.shutdown()
+      },
     }
   }
 }

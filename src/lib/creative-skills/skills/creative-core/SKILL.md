@@ -1,3 +1,8 @@
+---
+name: creative-core
+description: Apply shared creative fact boundaries, scope control, duration discipline, and delivery checks.
+---
+
 # 创作核心
 
 ## 作用

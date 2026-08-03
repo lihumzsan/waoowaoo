@@ -69,6 +69,8 @@ model ProjectAssistantThread {
   userId          String
   assistantId     String
   runtimeThreadId String?            @unique @db.VarChar(191)
+  runtimeRevision String?            @db.VarChar(64)
+  clearRequestId  String?            @db.VarChar(128)
   messagesJson    Json
   planJson        Json?
   createdAt       DateTime           @default(now())
@@ -177,31 +179,59 @@ model ProjectAssistantThreadArchive {
   @@map("project_assistant_thread_archives")
 }
 
+/// 用户消息的唯一命令身份与 handoff tombstone。它不挂 Thread/Turn 外键，
+/// 因为 clear 只能清除对话 View，不能清除延迟 HTTP retry 的去重事实。
+model ProjectAssistantMessageCommand {
+  id            String    @id @db.VarChar(191)
+  projectId     String
+  userId        String
+  assistantId   String    @db.VarChar(64)
+  sourceId      String    @db.VarChar(191)
+  payloadHash   String    @db.VarChar(64)
+  kind          String    @db.VarChar(32)
+  status        String    @db.VarChar(32)
+  threadId      String    @db.VarChar(191)
+  turnId        String    @db.VarChar(191)
+  runtimeTurnId String?   @db.VarChar(191)
+  messageJson   Json
+  acceptedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId, assistantId, sourceId])
+  @@index([threadId, createdAt])
+  @@index([turnId, status, createdAt])
+  @@map("project_assistant_message_commands")
+}
+
 model Project {
-  id                  String                   @id @default(uuid())
-  name                String
-  description         String?                  @db.Text
-  userId              String
-  analysisModel       String?
-  imageModel          String?
-  videoModel          String?
-  musicModel          String?
-  videoRatio          String?
-  characterModel      String?
-  locationModel       String?
-  editModel           String?
-  videoResolution     String                   @default("720p")
-  capabilityOverrides String?                  @db.LongText
-  imageResolution     String                   @default("2K")
-  createdAt           DateTime                 @default(now())
-  updatedAt           DateTime                 @default(now()) @updatedAt
-  lastAccessedAt      DateTime?
-  user                User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  usageCosts          UsageCost[]
-  assistantThreads    ProjectAssistantThread[]
-  mutationBatches     MutationBatch[]
-  workspaceResources  WorkspaceResource[]
-  canvasLayouts       ProjectCanvasLayout[]
+  id                       String                           @id @default(uuid())
+  name                     String
+  description              String?                          @db.Text
+  userId                   String
+  analysisModel            String?
+  imageModel               String?
+  videoModel               String?
+  musicModel               String?
+  videoRatio               String?
+  characterModel           String?
+  locationModel            String?
+  editModel                String?
+  videoResolution          String                           @default("720p")
+  capabilityOverrides      String?                          @db.LongText
+  imageResolution          String                           @default("2K")
+  createdAt                DateTime                         @default(now())
+  updatedAt                DateTime                         @default(now()) @updatedAt
+  lastAccessedAt           DateTime?
+  user                     User                             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usageCosts               UsageCost[]
+  assistantThreads         ProjectAssistantThread[]
+  assistantMessageCommands ProjectAssistantMessageCommand[]
+  mutationBatches          MutationBatch[]
+  workspaceResources       WorkspaceResource[]
+  canvasLayouts            ProjectCanvasLayout[]
 
   @@index([userId])
   @@map("projects")
@@ -257,16 +287,17 @@ model User {
   preferences   UserPreference?
 
   // 资产中心
-  globalAssetFolders             GlobalAssetFolder[]
-  globalCharacters               GlobalCharacter[]
-  globalLocations                GlobalLocation[]
-  tasks                          Task[]
-  taskEvents                     TaskEvent[]
-  projectAssistantThreads        ProjectAssistantThread[]
-  projectAssistantThreadArchives ProjectAssistantThreadArchive[]
-  mutationBatches                MutationBatch[]
-  inviteRedemptions              InviteRedemption[]
-  workspaceResources             WorkspaceResource[]
+  globalAssetFolders              GlobalAssetFolder[]
+  globalCharacters                GlobalCharacter[]
+  globalLocations                 GlobalLocation[]
+  tasks                           Task[]
+  taskEvents                      TaskEvent[]
+  projectAssistantThreads         ProjectAssistantThread[]
+  projectAssistantThreadArchives  ProjectAssistantThreadArchive[]
+  projectAssistantMessageCommands ProjectAssistantMessageCommand[]
+  mutationBatches                 MutationBatch[]
+  inviteRedemptions               InviteRedemption[]
+  workspaceResources              WorkspaceResource[]
 
   @@map("user")
 }

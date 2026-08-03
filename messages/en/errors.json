@@ -64,6 +64,8 @@
   "AGENT_TEMPORAL_UNAVAILABLE": "The assistant execution service is temporarily unavailable. Your command was not silently rerouted; please retry.",
   "AGENT_THREAD_BUSY": "The assistant is still processing this conversation. Wait for the current turn to finish, then retry.",
   "AGENT_TURN_COMMAND_REPLAY_DIVERGED": "This command identity was already used with different content. Start a new command instead of reusing it.",
+  "AGENT_STEER_HANDOFF_UNCERTAIN": "The appended message handoff could not be confirmed. To avoid duplicate execution, this message will not be retried automatically; send a new message to continue.",
+  "AGENT_START_HANDOFF_UNCERTAIN": "The assistant start handoff could not be confirmed. To avoid duplicate execution, this message will not be retried automatically; send a new message to continue.",
   "PROJECT_AGENT_RUNTIME_FAILED": "The assistant could not complete this turn. Your committed work and long-running tasks remain preserved.",
   "PROJECT_AGENT_ASSISTANT_MODEL_NOT_CONFIGURED": "Configure an assistant model before using the project assistant.",
   "PROJECT_AGENT_ASSISTANT_MODEL_INVALID": "The configured assistant model is invalid. Select an available model and retry.",

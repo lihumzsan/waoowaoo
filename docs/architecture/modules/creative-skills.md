@@ -16,7 +16,7 @@ Creative Skill 是 Codex Runtime 可发现、可按需读取的专业知识，�
 - **CS-04 — 原生 Subagent。** 并行专业工作只使用 Codex 原生协作协议和 UI 事件，不创建 Wao 自研 Worker。Subagent 必须先获得互斥目录边界；共享全局连续性文件只有主 Agent可写。
 - **CS-05 — 普通文件交付。** 剧本、方向、资产表、连续性、分集与镜头计划都写入用户工作区的普通文件/目录；没有 Story Canon、Episode、Chapter 或 Skill output 的系统实体。
 - **CS-06 — 语言由用户决定。** Skill 可以使用最适合模型的知识语言，但用户可见文本和工作区交付遵循当前 locale 或用户明确要求。
-- **CS-07 — 版本钉死。** Runtime 通过 `skills/list` 读取实际可用 Skill；加载错误必须显式投影，禁止静默换成内置提示词或旧 Worker。
+- **CS-07 — 版本钉死。** 每份生产 `SKILL.md` 必须是可被 Codex 原生解析的包（含唯一 name/description frontmatter）。每个 Turn 开始前 `skills/list` 必须无错误并包含 Registry 全集，否则 Turn fail closed；初始清单只做 conformance，不作为逐 Turn 聊天卡。只有真实 `skills/changed` 才投影变更，禁止静默换成内置提示词或旧 Worker。
 
 ## 权威入口
 
@@ -44,3 +44,8 @@ Creative Skill 是 Codex Runtime 可发现、可按需读取的专业知识，�
 - 是否把 Skill 错当成工具权限、持久状态或强制工作流？
 - 并行任务是否有互斥目录，且全局连续性只有一个 writer？
 - UI 是否消费 Codex 原生 Skill/Subagent 事件，而不是恢复旧 Worker 卡片？
+
+## 历史回归
+
+- 原生 Runtime smoke 曾只创建 synthetic Skill，未物化正式 Registry，因此七份无 frontmatter 的生产 Skill 全部解析失败仍被测试放过；初始 `skills/list` 还被每 Turn 当成聊天消息重复展示。当前 smoke 与 Turn 准入都穷尽真实 Registry，初始 inventory 只校验不渲染。
+- Session Manager 曾把 Subagent child Thread 的 Turn 事件误判成 parent identity 漂移并强制恢复整个 Runtime。当前 parent slot 只消费已映射 Product Thread，Subagent Active/Done/失败继续由 parent collab item 进入产品 View。

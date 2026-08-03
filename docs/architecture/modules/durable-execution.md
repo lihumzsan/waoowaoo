@@ -83,6 +83,10 @@ Codex Thread/Turn、模型 stream、command/file approval、Workspace 与 app-se
 - **DE-20 — Durable 控制面有复杂度预算。** 新增 timer、lease、claim、reconciler、execution
   receipt 或第二状态 projector 默认是复发信号。预算脚本必须把 Codex runtime placement 与长
   Task kernel 分开报告，不能靠移动文件隐藏代码。
+- **DE-21 — Agent-origin execution 服从 Turn cancel fence。** Direct/approved Operation 在首次
+  创建 OperationExecution、Task 或业务写入的同一 Project 事务内锁定 origin Turn；Turn 必须仍
+  为 running/waiting_approval 且 `cancelRequestId IS NULL`。已完成 execution 可精确 replay，取消
+  不能反向抹掉已提交事实，但取消先提交时不得启动新的持久执行。
 
 ## 正常时序
 
@@ -160,8 +164,24 @@ ready batchId
 
 ## 历史回归
 
+Production Manifest 曾对外接受 120 项，但 approved execution receipt、Temporal command 与
+FollowUpBatch 都以 64 项为协议上限，导致 65—120 项可报价获批却在提交后确定性失败。当前
+`OPERATION_EXECUTION_MAX_TASKS` 是唯一批量上限，Manifest、Grant 提交与 FollowUpBatch
+全部直接消费该常量。
+
+WorkspaceResource 首次真实生产暴露出 approved-plan Activity 的未知确定性错误会直接重新抛给
+Temporal，而 direct-task 路径才经过统一错误 retry policy；一个缺失生命周期投影的旧 Plan
+因此每 30 秒无限重放事务与冻结日志。当前 approved-plan 的载入、提交和 direct-task 共用唯一
+retry policy：只有规范化为 retryable infrastructure/provider 错误或 Task schedule ACK 不明才
+重试，领域契约、严格 schema、权限和其他确定性错误一律 non-retryable；事务回滚仍保证没有
+Task、Resource、消费或 Provider 调用。
+
 旧系统曾同时使用 BullMQ redelivery、DB attempt heartbeat、shutdown release、reconciler、Outbox
 与 Temporal 判断同一 Task 是否仍运行，产生重复 attempt、假失败和长期卡住。随后又把交互式
 Agent Turn 塞进 Temporal，为 model history、RunState、快速用户消息和 approval ACK 建立了巨大
 Coordinator。当前边界删掉两个根因：Task 只由 TaskWorkflow 调度，交互式 Agent 只由 Codex
 Runtime 执行；二者唯一交点是稳定 batchId 的完成通知。
+
+Agent Turn interrupt 首版没有进入 OperationExecution 的事务边界；审批等待后晚到执行可能在
+用户已停止时创建 Task。当前 direct/approved 事务与同步 tool effect 共用唯一 Turn effect fence，
+以 Project 锁串行决定 cancel 与首次副作用；已存在完成执行仍按原 identity 返回。

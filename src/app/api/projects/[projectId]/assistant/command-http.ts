@@ -120,13 +120,39 @@ function readAgentTurnErrorCode(text: string): string | null {
 export function mapProjectAgentCommandError(error: unknown): ApiError {
   if (error instanceof ApiError) return error
   if (error instanceof AssistantRuntimeProjectBusyError) {
-    return new ApiError('CONFLICT', {
-      code: error.message,
+    return new ApiError('AGENT_THREAD_BUSY', {
+      code: 'AGENT_THREAD_BUSY',
       message: error.message,
     })
   }
   const errorText = collectErrorText(error)
   const agentTurnCode = readAgentTurnErrorCode(errorText)
+  if (agentTurnCode === 'ASSISTANT_RUNTIME_OWNERSHIP_BUSY') {
+    return new ApiError('AGENT_THREAD_BUSY', {
+      code: 'AGENT_THREAD_BUSY',
+      message: agentTurnCode,
+    })
+  }
+  if (agentTurnCode === 'ASSISTANT_RUNTIME_STEER_HANDOFF_UNCERTAIN') {
+    return new ApiError('AGENT_STEER_HANDOFF_UNCERTAIN', {
+      code: 'AGENT_STEER_HANDOFF_UNCERTAIN',
+      message: agentTurnCode,
+    })
+  }
+  if (agentTurnCode === 'ASSISTANT_RUNTIME_START_HANDOFF_UNCERTAIN') {
+    return new ApiError('AGENT_START_HANDOFF_UNCERTAIN', {
+      code: 'AGENT_START_HANDOFF_UNCERTAIN',
+      message: agentTurnCode,
+    })
+  }
+  if (
+    agentTurnCode === 'ASSISTANT_RUNTIME_MESSAGE_COMMAND_REPLAY_DIVERGED'
+  ) {
+    return new ApiError('AGENT_TURN_COMMAND_REPLAY_DIVERGED', {
+      code: 'AGENT_TURN_COMMAND_REPLAY_DIVERGED',
+      message: agentTurnCode,
+    })
+  }
   if (
     agentTurnCode === 'CODEX_MODEL_GATEWAY_ASSISTANT_MODEL_NOT_CONFIGURED'
     || agentTurnCode === 'CODEX_MODEL_GATEWAY_ASSISTANT_MODEL_UNSUPPORTED'
@@ -160,6 +186,7 @@ export function mapProjectAgentCommandError(error: unknown): ApiError {
       || agentTurnCode === 'ASSISTANT_RUNTIME_PROJECT_BUSY'
       || agentTurnCode === 'AGENT_THREAD_CLEARED'
       || agentTurnCode === 'AGENT_THREAD_CLEAR_ALREADY_IN_FLIGHT'
+      || agentTurnCode === 'ASSISTANT_RUNTIME_COLLABORATION_MODE_LOCKED'
       || agentTurnCode === 'AGENT_TURN_COMMAND_REPLAY_DIVERGED'
       || agentTurnCode.endsWith('_SCOPE_DIVERGED')
       || agentTurnCode.endsWith('_NOT_FOUND')

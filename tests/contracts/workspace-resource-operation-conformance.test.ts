@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createProjectAgentOperationRegistryForApi } from '@/lib/operations/registry'
+import { OPERATION_EXECUTION_MAX_TASKS } from '@/lib/temporal/operation-execution/contracts'
 import { requireWorkspaceResourceSchema } from '@/lib/workspace-resource/schema-registry'
 
 describe('WorkspaceResource Operation registry conformance', () => {
@@ -42,10 +43,10 @@ describe('WorkspaceResource Operation registry conformance', () => {
     })
   })
 
-  it('accepts one 120-item manifest and rejects an implicit 121st item', () => {
+  it('matches the manifest boundary to the durable execution task limit', () => {
     const manifest = createProjectAgentOperationRegistryForApi().submit_production_manifest
     if (!manifest) throw new Error('submit_production_manifest missing')
-    const items = Array.from({ length: 120 }, (_, index) => ({
+    const items = Array.from({ length: OPERATION_EXECUTION_MAX_TASKS }, (_, index) => ({
       itemId: `shot-${String(index).padStart(3, '0')}`,
       mediaType: 'video' as const,
       outputPath: `shots/${String(index).padStart(3, '0')}.resource`,
@@ -56,10 +57,10 @@ describe('WorkspaceResource Operation registry conformance', () => {
     expect(manifest.inputSchema.safeParse({
       manifestId: 'feature-film-overflow',
       items: [...items, {
-        itemId: 'shot-120',
+        itemId: `shot-${OPERATION_EXECUTION_MAX_TASKS}`,
         mediaType: 'video',
-        outputPath: 'shots/120.resource',
-        prompt: 'Shot 120',
+        outputPath: `shots/${OPERATION_EXECUTION_MAX_TASKS}.resource`,
+        prompt: `Shot ${OPERATION_EXECUTION_MAX_TASKS}`,
       }],
     }).success).toBe(false)
   })

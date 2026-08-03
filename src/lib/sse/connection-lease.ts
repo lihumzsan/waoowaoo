@@ -13,59 +13,93 @@ const WORKSPACE_SSE_CONNECTION_LIMITS = {
 const ACQUIRE_LEASE_SCRIPT = `
 local time = redis.call('TIME')
 local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
-local keyCount = #KEYS
-local token = ARGV[keyCount + 1]
-local ttlMs = tonumber(ARGV[keyCount + 2])
+local connectionKeyCount = #KEYS - 1
+local ownerKey = KEYS[#KEYS]
+local connectionId = ARGV[connectionKeyCount + 1]
+local ownerToken = ARGV[connectionKeyCount + 2]
+local ttlMs = tonumber(ARGV[connectionKeyCount + 3])
 local expiresAt = now + ttlMs
+local complete = 1
 
-for index = 1, keyCount do
+for index = 1, connectionKeyCount do
   redis.call('ZREMRANGEBYSCORE', KEYS[index], '-inf', now)
-  if redis.call('ZCARD', KEYS[index]) >= tonumber(ARGV[index]) then
-    return 0
+  if redis.call('ZSCORE', KEYS[index], connectionId) == false then
+    complete = 0
   end
 end
 
-for index = 1, keyCount do
-  redis.call('ZADD', KEYS[index], expiresAt, token)
+if complete == 0 then
+  for index = 1, connectionKeyCount do
+    redis.call('ZREM', KEYS[index], connectionId)
+  end
+  for index = 1, connectionKeyCount do
+    if redis.call('ZCARD', KEYS[index]) >= tonumber(ARGV[index]) then
+      return 0
+    end
+  end
+end
+
+for index = 1, connectionKeyCount do
+  redis.call('ZADD', KEYS[index], expiresAt, connectionId)
   redis.call('PEXPIRE', KEYS[index], ttlMs * 2)
 end
+redis.call('SET', ownerKey, ownerToken, 'PX', ttlMs * 2)
 return 1
 `
 
 const RENEW_LEASE_SCRIPT = `
 local time = redis.call('TIME')
 local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
-local token = ARGV[1]
-local ttlMs = tonumber(ARGV[2])
+local connectionKeyCount = #KEYS - 1
+local ownerKey = KEYS[#KEYS]
+local connectionId = ARGV[1]
+local ownerToken = ARGV[2]
+local ttlMs = tonumber(ARGV[3])
 local expiresAt = now + ttlMs
 local complete = 1
 
-for index = 1, #KEYS do
+if redis.call('GET', ownerKey) ~= ownerToken then
+  return 0
+end
+
+for index = 1, connectionKeyCount do
   redis.call('ZREMRANGEBYSCORE', KEYS[index], '-inf', now)
-  if redis.call('ZSCORE', KEYS[index], token) == false then
+  if redis.call('ZSCORE', KEYS[index], connectionId) == false then
     complete = 0
   end
 end
 
 if complete == 0 then
-  for index = 1, #KEYS do
-    redis.call('ZREM', KEYS[index], token)
+  for index = 1, connectionKeyCount do
+    redis.call('ZREM', KEYS[index], connectionId)
   end
+  redis.call('DEL', ownerKey)
   return 0
 end
 
-for index = 1, #KEYS do
-  redis.call('ZADD', KEYS[index], expiresAt, token)
+for index = 1, connectionKeyCount do
+  redis.call('ZADD', KEYS[index], expiresAt, connectionId)
   redis.call('PEXPIRE', KEYS[index], ttlMs * 2)
 end
+redis.call('PEXPIRE', ownerKey, ttlMs * 2)
 return 1
 `
 
 const RELEASE_LEASE_SCRIPT = `
-local removed = 0
-for index = 1, #KEYS do
-  removed = removed + redis.call('ZREM', KEYS[index], ARGV[1])
+local connectionKeyCount = #KEYS - 1
+local ownerKey = KEYS[#KEYS]
+local connectionId = ARGV[1]
+local ownerToken = ARGV[2]
+
+if redis.call('GET', ownerKey) ~= ownerToken then
+  return 0
 end
+
+local removed = 0
+for index = 1, connectionKeyCount do
+  removed = removed + redis.call('ZREM', KEYS[index], connectionId)
+end
+redis.call('DEL', ownerKey)
 return removed
 `
 
@@ -73,17 +107,28 @@ function scopeDigest(value: string): string {
   return createHash('sha256').update(value).digest('base64url')
 }
 
-function connectionKeys(input: {
+function connectionLeaseIdentity(input: {
   readonly userId: string
   readonly projectId: string
-}): readonly [string, string, string] {
+  readonly connectionId: string
+}): {
+  readonly connectionId: string
+  readonly keys: readonly [string, string, string, string]
+} {
   const user = scopeDigest(input.userId)
   const userProject = scopeDigest(`${input.userId}\u0000${input.projectId}`)
-  return [
-    `sse:connections:user:${user}`,
-    `sse:connections:user-project:${userProject}`,
-    'sse:connections:global',
-  ]
+  const connectionId = scopeDigest(
+    `${input.userId}\u0000${input.projectId}\u0000${input.connectionId}`,
+  )
+  return {
+    connectionId,
+    keys: [
+      `sse:connections:user:${user}`,
+      `sse:connections:user-project:${userProject}`,
+      'sse:connections:global',
+      `sse:connections:owner:${connectionId}`,
+    ],
+  }
 }
 
 function isSuccessfulEvalResult(value: unknown): boolean {
@@ -91,7 +136,7 @@ function isSuccessfulEvalResult(value: unknown): boolean {
 }
 
 export interface WorkspaceSseConnectionLease {
-  readonly token: string
+  readonly ownerToken: string
   renew(): Promise<boolean>
   release(): Promise<void>
 }
@@ -99,9 +144,10 @@ export interface WorkspaceSseConnectionLease {
 export async function acquireWorkspaceSseConnectionLease(input: {
   readonly userId: string
   readonly projectId: string
+  readonly connectionId: string
 }): Promise<WorkspaceSseConnectionLease | null> {
-  const keys = connectionKeys(input)
-  const token = randomUUID()
+  const { connectionId, keys } = connectionLeaseIdentity(input)
+  const ownerToken = randomUUID()
   const acquired = await redis.eval(
     ACQUIRE_LEASE_SCRIPT,
     keys.length,
@@ -109,21 +155,23 @@ export async function acquireWorkspaceSseConnectionLease(input: {
     String(WORKSPACE_SSE_CONNECTION_LIMITS.user),
     String(WORKSPACE_SSE_CONNECTION_LIMITS.userProject),
     String(WORKSPACE_SSE_CONNECTION_LIMITS.global),
-    token,
+    connectionId,
+    ownerToken,
     String(WORKSPACE_SSE_LEASE_TTL_MS),
   )
   if (!isSuccessfulEvalResult(acquired)) return null
 
   let released = false
   return {
-    token,
+    ownerToken,
     async renew() {
       if (released) return false
       const renewed = await redis.eval(
         RENEW_LEASE_SCRIPT,
         keys.length,
         ...keys,
-        token,
+        connectionId,
+        ownerToken,
         String(WORKSPACE_SSE_LEASE_TTL_MS),
       )
       return isSuccessfulEvalResult(renewed)
@@ -135,7 +183,8 @@ export async function acquireWorkspaceSseConnectionLease(input: {
         RELEASE_LEASE_SCRIPT,
         keys.length,
         ...keys,
-        token,
+        connectionId,
+        ownerToken,
       )
     },
   }

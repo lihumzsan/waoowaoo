@@ -13,7 +13,7 @@ import { resolveOperationLocale } from '@/lib/operations/environment-input'
 import { refineTaskSubmitOperationOutputSchema, taskSubmitOperationOutputSchemaBase } from '@/lib/operations/output-schemas'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
-import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
+import { stableArgsFingerprint } from '@/lib/project-agent/stable-args-hash'
 import { TASK_TYPE } from '@/lib/task/types'
 
 const mergeVideosInputSchema = z.object({
@@ -78,7 +78,7 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
       execute: async (ctx, input) => {
         if (input.videos.length < 2 && !input.music) throw new Error('VIDEO_MERGE_SINGLE_VIDEO_REQUIRES_MUSIC')
         const references = normalizeMergeInputs(input)
-        const inputHash = stableArgsHash({ outputPath: input.outputPath, references })
+        const inputHash = stableArgsFingerprint({ outputPath: input.outputPath, references })
         const requestId = [
           'merge_videos', ctx.userId, ctx.projectId,
           ctx.context.turnId?.trim() || 'no-turn',

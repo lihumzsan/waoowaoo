@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { taskRuntimePayloadEnvelopeShape } from '@/lib/task/progress-payload'
 import type { WorkspaceResourceJsonValue } from './contracts'
+import { workspaceResourceLifecycleProjectionSchema } from './task-runtime-envelope'
 
 export const CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS = 15
 
@@ -52,6 +53,7 @@ const frozenResourceSchema = z.object({
 })
 
 export const workspaceResourceGenerationTaskPayloadSchema = z.object({
+  lifecycleProjection: workspaceResourceLifecycleProjectionSchema,
   protocol: z.literal('workspace_resource_generation_v1'),
   resource: frozenResourceSchema,
   imageModel: z.string().trim().min(1).optional(),
@@ -79,8 +81,22 @@ const workspaceResourceGenerationTaskEnvelopeSchema = workspaceResourceGeneratio
   ...taskRuntimePayloadEnvelopeShape,
 }).strict()
 
+const workspaceResourceGenerationRetrySourceSchema = workspaceResourceGenerationTaskPayloadSchema.extend({
+  resource: frozenResourceSchema.safeExtend({
+    inputHash: z.string().trim().min(1).max(64),
+  }),
+}).strict()
+
+const workspaceResourceGenerationRetrySourceEnvelopeSchema = workspaceResourceGenerationRetrySourceSchema.extend({
+  ...taskRuntimePayloadEnvelopeShape,
+}).strict()
+
 export type WorkspaceResourceGenerationTaskPayload = z.infer<
   typeof workspaceResourceGenerationTaskPayloadSchema
+>
+
+export type WorkspaceResourceGenerationRetrySource = z.infer<
+  typeof workspaceResourceGenerationRetrySourceSchema
 >
 
 export function parseWorkspaceResourceGenerationTaskPayload(
@@ -88,6 +104,38 @@ export function parseWorkspaceResourceGenerationTaskPayload(
 ): WorkspaceResourceGenerationTaskPayload {
   const parsed = workspaceResourceGenerationTaskEnvelopeSchema.parse(value)
   return workspaceResourceGenerationTaskPayloadSchema.parse({
+    lifecycleProjection: parsed.lifecycleProjection,
+    protocol: parsed.protocol,
+    resource: parsed.resource,
+    imageModel: parsed.imageModel,
+    videoModel: parsed.videoModel,
+    musicModel: parsed.musicModel,
+    voiceModel: parsed.voiceModel,
+    previewText: parsed.previewText,
+    language: parsed.language,
+    durationSeconds: parsed.durationSeconds,
+    vocalMode: parsed.vocalMode,
+    genre: parsed.genre,
+    mood: parsed.mood,
+    bpm: parsed.bpm,
+    outputFormat: parsed.outputFormat,
+    scoreCue: parsed.scoreCue,
+    count: parsed.count,
+    generationOptions: parsed.generationOptions,
+  })
+}
+
+/**
+ * Retry consumes the previous frozen execution inputs, but never trusts its
+ * derived digest. The caller must rebuild a strict current payload and a fresh
+ * 64-character input fingerprint before creating the next Task.
+ */
+export function parseWorkspaceResourceGenerationRetrySource(
+  value: unknown,
+): WorkspaceResourceGenerationRetrySource {
+  const parsed = workspaceResourceGenerationRetrySourceEnvelopeSchema.parse(value)
+  return workspaceResourceGenerationRetrySourceSchema.parse({
+    lifecycleProjection: parsed.lifecycleProjection,
     protocol: parsed.protocol,
     resource: parsed.resource,
     imageModel: parsed.imageModel,

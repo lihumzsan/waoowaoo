@@ -12,10 +12,8 @@ import {
   resolveAssistantRuntimeModelConfiguration,
   type AssistantRuntimeAccess,
 } from './runtime-access'
-import {
-  AssistantRuntimePersistence,
-  RedisAssistantRuntimeOwnership,
-} from './runtime-persistence'
+import { RedisAssistantRuntimeOwnership } from './runtime-ownership'
+import { AssistantRuntimePersistence } from './runtime-persistence'
 import {
   AssistantRuntimeService,
   type AssistantRuntimeAccessProvider,
@@ -68,11 +66,19 @@ class ProjectRuntimeAccessProvider implements AssistantRuntimeAccessProvider {
   }
 }
 
-let singleton: AssistantRuntimeService | null = null
+type AssistantRuntimeProcessState = typeof globalThis & {
+  __waoAssistantRuntimeService?: AssistantRuntimeService | null
+}
+
+function processState(): AssistantRuntimeProcessState {
+  return globalThis as AssistantRuntimeProcessState
+}
 
 export function getAssistantRuntimeService(): AssistantRuntimeService {
-  if (singleton) return singleton
+  const state = processState()
+  if (state.__waoAssistantRuntimeService) return state.__waoAssistantRuntimeService
   const config = readCodexRuntimeConfig()
+  let service: AssistantRuntimeService | null = null
   const manager = new RuntimeSessionManager({
     container: createRuntimeContainerAdapter(config, {
       clientInfo: {
@@ -84,6 +90,9 @@ export function getAssistantRuntimeService(): AssistantRuntimeService {
     persistence: new AssistantRuntimePersistence({ hostRoot: config.hostRoot }),
     ownership: new RedisAssistantRuntimeOwnership(),
     idleTimeoutMs: config.idleTimeoutMs,
+    waitForTurnSettlement: async (scope) => {
+      await service?.waitForTurnSettlements(scope)
+    },
     onError: ({ scope, phase, error }) => {
       logger.error({
         action: 'assistant_runtime.manager_error',
@@ -94,19 +103,21 @@ export function getAssistantRuntimeService(): AssistantRuntimeService {
       })
     },
   })
-  singleton = new AssistantRuntimeService({
+  service = new AssistantRuntimeService({
     manager,
     access: new ProjectRuntimeAccessProvider(manager),
     models: {
       resolve: resolveAssistantRuntimeModelConfiguration,
     },
   })
-  return singleton
+  state.__waoAssistantRuntimeService = service
+  return service
 }
 
 export async function shutdownAssistantRuntimeService(): Promise<void> {
-  const current = singleton
-  singleton = null
+  const state = processState()
+  const current = state.__waoAssistantRuntimeService ?? null
+  state.__waoAssistantRuntimeService = null
   if (current) await current.shutdown()
 }
 

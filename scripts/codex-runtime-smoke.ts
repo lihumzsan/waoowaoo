@@ -26,11 +26,15 @@ import { createWaoMcpServer } from '@/lib/wao-mcp/server'
 import type { WaoMcpOperationExecutorResult } from '@/lib/wao-mcp/contracts'
 import { inspectCapturedCodexState } from '@/lib/assistant-runtime/runtime-persistence'
 import {
+  CREATIVE_SKILLS,
+  readCreativeSkillResource,
+} from '@/lib/creative-skills'
+import {
   ASSISTANT_RUNTIME_APPROVAL_METHODS,
   ASSISTANT_RUNTIME_INPUT_METHODS,
 } from '@/lib/assistant-runtime/view-contract'
 
-const VALIDATED_CODEX_VERSION = 'codex-cli 0.144.1'
+const VALIDATED_CODEX_VERSION = 'codex-cli 0.146.0'
 const DEFAULT_MODEL = 'gpt-5.6-sol'
 const TURN_TIMEOUT_MS = 180_000
 
@@ -312,23 +316,16 @@ async function runAppServerSmoke(params: {
 
   const codexHome = path.join(params.rootDir, 'codex-home')
   await mkdir(codexHome, { recursive: true, mode: 0o700 })
-  const smokeSkillDirectory = path.join(codexHome, 'skills', 'runtime-smoke')
-  await mkdir(smokeSkillDirectory, { recursive: true, mode: 0o700 })
-  await writeFile(
-    path.join(smokeSkillDirectory, 'SKILL.md'),
-    [
-      '---',
-      'name: runtime-smoke',
-      'description: Verifies that Wao can expose versioned Creative Skills through the native Codex skills protocol.',
-      '---',
-      '',
-      '# Runtime smoke',
-      '',
-      'Use only for the Codex app-server integration smoke.',
-      '',
-    ].join('\n'),
-    { encoding: 'utf8', mode: 0o600 },
-  )
+  for (const definition of CREATIVE_SKILLS) {
+    const resource = await readCreativeSkillResource({ uri: definition.entryUri })
+    const skillDirectory = path.join(codexHome, 'skills', definition.id)
+    await mkdir(skillDirectory, { recursive: true, mode: 0o700 })
+    await writeFile(
+      path.join(skillDirectory, 'SKILL.md'),
+      resource.content,
+      { encoding: 'utf8', mode: 0o600 },
+    )
+  }
   const createManager = (home: string) => new LocalRuntimeManager({
     clientInfo: {
       name: 'wao-runtime-smoke',
@@ -348,6 +345,18 @@ async function runAppServerSmoke(params: {
   const runtimeKey = 'stage-0-smoke'
   const cwd = path.join(params.rootDir, 'workspace')
   const customProviderConfig = {
+    web_search: 'live',
+    features: {
+      standalone_web_search: true,
+      code_mode: {
+        enabled: true,
+        direct_only_tool_namespaces: ['wao'],
+      },
+      code_mode_host: {
+        enabled: true,
+        disable_in_process_fallback: true,
+      },
+    },
     model_providers: {
       'wao-runtime-smoke': {
         name: 'Wao Runtime Smoke Responses Provider',
@@ -355,6 +364,7 @@ async function runAppServerSmoke(params: {
         env_key: 'WAO_MCP_RUNTIME_BEARER_TOKEN',
         wire_api: 'responses',
         requires_openai_auth: false,
+        supports_standalone_web_search: true,
         request_max_retries: 0,
         stream_max_retries: 0,
       },
@@ -373,11 +383,13 @@ async function runAppServerSmoke(params: {
     assert.equal(listedSkills.data.length, 1)
     assert.equal(listedSkills.data[0]?.cwd, cwd)
     assert.deepEqual(listedSkills.data[0]?.errors, [])
-    assert.ok(listedSkills.data[0]?.skills.some((skill) => (
-      skill.name === 'runtime-smoke'
-      && skill.enabled
-      && skill.scope === 'user'
-    )))
+    for (const definition of CREATIVE_SKILLS) {
+      assert.ok(listedSkills.data[0]?.skills.some((skill) => (
+        skill.name === definition.id
+        && skill.enabled
+        && skill.scope === 'user'
+      )), `Production Skill was not loaded by Codex: ${definition.id}`)
+    }
     const thread = await firstRuntime.startThread({
       model: process.env.CODEX_RUNTIME_SMOKE_MODEL?.trim() || DEFAULT_MODEL,
       modelProvider: 'wao-runtime-smoke',
@@ -419,6 +431,10 @@ async function runAppServerSmoke(params: {
           type: 'message',
           role: 'user',
           content: [{ type: 'input_text', text: 'Runtime persistence smoke.' }],
+        }, {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'Product View recovery smoke.' }],
         }],
       })
     }

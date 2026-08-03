@@ -2,6 +2,8 @@ import { createHash, randomUUID } from 'node:crypto'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
 import { readJsonWithLimit } from '@/lib/http/body-limits'
+import { getAssistantRuntimeService } from '@/lib/assistant-runtime'
+import { hasAssistantRuntimeOwnership } from '@/lib/assistant-runtime/runtime-ownership'
 import { prisma } from '@/lib/prisma'
 import type {
   WaoMcpCallContextResolver,
@@ -87,6 +89,7 @@ function buildRuntimeScopeKey(scope: WaoRuntimeTokenPayload): string {
     scope.userId,
     scope.projectId,
     scope.assistantId,
+    scope.nonce,
   ])
 }
 
@@ -206,7 +209,30 @@ async function startHttpSessionExclusive(params: {
     },
   })
   const server = createWaoMcpServer({
-    executor: createProductionWaoMcpOperationExecutor(),
+    executor: createProductionWaoMcpOperationExecutor({
+      lifecycle: {
+        before: async (context) => {
+          await assertBoundRuntimeContext(params.scope, context)
+          await getAssistantRuntimeService().flushWorkspaceForMcp({
+            userId: context.userId,
+            projectId: context.projectId,
+            threadId: context.threadId,
+            runtimeTurnId: context.executionOwnerId,
+          })
+        },
+        assertAuthorized: async (context) => {
+          await assertBoundRuntimeContext(params.scope, context)
+        },
+        after: async (context) => {
+          await getAssistantRuntimeService().refreshWorkspaceAfterMcp({
+            userId: context.userId,
+            projectId: context.projectId,
+            threadId: context.threadId,
+            runtimeTurnId: context.executionOwnerId,
+          })
+        },
+      },
+    }),
     contextResolver: createBoundContextResolver(params.scope),
   })
   entry = {
@@ -303,15 +329,20 @@ async function resolveActiveRuntimeTurnBinding(
   readonly base: ActiveRuntimeTurnBinding
   readonly runtimeTurnId: string
 }> {
+  if (!await hasAssistantRuntimeOwnership(scope, scope.nonce)) {
+    throw new WaoMcpHttpBindingError('ACTIVE_TURN_NOT_FOUND')
+  }
   const turns = await prisma.projectAgentTurn.findMany({
     where: {
       projectId: scope.projectId,
       userId: scope.userId,
-      status: 'running',
+      status: { in: ['running', 'waiting_approval'] },
+      cancelRequestId: null,
       thread: {
         projectId: scope.projectId,
         userId: scope.userId,
         assistantId: scope.assistantId,
+        clearRequestId: null,
       },
     },
     select: {
@@ -411,12 +442,26 @@ function createBoundContextResolver(
   }
 }
 
+async function assertBoundRuntimeContext(
+  scope: WaoRuntimeTokenPayload,
+  context: WaoMcpTrustedCallContext,
+): Promise<void> {
+  const binding = await resolveActiveRuntimeTurnBinding(scope)
+  if (
+    binding.base.threadId !== context.threadId
+    || binding.base.turnId !== context.turnId
+    || binding.base.executionOwnerId !== context.executionOwnerId
+  ) {
+    throw new WaoMcpHttpBindingError('ACTIVE_TURN_IDENTITY_INVALID')
+  }
+}
+
 /**
  * Handles one authenticated request in a process-local stateful MCP session.
  * The session exists only to carry protocol requests such as elicitation; it is
- * not product state. The signed token is a project scope capability, while the
- * current running Turn is re-read from MySQL for every tool call and remains
- * the sole execution fence.
+ * not product state. The signed token nonce must still own the project's Redis
+ * Runtime placement, and the current running Turn is re-read from MySQL for
+ * every tool call as the product execution fence.
  */
 export async function handleWaoMcpHttpRequest(params: {
   readonly request: Request

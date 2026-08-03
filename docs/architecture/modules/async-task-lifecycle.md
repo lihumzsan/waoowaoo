@@ -230,6 +230,12 @@ migration、回填、删除或清理。
 
 ## 历史回归
 
+- WorkspaceResource clean cutover 首版把所有生成 Task 声明为 `reference` 生命周期投影，却只为
+  视频合并构造 `lifecycleProjection`；图片、视频、音乐与 Voice 在获批事务创建 `CREATED`
+  事件时因此失败，真实 Provider 尚未调用但 OperationExecution 会重复尝试。当前生成 Task
+  的严格 payload schema 必须携带统一 WorkspaceResource lifecycle projection，所有生产者由
+  TypeScript 契约强制构造；不得把收费媒体改回 `full` 来绕过最小投影边界。
+
 - 旧Task同时由BullMQ job、DB status/attempt/heartbeat、Worker shutdown release与
   reconciler解释“谁在运行”。每次修复一个进程窗口都会引入新的stale时间窗。当前
   TaskWorkflow唯一拥有attempt，数据库只保存业务投影和结果。
@@ -267,6 +273,11 @@ migration、回填、删除或清理。
   还无法用中文字符串反解。当前 Terminal Service仍是唯一 writer，但 transport/View/模型只
   消费 canonical code，重试经既有 progress envelope 可见，取消成为无 error payload 的独立
   终态。历史 Task 的诊断 message 继续留库，不再被新 reader 读取或外发。
+- WorkspaceResource 首版 terminal materializer 在成功、失败和取消三条路径上都先解析完整
+  生成 payload。producer/consumer 契约一旦分歧，Provider 尚未调用的确定性失败也无法提交终态，
+  Temporal 只会反复重试同一个不可能成功的 terminal Activity。当前失败与取消只消费 Task
+  registry、`targetType/targetId` 和 canonical error；完整领域 payload 仅属于成功物化路径。
+  因此错误载荷仍会明确失败，但不能锁住 Billing rollback、Resource 终态或容量释放。
 
 ## 修改检查表
 

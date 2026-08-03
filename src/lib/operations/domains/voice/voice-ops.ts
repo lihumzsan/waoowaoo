@@ -3,11 +3,13 @@ import { z } from 'zod'
 import { VOICE_DESIGN_LANGUAGE_OPTIONS } from '@/lib/ai-registry/voice-design-contract'
 import { parseWorkspaceResourceGenerationTaskPayload } from '@/lib/workspace-resource/generation-contract'
 import { buildWorkspaceResourceId } from '@/lib/workspace-resource/identity'
+import { resourceNameFromPath } from '@/lib/workspace-resource/path'
 import {
   reserveWorkspaceResourceInTransaction,
   validateWorkspaceResourcePlacement,
 } from '@/lib/workspace-resource/persistence'
 import { WORKSPACE_RESOURCE_SCHEMA } from '@/lib/workspace-resource/schema-registry'
+import { buildWorkspaceResourceLifecycleProjection } from '@/lib/workspace-resource/task-runtime-envelope'
 import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { resolveOperationLocale } from '@/lib/operations/environment-input'
@@ -21,7 +23,7 @@ import {
 import { refineTaskBatchSubmitOperationOutputSchema, taskBatchSubmitOperationOutputSchemaBase } from '@/lib/operations/output-schemas'
 import type { ProjectAgentOperationContext, ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { prisma } from '@/lib/prisma'
-import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
+import { stableArgsFingerprint, stableArgsHash } from '@/lib/project-agent/stable-args-hash'
 import { TASK_TYPE } from '@/lib/task/types'
 
 const voiceNewSchema = z.object({
@@ -107,7 +109,7 @@ async function planNewVoice(
     schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
   })))
   const tasks = resources.map((resource) => {
-    const inputHash = stableArgsHash({
+    const inputHash = stableArgsFingerprint({
       description: request.description,
       previewText: request.previewText,
       language: request.language,
@@ -115,6 +117,12 @@ async function planNewVoice(
       memberIndex: resource.memberIndex,
     })
     const payload = {
+      lifecycleProjection: buildWorkspaceResourceLifecycleProjection([{
+        resourceId: resource.resourceId,
+        mediaType: 'audio',
+        schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
+        name: resourceNameFromPath(resource.workspacePath),
+      }]),
       protocol: 'workspace_resource_generation_v1' as const,
       resource: {
         resourceId: resource.resourceId,

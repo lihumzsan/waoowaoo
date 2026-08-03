@@ -51,11 +51,17 @@ export interface WaoMcpOperationExecutor {
     readonly input: Readonly<Record<string, unknown>>
     readonly context: WaoMcpTrustedCallContext
     readonly signal: AbortSignal
-    /** Runtime-owned user interaction; the model cannot forge its result. */
+    /** Runtime transport for user interaction; execution independently verifies Wao's browser-authenticated decision. */
     readonly elicit: (
       request: WaoMcpElicitationRequest,
     ) => Promise<WaoMcpElicitationResult>
   }): Promise<WaoMcpOperationExecutorResult>
+}
+
+export interface WaoMcpExecutionLifecycle {
+  before(context: WaoMcpTrustedCallContext): Promise<void>
+  assertAuthorized(context: WaoMcpTrustedCallContext): Promise<void>
+  after(context: WaoMcpTrustedCallContext): Promise<void>
 }
 
 export interface WaoMcpCallContextResolver {

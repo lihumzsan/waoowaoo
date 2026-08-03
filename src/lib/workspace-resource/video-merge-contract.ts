@@ -34,7 +34,7 @@ export const workspaceResourceVideoMergeTaskPayloadSchema = z.object({
     schemaId: z.literal('generic.video'),
     prompt: z.null(),
     modelKey: z.null(),
-    inputHash: z.string().trim().min(1),
+    inputHash: z.string().length(64),
     inputs: videoMergeInputsSchema,
     generationOptions: workspaceResourceGenerationOptionsSchema,
     toolCallId: z.string().trim().min(1).nullable(),

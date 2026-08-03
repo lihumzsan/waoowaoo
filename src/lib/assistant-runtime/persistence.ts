@@ -7,6 +7,8 @@ import { recordAgentTurnUsageFactsInTransaction } from '@/lib/agent-turn/usage'
 import { projectErrorForModel } from '@/lib/errors/projection'
 import type {
   AssistantRuntimeInteractionView,
+  AssistantRuntimeCollaborationMode,
+  AssistantRuntimeMessageReceipt,
   AssistantRuntimeScope,
   AssistantRuntimeSubmitCommand,
   AssistantRuntimeTerminalProjection,
@@ -23,6 +25,7 @@ const FOLLOW_UP_INPUT_MAX_BYTES = 512 * 1_024
 type TransactionClient = Prisma.TransactionClient
 
 type ThreadView = AssistantRuntimeThreadIdentity & {
+  readonly runtimeRevision: string | null
   readonly messages: readonly UIMessage[]
   readonly createdAt: Date
   readonly updatedAt: Date
@@ -33,6 +36,17 @@ type AdmissionView = {
   readonly thread: ThreadView
   readonly turn: AssistantRuntimeTurnIdentity
 }
+
+type SteerClaimView = {
+  readonly outcome: 'claimed' | 'replayed'
+  readonly threadId: string
+  readonly turnId: string
+  readonly runtimeTurnId: string
+}
+
+export type AssistantRuntimeMessageReplayDecision =
+  | AssistantRuntimeMessageReceipt
+  | { readonly outcome: 'resume_queued' | 'reconcile_unbound_start' }
 
 function requireIdentity(value: string, code: string, maxLength = 191): string {
   if (!value || value !== value.trim() || value.length > maxLength) throw new Error(code)
@@ -48,6 +62,25 @@ function runtimeResponseRequestId(value: unknown): string {
     throw new Error('ASSISTANT_RUNTIME_INTERACTION_RESPONSE_INVALID')
   }
   return String(id)
+}
+
+function assertInteractionDoesNotRequestSecrets(
+  interaction: AssistantRuntimeInteractionView,
+): void {
+  if (interaction.method !== 'item/tool/requestUserInput') return
+  const payload = interaction.payload
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return
+  const questions = payload.questions
+  if (!Array.isArray(questions)) return
+  if (questions.some((question) => (
+    question !== null
+    && typeof question === 'object'
+    && !Array.isArray(question)
+    && 'isSecret' in question
+    && question.isSecret === true
+  ))) {
+    throw new Error('ASSISTANT_RUNTIME_SECRET_INPUT_UNSUPPORTED')
+  }
 }
 
 function toJson(value: unknown): Prisma.InputJsonValue {
@@ -90,6 +123,27 @@ function appendMessages(existing: readonly UIMessage[], appended: readonly UIMes
   return next
 }
 
+function insertMessageBefore(
+  existing: readonly UIMessage[],
+  message: UIMessage,
+  beforeMessageId: string,
+): UIMessage[] {
+  const prior = existing.find((candidate) => candidate.id === message.id)
+  if (prior) {
+    if (!isDeepStrictEqual(prior, message)) {
+      throw new Error(`ASSISTANT_RUNTIME_MESSAGE_ID_CONFLICT:${message.id}`)
+    }
+    return [...existing]
+  }
+  const insertionIndex = existing.findIndex((candidate) => candidate.id === beforeMessageId)
+  if (insertionIndex < 0) return [...existing, message]
+  return [
+    ...existing.slice(0, insertionIndex),
+    message,
+    ...existing.slice(insertionIndex),
+  ]
+}
+
 function upsertMessage(existing: readonly UIMessage[], message: UIMessage): UIMessage[] {
   const index = existing.findIndex((candidate) => candidate.id === message.id)
   if (index < 0) return [...existing, message]
@@ -129,11 +183,19 @@ function normalizePlanForStorage(value: unknown): Prisma.InputJsonValue | typeof
     ) throw new Error('ASSISTANT_RUNTIME_PLAN_INVALID')
     return { step, status }
   })
-  if (plan.filter((item) => item.status === 'in_progress').length > 1) {
-    throw new Error('ASSISTANT_RUNTIME_PLAN_MULTIPLE_IN_PROGRESS')
-  }
   if (plan.length === 0 || plan.every((item) => item.status === 'completed')) return Prisma.JsonNull
   return toJson({ explanation, plan })
+}
+
+function parseTurnCollaborationMode(value: unknown): AssistantRuntimeCollaborationMode {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('ASSISTANT_RUNTIME_TURN_CONTEXT_INVALID')
+  }
+  const mode = (value as Record<string, unknown>).collaborationMode
+  if (mode !== 'default' && mode !== 'plan') {
+    throw new Error('ASSISTANT_RUNTIME_COLLABORATION_MODE_INVALID')
+  }
+  return mode
 }
 
 function threadView(row: ProjectAssistantThread, messages: readonly UIMessage[]): ThreadView {
@@ -143,6 +205,7 @@ function threadView(row: ProjectAssistantThread, messages: readonly UIMessage[])
     assistantId: 'workspace-command',
     threadId: row.id,
     runtimeThreadId: row.runtimeThreadId,
+    runtimeRevision: row.runtimeRevision,
     messages,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -170,6 +233,17 @@ function buildTurnId(threadId: string, sourceId: string): string {
     .update(sourceId, 'utf8')
     .digest('hex')
   return `assistant-turn:${digest}`
+}
+
+function buildMessageCommandId(scope: AssistantRuntimeScope, sourceId: string): string {
+  const digest = createHash('sha256')
+    .update(scope.projectId, 'utf8')
+    .update('\0', 'utf8')
+    .update(scope.userId, 'utf8')
+    .update('\0workspace-command\0', 'utf8')
+    .update(sourceId, 'utf8')
+    .digest('hex')
+  return `assistant-message:${digest}`
 }
 
 function canonicalize(value: unknown): unknown {
@@ -220,6 +294,98 @@ async function lockThread(
   return row
 }
 
+export async function readAssistantRuntimeMessageReplay(
+  command: AssistantRuntimeSubmitCommand,
+): Promise<AssistantRuntimeMessageReplayDecision | null> {
+  requireIdentity(command.requestId, 'ASSISTANT_RUNTIME_REQUEST_ID_INVALID', 128)
+  requireIdentity(command.sourceId, 'ASSISTANT_RUNTIME_SOURCE_ID_INVALID')
+  const payloadHash = hashAssistantRuntimeSubmitCommand(command)
+  return await prisma.$transaction(async (tx) => {
+    await lockProjectScope(tx, command)
+    const prior = await tx.projectAssistantMessageCommand.findUnique({
+      where: {
+        projectId_userId_assistantId_sourceId: {
+          projectId: command.projectId,
+          userId: command.userId,
+          assistantId: 'workspace-command',
+          sourceId: command.sourceId,
+        },
+      },
+    })
+    if (!prior) return null
+    if (
+      prior.id !== buildMessageCommandId(command, command.sourceId)
+      || prior.payloadHash !== payloadHash
+    ) {
+      throw new Error('ASSISTANT_RUNTIME_MESSAGE_COMMAND_REPLAY_DIVERGED')
+    }
+    if (prior.status !== 'accepted') {
+      throw new Error(prior.kind === 'turn'
+        ? 'ASSISTANT_RUNTIME_START_HANDOFF_UNCERTAIN'
+        : 'ASSISTANT_RUNTIME_STEER_HANDOFF_UNCERTAIN')
+    }
+    if (prior.kind === 'steer') {
+      if (!prior.runtimeTurnId) {
+        throw new Error('ASSISTANT_RUNTIME_MESSAGE_COMMAND_RUNTIME_TURN_MISSING')
+      }
+      return {
+        threadId: prior.threadId,
+        turnId: prior.turnId,
+        runtimeTurnId: prior.runtimeTurnId,
+      }
+    }
+    if (prior.kind !== 'turn') {
+      throw new Error('ASSISTANT_RUNTIME_MESSAGE_COMMAND_KIND_INVALID')
+    }
+    const currentTurn = await tx.projectAgentTurn.findUnique({
+      where: { id: prior.turnId },
+      select: {
+        threadId: true,
+        status: true,
+        runtimeTurnId: true,
+      },
+    })
+    if (currentTurn && currentTurn.threadId !== prior.threadId) {
+      throw new Error('ASSISTANT_RUNTIME_MESSAGE_COMMAND_TURN_DIVERGED')
+    }
+    // A process may fail after durable admission but before turn/start. Let the
+    // ordinary admission path reclaim that queued Turn instead of acknowledging
+    // work that has never reached app-server.
+    if (currentTurn?.status === 'queued' && currentTurn.runtimeTurnId === null) {
+      return { outcome: 'resume_queued' }
+    }
+    if (currentTurn?.status === 'running' && currentTurn.runtimeTurnId === null) {
+      return { outcome: 'reconcile_unbound_start' }
+    }
+    const currentThread = await tx.projectAssistantThread.findUnique({
+      where: { id: prior.threadId },
+      select: {
+        projectId: true,
+        userId: true,
+        assistantId: true,
+        runtimeThreadId: true,
+      },
+    })
+    if (
+      currentThread
+      && (
+        currentThread.projectId !== command.projectId
+        || currentThread.userId !== command.userId
+        || currentThread.assistantId !== 'workspace-command'
+      )
+    ) {
+      throw new Error('ASSISTANT_RUNTIME_MESSAGE_COMMAND_THREAD_DIVERGED')
+    }
+    return {
+      outcome: 'replayed',
+      threadId: prior.threadId,
+      turnId: prior.turnId,
+      runtimeThreadId: currentThread?.runtimeThreadId ?? null,
+      runtimeTurnId: prior.runtimeTurnId,
+    }
+  })
+}
+
 export async function getOrCreateAssistantRuntimeThread(
   scope: AssistantRuntimeScope,
 ): Promise<ThreadView> {
@@ -241,6 +407,9 @@ export async function getOrCreateAssistantRuntimeThread(
         messagesJson: serializeMessages([]),
       },
     })
+    if (row.clearRequestId) {
+      throw new Error('ASSISTANT_RUNTIME_CLEAR_IN_PROGRESS')
+    }
     return threadView(row, await parseMessages(row.messagesJson))
   })
 }
@@ -267,19 +436,90 @@ export async function bindAssistantRuntimeThread(input: {
   })
 }
 
+export async function rotateAssistantRuntimeThreadRevision(input: {
+  readonly scope: AssistantRuntimeScope
+  readonly threadId: string
+  readonly expectedRuntimeThreadId: string | null
+  readonly runtimeRevision: string
+}): Promise<ThreadView> {
+  const runtimeRevision = requireIdentity(
+    input.runtimeRevision,
+    'ASSISTANT_RUNTIME_REVISION_INVALID',
+    64,
+  )
+  return await prisma.$transaction(async (tx) => {
+    await lockProjectScope(tx, input.scope)
+    const row = await lockThread(tx, input.scope, input.threadId)
+    if (row.runtimeRevision === runtimeRevision) {
+      return threadView(row, await parseMessages(row.messagesJson))
+    }
+    if (row.runtimeThreadId !== input.expectedRuntimeThreadId) {
+      throw new Error('ASSISTANT_RUNTIME_REVISION_THREAD_DIVERGED')
+    }
+    const updated = await tx.projectAssistantThread.update({
+      where: { id: row.id },
+      data: {
+        runtimeThreadId: null,
+        runtimeRevision,
+      },
+    })
+    return threadView(updated, await parseMessages(updated.messagesJson))
+  })
+}
+
 export async function admitAssistantRuntimeTurn(input: {
   readonly command: AssistantRuntimeSubmitCommand
   readonly threadId: string
+  readonly clientPayloadHash: string
 }): Promise<AdmissionView> {
   const command = input.command
   requireIdentity(command.requestId, 'ASSISTANT_RUNTIME_REQUEST_ID_INVALID', 128)
   requireIdentity(command.sourceId, 'ASSISTANT_RUNTIME_SOURCE_ID_INVALID')
-  const payloadHash = hashAssistantRuntimeSubmitCommand(command)
+  const payloadHash = requireIdentity(
+    input.clientPayloadHash,
+    'ASSISTANT_RUNTIME_MESSAGE_COMMAND_HASH_INVALID',
+    64,
+  )
   const turnId = buildTurnId(input.threadId, command.sourceId)
+  const messageCommandId = buildMessageCommandId(command, command.sourceId)
   return await prisma.$transaction(async (tx) => {
     await lockProjectScope(tx, command)
     const thread = await lockThread(tx, command, input.threadId)
-    const prior = await tx.projectAgentTurn.findUnique({
+    if (thread.clearRequestId) {
+      throw new Error('ASSISTANT_RUNTIME_CLEAR_IN_PROGRESS')
+    }
+    const priorCommand = await tx.projectAssistantMessageCommand.findUnique({
+      where: {
+        projectId_userId_assistantId_sourceId: {
+          projectId: command.projectId,
+          userId: command.userId,
+          assistantId: 'workspace-command',
+          sourceId: command.sourceId,
+        },
+      },
+    })
+    if (priorCommand) {
+      if (
+        priorCommand.id !== messageCommandId
+        || priorCommand.payloadHash !== payloadHash
+        || priorCommand.kind !== 'turn'
+        || priorCommand.status !== 'accepted'
+        || priorCommand.threadId !== thread.id
+        || priorCommand.turnId !== turnId
+      ) {
+        throw new Error('ASSISTANT_RUNTIME_MESSAGE_COMMAND_REPLAY_DIVERGED')
+      }
+      const priorTurn = await tx.projectAgentTurn.findUnique({ where: { id: turnId } })
+      if (!priorTurn || priorTurn.threadId !== thread.id) {
+        throw new Error('ASSISTANT_RUNTIME_MESSAGE_COMMAND_TURN_MISSING')
+      }
+      return {
+        replayed: true,
+        thread: threadView(thread, await parseMessages(thread.messagesJson)),
+        turn: { ...turnIdentity(priorTurn), runtimeThreadId: thread.runtimeThreadId },
+      }
+    }
+    const legacyTurn = await tx.projectAgentTurn.findUnique({
       where: {
         threadId_sourceKind_sourceId: {
           threadId: thread.id,
@@ -287,21 +527,9 @@ export async function admitAssistantRuntimeTurn(input: {
           sourceId: command.sourceId,
         },
       },
+      select: { id: true },
     })
-    if (prior) {
-      if (
-        prior.id !== turnId
-        || prior.payloadHash !== payloadHash
-        || prior.requestId !== command.requestId
-      ) {
-        throw new Error('ASSISTANT_RUNTIME_TURN_REPLAY_DIVERGED')
-      }
-      return {
-        replayed: true,
-        thread: threadView(thread, await parseMessages(thread.messagesJson)),
-        turn: { ...turnIdentity(prior), runtimeThreadId: thread.runtimeThreadId },
-      }
-    }
+    if (legacyTurn) throw new Error('ASSISTANT_RUNTIME_MESSAGE_COMMAND_MISSING')
     const active = await tx.projectAgentTurn.findFirst({
       where: {
         projectId: command.projectId,
@@ -331,7 +559,27 @@ export async function admitAssistantRuntimeTurn(input: {
         status: 'queued',
         attempt: 0,
         userMessageJson: toJson(command.message),
-        contextJson: toJson(command.context),
+        contextJson: toJson({
+          ...command.context,
+          collaborationMode: command.collaborationMode,
+        }),
+      },
+    })
+    await tx.projectAssistantMessageCommand.create({
+      data: {
+        id: messageCommandId,
+        projectId: command.projectId,
+        userId: command.userId,
+        assistantId: 'workspace-command',
+        sourceId: command.sourceId,
+        payloadHash,
+        kind: 'turn',
+        status: 'accepted',
+        threadId: thread.id,
+        turnId: row.id,
+        runtimeTurnId: null,
+        messageJson: toJson(command.message),
+        acceptedAt: new Date(),
       },
     })
     return {
@@ -352,6 +600,9 @@ export async function bindAssistantRuntimeTurn(input: {
   return await prisma.$transaction(async (tx) => {
     await lockProjectScope(tx, input.scope)
     const thread = await lockThread(tx, input.scope, input.threadId)
+    if (thread.clearRequestId) {
+      throw new Error('ASSISTANT_RUNTIME_CLEAR_IN_PROGRESS')
+    }
     const rows = await tx.$queryRaw<ProjectAgentTurn[]>(Prisma.sql`
       SELECT * FROM project_agent_turns WHERE id = ${input.turnId} FOR UPDATE
     `)
@@ -363,7 +614,10 @@ export async function bindAssistantRuntimeTurn(input: {
     ) {
       throw new Error('ASSISTANT_RUNTIME_CODEX_TURN_ID_DIVERGED')
     }
-    if (row.status !== 'queued' && row.status !== 'running') {
+    if (
+      row.cancelRequestId
+      || row.status !== 'running'
+    ) {
       throw new Error(`ASSISTANT_RUNTIME_TURN_NOT_STARTABLE:${row.status}`)
     }
     const updated = await tx.projectAgentTurn.update({
@@ -371,6 +625,61 @@ export async function bindAssistantRuntimeTurn(input: {
       data: {
         runtimeTurnId: input.runtimeTurnId,
         executionOwnerId: input.runtimeTurnId,
+        status: 'running',
+        attempt: row.attempt === 0 ? 1 : row.attempt,
+        startedAt: row.startedAt ?? new Date(),
+      },
+    })
+    if (row.sourceKind === 'user') {
+      const bound = await tx.projectAssistantMessageCommand.updateMany({
+        where: {
+          projectId: input.scope.projectId,
+          userId: input.scope.userId,
+          assistantId: 'workspace-command',
+          sourceId: row.sourceId,
+          kind: 'turn',
+          status: 'accepted',
+          threadId: thread.id,
+          turnId: row.id,
+        },
+        data: { runtimeTurnId: input.runtimeTurnId },
+      })
+      if (bound.count !== 1) {
+        throw new Error('ASSISTANT_RUNTIME_MESSAGE_COMMAND_BINDING_MISSING')
+      }
+    }
+    return { ...turnIdentity(updated), runtimeThreadId: thread.runtimeThreadId }
+  })
+}
+
+/**
+ * Claims product execution immediately before app-server turn/start. The
+ * native Turn id is not known yet, so model/MCP guards continue to require the
+ * later binding. Cancellation and clear serialize with this claim on the same
+ * Project/Thread/Turn locks.
+ */
+export async function claimAssistantRuntimeTurnStart(input: {
+  readonly scope: AssistantRuntimeScope
+  readonly threadId: string
+  readonly turnId: string
+}): Promise<AssistantRuntimeTurnIdentity> {
+  return await prisma.$transaction(async (tx) => {
+    await lockProjectScope(tx, input.scope)
+    const thread = await lockThread(tx, input.scope, input.threadId)
+    if (thread.clearRequestId) throw new Error('ASSISTANT_RUNTIME_CLEAR_IN_PROGRESS')
+    const rows = await tx.$queryRaw<ProjectAgentTurn[]>(Prisma.sql`
+      SELECT * FROM project_agent_turns WHERE id = ${input.turnId} FOR UPDATE
+    `)
+    const row = rows[0]
+    if (!row || row.threadId !== thread.id) {
+      throw new Error('ASSISTANT_RUNTIME_TURN_SCOPE_DIVERGED')
+    }
+    if (row.cancelRequestId || row.status !== 'queued' || row.runtimeTurnId) {
+      throw new Error(`ASSISTANT_RUNTIME_TURN_NOT_STARTABLE:${row.status}`)
+    }
+    const updated = await tx.projectAgentTurn.update({
+      where: { id: row.id },
+      data: {
         status: 'running',
         attempt: row.attempt === 0 ? 1 : row.attempt,
         startedAt: row.startedAt ?? new Date(),
@@ -405,8 +714,8 @@ export async function failAssistantRuntimeTurnStart(input: {
     await tx.projectAgentTurn.update({
       where: { id: turn.id },
       data: {
-        status: 'interrupted',
-        stopReason: input.reason,
+        status: turn.cancelRequestId ? 'cancelled' : 'interrupted',
+        stopReason: turn.cancelRequestId ? 'cancelled_before_binding' : input.reason,
         errorCode: null,
         errorMessage: null,
         finishedAt: new Date(),
@@ -415,28 +724,245 @@ export async function failAssistantRuntimeTurnStart(input: {
   })
 }
 
-export async function appendAssistantRuntimeSteerMessage(input: {
+export async function failAssistantRuntimeBoundTurnStart(input: {
   readonly scope: AssistantRuntimeScope
   readonly threadId: string
   readonly turnId: string
+  readonly runtimeTurnId: string
+  readonly reason: string
+}): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await lockProjectScope(tx, input.scope)
+    const thread = await lockThread(tx, input.scope, input.threadId)
+    const rows = await tx.$queryRaw<ProjectAgentTurn[]>(Prisma.sql`
+      SELECT * FROM project_agent_turns WHERE id = ${input.turnId} FOR UPDATE
+    `)
+    const turn = rows[0]
+    if (!turn || turn.threadId !== thread.id) {
+      throw new Error('ASSISTANT_RUNTIME_TURN_SCOPE_DIVERGED')
+    }
+    if (TERMINAL_TURN_STATUSES.includes(turn.status as (typeof TERMINAL_TURN_STATUSES)[number])) {
+      return
+    }
+    if (
+      turn.runtimeTurnId !== input.runtimeTurnId
+      || turn.executionOwnerId !== input.runtimeTurnId
+    ) {
+      throw new Error('ASSISTANT_RUNTIME_BOUND_START_IDENTITY_DIVERGED')
+    }
+    await tx.projectAgentTurn.update({
+      where: { id: turn.id },
+      data: {
+        status: turn.cancelRequestId ? 'cancelled' : 'interrupted',
+        stopReason: turn.cancelRequestId ? 'cancelled_during_projection_start' : input.reason,
+        errorCode: null,
+        errorMessage: null,
+        finishedAt: new Date(),
+      },
+    })
+  })
+}
+
+export async function claimAssistantRuntimeSteer(input: {
+  readonly scope: AssistantRuntimeScope
+  readonly threadId: string
+  readonly turnId: string
+  readonly sourceId: string
   readonly message: UIMessage
-}): Promise<AssistantRuntimeTurnIdentity> {
+  readonly clientPayloadHash: string
+}): Promise<SteerClaimView> {
+  requireIdentity(input.sourceId, 'ASSISTANT_RUNTIME_SOURCE_ID_INVALID')
+  const commandId = buildMessageCommandId(input.scope, input.sourceId)
+  const payloadHash = requireIdentity(
+    input.clientPayloadHash,
+    'ASSISTANT_RUNTIME_MESSAGE_COMMAND_HASH_INVALID',
+    64,
+  )
+  const messageJson = toJson(input.message)
   return await prisma.$transaction(async (tx) => {
     await lockProjectScope(tx, input.scope)
     const thread = await lockThread(tx, input.scope, input.threadId)
-    const turn = await tx.projectAgentTurn.findUnique({ where: { id: input.turnId } })
-    if (!turn || turn.threadId !== thread.id || turn.status !== 'running' || !turn.runtimeTurnId) {
+    if (thread.clearRequestId) throw new Error('ASSISTANT_RUNTIME_CLEAR_IN_PROGRESS')
+    const prior = await tx.projectAssistantMessageCommand.findUnique({
+      where: {
+        projectId_userId_assistantId_sourceId: {
+          projectId: input.scope.projectId,
+          userId: input.scope.userId,
+          assistantId: 'workspace-command',
+          sourceId: input.sourceId,
+        },
+      },
+    })
+    if (prior) {
+      if (
+        prior.id !== commandId
+        || prior.kind !== 'steer'
+        || prior.threadId !== thread.id
+        || prior.turnId !== input.turnId
+        || prior.payloadHash !== payloadHash
+        || !isDeepStrictEqual(prior.messageJson, messageJson)
+      ) {
+        throw new Error('ASSISTANT_RUNTIME_MESSAGE_COMMAND_REPLAY_DIVERGED')
+      }
+      if (prior.status !== 'accepted' || !prior.runtimeTurnId) {
+        throw new Error('ASSISTANT_RUNTIME_STEER_HANDOFF_UNCERTAIN')
+      }
+      return {
+        outcome: 'replayed',
+        threadId: prior.threadId,
+        turnId: prior.turnId,
+        runtimeTurnId: prior.runtimeTurnId,
+      }
+    }
+    const rows = await tx.$queryRaw<ProjectAgentTurn[]>(Prisma.sql`
+      SELECT * FROM project_agent_turns WHERE id = ${input.turnId} FOR UPDATE
+    `)
+    const turn = rows[0]
+    if (
+      !turn
+      || turn.threadId !== thread.id
+      || turn.status !== 'running'
+      || turn.cancelRequestId
+      || !turn.runtimeTurnId
+    ) {
       throw new Error('ASSISTANT_RUNTIME_STEER_TARGET_INVALID')
     }
+    await tx.projectAssistantMessageCommand.create({
+      data: {
+        id: commandId,
+        projectId: input.scope.projectId,
+        userId: input.scope.userId,
+        assistantId: 'workspace-command',
+        sourceId: input.sourceId,
+        payloadHash,
+        kind: 'steer',
+        status: 'pending',
+        threadId: thread.id,
+        turnId: turn.id,
+        runtimeTurnId: turn.runtimeTurnId,
+        messageJson,
+      },
+    })
+    return {
+      outcome: 'claimed',
+      threadId: thread.id,
+      turnId: turn.id,
+      runtimeTurnId: turn.runtimeTurnId,
+    }
+  })
+}
+
+export async function markAssistantRuntimeSteerUncertain(input: {
+  readonly scope: AssistantRuntimeScope
+  readonly threadId: string
+  readonly turnId: string
+  readonly sourceId: string
+}): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await lockProjectScope(tx, input.scope)
+    // Do not lock the Thread here: clear may already have removed it. The
+    // uncertain tombstone is project-scoped precisely so it survives clear.
+    const handoff = await tx.projectAssistantMessageCommand.findUnique({
+      where: {
+        projectId_userId_assistantId_sourceId: {
+          projectId: input.scope.projectId,
+          userId: input.scope.userId,
+          assistantId: 'workspace-command',
+          sourceId: input.sourceId,
+        },
+      },
+    })
+    if (
+      !handoff
+      || handoff.id !== buildMessageCommandId(input.scope, input.sourceId)
+      || handoff.kind !== 'steer'
+      || handoff.threadId !== input.threadId
+      || handoff.turnId !== input.turnId
+    ) {
+      throw new Error('ASSISTANT_RUNTIME_STEER_HANDOFF_NOT_FOUND')
+    }
+    if (handoff.status === 'accepted' || handoff.status === 'uncertain') return
+    if (handoff.status !== 'pending') {
+      throw new Error('ASSISTANT_RUNTIME_STEER_HANDOFF_STATUS_INVALID')
+    }
+    await tx.projectAssistantMessageCommand.update({
+      where: { id: handoff.id },
+      data: { status: 'uncertain' },
+    })
+  })
+}
+
+export async function acceptAssistantRuntimeSteer(input: {
+  readonly scope: AssistantRuntimeScope
+  readonly threadId: string
+  readonly turnId: string
+  readonly sourceId: string
+  readonly runtimeTurnId: string
+  readonly message: UIMessage
+  readonly clientPayloadHash: string
+}): Promise<void> {
+  const payloadHash = requireIdentity(
+    input.clientPayloadHash,
+    'ASSISTANT_RUNTIME_MESSAGE_COMMAND_HASH_INVALID',
+    64,
+  )
+  const messageJson = toJson(input.message)
+  await prisma.$transaction(async (tx) => {
+    await lockProjectScope(tx, input.scope)
+    const thread = await lockThread(tx, input.scope, input.threadId)
+    const rows = await tx.$queryRaw<ProjectAgentTurn[]>(Prisma.sql`
+      SELECT * FROM project_agent_turns WHERE id = ${input.turnId} FOR UPDATE
+    `)
+    const turn = rows[0]
+    if (
+      !turn
+      || turn.threadId !== thread.id
+      || turn.runtimeTurnId !== input.runtimeTurnId
+    ) {
+      throw new Error('ASSISTANT_RUNTIME_STEER_ACCEPT_TARGET_DIVERGED')
+    }
+    const handoff = await tx.projectAssistantMessageCommand.findUnique({
+      where: {
+        projectId_userId_assistantId_sourceId: {
+          projectId: input.scope.projectId,
+          userId: input.scope.userId,
+          assistantId: 'workspace-command',
+          sourceId: input.sourceId,
+        },
+      },
+    })
+    if (
+      !handoff
+      || handoff.id !== buildMessageCommandId(input.scope, input.sourceId)
+      || handoff.kind !== 'steer'
+      || handoff.threadId !== thread.id
+      || handoff.turnId !== turn.id
+      || handoff.runtimeTurnId !== input.runtimeTurnId
+      || handoff.payloadHash !== payloadHash
+      || !isDeepStrictEqual(handoff.messageJson, messageJson)
+    ) {
+      throw new Error('ASSISTANT_RUNTIME_STEER_ACCEPT_DIVERGED')
+    }
+    if (handoff.status === 'accepted') return
+    if (handoff.status !== 'pending') {
+      throw new Error('ASSISTANT_RUNTIME_STEER_HANDOFF_UNCERTAIN')
+    }
     const messages = await parseMessages(thread.messagesJson)
-    const nextMessages = appendMessages(messages, [input.message])
-    if (nextMessages.length !== messages.length) {
+    const assistantMessageId = `workspace-assistant-turn:${turn.id}:attempt:${String(turn.attempt)}`
+    const nextMessages = insertMessageBefore(messages, input.message, assistantMessageId)
+    if (!isDeepStrictEqual(nextMessages, messages)) {
       await tx.projectAssistantThread.update({
         where: { id: thread.id },
         data: { messagesJson: serializeMessages(nextMessages) },
       })
     }
-    return { ...turnIdentity(turn), runtimeThreadId: thread.runtimeThreadId }
+    await tx.projectAssistantMessageCommand.update({
+      where: { id: handoff.id },
+      data: {
+        status: 'accepted',
+        acceptedAt: new Date(),
+      },
+    })
   })
 }
 
@@ -459,6 +985,7 @@ export async function readAssistantRuntimeActiveTurn(input: {
     !turn
     || turn.threadId !== thread.id
     || turn.status !== 'running'
+    || turn.cancelRequestId
     || !turn.runtimeTurnId
   ) {
     throw new Error('ASSISTANT_RUNTIME_ACTIVE_TURN_INVALID')
@@ -466,14 +993,64 @@ export async function readAssistantRuntimeActiveTurn(input: {
   return { ...turnIdentity(turn), runtimeThreadId: thread.runtimeThreadId }
 }
 
+export async function resolveAssistantRuntimeMessageTarget(
+  scope: AssistantRuntimeScope & { readonly sourceId: string },
+): Promise<(AssistantRuntimeTurnIdentity & {
+  readonly collaborationMode: AssistantRuntimeCollaborationMode
+}) | null> {
+  const thread = await prisma.projectAssistantThread.findUnique({
+    where: {
+      projectId_userId_assistantId: {
+        projectId: scope.projectId,
+        userId: scope.userId,
+        assistantId: 'workspace-command',
+      },
+    },
+  })
+  if (!thread) return null
+  const active = await prisma.projectAgentTurn.findMany({
+    where: {
+      threadId: thread.id,
+      status: { in: [...ACTIVE_TURN_STATUSES] },
+    },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    take: 2,
+  })
+  if (active.length > 1) throw new Error('ASSISTANT_RUNTIME_ACTIVE_TURN_CONFLICT')
+  const turn = active[0]
+  if (!turn) return null
+  // An HTTP retry of the original user message must return through admission's
+  // idempotent replay path. Treating the same source identity as a steer would
+  // inject the user's request twice into the live Runtime Turn.
+  if (turn.sourceId === scope.sourceId) return null
+  if (turn.status !== 'running' || !turn.runtimeTurnId || turn.cancelRequestId) {
+    throw new AssistantRuntimeProjectBusyError()
+  }
+  return {
+    ...turnIdentity(turn),
+    runtimeThreadId: thread.runtimeThreadId,
+    collaborationMode: parseTurnCollaborationMode(turn.contextJson),
+  }
+}
+
 export async function persistAssistantRuntimeInteraction(
-  interaction: AssistantRuntimeInteractionView,
+  interaction: AssistantRuntimeInteractionView & AssistantRuntimeScope,
 ): Promise<void> {
+  assertInteractionDoesNotRequestSecrets(interaction)
   await prisma.$transaction(async (tx) => {
-    const turn = await tx.projectAgentTurn.findUnique({ where: { id: interaction.turnId } })
+    await lockProjectScope(tx, interaction)
+    const thread = await lockThread(tx, interaction, interaction.threadId)
+    if (thread.clearRequestId) {
+      throw new Error('ASSISTANT_RUNTIME_INTERACTION_CLEAR_IN_PROGRESS')
+    }
+    const rows = await tx.$queryRaw<ProjectAgentTurn[]>(Prisma.sql`
+      SELECT * FROM project_agent_turns WHERE id = ${interaction.turnId} FOR UPDATE
+    `)
+    const turn = rows[0]
     if (
       !turn
-      || turn.threadId !== interaction.threadId
+      || turn.threadId !== thread.id
+      || turn.cancelRequestId
       || !ACTIVE_TURN_STATUSES.includes(turn.status as (typeof ACTIVE_TURN_STATUSES)[number])
     ) {
       throw new Error('ASSISTANT_RUNTIME_INTERACTION_TURN_INVALID')
@@ -512,7 +1089,7 @@ export async function persistAssistantRuntimeInteraction(
       },
     })
     await tx.projectAgentTurn.update({
-      where: { id: interaction.turnId },
+      where: { id: turn.id },
       data: { status: 'waiting_approval' },
     })
   })
@@ -529,6 +1106,9 @@ export async function decideAssistantRuntimeInteraction(input: {
   return await prisma.$transaction(async (tx) => {
     await lockProjectScope(tx, input.scope)
     const thread = await lockThread(tx, input.scope, input.threadId)
+    if (thread.clearRequestId) {
+      throw new Error('ASSISTANT_RUNTIME_INTERACTION_CLEAR_IN_PROGRESS')
+    }
     const interaction = await tx.agentTurnInteraction.findUnique({
       where: { id: input.interactionId },
       include: { turn: true },
@@ -540,6 +1120,9 @@ export async function decideAssistantRuntimeInteraction(input: {
       || !interaction.runtimeRequestId
     ) {
       throw new Error('ASSISTANT_RUNTIME_INTERACTION_SCOPE_DIVERGED')
+    }
+    if (interaction.turn.cancelRequestId) {
+      throw new Error('ASSISTANT_RUNTIME_INTERACTION_CANCELLED')
     }
     if (responseRequestId !== interaction.runtimeRequestId) {
       throw new Error('ASSISTANT_RUNTIME_INTERACTION_RESPONSE_ID_DIVERGED')
@@ -566,10 +1149,23 @@ export async function decideAssistantRuntimeInteraction(input: {
 }
 
 export async function resolveAssistantRuntimeInteraction(input: {
+  readonly scope: AssistantRuntimeScope
+  readonly threadId: string
   readonly turnId: string
   readonly runtimeRequestId: string
 }): Promise<void> {
   await prisma.$transaction(async (tx) => {
+    await lockProjectScope(tx, input.scope)
+    const thread = await lockThread(tx, input.scope, input.threadId)
+    if (thread.clearRequestId) return
+    const rows = await tx.$queryRaw<ProjectAgentTurn[]>(Prisma.sql`
+      SELECT * FROM project_agent_turns WHERE id = ${input.turnId} FOR UPDATE
+    `)
+    const turn = rows[0]
+    if (!turn || turn.threadId !== thread.id) {
+      throw new Error('ASSISTANT_RUNTIME_INTERACTION_TURN_INVALID')
+    }
+    if (turn.cancelRequestId) return
     const interaction = await tx.agentTurnInteraction.findUnique({
       where: {
         turnId_runtimeRequestId: {
@@ -578,7 +1174,7 @@ export async function resolveAssistantRuntimeInteraction(input: {
         },
       },
     })
-    if (!interaction || interaction.status === 'resolved') return
+    if (!interaction || interaction.status === 'resolved' || interaction.status === 'cancelled') return
     if (interaction.status !== 'decided') {
       throw new Error('ASSISTANT_RUNTIME_INTERACTION_RESOLVED_WITHOUT_DECISION')
     }
@@ -587,7 +1183,11 @@ export async function resolveAssistantRuntimeInteraction(input: {
       data: { status: 'resolved', resolvedAt: new Date() },
     })
     await tx.projectAgentTurn.updateMany({
-      where: { id: input.turnId, status: 'waiting_approval' },
+      where: {
+        id: input.turnId,
+        status: 'waiting_approval',
+        cancelRequestId: null,
+      },
       data: { status: 'running' },
     })
   })
@@ -662,12 +1262,38 @@ export async function settleAssistantRuntimeTurn(input: {
       throw new Error('ASSISTANT_RUNTIME_SETTLEMENT_SCOPE_DIVERGED')
     }
     if (TERMINAL_TURN_STATUSES.includes(turn.status as (typeof TERMINAL_TURN_STATUSES)[number])) {
-      if (
-        turn.status !== input.projection.status
-        || turn.assistantMessageId !== (input.projection.assistantMessage?.id ?? null)
-      ) {
+      const projectedMessageId = input.projection.assistantMessage?.id ?? null
+      if (turn.status !== input.projection.status) {
         throw new Error('ASSISTANT_RUNTIME_SETTLEMENT_REPLAY_DIVERGED')
       }
+      if (turn.assistantMessageId === projectedMessageId) return
+      // Session recovery can mark the Turn interrupted immediately after the
+      // app-server exits, while the live projector is still flushing its last
+      // durable tool/message snapshot. It may fill that one missing message,
+      // but can never replace an existing terminal message or status.
+      if (turn.assistantMessageId !== null || !input.projection.assistantMessage) {
+        throw new Error('ASSISTANT_RUNTIME_SETTLEMENT_REPLAY_DIVERGED')
+      }
+      const messages = await parseMessages(thread.messagesJson)
+      const nextMessages = upsertMessage(messages, input.projection.assistantMessage)
+      if (!isDeepStrictEqual(nextMessages, messages)) {
+        await tx.projectAssistantThread.update({
+          where: { id: thread.id },
+          data: { messagesJson: serializeMessages(nextMessages) },
+        })
+      }
+      await tx.projectAgentTurn.update({
+        where: { id: turn.id },
+        data: { assistantMessageId: projectedMessageId },
+      })
+      await recordAgentTurnUsageFactsInTransaction({
+        tx,
+        turnId: turn.id,
+        attempt: turn.attempt,
+        projectId: turn.projectId,
+        userId: turn.userId,
+        usageFacts: input.projection.usage ? [input.projection.usage] : [],
+      })
       return
     }
     const messages = await parseMessages(thread.messagesJson)
@@ -724,6 +1350,23 @@ export async function requestAssistantRuntimeInterrupt(input: {
     if (turn.cancelRequestId && turn.cancelRequestId !== input.requestId) {
       throw new Error('ASSISTANT_RUNTIME_INTERRUPT_REQUEST_DIVERGED')
     }
+    await tx.agentTurnInteraction.updateMany({
+      where: { turnId: turn.id, status: { in: ['pending', 'decided'] } },
+      data: { status: 'cancelled', resolvedAt: new Date() },
+    })
+    if (turn.status === 'queued' && turn.runtimeTurnId === null) {
+      await tx.projectAgentTurn.update({
+        where: { id: turn.id },
+        data: {
+          status: 'cancelled',
+          cancelRequestId: input.requestId,
+          cancelReason: input.reason,
+          stopReason: 'cancelled_before_start',
+          finishedAt: new Date(),
+        },
+      })
+      return { runtimeTurnId: null, terminal: true }
+    }
     await tx.projectAgentTurn.update({
       where: { id: turn.id },
       data: {
@@ -732,6 +1375,42 @@ export async function requestAssistantRuntimeInterrupt(input: {
       },
     })
     return { runtimeTurnId: turn.runtimeTurnId, terminal: false }
+  })
+}
+
+export async function claimAssistantRuntimeThreadClear(input: {
+  readonly scope: AssistantRuntimeScope
+  readonly threadId: string
+  readonly requestId: string
+}): Promise<'claimed' | 'replayed'> {
+  requireIdentity(input.requestId, 'ASSISTANT_RUNTIME_CLEAR_REQUEST_ID_INVALID', 128)
+  return await prisma.$transaction(async (tx) => {
+    await lockProjectScope(tx, input.scope)
+    const archived = await tx.projectAssistantThreadArchive.findUnique({
+      where: { threadId: input.threadId },
+    })
+    if (archived) {
+      if (
+        archived.projectId !== input.scope.projectId
+        || archived.userId !== input.scope.userId
+        || archived.assistantId !== 'workspace-command'
+        || archived.clearRequestId !== input.requestId
+      ) {
+        throw new Error('ASSISTANT_RUNTIME_CLEAR_REPLAY_DIVERGED')
+      }
+      return 'replayed'
+    }
+    const thread = await lockThread(tx, input.scope, input.threadId)
+    if (thread.clearRequestId && thread.clearRequestId !== input.requestId) {
+      throw new Error('ASSISTANT_RUNTIME_CLEAR_REQUEST_DIVERGED')
+    }
+    if (!thread.clearRequestId) {
+      await tx.projectAssistantThread.update({
+        where: { id: thread.id },
+        data: { clearRequestId: input.requestId },
+      })
+    }
+    return 'claimed'
   })
 }
 
@@ -757,6 +1436,9 @@ export async function clearAssistantRuntimeThread(input: {
       return
     }
     const thread = await lockThread(tx, input.scope, input.threadId)
+    if (thread.clearRequestId !== input.requestId) {
+      throw new Error('ASSISTANT_RUNTIME_CLEAR_NOT_CLAIMED')
+    }
     const messages = await parseMessages(thread.messagesJson)
     const activeTurns = await tx.projectAgentTurn.findMany({
       where: { threadId: thread.id, status: { in: [...ACTIVE_TURN_STATUSES] } },
@@ -810,14 +1492,64 @@ export async function markAssistantRuntimeProjectTurnsInterrupted(input: {
       where: {
         projectId: input.scope.projectId,
         userId: input.scope.userId,
-        status: { in: [...ACTIVE_TURN_STATUSES] },
+        // queued has not crossed the app-server handoff boundary and is safe
+        // to resume. Only a claimed/bound Runtime Turn is orphaned here.
+        status: { in: ['running', 'waiting_approval'] },
         ...(input.runtimeTurnId ? { runtimeTurnId: input.runtimeTurnId } : {}),
         ...(input.runtimeThreadId ? { thread: { runtimeThreadId: input.runtimeThreadId } } : {}),
       },
-      select: { id: true },
+      select: {
+        id: true,
+        sourceKind: true,
+        sourceId: true,
+        runtimeTurnId: true,
+      },
     })
     if (turns.length === 0) return
-    const ids = turns.map((turn) => turn.id)
+    const unboundFollowUps = turns.filter((turn) => (
+      turn.sourceKind === 'task_follow_up' && turn.runtimeTurnId === null
+    ))
+    for (const turn of unboundFollowUps) {
+      const restored = await tx.followUpBatch.updateMany({
+        where: {
+          id: turn.sourceId,
+          status: 'notified',
+          notifiedTurnId: turn.id,
+        },
+        data: {
+          status: 'ready',
+          notifiedTurnId: null,
+          notifiedAt: null,
+        },
+      })
+      if (restored.count !== 1) {
+        throw new Error(`ASSISTANT_RUNTIME_FOLLOW_UP_RECONCILE_DIVERGED:${turn.sourceId}`)
+      }
+      await tx.projectAgentTurn.delete({ where: { id: turn.id } })
+    }
+    const interrupted = turns.filter((turn) => !unboundFollowUps.includes(turn))
+    if (interrupted.length === 0) return
+    const ids = interrupted.map((turn) => turn.id)
+    for (const turn of interrupted.filter((candidate) => (
+      candidate.sourceKind === 'user' && candidate.runtimeTurnId === null
+    ))) {
+      const fenced = await tx.projectAssistantMessageCommand.updateMany({
+        where: {
+          projectId: input.scope.projectId,
+          userId: input.scope.userId,
+          assistantId: 'workspace-command',
+          sourceId: turn.sourceId,
+          kind: 'turn',
+          status: 'accepted',
+          turnId: turn.id,
+          runtimeTurnId: null,
+        },
+        data: { status: 'uncertain' },
+      })
+      if (fenced.count !== 1) {
+        throw new Error('ASSISTANT_RUNTIME_START_HANDOFF_COMMAND_DIVERGED')
+      }
+    }
     await tx.agentTurnInteraction.updateMany({
       where: { turnId: { in: ids }, status: { in: ['pending', 'decided'] } },
       data: { status: 'cancelled', resolvedAt: new Date() },
@@ -1013,6 +1745,9 @@ export async function admitAssistantRuntimeTaskFollowUp(input: {
       throw new Error(`ASSISTANT_RUNTIME_FOLLOW_UP_PREFLIGHT_DIVERGED:${batchId}`)
     }
     const thread = await lockThread(tx, scope, batch.threadId)
+    if (thread.clearRequestId) {
+      throw new Error('ASSISTANT_RUNTIME_CLEAR_IN_PROGRESS')
+    }
     const turnId = buildTurnId(thread.id, batch.id)
     const payloadHash = createHash('sha256')
       .update(JSON.stringify(canonicalize(followUp)), 'utf8')
@@ -1067,7 +1802,7 @@ export async function admitAssistantRuntimeTaskFollowUp(input: {
         status: 'queued',
         attempt: 0,
         userMessageJson: Prisma.JsonNull,
-        contextJson: toJson(followUp.context),
+        contextJson: toJson({ ...followUp.context, collaborationMode: 'default' }),
       },
     })
     const notified = await tx.followUpBatch.updateMany({

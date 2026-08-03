@@ -18,6 +18,9 @@
 - **BA-08 — attempt 与业务收费分离。** Provider attempt 可重试，但同一业务执行只持有一份授权和费用。未提交 Provider 的失败释放冻结；已经产生不可撤销成本的结算遵循 ledger policy。
 - **BA-09 — 批量仍是一次计划。** `submit_production_manifest` 对整个批次一次校验/报价/授权，然后以稳定 item identity 扇出。每项结果独立，失败项续跑复用原 Snapshot，不重新收费成功项。
 - **BA-10 — 审批结果可审计。** 用户、Project、Snapshot、Grant、Task/Batch、金额、币种、catalog revision 和时间均持久化；UI 只消费服务端 View。
+- **BA-11 — 报价消费 canonical Task 字段。** Production planner、billing policy 与 Task handler 必须消费同一冻结 payload；视频/音频时长以 `durationSeconds` 为唯一 Task 字段，billing 和执行只能在各自边界把它映射成价格/provider 所需的 `duration`，不能从自由 `generationOptions` 或旧字段另行解释。
+- **BA-12 — 破坏性审批冻结精确输入。** 非计费删除在展示审批卡前先按 Operation schema 规范化输入；approval identity 必须包含 canonical input hash，卡片展示精确目标，执行只消费同一份规范化输入。只绑定 Turn/call/operation 的通用“确认删除”不能授权另一组目标。
+- **BA-13 — 取消或清空先到则不得开始副作用。** 浏览器 Turn cancel 与 pending/decided interaction 在 Project 锁下原子关闭；浏览器审批证明要求同 Turn 未取消且 Thread 未进入 clear。同步写、approved-plan 提交和 direct durable execution 在业务事务内按 Project→Thread→Turn 获取同一 effect fence，先取消或 clear 则不能创建 Task、扣费或删除资源。
 
 ## 权威入口
 
@@ -44,3 +47,12 @@
 - Snapshot 是否冻结实际版本、Placement 和 quote，而不是只保存 prompt？
 - MCP/Web/CLI 是否共享 request identity 与幂等执行？
 - 批量重试是否只处理失败 item，且不会重新扣成功 item？
+
+## 历史回归
+
+- WorkspaceResource clean cutover 首版把 Manifest 的 `durationSeconds` 正确冻结到 Task payload，但通用视频计费与新视频 handler 仍读取旧 `generationOptions.duration`；四段 15 秒 Manifest 因而在审批前被误判为“缺时长”，即使绕过报价也会在执行时丢失时长。当前 Task schema 的 `durationSeconds` 是唯一事实，billing 与 provider 调用分别显式映射；视频/音频计划缺时长在 planner 原地失败。
+- 同一批次修复时，通用 planning policy 已向含图片/视频的 Plan metadata 冻结 `projectVideoRatio`，但 WorkspaceResource commit 的严格领域 metadata schema 未组合这份共享字段；批准后的 OperationExecution 因此在 Task/Resource 事务前连续失败。当前比例快照 schema 与 key 由 ratio policy 导出，领域 commit 显式组合它，严格解析仍拒绝所有未知 metadata。
+- Codex Runtime 与 Wao MCP 首次接通时把短期 bearer 同时当作“可调用能力”和“用户已批准”的证明；容器内代码若取得该 bearer，可自行建立 MCP session 并伪造 elicitation accept。当前 bearer 只授予传输能力；每次计费或破坏性执行的 elicitation 带稳定 approval identity，Grant/执行 writer 必须再验证由 Wao 登录态交互 route 已持久化的同 Turn 浏览器决定。Runtime 返回值本身永远不能签发用户授权。
+- 浏览器审批证明首次只绑定 Turn、call 与 Operation，删除客户端可复用同一 request identity 替换目标输入。当前破坏性审批先规范化输入，将 canonical input hash 纳入 approval identity 并把精确目标展示给用户；执行路径复用该规范化值，不能在批准后重新解释原始参数。
+- Interrupt 首版只在 MCP 入口检查易失 AbortSignal；等待审批期间持久 cancel 已提交后，晚到 accept 仍可经过 browser proof 创建执行。当前 interaction、approval proof 与所有 effect transaction 都检查同一 `cancelRequestId`，并用 Project 锁确定 cancel/effect 的先后关系。
+- Thread clear 首版没有进入 approval/effect fence；清空已 claim 后，旧 Turn 的晚到 MCP 调用仍能签发 Grant 或提交 Task。当前浏览器证明、MCP binding 与事务 effect fence 都检查 `clearRequestId`，并共享 Project→Thread→Turn 锁序。

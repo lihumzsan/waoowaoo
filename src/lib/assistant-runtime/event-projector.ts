@@ -218,6 +218,12 @@ export class AssistantRuntimeEventProjector {
   private readonly partOrder: string[] = []
   private readonly pendingText = new Map<string, PendingTextPart>()
   private readonly progressByItem = new Map<string, string>()
+  private latestStreamSeq = 0
+  private readonly subagentsByThreadId = new Map<string, {
+    agentPath: string
+    status: 'active' | 'completed' | 'interrupted'
+  }>()
+  private readonly childTerminalStatus = new Map<string, 'completed' | 'interrupted'>()
   private terminalProjection: AssistantRuntimeTerminalProjection | null = null
   private finalizing = false
   private persistenceFailureReason: string | null = null
@@ -267,10 +273,15 @@ export class AssistantRuntimeEventProjector {
       return
     }
     if (event.type === 'processExited') {
-      if (!event.expected) this.finish({ status: 'interrupted', stopReason: 'runtime_process_exited' })
+      this.interruptActiveSubagents()
+      this.finish({
+        status: 'interrupted',
+        stopReason: event.expected ? 'runtime_process_stopped' : 'runtime_process_exited',
+      })
       return
     }
     if (event.type === 'protocolError') {
+      this.interruptActiveSubagents()
       this.finish({ status: 'failed', stopReason: 'runtime_protocol_error' })
       return
     }
@@ -278,13 +289,10 @@ export class AssistantRuntimeEventProjector {
       this.refreshSkillsInventory()
       return
     }
-    if (event.type !== 'notification' || !this.matchesNotification(event.params)) return
+    if (event.type !== 'notification') return
+    if (this.consumeChildTurnLifecycle(event.method, event.params)) return
+    if (!this.matchesNotification(event.params)) return
     this.consumeNotification(event.method, event.params)
-  }
-
-  setInitialSkillsInventory(entry: RuntimeSkillsListEntry): void {
-    if (this.terminalProjection || this.finalizing) return
-    this.consumeSkillsInventory(entry, false)
   }
 
   private consumeNotification(method: string, params: RuntimeJsonObject): void {
@@ -424,6 +432,7 @@ export class AssistantRuntimeEventProjector {
       id: `${itemId}:progress`,
       data: { itemId, kind, message },
     })
+    this.queueMessageSnapshot(false)
   }
 
   private consumeTurnDiff(params: RuntimeJsonObject): void {
@@ -434,6 +443,7 @@ export class AssistantRuntimeEventProjector {
       id: 'runtime-turn-diff',
       data: { itemId: 'turn-diff', kind: 'diff', message: diff.slice(-12_000) },
     })
+    this.queueMessageSnapshot(false)
   }
 
   private consumeDelta(kind: PendingTextPart['kind'], params: RuntimeJsonObject): void {
@@ -448,16 +458,20 @@ export class AssistantRuntimeEventProjector {
     }
     if (pending.kind !== kind) return
     if (!pending.started) {
-      this.options.sink.publishChunk(kind === 'text'
+      this.publishChunk(kind === 'text'
         ? { type: 'text-start', id: itemId }
         : { type: 'reasoning-start', id: itemId })
       pending.started = true
     }
     pending.value += delta
     this.pendingText.set(itemId, pending)
-    this.options.sink.publishChunk(kind === 'text'
+    this.publishChunk(kind === 'text'
       ? { type: 'text-delta', id: itemId, delta }
       : { type: 'reasoning-delta', id: itemId, delta })
+    this.upsertPart(itemId, kind === 'text'
+      ? { type: 'text', text: pending.value, state: 'streaming' }
+      : { type: 'reasoning', text: pending.value, state: 'streaming' })
+    this.queueMessageSnapshot(false)
   }
 
   private consumeItemStarted(params: RuntimeJsonObject): void {
@@ -466,14 +480,23 @@ export class AssistantRuntimeEventProjector {
     const itemId = readString(item, 'id')
     const toolName = toolNameForItem(item)
     if (!itemId || !toolName) return
+    const input = toolInputForItem(item)
+    this.upsertPart(itemId, {
+      type: 'dynamic-tool',
+      toolName,
+      toolCallId: itemId,
+      state: 'input-available',
+      input,
+    })
     const chunk: UIMessageChunk = {
       type: 'tool-input-available',
       toolCallId: itemId,
       toolName,
-      input: toolInputForItem(item),
+      input,
       dynamic: true,
     }
-    this.options.sink.publishChunk(chunk)
+    this.publishChunk(chunk)
+    this.queueMessageSnapshot()
   }
 
   private consumeItemCompleted(params: RuntimeJsonObject): void {
@@ -509,12 +532,13 @@ export class AssistantRuntimeEventProjector {
       this.queueMessageSnapshot()
       return
     }
+    if (itemType === 'subAgentActivity') this.consumeSubagentActivity(item)
     const part = finalToolPart(item)
     if (!part) return
     this.removePart(`${itemId}:progress`)
     this.progressByItem.delete(itemId)
     this.upsertPart(itemId, part)
-    this.options.sink.publishChunk({
+    this.publishChunk({
       type: 'tool-output-available',
       toolCallId: itemId,
       output: safeToolOutput(item),
@@ -523,20 +547,83 @@ export class AssistantRuntimeEventProjector {
     this.queueMessageSnapshot()
   }
 
+  private consumeSubagentActivity(item: RuntimeJsonObject): void {
+    const agentThreadId = readString(item, 'agentThreadId')
+    const agentPath = readString(item, 'agentPath')
+    const kind = readString(item, 'kind')
+    if (!agentThreadId || !agentPath) return
+    const terminal = this.childTerminalStatus.get(agentThreadId)
+    const status = kind === 'interrupted'
+      ? 'interrupted'
+      : terminal ?? 'active'
+    this.subagentsByThreadId.set(agentThreadId, { agentPath, status })
+    this.publishSubagentLifecycle(agentThreadId)
+  }
+
+  private consumeChildTurnLifecycle(method: string, params: RuntimeJsonObject): boolean {
+    if (method !== 'turn/started' && method !== 'turn/completed') return false
+    const threadId = readThreadId(params)
+    if (!threadId || threadId === this.options.identity.runtimeThreadId) return false
+    if (method === 'turn/started') {
+      this.childTerminalStatus.delete(threadId)
+      const current = this.subagentsByThreadId.get(threadId)
+      if (current) {
+        this.subagentsByThreadId.set(threadId, { ...current, status: 'active' })
+        this.publishSubagentLifecycle(threadId)
+        this.queueMessageSnapshot()
+      }
+      return true
+    }
+    const turn = isRecord(params.turn) ? params.turn : null
+    const runtimeStatus = turn ? readString(turn, 'status') : null
+    const status = runtimeStatus === 'completed' ? 'completed' : 'interrupted'
+    this.childTerminalStatus.set(threadId, status)
+    const current = this.subagentsByThreadId.get(threadId)
+    if (current) {
+      this.subagentsByThreadId.set(threadId, { ...current, status })
+      this.publishSubagentLifecycle(threadId)
+      this.queueMessageSnapshot()
+    }
+    return true
+  }
+
+  private publishSubagentLifecycle(agentThreadId: string): void {
+    const subagent = this.subagentsByThreadId.get(agentThreadId)
+    if (!subagent) return
+    this.upsertAndPublishDataPart(`runtime-subagent:${agentThreadId}`, {
+      type: 'data-assistant-runtime-subagent',
+      id: `runtime-subagent:${agentThreadId}`,
+      data: {
+        agentThreadId,
+        agentPath: subagent.agentPath,
+        status: subagent.status,
+      },
+    })
+  }
+
+  private interruptActiveSubagents(): void {
+    for (const [agentThreadId, subagent] of this.subagentsByThreadId) {
+      if (subagent.status !== 'active') continue
+      this.subagentsByThreadId.set(agentThreadId, { ...subagent, status: 'interrupted' })
+      this.publishSubagentLifecycle(agentThreadId)
+    }
+    if (this.subagentsByThreadId.size > 0) this.queueMessageSnapshot()
+  }
+
   private completeTextPart(kind: PendingTextPart['kind'], itemId: string, value: string): void {
     const pending = this.pendingText.get(itemId)
     if (pending?.started) {
-      this.options.sink.publishChunk(kind === 'text'
+      this.publishChunk(kind === 'text'
         ? { type: 'text-end', id: itemId }
         : { type: 'reasoning-end', id: itemId })
     } else if (value) {
-      this.options.sink.publishChunk(kind === 'text'
+      this.publishChunk(kind === 'text'
         ? { type: 'text-start', id: itemId }
         : { type: 'reasoning-start', id: itemId })
-      this.options.sink.publishChunk(kind === 'text'
+      this.publishChunk(kind === 'text'
         ? { type: 'text-delta', id: itemId, delta: value }
         : { type: 'reasoning-delta', id: itemId, delta: value })
-      this.options.sink.publishChunk(kind === 'text'
+      this.publishChunk(kind === 'text'
         ? { type: 'text-end', id: itemId }
         : { type: 'reasoning-end', id: itemId })
     }
@@ -550,6 +637,7 @@ export class AssistantRuntimeEventProjector {
   private consumeTurnCompleted(params: RuntimeJsonObject): void {
     const turn = isRecord(params.turn) ? params.turn : null
     const status = turn ? readString(turn, 'status') : null
+    this.interruptActiveSubagents()
     if (status === 'completed') {
       this.finish({ status: 'completed', stopReason: 'completed' })
       return
@@ -601,6 +689,9 @@ export class AssistantRuntimeEventProjector {
     readonly stopReason: string
   }): void {
     if (this.terminalProjection || this.finalizing) return
+    if (this.terminalizeOpenToolParts(input.stopReason)) {
+      this.queueMessageSnapshot(false)
+    }
     this.finalizing = true
     void this.skillsRefreshTail.then(async () => await this.persistenceTail).then(() => {
       this.finishAfterPersistence({
@@ -610,6 +701,32 @@ export class AssistantRuntimeEventProjector {
           : this.persistenceFailureReason ?? input.stopReason,
       })
     })
+  }
+
+  private terminalizeOpenToolParts(stopReason: string): boolean {
+    let changed = false
+    for (const [itemId, part] of this.partsByItemId) {
+      if (
+        part.type !== 'dynamic-tool'
+        || (part.state !== 'input-streaming' && part.state !== 'input-available')
+      ) continue
+      this.partsByItemId.set(itemId, {
+        type: 'dynamic-tool',
+        toolName: part.toolName,
+        toolCallId: part.toolCallId,
+        state: 'output-error',
+        input: part.input,
+        errorText: `ASSISTANT_RUNTIME_TOOL_INTERRUPTED:${stopReason}`,
+      })
+      this.publishChunk({
+        type: 'tool-output-error',
+        toolCallId: part.toolCallId,
+        errorText: `ASSISTANT_RUNTIME_TOOL_INTERRUPTED:${stopReason}`,
+        dynamic: true,
+      })
+      changed = true
+    }
+    return changed
   }
 
   private finishAfterPersistence(input: {
@@ -648,7 +765,7 @@ export class AssistantRuntimeEventProjector {
     part: Extract<UIMessagePart, { type: `data-${string}` }>,
   ): void {
     this.upsertPart(itemId, part)
-    this.options.sink.publishChunk(part)
+    this.publishChunk(part)
   }
 
   private removePart(itemId: string): void {
@@ -665,15 +782,29 @@ export class AssistantRuntimeEventProjector {
       id: `workspace-assistant-turn:${this.options.identity.turnId}:attempt:${String(this.options.identity.attempt)}`,
       role: 'assistant',
       parts,
+      metadata: {
+        custom: {
+          waoAgentTurnStreamSeq: this.latestStreamSeq,
+        },
+      },
     }
   }
 
-  private queueMessageSnapshot(): void {
+  private publishChunk(chunk: UIMessageChunk): void {
+    const seq = this.options.sink.reserveChunk(chunk)
+    if (seq !== null) this.latestStreamSeq = seq
+  }
+
+  private queueMessageSnapshot(publishViewChanged = true): void {
     const message = this.buildAssistantMessage()
     if (!message) return
+    const watermark = this.latestStreamSeq
     this.queueCriticalPersistence(async () => {
       await this.options.onMessageSnapshot(message)
-      await this.options.sink.publishViewChanged('runtime_item_completed').catch(() => undefined)
+      await this.options.sink.publishChunksThrough(watermark)
+      if (publishViewChanged) {
+        await this.options.sink.publishViewChanged('runtime_item_completed').catch(() => undefined)
+      }
     }, 'message_snapshot_persistence_failed')
   }
 

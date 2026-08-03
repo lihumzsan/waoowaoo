@@ -6,19 +6,53 @@ export const WORKSPACE_ASSISTANT_HIDDEN_TRACE_TOOL_NAMES = [
 
 type MessagePartRecord = {
   readonly type?: unknown
+  readonly state?: unknown
   readonly text?: unknown
   readonly name?: unknown
   readonly data?: unknown
   readonly status?: unknown
   readonly toolCallId?: unknown
   readonly toolName?: unknown
+  readonly input?: unknown
+  readonly agentThreadId?: unknown
+  readonly agentPath?: unknown
+  readonly kind?: unknown
   readonly result?: unknown
+  readonly output?: unknown
+  readonly errorText?: unknown
+  readonly structuredContent?: unknown
   readonly isError?: unknown
   readonly ok?: unknown
   readonly async?: unknown
   readonly taskId?: unknown
   readonly taskIds?: unknown
 }
+
+const RUNTIME_TOOL_INTERRUPTED_PREFIX = 'ASSISTANT_RUNTIME_TOOL_INTERRUPTED:'
+
+export type WorkspaceAssistantSubagentStatus = 'active' | 'completed' | 'interrupted'
+
+export type WorkspaceAssistantSubagentView = {
+  readonly agentThreadId: string
+  readonly agentPath: string
+  readonly status: WorkspaceAssistantSubagentStatus
+}
+
+export type WorkspaceAssistantSubagentLifecycleView = {
+  readonly agents: readonly WorkspaceAssistantSubagentView[]
+  readonly active: number
+  readonly completed: number
+  readonly interrupted: number
+}
+
+export type WorkspaceAssistantMessageTurnStatus =
+  | 'queued'
+  | 'running'
+  | 'waiting_approval'
+  | 'completed'
+  | 'failed'
+  | 'interrupted'
+  | 'cancelled'
 
 export type WorkspaceAssistantRepeatedToolCallGroup = {
   readonly leaderToolCallId: string
@@ -51,6 +85,72 @@ function readPart(value: unknown): MessagePartRecord | null {
     : null
 }
 
+function readNonEmptyString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null
+}
+
+function subagentStatusForTurn(status: WorkspaceAssistantMessageTurnStatus | undefined): WorkspaceAssistantSubagentStatus {
+  if (status === 'queued' || status === 'running' || status === 'waiting_approval') return 'active'
+  if (status === 'failed' || status === 'interrupted' || status === 'cancelled') return 'interrupted'
+  return 'completed'
+}
+
+/**
+ * Subagent activity items carry the stable child thread and path identities,
+ * while the Wao Turn is the authority for whether that collaboration is still
+ * active, completed, or interrupted. This keeps the UI from treating a
+ * completed `spawn`/`wait` tool call as the child agent's lifecycle.
+ */
+export function resolveWorkspaceAssistantSubagentLifecycleViews(
+  messages: readonly UIMessage[],
+  statusByAssistantMessageId: ReadonlyMap<string, WorkspaceAssistantMessageTurnStatus>,
+): ReadonlyMap<string, WorkspaceAssistantSubagentLifecycleView> {
+  const views = new Map<string, WorkspaceAssistantSubagentLifecycleView>()
+  for (const message of messages) {
+    if (message.role !== 'assistant') continue
+    const status = subagentStatusForTurn(statusByAssistantMessageId.get(message.id))
+    const byThreadId = new Map<string, WorkspaceAssistantSubagentView>()
+    for (const part of message.parts) {
+      const record = readPart(part)
+      if (record?.type === 'data-assistant-runtime-subagent') {
+        const data = readPart(record.data)
+        const agentThreadId = readNonEmptyString(data?.agentThreadId)
+        const agentPath = readNonEmptyString(data?.agentPath)
+        const childStatus = readNonEmptyString(data?.status)
+        if (
+          agentThreadId
+          && agentPath
+          && (childStatus === 'active' || childStatus === 'completed' || childStatus === 'interrupted')
+        ) {
+          byThreadId.set(agentThreadId, { agentThreadId, agentPath, status: childStatus })
+        }
+        continue
+      }
+      if (!isToolUIPart(part) || getToolName(part) !== 'subagent_activity') continue
+      const input = readPart(record?.input)
+      const agentThreadId = readNonEmptyString(input?.agentThreadId)
+      const agentPath = readNonEmptyString(input?.agentPath)
+      if (!agentThreadId || !agentPath) continue
+      const kind = readNonEmptyString(input?.kind)
+      if (byThreadId.has(agentThreadId)) continue
+      byThreadId.set(agentThreadId, {
+        agentThreadId,
+        agentPath,
+        status: kind === 'interrupted' ? 'interrupted' : status,
+      })
+    }
+    if (byThreadId.size === 0) continue
+    const agents = [...byThreadId.values()].sort((left, right) => left.agentPath.localeCompare(right.agentPath))
+    views.set(message.id, {
+      agents,
+      active: agents.filter((agent) => agent.status === 'active').length,
+      completed: agents.filter((agent) => agent.status === 'completed').length,
+      interrupted: agents.filter((agent) => agent.status === 'interrupted').length,
+    })
+  }
+  return views
+}
+
 function isSubmittedToolResult(result: unknown): boolean {
   const record = readPart(result)
   if (record?.ok !== true) return false
@@ -67,8 +167,19 @@ function isFailedToolResult(result: unknown): boolean {
 }
 
 function isInterruptedToolResult(result: unknown): boolean {
-  const status = readPart(result)?.status
-  return status === 'declined' || status === 'interrupted' || status === 'cancelled'
+  const record = readPart(result)
+  const nestedResult = readPart(record?.result)
+  const structuredContent = readPart(record?.structuredContent)
+    ?? readPart(nestedResult?.structuredContent)
+  return [record?.status, structuredContent?.status].some((status) => (
+    status === 'declined' || status === 'interrupted' || status === 'cancelled'
+  ))
+}
+
+export function isWorkspaceAssistantRuntimeInterruptedToolPart(value: unknown): boolean {
+  const part = readPart(value)
+  return part?.state === 'output-error'
+    && readNonEmptyString(part.errorText)?.startsWith(RUNTIME_TOOL_INTERRUPTED_PREFIX) === true
 }
 
 export function resolveWorkspaceAssistantToolCallDisplayState(
@@ -79,8 +190,11 @@ export function resolveWorkspaceAssistantToolCallDisplayState(
   if (status === 'incomplete') return 'interrupted'
   if (status === 'requires-action') return 'needsAction'
   if (status !== 'complete') return 'running'
-  if (part?.isError === true || isFailedToolResult(part?.result)) return 'failed'
+  if (readNonEmptyString(part?.errorText)?.startsWith(RUNTIME_TOOL_INTERRUPTED_PREFIX)) {
+    return 'interrupted'
+  }
   if (isInterruptedToolResult(part?.result)) return 'interrupted'
+  if (part?.isError === true || isFailedToolResult(part?.result)) return 'failed'
   return isSubmittedToolResult(part?.result) ? 'submitted' : 'success'
 }
 
@@ -128,14 +242,31 @@ export function resolveWorkspaceAssistantRepeatedToolCallGroups(
 }
 
 export function resolveWorkspaceAssistantToolCallGroupView(
-  parts: readonly unknown[],
+  messages: readonly UIMessage[],
   group: WorkspaceAssistantRepeatedToolCallGroup,
 ): WorkspaceAssistantToolCallGroupView {
   const partByToolCallId = new Map<string, MessagePartRecord>()
-  for (const partValue of parts) {
-    const part = readPart(partValue)
-    if (part?.type !== 'tool-call' || typeof part.toolCallId !== 'string') continue
-    partByToolCallId.set(part.toolCallId, part)
+  for (const message of messages) {
+    if (message.role !== 'assistant') continue
+    for (const partValue of message.parts) {
+      if (!isToolUIPart(partValue) || !partValue.toolCallId) continue
+      const part = readPart(partValue)
+      const state = typeof part?.state === 'string' ? part.state : null
+      const output = part?.output
+      partByToolCallId.set(partValue.toolCallId, {
+        type: 'tool-call',
+        toolCallId: partValue.toolCallId,
+        toolName: getToolName(partValue),
+        status: {
+          type: state === 'output-available' || state === 'output-error'
+            ? 'complete'
+            : 'running',
+        },
+        result: output,
+        errorText: part?.errorText,
+        isError: state === 'output-error',
+      })
+    }
   }
   const counts: Record<WorkspaceAssistantToolCallDisplayState, number> = {
     success: 0,

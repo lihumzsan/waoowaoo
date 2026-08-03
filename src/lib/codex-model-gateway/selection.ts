@@ -73,6 +73,15 @@ function buildRuntimeGatewayBaseUrl(runtimeReachableWaoBaseUrl: string): string 
   return parsed.toString().replace(/\/$/u, '')
 }
 
+function resolveCodexRuntimeModelId(upstreamModelId: string): string {
+  const openAiPrefix = 'openai/'
+  if (upstreamModelId.startsWith(openAiPrefix)) {
+    const modelId = upstreamModelId.slice(openAiPrefix.length)
+    if (modelId) return modelId
+  }
+  return upstreamModelId
+}
+
 async function resolveSelectedAssistantModel(scope: CodexModelGatewayScope) {
   const config = await getUserModelConfig(scope.userId)
   const modelKey = config.assistantModel?.trim() || ''
@@ -134,6 +143,7 @@ async function resolveSelectedAssistantModel(scope: CodexModelGatewayScope) {
 export async function resolveCodexModelGatewayUpstream(
   scopeValue: CodexModelGatewayScope,
 ): Promise<{
+  readonly runtimeModelId: string
   readonly modelId: string
   readonly modelKey: string
   readonly responsesEndpoint: string
@@ -142,6 +152,7 @@ export async function resolveCodexModelGatewayUpstream(
   const scope = normalizeCodexModelGatewayScope(scopeValue)
   const resolved = await resolveSelectedAssistantModel(scope)
   return {
+    runtimeModelId: resolveCodexRuntimeModelId(resolved.selection.modelId),
     modelId: resolved.selection.modelId,
     modelKey: resolved.selection.modelKey,
     responsesEndpoint: resolved.responsesEndpoint,
@@ -173,6 +184,7 @@ export async function resolveCodexModelGatewayRuntimeConfig(params: {
   }
   const resolved = await resolveSelectedAssistantModel(scope)
   return {
+    runtimeModelId: resolveCodexRuntimeModelId(resolved.selection.modelId),
     modelId: resolved.selection.modelId,
     modelKey: resolved.selection.modelKey,
     modelProviderId: CODEX_MODEL_GATEWAY_PROVIDER_ID,

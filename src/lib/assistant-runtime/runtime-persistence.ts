@@ -1,15 +1,14 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { lstat, mkdir, mkdtemp, readFile, rename, rm, rmdir, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
   captureWorkspaceBundle,
+  encodeWorkspaceBundle,
   materializeWorkspaceBundle,
 } from '@/lib/codex-runtime/workspace-bundle'
 import type { WorkspaceBundleV1 } from '@/lib/codex-runtime/workspace-bundle'
 import type {
   RuntimeSessionMaterialization,
-  RuntimeSessionOwnership,
-  RuntimeSessionOwnershipClaim,
   RuntimeSessionPersistence,
   RuntimeSessionScope,
 } from '@/lib/codex-runtime/runtime-session-manager'
@@ -19,41 +18,19 @@ import {
   type CodexWorkspaceBaseline,
   type CodexWorkspaceDirectoryIdentity,
 } from '@/lib/codex-workspace'
-import { redis } from '@/lib/redis'
 import { prisma } from '@/lib/prisma'
+import { publishWorkspaceResourceChanges } from '@/lib/workspace-resource/resource-change-publisher'
 import { captureCodexStateBundle, restoreCodexStateBundle, saveCodexStateBundle } from './codex-state-store'
 import { markAssistantRuntimeProjectTurnsInterrupted } from './persistence'
 
 const MATERIALIZATION_PREFIX = 'wao-codex-runtime-'
 const BASELINE_FILE_NAME = 'workspace-baseline.bundle.json'
-const OWNERSHIP_LEASE_MS = 45_000
-const OWNERSHIP_RENEW_MS = 15_000
 
 type MaterializationLayout = {
   readonly root: string
   readonly workspace: string
   readonly codexHome: string
   readonly baseline: string
-}
-
-function requireIdentity(value: string, code: string): string {
-  if (value !== value.trim() || !/^[A-Za-z0-9_-]{1,191}$/u.test(value)) throw new Error(code)
-  return value
-}
-
-function scopeHash(scope: RuntimeSessionScope): string {
-  const hash = createHash('sha256')
-  for (const value of [
-    requireIdentity(scope.userId, 'ASSISTANT_RUNTIME_SCOPE_USER_INVALID'),
-    requireIdentity(scope.projectId, 'ASSISTANT_RUNTIME_SCOPE_PROJECT_INVALID'),
-  ]) {
-    const bytes = Buffer.from(value, 'utf8')
-    const length = Buffer.allocUnsafe(4)
-    length.writeUInt32BE(bytes.length)
-    hash.update(length)
-    hash.update(bytes)
-  }
-  return hash.digest('hex')
 }
 
 function requireHostRoot(value: string): string {
@@ -296,6 +273,38 @@ export class AssistantRuntimePersistence implements RuntimeSessionPersistence {
       runtimeBundle: writeback.runtimeBundle,
       baseline: hydrateFolderRuntimeIdentities(writeback.baseline, refreshedDirectoryIdentities),
     }, false)
+    if (writeback.changes.length > 0) {
+      await publishWorkspaceResourceChanges({
+        projectId: params.scope.projectId,
+        userId: params.scope.userId,
+        affectedResources: [{ kind: 'workspaceResources', projectId: params.scope.projectId }],
+      })
+    }
+  }
+
+  async refreshWorkspace(params: Parameters<RuntimeSessionPersistence['refreshWorkspace']>[0]): Promise<void> {
+    const layout = layoutFromMaterialization(params.materialization, this.hostRoot)
+    const [baselineText, captured] = await Promise.all([
+      readFile(layout.baseline, 'utf8'),
+      captureWorkspaceBundle(layout.workspace),
+    ])
+    const baseline = parseRuntimeBaseline(baselineText)
+    if (!encodeWorkspaceBundle(captured).equals(encodeWorkspaceBundle(baseline.runtimeBundle))) {
+      throw new Error('ASSISTANT_RUNTIME_WORKSPACE_CHANGED_DURING_MCP')
+    }
+    const projection = await readCodexRuntimeWorkspace({
+      projectId: params.scope.projectId,
+      userId: params.scope.userId,
+    })
+    await synchronizeRuntimeWorkspace(layout.workspace, captured, projection.runtimeBundle)
+    const directoryIdentities = await readDirectoryIdentities(
+      layout.workspace,
+      projection.runtimeBundle.directories,
+    )
+    await writeRuntimeBaseline(layout.baseline, {
+      runtimeBundle: projection.runtimeBundle,
+      baseline: hydrateFolderRuntimeIdentities(projection.baseline, directoryIdentities),
+    }, false)
   }
 
   async checkpointRuntime(params: Parameters<RuntimeSessionPersistence['checkpointRuntime']>[0]): Promise<void> {
@@ -307,81 +316,9 @@ export class AssistantRuntimePersistence implements RuntimeSessionPersistence {
     await checkpointRuntimeThreadBinding(params)
   }
 
-  async recordInterrupted(params: Parameters<RuntimeSessionPersistence['recordInterrupted']>[0]): Promise<void> {
-    await markAssistantRuntimeProjectTurnsInterrupted({
-      scope: params.scope,
-      runtimeThreadId: params.runtimeThreadId,
-      runtimeTurnId: params.runtimeTurnId,
-      reason: params.reason,
-    })
-  }
-
   async destroyMaterialization(materialization: RuntimeSessionMaterialization): Promise<void> {
     const layout = layoutFromMaterialization(materialization, this.hostRoot)
     await rm(layout.root, { recursive: true, force: true })
-  }
-}
-
-const OWNERSHIP_RENEW_SCRIPT = `
-if redis.call('GET', KEYS[1]) == ARGV[1] then
-  return redis.call('PEXPIRE', KEYS[1], ARGV[2])
-end
-return 0
-`
-
-const OWNERSHIP_RELEASE_SCRIPT = `
-if redis.call('GET', KEYS[1]) == ARGV[1] then
-  return redis.call('DEL', KEYS[1])
-end
-return 0
-`
-
-export class RedisAssistantRuntimeOwnership implements RuntimeSessionOwnership {
-  async acquire(scope: RuntimeSessionScope): Promise<RuntimeSessionOwnershipClaim> {
-    const key = `assistant-runtime:owner:v1:${scopeHash(scope)}`
-    const ownerToken = randomUUID()
-    const acquired = await redis.set(key, ownerToken, 'PX', OWNERSHIP_LEASE_MS, 'NX')
-    if (acquired !== 'OK') throw new Error('ASSISTANT_RUNTIME_OWNERSHIP_BUSY')
-    let active = true
-    let timer: NodeJS.Timeout | null = null
-    let resolveLost: (() => void) | null = null
-    const lost = new Promise<void>((resolve) => {
-      resolveLost = resolve
-    })
-    const schedule = (): void => {
-      if (!active) return
-      timer = setTimeout(() => {
-        void redis.eval(
-          OWNERSHIP_RENEW_SCRIPT,
-          1,
-          key,
-          ownerToken,
-          String(OWNERSHIP_LEASE_MS),
-        ).then((result) => {
-          if (result !== 1) {
-            active = false
-            resolveLost?.()
-            return
-          }
-          schedule()
-        }).catch(() => {
-          active = false
-          resolveLost?.()
-        })
-      }, OWNERSHIP_RENEW_MS)
-      timer.unref()
-    }
-    schedule()
-    return {
-      ownerToken,
-      lost,
-      async release() {
-        if (!active) return
-        active = false
-        if (timer) clearTimeout(timer)
-        await redis.eval(OWNERSHIP_RELEASE_SCRIPT, 1, key, ownerToken)
-      },
-    }
   }
 }
 

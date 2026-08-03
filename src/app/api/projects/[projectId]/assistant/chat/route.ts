@@ -6,6 +6,7 @@ import {
   getAssistantRuntimeService,
   getAssistantRuntimeSessionView,
 } from '@/lib/assistant-runtime'
+import type { AssistantRuntimeCollaborationMode } from '@/lib/assistant-runtime/contracts'
 import { ensureUniqueUIMessages } from '@/lib/project-agent/ui-message-validation'
 import {
   mapProjectAgentCommandError,
@@ -44,6 +45,7 @@ function readUserTurnContext(body: ProjectAgentCommandHttpBody): {
   locale: string
   selectedScopeRef: string | null
   selectedAssetId: string | null
+  collaborationMode: AssistantRuntimeCollaborationMode
 } {
   assertExactKeys(
     body,
@@ -61,9 +63,14 @@ function readUserTurnContext(body: ProjectAgentCommandHttpBody): {
       'locale',
       'selectedScopeRef',
       'selectedAssetId',
+      'collaborationMode',
     ]),
     'AGENT_TURN_CONTEXT_FIELDS_INVALID',
   )
+  const collaborationMode = contextRecord.collaborationMode
+  if (collaborationMode !== 'default' && collaborationMode !== 'plan') {
+    throw new Error('AGENT_TURN_COLLABORATION_MODE_INVALID')
+  }
   return {
     locale: readRequiredProjectAgentCommandString(
       contextRecord.locale,
@@ -78,6 +85,7 @@ function readUserTurnContext(body: ProjectAgentCommandHttpBody): {
       contextRecord.selectedAssetId,
       'AGENT_TURN_ASSET_ID_INVALID',
     ),
+    collaborationMode,
   }
 }
 
@@ -165,14 +173,19 @@ export const POST = apiHandler(async (
       message.id,
       'AGENT_TURN_SOURCE_ID_INVALID',
     )
-    const receipt = await getAssistantRuntimeService().submit({
+    const receipt = await getAssistantRuntimeService().send({
       projectId,
       userId: authResult.session.user.id,
       assistantId: 'workspace-command',
       sourceId,
       requestId: sourceId,
       message,
-      context: turnContext,
+      context: {
+        locale: turnContext.locale,
+        selectedScopeRef: turnContext.selectedScopeRef,
+        selectedAssetId: turnContext.selectedAssetId,
+      },
+      collaborationMode: turnContext.collaborationMode,
     })
     return NextResponse.json(receipt, { status: 202 })
   } catch (error) {

@@ -12,7 +12,7 @@ Canvas 是 WorkspaceResource 文件树的空间化投影，不是第二套文件
 - **CN-02 — 一个文件夹就是一个 Canvas。** 持久 folder Resource 以自身 `resourceId` 作为 `folderKey`；项目根使用唯一虚拟 identity `@root`，永不创建伪 Resource。Canvas 不再按 Episode、Chapter、工作流阶段或媒体类别分区。
 - **CN-02A — 节点 canonical identity 只来自 Resource。** file 节点和 folder 节点都使用各自的 `resourceId`；不得使用路径、数组位置、最近记录、Prompt、DOM、历史消息或 Task 到达顺序推导 identity。路径变化不改变节点 identity。
 - **CN-02B — 当前 Canvas 只投影直接子项。** root 只显示根目录直接子项，folder Canvas 只显示 `workspacePath` 的直接子项；服务端从同一 Catalog 路径关系解析父目录，不能持久化第二份 parent 字段。后代必须进入对应文件夹后才显示。搜索可以跨项目返回结果，但选中结果前必须导航到其父文件夹，不能把后代临时混入当前 Canvas。
-- **CN-02C — folder 是正式 Resource 与导航入口。** folder 节点消费服务端投影的名称、路径和 ancestors，双击进入、面包屑返回；folder 不携带媒体、Task target、生成动作或 Lineage handle。Canvas 不维护第二份目录结构。
+- **CN-02C — folder 是正式 Resource 与导航入口。** folder 节点消费服务端投影的名称、路径和 ancestors，原生按钮的鼠标/键盘 click、ReactFlow 卡片单击与双击都调用 Canvas owner 注入的同一个导航 callback，面包屑返回；不得再用 `window` event 或 renderer 私有状态建立第二条导航路径。folder 不携带媒体、Task target、生成动作或 Lineage handle。Canvas 不维护第二份目录结构。
 - **CN-02D — 布局不改变文件归属。** 普通节点拖拽只写当前 `folderKey` 下的位置，绝不修改 `workspacePath`；移动文件或文件夹只能走 WorkspaceResource 的显式 move 能力。路径移动后由目标文件夹的正式 Query 决定节点出现位置。
 - **CN-02E — 批次、alternatives 与当前选择不改变节点事实。** 每个 Resource 始终按自己的 identity 形成节点；Prompt Set、多角色音色和 Manifest 多资产等领域批次只用 `memberIndex` 保持稳定展示顺序，不合并成候选节点。只有一次 generation request 实际创建两个以上结果时，Resource View 才下发 opaque alternatives group identity 与完整有序成员；单结果不伪造组。组也不合并节点、不产生同组 edge、不保存 selected/current/adopt；预览左右浏览的 index 只是 modal UI 状态。当前项仍只来自服务端 typed current selection，renderer 不得通过数组位置、当前 head 或本地选中态覆盖它。
 - **CN-03 — 运行展示无裁决权。** Task runtime 只能覆盖已由正式 WorkspaceResource 物化的 file 节点运行展示，不能凭 Task、Creative reasoning 或本地 optimistic 结果创建 Canvas 节点或写业务状态。
@@ -59,6 +59,11 @@ Canvas 是 WorkspaceResource 文件树的空间化投影，不是第二套文件
 - alternatives 左右浏览、多媒体 renderer、付费确认、当前目录创建/上传及上传重试同样属于 authenticated 产品人工复验；静态验证只能证明 registry、类型和唯一协议接线。
 
 ## 历史回归
+
+- Workspace tree clean cutover 删除旧 Project read pack 时，Canvas 仍使用的 `/api/task-target-states` 唯一 API Operation `get_task_status` 一并被误删；底层 Task state service 与 route 都还在，导致每次卡片状态刷新确定性返回 Operation not found。当前查询实例归入 Task Operation pack，并保持 API-only；Canvas 不另建 Task 状态解释器。
+- 文件夹卡片首版把可见文案写成“打开文件夹”，实际却只在 ReactFlow `onNodeDoubleClick` 导航；用户按文案单击时 handler 仅清空 selection，页面没有任何响应。当前单击与双击复用同一个 `folderFromResource → onNavigate` 入口，普通 Resource 单击仍只负责选中详情。
+- 文件夹导航首版固定在 ReactFlow 视口左上 `16px`，被全局工作区导航条遮挡；语义按钮虽然存在，真实指针会命中上层 logo。后续 renderer 又通过全局 `window` event 发送按钮导航，而 ReactFlow node click 仍是另一入口，语义点击、键盘与普通卡片点击无法保证同路。当前导航控件避开全局顶栏，Canvas owner 只注入一个使用正式 Resource identity 的导航 callback；原生按钮与 ReactFlow node click 都调用它，键盘不再依赖指针事件。
+- Runtime Turn checkpoint 已把新文件原子写入 WorkspaceResource Catalog，但只发布 Assistant View 失效事件，Canvas 查询因此在当前页面继续显示旧树，刷新后才出现新目录。当前 checkpoint 在树变更提交且本地 baseline 更新后复用统一 `resource.changed` 投影事件；前端仍只消费 WorkspaceResource View，不从聊天事件或 Runtime 文件猜测节点。
 
 - BGM/环境音曾以 planner stream、BgmDesign、MusicScore 和最终节点依次交接，任何 owner 字段或 Query 条件漂移都会制造空窗。当前音乐方向是普通 WorkspaceResource，生成音乐是普通 audio Resource，最终输出是普通 video Resource；同一 Task 的正式 Revision只接手自己的 presentation，不再跨阶段交接。
 - 旧结构化 accumulator 只存在组件内存，刷新后镜头计划与 BGM presentation 会形成空窗；后续即使补上 stream checkpoint，仍让 Canvas 解释了第二份制作状态。当前结构化 stream 与制作规划节点整体删除：Task 只展示运行事实，持久 Resource 只通过正式 Query 与 `affectedResources` 接手内容，刷新不再依赖内存 delta 或阶段恢复。

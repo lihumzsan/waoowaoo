@@ -37,7 +37,8 @@ function formatHeartbeat() {
 
 export const GET = apiHandler(async (request: NextRequest) => {
   const projectId = request.nextUrl.searchParams.get('projectId')
-  if (!projectId) {
+  const connectionId = request.nextUrl.searchParams.get('connectionId')
+  if (!projectId || !connectionId || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(connectionId)) {
     throw new ApiError('INVALID_PARAMS')
   }
 
@@ -49,6 +50,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const connectionLease = await acquireWorkspaceSseConnectionLease({
     userId: session.user.id,
     projectId,
+    connectionId,
   })
   if (!connectionLease) {
     throw new ApiError('RATE_LIMIT', {

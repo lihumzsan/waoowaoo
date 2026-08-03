@@ -5,6 +5,11 @@
     "composerPlaceholder": "和 AI 一起创造",
     "sending": "发送中...",
     "send": "发送",
+    "collaborationMode": "对话模式",
+    "collaborationModes": {
+      "default": "Agent",
+      "plan": "Plan"
+    },
     "stopGenerating": "停止生成",
     "streaming": "流式响应中",
     "loading": "加载中",
@@ -16,6 +21,8 @@
     "runFailedTitle": "AI 运行失败",
     "turnInterruptedTitle": "本轮 AI 对话已中断",
     "turnInterruptedDescription": "服务器在本轮执行期间停止。已完成的操作和长期任务都已保留；发送一条新消息即可继续。",
+    "turnStoppedTitle": "已停止生成",
+    "turnStoppedDescription": "本轮已按你的要求停止。已完成的内容和长期任务会保留；发送新消息即可继续。",
     "resend": "重新发送",
     "undelivered": "未送达",
     "sessionStateError": "无法刷新助手状态，请重试或刷新页面后再继续。",
@@ -74,10 +81,10 @@
     "submitted": "已提交",
     "progressSummary": "成功 {succeeded} · 失败 {failed} · 取消 {canceled} · 进行中 {running}",
     "groupTitle": "{title} × {count}",
-    "groupProgressSummary": "成功 {success} · 已提交 {submitted} · 失败 {failed} · 未完成 {interrupted} · 待处理 {needsAction} · 进行中 {running}",
+    "groupProgressSummary": "成功 {success} · 已提交 {submitted} · 失败 {failed} · 已停止 {interrupted} · 待处理 {needsAction} · 进行中 {running}",
     "partial": "部分完成",
     "failed": "失败",
-    "interrupted": "未完成",
+    "interrupted": "已停止",
     "failedDetail": "操作未能完成，请重试。",
     "running": "进行中",
     "needsAction": "待处理",
@@ -128,14 +135,21 @@
         "resumeAgent": "恢复 Subagent",
         "wait": "等待 Subagent",
         "closeAgent": "关闭 Subagent",
+        "interruptAgent": "中断 Subagent",
+        "listAgents": "查看 Subagent 状态",
         "activity": "Subagent 动态"
       },
-      "subagentSummary": "{active} 个进行中 · {completed} 个完成 · {failed} 个失败",
+      "subagentSummary": "{active} 个进行中 · {completed} 个完成 · {interrupted} 个中断",
+      "subagentStatus": {
+        "active": "进行中",
+        "completed": "已完成",
+        "interrupted": "已中断"
+      },
       "web": {
-        "search": "正在搜索：{query}",
-        "openPage": "正在打开页面：{value}",
-        "findInPage": "正在页内查找：{value}",
-        "other": "正在处理联网结果"
+        "search": "搜索：{query}",
+        "openPage": "页面：{value}",
+        "findInPage": "页内查找：{value}",
+        "other": "联网结果"
       }
     }
   },

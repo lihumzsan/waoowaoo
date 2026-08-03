@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { hashCanonicalJson } from '@/lib/operation-plan-contract/canonical-json'
 import { prisma } from '@/lib/prisma'
+import { lockAgentTurnEffectFence } from '@/lib/agent-turn/effect-fence'
 import type {
   DirectTaskOperationExecutionCommand,
   OperationExecutionCommandEnvelope,
@@ -128,6 +129,13 @@ export async function executeDirectOperationTransaction(params: {
         throw new Error('OPERATION_EXECUTION_PROJECT_SCOPE_DIVERGED')
       }
       let row = await tx.operationExecution.findUnique({ where: { id } })
+      if (!row && command.context.origin.kind === 'agent_turn') {
+        await lockAgentTurnEffectFence(tx, {
+          turnId: command.context.origin.turnId,
+          projectId: command.projectId,
+          userId: command.userId,
+        })
+      }
       if (!row) {
         row = await tx.operationExecution.create({
           data: {

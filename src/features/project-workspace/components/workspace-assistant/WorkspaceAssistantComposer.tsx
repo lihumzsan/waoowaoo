@@ -13,6 +13,7 @@ import type { ProjectAssistantMediaAttachment } from '@/lib/project-agent/media-
 import { isProjectAssistantMediaFile } from '@/lib/project-agent/media-attachments/client'
 import type { WorkspaceCanvasSelection } from '../../canvas/contracts/workspace-canvas-interactions'
 import type { WorkspaceAssistantFailureView } from './workspace-assistant-panel-state'
+import type { AssistantRuntimeCollaborationMode } from '@/lib/assistant-runtime/contracts'
 
 interface WorkspaceAssistantComposerProps {
   readonly value: string
@@ -30,6 +31,8 @@ interface WorkspaceAssistantComposerProps {
   readonly mediaAttachments?: readonly ProjectAssistantMediaAttachment[]
   readonly attachDisabled?: boolean
   readonly mediaUploadPending?: boolean
+  readonly collaborationMode: AssistantRuntimeCollaborationMode
+  readonly collaborationModeLocked: boolean
   readonly attachmentError?: string | null
   readonly onChange: (value: string) => void
   readonly onSubmit: () => Promise<void>
@@ -39,6 +42,7 @@ interface WorkspaceAssistantComposerProps {
   readonly onRemoveMediaAttachment?: (resourceId: string) => void
   readonly onPasteMediaFiles?: (files: readonly File[]) => void
   readonly onClearSelection: () => void
+  readonly onCollaborationModeChange: (mode: AssistantRuntimeCollaborationMode) => void
 }
 
 export function WorkspaceAssistantComposer({
@@ -52,6 +56,8 @@ export function WorkspaceAssistantComposer({
   mediaAttachments = [],
   attachDisabled = false,
   mediaUploadPending = false,
+  collaborationMode,
+  collaborationModeLocked,
   attachmentError = null,
   onChange,
   onSubmit,
@@ -61,6 +67,7 @@ export function WorkspaceAssistantComposer({
   onRemoveMediaAttachment,
   onPasteMediaFiles,
   onClearSelection,
+  onCollaborationModeChange,
 }: WorkspaceAssistantComposerProps) {
   const t = useTranslations('assistantAgent')
 
@@ -153,7 +160,7 @@ export function WorkspaceAssistantComposer({
           </p>
         ) : null}
         <div className="mt-1 flex h-8 shrink-0 items-center justify-between gap-2">
-          <div className="flex items-center">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               aria-label={t('attachments.openUpload')}
@@ -164,6 +171,24 @@ export function WorkspaceAssistantComposer({
             >
               <AppIcon name="plus" className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
+            <div
+              role="group"
+              aria-label={t('panel.collaborationMode')}
+              className="flex items-center rounded-lg bg-slate-100 p-0.5 text-[11px] font-medium"
+            >
+              {(['default', 'plan'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  disabled={pending || collaborationModeLocked}
+                  aria-pressed={collaborationMode === mode}
+                  onClick={() => onCollaborationModeChange(mode)}
+                  className={`rounded-md px-2 py-1 transition-colors ${collaborationMode === mode ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'} disabled:cursor-not-allowed disabled:opacity-50`}
+                >
+                  {t(`panel.collaborationModes.${mode}`)}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="flex items-center gap-1.5">
             {canStopReply ? (

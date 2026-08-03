@@ -1,7 +1,12 @@
 import { createHash } from 'node:crypto'
 import { ApiError } from '@/lib/api-errors'
+import { createScopedLogger } from '@/lib/logging/core'
 import { normalizeOperationExecutionToolError } from '@/lib/adapters/operation-error-normalizer'
 import { formatBillingActionCost } from '@/lib/billing/action-quote-preview'
+import {
+  canonicalJson,
+  hashCanonicalJson,
+} from '@/lib/operation-plan-contract/canonical-json'
 import {
   buildAgentToolEffectInputHash,
   executeAgentToolEffectTransaction,
@@ -15,10 +20,7 @@ import { invokeProjectAgentOperation } from '@/lib/operations/invocation'
 import { prepareProjectAgentOperationInput } from '@/lib/operations/invocation'
 import { parseOperationMutationReceipt } from '@/lib/operations/mutation-receipt'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
-import {
-  issueApprovalGrantGroup,
-  type PlannedOperationInvocation,
-} from '@/lib/operations/planned-operation-invocation'
+import type { PlannedOperationInvocation } from '@/lib/operations/planned-operation-invocation'
 import { loadOperationPlanSnapshotByApiRequest } from '@/lib/operations/operation-plan-snapshot'
 import {
   persistOperationPlanView,
@@ -43,10 +45,18 @@ import { publishOperationMutationReceipt } from '@/lib/workspace-resource/resour
 import type {
   WaoMcpOperationExecutor,
   WaoMcpOperationExecutorResult,
+  WaoMcpExecutionLifecycle,
   WaoMcpElicitationRequest,
   WaoMcpElicitationResult,
   WaoMcpTrustedCallContext,
 } from './contracts'
+import {
+  issueWaoMcpApprovalGrant,
+  requireWaoMcpBrowserApproval,
+  WAO_MCP_APPROVAL_META_KEY,
+} from './approval-proof'
+
+const logger = createScopedLogger({ module: 'wao-mcp.production-executor' })
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -159,8 +169,7 @@ function failedResult(params: {
 }
 
 type ExecutorCopyKey =
-  | 'approvalBillable'
-  | 'approvalDestructive'
+  | 'declined'
   | 'approvedSubmitted'
   | 'submitted'
   | 'completed'
@@ -171,16 +180,14 @@ const EXECUTOR_COPY: Record<
   Record<ExecutorCopyKey, string>
 > = {
   zh: {
-    approvalBillable: '此操作需要先确认不可变生产计划。',
-    approvalDestructive: '此操作需要确认后才能执行。',
+    declined: '操作已取消，未执行任何生产任务。',
     approvedSubmitted: '已提交获批的 Wao 操作。',
     submitted: '已提交 Wao 操作。',
     completed: 'Wao 操作已完成。',
     notAvailable: '此操作不能通过 Wao MCP 使用。',
   },
   en: {
-    approvalBillable: 'This operation requires an approved immutable plan.',
-    approvalDestructive: 'This operation requires approval before execution.',
+    declined: 'The operation was cancelled and no production task was executed.',
     approvedSubmitted: 'The approved Wao operation was submitted.',
     submitted: 'The Wao operation was submitted.',
     completed: 'The Wao operation completed.',
@@ -195,26 +202,21 @@ function executorCopy(
   return EXECUTOR_COPY[normalizeProjectAgentLocale(locale)][key]
 }
 
-function approvalRequiredResult(
+function operationDeclinedResult(
   operation: ProjectAgentOperationDefinition,
   locale: string | null | undefined,
 ): WaoMcpOperationExecutorResult {
-  const billable = operation.confirmation.kind === 'billable_media'
   return {
     structuredContent: {
       ok: false,
-      confirmationRequired: true,
+      status: 'declined',
       error: {
-        code: 'CONFIRMATION_REQUIRED',
-        message: 'PROJECT_AGENT_OPERATION_APPROVAL_REQUIRED',
+        code: 'OPERATION_DECLINED',
+        message: 'PROJECT_AGENT_OPERATION_DECLINED',
         operationId: operation.id,
       },
     },
-    text: executorCopy(
-      locale,
-      billable ? 'approvalBillable' : 'approvalDestructive',
-    ),
-    isError: true,
+    text: executorCopy(locale, 'declined'),
   }
 }
 
@@ -222,13 +224,15 @@ function buildApprovalRequestId(params: {
   readonly turnId: string
   readonly callId: string
   readonly operationId: string
+  readonly inputHash: string
 }): string {
   const digest = createHash('sha256')
     .update(JSON.stringify([
-      'wao-mcp-approval-v1',
+      'wao-mcp-approval-v2',
       params.turnId,
       params.callId,
       params.operationId,
+      params.inputHash,
     ]), 'utf8')
     .digest('hex')
   return `wao-mcp:${digest}`
@@ -258,10 +262,12 @@ function projectPersistedPlanView(
 }
 
 function approvalElicitation(params: {
+  readonly approvalRequestId: string
   readonly operationId: string
   readonly locale: string | null | undefined
   readonly plan: OperationPlanView | null
   readonly kind: 'billable' | 'destructive'
+  readonly destructiveInputSummary?: string
 }): WaoMcpElicitationRequest {
   const locale = normalizeProjectAgentLocale(params.locale)
   const operationTitle = localizeProjectAgentOperationTitle(params.operationId, locale)
@@ -286,6 +292,9 @@ function approvalElicitation(params: {
     ? [
         `${operationTitle} requires your approval.`,
         planSummary ? `Plan: ${planSummary}` : null,
+        params.destructiveInputSummary
+          ? `Exact target: ${params.destructiveInputSummary}`
+          : null,
         params.kind === 'billable'
           ? 'Approving authorizes the displayed immutable production plan and its quoted ceiling.'
           : 'Approving authorizes this destructive operation.',
@@ -293,12 +302,18 @@ function approvalElicitation(params: {
     : [
         `${operationTitle}需要你的确认。`,
         planSummary ? `计划：${planSummary}` : null,
+        params.destructiveInputSummary
+          ? `精确目标：${params.destructiveInputSummary}`
+          : null,
         params.kind === 'billable'
           ? '确认后将授权执行上述不可变生产计划及其报价上限。'
           : '确认后将授权执行此删除操作。',
       ].filter((value): value is string => Boolean(value)).join('\n')
   return {
     mode: 'form',
+    _meta: {
+      [WAO_MCP_APPROVAL_META_KEY]: params.approvalRequestId,
+    },
     message,
     requestedSchema: {
       type: 'object',
@@ -322,7 +337,9 @@ async function authorizeBillableOperation(params: {
   readonly input: Readonly<Record<string, unknown>>
   readonly trusted: ReturnType<typeof normalizeTrustedContext>
   readonly context: WaoMcpTrustedCallContext
+  readonly signal: AbortSignal
   readonly elicit: (request: WaoMcpElicitationRequest) => Promise<WaoMcpElicitationResult>
+  readonly assertAuthorized: () => Promise<void>
 }): Promise<PlannedOperationInvocation | null> {
   const prepared = prepareProjectAgentOperationInput({
     channel: 'tool',
@@ -337,10 +354,12 @@ async function authorizeBillableOperation(params: {
     throw new Error(`WAO_MCP_OPERATION_PLAN_CONTRACT_MISSING:${params.operation.id}`)
   }
   const planContractRevision = params.operation.planContractRevision
+  const inputHash = hashCanonicalJson(prepared.input)
   const approvalRequestId = buildApprovalRequestId({
     turnId: params.trusted.turnId,
     callId: params.trusted.callId,
     operationId: params.operation.id,
+    inputHash,
   })
   const apiRequestContext = {
     turnId: params.trusted.turnId,
@@ -359,11 +378,13 @@ async function authorizeBillableOperation(params: {
   const view = replay
     ? projectPersistedPlanView(replay)
     : await (async (): Promise<OperationPlanView> => {
+        await params.assertAuthorized()
         const plan = await planOperation({
           operation: params.operation,
           ctx: params.trusted.operationContext,
           input: prepared.input,
         })
+        await params.assertAuthorized()
         return await persistOperationPlanView({
           plan,
           executionContractRevision: planContractRevision,
@@ -378,21 +399,29 @@ async function authorizeBillableOperation(params: {
   const confirmationRequired = await readAssistantBillingConfirmationRequired(
     params.trusted.userId,
   )
+  params.signal.throwIfAborted()
   if (confirmationRequired) {
     const decision = await params.elicit(approvalElicitation({
+      approvalRequestId,
       operationId: params.operation.id,
       locale: params.context.locale,
       plan: view,
       kind: 'billable',
     }))
     if (!elicitationApproved(decision)) return null
+    params.signal.throwIfAborted()
+    await params.assertAuthorized()
+    params.signal.throwIfAborted()
   }
-  const [grant] = await issueApprovalGrantGroup({
+  await params.assertAuthorized()
+  const grant = await issueWaoMcpApprovalGrant({
     userId: params.trusted.userId,
-    requests: [{
-      planSnapshotId: view.planSnapshotId,
-      requestId: approvalRequestId,
-    }],
+    projectId: params.trusted.projectId,
+    turnId: params.trusted.turnId,
+    executionOwnerId: params.trusted.executionOwnerId,
+    approvalRequestId,
+    planSnapshotId: view.planSnapshotId,
+    requireBrowserProof: confirmationRequired,
   })
   if (!grant || grant.operationId !== params.operation.id) {
     throw new Error(`WAO_MCP_APPROVAL_GRANT_DIVERGED:${params.operation.id}`)
@@ -410,9 +439,11 @@ async function executeOperation(params: {
   context: WaoMcpTrustedCallContext
   signal: AbortSignal
   elicit: (request: WaoMcpElicitationRequest) => Promise<WaoMcpElicitationResult>
+  assertAuthorized: () => Promise<void>
 }): Promise<WaoMcpOperationExecutorResult> {
   params.signal.throwIfAborted()
   const trusted = normalizeTrustedContext(params.context, params.signal)
+  let executionInput = params.input
 
   if (isBillablePlannedOperation(params.operation)) {
     const invocation = params.context.approvedInvocation ?? await authorizeBillableOperation({
@@ -420,11 +451,15 @@ async function executeOperation(params: {
       input: params.input,
       trusted,
       context: params.context,
+      signal: params.signal,
       elicit: params.elicit,
+      assertAuthorized: params.assertAuthorized,
     })
     if (!invocation) {
-      return approvalRequiredResult(params.operation, params.context.locale)
+      return operationDeclinedResult(params.operation, params.context.locale)
     }
+    params.signal.throwIfAborted()
+    await params.assertAuthorized()
     const result = await executeApprovedTaskOperationViaTemporal({
       registry: params.registry,
       operationId: params.operation.id,
@@ -450,21 +485,54 @@ async function executeOperation(params: {
     && params.operation.confirmation.required
     && params.context.destructiveApproved !== true
   ) {
+    const prepared = prepareProjectAgentOperationInput({
+      channel: 'tool',
+      operation: params.operation,
+      context: trusted.operationContext.context,
+      input: params.input,
+    })
+    if (prepared.invocation) {
+      throw new Error(`WAO_MCP_DESTRUCTIVE_PROVENANCE_AMBIGUOUS:${params.operation.id}`)
+    }
+    if (!isRecord(prepared.input)) {
+      throw new Error(`WAO_MCP_DESTRUCTIVE_INPUT_INVALID:${params.operation.id}`)
+    }
+    executionInput = prepared.input
+    const destructiveInputSummary = canonicalJson(prepared.input).slice(0, 1_200)
+    const approvalRequestId = buildApprovalRequestId({
+      turnId: trusted.turnId,
+      callId: trusted.callId,
+      operationId: params.operation.id,
+      inputHash: hashCanonicalJson(prepared.input),
+    })
     const decision = await params.elicit(approvalElicitation({
+      approvalRequestId,
       operationId: params.operation.id,
       locale: params.context.locale,
       plan: null,
       kind: 'destructive',
+      destructiveInputSummary,
     }))
     if (!elicitationApproved(decision)) {
-      return approvalRequiredResult(params.operation, params.context.locale)
+      return operationDeclinedResult(params.operation, params.context.locale)
     }
+    params.signal.throwIfAborted()
+    await requireWaoMcpBrowserApproval({
+      userId: trusted.userId,
+      projectId: trusted.projectId,
+      turnId: trusted.turnId,
+      approvalRequestId,
+    })
+    params.signal.throwIfAborted()
+    await params.assertAuthorized()
   }
 
   if (
     params.operation.assistantWriteAuthority?.kind
       === 'temporal_operation_execution'
   ) {
+    params.signal.throwIfAborted()
+    await params.assertAuthorized()
     const identity = buildDirectOperationInvocationIdentity({
       channel: 'tool',
       projectId: trusted.projectId,
@@ -479,7 +547,7 @@ async function executeOperation(params: {
       projectId: trusted.projectId,
       source: trusted.operationContext.source,
       context: trusted.operationContext.context,
-      input: params.input,
+      input: executionInput,
       ...identity,
       origin: {
         kind: 'agent_turn',
@@ -494,6 +562,8 @@ async function executeOperation(params: {
   }
 
   if (params.operation.effects.writes) {
+    params.signal.throwIfAborted()
+    await params.assertAuthorized()
     const contractRevision = params.operation.toolContractRevision
     if (!contractRevision) {
       throw new Error(
@@ -510,7 +580,7 @@ async function executeOperation(params: {
         inputHash: buildAgentToolEffectInputHash({
           operationId: params.operation.id,
           contractRevision,
-          input: params.input,
+          input: executionInput,
         }),
         execute: async (transaction) => {
           const result = await invokeProjectAgentOperation({
@@ -518,7 +588,7 @@ async function executeOperation(params: {
             channel: 'tool',
             operationId: params.operation.id,
             context: trusted.operationContext,
-            input: params.input,
+            input: executionInput,
             transaction,
             invocationMode: 'agent_tool_effect',
           })
@@ -550,7 +620,7 @@ async function executeOperation(params: {
     channel: 'tool',
     operationId: params.operation.id,
     context: trusted.operationContext,
-    input: params.input,
+    input: executionInput,
   })
   return {
     structuredContent: toJsonObject({ ok: true, data: result.data }),
@@ -560,6 +630,7 @@ async function executeOperation(params: {
 
 export function createProductionWaoMcpOperationExecutor(params?: {
   readonly registry?: ProjectAgentOperationRegistry
+  readonly lifecycle?: WaoMcpExecutionLifecycle
 }): WaoMcpOperationExecutor {
   const registry = params?.registry ?? createProjectAgentOperationRegistry()
 
@@ -581,16 +652,58 @@ export function createProductionWaoMcpOperationExecutor(params?: {
         }
       }
 
+      let lifecycleStarted = false
       try {
-        return await executeOperation({
+        await params?.lifecycle?.before(call.context)
+        lifecycleStarted = true
+        const result = await executeOperation({
           registry,
           operation,
           input: call.input,
           context: call.context,
           signal: call.signal,
           elicit: call.elicit,
+          assertAuthorized: async () => {
+            await params?.lifecycle?.assertAuthorized(call.context)
+          },
         })
+        try {
+          await params?.lifecycle?.after(call.context)
+        } catch (error) {
+          logger.warn({
+            action: 'wao_mcp.post_effect_refresh_failed',
+            message: 'Wao MCP operation succeeded but post-effect workspace refresh failed',
+            projectId: call.context.projectId,
+            userId: call.context.userId,
+            details: {
+              operationId: call.operationId,
+              turnId: call.context.turnId,
+              error: error instanceof Error ? error.message : 'UNKNOWN_ERROR',
+            },
+          })
+        }
+        return result
       } catch (error) {
+        if (lifecycleStarted) {
+          try {
+            await params?.lifecycle?.after(call.context)
+          } catch (refreshError) {
+            logger.warn({
+              action: 'wao_mcp.failed_effect_refresh_failed',
+              message: 'Wao MCP operation and post-effect workspace refresh both failed',
+              projectId: call.context.projectId,
+              userId: call.context.userId,
+              details: {
+                operationId: call.operationId,
+                turnId: call.context.turnId,
+                operationError: error instanceof Error ? error.message : 'UNKNOWN_ERROR',
+                refreshError: refreshError instanceof Error
+                  ? refreshError.message
+                  : 'UNKNOWN_ERROR',
+              },
+            })
+          }
+        }
         call.signal.throwIfAborted()
         return failedResult({ operation, error })
       }
