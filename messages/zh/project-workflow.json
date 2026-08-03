@@ -110,6 +110,10 @@
         "waitedMinutes": "已等待 {minutes} 分钟"
       },
       "details": {
+        "contentSection": "文件内容",
+        "contentLoading": "正在加载内容…",
+        "contentLoadFailed": "内容加载失败",
+        "contentRetry": "重试",
         "empty": "暂无生成信息"
       },
       "folderNavigation": {

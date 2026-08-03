@@ -69,6 +69,10 @@ export {
 } from './useWorkspaceResources'
 
 export {
+    useWorkspaceResourceView,
+} from './useWorkspaceResourceView'
+
+export {
     useAgentSessionView,
 } from './useAgentSessionView'
 

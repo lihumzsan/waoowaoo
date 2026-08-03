@@ -4,12 +4,25 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import GlassModalShell from '@/components/ui/primitives/GlassModalShell'
 import { AppIcon } from '@/components/ui/icons'
+import { useWorkspaceResourceView } from '@/lib/query/hooks'
+import { workspaceResourceContentText } from '@/lib/workspace-resource/contracts'
+import { useWorkspaceProvider } from '../../WorkspaceProvider'
 import type { WorkspaceResourceCardMemberView } from '../contracts/workspace-canvas-interactions'
 
 function ResourcePreviewBody({ card }: { readonly card: WorkspaceResourceCardMemberView }) {
   const statusLabels = useTranslations('projectWorkflow.canvas.workspace.status')
   const previewLabels = useTranslations('projectWorkflow.canvas.workspace.preview')
+  const { projectId } = useWorkspaceProvider()
   const summary = card.presentation.summary
+  // Text/structured previews are bounded summaries; the modal upgrades to the
+  // full content through the single-resource read while showing the summary.
+  const isTextPreview = card.resource.status === 'ready'
+    && (summary.kind === 'text' || summary.kind === 'structured')
+  const contentQuery = useWorkspaceResourceView({
+    projectId,
+    resourceId: isTextPreview ? card.resource.resourceId : null,
+  })
+  const fullContentText = workspaceResourceContentText(contentQuery.data?.current?.content)
   if (card.resource.status !== 'ready') {
     return (
       <div className="flex min-h-[18rem] items-center justify-center rounded-2xl bg-slate-50 text-sm text-[var(--glass-text-tertiary)]">
@@ -35,11 +48,11 @@ function ResourcePreviewBody({ card }: { readonly card: WorkspaceResourceCardMem
     }
   }
   if (summary.kind === 'text') {
-    return <pre className="max-h-[68vh] overflow-auto whitespace-pre-wrap rounded-2xl bg-slate-50 p-5 text-sm leading-6 text-slate-700">{summary.text}</pre>
+    return <pre className="max-h-[68vh] overflow-auto whitespace-pre-wrap rounded-2xl bg-slate-50 p-5 text-sm leading-6 text-slate-700">{fullContentText ?? summary.text}</pre>
   }
   if (summary.kind === 'structured') {
-    if (summary.preview) {
-      return <pre className="max-h-[68vh] overflow-auto whitespace-pre-wrap rounded-2xl bg-slate-50 p-5 text-sm leading-6 text-slate-700">{summary.preview}</pre>
+    if (fullContentText || summary.preview) {
+      return <pre className="max-h-[68vh] overflow-auto whitespace-pre-wrap rounded-2xl bg-slate-50 p-5 text-sm leading-6 text-slate-700">{fullContentText ?? summary.preview}</pre>
     }
     return (
       <div className="flex min-h-[18rem] items-center justify-center rounded-2xl bg-slate-50 text-sm text-[var(--glass-text-tertiary)]">

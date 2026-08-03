@@ -5,10 +5,13 @@ import { useTranslations } from 'next-intl'
 import { AppIcon, type AppIconName } from '@/components/ui/icons'
 import { useToast } from '@/contexts/ToastContext'
 import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
-import type {
-  WorkspaceResourceInputSummary,
-  WorkspaceResourceMediaType,
+import { useWorkspaceResourceView } from '@/lib/query/hooks'
+import {
+  workspaceResourceContentText,
+  type WorkspaceResourceInputSummary,
+  type WorkspaceResourceMediaType,
 } from '@/lib/workspace-resource/contracts'
+import { useWorkspaceProvider } from '../../WorkspaceProvider'
 import { workspaceCanvasScrollableRegionProps } from '../canvas-scroll-lock'
 import { PreviewableImage, SELECTABLE_TEXT_CLASS } from '../nodes/renderers/renderer-shared'
 import type { WorkspaceNodeDetailsActions } from './WorkspaceNodeDetailsCard'
@@ -311,6 +314,15 @@ export function WorkspaceNodeDetailsPanel({
   const errorLabels = useTranslations('projectWorkflow.canvas.workspace.errors')
   const resolveClientError = useClientErrorMessage()
   const { showError, showToast } = useToast()
+  const { projectId } = useWorkspaceProvider()
+  // Text/structured resources load their full content through the single
+  // single-resource read route; tree summaries stay bounded (WR-13).
+  const isTextResource = card.resource.mediaType === 'text' && card.resource.status === 'ready'
+  const contentQuery = useWorkspaceResourceView({
+    projectId,
+    resourceId: isTextResource ? card.resource.resourceId : null,
+  })
+  const fullContentText = workspaceResourceContentText(contentQuery.data?.current?.content)
   // One active playback across the whole card: starting a video stops the
   // playing audio tile and vice versa.
   const [activeInputKey, setActiveInputKey] = useState<string | null>(null)
@@ -347,6 +359,31 @@ export function WorkspaceNodeDetailsPanel({
 
   return (
     <section className="space-y-2.5 rounded-[20px] border border-slate-200 bg-white/96 p-4 shadow-[0_18px_48px_rgba(15,23,42,0.14)] backdrop-blur-xl">
+      {isTextResource ? (
+        <SectionShell title={t('contentSection')}>
+          {fullContentText !== null ? (
+            <pre
+              {...workspaceCanvasScrollableRegionProps<HTMLPreElement>()}
+              className={`${SELECTABLE_TEXT_CLASS} nowheel max-h-[16rem] overflow-y-auto whitespace-pre-wrap text-[13px] leading-6 text-slate-700`}
+            >
+              {fullContentText}
+            </pre>
+          ) : contentQuery.isError ? (
+            <div className="flex items-center gap-3 text-xs text-[var(--glass-text-secondary)]">
+              <span>{t('contentLoadFailed')}</span>
+              <button
+                type="button"
+                className="font-semibold text-[var(--glass-text-primary)]"
+                onClick={() => { void contentQuery.refetch() }}
+              >
+                {t('contentRetry')}
+              </button>
+            </div>
+          ) : (
+            <span className="text-xs text-[var(--glass-text-tertiary)]">{t('contentLoading')}</span>
+          )}
+        </SectionShell>
+      ) : null}
       {inputs.length > 0 ? (
         <SectionShell
           title={labels('generationReferences')}
@@ -466,7 +503,7 @@ export function WorkspaceNodeDetailsPanel({
         </SectionShell>
       ) : null}
 
-      {!prompt && !modelKey && inputs.length === 0 ? (
+      {!prompt && !modelKey && inputs.length === 0 && !isTextResource ? (
         <p className={`${SELECTABLE_TEXT_CLASS} px-1 py-2 text-xs text-[var(--glass-text-tertiary)]`}>
           {t('empty')}
         </p>

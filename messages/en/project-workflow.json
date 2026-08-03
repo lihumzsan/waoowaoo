@@ -110,6 +110,10 @@
         "waitedMinutes": "Waited {minutes} min"
       },
       "details": {
+        "contentSection": "File content",
+        "contentLoading": "Loading content…",
+        "contentLoadFailed": "Content failed to load",
+        "contentRetry": "Retry",
         "empty": "No generation details"
       },
       "folderNavigation": {

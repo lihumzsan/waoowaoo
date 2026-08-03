@@ -80,6 +80,16 @@ export type WorkspaceResourceContent =
       readonly durationMs: number | null
     }
 
+/** Full text of a version's content for display; null for media content. */
+export function workspaceResourceContentText(
+  content: WorkspaceResourceContent | null | undefined,
+): string | null {
+  if (!content) return null
+  if (content.kind === 'text') return content.text
+  if (content.kind === 'structured') return JSON.stringify(content.data, null, 2)
+  return null
+}
+
 export interface WorkspaceResourceVersionView {
   readonly version: number
   /** Null in tree/search projections; read_resource returns the full content. */
