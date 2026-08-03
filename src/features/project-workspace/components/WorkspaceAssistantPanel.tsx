@@ -93,11 +93,16 @@ export const WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE = {
 function WorkspaceAssistantRunFailureNotice({
   failure,
   title,
-  resend,
+  action,
 }: {
   failure: WorkspaceAssistantFailureView
   title?: string
-  resend: { readonly pending: boolean; readonly onResend: () => void } | null
+  action: {
+    readonly label: string
+    readonly pendingLabel: string
+    readonly pending: boolean
+    readonly onClick: () => void
+  } | null
 }) {
   const t = useTranslations('assistantAgent')
   return (
@@ -114,15 +119,15 @@ function WorkspaceAssistantRunFailureNotice({
             {failure.technical}
           </div>
         ) : null}
-        {resend ? (
+        {action ? (
           <button
             type="button"
-            disabled={resend.pending}
-            onClick={resend.onResend}
+            disabled={action.pending}
+            onClick={action.onClick}
             className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-[var(--glass-tone-warn-fg)]/30 bg-white/70 px-2 py-1 text-xs font-medium text-[var(--glass-tone-warn-fg)] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             <AppIcon name="refresh" className="h-3 w-3 shrink-0" />
-            {resend.pending ? t('panel.sending') : t('panel.resend')}
+            {action.pending ? action.pendingLabel : action.label}
           </button>
         ) : null}
       </div>
@@ -835,6 +840,40 @@ export default function WorkspaceAssistantPanel({
       mediaAttachments: resendDraft.mediaAttachments,
     }).catch(() => undefined)
   }, [resendDraft, sendMessage])
+  const continueInterruptedTurn = useCallback(() => {
+    // This is a new Product Turn with a new message-command identity. It asks
+    // the Agent to reconcile durable facts and never replays the failed source
+    // message or reopens its terminal Turn.
+    void sendMessage({
+      text: t('panel.continueInterruptedInstruction'),
+      attachments: [],
+      mediaAttachments: [],
+    }).catch(() => undefined)
+  }, [sendMessage, t])
+  const canContinueInterruptedTurn = Boolean(
+    currentTurn?.startedAt
+      && (
+        currentTurn.status === 'failed'
+        || (currentTurn.status === 'interrupted' && currentTurn.cancelReason !== 'user_cancelled')
+      ),
+  )
+  const failureActionPending = assistantRuntime.pending || assistantRuntime.viewLoading
+  const continueAction = canContinueInterruptedTurn
+    ? {
+        label: t('panel.continueInterrupted'),
+        pendingLabel: t('panel.continuing'),
+        pending: failureActionPending,
+        onClick: continueInterruptedTurn,
+      }
+    : null
+  const resendAction = resendDraft
+    ? {
+        label: t('panel.resend'),
+        pendingLabel: t('panel.sending'),
+        pending: failureActionPending,
+        onClick: resendUndeliveredMessage,
+      }
+    : null
   const taskBatchViews = useMemo(
     () =>
       taskBatches.map((batch) => {
@@ -938,15 +977,7 @@ export default function WorkspaceAssistantPanel({
                           {showRunFailureNotice ? (
                             <WorkspaceAssistantRunFailureNotice
                               failure={runFailureView}
-                              resend={
-                                resendDraft
-                                  ? {
-                                      pending:
-                                        assistantRuntime.pending || assistantRuntime.viewLoading,
-                                      onResend: resendUndeliveredMessage,
-                                    }
-                                  : null
-                              }
+                              action={continueAction ?? resendAction}
                             />
                           ) : null}
                           {showInterruptedNotice ? (
@@ -959,15 +990,7 @@ export default function WorkspaceAssistantPanel({
                                   ? formatFailureReference(currentTurn.requestId)
                                   : null,
                               }}
-                              resend={
-                                resendDraft
-                                  ? {
-                                      pending:
-                                        assistantRuntime.pending || assistantRuntime.viewLoading,
-                                      onResend: resendUndeliveredMessage,
-                                    }
-                                  : null
-                              }
+                              action={continueAction ?? resendAction}
                             />
                           ) : null}
                           {showUserStoppedNotice ? (
@@ -978,7 +1001,7 @@ export default function WorkspaceAssistantPanel({
                                 headline: t('panel.turnStoppedDescription'),
                                 technical: null,
                               }}
-                              resend={null}
+                              action={null}
                             />
                           ) : null}
                           {!assistantRuntime.viewLoading

@@ -25,6 +25,7 @@ Codex app-server 拥有单个 Agent 进程内的 Thread/Turn 与原生交互；W
 - **ARL-14 — Clear 先 claim 再停 placement。** Thread 的 `clearRequestId` 是清空进行中的唯一 fence；claim 后新 admission/follow-up、模型网关、MCP binding、审批证明与所有 effect transaction 立即失败关闭，active placement 在等待 capture/settlement 前先 force-stop，随后才归档。已归档请求的重放直接返回，绝不再停止后来创建的新 Thread/Turn。
 - **ARL-15 — Secret input fail closed。** 当前没有独立 secret authority；`isSecret=true` 的原生输入请求在写普通消息/interaction JSON 前拒绝。普通 interaction 的 decided response 可持久化并在 runtime handoff 失败后只重放同一 response，UI 不允许改答。
 - **ARL-16 — SSE 重连替换旧连接而不扩容。** 浏览器标签页为每个 Project 持有稳定的 session connection identity；服务端另发本次连接的唯一 owner token。相同 identity 重连原子接管现有 user/project/global 租约，不增加 cardinality；旧 owner 之后不能 renew 或 release 新连接。不同标签页仍受既有三层上限约束，进程重启、页面刷新和 EventSource 重建不得依赖等待 TTL 才恢复。
+- **ARL-17 — Runtime 错误与继续动作都由持久事实裁决。** Projector 只按钉死 Codex 协议读取 `error` notification 与最终 `turn/completed.error`，将最终失败一次性写为稳定 error code 和受限诊断 message；UI 不解析流内容、日志或 Provider 文案猜测原因。尚可重试的 attempt 不是 Product Turn 终态。已进入 Runtime 且非用户取消的失败/中断只能以新 source identity 创建一个新 Product Turn，指令 Agent 先核对 WorkspaceResource、Task 与 Plan 后继续未完成部分；只有从未进入 Runtime 的消息才允许忠实重发原 source。
 
 ## 状态所有权
 
@@ -96,3 +97,5 @@ Codex app-server 拥有单个 Agent 进程内的 Thread/Turn 与原生交互；W
 - Clear 首版只把 `clearRequestId` 用于 admission，却没有进入模型/MCP/effect guard，且 stop 在等待 persistence/child drain 后才终止 active app-server；已 claim 的清空仍可能继续产生模型调用、付费任务或目录写入。当前 clear fence 覆盖全部能力边界，数据库副作用统一按 Project→Thread→Turn 锁序检查，active Runtime 先停止 writer 再等待持久交接。
 - Child drain 曾在 interrupt 空回执后立即删除 writer，即使改成等待 completion，已排队的 grandchild start 仍可能落在已完成 Promise 之后。当前 child identity 只由匹配 completion 关闭并有有界超时；任何使用过 Subagent 的 Parent 终态都会关闭整个 app-server generation，再从 durable state 恢复，因此协议延迟不能跨 generation 写入下一 Turn。
 - SSE 连接上限首版用每次 HTTP 请求的随机 UUID 作为 Redis ZSET member；开发服务重启、页面刷新或 EventSource 显式重建后，旧 lease 在 TTL 内仍占位，新请求被当成额外连接并错误限流。仅复用 member 又会让旧 handler 的 renew/release 覆盖新连接。当前标签页 session identity 决定稳定 member，每次 HTTP 连接的 owner token 作为 fencing；重连原子接管，旧连接随后失去续租和释放权。
+- 旧 Agent 链路曾建立稳定错误码与本地化文案边界，但 Codex cutover 的 terminal persistence 又固定写 `ASSISTANT_RUNTIME_TURN_FAILED` 且丢弃原生错误详情，使 socket 中断、配额、鉴权和请求协议错误重新坍缩成同一“服务器错误”。这是同一错误可见性不变量的换形式复发：上一版防线只覆盖旧执行器，没有约束新的 Codex projector。当前 projector 是 Codex 终态错误的唯一解释者，协议枚举映射为共享 error registry；UI 只消费持久 View。
+- 已执行 Turn 失败时，旧 UI 要么不提供动作，要么只能沿用“未送达”的原消息重发，后者可能重复文件写入或任务提交。当前严格以 `startedAt` 区分：未送达才重发；已开始且非用户取消只创建新 Turn，并要求先读取持久项目事实再续做。模型如何判断创作内容已完成仍属于真实模型行为盲区，副作用幂等继续由各自 Capability/Task owner 保证。

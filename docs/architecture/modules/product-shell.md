@@ -99,6 +99,7 @@
   当前全局入口只接受 registry code，未知值统一显示安全兜底并附带 reference；旧 parser、局部
   toast 与 alert 已删除，ESLint 禁止全局 `alert` 作为静态边界。真实双 locale、离线和会话过期交互仍需
   发布前人工产品复验。
+- Codex cutover 曾绕过稳定错误 registry，把所有 Runtime 失败固定投影为通用 code 且丢弃安全诊断信息；旧错误治理因此没有覆盖新的终态 writer。当前 Runtime projector 只写共享 `src/lib/errors/codes.ts` 中的稳定 identity，中英文 catalog 继续是唯一用户 copy owner；Provider 原文不直接进入 UI。真实双 locale 的 Runtime 错误卡仍需人工产品复验。
 
 ## 修改检查表
 

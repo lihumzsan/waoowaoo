@@ -113,6 +113,18 @@ async function assertPinnedProtocolSurface(rootDir: string): Promise<void> {
   ]) {
     assert.ok(notifications.includes(`\"${itemType}\"`), `Pinned Codex protocol no longer exposes ${itemType}`)
   }
+  for (const terminalErrorField of [
+    'willRetry',
+    'codexErrorInfo',
+    'responseStreamDisconnected',
+    'responseTooManyFailedAttempts',
+    'badRequest',
+  ]) {
+    assert.ok(
+      notifications.includes(`\"${terminalErrorField}\"`),
+      `Pinned Codex protocol no longer exposes terminal error field ${terminalErrorField}`,
+    )
+  }
 }
 
 async function runWorkspaceSmoke(rootDir: string): Promise<void> {

@@ -194,7 +194,7 @@ export async function resolveCodexModelGatewayRuntimeConfig(params: {
     wireApi: 'responses',
     bearerTokenEnvironmentKey: CODEX_RUNTIME_BEARER_ENV_KEY,
     bearerToken: params.runtimeBearerToken,
-    requestMaxRetries: 0,
-    streamMaxRetries: 0,
+    requestMaxRetries: 1,
+    streamMaxRetries: 2,
   }
 }

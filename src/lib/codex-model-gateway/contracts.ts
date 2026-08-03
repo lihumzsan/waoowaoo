@@ -21,9 +21,9 @@ export type CodexModelGatewayRuntimeConfig = {
   readonly bearerTokenEnvironmentKey: typeof CODEX_RUNTIME_BEARER_ENV_KEY
   /** Same project-scoped bearer used by Wao MCP. */
   readonly bearerToken: string
-  /** Prevent Codex from silently issuing a second model POST. */
-  readonly requestMaxRetries: 0
-  readonly streamMaxRetries: 0
+  /** Codex is the only bounded retry owner for one model sampling request. */
+  readonly requestMaxRetries: 1
+  readonly streamMaxRetries: 2
 }
 
 export type CodexModelGatewayErrorCode =
@@ -38,6 +38,7 @@ export type CodexModelGatewayErrorCode =
   | 'ACTIVE_TURN_REQUIRED'
   | 'REQUEST_ENDPOINT_INVALID'
   | 'REQUEST_BODY_INVALID'
+  | 'REQUEST_INSTRUCTIONS_INVALID'
   | 'REQUEST_MODEL_MISMATCH'
   | 'PROVIDER_REQUEST_FAILED'
   | 'SEARCH_COMMAND_UNSUPPORTED'

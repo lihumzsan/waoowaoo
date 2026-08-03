@@ -24,6 +24,7 @@ Codex app-server 是唯一 Agent Runtime；Wao 保留产品 View、WorkspaceReso
 - **CRR-08 — 空闲可停。** 无活跃 Turn 时达到 idle timeout 才 capture、保存 session state 并停止容器；下一条消息按持久绑定重建。原生 Turn completion 必须同步登记 workspace capture/checkpoint，persistence queue 是 sticky failure barrier；下一 Turn、进程退出、ownership 丢失或 Manager 重启必须先排空持久化并确认 Product Turn settlement，再允许新 writer 或 placement。
 - **CRR-09 — 版本钉死。** Codex binary/app-server 版本与协议 smoke 一起升级；未知关键 request/event 不得静默忽略。
 - **CRR-09A — 原生实验事件显式协商。** 当前钉死版本把 `request_user_input`、Goal 等产品所需事件标为 experimental；Wao initialize 必须显式声明 `experimentalApi=true`，真实 schema smoke 同时校验这些方法仍存在。关闭该 capability 等同缺失必需能力，禁止静默降级。
+- **CRR-09B — Provider 适配与重试只有一个 owner。** Codex app-server 是同一原生 Turn 内模型请求与流式连接重试的唯一 owner，重试次数必须有界；网关不得再建第二套 retry。Codex 生成的 Responses 输入只能在 `src/lib/codex-model-gateway` 这一唯一 Provider 适配边界规范化：所有 developer/system 指令提升到 top-level `instructions`，user/assistant/tool/reasoning 历史保持原顺序，无法无损规范化时原地失败。原生 `error` notification 只表示本次尝试，`willRetry=true` 不得提前写 Product Turn 失败；最终 `turn/completed.error` 才由 Product View writer 按钉死协议映射为稳定错误 identity。
 - **CRR-10 — 不使用 Git。** 创作历史由 WorkspaceResourceVersion 拥有；Runtime 目录没有 Git、Commit Service、branch 或 CAS HEAD。并发安全来自 Project ownership、单 Turn 与 Catalog baseline CAS。
 - **CRR-11 — 进程内 Manager 唯一。** 所有 Next route bundle 在同一进程必须复用一个进程级 AssistantRuntime/Session Manager；开发热更新不能遗留仍续租的模块级 Manager。跨进程唯一性继续由外部 ownership claim 裁决，不能用第二个本地 singleton 竞争。
 - **CRR-12 — 当前控制面单进程。** app-server placement 与 Streamable HTTP MCP session 当前都是进程内对象，因此当前 Cloud Web 控制面只支持一个 Next Node 进程/replica；Temporal 媒体 Worker 可独立横向扩展。启用多个 Web replica 前必须先增加按 project owner 的请求路由与 MCP session affinity，禁止把 Redis ownership 误称为跨 replica 转发能力。
@@ -44,6 +45,7 @@ Codex app-server 是唯一 Agent Runtime；Wao 保留产品 View、WorkspaceReso
 | --- | --- |
 | app-server 启动/initialize 失败 | 不建立 durable binding；清理 materialization；Turn 显式失败 |
 | Runtime 进程意外退出 | live projector 结算 interrupted；Manager capture 后停止 placement，不并发写终态；下一 admission 再创建 placement |
+| Provider 请求或流式连接失败 | Codex 在同一 Turn 内按有界次数重试；中间 `error` 只更新诊断事实。最终失败时 projector 持久化 typed code 与安全 message；用户若继续，创建新 Product Turn 并先核对 WorkspaceResource/Task/Plan，不重放原消息 |
 | Session Manager 崩溃 | 外部 ownership 过期后新 Manager reconcile 废弃 Turn；禁止双 Runtime |
 | workspace baseline 漂移 | 整个 checkpoint 原地拒绝，不部分覆盖 Catalog |
 | MCP flush/Task 提交结果不明 | 依赖 operation/request idempotency 查询同一执行，不再次扣费 |
@@ -76,6 +78,8 @@ Codex app-server 是唯一 Agent Runtime；Wao 保留产品 View、WorkspaceReso
 - 模型网关首版只验证“项目里恰好有一个活跃 Turn”，未证明请求来自当前 Runtime；旧容器 bearer 在一小时内可等待新 Turn 后重放。当前 bearer nonce 与 Redis placement owner 完全相同，租约释放后 Responses/Search/MCP 都立即拒绝旧 generation。
 - MCP 首版在业务事务或 Temporal 提交成功后再次执行 ownership 授权检查；用户恰在提交后取消会让后置检查抛错，把真实成功返回成失败并诱导重复执行。当前授权复验截止于副作用之前，后置 workspace refresh 失败只触发 Runtime 恢复与告警，不覆盖已经提交的业务结果。
 - Local development driver 首版忽略 `stop('force')`，始终先等待 graceful shutdown；clear 已 claim 后本地 shell 仍可能继续数秒。当前 local app-server 使用独立进程组，force 直接终止整个组并等待 exit；graceful 仅用于已闭合 writer 的 checkpoint/idle 路径。
+- Product View history seed 首版把旧 user/assistant 消息与当前 Turn 的 developer context 原样塞进同一 Responses `input`；OpenRouter 的 Anthropic-compatible 路由会把中段 developer 转成非法 system message，导致新 Turn 以 HTTP 400 在任何模型执行前失败。当前唯一模型网关把全部 instruction item 提升到 top-level `instructions`，只保留对话与工具历史的原顺序；不支持的指令结构显式拒绝，不按具体 Provider 名称增加分支。
+- Codex 接入首版把 request/stream retry 都设为 0，长流的单次 socket 关闭直接终结整个 Product Turn；与此同时 projector 忽略原生 `error` 与 `turn.error`，持久层又固定写通用错误，真实网络失败和后续协议拒绝最终都显示成同一“服务器错误”。当前 Codex 是唯一有界 retry owner，网关不重试；projector 区分可重试 attempt 与最终 Turn，按钉死协议持久化 typed error。目标公网链路的实际稳定性仍是部署环境盲区。
 
 ## 修改检查表
 
