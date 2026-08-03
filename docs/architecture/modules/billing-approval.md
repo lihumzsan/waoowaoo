@@ -21,6 +21,7 @@
 - **BA-11 — 报价消费 canonical Task 字段。** Production planner、billing policy 与 Task handler 必须消费同一冻结 payload；视频/音频时长以 `durationSeconds` 为唯一 Task 字段，billing 和执行只能在各自边界把它映射成价格/provider 所需的 `duration`，不能从自由 `generationOptions` 或旧字段另行解释。
 - **BA-12 — 破坏性审批冻结精确输入。** 非计费删除在展示审批卡前先按 Operation schema 规范化输入；approval identity 必须包含 canonical input hash，卡片展示精确目标，执行只消费同一份规范化输入。只绑定 Turn/call/operation 的通用“确认删除”不能授权另一组目标。
 - **BA-13 — 取消或清空先到则不得开始副作用。** 浏览器 Turn cancel 与 pending/decided interaction 在 Project 锁下原子关闭；浏览器审批证明要求同 Turn 未取消且 Thread 未进入 clear。同步写、approved-plan 提交和 direct durable execution 在业务事务内按 Project→Thread→Turn 获取同一 effect fence，先取消或 clear 则不能创建 Task、扣费或删除资源。
+- **BA-14 — 图片能力参数只有一个编译入口。** 所有项目图片 producer 在 Plan 阶段通过 `buildImageBillingPayload` 取得当前模型已配置的分辨率、质量与业务画幅，再把同一 `generationOptions` 同时交给 quote 和 Task。新 Resource producer 不得只传模型和画幅、另行猜测价格档位或绕过 capability catalog。
 
 ## 权威入口
 
@@ -56,3 +57,4 @@
 - 浏览器审批证明首次只绑定 Turn、call 与 Operation，删除客户端可复用同一 request identity 替换目标输入。当前破坏性审批先规范化输入，将 canonical input hash 纳入 approval identity 并把精确目标展示给用户；执行路径复用该规范化值，不能在批准后重新解释原始参数。
 - Interrupt 首版只在 MCP 入口检查易失 AbortSignal；等待审批期间持久 cancel 已提交后，晚到 accept 仍可经过 browser proof 创建执行。当前 interaction、approval proof 与所有 effect transaction 都检查同一 `cancelRequestId`，并用 Project 锁确定 cancel/effect 的先后关系。
 - Thread clear 首版没有进入 approval/effect fence；清空已 claim 后，旧 Turn 的晚到 MCP 调用仍能签发 Grant 或提交 Task。当前浏览器证明、MCP binding 与事务 effect fence 都检查 `clearRequestId`，并共享 Project→Thread→Turn 锁序。
+- WorkspaceResource 图片生成首版绕过既有图片能力编译器，只把 `aspectRatio` 写进 Task；OpenRouter GPT Image 价格目录按 `resolution + quality + aspectRatio` 匹配，因此请求在 Provider 前被误报为 `BILLING_CAPABILITY_PRICE_NOT_FOUND`。当前该 producer 复用 `buildImageBillingPayload`，项目已配置的 1K/high/16:9 同时进入报价和执行 payload，显式请求只在同一 schema 内覆盖配置值。

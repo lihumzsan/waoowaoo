@@ -24,7 +24,6 @@ export function requireProjectVideoRatio(value: string | null | undefined): Proj
       allowedValues: Object.keys(ASPECT_RATIO_CONFIGS),
       correction: {
         interaction: 'codex_request_user_input',
-        collaborationMode: 'plan',
         commitmentOperationId: 'update_project_config',
         commitmentInputField: 'videoRatio',
       },

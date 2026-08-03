@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { z } from 'zod'
-import { getProjectModelConfig } from '@/lib/config-service'
+import { buildImageBillingPayload, getProjectModelConfig } from '@/lib/config-service'
 import type {
   WorkspaceResourceInputRef,
   WorkspaceResourceJsonValue,
@@ -325,10 +325,29 @@ async function buildPlannedItem(input: {
     throw new Error(`WORKSPACE_RESOURCE_REFERENCE_CHANNEL_UNSUPPORTED:${mediaType}:${invalidChannel.channel}`)
   }
   const references = await freezeReferences(input.ctx, publicReferences)
-  const generationOptions: Record<string, string | number | boolean | null> = {
-    ...(input.item.generationOptions ?? {}),
-  }
   const config = await getProjectModelConfig(input.ctx.projectId, input.ctx.userId)
+  const requestedOptions = input.item.generationOptions ?? {}
+  const imageDefaults = mediaType === 'image'
+    ? await buildImageBillingPayload({
+        projectId: input.ctx.projectId,
+        userId: input.ctx.userId,
+        imageModel: modelKey,
+        basePayload: {},
+        aspectRatio: typeof requestedOptions.aspectRatio === 'string'
+          ? requestedOptions.aspectRatio
+          : config.videoRatio,
+      })
+    : null
+  const configuredImageOptions = imageDefaults
+    && typeof imageDefaults.generationOptions === 'object'
+    && imageDefaults.generationOptions !== null
+    && !Array.isArray(imageDefaults.generationOptions)
+      ? imageDefaults.generationOptions as Record<string, string | number | boolean | null>
+      : {}
+  const generationOptions: Record<string, string | number | boolean | null> = {
+    ...configuredImageOptions,
+    ...requestedOptions,
+  }
   if ((mediaType === 'image' || mediaType === 'video') && !generationOptions.aspectRatio && config.videoRatio) {
     generationOptions.aspectRatio = config.videoRatio
   }
