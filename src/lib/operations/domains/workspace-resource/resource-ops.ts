@@ -4,7 +4,7 @@ import {
   createWorkspaceResourceFolderInTransaction,
   moveWorkspaceResourceInTransaction,
   restoreWorkspaceResourceInTransaction,
-  softDeleteWorkspacePathInTransaction,
+  softDeleteWorkspaceResourceInTransaction,
 } from '@/lib/workspace-resource/persistence'
 import {
   listWorkspaceResourceTreePage,
@@ -69,7 +69,7 @@ const moveResourceOutputSchema = z.object({
 }).strict()
 
 const deleteResourceInputSchema = z.object({
-  workspacePath: z.string().trim().min(1).max(512),
+  resourceId: z.string().trim().min(1).max(32),
 }).strict()
 
 const deleteResourceOutputSchema = z.object({
@@ -209,7 +209,7 @@ export function createWorkspaceResourceOperations(): ProjectAgentOperationRegist
       summary: 'Soft-delete one file or an entire folder subtree. Active or pending production Resources are rejected.',
       intent: 'act',
       channels: { tool: false, api: true, mcp: false },
-      toolContractRevision: 'delete_resource/v1',
+      toolContractRevision: 'delete_resource/v2',
       effects: writeEffects({ destructive: true, overwrite: false, bulk: true }),
       resourceContract: { kind: 'none', reason: 'soft-deletes existing Resources without creating a new Resource' },
       confirmation: { kind: 'destructive', required: true },
@@ -217,10 +217,10 @@ export function createWorkspaceResourceOperations(): ProjectAgentOperationRegist
       outputSchema: deleteResourceOutputSchema,
       executeInTransaction: async (ctx, input, tx) => deleteResourceOutputSchema.parse({
         success: true,
-        deletedCount: await softDeleteWorkspacePathInTransaction(tx, {
+        deletedCount: await softDeleteWorkspaceResourceInTransaction(tx, {
           userId: ctx.userId,
           projectId: ctx.projectId,
-          workspacePath: input.workspacePath,
+          resourceId: input.resourceId,
         }),
       }),
     }),

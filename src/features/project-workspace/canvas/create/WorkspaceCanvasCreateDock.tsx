@@ -32,6 +32,7 @@ export function WorkspaceCanvasCreateDock({
   loading,
   loadFailed,
   projectAspectRatio,
+  dismissible,
   onRetryCapabilities,
   onSubmit,
   onUpload,
@@ -42,6 +43,7 @@ export function WorkspaceCanvasCreateDock({
   readonly loading: boolean
   readonly loadFailed: boolean
   readonly projectAspectRatio: string | null
+  readonly dismissible: boolean
   readonly onRetryCapabilities: () => void
   readonly onSubmit: (request: WorkspaceCanvasCreateRequest) => void
   readonly onUpload: () => void
@@ -63,16 +65,17 @@ export function WorkspaceCanvasCreateDock({
   const dockRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    if (!dismissible) return
     const closeOnOutsidePointerDown = (event: PointerEvent) => {
       if (!(event.target instanceof Node) || dockRef.current?.contains(event.target)) return
       onClose()
     }
     window.addEventListener('pointerdown', closeOnOutsidePointerDown, true)
     return () => window.removeEventListener('pointerdown', closeOnOutsidePointerDown, true)
-  }, [onClose])
+  }, [dismissible, onClose])
 
   const closeOnEscape = (event: KeyboardEvent) => {
-    if (event.key !== 'Escape') return
+    if (event.key !== 'Escape' || !dismissible) return
     event.stopPropagation()
     onClose()
   }

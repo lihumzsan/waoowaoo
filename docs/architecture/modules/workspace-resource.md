@@ -20,7 +20,7 @@
 - **WR-08 — 执行前冻结精确输入。** Operation 以用户提供的 `workspacePath` 解析当前 Resource，再冻结 `resourceId + contentVersion + role + position` 到同一个 PlanSnapshot；计费审批消费该快照。执行、重试和 Lineage 都只消费冻结版本，不能在 Task 开始后重新按路径读取。
 - **WR-09 — 一个异步终态 writer。** 生成 Operation 的 commit 事务预留 pending Resource 与 Task。Task terminal success 在同一事务物化版本、Lineage、Resource 状态、Task 终态和通知；失败/取消只结算未物化 Resource。replay 返回同一事实，不能生成第二 Resource 或重复计费。
 - **WR-10 — 批量生产是数据，不是 N 个 Agent 调用。** `submit_production_manifest` 一次冻结最多 registry 允许的显式条目、一个总报价和一个 Approval Grant，再由 Temporal 扇出 Task。成员有稳定 `itemId/resourceId`；部分失败只由 `rerun_failed_production_items` 重跑失败成员，成功成员不重提。FollowUpBatch 在全部终态后至多一次唤醒 Assistant。
-- **WR-11 — 移动、删除和恢复只有一套语义。** 文件移动只改自身路径；文件夹移动原子改写完整子树路径。活跃 Task 涉及的 Resource 不可移动或删除；pending Resource 不可删除。软删除文件夹原子删除子树。恢复默认回原路径，冲突时必须显式给新路径，禁止静默改名。永久删除是独立、需审批的系统能力。
+- **WR-11 — 移动、删除和恢复只有一套语义。** 文件移动只改自身路径；文件夹移动原子改写完整子树路径。产品/API 的移动、软删除与恢复必须以 canonical `resourceId` 定位目标并在 Project 锁内解析当前路径，禁止拿旧 View 的 path 删除后来占用同一路径的另一 Resource；Runtime 文件删除仍由 checkpoint baseline 把受保护 identity 交给同一 Catalog writer。活跃 Task 涉及的 Resource 不可移动或删除；pending Resource 不可删除。软删除文件夹原子删除子树。恢复默认回原路径，冲突时必须显式给新路径，禁止静默改名。永久删除是独立、需审批的系统能力。
 - **WR-12 — Canvas 不拥有 Resource。** Canvas 按当前文件夹以 `scope=subtree` 加载子树并由自身预算 policy 决定展开/收起，使用稳定 `resourceId` 作为卡片身份，目录决定导航与分组，布局只保存视图位置。拖动卡片不移动文件；改路径必须调用 Resource move 或由 Runtime `mv` 后 checkpoint。
 - **WR-13 — 大项目按目录读取。** Agent 通过普通 `rg/read/bash` 探索用户树；Canvas 和 API 用 cursor 分页与 bounded summary，不读取全部正文——文本/结构化的列表摘要只来自版本行物化的 `contentPreview`，列表路径零对象存储读取。完整正文只经单资源读取入口（`readWorkspaceResource` 与其唯一 HTTP route）按需加载。Runtime Bundle 上限与 Canvas 5,000 项视图上限必须明确失败，不能恢复 200 条静默截断。
 - **WR-14 — Agent/Subagent 写入边界显式。** 主 Agent 是全局一致性文件的唯一 writer；并行 Subagent 只能写被分配的互斥目录。两个 writer 争用同路径由 `(projectId, activePath)` 与 checkpoint baseline fail closed，不靠最后写入覆盖。
@@ -71,6 +71,8 @@ Route、UI、MCP 和未来 CLI 都只能调用这些入口，不能直接写 Wor
 - Production Manifest：同一快照报价、成员稳定 identity、成功不重跑、失败成员续跑、FollowUp 至多一次。
 
 ## 历史回归
+
+- `delete_resource` 首版接受 `workspacePath`，目录树只有 Agent checkpoint 调用时尚未暴露问题；新增 Canvas 删除入口后，旧 View 与并发移动之间可能让同一路径的新 Resource 被误删，说明 path 是可变位置而不是删除 identity。当前 Operation、Canvas Action View、确认 request identity 与持久化 writer 全部传 canonical `resourceId`，在 Project 锁内一次解析当前子树；path 只用于精确确认文案和恢复目的地，不再决定删除目标。
 
 - WorkspaceResource clean cutover 首版为生成 Task 配置了 reference 生命周期策略，却遗漏图片、
   视频、音乐与 Voice payload 的 `lifecycleProjection`，获批生产清单因而无法原子创建 Task 与

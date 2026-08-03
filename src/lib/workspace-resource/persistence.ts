@@ -987,48 +987,57 @@ export async function moveWorkspaceResourceInTransaction(
   return { resourceId: root.id, workspacePath: destinationPath, movedCount: subtree.length }
 }
 
-export async function softDeleteWorkspacePath(input: {
+export async function softDeleteWorkspaceResource(input: {
   readonly userId: string
   readonly projectId: string
-  readonly workspacePath: string
+  readonly resourceId: string
 }): Promise<number> {
-  return await prisma.$transaction(async (tx) => await softDeleteWorkspacePathInTransaction(tx, input))
+  return await prisma.$transaction(async (tx) => await softDeleteWorkspaceResourceInTransaction(tx, input))
 }
 
-export async function softDeleteWorkspacePathInTransaction(
+export async function softDeleteWorkspaceResourceInTransaction(
   tx: Prisma.TransactionClient,
   input: {
     readonly userId: string
     readonly projectId: string
-    readonly workspacePath: string
+    readonly resourceId: string
   },
 ): Promise<number> {
   await lockOwnedProject(tx, input.projectId, input.userId)
-    const root = await tx.workspaceResource.findFirst({
-      where: { userId: input.userId, projectId: input.projectId, activePath: input.workspacePath, deletedAt: null },
-    })
-    if (!root) throw new Error('WORKSPACE_RESOURCE_PATH_NOT_FOUND')
-    const workspacePath = validateWorkspaceResourcePathForKind(input.workspacePath, root.resourceKind === 'folder' ? 'folder' : 'file')
-    const resources = await tx.workspaceResource.findMany({
-      where: {
-        userId: input.userId,
-        projectId: input.projectId,
-        deletedAt: null,
-        OR: [{ workspacePath }, { workspacePath: { startsWith: `${workspacePath}/` } }],
-      },
-      select: { id: true, status: true },
-    })
-    if (root.resourceKind === 'file' && resources.length !== 1) throw new Error('WORKSPACE_RESOURCE_FILE_HAS_DESCENDANTS')
-    const ids = resources.map((resource) => resource.id)
-    await requireNoActiveResourceTasks(tx, ids)
-    if (resources.some((resource) => resource.status === 'pending')) {
-      throw new Error('WORKSPACE_RESOURCE_PENDING_DELETE_CONFLICT')
-    }
-    const deletedAt = new Date()
-    const result = await tx.workspaceResource.updateMany({
-      where: { id: { in: ids }, deletedAt: null },
-      data: { activePath: null, deletedAt },
-    })
+  const root = await tx.workspaceResource.findFirst({
+    where: {
+      id: input.resourceId,
+      userId: input.userId,
+      projectId: input.projectId,
+      deletedAt: null,
+      activePath: { not: null },
+    },
+  })
+  if (!root) throw new Error('WORKSPACE_RESOURCE_NOT_FOUND')
+  const workspacePath = validateWorkspaceResourcePathForKind(
+    root.workspacePath,
+    root.resourceKind === 'folder' ? 'folder' : 'file',
+  )
+  const resources = await tx.workspaceResource.findMany({
+    where: {
+      userId: input.userId,
+      projectId: input.projectId,
+      deletedAt: null,
+      OR: [{ workspacePath }, { workspacePath: { startsWith: `${workspacePath}/` } }],
+    },
+    select: { id: true, status: true },
+  })
+  if (root.resourceKind === 'file' && resources.length !== 1) throw new Error('WORKSPACE_RESOURCE_FILE_HAS_DESCENDANTS')
+  const ids = resources.map((resource) => resource.id)
+  await requireNoActiveResourceTasks(tx, ids)
+  if (resources.some((resource) => resource.status === 'pending')) {
+    throw new Error('WORKSPACE_RESOURCE_PENDING_DELETE_CONFLICT')
+  }
+  const deletedAt = new Date()
+  const result = await tx.workspaceResource.updateMany({
+    where: { id: { in: ids }, deletedAt: null },
+    data: { activePath: null, deletedAt },
+  })
   if (result.count !== resources.length) throw new Error('WORKSPACE_RESOURCE_DELETE_CONFLICT')
   return result.count
 }

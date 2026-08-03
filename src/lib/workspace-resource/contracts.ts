@@ -128,11 +128,13 @@ export interface WorkspaceResourceInputSummary extends WorkspaceResourceInputRef
 }
 
 export interface WorkspaceResourceActionView {
-  readonly kind: 'retry' | 'variant' | 'download'
+  readonly kind: 'retry' | 'variant' | 'download' | 'delete'
   readonly enabled: boolean
   readonly operationId: string | null
   readonly input: WorkspaceResourceJsonObject | null
   readonly href: string | null
+  /** Stable hash of the exact normalized destructive input, otherwise null. */
+  readonly approvalInputHash: string | null
 }
 
 export interface WorkspaceResourceAlternativeMemberView {

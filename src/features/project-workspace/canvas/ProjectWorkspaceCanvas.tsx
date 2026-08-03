@@ -45,7 +45,7 @@ import { isWorkspaceCanvasWheelLockedTarget } from './canvas-scroll-lock'
 import { WorkspaceNodeDetailsCard } from './details/WorkspaceNodeDetailsCard'
 import { workspaceNodeTypes } from './nodes/workspaceNodeTypes'
 import {
-  WorkspaceCanvasFolderOpenContext,
+  WorkspaceCanvasFolderActionsContext,
   type WorkspaceCanvasFolderOpenTarget,
 } from './nodes/renderers/folder-card'
 import type { WorkspaceCanvasFlowEdge, WorkspaceCanvasFlowNode } from './node-canvas-types'
@@ -59,6 +59,7 @@ import type {
   WorkspaceResourceCardMemberView,
 } from './contracts/workspace-canvas-interactions'
 import { useCanvasOperationAction } from './actions/useCanvasOperationAction'
+import { useCanvasResourceDeleteAction } from './actions/useCanvasResourceDeleteAction'
 import { CanvasOperationConfirmationModal } from './actions/CanvasOperationConfirmationModal'
 import { WorkspaceResourcePreviewModal } from './preview/WorkspaceResourcePreviewModal'
 import { useCanvasActions } from '@/lib/query/hooks/useCanvasActions'
@@ -208,7 +209,11 @@ function ProjectWorkspaceFolderCanvas({
   const [createDraft, setCreateDraft] = useState<{
     readonly id: string
     readonly position: WorkspaceCanvasCreateRequest['position']
+    readonly handoffTargetNodeIds: readonly string[] | null
   } | null>(null)
+  const closeCreateDraft = useCallback((draftId: string) => {
+    setCreateDraft((current) => current?.id === draftId ? null : current)
+  }, [])
   const reactFlow = useReactFlow<WorkspaceCanvasFlowNode>()
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const [userNodePositions, setUserNodePositions] = useState<ReadonlyMap<string, WorkspaceCanvasUserPosition>>(() => new Map())
@@ -231,6 +236,12 @@ function ProjectWorkspaceFolderCanvas({
   const layoutWriteChainRef = useRef<Promise<void>>(Promise.resolve())
   const pendingPlacementNodeIdsRef = useRef<Set<string>>(new Set())
   const operationAction = useCanvasOperationAction({ projectId })
+  const deleteAction = useCanvasResourceDeleteAction({
+    projectId,
+    onDeleted: (resourceId) => {
+      if (selection?.targetId === resourceId) onSelectionChange(null)
+    },
+  })
   const placeUploadedResource = useCallback((item: CanvasUploadQueueItem, resourceId: string, reused: boolean) => {
     if (reused) return
     const nodeId = workspaceNodeId.resourceCard(resourceId)
@@ -515,13 +526,18 @@ function ProjectWorkspaceFolderCanvas({
     canvasRef.current?.focus()
     onSelectionChange(null)
     if (event.detail !== 2) return
+    if (operationAction.busy || deleteAction.busy || createDraft?.handoffTargetNodeIds) return
     notifyCanvasUserInteraction()
     const flow = reactFlow.screenToFlowPosition({ x: event.clientX, y: event.clientY })
-    setCreateDraft({ id: crypto.randomUUID(), position: flow })
-  }, [notifyCanvasUserInteraction, onSelectionChange, reactFlow])
-  const closeCreateDraft = useCallback((draftId: string) => {
-    setCreateDraft((current) => current?.id === draftId ? null : current)
-  }, [])
+    setCreateDraft({ id: crypto.randomUUID(), position: flow, handoffTargetNodeIds: null })
+  }, [createDraft?.handoffTargetNodeIds, deleteAction.busy, notifyCanvasUserInteraction, onSelectionChange, operationAction.busy, reactFlow])
+  useEffect(() => {
+    const targetNodeIds = createDraft?.handoffTargetNodeIds
+    if (!createDraft || !targetNodeIds || targetNodeIds.length === 0) return
+    const projectedNodeIds = new Set(projectedNodes.map((node) => node.id))
+    if (!targetNodeIds.every((nodeId) => projectedNodeIds.has(nodeId))) return
+    closeCreateDraft(createDraft.id)
+  }, [closeCreateDraft, createDraft, projectedNodes, projectionNodeSignature])
   const handleMoveStart = useCallback((event: MouseEvent | TouchEvent | null) => {
     if (event) notifyCanvasUserInteraction()
   }, [notifyCanvasUserInteraction])
@@ -581,12 +597,17 @@ function ProjectWorkspaceFolderCanvas({
     onAssistantDraftRequest({ requestId: crypto.randomUUID(), text, focus: true })
   }, [onAssistantDraftRequest])
   const beginResourceOperation = useCallback((operation: WorkspaceCanvasResourceOperationView) => {
+    if (operation.confirmation === 'destructive') {
+      if (!selectedNode || selectedNode.data.kind !== 'resourceCard') return
+      deleteAction.begin(operation, selectedNode.data.resourceDetails.resource.workspacePath)
+      return
+    }
     void operationAction.begin({
       operationId: operation.operationId,
       input: operation.input,
       confirmation: operation.confirmation,
     })
-  }, [operationAction])
+  }, [deleteAction, operationAction, selectedNode])
   const placePlannedResources = useCallback((request: WorkspaceCanvasCreateRequest, targetIds: readonly string[]) => {
     const uniqueTargetIds = [...new Set(targetIds)]
     setUserNodePositions((current) => {
@@ -614,11 +635,16 @@ function ProjectWorkspaceFolderCanvas({
       input: buildWorkspaceCanvasCreateOperationInput(request, outputPath),
       confirmation: 'billable_media',
       onAccepted: (plan) => {
-        closeCreateDraft(draftId)
-        if (plan) placePlannedResources(request, plan.tasks.map((task) => task.targetId))
+        if (!plan) return
+        const targetIds = [...new Set(plan.tasks.map((task) => task.targetId))]
+        placePlannedResources(request, targetIds)
+        setCreateDraft((current) => current?.id === draftId ? {
+          ...current,
+          handoffTargetNodeIds: targetIds.map((targetId) => workspaceNodeId.resourceCard(targetId)),
+        } : current)
       },
     })
-  }, [closeCreateDraft, folder.workspacePath, operationAction, placePlannedResources])
+  }, [folder.workspacePath, operationAction, placePlannedResources])
   const selectionForCard = useCallback((card: WorkspaceResourceCardMemberView): WorkspaceCanvasSelection | null => {
     const node = flowNodes.find((candidate) => candidate.data.targetId === card.resource.resourceId)
     return node ? selectionForNode(node) : null
@@ -646,8 +672,15 @@ function ProjectWorkspaceFolderCanvas({
 
   const loading = folderQuery.isLoading || layoutLoading
   const failed = folderQuery.isError || Boolean(layoutLoadError)
+  const folderActions = useMemo(() => ({
+    busy: deleteAction.busy || operationAction.busy,
+    open: openProjectedFolder,
+    remove: (target: WorkspaceCanvasFolderOpenTarget & {
+      readonly operation: WorkspaceCanvasFolderNodeData['folder']['deleteOperation']
+    }) => deleteAction.begin(target.operation, target.workspacePath),
+  }), [deleteAction, openProjectedFolder, operationAction.busy])
   return (
-    <WorkspaceCanvasFolderOpenContext.Provider value={openProjectedFolder}>
+    <WorkspaceCanvasFolderActionsContext.Provider value={folderActions}>
       <div
       className="workspace-canvas-layout-animated relative h-full min-h-0 w-full overflow-hidden bg-[var(--glass-bg-canvas)]"
       onDragOver={handleCanvasDragOver}
@@ -726,6 +759,10 @@ function ProjectWorkspaceFolderCanvas({
                 loading={canvasActionsLoading}
                 loadFailed={canvasActionsFailed}
                 projectAspectRatio={projectAspectRatio}
+                dismissible={
+                  !operationAction.busy
+                  && createDraft.handoffTargetNodeIds === null
+                }
                 onRetryCapabilities={() => { void retryCanvasActions() }}
                 onSubmit={(request) => submitCanvasCreation(createDraft.id, request)}
                 onUpload={() => {
@@ -740,7 +777,7 @@ function ProjectWorkspaceFolderCanvas({
             <WorkspaceNodeDetailsCard
               node={selectedNode}
               actions={{
-                busy: operationAction.busy,
+                busy: operationAction.busy || deleteAction.busy,
                 onAssistantPrefill: requestAssistantDraft,
                 onPreview: () => {
                   const card = selectedNode.data.kind === 'resourceCard'
@@ -829,9 +866,19 @@ function ProjectWorkspaceFolderCanvas({
           onCancel={operationAction.cancel}
         />
       ) : null}
+      {deleteAction.pending ? (
+        <CanvasOperationConfirmationModal
+          plan={null}
+          destructive
+          destructiveTarget={deleteAction.pending.targetLabel}
+          executing={deleteAction.phase === 'executing'}
+          onConfirm={() => { void deleteAction.confirm() }}
+          onCancel={deleteAction.cancel}
+        />
+      ) : null}
       <CanvasUploadQueue items={uploadQueue.items} onRetry={uploadQueue.retry} onDismiss={uploadQueue.dismiss} />
       </div>
-    </WorkspaceCanvasFolderOpenContext.Provider>
+    </WorkspaceCanvasFolderActionsContext.Provider>
   )
 }
 

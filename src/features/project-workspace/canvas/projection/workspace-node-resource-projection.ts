@@ -5,6 +5,7 @@ import type {
   WorkspaceResourceView,
 } from '@/lib/workspace-resource/contracts'
 import type {
+  WorkspaceCanvasDeleteOperationView,
   WorkspaceCanvasResourceFileView,
   WorkspaceCanvasResourceSummaryView,
   WorkspaceResourceCardMemberView,
@@ -142,10 +143,30 @@ function alternativeMember(
   }
 }
 
+function deleteOperation(resource: WorkspaceResourceView): WorkspaceCanvasDeleteOperationView | null {
+  const action = resource.actions.find((candidate) => candidate.kind === 'delete' && candidate.enabled)
+  if (!action) return null
+  if (
+    action.operationId !== 'delete_resource'
+    || action.input?.resourceId !== resource.resourceId
+    || typeof action.approvalInputHash !== 'string'
+    || !action.approvalInputHash
+  ) {
+    throw new Error(`WORKSPACE_CANVAS_DELETE_ACTION_INVALID:${resource.resourceId}`)
+  }
+  return {
+    kind: 'delete',
+    operationId: action.operationId,
+    confirmation: 'destructive',
+    input: { resourceId: resource.resourceId },
+    approvalInputHash: action.approvalInputHash,
+  }
+}
+
 function resourceCard(resourceView: WorkspaceResourceView): WorkspaceResourceCardView {
   const resource = requireFileResource(resourceView)
   const download = resource.actions.find((action) => action.kind === 'download' && action.enabled && action.href)
-  const operations = resource.actions.flatMap((action) => {
+  const billableOperations = resource.actions.flatMap((action) => {
     if (
       (action.kind !== 'retry' && action.kind !== 'variant')
       || !action.enabled
@@ -159,6 +180,7 @@ function resourceCard(resourceView: WorkspaceResourceView): WorkspaceResourceCar
       input: action.input,
     }]
   })
+  const projectedDeleteOperation = deleteOperation(resource)
   const primary: WorkspaceResourceCardMemberView = {
     resource,
     inputSummaries: resource.inputSummaries,
@@ -186,7 +208,10 @@ function resourceCard(resourceView: WorkspaceResourceView): WorkspaceResourceCar
       total: resource.alternativeGroup.total,
       members: allAlternativeMembers,
     } : null,
-    canvasOperations: operations,
+    canvasOperations: [
+      ...billableOperations,
+      ...(projectedDeleteOperation ? [projectedDeleteOperation] : []),
+    ],
   }
 }
 
@@ -318,23 +343,30 @@ export function appendWorkspaceResourceProjection(context: WorkspaceNodeProjecti
     display: 'card' | 'section',
     childCount: number,
     titleLabel: string,
-  ) => ({
-    projectId,
-    kind: 'folder' as const,
-    layoutNodeType: 'folder' as const,
-    targetType: 'folder' as const,
-    targetId: folderResource.resourceId,
-    title: titleLabel,
-    eyebrow: translate('nodes.folder.eyebrow'),
-    ...workspaceCanvasSucceededResourcePresentation(),
-    runtimeTargets: [],
-    folder: {
-      resourceId: folderResource.resourceId,
-      workspacePath: folderResource.workspacePath,
-      display,
-      childCount,
-    },
-  })
+  ) => {
+    const projectedDeleteOperation = deleteOperation(folderResource)
+    if (!projectedDeleteOperation) {
+      throw new Error(`WORKSPACE_CANVAS_FOLDER_DELETE_ACTION_REQUIRED:${folderResource.resourceId}`)
+    }
+    return {
+      projectId,
+      kind: 'folder' as const,
+      layoutNodeType: 'folder' as const,
+      targetType: 'folder' as const,
+      targetId: folderResource.resourceId,
+      title: titleLabel,
+      eyebrow: translate('nodes.folder.eyebrow'),
+      ...workspaceCanvasSucceededResourcePresentation(),
+      runtimeTargets: [],
+      folder: {
+        resourceId: folderResource.resourceId,
+        workspacePath: folderResource.workspacePath,
+        display,
+        childCount,
+        deleteOperation: projectedDeleteOperation,
+      },
+    }
+  }
 
   const folderCardElement = (
     treeNode: WorkspaceCanvasFolderTreeNode,

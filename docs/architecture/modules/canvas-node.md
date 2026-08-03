@@ -23,7 +23,7 @@ Canvas 是 WorkspaceResource 文件树的空间化投影，不是第二套文件
 - **CN-08 — 同步与异步写入都精确交接 Query。** 同步 Operation、异步 Resource 的提交事务和 Task Terminal 只通过注册的 `affectedResources` 发布可 replay 事实；提交事件只公布已经持久化的 pending Resource，终态事件只公布 Terminal 已结算事实。客户端只 invalidate/refetch 正式 Query，禁止从 TaskType、target、operation output 或本地 baseline 猜更新。
 - **CN-09 — 最终成片仍是普通视频。** 完成的章节视频与最终渲染都投影为普通 video ResourceCard，只由名称、schemaId 或 typed current-selection kind 表达用途；不得注册 `finalTimeline/finalOutput/finalArtifact` 专用节点或 renderer。渲染中的 Task 由通用 Task/Assistant 生命周期展示，成功媒体到达后才作为普通 VideoCard 进入 Canvas。
 - **CN-10 — 连线只表达当前 Canvas 可见节点间的真实 Lineage。** Resource edge 必须来自持久 `inputResourceId → outputResourceId` Lineage，且 source 与 target 都已作为当前 Canvas 的可见 Resource 节点（顶层或展开分区内）出现；收起文件夹内的资源不参与连线。推荐顺序、Canvas 邻近、Workflow step、同批成员或共享 Episode 都不能产生可见边。
-- **CN-11 — 文件夹化不得降级原卡片能力。** file 节点继续复用既有 text/image/audio/video 卡片、媒体 profile、详情卡、alternatives 预览、上传、创建、直接动作、拖拽和视口行为。媒体尺寸仍按“冻结 aspectRatio → 已完成媒体尺寸 → Asset Format Policy → 项目 videoRatio”解析；folder 只增加导航，不得另造简化文件列表替代 ReactFlow Canvas。
+- **CN-11 — 文件夹化不得降级原卡片能力。** file 节点继续复用既有 text/image/audio/video 卡片、媒体 profile、详情卡、alternatives 预览、上传、创建、删除、直接动作、拖拽和视口行为；可见 folder 卡与展开分区同样投影正式软删除能力。媒体尺寸仍按“冻结 aspectRatio → 已完成媒体尺寸 → Asset Format Policy → 项目 videoRatio”解析；folder 只增加导航和同一 Resource 动作，不得另造简化文件列表替代 ReactFlow Canvas。
 - **CN-12 — 详情卡是唯一展开机制。** 选中节点在其正下方渲染唯一详情卡（ReactFlow viewport 层，跟随画布坐标），内容消费该卡 View 的 prompt provenance 与服务端一次性下发的 `inputSummaries`；text/structured 资源的完整正文只经唯一单资源读取 route 按需加载（详情卡与预览弹窗共用同一 hook），UI 不得按 resourceId 零散请求 inputs 或推断引用。取消选中或点击空白关闭。不存在第二种展开/收起或 disclosure 状态。
 - **CN-13 — 新批次只调整一次整体视口。** Assistant Session 投影的持久 Task batch identity 是自动定位的唯一请求身份；批次至少一个 durable target 物化成 Canvas 节点后，只对当前整个 Canvas 执行一次 `fitView`。同批成员的 queued/running/terminal 变化、查询刷新和节点顺序变化都不得再次移动视口；用户拖拽、平移或缩放立即终止本次动画并把该批次标记为已处理。禁止按第一个 running 节点轮换、单节点放大、timer 恢复跟随或从 Operation 名称推断焦点。
 - **CN-14 — Canvas 直接动作只复用正式 Operation。** 卡片 retry、variant、edit、创建与上传必须从最终 Card/Action View 构造 exact Resource scope，经同一个 plan/snapshot/grant/execute 或 direct Operation adapter 写入；UI 不插入假 Resource、不改本地生命周期，只把成功 execute ACK、mutation receipt 或 SSE 作为正式 Query 失效信号。付费动作一次用户意图持有稳定 `Idempotency-Key/operationRequestId`，并只批准当前展示的完整计划。
@@ -45,8 +45,8 @@ Canvas 是 WorkspaceResource 文件树的空间化投影，不是第二套文件
 - 投影编排：`src/features/project-workspace/canvas/projection/workspace-node-canvas-projection.ts`。
 - Resource 投影与通用 fallback renderer：`workspace-node-resource-projection.ts`、`nodes/renderers/resource-card.tsx`、`nodes/renderers/resource-media-shell.tsx`；Resource View 来自 `src/lib/workspace-resource/view-service.ts`。
 - 选中详情卡：`src/features/project-workspace/canvas/details/WorkspaceNodeDetailsCard.tsx` 负责 viewport 定位与宽度，唯一展示实现在同目录 `WorkspaceNodeDetailsPanel.tsx`；数据只来自 card View（prompt provenance + `inputSummaries`）。详情卡提示词只读可复制；已有 Resource 的修改一律经 Assistant 通道产生新 Resource，Canvas 不提供人工改写历史输入的入口。
-- 画布创建占位卡：`create/WorkspaceCanvasCreateDock.tsx`。双击空白产生单一临时纯 UI 草稿并分两步：先在原位选择类型（能力来自服务端 creation 声明），再展开单类型撰写面板（外壳与选中详情面板一致）；点击草稿外任意位置或按 Escape 直接丢弃，双击新位置替换旧草稿，不提供固定关闭按钮；不注册节点 kind、不写任何持久层，提交只走通用 Operation 通道，上传只走既有上传队列两段式协议；刷新丢弃未提交草稿属预期。
-- Canvas 直接动作、创建、上传和 Assistant 预填：`src/features/project-workspace/canvas/actions/**`、`canvas/upload/**` 与 `ProjectWorkspace` 的受控 selection/draft bridge；服务端写入仍只走 Operation adapter。
+- 画布创建占位卡：`create/WorkspaceCanvasCreateDock.tsx`。双击空白产生单一临时纯 UI 草稿并分两步：先在原位选择类型（能力来自服务端 creation 声明），再展开单类型撰写面板（外壳与选中详情面板一致）；尚未提交时，点击草稿外任意位置或按 Escape 直接丢弃，双击新位置替换旧草稿，不提供固定关闭按钮；开始 plan/确认/执行后草稿不可被外部点击移除，只有正式 pending Resource 已通过当前目录 Query 投影全部计划目标后才关闭并由真实卡片接手。不注册节点 kind、不写任何持久层，提交只走通用 Operation 通道，上传只走既有上传队列两段式协议；刷新丢弃未提交草稿属预期。
+- Canvas 直接动作、创建、上传、软删除和 Assistant 预填：`src/features/project-workspace/canvas/actions/**`、`canvas/upload/**` 与 `ProjectWorkspace` 的受控 selection/draft bridge；删除确认冻结服务端 Action View 下发的 canonical `resourceId + approvalInputHash`，文件与可见 folder 共用 `delete_resource → WorkspaceResource` 唯一 writer，mutation receipt 只负责 Query 交接；服务端写入仍只走 Operation adapter。
 - folder-scoped 节点位置与 viewport：`src/lib/project-canvas/layout/**` 与 `/api/projects/[projectId]/canvas-layout`；唯一 scope 是 `(projectId, folderKey)`，不存在第二隐藏集合或 Episode layout route。
 - 可选领域事实投影必须先对齐 Resource origin/lineage；不存在 planning/asset-execution/video-stage projector。
 - 音频与成片同样使用普通 Resource 投影，不得恢复声音或最终阶段节点。
@@ -57,9 +57,11 @@ Canvas 是 WorkspaceResource 文件树的空间化投影，不是第二套文件
 
 - `tests/contracts/canvas-node-conformance.test.ts` 从生产 registry 穷尽校验 kind/capability/renderer/fixture，并校验媒体 presentation 契约对全部 media type 穷尽、frame shell 按画幅比解析。
 - folder 进入/返回、项目搜索定位、预算展开/收起形态、folder-scoped layout、分页完成前禁止布局覆盖、卡片刷新与真实 Resource/Task/Lineage 组合没有稳定独立 oracle，使用 authenticated 产品人工复验。
-- alternatives 左右浏览、多媒体 renderer、付费确认、当前目录创建/上传及上传重试同样属于 authenticated 产品人工复验；静态验证只能证明 registry、类型和唯一协议接线。
+- alternatives 左右浏览、多媒体 renderer、付费确认、当前目录创建/上传、创建草稿到 pending Resource 的无缝接力、软删除确认及上传重试同样属于 authenticated 产品人工复验；静态验证只能证明 registry、类型和唯一协议接线。
 
 ## 历史回归
+
+- 创建菜单改为“点击外部关闭”后，确认生成弹窗也位于草稿 DOM 外；用户点击确认时，全局 pointer capture 先删除草稿，而正式 pending Resource 尚未完成 Query 接手，画布出现确定性空窗。上一版只用 ESLint、类型和 locale 对齐验证静态接线，无法反证跨 portal 的真实指针顺序。当前草稿在 plan/确认/执行与 Query handoff 期间不可 dismiss，且只在计划目标已全部进入正式 Canvas 投影后关闭；没有 timer、假节点或本地终态。认证浏览器下的真实点击时序仍是人工复验边界。
 
 - Workspace tree clean cutover 删除旧 Project read pack 时，Canvas 仍使用的 `/api/task-target-states` 唯一 API Operation `get_task_status` 一并被误删；底层 Task state service 与 route 都还在，导致每次卡片状态刷新确定性返回 Operation not found。当前查询实例归入 Task Operation pack，并保持 API-only；Canvas 不另建 Task 状态解释器。
 - 文件夹卡片首版把可见文案写成“打开文件夹”，实际却只在 ReactFlow `onNodeDoubleClick` 导航；用户按文案单击时 handler 仅清空 selection，页面没有任何响应。当前单击与双击复用同一个 `folderFromResource → onNavigate` 入口，普通 Resource 单击仍只负责选中详情。

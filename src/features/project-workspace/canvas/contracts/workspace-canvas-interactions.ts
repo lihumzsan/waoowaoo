@@ -23,7 +23,7 @@ export type WorkspaceCanvasCreateKind = typeof WORKSPACE_CANVAS_CREATE_KINDS[num
  */
 export type WorkspaceCanvasCreateCapabilityView = CanvasCreationActionView
 
-export type WorkspaceCanvasResourceOperationKind = 'retry' | 'variant'
+export type WorkspaceCanvasResourceOperationKind = 'retry' | 'variant' | 'delete'
 
 export type WorkspaceCanvasNodeActionKey =
   | 'discuss'
@@ -31,18 +31,31 @@ export type WorkspaceCanvasNodeActionKey =
   | 'preview_alternatives'
   | 'retry'
   | 'variant'
+  | 'delete'
 
 /**
  * Exact server-owned action input for a Resource card. Keeping the normalized
  * Operation input in the View prevents the renderer from rebuilding frozen
  * references, scope, or retry facts.
  */
-export interface WorkspaceCanvasResourceOperationView {
-  readonly kind: WorkspaceCanvasResourceOperationKind
+export interface WorkspaceCanvasBillableOperationView {
+  readonly kind: Exclude<WorkspaceCanvasResourceOperationKind, 'delete'>
   readonly operationId: string
   readonly confirmation: 'billable_media'
   readonly input: WorkspaceResourceJsonObject
 }
+
+export interface WorkspaceCanvasDeleteOperationView {
+  readonly kind: 'delete'
+  readonly operationId: string
+  readonly confirmation: 'destructive'
+  readonly input: { readonly resourceId: string }
+  readonly approvalInputHash: string
+}
+
+export type WorkspaceCanvasResourceOperationView =
+  | WorkspaceCanvasBillableOperationView
+  | WorkspaceCanvasDeleteOperationView
 
 /**
  * Client extension point for the Resource Card View. These optional fields are

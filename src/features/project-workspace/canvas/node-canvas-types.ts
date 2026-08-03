@@ -2,7 +2,10 @@ import type { Edge, Node } from '@xyflow/react'
 import type { CanvasLayoutNodeType } from '@/lib/project-canvas/layout/canvas-layout-contract'
 import type { TaskRuntimeTarget } from '@/lib/task/runtime-targets'
 import type { WorkspaceCanvasLifecycle } from './lifecycle/workspace-canvas-lifecycle'
-import type { WorkspaceResourceCardView } from './contracts/workspace-canvas-interactions'
+import type {
+  WorkspaceCanvasDeleteOperationView,
+  WorkspaceResourceCardView,
+} from './contracts/workspace-canvas-interactions'
 
 /**
  * Canvas projects durable Creative Resources. Resource schema and lineage,
@@ -71,6 +74,8 @@ export interface WorkspaceCanvasFolderNodeData extends WorkspaceCanvasBaseNodeDa
     readonly display: 'card' | 'section'
     /** Descendant file count resolved by the same expansion policy. */
     readonly childCount: number
+    /** Exact server-projected destructive action for this folder identity. */
+    readonly deleteOperation: WorkspaceCanvasDeleteOperationView
   }
 }
 

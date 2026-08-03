@@ -99,6 +99,7 @@
         "src/lib/task/execution/handlers/workspace-resource-video.ts",
         "src/lib/task/execution/handlers/workspace-resource-video-merge.ts",
         "src/lib/task/execution/handlers/workspace-resource-voice.ts",
+        "src/lib/voice/voice-resource-service.ts",
         "src/lib/video-compose/video-merge-ffmpeg.ts",
         "src/types/project.ts",
         "scripts/media-mapping.ts",

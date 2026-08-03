@@ -12,39 +12,68 @@ export interface WorkspaceCanvasFolderOpenTarget {
   readonly workspacePath: string
 }
 
-export const WorkspaceCanvasFolderOpenContext = createContext<
-  ((target: WorkspaceCanvasFolderOpenTarget) => void) | null
->(null)
+interface WorkspaceCanvasFolderActions {
+  readonly busy: boolean
+  readonly open: (target: WorkspaceCanvasFolderOpenTarget) => void
+  readonly remove: (target: WorkspaceCanvasFolderOpenTarget & {
+    readonly operation: WorkspaceCanvasFolderNodeData['folder']['deleteOperation']
+  }) => void
+}
+
+export const WorkspaceCanvasFolderActionsContext = createContext<WorkspaceCanvasFolderActions | null>(null)
 
 export function FolderCardContent({ data }: WorkspaceCanvasNodeRendererProps) {
   const t = useTranslations('projectWorkflow.canvas.workspace.folderNavigation')
-  const openFolder = useContext(WorkspaceCanvasFolderOpenContext)
+  const actions = useContext(WorkspaceCanvasFolderActionsContext)
   if (data.kind !== 'folder') return null
-  if (!openFolder) throw new Error('WORKSPACE_CANVAS_FOLDER_OPEN_CONTEXT_REQUIRED')
+  if (!actions) throw new Error('WORKSPACE_CANVAS_FOLDER_ACTIONS_CONTEXT_REQUIRED')
   return (
-    <button
-      type="button"
+    <div
       data-workspace-folder-id={data.folder.resourceId}
       data-workspace-folder-name={data.title}
       data-workspace-folder-path={data.folder.workspacePath}
-      className="nodrag nopan flex h-[108px] w-full flex-col items-center justify-center gap-1.5 rounded-[14px] bg-amber-50/80 text-amber-500 ring-1 ring-amber-100"
-      onPointerDown={(event) => event.stopPropagation()}
-      onClick={(event) => {
-        event.stopPropagation()
-        openFolder({
-          resourceId: data.folder.resourceId,
-          name: data.title,
-          workspacePath: data.folder.workspacePath,
-        })
-      }}
+      className="relative h-[108px] w-full"
     >
-      <AppIcon name="folder" className="h-14 w-14" />
-      <span className="text-[11px] font-medium text-amber-700/80">
-        {t('openFolder')}
-        {' · '}
-        {t('sectionCount', { count: data.folder.childCount })}
-      </span>
-    </button>
+      <button
+        type="button"
+        className="nodrag nopan flex h-full w-full flex-col items-center justify-center gap-1.5 rounded-[14px] bg-amber-50/80 text-amber-500 ring-1 ring-amber-100"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation()
+          actions.open({
+            resourceId: data.folder.resourceId,
+            name: data.title,
+            workspacePath: data.folder.workspacePath,
+          })
+        }}
+      >
+        <AppIcon name="folder" className="h-14 w-14" />
+        <span className="text-[11px] font-medium text-amber-700/80">
+          {t('openFolder')}
+          {' · '}
+          {t('sectionCount', { count: data.folder.childCount })}
+        </span>
+      </button>
+      <button
+        type="button"
+        disabled={actions.busy}
+        aria-label={t('deleteFolder', { path: data.folder.workspacePath })}
+        title={t('deleteFolder', { path: data.folder.workspacePath })}
+        className="nodrag nopan absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-[var(--glass-tone-danger-fg)] shadow-sm ring-1 ring-red-100 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation()
+          actions.remove({
+            resourceId: data.folder.resourceId,
+            name: data.title,
+            workspacePath: data.folder.workspacePath,
+            operation: data.folder.deleteOperation,
+          })
+        }}
+      >
+        <AppIcon name="trash" className="h-3.5 w-3.5" />
+      </button>
+    </div>
   )
 }
 
@@ -58,6 +87,8 @@ export function FolderCardContent({ data }: WorkspaceCanvasNodeRendererProps) {
  */
 export function FolderSectionShell({ data }: { readonly data: WorkspaceCanvasFolderNodeData }) {
   const t = useTranslations('projectWorkflow.canvas.workspace.folderNavigation')
+  const actions = useContext(WorkspaceCanvasFolderActionsContext)
+  if (!actions) throw new Error('WORKSPACE_CANVAS_FOLDER_ACTIONS_CONTEXT_REQUIRED')
   return (
     <section
       className="relative h-full w-full"
@@ -73,6 +104,25 @@ export function FolderSectionShell({ data }: { readonly data: WorkspaceCanvasFol
         <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-[var(--glass-text-tertiary)]">
           {t('sectionCount', { count: data.folder.childCount })}
         </span>
+        <button
+          type="button"
+          disabled={actions.busy}
+          aria-label={t('deleteFolder', { path: data.folder.workspacePath })}
+          title={t('deleteFolder', { path: data.folder.workspacePath })}
+          className="nodrag nopan -mr-1 inline-flex h-6 w-6 items-center justify-center rounded-full text-[var(--glass-tone-danger-fg)] transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation()
+            actions.remove({
+              resourceId: data.folder.resourceId,
+              name: data.title,
+              workspacePath: data.folder.workspacePath,
+              operation: data.folder.deleteOperation,
+            })
+          }}
+        >
+          <AppIcon name="trash" className="h-3.5 w-3.5" />
+        </button>
       </header>
     </section>
   )

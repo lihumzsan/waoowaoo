@@ -45,6 +45,10 @@ export function WorkspaceNodeActionBar({
     if (!operation) continue
     add(kind, 'refresh', t(kind), () => onOperation(operation))
   }
+  const deleteOperation = operationByKind.get('delete')
+  if (deleteOperation) {
+    add('delete', 'trash', t('delete'), () => onOperation(deleteOperation), 'danger')
+  }
   return (
     <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-2.5">
       {actions.map((action) => (

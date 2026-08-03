@@ -15,6 +15,7 @@
         "download": "Download",
         "retry": "Retry",
         "variant": "Create variant",
+        "delete": "Delete",
         "unavailable": "This action is unavailable"
       },
       "errors": {
@@ -38,11 +39,13 @@
         "description": "Review the number of generation tasks and the maximum quoted cost.",
         "cancel": "Cancel",
         "executing": "Submitting…",
+        "deleting": "Deleting…",
         "confirm": "Confirm and create",
+        "confirmDelete": "Confirm deletion",
         "taskCount": "{count} generation tasks",
         "priceHidden": "Price hidden",
         "priceCredits": "Up to {cost} credits",
-        "destructiveBody": "This action changes the selected Resource."
+        "destructiveBody": "Remove “{target}” from the current project tree. This is a soft delete and remains recoverable through the system restore capability."
       },
       "create": {
         "loading": "Loading capabilities…",
@@ -126,6 +129,7 @@
         "loadFailed": "Files could not be loaded",
         "retry": "Retry",
         "openFolder": "Open folder",
+        "deleteFolder": "Delete folder {path}",
         "sectionCount": "{count} items",
         "directory": "Directory",
         "directoryEmpty": "No folders yet"

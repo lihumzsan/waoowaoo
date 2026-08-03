@@ -43,19 +43,19 @@ export const WORKSPACE_CANVAS_NODE_DEFINITIONS = {
     actionKeysByMediaType: {
       text: [
         'discuss', 'preview_alternatives',
-        'retry', 'variant',
+        'retry', 'variant', 'delete',
       ],
       image: [
         'discuss', 'preview_alternatives', 'download',
-        'retry', 'variant',
+        'retry', 'variant', 'delete',
       ],
       audio: [
         'discuss', 'preview_alternatives', 'download',
-        'retry', 'variant',
+        'retry', 'variant', 'delete',
       ],
       video: [
         'discuss', 'preview_alternatives', 'download',
-        'retry', 'variant',
+        'retry', 'variant', 'delete',
       ],
     },
     presentation: {

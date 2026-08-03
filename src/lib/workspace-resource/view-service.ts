@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { stableArgsFingerprint } from '@/lib/project-agent/stable-args-hash'
 import { readWorkspaceResourceTextContent } from './content-store'
 import type {
   WorkspaceResourceActionView,
@@ -140,7 +141,15 @@ function projectActions(input: {
   readonly current: VersionRow | undefined
   readonly mediaType: WorkspaceResourceMediaType | null
 }): readonly WorkspaceResourceActionView[] {
-  if (input.resource.resourceKind === 'folder') return []
+  const deleteAction: WorkspaceResourceActionView = {
+    kind: 'delete',
+    enabled: input.resource.status !== 'pending',
+    operationId: 'delete_resource',
+    input: { resourceId: input.resource.id },
+    href: null,
+    approvalInputHash: stableArgsFingerprint({ resourceId: input.resource.id }),
+  }
+  if (input.resource.resourceKind === 'folder') return [deleteAction]
   const downloadHref = previewUrl(input.current)
   const failed = (
     input.resource.status === 'failed'
@@ -168,6 +177,7 @@ function projectActions(input: {
       operationId: retryOperationId,
       input: retryInput,
       href: null,
+      approvalInputHash: null,
     },
     {
       kind: 'variant',
@@ -175,6 +185,7 @@ function projectActions(input: {
       operationId: null,
       input: null,
       href: null,
+      approvalInputHash: null,
     },
     {
       kind: 'download',
@@ -182,7 +193,9 @@ function projectActions(input: {
       operationId: null,
       input: null,
       href: downloadHref,
+      approvalInputHash: null,
     },
+    deleteAction,
   ]
 }
 

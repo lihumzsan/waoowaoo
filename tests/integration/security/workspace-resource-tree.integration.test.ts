@@ -4,7 +4,7 @@ import { createWorkspaceResourceId } from '@/lib/workspace-resource/identity'
 import {
   reconcileWorkspaceResourceTreeInTransaction,
   restoreWorkspaceResource,
-  softDeleteWorkspacePath,
+  softDeleteWorkspaceResource,
   type WorkspaceResourceTreeBaselineEntry,
 } from '@/lib/workspace-resource/persistence'
 import { WORKSPACE_RESOURCE_SCHEMA } from '@/lib/workspace-resource/schema-registry'
@@ -128,10 +128,10 @@ describe('WorkspaceResource canonical tree transaction boundary', () => {
       where: { id: task.id },
       data: { status: TASK_STATUS.COMPLETED, finishedAt: new Date() },
     })
-    await expect(softDeleteWorkspacePath({
+    await expect(softDeleteWorkspaceResource({
       userId: user.id,
       projectId: project.id,
-      workspacePath: 'series',
+      resourceId: seriesId,
     })).resolves.toBe(2)
 
     const replacementId = createWorkspaceResourceId()
@@ -183,10 +183,10 @@ describe('WorkspaceResource canonical tree transaction boundary', () => {
       },
     })
 
-    await expect(softDeleteWorkspacePath({
+    await expect(softDeleteWorkspaceResource({
       userId: user.id,
       projectId: project.id,
-      workspacePath: 'pending.resource',
+      resourceId,
     })).rejects.toThrow('WORKSPACE_RESOURCE_PENDING_DELETE_CONFLICT')
     await expect(prisma.workspaceResource.findUnique({ where: { id: resourceId } })).resolves.toMatchObject({
       activePath: 'pending.resource',

@@ -8,12 +8,14 @@ import type { OperationPlanView } from '@/lib/operations/planning'
 export function CanvasOperationConfirmationModal({
   plan,
   destructive,
+  destructiveTarget,
   executing,
   onConfirm,
   onCancel,
 }: {
   readonly plan: OperationPlanView | null
   readonly destructive: boolean
+  readonly destructiveTarget?: string | null
   readonly executing: boolean
   readonly onConfirm: () => void
   readonly onCancel: () => void
@@ -43,11 +45,14 @@ export function CanvasOperationConfirmationModal({
           <button
             type="button"
             disabled={executing}
-            className="glass-btn-base glass-btn-primary inline-flex items-center gap-2 px-4 py-2 text-sm"
+            className={`glass-btn-base inline-flex items-center gap-2 px-4 py-2 text-sm ${destructive ? 'bg-red-600 text-white hover:bg-red-700' : 'glass-btn-primary'}`}
             onClick={onConfirm}
           >
             {executing ? <AppIcon name="loader" className="h-4 w-4 animate-spin" /> : null}
-            {executing ? t('executing') : t('confirm')}
+            {destructive && executing ? t('deleting') : null}
+            {destructive && !executing ? t('confirmDelete') : null}
+            {!destructive && executing ? t('executing') : null}
+            {!destructive && !executing ? t('confirm') : null}
           </button>
         </div>
       )}
@@ -65,7 +70,7 @@ export function CanvasOperationConfirmationModal({
         </div>
       ) : (
         <p className="text-sm leading-6 text-[var(--glass-text-secondary)]">
-          {t('destructiveBody')}
+          {t('destructiveBody', { target: destructiveTarget ?? '' })}
         </p>
       )}
     </GlassModalShell>

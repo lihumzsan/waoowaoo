@@ -1,6 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { ApiError } from '@/lib/api-errors'
-import { softDeleteWorkspacePathInTransaction } from '@/lib/workspace-resource/persistence'
+import { softDeleteWorkspaceResourceInTransaction } from '@/lib/workspace-resource/persistence'
 import { WORKSPACE_RESOURCE_SCHEMA } from '@/lib/workspace-resource/schema-registry'
 
 export async function deleteVoiceResourceInTransaction(
@@ -21,15 +21,15 @@ export async function deleteVoiceResourceInTransaction(
       schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
       deletedAt: null,
     },
-    select: { workspacePath: true },
+    select: { id: true },
   })
   if (!resource) {
     throw new ApiError('NOT_FOUND', { code: 'VOICE_RESOURCE_NOT_FOUND', field: 'target.assetId' })
   }
-  await softDeleteWorkspacePathInTransaction(tx, {
+  await softDeleteWorkspaceResourceInTransaction(tx, {
     userId: input.userId,
     projectId: input.projectId,
-    workspacePath: resource.workspacePath,
+    resourceId: resource.id,
   })
   return { success: true }
 }
