@@ -82,6 +82,3 @@ export async function attachMediaFieldsToGlobalLocation<T extends Record<string,
   }
 }
 
-export function firstMediaUrl(list: MediaRef[]): string[] {
-  return list.map((m) => m.url)
-}

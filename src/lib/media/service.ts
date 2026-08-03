@@ -230,7 +230,3 @@ export async function resolveMediaRefsFromLegacyJsonArray(jsonStr: unknown): Pro
   }
 }
 
-export function mediaUrlFromRef(ref: MediaRef | null | undefined, fallback: string | null | undefined): string | null {
-  if (ref?.url) return ref.url
-  return fallback || null
-}

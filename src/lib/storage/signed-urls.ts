@@ -39,7 +39,7 @@ const signedUrlLogger = createScopedLogger({
 })
 const _ulogError = (...args: unknown[]) => signedUrlLogger.error(...args)
 
-export function keyToSignedUrl(key: string | null, expires: number = 24 * 60 * 60): string | null {
+function keyToSignedUrl(key: string | null, expires: number = 24 * 60 * 60): string | null {
   if (!key) return null
   if (key.startsWith('http://') || key.startsWith('https://')) {
     return key
@@ -47,7 +47,7 @@ export function keyToSignedUrl(key: string | null, expires: number = 24 * 60 * 6
   return getSignedUrl(key, expires)
 }
 
-export function addSignedUrlsToCharacter(character: CharacterLike) {
+function addSignedUrlsToCharacter(character: CharacterLike) {
   const appearances = character.appearances?.map((app) => {
     const imageUrls = decodeImageUrlsFromDb(app.imageUrls, 'appearance.imageUrls')
       .map((key) => keyToSignedUrl(key))
@@ -76,7 +76,7 @@ export function addSignedUrlsToCharacter(character: CharacterLike) {
   }
 }
 
-export function addSignedUrlToLocation(location: LocationLike) {
+function addSignedUrlToLocation(location: LocationLike) {
   const images = location.images?.map((img) => ({
     ...img,
     imageUrl: keyToSignedUrl(img.imageUrl),
@@ -85,20 +85,6 @@ export function addSignedUrlToLocation(location: LocationLike) {
   return {
     ...location,
     images,
-  }
-}
-
-export function addSignedUrlToAssetCharacter(character: { imageUrl: string | null } & UnknownRecord) {
-  return {
-    ...character,
-    imageUrl: keyToSignedUrl(character.imageUrl),
-  }
-}
-
-export function addSignedUrlToAssetLocation(location: { imageUrl: string | null } & UnknownRecord) {
-  return {
-    ...location,
-    imageUrl: keyToSignedUrl(location.imageUrl),
   }
 }
 
