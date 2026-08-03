@@ -74,16 +74,36 @@ function countVisible(
   return total
 }
 
+function collectFolderIds(root: WorkspaceCanvasFolderTreeNode, into: Set<string>): void {
+  for (const child of root.folders) {
+    if (child.folder) into.add(child.folder.resourceId)
+    collectFolderIds(child, into)
+  }
+}
+
 /**
  * The single display rule: everything starts expanded; while the visible card
  * count exceeds the budget, the expanded folder with the most descendant files
  * collapses next. Deterministic — no timers, no viewport heuristics.
+ *
+ * `seed` carries the folders already collapsed in the current canvas session:
+ * they stay collapsed (monotonic within one visit) so mid-session content
+ * growth can only add collapses, never pop a folded folder back open. The
+ * baseline resets when the canvas is entered again.
  */
 export function computeCollapsedWorkspaceFolders(
   root: WorkspaceCanvasFolderTreeNode,
   budget: number,
+  seed?: ReadonlySet<string>,
 ): ReadonlySet<string> {
   const collapsed = new Set<string>()
+  if (seed && seed.size > 0) {
+    const existing = new Set<string>()
+    collectFolderIds(root, existing)
+    for (const id of seed) {
+      if (existing.has(id)) collapsed.add(id)
+    }
+  }
   for (;;) {
     if (countVisible(root, collapsed) <= budget) break
     const candidates: WorkspaceCanvasFolderTreeNode[] = []

@@ -257,16 +257,31 @@ function ProjectWorkspaceFolderCanvas({
     && !layoutLoadError
 
   const savedNodeLayouts = layout?.nodeLayouts ?? EMPTY_SAVED_NODE_LAYOUTS
+  // Session-monotonic collapse seed: folders folded during this canvas visit
+  // never pop back open mid-session (the ref resets with the per-folder mount).
+  const collapsedFoldersRef = useRef<ReadonlySet<string>>(new Set())
   const projection = useWorkspaceNodeCanvasProjection({
     projectId,
     projectAspectRatio,
     currentFolderPath: folder.workspacePath || null,
+    collapsedSeed: collapsedFoldersRef.current,
     workspaceResources: resources,
     savedLayouts: savedNodeLayouts,
     translate: t,
   })
   const projectedNodes = projection.nodes
   const projectionEdges = projection.edges
+  useEffect(() => {
+    const next = new Set<string>()
+    for (const node of projectedNodes) {
+      if (node.data.kind === 'folder' && node.data.folder.display === 'card') {
+        next.add(node.data.folder.resourceId)
+      }
+    }
+    const current = collapsedFoldersRef.current
+    if (next.size === current.size && [...next].every((id) => current.has(id))) return
+    collapsedFoldersRef.current = next
+  }, [projectedNodes])
   const workspaceRuntimeTargets = useMemo(
     () => collectWorkspaceNodeRuntimeTargets(projectedNodes),
     [projectedNodes],

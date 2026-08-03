@@ -21,6 +21,8 @@ export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly projectAspectRatio?: string | null
   /** Current canvas folder path (`null` = project root); subtree rows resolve against it. */
   readonly currentFolderPath?: string | null
+  /** Folders already collapsed in this canvas session (monotonic, see expansion policy). */
+  readonly collapsedSeed?: ReadonlySet<string>
   readonly workspaceResources?: readonly WorkspaceResourceView[]
   readonly savedLayouts: readonly CanvasNodeLayout[]
   readonly translate: Translate
@@ -31,6 +33,7 @@ export function createWorkspaceNodeProjectionContext(input: BuildWorkspaceNodeCa
     projectId: input.projectId,
     projectAspectRatio: input.projectAspectRatio ?? null,
     currentFolderPath: input.currentFolderPath ?? null,
+    collapsedSeed: input.collapsedSeed,
     workspaceResources: input.workspaceResources ?? [],
     savedLayouts: input.savedLayouts,
     translate: input.translate,

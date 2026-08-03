@@ -16,11 +16,11 @@ export function useWorkspaceNodeCanvasProjection(
   input: BuildWorkspaceNodeCanvasProjectionInput,
 ): WorkspaceCanvasProjection {
   const {
-    projectId, projectAspectRatio, currentFolderPath, workspaceResources, savedLayouts, translate,
+    projectId, projectAspectRatio, currentFolderPath, collapsedSeed, workspaceResources, savedLayouts, translate,
   } = input
   return useMemo(() => buildWorkspaceNodeCanvasProjection({
-    projectId, projectAspectRatio, currentFolderPath, workspaceResources, savedLayouts, translate,
+    projectId, projectAspectRatio, currentFolderPath, collapsedSeed, workspaceResources, savedLayouts, translate,
   }), [
-    projectId, projectAspectRatio, currentFolderPath, workspaceResources, savedLayouts, translate,
+    projectId, projectAspectRatio, currentFolderPath, collapsedSeed, workspaceResources, savedLayouts, translate,
   ])
 }

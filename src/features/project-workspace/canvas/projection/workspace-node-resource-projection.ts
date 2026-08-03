@@ -255,7 +255,11 @@ export function appendWorkspaceResourceProjection(context: WorkspaceNodeProjecti
     currentFolderPath: context.currentFolderPath,
     resources: workspaceResources,
   })
-  const collapsedFolders = computeCollapsedWorkspaceFolders(tree, WORKSPACE_CANVAS_EXPANSION_BUDGET)
+  const collapsedFolders = computeCollapsedWorkspaceFolders(
+    tree,
+    WORKSPACE_CANVAS_EXPANSION_BUDGET,
+    context.collapsedSeed,
+  )
 
   const resourceElement = (resource: WorkspaceResourceView): ProjectionElement => {
     const card = resourceCard(resource)
