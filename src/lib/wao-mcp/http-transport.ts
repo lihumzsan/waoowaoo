@@ -3,8 +3,11 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
 import { readJsonWithLimit } from '@/lib/http/body-limits'
 import { getAssistantRuntimeService } from '@/lib/assistant-runtime'
-import { hasAssistantRuntimeOwnership } from '@/lib/assistant-runtime/runtime-ownership'
-import { prisma } from '@/lib/prisma'
+import {
+  AssistantRuntimeCapabilityTurnError,
+  requireAssistantRuntimeCapabilityTurn,
+  type AssistantRuntimeCapabilityTurn,
+} from '@/lib/assistant-runtime/capability-turn'
 import type {
   WaoMcpCallContextResolver,
   WaoMcpTrustedCallContext,
@@ -48,16 +51,6 @@ export class WaoMcpHttpBindingError extends Error {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function requireIdentity(
-  value: string | null,
-  code: WaoMcpHttpBindingErrorCode,
-): string {
-  if (!value || value !== value.trim()) {
-    throw new WaoMcpHttpBindingError(code)
-  }
-  return value
 }
 
 function parseOptionalIdentity(
@@ -329,77 +322,32 @@ async function resolveActiveRuntimeTurnBinding(
   readonly base: ActiveRuntimeTurnBinding
   readonly runtimeTurnId: string
 }> {
-  if (!await hasAssistantRuntimeOwnership(scope, scope.nonce)) {
+  let turn: AssistantRuntimeCapabilityTurn
+  try {
+    turn = await requireAssistantRuntimeCapabilityTurn({
+      scope,
+      ownerToken: scope.nonce,
+    })
+  } catch (error) {
+    if (!(error instanceof AssistantRuntimeCapabilityTurnError)) throw error
+    if (error.code === 'ACTIVE_TURN_AMBIGUOUS') {
+      throw new WaoMcpHttpBindingError('ACTIVE_TURN_AMBIGUOUS')
+    }
+    if (error.code === 'ACTIVE_TURN_IDENTITY_INVALID') {
+      throw new WaoMcpHttpBindingError('ACTIVE_TURN_IDENTITY_INVALID')
+    }
     throw new WaoMcpHttpBindingError('ACTIVE_TURN_NOT_FOUND')
-  }
-  const turns = await prisma.projectAgentTurn.findMany({
-    where: {
-      projectId: scope.projectId,
-      userId: scope.userId,
-      status: { in: ['running', 'waiting_approval'] },
-      cancelRequestId: null,
-      thread: {
-        projectId: scope.projectId,
-        userId: scope.userId,
-        assistantId: scope.assistantId,
-        clearRequestId: null,
-      },
-    },
-    select: {
-      id: true,
-      requestId: true,
-      executionOwnerId: true,
-      contextJson: true,
-      threadId: true,
-      runtimeTurnId: true,
-      thread: {
-        select: {
-          id: true,
-          runtimeThreadId: true,
-        },
-      },
-    },
-    orderBy: { createdAt: 'asc' },
-    take: 2,
-  })
-  if (turns.length === 0) {
-    throw new WaoMcpHttpBindingError('ACTIVE_TURN_NOT_FOUND')
-  }
-  if (turns.length !== 1) {
-    throw new WaoMcpHttpBindingError('ACTIVE_TURN_AMBIGUOUS')
-  }
-  const turn = turns[0]
-  if (!turn) {
-    throw new WaoMcpHttpBindingError('ACTIVE_TURN_NOT_FOUND')
-  }
-  const runtimeTurnId = requireIdentity(
-    turn.runtimeTurnId,
-    'ACTIVE_TURN_IDENTITY_INVALID',
-  )
-  requireIdentity(
-    turn.thread.runtimeThreadId,
-    'ACTIVE_TURN_IDENTITY_INVALID',
-  )
-  const executionOwnerId = requireIdentity(
-    turn.executionOwnerId,
-    'ACTIVE_TURN_IDENTITY_INVALID',
-  )
-  if (turn.threadId !== turn.thread.id) {
-    throw new WaoMcpHttpBindingError('ACTIVE_TURN_IDENTITY_INVALID')
   }
   if (!isRecord(turn.contextJson)) {
     throw new WaoMcpHttpBindingError('ACTIVE_TURN_CONTEXT_INVALID')
   }
   return {
-    runtimeTurnId,
+    runtimeTurnId: turn.runtimeTurnId,
     base: {
       threadId: turn.threadId,
-      turnId: turn.id,
-      requestId: requireIdentity(
-        turn.requestId,
-        'ACTIVE_TURN_IDENTITY_INVALID',
-      ),
-      executionOwnerId,
+      turnId: turn.turnId,
+      requestId: turn.requestId,
+      executionOwnerId: turn.executionOwnerId,
       userId: scope.userId,
       projectId: scope.projectId,
       source: 'codex_runtime_mcp',
