@@ -15,6 +15,11 @@ import type {
   AssistantRuntimeTurnIdentity,
 } from './contracts'
 import { isAssistantRuntimeSupportedRequestMethod } from './view-contract'
+import {
+  assistantRuntimeFailureForStopReason,
+  normalizeAssistantRuntimeFailure,
+  type AssistantRuntimeFailure,
+} from './runtime-error'
 
 type UIMessagePart = UIMessage['parts'][number]
 
@@ -249,6 +254,7 @@ export class AssistantRuntimeEventProjector {
   private finalizing = false
   private persistenceFailureReason: string | null = null
   private skillsRefreshFailed = false
+  private latestRuntimeFailure: AssistantRuntimeFailure | null = null
   private persistenceTail: Promise<void> = Promise.resolve()
   private skillsRefreshTail: Promise<void> = Promise.resolve()
   private terminalResolve: ((value: AssistantRuntimeTerminalProjection) => void) | null = null
@@ -414,12 +420,22 @@ export class AssistantRuntimeEventProjector {
         }, 'interaction_resolution_failed')
         return
       }
+      case 'error':
+        this.consumeRuntimeError(params)
+        return
       case 'turn/completed':
         this.consumeTurnCompleted(params)
         return
       default:
         return
     }
+  }
+
+  private consumeRuntimeError(params: RuntimeJsonObject): void {
+    const failure = normalizeAssistantRuntimeFailure(params.error)
+    if (failure) this.latestRuntimeFailure = failure
+    // `willRetry=true` is an app-server-owned retry within the same Turn.
+    // It is progress, not a second lifecycle or a Product Turn terminal fact.
   }
 
   private consumeGoal(params: RuntimeJsonObject): void {
@@ -785,7 +801,8 @@ export class AssistantRuntimeEventProjector {
       this.finish({ status: 'interrupted', stopReason: 'runtime_interrupted' })
       return
     }
-    this.finish({ status: 'failed', stopReason: 'runtime_failed' })
+    const failure = normalizeAssistantRuntimeFailure(turn?.error) ?? this.latestRuntimeFailure
+    this.finish({ status: 'failed', stopReason: 'runtime_failed', failure })
   }
 
   private consumeTokenUsage(params: RuntimeJsonObject): void {
@@ -826,6 +843,7 @@ export class AssistantRuntimeEventProjector {
   private finish(input: {
     readonly status: AssistantRuntimeTerminalProjection['status']
     readonly stopReason: string
+    readonly failure?: AssistantRuntimeFailure | null
   }): void {
     if (this.terminalProjection || this.finalizing) return
     if (this.terminalizeOpenToolParts(input.stopReason)) {
@@ -833,12 +851,11 @@ export class AssistantRuntimeEventProjector {
     }
     this.finalizing = true
     void this.skillsRefreshTail.then(async () => await this.persistenceTail).then(() => {
-      this.finishAfterPersistence({
-        status: this.persistenceFailureReason || this.skillsRefreshFailed ? 'failed' : input.status,
-        stopReason: this.skillsRefreshFailed
-          ? 'skills_list_failed'
-          : this.persistenceFailureReason ?? input.stopReason,
-      })
+      const stopReason = this.skillsRefreshFailed
+        ? 'skills_list_failed'
+        : this.persistenceFailureReason ?? input.stopReason
+      const status = this.persistenceFailureReason || this.skillsRefreshFailed ? 'failed' : input.status
+      this.finishAfterPersistence({ status, stopReason, failure: input.failure })
     })
   }
 
@@ -871,12 +888,18 @@ export class AssistantRuntimeEventProjector {
   private finishAfterPersistence(input: {
     readonly status: AssistantRuntimeTerminalProjection['status']
     readonly stopReason: string
+    readonly failure?: AssistantRuntimeFailure | null
   }): void {
     if (this.terminalProjection) return
     const assistantMessage = this.buildAssistantMessage()
+    const failure = input.status === 'failed'
+      ? input.failure ?? assistantRuntimeFailureForStopReason(input.stopReason)
+      : null
     const projection: AssistantRuntimeTerminalProjection = {
       status: input.status,
       stopReason: input.stopReason,
+      errorCode: failure?.errorCode ?? null,
+      errorMessage: failure?.errorMessage ?? null,
       assistantMessage,
       usage: this.latestUsage
         ? {

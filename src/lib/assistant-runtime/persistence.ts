@@ -1309,8 +1309,8 @@ export async function settleAssistantRuntimeTurn(input: {
         status: input.projection.status,
         assistantMessageId: input.projection.assistantMessage?.id ?? null,
         stopReason: input.projection.stopReason,
-        errorCode: input.projection.status === 'failed' ? 'ASSISTANT_RUNTIME_TURN_FAILED' : null,
-        errorMessage: null,
+        errorCode: input.projection.errorCode,
+        errorMessage: input.projection.errorMessage,
         finishedAt: new Date(),
       },
     })

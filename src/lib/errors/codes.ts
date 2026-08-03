@@ -332,6 +332,8 @@ export const ERROR_CATALOG = {
   AGENT_STEER_HANDOFF_UNCERTAIN: defineErrorSpec('AGENT_STEER_HANDOFF_UNCERTAIN', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant steer handoff outcome is unknown'),
   AGENT_START_HANDOFF_UNCERTAIN: defineErrorSpec('AGENT_START_HANDOFF_UNCERTAIN', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant turn start handoff outcome is unknown'),
   PROJECT_AGENT_RUNTIME_FAILED: defineErrorSpec('PROJECT_AGENT_RUNTIME_FAILED', 502, true, ERROR_CATEGORY.SYSTEM, 'Assistant runtime failed'),
+  ASSISTANT_PROVIDER_REQUEST_INVALID: defineErrorSpec('ASSISTANT_PROVIDER_REQUEST_INVALID', 400, false, ERROR_CATEGORY.PROVIDER, 'The assistant provider rejected the conversation request'),
+  ASSISTANT_RUNTIME_PROTOCOL_ERROR: defineErrorSpec('ASSISTANT_RUNTIME_PROTOCOL_ERROR', 502, false, ERROR_CATEGORY.SYSTEM, 'The assistant runtime protocol is incompatible'),
   PROJECT_AGENT_ASSISTANT_MODEL_NOT_CONFIGURED: defineErrorSpec('PROJECT_AGENT_ASSISTANT_MODEL_NOT_CONFIGURED', 400, false, ERROR_CATEGORY.PROVIDER, 'Assistant model is not configured'),
   PROJECT_AGENT_ASSISTANT_MODEL_INVALID: defineErrorSpec('PROJECT_AGENT_ASSISTANT_MODEL_INVALID', 400, false, ERROR_CATEGORY.PROVIDER, 'Assistant model configuration is invalid'),
   PROJECT_DELETE_ACTIVE_EXECUTION: defineErrorSpec('PROJECT_DELETE_ACTIVE_EXECUTION', 409, false, ERROR_CATEGORY.VALIDATION, 'Project has active work'),

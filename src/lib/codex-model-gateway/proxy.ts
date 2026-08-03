@@ -25,6 +25,58 @@ function validateResponsesEndpoint(request: Request): void {
   }
 }
 
+function readInstructionMessage(item: Record<string, unknown>): string | null {
+  if (item.type !== 'message') return null
+  if (item.role !== 'developer' && item.role !== 'system') return null
+  if (!Array.isArray(item.content) || item.content.length === 0) {
+    throw new CodexModelGatewayError('REQUEST_INSTRUCTIONS_INVALID', 400)
+  }
+  const parts = item.content.map((part) => {
+    if (
+      !isRecord(part)
+      || part.type !== 'input_text'
+      || typeof part.text !== 'string'
+      || !part.text.trim()
+    ) {
+      throw new CodexModelGatewayError('REQUEST_INSTRUCTIONS_INVALID', 400)
+    }
+    return part.text
+  })
+  return parts.join('\n\n')
+}
+
+/**
+ * Codex may append current-Turn developer context after Product View history.
+ * OpenRouter's Anthropic-compatible routes translate that item to a mid-history
+ * system message and reject the otherwise valid Responses request. The gateway
+ * is the single provider adaptation boundary, so it lifts every instruction
+ * message into the canonical top-level `instructions` field while preserving
+ * all user, assistant, tool and reasoning items in their original order.
+ */
+export function normalizeCodexProviderRequest(body: Record<string, unknown>): void {
+  const topLevel = body.instructions
+  if (topLevel !== undefined && topLevel !== null && typeof topLevel !== 'string') {
+    throw new CodexModelGatewayError('REQUEST_INSTRUCTIONS_INVALID', 400)
+  }
+  if (!Array.isArray(body.input)) return
+
+  const instructions = typeof topLevel === 'string' && topLevel.trim()
+    ? [topLevel]
+    : []
+  const input: unknown[] = []
+  for (const item of body.input) {
+    if (!isRecord(item)) {
+      input.push(item)
+      continue
+    }
+    const instruction = readInstructionMessage(item)
+    if (instruction === null) input.push(item)
+    else instructions.push(instruction)
+  }
+  body.input = input
+  if (instructions.length > 0) body.instructions = instructions.join('\n\n')
+}
+
 async function readAndValidateBody(params: {
   readonly request: Request
   readonly runtimeModelId: string
@@ -57,6 +109,7 @@ async function readAndValidateBody(params: {
   if (parsed.model !== params.runtimeModelId) {
     throw new CodexModelGatewayError('REQUEST_MODEL_MISMATCH', 403)
   }
+  normalizeCodexProviderRequest(parsed)
   parsed.model = params.upstreamModelId
   return Buffer.from(JSON.stringify(parsed), 'utf8')
 }

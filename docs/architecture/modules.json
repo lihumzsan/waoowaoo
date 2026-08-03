@@ -218,6 +218,7 @@
         "src/lib/api-auth.ts",
         "src/lib/auth",
         "src/lib/deployment",
+        "src/lib/errors",
         "src/lib/home",
         "src/lib/profile",
         "src/lib/projects",
