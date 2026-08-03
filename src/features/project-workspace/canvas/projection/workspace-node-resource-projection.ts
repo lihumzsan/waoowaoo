@@ -317,13 +317,14 @@ export function appendWorkspaceResourceProjection(context: WorkspaceNodeProjecti
     folderResource: WorkspaceResourceView,
     display: 'card' | 'section',
     childCount: number,
+    titleLabel: string,
   ) => ({
     projectId,
     kind: 'folder' as const,
     layoutNodeType: 'folder' as const,
     targetType: 'folder' as const,
     targetId: folderResource.resourceId,
-    title: folderResource.name,
+    title: titleLabel,
     eyebrow: translate('nodes.folder.eyebrow'),
     ...workspaceCanvasSucceededResourcePresentation(),
     runtimeTargets: [],
@@ -338,6 +339,7 @@ export function appendWorkspaceResourceProjection(context: WorkspaceNodeProjecti
   const folderCardElement = (
     treeNode: WorkspaceCanvasFolderTreeNode,
     folderResource: WorkspaceResourceView,
+    titleLabel: string,
   ): ProjectionElement => {
     const nodeId = workspaceNodeId.folder(folderResource.resourceId)
     return {
@@ -352,18 +354,24 @@ export function appendWorkspaceResourceProjection(context: WorkspaceNodeProjecti
           height: FOLDER_HEIGHT,
           parentId: parentId ?? undefined,
           draggable: parentId ? false : undefined,
-          data: folderData(folderResource, 'card', countWorkspaceFolderFiles(treeNode)),
+          data: folderData(folderResource, 'card', countWorkspaceFolderFiles(treeNode), titleLabel),
         }))
       },
     }
   }
 
+  /**
+   * Flat section: frames never nest. A section holds only its folder's direct
+   * files; deeper folders become their own top-level sections (or collapsed
+   * cards), all labeled with their path relative to the current canvas.
+   */
   const sectionElement = (
     treeNode: WorkspaceCanvasFolderTreeNode,
     folderResource: WorkspaceResourceView,
+    titleLabel: string,
   ): ProjectionElement => {
     const nodeId = workspaceNodeId.folder(folderResource.resourceId)
-    const inner = folderElements(treeNode)
+    const inner = treeNode.resources.map(resourceElement)
     const packed = packProjectionElements(inner)
     const width = Math.max(packed.width, SECTION_MIN_CONTENT_WIDTH) + SECTION_PADDING_X * 2
     const height = packed.height + SECTION_HEADER_HEIGHT + SECTION_PADDING_BOTTOM
@@ -378,7 +386,7 @@ export function appendWorkspaceResourceProjection(context: WorkspaceNodeProjecti
           width,
           height,
           parentId: parentId ?? undefined,
-          data: folderData(folderResource, 'section', countWorkspaceFolderFiles(treeNode)),
+          data: folderData(folderResource, 'section', treeNode.resources.length, titleLabel),
         }))
         inner.forEach((el, index) => {
           el.emit({
@@ -390,24 +398,28 @@ export function appendWorkspaceResourceProjection(context: WorkspaceNodeProjecti
     }
   }
 
-  const folderElements = (treeNode: WorkspaceCanvasFolderTreeNode): ProjectionElement[] => [
-    ...treeNode.resources.map(resourceElement),
-    ...treeNode.folders.flatMap((child) => {
+  const topElements: ProjectionElement[] = tree.resources.map(resourceElement)
+  const collectFlatElements = (treeNode: WorkspaceCanvasFolderTreeNode, trail: readonly string[]) => {
+    for (const child of treeNode.folders) {
       const folderResource = child.folder
-      if (!folderResource) return []
+      if (!folderResource) continue
       // Folders without any descendant file stay off the canvas entirely:
       // the canvas shows content, not structure. The folder Resource still
       // exists and remains reachable through search.
-      if (countWorkspaceFolderFiles(child) === 0) return []
-      return [
-        collapsedFolders.has(folderResource.resourceId)
-          ? folderCardElement(child, folderResource)
-          : sectionElement(child, folderResource),
-      ]
-    }),
-  ]
-
-  const topElements = folderElements(tree)
+      if (countWorkspaceFolderFiles(child) === 0) continue
+      const childTrail = [...trail, folderResource.name]
+      const titleLabel = childTrail.join(' / ')
+      if (collapsedFolders.has(folderResource.resourceId)) {
+        topElements.push(folderCardElement(child, folderResource, titleLabel))
+        continue
+      }
+      if (child.resources.length > 0) {
+        topElements.push(sectionElement(child, folderResource, titleLabel))
+      }
+      collectFlatElements(child, childTrail)
+    }
+  }
+  collectFlatElements(tree, [])
   const packedTop = packProjectionElements(topElements)
   topElements.forEach((el, index) => {
     const fallback = {
