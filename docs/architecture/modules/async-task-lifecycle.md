@@ -120,6 +120,10 @@ gate。Temporal transport 不拥有业务结果，MySQL Task/Resource/Billing/Pr
   terminal failure。最终失败只持久化 registry code 与内部诊断 message，对外 Task View、
   TaskEvent/SSE 和 Agent continuation 只投影 code。用户取消只写 `status=canceled`，Task 与
   Resource 的 errorCode/errorMessage 必须为空，消费者不得再从“任务已取消”等文案反解状态。
+- **TL-24 — Worker 只执行冻结计划。** 媒体 Task payload 必须携带 planner 已验证的 model、
+  canonical generation options、精确 Resource 版本和公共时长；handler 只负责 owner-aware
+  URL 解析、provider fence、调用与结果持久化。Worker 不读取当前项目配置、不补 capability
+  默认、不更换模型，也不静默丢弃已冻结字段；payload 自相矛盾属于显式内部不变量失败。
 
 ## 状态与写入者
 

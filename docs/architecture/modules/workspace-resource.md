@@ -25,6 +25,7 @@
 - **WR-13 — 大项目按目录读取。** Agent 通过普通 `rg/read/bash` 探索用户树；Canvas 和 API 用 cursor 分页与 bounded summary，不读取全部正文——文本/结构化的列表摘要只来自版本行物化的 `contentPreview`，列表路径零对象存储读取。完整正文只经单资源读取入口（`readWorkspaceResource` 与其唯一 HTTP route）按需加载。Runtime Bundle 上限与 Canvas 5,000 项视图上限必须明确失败，不能恢复 200 条静默截断。
 - **WR-14 — Agent/Subagent 写入边界显式。** 主 Agent 是全局一致性文件的唯一 writer；并行 Subagent 只能写被分配的互斥目录。两个 writer 争用同路径由 `(projectId, activePath)` 与 checkpoint baseline fail closed，不靠最后写入覆盖。
 - **WR-15 — MCP 边界同步同一工作区。** Wao MCP Operation 开始前必须在 Session Manager 的唯一 persistence queue 中 capture Runtime，使本 Turn 新建目录和文本进入 Catalog；Operation 结束后只在 Runtime 自 preflight 后未变化时把最新 Catalog 投影（包括 pending `.resource` 和 Task 系统视图）刷新回 Runtime。任一同步失败都不得开始新的付费执行或伪装成功；Catalog、Task 与幂等执行身份仍是恢复权威。
+- **WR-16 — 媒体创建按模态编译一次。** `create_image`、`create_audio`、`create_video`、`generate_voice` 与 Production Manifest 的公开 schema 只暴露各自稳定的产品字段，严格拒绝跨模态 schema、自由 `generationOptions`、输出格式与 model/provider。Planner 在任何 Plan、报价、Resource 或 Task 副作用前解析正式模型与配置、校验精确引用、编译 canonical option 并冻结到 Task payload；公开引用上限必须能被共享 Task envelope 无损表示，Worker 只能消费这份冻结结果。角色、场景与道具图片由 Asset Format Policy 追加唯一固定提示词并强制 4:3，普通图片与视频继续冻结项目画幅。
 
 ## 权威所有权与入口
 
@@ -71,6 +72,8 @@ Route、UI、MCP 和未来 CLI 都只能调用这些入口，不能直接写 Wor
 - Production Manifest：同一快照报价、成员稳定 identity、成功不重跑、失败成员续跑、FollowUp 至多一次。
 
 ## 历史回归
+
+- WorkspaceResource 媒体入口首次真实创作时仍沿用面向内部调用方的通用 `modelKey + generationOptions` 形状：Agent 可传入不属于当前模态的字段，模型默认值、引用上限和音乐格式又延迟到 Worker 才解释；资产图片因此以 `generic.image + 项目 16:9` 生成，音乐还会在 Provider fence 前以通用内部错误失败。旧 Registry conformance 只验证“会生产 Resource”，没有枚举公开输入边界。当前五个媒体入口按模态严格注册，统一 planner 在副作用前完成模型、能力、引用与 option 编译；资产 schema 由服务端唯一追加固定 4:3 格式，Worker 不再重新规划。
 
 - `delete_resource` 首版接受 `workspacePath`，目录树只有 Agent checkpoint 调用时尚未暴露问题；新增 Canvas 删除入口后，旧 View 与并发移动之间可能让同一路径的新 Resource 被误删，说明 path 是可变位置而不是删除 identity。当前 Operation、Canvas Action View、确认 request identity 与持久化 writer 全部传 canonical `resourceId`，在 Project 锁内一次解析当前子树；path 只用于精确确认文案和恢复目的地，不再决定删除目标。
 

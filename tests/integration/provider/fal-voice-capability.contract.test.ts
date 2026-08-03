@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
-import { normalizeAiOptions } from '@/lib/ai-exec/normalize'
+import { AiOptionValidationError, normalizeAiOptions } from '@/lib/ai-exec/normalize'
 import { falAdapter } from '@/lib/ai-providers/fal/adapter'
 import {
   FAL_PLATFORM_DEFAULT_VOICE_MODEL_KEY,
@@ -61,12 +61,12 @@ describe('FAL Qwen voice-design capability', () => {
       schema,
       options: { language: 'Esperanto' },
       context: 'fal-voice-test',
-    })).toThrow('AI_OPTION_INVALID:fal-voice-test:language')
+    })).toThrow(AiOptionValidationError)
     expect(() => normalizeAiOptions({
       schema,
       options: { language: 'Chinese', temperature: 0.8 },
       context: 'fal-voice-test',
-    })).toThrow('AI_OPTION_UNSUPPORTED:fal-voice-test:temperature')
+    })).toThrow(AiOptionValidationError)
     expect(fetchMock).not.toHaveBeenCalled()
   })
 

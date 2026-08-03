@@ -118,7 +118,9 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
         if (
           capability.kind !== 'request_count'
           || !['image', 'video', 'music', 'voice'].includes(String(capability.mediaKind))
-          || !['new', 'single'].includes(String(capability.requestKind))
+          || capability.requestKind !== 'new'
+          || typeof capability.defaultSchemaId !== 'string'
+          || !capability.defaultSchemaId.trim()
           || capability.minCount !== 1
           || capability.maxCount !== 6
         ) {
@@ -129,6 +131,9 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
           : capability.mediaKind
         if (!(resourceContract.outputMediaTypes as unknown[]).includes(expectedOutputMediaType)) {
           throw new Error(`PROJECT_AGENT_OPERATION_ALTERNATIVE_CAPABILITY_MEDIA_MISMATCH:${operationId}`)
+        }
+        if (!(resourceContract.outputSchemaIds as unknown[]).includes(capability.defaultSchemaId)) {
+          throw new Error(`PROJECT_AGENT_OPERATION_ALTERNATIVE_CAPABILITY_SCHEMA_MISMATCH:${operationId}`)
         }
         const inputLimits = capability.inputLimits
         if (inputLimits !== undefined) {

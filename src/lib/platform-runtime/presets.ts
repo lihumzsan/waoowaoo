@@ -124,11 +124,13 @@ export function getPlatformCapabilityDefaults(): CapabilitySelections {
   const defaults: CapabilitySelections = {}
   const imageOptions = platformImageOptions()
   const videoOptions = getPlatformVideoGenerationOptions()
+  const musicOptions = getPlatformMusicGenerationOptions()
 
   assignCapabilityDefault(defaults, getPlatformRuntimePlan('character-image').modelKey, imageOptions)
   assignCapabilityDefault(defaults, getPlatformRuntimePlan('location-image').modelKey, imageOptions)
   assignCapabilityDefault(defaults, getPlatformRuntimePlan('edit-image').modelKey, imageOptions)
   assignCapabilityDefault(defaults, getPlatformRuntimePlan('video').modelKey, videoOptions)
+  assignCapabilityDefault(defaults, getPlatformRuntimePlan('music').modelKey, musicOptions)
 
   return defaults
 }

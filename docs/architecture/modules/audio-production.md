@@ -14,6 +14,7 @@
 - **AP-04 — 音色是资源。** 角色/旁白参考音色只有在本次输入显式引用并冻结其 resourceId/version 时才传给 Provider；“当前音色”或最近记录不是事实。
 - **AP-05 — 混音确定且有界。** 输入视频/音频、顺序、start/end、gain/fade/automation 全部冻结；输出时长由 stitched timeline 决定。执行统一采样率、PTS、pad/trim 和超时，不能分析内容后改写创作决定。
 - **AP-06 — 终态不连锁。** 音频 Task 只结算自身 Resource/账单；后续采用、重做、混音或视频均需独立用户意图和授权。
+- **AP-07 — 音乐输入是显式产品字段。** `create_audio` 只接收 `durationSeconds`、`vocalMode`、`genre`、`mood`、`bpm` 与精确 context/video 引用；格式、模型和 provider option 由服务端 registry/config 编译并在 Plan 前校验。原始 prompt 与这些字段由唯一共享编译器组成 Provider 最终文本，Planner 对最终文本执行模型长度校验；Task handler 只消费冻结结果，不能把缺失默认值或可预测的 prompt 超限改写为 Worker 内部错误。
 
 ## 权威入口
 

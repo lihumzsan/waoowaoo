@@ -1,5 +1,4 @@
 import { generateMusic } from '@/lib/ai-exec/engine'
-import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
 import {
   parseWorkspaceResourceGenerationTaskPayload,
   type WorkspaceResourceGenerationTaskPayload,
@@ -34,15 +33,6 @@ async function loadMusicVideoReference(
     return reference
   })
   if (videoInputs.length === 0) return null
-  const maxReferenceVideos = resolveBuiltinCapabilitiesByModelKey(
-    'music',
-    payload.resource.modelKey,
-  )?.music?.maxReferenceVideos
-  if (!maxReferenceVideos || videoInputs.length > maxReferenceVideos) {
-    throw new Error(
-      `MUSIC_MODEL_VIDEO_REFERENCE_LIMIT_EXCEEDED:${payload.resource.modelKey}:${String(videoInputs.length)}:${String(maxReferenceVideos ?? 0)}`,
-    )
-  }
   const reference = videoInputs[0]
   if (!reference) throw new Error('WORKSPACE_RESOURCE_MUSIC_VIDEO_REFERENCE_REQUIRED')
   const [resource] = await resolveWorkspaceResourceInputMedia({
@@ -81,6 +71,7 @@ export async function handleWorkspaceResourceAudioTask(context: TaskExecutionCon
   }
 
   const videoReference = await loadMusicVideoReference(context, payload)
+  const options = payload.generationOptions
   await reportTaskProgress(context, 20, { stage: 'generate_music_submit' })
 
   const invocationKey = 'media:music:primary'
@@ -90,11 +81,18 @@ export async function handleWorkspaceResourceAudioTask(context: TaskExecutionCon
     prompt,
     {
       durationSeconds,
-      ...(payload.vocalMode ? { vocalMode: payload.vocalMode } : {}),
-      ...(payload.genre ? { genre: payload.genre } : {}),
-      ...(payload.mood ? { mood: payload.mood } : {}),
-      ...(typeof payload.bpm === 'number' ? { bpm: payload.bpm } : {}),
-      ...(payload.outputFormat ? { outputFormat: payload.outputFormat } : {}),
+      ...(typeof options.negativePrompt === 'string'
+        ? { negativePrompt: options.negativePrompt }
+        : {}),
+      ...(options.vocalMode === 'instrumental' || options.vocalMode === 'vocal'
+        ? { vocalMode: options.vocalMode }
+        : {}),
+      ...(typeof options.genre === 'string' ? { genre: options.genre } : {}),
+      ...(typeof options.mood === 'string' ? { mood: options.mood } : {}),
+      ...(typeof options.bpm === 'number' ? { bpm: options.bpm } : {}),
+      ...(options.outputFormat === 'mp3' || options.outputFormat === 'wav'
+        ? { outputFormat: options.outputFormat }
+        : {}),
       ...(videoReference
         ? {
             referenceVideoUrl: videoReference.url,

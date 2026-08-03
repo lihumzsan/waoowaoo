@@ -25,14 +25,20 @@ import type { ProjectAgentOperationContext, ProjectAgentOperationRegistryDraft }
 import { prisma } from '@/lib/prisma'
 import { stableArgsFingerprint, stableArgsHash } from '@/lib/project-agent/stable-args-hash'
 import { TASK_TYPE } from '@/lib/task/types'
+import {
+  preflightMediaGenerationOptions,
+  preflightMediaProviderRoutes,
+} from '@/lib/ai-exec/media-preflight'
+import { AiOptionValidationError } from '@/lib/ai-exec/normalize'
+import { ApiError } from '@/lib/api-errors'
 
 const voiceNewSchema = z.object({
   kind: z.literal('new'),
-  outputPath: z.string().trim().min(1).max(512),
+  outputPath: z.string().trim().min(1).max(512)
+    .regex(/\.resource$/u, 'Voice outputPath must end in .resource.'),
   description: z.string().trim().min(1).max(4_000),
   previewText: z.string().trim().min(1).max(10_000),
   language: z.enum(VOICE_DESIGN_LANGUAGE_OPTIONS),
-  modelKey: z.string().trim().min(1).max(191).optional(),
   count: z.number().int().min(1).max(6).default(1),
 }).strict()
 
@@ -43,7 +49,16 @@ const voiceRetrySchema = z.object({
 
 const generateVoiceInputSchema = z.object({
   request: z.discriminatedUnion('kind', [voiceNewSchema, voiceRetrySchema]),
-}).strict()
+}).strict().superRefine((value, context) => {
+  if (value.request.kind === 'retry'
+    && new Set(value.request.resourceIds).size !== value.request.resourceIds.length) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['request', 'resourceIds'],
+      message: 'resourceIds must be unique',
+    })
+  }
+})
 
 const generateVoiceOutputSchema = refineTaskBatchSubmitOperationOutputSchema(
   taskBatchSubmitOperationOutputSchemaBase.extend({
@@ -76,15 +91,49 @@ function alternativePath(outputPath: string, memberIndex: number): string {
   return `${outputPath.slice(0, -extension.length)}-${String(memberIndex + 1)}${extension}`
 }
 
+async function preflightVoiceGeneration(
+  ctx: ProjectAgentOperationContext,
+  voiceModel: string,
+  requestedLanguage: string,
+): Promise<string> {
+  try {
+    const preflight = await preflightMediaGenerationOptions({
+      userId: ctx.userId,
+      modelKey: voiceModel,
+      modality: 'voice',
+      options: { language: requestedLanguage },
+    })
+    const language = typeof preflight.options?.language === 'string'
+      ? preflight.options.language
+      : requestedLanguage
+    preflightMediaProviderRoutes({
+      selection: preflight.selection,
+      modality: 'voice',
+      options: { language },
+    })
+    return language
+  } catch (error) {
+    if (error instanceof AiOptionValidationError) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'VOICE_GENERATION_OPTION_INVALID',
+        field: error.field ?? 'language',
+        reason: error.reason ?? error.failure,
+      })
+    }
+    throw error
+  }
+}
+
 async function planNewVoice(
   ctx: ProjectAgentOperationContext,
   request: z.infer<typeof voiceNewSchema>,
 ): Promise<OperationPlan> {
-  const voiceModel = request.modelKey ?? await resolveSystemModelKey({
+  const voiceModel = await resolveSystemModelKey({
     userId: ctx.userId,
     projectId: ctx.projectId,
     purpose: 'voice-design',
   })
+  const language = await preflightVoiceGeneration(ctx, voiceModel, request.language)
   const fingerprint = stableArgsHash({ request, voiceModel })
   const requestId = [
     'generate_voice', ctx.userId, ctx.projectId,
@@ -112,7 +161,7 @@ async function planNewVoice(
     const inputHash = stableArgsFingerprint({
       description: request.description,
       previewText: request.previewText,
-      language: request.language,
+      language,
       voiceModel,
       memberIndex: resource.memberIndex,
     })
@@ -141,9 +190,9 @@ async function planNewVoice(
       },
       voiceModel,
       previewText: request.previewText,
-      language: request.language,
+      language,
       count: 1 as const,
-      generationOptions: { language: request.language },
+      generationOptions: { language },
     }
     return createPlannedTask({
       id: resource.taskPlanId,
@@ -189,12 +238,20 @@ async function planRetryVoice(
     include: { task: { select: { id: true, type: true, payload: true } } },
   })
   const byId = new Map(rows.map((row) => [row.id, row]))
-  const resources = resourceIds.map((resourceId, memberIndex) => {
+  const resources = await Promise.all(resourceIds.map(async (resourceId, memberIndex) => {
     const row = byId.get(resourceId)
     if (!row?.task || row.task.type !== TASK_TYPE.WORKSPACE_RESOURCE_VOICE) {
-      throw new Error(`WORKSPACE_RESOURCE_VOICE_RETRY_TARGET_INVALID:${resourceId}`)
+      throw new ApiError('WORKSPACE_RESOURCE_RETRY_TARGET_INVALID', { resourceId })
     }
-    parseWorkspaceResourceGenerationTaskPayload(row.task.payload)
+    const source = parseWorkspaceResourceGenerationTaskPayload(row.task.payload)
+    if (
+      source.voiceModel !== source.resource.modelKey
+      || typeof source.language !== 'string'
+      || !source.language.trim()
+    ) {
+      throw new Error(`WORKSPACE_RESOURCE_VOICE_RETRY_FROZEN_INPUT_INVALID:${resourceId}`)
+    }
+    await preflightVoiceGeneration(ctx, source.voiceModel, source.language)
     return {
       resourceId,
       workspacePath: row.workspacePath,
@@ -202,7 +259,7 @@ async function planRetryVoice(
       taskPlanId: `generate_voice:retry:${resourceId}`,
       sourceTask: row.task,
     }
-  })
+  }))
   const tasks = resources.map((resource): PlannedTask => {
     const payload = parseWorkspaceResourceGenerationTaskPayload(resource.sourceTask.payload)
     return createPlannedTask({
@@ -341,7 +398,8 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
         alternativeGeneration: {
           kind: 'request_count',
           mediaKind: 'voice',
-          requestKind: 'single',
+          requestKind: 'new',
+          defaultSchemaId: WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
           minCount: 1,
           maxCount: 6,
           inputLimits: { promptMaxLength: 4_000, previewTextMaxLength: 10_000 },

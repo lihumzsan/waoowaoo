@@ -27,7 +27,10 @@ const frozenResourceSchema = z.object({
   prompt: z.string().trim().min(1).max(100_000),
   modelKey: z.string().trim().min(1).max(191),
   inputs: z.array(workspaceResourceInputRefSchema).max(16),
-  imageInputPositions: z.array(z.number().int().nonnegative()).max(8),
+  // Shared task envelope must accept the largest declared image capability.
+  // Video models are still constrained to their own max (currently 8) by
+  // planning preflight; GPT Image 2 legitimately accepts up to 16 references.
+  imageInputPositions: z.array(z.number().int().nonnegative()).max(16),
   audioInputPositions: z.array(z.number().int().nonnegative()).max(3),
   videoInputPositions: z.array(z.number().int().nonnegative()).max(1),
   toolCallId: z.string().trim().min(1).max(191).nullable(),

@@ -50,6 +50,7 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
   `failed` poll结果必须携带 code。共享 normalize只接受 typed code/status作为兜底，不得以
   Provider英文/中文 message子串猜业务语义。原始响应只进入受限内部诊断，用户和模型投影
   不得读取。连接诊断也只返回有限 `messageKey`，不得把 Provider detail交给浏览器。
+- **PG-20 — 同一模态共享一次 preflight 与错误分类。** Operation planner 与 `ai-exec` 必须调用同一个 option normalizer；planner 还要在 Plan 前验证所选 provider 凭证/连接配置，并让确切的冻结 Worker option 通过全部 registry 声明的 pre-accept route。Provider 缺省 base URL 只来自 API config registry，不能由 adapter 私自补另一份。已冻结 option 到 adapter 前不得再补默认或删除未知字段。音乐产品字段由共享编译器组成最终 wire prompt，长度约束必须检查该最终文本，而非只检查尚未追加 genre/mood/时长的原文。使用同一 SDK 的 provider 模态共用一个 typed HTTP/stream classifier，至少保留鉴权、账户额度、限流、内容/隐私策略、请求拒绝、外部故障与网络超时；adapter 只补充该模态确实独有的响应结构校验。敏感内容拒绝是 permanent 业务事实，不能坍缩成内部错误或被 Agent 跨工具绕过。
 
 ## 权威入口
 
@@ -84,6 +85,10 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 
 脚本模型、脚本媒体 Provider 和创作 Journey 已删除；真实模型质量、付费 Provider 接受度与长上传时延只能通过发布前真实调用和生产观测验证。
 ## 历史回归
+
+- OpenRouter Image 与 Video 已迁到同一官方 SDK，但两者分别维护错误判断：真实视频返回 `InputImageSensitiveContentDetected.PrivacyInformation` 时被包装为通用外部错误，Agent 随后改走直接视频与批量清单重复尝试；图片 SDK 的 HTTP 和 mid-stream 机器错误也没有一致语义。Mureka 同期把 HTTP 200 的任意 `message` 当错误，又让非 2xx、缺 task id 与错误的 sync execution mode 混在一起。当前 OpenRouter 两个模态共用唯一 SDK HTTP/stream classifier，隐私/内容拒绝映射为 permanent typed failure；Mureka 只按官方协议从非 2xx `error` 读取拒绝，200 读取 task id，并按真实异步 external-id 生命周期注册。无法证明是否受理的无结构响应仍保持 outcome-unknown，不自动重提。
+
+- 媒体 Operation 曾只解析“模型存在”，没有在 Plan 前读取实际 Provider 配置；用户配置省略 OpenRouter base URL 时，API config 表单明明声明官方默认地址，Worker 却在 Resource/Task 已建立后才报 `PROVIDER_BASE_URL_MISSING`。同一根因还让 Ark 连接测试使用私有默认地址而真实 LLM runtime 得不到地址，图片、视频和轮询又各自硬编码官方地址。当前 runtime config 的缺省 base URL 唯一来自 API config registry；Ark 的连接测试、同步提交、异步轮询与 LLM 共用这份配置并允许同一显式 override。planner 在报价与任何持久副作用前验证所选 Provider 凭证/连接；route 等价但 option schema 不兼容也在同一 preflight 原地失败。
 
 - 视频 retry 已能从 failed Resource 恢复冻结输入，但每个 attempt 都重新签发私有图片/声音 URL；Gateway 又把完整签名 URL 计入 durable request hash。真实 Provider 明确 retryable 拒绝后，下一 attempt 因 `X-Amz-*` 与过期时间变化在发请求前触发 checkpoint request mismatch，用户看到“可重试”却永远无法重新提交。旧 retry 修复只证明原 Task/payload 与 Resource identity 稳定，没有区分业务对象身份和传输凭据。当前所有媒体 route 在 claim fence 前用同一个 identity projector 移除媒体 URL query/hash，wire 输入不变；对象 origin/path、顺序和 canonical option 继续参与 hash。
 - OpenRouter GPT Image 2 的同步 AI SDK `generateImage` 只能等待 `/images` 返回整包 JSON；真实 4:3 1K high 请求中，七张图在 118–195 秒内完成，两个同场景请求都在约 200.47 秒被传输对端关闭，应用的 5 分钟总超时尚未触发。旧本地 provider contract 只返回即时 JSON，没有反证同步长连接的固定空闲边界；继续 Task retry 只会重放同一传输风险。当前唯一 Image adapter 改用已安装的官方 OpenRouter SDK，并在 production endpoint 明确声明支持 native streaming 时发送一次 `stream=true` POST；partial image 只作为同一 invocation 的传输事件并逐项执行图片字节上限，只有唯一 completed event 形成 GenerateResult。pre-stream HTTP、mid-stream error、未知事件、缺失/重复 completed、断连和超时全部显式失败，SDK retry 关闭，durable provider fence 仍禁止重提不确定 invocation。本地 SSE wire contract 反证 `stream=true`、partial→completed 投影和 POST 至多一次；真实收费长图是否稳定跨过原 200 秒边界仍需发布复验。

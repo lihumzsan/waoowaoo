@@ -13,6 +13,16 @@ import {
   uploadImageSourceToStorage,
 } from '../provider-media'
 
+function frozenImageOptions(
+  value: WorkspaceResourceGenerationTaskPayload['generationOptions'],
+): Record<string, string | number | boolean> {
+  return Object.fromEntries(
+    Object.entries(value).filter((entry): entry is [string, string | number | boolean] => (
+      entry[1] !== null
+    )),
+  )
+}
+
 async function loadImageReferences(
   context: TaskExecutionContext,
   input: WorkspaceResourceGenerationTaskPayload,
@@ -61,19 +71,8 @@ export async function handleWorkspaceResourceImageTask(
     modelId: payload.resource.modelKey,
     prompt: payload.resource.prompt,
     options: {
+      ...frozenImageOptions(payload.generationOptions),
       ...(referenceImages.length > 0 ? { referenceImages } : {}),
-      ...(typeof payload.generationOptions.aspectRatio === 'string'
-        ? { aspectRatio: payload.generationOptions.aspectRatio }
-        : {}),
-      ...(typeof payload.generationOptions.resolution === 'string'
-        ? { resolution: payload.generationOptions.resolution }
-        : {}),
-      ...(typeof payload.generationOptions.quality === 'string'
-        ? { quality: payload.generationOptions.quality }
-        : {}),
-      ...(typeof payload.generationOptions.size === 'string'
-        ? { size: payload.generationOptions.size }
-        : {}),
     },
   })
   const providerRoute = await requireTaskProviderRouteSelection(

@@ -68,6 +68,11 @@ export function encodeMediaPointer(resource: WorkspaceResourceView): string {
     mediaType: resource.mediaType,
     schemaId: resource.schemaId,
     name: resource.name,
+    status: resource.status,
+    taskId: resource.taskId,
+    error: resource.error
+      ? { code: resource.error.code }
+      : null,
     prompt: resource.prompt,
     inputs: resource.inputs.map((entry): WorkspaceResourceJsonValue => ({
       workspacePath: entry.workspacePath,

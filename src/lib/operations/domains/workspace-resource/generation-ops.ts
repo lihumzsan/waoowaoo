@@ -1,6 +1,23 @@
 import path from 'node:path'
 import { z } from 'zod'
-import { buildImageBillingPayload, getProjectModelConfig } from '@/lib/config-service'
+import {
+  getProjectModelConfig,
+  resolveProjectModelCapabilityGenerationOptions,
+} from '@/lib/config-service'
+import { AiOptionValidationError } from '@/lib/ai-exec/normalize'
+import {
+  preflightMediaGenerationOptions,
+  preflightMediaProviderRoutes,
+} from '@/lib/ai-exec/media-preflight'
+import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
+import { supportsTextToVideoModel } from '@/lib/ai-registry/video-model-helpers'
+import type { CapabilityValue } from '@/lib/ai-registry/types'
+import { ApiError } from '@/lib/api-errors'
+import {
+  compileAssetImagePrompt,
+  getAssetImageFormatPolicy,
+  resolveAssetImageKindForSchemaId,
+} from '@/lib/asset-generation/asset-image-format'
 import type {
   WorkspaceResourceInputRef,
   WorkspaceResourceJsonValue,
@@ -48,6 +65,10 @@ import { prisma } from '@/lib/prisma'
 import { stableArgsFingerprint, stableArgsHash } from '@/lib/project-agent/stable-args-hash'
 import { TASK_TYPE, type TaskType } from '@/lib/task/types'
 import { OPERATION_EXECUTION_MAX_TASKS } from '@/lib/temporal/operation-execution/contracts'
+import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
+import { CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS } from '@/lib/workspace-resource/generation-contract'
+import { AppError } from '@/lib/errors/app-error'
+import { describeUnknownError } from '@/lib/errors/normalize'
 
 const MAX_ALTERNATIVES = 6
 const MAX_MANIFEST_ITEMS = OPERATION_EXECUTION_MAX_TASKS
@@ -63,29 +84,66 @@ const workspaceResourceJsonValueSchema: z.ZodType<WorkspaceResourceJsonValue> = 
 ]))
 
 const generationReferenceSchema = workspaceResourceInputRefSchema.extend({
+  resourceId: workspaceResourceInputRefSchema.shape.resourceId
+    .describe('Exact Resource identity copied from a ready .resource pointer.'),
+  contentVersion: workspaceResourceInputRefSchema.shape.contentVersion
+    .describe('Exact positive contentVersion copied from that ready pointer.'),
+  workspacePath: workspaceResourceInputRefSchema.shape.workspacePath
+    .describe('Current project-relative path of the same Resource pointer.'),
+  role: workspaceResourceInputRefSchema.shape.role
+    .describe('Semantic use. For a supported video frame pair use exactly first_frame or last_frame.'),
+  position: workspaceResourceInputRefSchema.shape.position
+    .describe('Unique zero-based input order across this item.'),
   channel: z.enum(['context', 'image', 'audio', 'video']),
 }).strict()
 
+const resourceOutputPathSchema = z.string().trim().min(1).max(512)
+  .regex(/\.resource$/u, 'Media outputPath must end in .resource.')
+  .describe('Complete project-relative output path ending in .resource; create its parent directory first.')
+
 const baseMediaItemShape = {
-  outputPath: z.string().trim().min(1).max(512)
-    .describe('Complete project-relative output path ending in .resource.'),
-  prompt: z.string().trim().min(1).max(100_000),
-  schemaId: z.string().trim().min(1).max(96).optional(),
-  modelKey: z.string().trim().min(1).max(191).optional(),
-  references: z.array(generationReferenceSchema).max(16).optional(),
-  generationOptions: workspaceResourceGenerationOptionsSchema.optional(),
+  outputPath: resourceOutputPathSchema,
+  prompt: z.string().trim().min(1).max(100_000)
+    .describe('Creative content only. Models, output format, resolution, asset layout, and aspect ratio are server policy.'),
 } as const
 
-const newMediaRequestSchema = z.object({
+const imageNewMediaRequestSchema = z.object({
   kind: z.literal('new'),
   ...baseMediaItemShape,
+  schemaId: z.enum(WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.image)
+    .describe('Use project.character_image, project.location_image, or project.prop_image for reusable assets so the server applies their fixed 4:3 asset format; otherwise use generic.image or project.style.'),
+  references: z.array(generationReferenceSchema.extend({
+    channel: z.enum(['context', 'image']),
+  }).strict()).max(16).optional(),
   count: z.number().int().min(1).max(MAX_ALTERNATIVES).default(1),
-  durationSeconds: z.number().int().min(1).max(600).optional(),
-  vocalMode: z.enum(['instrumental', 'vocal']).optional(),
+}).strict()
+
+const audioNewMediaRequestSchema = z.object({
+  kind: z.literal('new'),
+  ...baseMediaItemShape,
+  schemaId: z.enum(WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.audio)
+    .describe('Generated music uses project.bgm_audio.'),
+  references: z.array(generationReferenceSchema.extend({
+    channel: z.enum(['context', 'video']),
+  }).strict()).max(16).optional(),
+  count: z.number().int().min(1).max(MAX_ALTERNATIVES).default(1),
+  durationSeconds: z.number().int().min(1).max(600),
+  vocalMode: z.enum(['instrumental', 'vocal']).default('instrumental'),
   genre: z.string().trim().min(1).max(200).optional(),
   mood: z.string().trim().min(1).max(200).optional(),
   bpm: z.number().int().min(20).max(300).optional(),
-  outputFormat: z.enum(['mp3', 'wav']).optional(),
+}).strict()
+
+const videoNewMediaRequestSchema = z.object({
+  kind: z.literal('new'),
+  ...baseMediaItemShape,
+  schemaId: z.enum(WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.video)
+    .describe('Choose the Resource semantic that matches the produced video; project.video_segment is the normal generated shot type.'),
+  references: z.array(generationReferenceSchema.extend({
+    channel: z.enum(['context', 'image', 'audio']),
+  }).strict()).max(16).optional(),
+  count: z.number().int().min(1).max(MAX_ALTERNATIVES).default(1),
+  durationSeconds: z.number().int().min(1).max(CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS),
 }).strict()
 
 const retryMediaRequestSchema = z.object({
@@ -93,21 +151,97 @@ const retryMediaRequestSchema = z.object({
   resourceIds: z.array(z.string().trim().min(1).max(32)).min(1).max(MAX_MANIFEST_ITEMS),
 }).strict()
 
-const mediaRequestSchema = z.object({
-  request: z.discriminatedUnion('kind', [newMediaRequestSchema, retryMediaRequestSchema]),
+function requireUniqueRetryResourceIds(
+  value: { request: { kind: 'new' } | { kind: 'retry'; resourceIds: string[] } },
+  context: z.RefinementCtx,
+): void {
+  if (value.request.kind === 'retry'
+    && new Set(value.request.resourceIds).size !== value.request.resourceIds.length) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['request', 'resourceIds'],
+      message: 'resourceIds must be unique',
+    })
+  }
+}
+
+function addDuplicateReferencePositionIssue(
+  references: readonly { readonly position: number }[] | undefined,
+  path: Array<string | number>,
+  context: z.RefinementCtx,
+): void {
+  if (!references || new Set(references.map((reference) => reference.position)).size === references.length) return
+  context.addIssue({
+    code: z.ZodIssueCode.custom,
+    path,
+    message: 'Reference positions must be unique.',
+  })
+}
+
+function validateMediaRequestReferences(
+  value: { request: { kind: 'new'; references?: readonly { readonly position: number }[] } | { kind: 'retry'; resourceIds: string[] } },
+  context: z.RefinementCtx,
+): void {
+  requireUniqueRetryResourceIds(value, context)
+  if (value.request.kind === 'new') {
+    addDuplicateReferencePositionIssue(value.request.references, ['request', 'references'], context)
+  }
+}
+
+const imageMediaRequestSchema = z.object({
+  request: z.discriminatedUnion('kind', [imageNewMediaRequestSchema, retryMediaRequestSchema]),
+}).strict().superRefine(validateMediaRequestReferences)
+const audioMediaRequestSchema = z.object({
+  request: z.discriminatedUnion('kind', [audioNewMediaRequestSchema, retryMediaRequestSchema]),
+}).strict().superRefine(validateMediaRequestReferences)
+const videoMediaRequestSchema = z.object({
+  request: z.discriminatedUnion('kind', [videoNewMediaRequestSchema, retryMediaRequestSchema]),
+}).strict().superRefine(validateMediaRequestReferences)
+
+const manifestBaseShape = {
+  itemId: z.string().trim().min(1).max(191),
+  ...baseMediaItemShape,
+} as const
+
+const manifestImageItemSchema = z.object({
+  ...manifestBaseShape,
+  mediaType: z.literal('image'),
+  schemaId: z.enum(WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.image)
+    .describe('Use the matching project.*_image schema for reusable character/location/prop assets.'),
+  references: z.array(generationReferenceSchema.extend({
+    channel: z.enum(['context', 'image']),
+  }).strict()).max(16).optional(),
 }).strict()
 
-const manifestItemSchema = z.object({
-  itemId: z.string().trim().min(1).max(191),
-  mediaType: z.enum(['image', 'audio', 'video']),
-  ...baseMediaItemShape,
-  durationSeconds: z.number().int().min(1).max(600).optional(),
-  vocalMode: z.enum(['instrumental', 'vocal']).optional(),
+const manifestAudioItemSchema = z.object({
+  ...manifestBaseShape,
+  mediaType: z.literal('audio'),
+  schemaId: z.enum(WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.audio),
+  references: z.array(generationReferenceSchema.extend({
+    channel: z.enum(['context', 'video']),
+  }).strict()).max(16).optional(),
+  durationSeconds: z.number().int().min(1).max(600),
+  vocalMode: z.enum(['instrumental', 'vocal']).default('instrumental'),
   genre: z.string().trim().min(1).max(200).optional(),
   mood: z.string().trim().min(1).max(200).optional(),
   bpm: z.number().int().min(20).max(300).optional(),
-  outputFormat: z.enum(['mp3', 'wav']).optional(),
 }).strict()
+
+const manifestVideoItemSchema = z.object({
+  ...manifestBaseShape,
+  mediaType: z.literal('video'),
+  schemaId: z.enum(WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.video),
+  references: z.array(generationReferenceSchema.extend({
+    channel: z.enum(['context', 'image', 'audio']),
+  }).strict()).max(16).optional(),
+  durationSeconds: z.number().int().min(1).max(CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS),
+}).strict()
+
+const manifestItemSchema = z.discriminatedUnion('mediaType', [
+  manifestImageItemSchema,
+  manifestAudioItemSchema,
+  manifestVideoItemSchema,
+])
 
 const submitProductionManifestInputSchema = z.object({
   manifestId: z.string().trim().min(1).max(191),
@@ -122,12 +256,19 @@ const submitProductionManifestInputSchema = z.object({
   if (paths.size !== value.items.length) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['items'], message: 'manifest outputPath values must be unique' })
   }
+  value.items.forEach((item, index) => {
+    addDuplicateReferencePositionIssue(item.references, ['items', index, 'references'], context)
+  })
 })
 
 const rerunFailedItemsInputSchema = z.object({
   resourceIds: z.array(z.string().trim().min(1).max(32)).min(1).max(MAX_MANIFEST_ITEMS),
   maxBudgetCredits: z.number().finite().positive().optional(),
-}).strict()
+}).strict().superRefine((value, context) => {
+  if (new Set(value.resourceIds).size !== value.resourceIds.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['resourceIds'], message: 'resourceIds must be unique' })
+  }
+})
 
 const textInputSchema = z.object({
   outputPath: z.string().trim().min(1).max(512),
@@ -159,7 +300,10 @@ const mediaOutputSchema = z.object({
   }).strict()).min(1),
 }).passthrough()
 
-type NewMediaRequest = z.infer<typeof newMediaRequestSchema>
+type NewMediaRequest =
+  | z.infer<typeof imageNewMediaRequestSchema>
+  | z.infer<typeof audioNewMediaRequestSchema>
+  | z.infer<typeof videoNewMediaRequestSchema>
 type ManifestItem = z.infer<typeof manifestItemSchema>
 
 type PlannedResource = {
@@ -198,16 +342,22 @@ const MEDIA_EFFECTS = {
   longRunning: true,
 } as const
 
-function schemaForMedia(mediaType: PlannedResource['mediaType'], schemaId?: string): string {
-  const fallback = mediaType === 'image'
-    ? WORKSPACE_RESOURCE_SCHEMA.GENERIC_IMAGE
-    : mediaType === 'video'
-      ? WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO
-      : WORKSPACE_RESOURCE_SCHEMA.BGM_AUDIO
-  const resolved = schemaId?.trim() || fallback
+function schemaForMedia(mediaType: PlannedResource['mediaType'], schemaId: string): string {
+  const resolved = schemaId.trim()
+  if (!resolved) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'WORKSPACE_RESOURCE_GENERATION_SCHEMA_REQUIRED',
+      field: 'schemaId',
+      mediaType,
+    })
+  }
   const schema = requireWorkspaceResourceSchema(resolved)
   if (schema.mediaType !== mediaType || !WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA[mediaType].includes(schema.schemaId)) {
-    throw new Error(`WORKSPACE_RESOURCE_GENERATION_SCHEMA_INVALID:${resolved}:${mediaType}`)
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'WORKSPACE_RESOURCE_GENERATION_SCHEMA_INVALID',
+      field: 'schemaId',
+      mediaType,
+    })
   }
   return resolved
 }
@@ -215,17 +365,22 @@ function schemaForMedia(mediaType: PlannedResource['mediaType'], schemaId?: stri
 async function modelForMedia(
   ctx: ProjectAgentOperationContext,
   mediaType: PlannedResource['mediaType'],
-  requested?: string,
+  schemaId: string,
 ): Promise<string> {
-  if (requested?.trim()) return requested.trim()
-  const config = await getProjectModelConfig(ctx.projectId, ctx.userId)
-  const model = mediaType === 'video'
-    ? config.videoModel
-    : mediaType === 'audio'
-      ? config.musicModel
-      : config.editModel ?? config.characterModel ?? config.locationModel
-  if (!model) throw new Error(`WORKSPACE_RESOURCE_MODEL_REQUIRED:${mediaType}`)
-  return model
+  const assetKind = mediaType === 'image' ? resolveAssetImageKindForSchemaId(schemaId) : null
+  return await resolveSystemModelKey({
+    userId: ctx.userId,
+    projectId: ctx.projectId,
+    purpose: mediaType === 'video'
+      ? 'video'
+      : mediaType === 'audio'
+        ? 'music'
+        : assetKind === 'character'
+          ? 'character-image'
+          : assetKind === 'location'
+            ? 'location-image'
+            : 'edit-image',
+  })
 }
 
 function alternativePath(outputPath: string, memberIndex: number): string {
@@ -240,6 +395,332 @@ function providerPositions(
   channel: 'image' | 'audio' | 'video',
 ): number[] {
   return references.filter((reference) => reference.channel === channel).map((reference) => reference.position)
+}
+
+function providerPlaceholderUrls(count: number, mediaType: 'image' | 'audio' | 'video'): string[] {
+  return Array.from({ length: count }, (_, index) => (
+    `https://preflight.invalid/${mediaType}/${String(index + 1)}`
+  ))
+}
+
+function providerTransportPreflightOptions(input: {
+  readonly mediaType: PlannedResource['mediaType']
+  readonly options: Readonly<Record<string, unknown>>
+  readonly imageCount: number
+  readonly audioCount: number
+  readonly videoCount: number
+  readonly usesLastFrame: boolean
+  readonly durationSeconds: number | null
+}): Record<string, unknown> {
+  return {
+    ...input.options,
+    ...(input.mediaType === 'image' && input.imageCount > 0
+      ? { referenceImages: providerPlaceholderUrls(input.imageCount, 'image') }
+      : {}),
+    ...(input.mediaType === 'video' && input.imageCount > 1 && !input.usesLastFrame
+      ? { referenceImages: providerPlaceholderUrls(input.imageCount, 'image') }
+      : {}),
+    ...(input.mediaType === 'video' && input.usesLastFrame
+      ? { lastFrameImageUrl: providerPlaceholderUrls(1, 'image')[0] }
+      : {}),
+    ...(input.mediaType === 'video' && input.audioCount > 0
+      ? { referenceAudios: providerPlaceholderUrls(input.audioCount, 'audio') }
+      : {}),
+    ...(input.mediaType === 'audio' && input.videoCount > 0
+      ? {
+          referenceVideoUrl: providerPlaceholderUrls(1, 'video')[0],
+          referenceVideoDurationMs: Math.round((input.durationSeconds ?? 1) * 1000),
+        }
+      : {}),
+  }
+}
+
+function frozenScalarOptions(value: Record<string, unknown> | undefined): Record<string, string | number | boolean | null> {
+  const result: Record<string, string | number | boolean | null> = {}
+  for (const [key, option] of Object.entries(value ?? {})) {
+    if (
+      typeof option === 'string'
+      || typeof option === 'number'
+      || typeof option === 'boolean'
+      || option === null
+    ) {
+      result[key] = option
+    }
+  }
+  return result
+}
+
+function throwMediaPreflightError(error: unknown, mediaType: PlannedResource['mediaType']): never {
+  if (error instanceof ApiError || error instanceof AppError) throw error
+  if (error instanceof AiOptionValidationError) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'MEDIA_GENERATION_OPTION_INVALID',
+      field: error.field ?? 'generation',
+      reason: error.reason ?? error.failure,
+      mediaType,
+    })
+  }
+  throw new ApiError('INVALID_PARAMS', {
+    code: 'MEDIA_GENERATION_PREFLIGHT_FAILED',
+    field: mediaType,
+    reason: describeUnknownError(error),
+  })
+}
+
+function validateReferenceCapabilities(input: {
+  readonly mediaType: PlannedResource['mediaType']
+  readonly modelKey: string
+  readonly references: readonly z.infer<typeof generationReferenceSchema>[]
+}): void {
+  const imageReferences = input.references.filter((reference) => reference.channel === 'image')
+  const audioReferences = input.references.filter((reference) => reference.channel === 'audio')
+  const videoReferences = input.references.filter((reference) => reference.channel === 'video')
+
+  if (input.mediaType === 'video') {
+    const capabilities = resolveBuiltinCapabilitiesByModelKey('video', input.modelKey)?.video
+    const firstFrames = imageReferences.filter((reference) => reference.role === 'first_frame')
+    const lastFrames = imageReferences.filter((reference) => reference.role === 'last_frame')
+    const ordinaryImages = imageReferences.filter((reference) => reference.role !== 'first_frame' && reference.role !== 'last_frame')
+    const usesFramePair = firstFrames.length > 0 || lastFrames.length > 0
+    if (
+      usesFramePair
+      && (
+        firstFrames.length !== 1
+        || lastFrames.length !== 1
+        || ordinaryImages.length > 0
+        || capabilities?.firstlastframe !== true
+      )
+    ) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'VIDEO_MODEL_FIRST_LAST_FRAME_INVALID',
+        field: 'references',
+      })
+    }
+    const maxImages = usesFramePair ? 2 : capabilities?.maxReferenceImages ?? 1
+    if (imageReferences.length > maxImages) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'VIDEO_MODEL_REFERENCE_LIMIT_EXCEEDED',
+        field: 'references',
+        limit: maxImages,
+      })
+    }
+    const maxAudios = capabilities?.maxReferenceAudios ?? 0
+    if (audioReferences.length > maxAudios) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'VIDEO_MODEL_AUDIO_REFERENCE_LIMIT_EXCEEDED',
+        field: 'references',
+        limit: maxAudios,
+      })
+    }
+    if (imageReferences.length === 0 && !supportsTextToVideoModel(input.modelKey)) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'VIDEO_MODEL_TEXT_TO_VIDEO_UNSUPPORTED',
+        field: 'references',
+      })
+    }
+    if (audioReferences.length > 0 && imageReferences.length === 0) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'VIDEO_MODEL_REFERENCE_AUDIO_REQUIRES_IMAGE',
+        field: 'references',
+      })
+    }
+    if (audioReferences.length > 0 && usesFramePair) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'VIDEO_MODEL_REFERENCE_AUDIO_FRAME_ROLE_CONFLICT',
+        field: 'references',
+      })
+    }
+  }
+
+  if (input.mediaType === 'audio') {
+    const maxVideos = resolveBuiltinCapabilitiesByModelKey('music', input.modelKey)?.music?.maxReferenceVideos ?? 0
+    if (videoReferences.length > maxVideos) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'MUSIC_MODEL_VIDEO_REFERENCE_LIMIT_EXCEEDED',
+        field: 'references',
+        limit: maxVideos,
+      })
+    }
+  }
+}
+
+async function compileMediaExecution(input: {
+  readonly ctx: ProjectAgentOperationContext
+  readonly item: ManifestItem
+  readonly schemaId: string
+  readonly modelKey: string
+  readonly references: readonly z.infer<typeof generationReferenceSchema>[]
+}): Promise<{
+  readonly prompt: string
+  readonly generationOptions: Record<string, string | number | boolean | null>
+}> {
+  const { item, modelKey } = input
+  const config = await getProjectModelConfig(input.ctx.projectId, input.ctx.userId)
+  const assetKind = item.mediaType === 'image'
+    ? resolveAssetImageKindForSchemaId(input.schemaId)
+    : null
+  const aspectRatio = assetKind
+    ? getAssetImageFormatPolicy(assetKind).aspectRatio
+    : config.videoRatio
+  const prompt = assetKind
+    ? compileAssetImagePrompt({
+        stableDescription: item.prompt,
+        creativeDirection: null,
+        kind: assetKind,
+        locale: resolveOperationLocale(input.ctx.context),
+      })
+    : item.prompt
+
+  try {
+    let requested: Record<string, CapabilityValue>
+    if (item.mediaType === 'image') {
+      const configured = await resolveProjectModelCapabilityGenerationOptions({
+        projectId: input.ctx.projectId,
+        userId: input.ctx.userId,
+        modelType: 'image',
+        modelKey,
+      })
+      requested = {
+        ...configured,
+        ...(aspectRatio ? { aspectRatio } : {}),
+      }
+    } else if (item.mediaType === 'video') {
+      const generationMode = input.references.some((reference) => reference.role === 'last_frame')
+        ? 'firstlastframe'
+        : 'normal'
+      const configured = await resolveProjectModelCapabilityGenerationOptions({
+        projectId: input.ctx.projectId,
+        userId: input.ctx.userId,
+        modelType: 'video',
+        modelKey,
+        runtimeSelections: {
+          duration: item.durationSeconds,
+          generationMode,
+        },
+      })
+      requested = {
+        ...configured,
+        duration: item.durationSeconds,
+        generationMode,
+        ...(aspectRatio ? { aspectRatio } : {}),
+      }
+    } else {
+      requested = {
+        ...(config.capabilityDefaults[modelKey] ?? {}),
+        ...(config.capabilityOverrides[modelKey] ?? {}),
+        durationSeconds: item.durationSeconds,
+        vocalMode: item.vocalMode,
+        ...(item.genre ? { genre: item.genre } : {}),
+        ...(item.mood ? { mood: item.mood } : {}),
+        ...(item.bpm ? { bpm: item.bpm } : {}),
+      }
+    }
+
+    const imageCount = input.references.filter((reference) => reference.channel === 'image').length
+    const audioCount = input.references.filter((reference) => reference.channel === 'audio').length
+    const videoCount = input.references.filter((reference) => reference.channel === 'video').length
+    const usesLastFrame = item.mediaType === 'video'
+      && input.references.some((reference) => reference.role === 'last_frame')
+    const durationSeconds = 'durationSeconds' in item ? item.durationSeconds : null
+    const preflightOptions = providerTransportPreflightOptions({
+      mediaType: item.mediaType,
+      options: requested,
+      imageCount,
+      audioCount,
+      videoCount,
+      usesLastFrame,
+      durationSeconds,
+    })
+    const preflight = await preflightMediaGenerationOptions({
+      userId: input.ctx.userId,
+      modelKey,
+      modality: item.mediaType === 'audio' ? 'music' : item.mediaType,
+      options: preflightOptions,
+      prompt,
+    })
+    const frozenExecutionOptions = providerTransportPreflightOptions({
+      mediaType: item.mediaType,
+      options: frozenScalarOptions(preflight.options),
+      imageCount,
+      audioCount,
+      videoCount,
+      usesLastFrame,
+      durationSeconds,
+    })
+    preflightMediaProviderRoutes({
+      selection: preflight.selection,
+      modality: item.mediaType === 'audio' ? 'music' : item.mediaType,
+      options: frozenExecutionOptions,
+      prompt,
+    })
+    return {
+      prompt,
+      generationOptions: frozenScalarOptions(preflight.options),
+    }
+  } catch (error) {
+    throwMediaPreflightError(error, item.mediaType)
+  }
+}
+
+async function preflightFrozenRetry(input: {
+  readonly ctx: ProjectAgentOperationContext
+  readonly mediaType: PlannedResource['mediaType']
+  readonly modelKey: string
+  readonly prompt: string
+  readonly source: ReturnType<typeof parseWorkspaceResourceGenerationRetrySource>
+  readonly generationOptions: z.infer<typeof workspaceResourceGenerationOptionsSchema>
+}): Promise<void> {
+  const imagePositions = new Set(input.source.resource.imageInputPositions)
+  const audioPositions = new Set(input.source.resource.audioInputPositions)
+  const videoPositions = new Set(input.source.resource.videoInputPositions)
+  const references: Array<z.infer<typeof generationReferenceSchema>> = input.source.resource.inputs.map((reference) => ({
+    ...reference,
+    channel: imagePositions.has(reference.position)
+      ? 'image'
+      : audioPositions.has(reference.position)
+        ? 'audio'
+        : videoPositions.has(reference.position)
+          ? 'video'
+          : 'context',
+  }))
+  validateReferenceCapabilities({
+    mediaType: input.mediaType,
+    modelKey: input.modelKey,
+    references,
+  })
+  const inputByPosition = new Map(
+    input.source.resource.inputs.map((reference) => [reference.position, reference]),
+  )
+  const imageReferences = input.source.resource.imageInputPositions.map((position) => (
+    inputByPosition.get(position)
+  ))
+  const usesLastFrame = imageReferences.some((reference) => reference?.role === 'last_frame')
+  const options = providerTransportPreflightOptions({
+    mediaType: input.mediaType,
+    options: input.generationOptions,
+    imageCount: input.source.resource.imageInputPositions.length,
+    audioCount: input.source.resource.audioInputPositions.length,
+    videoCount: input.source.resource.videoInputPositions.length,
+    usesLastFrame,
+    durationSeconds: input.source.durationSeconds ?? null,
+  })
+  try {
+    const preflight = await preflightMediaGenerationOptions({
+      userId: input.ctx.userId,
+      modelKey: input.modelKey,
+      modality: input.mediaType === 'audio' ? 'music' : input.mediaType,
+      options,
+      prompt: input.prompt,
+    })
+    preflightMediaProviderRoutes({
+      selection: preflight.selection,
+      modality: input.mediaType === 'audio' ? 'music' : input.mediaType,
+      options,
+      prompt: input.prompt,
+    })
+  } catch (error) {
+    throwMediaPreflightError(error, input.mediaType)
+  }
 }
 
 function taskTypeForMedia(mediaType: PlannedResource['mediaType']): TaskType {
@@ -289,7 +770,11 @@ async function freezeReferences(
   for (const reference of references) {
     if (reference.channel === 'context') continue
     if (mediaById.get(reference.resourceId) !== reference.channel) {
-      throw new Error(`WORKSPACE_RESOURCE_REFERENCE_CHANNEL_MISMATCH:${reference.resourceId}:${reference.channel}`)
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'WORKSPACE_RESOURCE_REFERENCE_CHANNEL_MISMATCH',
+        field: 'references',
+        resourceId: reference.resourceId,
+      })
     }
   }
   return frozen
@@ -313,44 +798,20 @@ async function buildPlannedItem(input: {
     mediaType,
     schemaId,
   })
-  const modelKey = await modelForMedia(input.ctx, mediaType, input.item.modelKey)
+  const modelKey = await modelForMedia(input.ctx, mediaType, schemaId)
   const publicReferences = input.item.references ?? []
-  const allowedChannels = mediaType === 'image'
-    ? new Set(['context', 'image'])
-    : mediaType === 'video'
-      ? new Set(['context', 'image', 'audio'])
-      : new Set(['context', 'video'])
-  const invalidChannel = publicReferences.find((reference) => !allowedChannels.has(reference.channel))
-  if (invalidChannel) {
-    throw new Error(`WORKSPACE_RESOURCE_REFERENCE_CHANNEL_UNSUPPORTED:${mediaType}:${invalidChannel.channel}`)
-  }
+  validateReferenceCapabilities({ mediaType, modelKey, references: publicReferences })
   const references = await freezeReferences(input.ctx, publicReferences)
-  const config = await getProjectModelConfig(input.ctx.projectId, input.ctx.userId)
-  const requestedOptions = input.item.generationOptions ?? {}
-  const imageDefaults = mediaType === 'image'
-    ? await buildImageBillingPayload({
-        projectId: input.ctx.projectId,
-        userId: input.ctx.userId,
-        imageModel: modelKey,
-        basePayload: {},
-        aspectRatio: typeof requestedOptions.aspectRatio === 'string'
-          ? requestedOptions.aspectRatio
-          : config.videoRatio,
-      })
-    : null
-  const configuredImageOptions = imageDefaults
-    && typeof imageDefaults.generationOptions === 'object'
-    && imageDefaults.generationOptions !== null
-    && !Array.isArray(imageDefaults.generationOptions)
-      ? imageDefaults.generationOptions as Record<string, string | number | boolean | null>
-      : {}
-  const generationOptions: Record<string, string | number | boolean | null> = {
-    ...configuredImageOptions,
-    ...requestedOptions,
-  }
-  if ((mediaType === 'image' || mediaType === 'video') && !generationOptions.aspectRatio && config.videoRatio) {
-    generationOptions.aspectRatio = config.videoRatio
-  }
+  const compiled = await compileMediaExecution({
+    ctx: input.ctx,
+    item: input.item,
+    schemaId,
+    modelKey,
+    references: publicReferences,
+  })
+  const durationSeconds = 'durationSeconds' in input.item
+    ? input.item.durationSeconds
+    : undefined
   const resourceId = buildWorkspaceResourceId({
     operationId: input.operationId,
     requestId: `${input.requestId}:${input.item.itemId}`,
@@ -360,10 +821,10 @@ async function buildPlannedItem(input: {
     mediaType,
     schemaId,
     modelKey,
-    prompt: input.item.prompt,
+    prompt: compiled.prompt,
     references,
-    generationOptions,
-    durationSeconds: input.item.durationSeconds ?? null,
+    generationOptions: compiled.generationOptions,
+    durationSeconds: durationSeconds ?? null,
   })
   const resourcePayload: WorkspaceResourceGenerationTaskPayload['resource'] = {
     resourceId,
@@ -371,7 +832,7 @@ async function buildPlannedItem(input: {
     mediaType,
     schemaId,
     inputHash,
-    prompt: input.item.prompt,
+    prompt: compiled.prompt,
     modelKey,
     inputs: [...references],
     imageInputPositions: providerPositions(publicReferences, 'image'),
@@ -391,16 +852,23 @@ async function buildPlannedItem(input: {
     resource: resourcePayload,
     ...modelPayload(mediaType, modelKey),
     count: 1,
-    generationOptions,
-    ...(input.item.durationSeconds ? { durationSeconds: input.item.durationSeconds } : {}),
-    ...(input.item.vocalMode ? { vocalMode: input.item.vocalMode } : {}),
-    ...(input.item.genre ? { genre: input.item.genre } : {}),
-    ...(input.item.mood ? { mood: input.item.mood } : {}),
-    ...(input.item.bpm ? { bpm: input.item.bpm } : {}),
-    ...(input.item.outputFormat ? { outputFormat: input.item.outputFormat } : {}),
-  }
-  if ((mediaType === 'audio' || mediaType === 'video') && !payload.durationSeconds) {
-    throw new Error(`WORKSPACE_RESOURCE_${mediaType.toUpperCase()}_DURATION_REQUIRED:${input.item.itemId}`)
+    generationOptions: compiled.generationOptions,
+    ...(durationSeconds ? { durationSeconds } : {}),
+    ...(typeof compiled.generationOptions.vocalMode === 'string'
+      ? { vocalMode: compiled.generationOptions.vocalMode as 'instrumental' | 'vocal' }
+      : {}),
+    ...(typeof compiled.generationOptions.genre === 'string'
+      ? { genre: compiled.generationOptions.genre }
+      : {}),
+    ...(typeof compiled.generationOptions.mood === 'string'
+      ? { mood: compiled.generationOptions.mood }
+      : {}),
+    ...(typeof compiled.generationOptions.bpm === 'number'
+      ? { bpm: compiled.generationOptions.bpm }
+      : {}),
+    ...(compiled.generationOptions.outputFormat === 'mp3' || compiled.generationOptions.outputFormat === 'wav'
+      ? { outputFormat: compiled.generationOptions.outputFormat }
+      : {}),
   }
   const taskType = taskTypeForMedia(mediaType)
   const taskPlanId = `${input.operationId}:${resourceId}`
@@ -447,7 +915,12 @@ function assertBudget(tasks: readonly PlannedTask[], maxBudgetCredits: number | 
     task.billingInfo.billable ? total + task.billingInfo.maxFrozenCost : total
   ), 0)
   if (frozen > maxBudgetCredits) {
-    throw new Error(`WORKSPACE_RESOURCE_MANIFEST_BUDGET_EXCEEDED:${String(frozen)}:${String(maxBudgetCredits)}`)
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'WORKSPACE_RESOURCE_MANIFEST_BUDGET_EXCEEDED',
+      field: 'maxBudgetCredits',
+      requiredCredits: frozen,
+      maxBudgetCredits,
+    })
   }
 }
 
@@ -481,21 +954,43 @@ async function planNewMedia(
   request: NewMediaRequest,
 ): Promise<OperationPlan> {
   const requestId = requestIdentity(ctx, operationId, request)
-  const item: ManifestItem = {
-    itemId: 'primary',
-    mediaType,
-    outputPath: request.outputPath,
-    prompt: request.prompt,
-    schemaId: request.schemaId,
-    modelKey: request.modelKey,
-    references: request.references,
-    generationOptions: request.generationOptions,
-    durationSeconds: request.durationSeconds,
-    vocalMode: request.vocalMode,
-    genre: request.genre,
-    mood: request.mood,
-    bpm: request.bpm,
-    outputFormat: request.outputFormat,
+  let item: ManifestItem
+  if (mediaType === 'image') {
+    const parsed = imageNewMediaRequestSchema.parse(request)
+    item = {
+      itemId: 'primary',
+      mediaType,
+      outputPath: parsed.outputPath,
+      prompt: parsed.prompt,
+      schemaId: parsed.schemaId,
+      references: parsed.references,
+    }
+  } else if (mediaType === 'audio') {
+    const parsed = audioNewMediaRequestSchema.parse(request)
+    item = {
+      itemId: 'primary',
+      mediaType,
+      outputPath: parsed.outputPath,
+      prompt: parsed.prompt,
+      schemaId: parsed.schemaId,
+      references: parsed.references,
+      durationSeconds: parsed.durationSeconds,
+      vocalMode: parsed.vocalMode,
+      genre: parsed.genre,
+      mood: parsed.mood,
+      bpm: parsed.bpm,
+    }
+  } else {
+    const parsed = videoNewMediaRequestSchema.parse(request)
+    item = {
+      itemId: 'primary',
+      mediaType,
+      outputPath: parsed.outputPath,
+      prompt: parsed.prompt,
+      schemaId: parsed.schemaId,
+      references: parsed.references,
+      durationSeconds: parsed.durationSeconds,
+    }
   }
   const built = await Promise.all(Array.from({ length: request.count }, async (_, memberIndex) => (
     await buildPlannedItem({
@@ -560,9 +1055,12 @@ async function loadFailedTasks(
     include: { task: { select: { id: true, type: true, payload: true } } },
   })
   const byId = new Map(resources.map((resource) => [resource.id, resource]))
-  return resourceIds.map((resourceId) => {
+  return await Promise.all(resourceIds.map(async (resourceId) => {
     const resource = byId.get(resourceId)
-    if (!resource?.task || !resource.mediaType) throw new Error(`WORKSPACE_RESOURCE_RETRY_TARGET_INVALID:${resourceId}`)
+    if (!resource) throw new ApiError('WORKSPACE_RESOURCE_RETRY_TARGET_NOT_FOUND', { resourceId })
+    if (!resource.task || !resource.mediaType) {
+      throw new ApiError('WORKSPACE_RESOURCE_RETRY_TARGET_INVALID', { resourceId })
+    }
     const taskType = taskTypeForMedia(resource.mediaType as PlannedResource['mediaType'])
     if (resource.task.type !== taskType) throw new Error(`WORKSPACE_RESOURCE_RETRY_TASK_TYPE_INVALID:${resourceId}`)
     const source = parseWorkspaceResourceGenerationRetrySource(resource.task.payload)
@@ -572,11 +1070,21 @@ async function loadFailedTasks(
     const mediaType = resource.mediaType as PlannedResource['mediaType']
     const prompt = resource.prompt?.trim()
     const modelKey = resource.modelKey?.trim()
-    if (!prompt || !modelKey) throw new Error(`WORKSPACE_RESOURCE_RETRY_FROZEN_INPUT_MISSING:${resourceId}`)
+    if (!prompt || !modelKey) {
+      throw new ApiError('WORKSPACE_RESOURCE_RETRY_FROZEN_INPUT_MISSING', { resourceId })
+    }
     const generationOptions = workspaceResourceGenerationOptionsSchema.parse(resource.generationOptions ?? {})
     if ((mediaType === 'audio' || mediaType === 'video') && !source.durationSeconds) {
       throw new Error(`WORKSPACE_RESOURCE_RETRY_DURATION_MISSING:${resourceId}`)
     }
+    await preflightFrozenRetry({
+      ctx,
+      mediaType,
+      modelKey,
+      prompt,
+      source,
+      generationOptions,
+    })
     const payload = parseWorkspaceResourceGenerationTaskPayload({
       lifecycleProjection: buildWorkspaceResourceLifecycleProjection([{
         resourceId: resource.id,
@@ -630,7 +1138,7 @@ async function loadFailedTasks(
         billingInfo: requirePlannedTaskBillingInfo({
           taskType,
           payload,
-        allowedApiTypes: [mediaType === 'audio' ? 'music' : mediaType],
+          allowedApiTypes: [mediaType === 'audio' ? 'music' : mediaType],
         }),
         locale: resolveOperationLocale(ctx.context),
         dedupeKey: `rerun:${resource.id}:${resource.task.id}`,
@@ -645,7 +1153,7 @@ async function loadFailedTasks(
         alternatives: Boolean(resource.alternativeGroupExecutionId),
       },
     }
-  })
+  }))
 }
 
 async function planRetry(
@@ -765,13 +1273,15 @@ async function commitProductionPlan(
   })
 }
 
-function mediaOperation(input: {
+function mediaOperationBase(input: {
   readonly operationId: 'create_image' | 'create_audio' | 'create_video'
   readonly mediaType: PlannedResource['mediaType']
   readonly schemaIds: readonly string[]
+  readonly defaultSchemaId: string
   readonly mediaKind: 'image' | 'music' | 'video'
+  readonly durationSeconds?: { readonly min: number; readonly max: number }
 }) {
-  return defineOperation({
+  return {
     id: input.operationId,
     summary: `Generate ${input.mediaType} files at explicit workspace paths. Inputs are exact Resource versions; retry accepts only failed Resource IDs.`,
     intent: 'act',
@@ -789,19 +1299,19 @@ function mediaOperation(input: {
         kind: 'request_count',
         mediaKind: input.mediaKind,
         requestKind: 'new',
+        defaultSchemaId: input.defaultSchemaId,
         minCount: 1,
         maxCount: 6,
+        inputLimits: {
+          promptMaxLength: 100_000,
+          ...(input.durationSeconds ? { durationSeconds: input.durationSeconds } : {}),
+        },
       },
     },
     confirmation: { kind: 'billable_media', required: true },
     planContractRevision: MEDIA_GENERATION_PLAN_CONTRACT_REVISION,
-    inputSchema: mediaRequestSchema,
     outputSchema: mediaOutputSchema,
-    plan: async (ctx, value) => value.request.kind === 'retry'
-      ? await planRetry(ctx, input.operationId, value.request.resourceIds)
-      : await planNewMedia(ctx, input.operationId, input.mediaType, value.request),
-    commit: async (ctx, _value, plan) => await commitProductionPlan(ctx, input.operationId, plan),
-  })
+  } as const
 }
 
 export function createWorkspaceResourceGenerationOperations(): ProjectAgentOperationRegistryDraft {
@@ -881,23 +1391,49 @@ export function createWorkspaceResourceGenerationOperations(): ProjectAgentOpera
         return textOutputSchema.parse({ success: true, ...reserved, ...materialized })
       },
     }),
-    create_image: mediaOperation({
-      operationId: 'create_image',
-      mediaType: 'image',
-      mediaKind: 'image',
-      schemaIds: WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.image,
+    create_image: defineOperation({
+      ...mediaOperationBase({
+        operationId: 'create_image',
+        mediaType: 'image',
+        mediaKind: 'image',
+        schemaIds: WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.image,
+        defaultSchemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_IMAGE,
+      }),
+      inputSchema: imageMediaRequestSchema,
+      plan: async (ctx, value) => value.request.kind === 'retry'
+        ? await planRetry(ctx, 'create_image', value.request.resourceIds)
+        : await planNewMedia(ctx, 'create_image', 'image', value.request),
+      commit: async (ctx, _value, plan) => await commitProductionPlan(ctx, 'create_image', plan),
     }),
-    create_audio: mediaOperation({
-      operationId: 'create_audio',
-      mediaType: 'audio',
-      mediaKind: 'music',
-      schemaIds: WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.audio,
+    create_audio: defineOperation({
+      ...mediaOperationBase({
+        operationId: 'create_audio',
+        mediaType: 'audio',
+        mediaKind: 'music',
+        schemaIds: WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.audio,
+        defaultSchemaId: WORKSPACE_RESOURCE_SCHEMA.BGM_AUDIO,
+        durationSeconds: { min: 1, max: 600 },
+      }),
+      inputSchema: audioMediaRequestSchema,
+      plan: async (ctx, value) => value.request.kind === 'retry'
+        ? await planRetry(ctx, 'create_audio', value.request.resourceIds)
+        : await planNewMedia(ctx, 'create_audio', 'audio', value.request),
+      commit: async (ctx, _value, plan) => await commitProductionPlan(ctx, 'create_audio', plan),
     }),
-    create_video: mediaOperation({
-      operationId: 'create_video',
-      mediaType: 'video',
-      mediaKind: 'video',
-      schemaIds: WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.video,
+    create_video: defineOperation({
+      ...mediaOperationBase({
+        operationId: 'create_video',
+        mediaType: 'video',
+        mediaKind: 'video',
+        schemaIds: WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.video,
+        defaultSchemaId: WORKSPACE_RESOURCE_SCHEMA.VIDEO_SEGMENT,
+        durationSeconds: { min: 1, max: CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS },
+      }),
+      inputSchema: videoMediaRequestSchema,
+      plan: async (ctx, value) => value.request.kind === 'retry'
+        ? await planRetry(ctx, 'create_video', value.request.resourceIds)
+        : await planNewMedia(ctx, 'create_video', 'video', value.request),
+      commit: async (ctx, _value, plan) => await commitProductionPlan(ctx, 'create_video', plan),
     }),
     submit_production_manifest: defineOperation({
       id: 'submit_production_manifest',

@@ -197,7 +197,9 @@ function pickProviderStrict(providers: CustomProvider[], providerId: string): Cu
   const matched = providers.find((provider) => provider.id === providerId)
   if (matched) return matched
 
-  throw new Error(`PROVIDER_NOT_FOUND: ${providerId} is not configured`)
+  throw new AppError('PROVIDER_AUTH_INVALID', `Provider is not configured: ${providerId}`, {
+    provider: providerId,
+  })
 }
 
 async function readUserConfig(userId: string): Promise<{ models: CustomModel[]; providers: CustomProvider[] }> {

@@ -43,7 +43,7 @@ import {
 } from '@/lib/ai-providers/fal/models'
 import { resolveReasoningEffort } from '@/lib/ai-exec/reasoning-effort'
 import { describeLlmVariantBase } from '@/lib/ai-exec/llm-descriptor'
-import { normalizeAiOptions } from '@/lib/ai-exec/normalize'
+import { AiOptionValidationError, normalizeAiOptions } from '@/lib/ai-exec/normalize'
 import { createAiLanguageModel } from '@/lib/ai-exec/language-model'
 import { listApiConfigCatalogModels } from '@/lib/ai-registry/api-config-catalog'
 import {
@@ -109,7 +109,7 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
       schema,
       options: { aspectRatio: '1:1', quality: 'auto' },
       context: 'fal-gpt-image-2',
-    })).toThrow('AI_OPTION_INVALID:fal-gpt-image-2:quality:unsupported_value=auto')
+    })).toThrow(AiOptionValidationError)
   })
 
   it('derives only the declared GPT Image 2 provider routes from the production catalog', () => {
@@ -599,7 +599,7 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
       expect(() => normalizeAiOptions({ schema, options: { reasoningEffort: 'max' }, context: 'test' }))
         .not.toThrow()
       expect(() => normalizeAiOptions({ schema, options: { reasoningEffort: 'minimal' }, context: 'test' }))
-        .toThrow('AI_OPTION_INVALID:test:reasoningEffort:unsupported_value=minimal')
+        .toThrow(AiOptionValidationError)
     })
 
     it('resolves assistant and analysis effort from separate platform env keys', async () => {

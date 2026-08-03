@@ -5,7 +5,7 @@ import {
   OPENROUTER_GPT_IMAGE_2_MODEL_ID,
   resolveOpenRouterOptionSchema,
 } from '@/lib/ai-providers/openrouter/models'
-import { normalizeAiOptions } from '@/lib/ai-exec/normalize'
+import { AiOptionValidationError, normalizeAiOptions } from '@/lib/ai-exec/normalize'
 import { startScenarioServer } from '../../helpers/fakes/scenario-server'
 import { ProviderPreAcceptRejectedError } from '@/lib/ai-exec/submission-error'
 
@@ -53,10 +53,19 @@ describe('provider contract - OpenRouter image', () => {
       aspectRatio: '1:1',
       outputCompression: 50,
     })).toThrow('outputCompression_requires_jpeg_or_webp')
-    expect(() => normalizeImageOptions({
-      aspectRatio: '1:1',
-      keepOriginalAspectRatio: true,
-    })).toThrow('AI_OPTION_UNSUPPORTED')
+    try {
+      normalizeImageOptions({
+        aspectRatio: '1:1',
+        keepOriginalAspectRatio: true,
+      })
+      throw new Error('Expected option validation to reject an unsupported field')
+    } catch (error) {
+      expect(error).toBeInstanceOf(AiOptionValidationError)
+      expect(error).toMatchObject({
+        failure: 'unsupported_option',
+        field: 'keepOriginalAspectRatio',
+      })
+    }
   })
 
   it('streams the dedicated image API exactly once and projects only the completed image', async () => {
@@ -199,7 +208,49 @@ describe('provider contract - OpenRouter image', () => {
       modelId: 'openai/gpt-image-2',
       prompt: 'surface the stream failure',
       options: normalizeImageOptions({ aspectRatio: '1:1', resolution: '1K', quality: 'low' }),
-    })).rejects.toThrow('OPENROUTER_IMAGE_STREAM_ERROR: server_error: Generation failed')
+    })).rejects.toMatchObject({
+      code: 'EXTERNAL_ERROR',
+      provider: 'openrouter',
+      message: 'Generation failed',
+    })
+
+    expect(server!.getRequests('POST', '/openrouter/images')).toHaveLength(1)
+  })
+
+  it('preserves a streaming content-policy machine code as a permanent typed failure', async () => {
+    server!.defineScenario({
+      method: 'POST',
+      path: '/openrouter/images',
+      mode: 'fatal_error',
+      submitResponse: {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+        body: [
+          `data: ${JSON.stringify({
+            type: 'error',
+            error: {
+              code: 'content_policy_violation',
+              message: 'The supplied reference was rejected.',
+            },
+          })}`,
+          '',
+          'data: [DONE]',
+          '',
+          '',
+        ].join('\n'),
+      },
+    })
+
+    await expect(requestOpenRouterImage({
+      baseUrl: `${server!.baseUrl}/openrouter`,
+      apiKey: 'openrouter-image-key',
+      modelId: 'openai/gpt-image-2',
+      prompt: 'preserve the machine policy fact',
+      options: normalizeImageOptions({ aspectRatio: '1:1', resolution: '1K', quality: 'low' }),
+    })).rejects.toMatchObject({
+      code: 'SENSITIVE_CONTENT',
+      provider: 'openrouter',
+    })
 
     expect(server!.getRequests('POST', '/openrouter/images')).toHaveLength(1)
   })

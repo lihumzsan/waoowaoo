@@ -22,8 +22,9 @@ export const arkAsyncTaskProvider: AsyncTaskProviderRegistration = {
   parseExternalId: parseArkExternalId,
   formatExternalId: (input) => `ARK:${input.type}:${input.requestId}`,
   poll: async ({ parsed, context }) => {
-    const { apiKey } = await context.getProviderConfig(context.userId, 'ark')
-    const result = await querySeedanceVideoStatus(parsed.requestId, apiKey)
+    const { apiKey, baseUrl } = await context.getProviderConfig(context.userId, 'ark')
+    if (!baseUrl) throw new Error('PROVIDER_BASE_URL_MISSING: ark (video-poll)')
+    const result = await querySeedanceVideoStatus(parsed.requestId, { apiKey, baseUrl })
     return normalizeAsyncPollResult({
       status: result.status,
       failureDisposition: result.failureDisposition,

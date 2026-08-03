@@ -29,6 +29,7 @@
 - **BA-15 — 余额是两个池，订阅池先花。** 订阅池按周期发放、周期末过期，充值池永久有效；可用额度 = 未过期订阅池 + 充值池。冻结必须记录各池出资额，结算与回滚按原出资归还；周期已过期后释放的订阅额度不得复活，必须作废并落流水。过期只能在读取时按 `subscriptionExpiresAt` 判定（lazy），正确性不得依赖定时任务是否按时执行；清零流水由发放事务或显式终止写入。取消订阅只结束订阅池，绝不动充值池。
 - **BA-16 — 每期发放只有一个幂等写入者。** `SubscriptionGrant(subscriptionId, periodIndex)` 是发放身份；年付一次付款按月分 12 期发放，重投 webhook、重放 Activity 与并发 sweep 只发放一次。发放替换（而非累加）订阅池，上期余额在同一事务作废并落流水。升级即时把本期补足到新档，降级只记录新档、下期生效，已发放额度不回收。套餐只能从我们在 checkout 写入的 metadata 读取，禁止从 Stripe price id 或金额反推。
 - **BA-17 — LLM 后付、按日聚合、事前只做门禁。** 模型价格只有跑完才知道，因此不进入 `plan → quote → freeze` 链路。用量按调用如实写入 `UsageCost`，按「用户 × 自然日」聚合为一次扣费，只结算已完整过去的日期，小数在全天累计后统一向上取整一次；幂等键为 `llm-daily:<UTC 日期>`。事前只检查「是否还有可用额度」这一条下限，不得伪造预估报价来拒绝工作。供应商回报的成本只作为成本观测事实进入 metadata，永远不得成为扣费金额。
+- **BA-18 — 确定性媒体 preflight 全部先于 Plan。** 模型选择、所选 Provider 本地凭证与 endpoint 配置存在性、项目能力默认/覆盖、全部声明 route 的 option 兼容性、公共参数映射、引用模态与数量、首尾帧组合、Placement 后缀、资产格式和输出数量都必须在创建 PlanSnapshot、报价、pending Resource 或 Task 前完成；任何可由正式 registry 或本地配置判定的错误都返回结构化可纠正字段，不得让 Worker 或 Provider fence 成为第一位发现者。
 
 ## 权威入口
 
@@ -66,6 +67,8 @@
 - 批量重试是否只处理失败 item，且不会重新扣成功 item？
 
 ## 历史回归
+
+- 通用媒体 Operation 过去只在 Plan 前验证路径和少量公开字段，模型能力、参考图/音频上限、音乐格式及 option 组合由不同 Worker/adapter 延迟解释；用户已看到审批甚至创建 pending Resource 后才收到内部错误。当前 canonical media preflight 与 provider execution 复用同一 schema normalizer，全部确定性错误发生在 Plan/计费/Resource/Task 之前，同一冻结 option 同时进入报价和 Task payload。
 
 - WorkspaceResource clean cutover 首版把 Manifest 的 `durationSeconds` 正确冻结到 Task payload，但通用视频计费与新视频 handler 仍读取旧 `generationOptions.duration`；四段 15 秒 Manifest 因而在审批前被误判为“缺时长”，即使绕过报价也会在执行时丢失时长。当前 Task schema 的 `durationSeconds` 是唯一事实，billing 与 provider 调用分别显式映射；视频/音频计划缺时长在 planner 原地失败。
 - 同一批次修复时，通用 planning policy 已向含图片/视频的 Plan metadata 冻结 `projectVideoRatio`，但 WorkspaceResource commit 的严格领域 metadata schema 未组合这份共享字段；批准后的 OperationExecution 因此在 Task/Resource 事务前连续失败。当前比例快照 schema 与 key 由 ratio policy 导出，领域 commit 显式组合它，严格解析仍拒绝所有未知 metadata。

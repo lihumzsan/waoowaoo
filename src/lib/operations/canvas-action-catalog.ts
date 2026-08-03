@@ -8,6 +8,7 @@ export interface CanvasCreationActionView {
   readonly operationId: string
   readonly mediaKind: WorkspaceResourceAlternativeMediaKind
   readonly requestKind: WorkspaceResourceAlternativeGenerationCapability['requestKind']
+  readonly defaultSchemaId: string
   readonly alternatives: {
     readonly min: number
     readonly max: number
@@ -49,6 +50,7 @@ export function readCanvasActionCatalogView(): CanvasActionCatalogView {
         operationId: operation.id,
         mediaKind: capability.mediaKind,
         requestKind: capability.requestKind,
+        defaultSchemaId: capability.defaultSchemaId,
         alternatives: {
           min: capability.minCount,
           max: capability.maxCount,

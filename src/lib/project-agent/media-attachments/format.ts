@@ -19,7 +19,7 @@ export function formatProjectAssistantMediaAttachmentsForModel(input: {
     const tag = `<uploaded_media name="${escapeTagAttribute(attachment.name)}" mediaType="${attachment.mediaType}" attachmentToken="${escapeTagAttribute(attachment.attachmentToken)}" />`
     return `Uploaded media ${String(index + 1)}:\n${tag}`
   })
-  const hint = 'These are chat-scoped uploaded attachments, not project Resources yet. Attached images are already visible to you in this conversation for viewing and discussion. To use one as an input to generation, lineage, or transcription, first call register_uploaded_media with the exact attachmentToken to materialize it as a ready upload Resource, then pass the returned resourceId into the matching typed reference parameter (for example create_video.imageReferences, create_image.imageReferences, create_audio.videoReference, or create_text.content.sourceResourceId). Never invent or reuse tokens across attachments.'
+  const hint = 'These are chat-scoped uploaded attachments, not project Resources yet. Attached images are already visible to you in this conversation for viewing and discussion. To use one as an input to generation, lineage, or transcription, first call register_uploaded_media with the exact attachmentToken and a project-relative outputPath ending in .resource to materialize it as a ready upload Resource. Then pass the returned resource identity and version through the target operation\'s references array, using its declared channel (for example image for create_image/create_video, video for create_audio, or context for create_text). Follow the live tool schema exactly; never invent or reuse tokens or Resource identities.'
   return [...blocks, hint].join('\n\n')
 }
 

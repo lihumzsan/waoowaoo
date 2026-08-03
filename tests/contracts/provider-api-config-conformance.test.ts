@@ -8,6 +8,7 @@ import {
 import PLATFORM_PROVIDER_ENV from '@/lib/deployment/platform-provider-env.json'
 import { ApiError } from '@/lib/api-errors'
 import { normalizeProvidersInput } from '@/lib/user-api/api-config-provider-normalization'
+import { normalizeProviderRuntimeBaseUrl } from '@/lib/ai-registry/runtime-selection'
 
 describe('API config provider registry conformance', () => {
   it('keeps every catalog provider executable, configurable, and platform-declared', () => {
@@ -23,6 +24,7 @@ describe('API config provider registry conformance', () => {
     for (const provider of API_CONFIG_CATALOG_PROVIDERS) {
       expect(isApiConfigCatalogProviderId(provider.id)).toBe(true)
       expect(tryResolveAiProviderAdapter(provider.id)).not.toBeNull()
+      expect(normalizeProviderRuntimeBaseUrl(provider.id)).toBe(provider.baseUrl)
       expect(normalizeProvidersInput([provider])).toEqual([{
         id: provider.id,
         name: provider.name,

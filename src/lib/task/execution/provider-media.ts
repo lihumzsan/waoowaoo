@@ -1,7 +1,12 @@
 import { describeUnknownError } from '@/lib/errors/normalize'
 import { createScopedLogger } from '@/lib/logging/core'
 import { withLogContext } from '@/lib/logging/context'
-import { generateImage, generateVideo } from '@/lib/ai-exec/engine'
+import {
+  generateImage,
+  generateVideo,
+  type AiImageExecutionOptions,
+  type AiVideoExecutionOptions,
+} from '@/lib/ai-exec/engine'
 import {
   cancelAsyncProviderTaskBestEffort,
   ProviderQueueTimeoutError,
@@ -13,7 +18,6 @@ import {
   ProviderTerminalFailureError,
 } from '@/lib/ai-exec/provider-errors'
 import { processMediaResult } from '@/lib/media-process'
-import { resolveProjectModelCapabilityGenerationOptions } from '@/lib/config-service'
 import { TaskTerminatedError } from '@/lib/task/errors'
 import {
   listTaskAcceptedProviderExternalIds,
@@ -24,6 +28,7 @@ import { isTaskActive } from '@/lib/task/service'
 import { AppError } from '@/lib/errors/app-error'
 import { reportTaskProgress } from './progress'
 import type { TaskExecutionContext } from './context'
+import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
 import {
   resolveProviderVideoReferencePayload,
   type VideoReferenceImageInput,
@@ -278,14 +283,7 @@ export async function resolveImageSourceFromGeneration(
     userId: string
     modelId: string
     prompt: string
-    options?: {
-      referenceImages?: string[]
-      aspectRatio?: string
-      resolution?: string
-      quality?: string
-      size?: string
-      provider?: string
-    }
+    options?: AiImageExecutionOptions
     /**
      * A durable identity for this exact provider submission. A Task may make
      * more than one independent image request, so callers that fan out must
@@ -300,28 +298,13 @@ export async function resolveImageSourceFromGeneration(
   const invocationKey =
     params.invocationKey === undefined ? 'media:image:primary' : params.invocationKey.trim()
   if (!invocationKey) throw new Error('IMAGE_PROVIDER_INVOCATION_KEY_REQUIRED')
+  const providerKey = parseModelKeyStrict(params.modelId)?.provider ?? ''
   logger.info({
     message: 'image source generation started',
-    provider: params.options?.provider || undefined,
+    provider: providerKey || undefined,
     details: {
       model: params.modelId,
     },
-  })
-
-  const runtimeSelections: Record<string, string | number | boolean> = {}
-  if (typeof params.options?.resolution === 'string') {
-    runtimeSelections.resolution = params.options.resolution
-  }
-  if (typeof params.options?.quality === 'string') {
-    runtimeSelections.quality = params.options.quality
-  }
-
-  const capabilityOptions = await resolveProjectModelCapabilityGenerationOptions({
-    projectId: job.data.projectId,
-    userId: params.userId,
-    modelType: 'image',
-    modelKey: params.modelId,
-    runtimeSelections,
   })
 
   logger.info({
@@ -329,15 +312,11 @@ export async function resolveImageSourceFromGeneration(
     details: {
       model: params.modelId,
       referenceImageCount: params.options?.referenceImages?.length ?? 0,
-      capabilityOptions,
       optionKeys: Object.keys(params.options || {}),
     },
   })
 
-  const finalOptions = {
-    ...(params.options || {}),
-    ...capabilityOptions,
-  } as Record<string, unknown>
+  const finalOptions: AiImageExecutionOptions = { ...(params.options || {}) }
 
   let result: Awaited<ReturnType<typeof generateImage>>
   try {
@@ -353,10 +332,6 @@ export async function resolveImageSourceFromGeneration(
     // outcomes. Preserve its typed error so an ambiguous POST remains
     // non-retryable instead of being flattened into GENERATION_FAILED.
     if (error instanceof AppError) throw error
-    const providerKey =
-      typeof (finalOptions as { provider?: unknown }).provider === 'string'
-        ? (finalOptions as { provider: string }).provider
-        : params.options?.provider || ''
     throw new AppError(
       'EXTERNAL_ERROR',
       [
@@ -364,17 +339,12 @@ export async function resolveImageSourceFromGeneration(
         `modelKey=${params.modelId}`,
         providerKey ? `providerKey=${providerKey}` : 'providerKey=<unset>',
         `options=${jsonStringifySafe(summarizeImageGenerationOptions(finalOptions))}`,
-        `capabilityOptions=${jsonStringifySafe(capabilityOptions)}`,
         `cause=${describeUnknownError(error)}`,
       ].join(' '),
       { provider: providerKey || null, cause: error },
     )
   }
   if (!result.success) {
-    const providerKey =
-      typeof (finalOptions as { provider?: unknown }).provider === 'string'
-        ? (finalOptions as { provider: string }).provider
-        : params.options?.provider || ''
     throw new AppError(
       'GENERATION_FAILED',
       [
@@ -382,7 +352,6 @@ export async function resolveImageSourceFromGeneration(
         `modelKey=${params.modelId}`,
         providerKey ? `providerKey=${providerKey}` : 'providerKey=<unset>',
         `options=${jsonStringifySafe(summarizeImageGenerationOptions(finalOptions))}`,
-        `capabilityOptions=${jsonStringifySafe(capabilityOptions)}`,
         `error=${result.error || '<empty>'}`,
       ].join(' '),
       { provider: providerKey || null },
@@ -392,7 +361,7 @@ export async function resolveImageSourceFromGeneration(
   if (result.imageUrl) {
     logger.info({
       message: 'image source generation completed',
-      provider: params.options?.provider || undefined,
+      provider: providerKey || undefined,
       durationMs: Date.now() - startedAt,
     })
     return result.imageUrl
@@ -400,7 +369,7 @@ export async function resolveImageSourceFromGeneration(
   if (result.imageBase64) {
     logger.info({
       message: 'image source generation completed (base64)',
-      provider: params.options?.provider || undefined,
+      provider: providerKey || undefined,
       durationMs: Date.now() - startedAt,
     })
     return `data:image/png;base64,${result.imageBase64}`
@@ -417,7 +386,7 @@ export async function resolveImageSourceFromGeneration(
   })
   logger.info({
     message: 'image source generation completed (async)',
-    provider: params.options?.provider || undefined,
+    provider: providerKey || undefined,
     durationMs: Date.now() - startedAt,
     details: {
       externalId,
@@ -435,16 +404,8 @@ export async function resolveVideoSourceFromGeneration(
     referenceImages?: readonly VideoReferenceImageInput[]
     referenceAudios?: readonly string[]
     allowTextOnly?: boolean
-    options?: {
-      prompt?: string
-      duration?: number
-      resolution?: string
-      aspectRatio?: string
-      generateAudio?: boolean
-      lastFrameImageUrl?: string
+    options?: AiVideoExecutionOptions & {
       generationMode?: 'normal' | 'firstlastframe'
-      referenceImages?: string[]
-      [key: string]: string | number | boolean | string[] | undefined
     }
     pollProgress?: { start?: number; end?: number }
   },
@@ -459,35 +420,6 @@ export async function resolveVideoSourceFromGeneration(
     },
   })
 
-  const runtimeSelections: Record<string, string | number | boolean> = {}
-  if (typeof params.options?.duration === 'number') {
-    runtimeSelections.duration = params.options.duration
-  }
-  if (typeof params.options?.resolution === 'string') {
-    runtimeSelections.resolution = params.options.resolution
-  }
-  if (
-    params.options?.generationMode === 'normal' ||
-    params.options?.generationMode === 'firstlastframe'
-  ) {
-    runtimeSelections.generationMode = params.options.generationMode
-  }
-  if (typeof params.options?.generateAudio === 'boolean') {
-    runtimeSelections.generateAudio = params.options.generateAudio
-  }
-
-  const capabilityOptions = await resolveProjectModelCapabilityGenerationOptions({
-    projectId: job.data.projectId,
-    userId: params.userId,
-    modelType: 'video',
-    modelKey: params.modelId,
-    runtimeSelections,
-  })
-
-  const providerCapabilityOptions: Record<string, string | number | boolean> = {
-    ...capabilityOptions,
-  }
-  delete providerCapabilityOptions.generationMode
   const providerReferencePayload = resolveProviderVideoReferencePayload({
     referenceImages: params.referenceImages,
     imageUrl: params.imageUrl,
@@ -527,7 +459,6 @@ export async function resolveVideoSourceFromGeneration(
           ...(params.referenceAudios && params.referenceAudios.length > 0
             ? { referenceAudios: [...params.referenceAudios] }
             : {}),
-          ...providerCapabilityOptions,
         },
         { key: 'media:video:primary' },
       ),

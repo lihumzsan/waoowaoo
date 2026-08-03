@@ -9,7 +9,7 @@ export const murekaAdapter: AiProviderAdapter = {
     describe: (selection) => describeMediaVariantBase({
       modality: 'music',
       selection,
-      executionMode: 'sync',
+      executionMode: 'async',
       optionSchema: resolveMurekaOptionSchema('music', selection.modelId),
     }),
     execute: executeMurekaMusicGeneration,

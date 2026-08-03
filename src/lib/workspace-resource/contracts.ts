@@ -27,7 +27,9 @@ export type WorkspaceResourceAlternativeMediaKind = 'image' | 'video' | 'music' 
 export interface WorkspaceResourceAlternativeGenerationCapability {
   readonly kind: 'request_count'
   readonly mediaKind: WorkspaceResourceAlternativeMediaKind
-  readonly requestKind: 'new' | 'single'
+  readonly requestKind: 'new'
+  /** The one Resource semantic used by the compact Canvas create form. */
+  readonly defaultSchemaId: string
   readonly minCount: 1
   readonly maxCount: 6
   readonly inputLimits?: {

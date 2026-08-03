@@ -29,7 +29,10 @@ describe('provider contract - Ark async failure classification', () => {
       },
     }))
 
-    await expect(querySeedanceVideoStatus('job-1', 'ark-key')).resolves.toEqual({
+    await expect(querySeedanceVideoStatus('job-1', {
+      apiKey: 'ark-key',
+      baseUrl: 'https://ark.example/api/v3',
+    })).resolves.toEqual({
       status: 'failed',
       failureDisposition: 'permanent',
       errorCode: 'PROVIDER_BILLING_REQUIRED',
@@ -45,7 +48,10 @@ describe('provider contract - Ark async failure classification', () => {
       },
     }, 403))
 
-    await expect(querySeedanceVideoStatus('job-2', 'ark-key')).rejects.toMatchObject({
+    await expect(querySeedanceVideoStatus('job-2', {
+      apiKey: 'ark-key',
+      baseUrl: 'https://ark.example/api/v3',
+    })).rejects.toMatchObject({
       code: 'PROVIDER_BILLING_REQUIRED',
       provider: 'ark',
       retryable: false,

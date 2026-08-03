@@ -13,7 +13,6 @@ import { SEEDANCE_2_RETAIL_CREDITS_PER_SECOND } from '@/lib/ai-providers/shared/
 import { usdToCredits } from '@/lib/ai-registry/pricing-currency'
 import type { ReasoningEffort } from '@/lib/ai-registry/reasoning-effort'
 
-export const OPENROUTER_PROVIDER_DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1'
 export const OPENROUTER_PROVIDER_TEST_LLM_MODEL_ID = 'openai/gpt-4o-mini'
 export const OPENROUTER_GPT_IMAGE_2_MODEL_ID = 'openai/gpt-image-2'
 export const OPENROUTER_SEEDANCE_2_VIDEO_MODEL_ID = 'bytedance/seedance-2.0'

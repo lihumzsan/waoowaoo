@@ -17,10 +17,15 @@ import { stableArgsFingerprint } from '@/lib/project-agent/stable-args-hash'
 import { TASK_TYPE } from '@/lib/task/types'
 
 const mergeVideosInputSchema = z.object({
-  outputPath: z.string().trim().min(1).max(512),
+  outputPath: z.string().trim().min(1).max(512)
+    .regex(/\.resource$/u, 'Merged video outputPath must end in .resource.')
+    .describe('Complete project-relative video pointer path ending in .resource.'),
   videos: z.array(workspaceResourceInputRefSchema).min(1).max(50),
   music: workspaceResourceInputRefSchema.optional(),
-}).strict()
+}).strict().refine((input) => input.videos.length >= 2 || Boolean(input.music), {
+  message: 'A single video requires a music input.',
+  path: ['videos'],
+})
 
 const mergeVideosOutputSchema = refineTaskSubmitOperationOutputSchema(
   taskSubmitOperationOutputSchemaBase.extend({
@@ -76,7 +81,6 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
       inputSchema: mergeVideosInputSchema,
       outputSchema: mergeVideosOutputSchema,
       execute: async (ctx, input) => {
-        if (input.videos.length < 2 && !input.music) throw new Error('VIDEO_MERGE_SINGLE_VIDEO_REQUIRES_MUSIC')
         const references = normalizeMergeInputs(input)
         const inputHash = stableArgsFingerprint({ outputPath: input.outputPath, references })
         const requestId = [

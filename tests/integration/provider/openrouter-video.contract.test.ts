@@ -128,6 +128,43 @@ describe('provider contract - OpenRouter video', () => {
     expect(server!.getRequests('POST', '/openrouter/videos')).toHaveLength(1)
   })
 
+  it('preserves the provider privacy rejection as a permanent content-policy fact', async () => {
+    server!.defineScenario({
+      method: 'POST',
+      path: '/openrouter/videos',
+      mode: 'fatal_error',
+      submitResponse: {
+        status: 202,
+        body: {
+          error: {
+            code: 400,
+            message: 'The supplied reference was rejected.',
+            metadata: {
+              error_type: 'InputImageSensitiveContentDetected.PrivacyInformation',
+            },
+          },
+        },
+      },
+    })
+
+    await expect(submitOpenRouterVideoTask({
+      baseUrl: `${server!.baseUrl}/openrouter`,
+      apiKey: 'openrouter-video-key',
+      payload: {
+        model: 'bytedance/seedance-2.0-fast',
+        prompt: 'Do not collapse a machine policy code into an internal error.',
+        duration: 15,
+        resolution: '720p',
+        aspectRatio: '16:9',
+      },
+    })).rejects.toMatchObject({
+      code: 'SENSITIVE_CONTENT',
+      provider: 'openrouter',
+    })
+
+    expect(server!.getRequests('POST', '/openrouter/videos')).toHaveLength(1)
+  })
+
   it('does not turn an unclassified accepted response into a safe-to-retry rejection', async () => {
     server!.defineScenario({
       method: 'POST',

@@ -72,14 +72,18 @@ function readArkVideoUrl(content: unknown): string | undefined {
   return undefined
 }
 
-export async function querySeedanceVideoStatus(taskId: string, apiKey: string): Promise<ProviderAsyncTaskStatus> {
+export async function querySeedanceVideoStatus(
+  taskId: string,
+  input: { apiKey: string; baseUrl: string },
+): Promise<ProviderAsyncTaskStatus> {
+  const { apiKey, baseUrl } = input
   if (!apiKey) {
     throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'ark' })
   }
 
   try {
     const queryResponse = await fetchWithProviderProxy(
-      `https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks/${taskId}`,
+      `${baseUrl.replace(/\/+$/, '')}/contents/generations/tasks/${taskId}`,
       {
         method: 'GET',
         headers: {

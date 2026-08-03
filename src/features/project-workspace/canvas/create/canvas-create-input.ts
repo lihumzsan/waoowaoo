@@ -5,7 +5,6 @@ export function buildWorkspaceCanvasCreateOperationInput(
   request: WorkspaceCanvasCreateRequest,
   outputPath: string,
 ): Readonly<Record<string, unknown>> {
-  const optionalName = request.name ? { name: request.name } : {}
   if (request.capability.mediaKind === 'voice') {
     return {
       request: {
@@ -14,8 +13,6 @@ export function buildWorkspaceCanvasCreateOperationInput(
         previewText: request.voicePreviewText,
         language: 'Auto',
         outputPath,
-        resource: { name: request.name },
-        target: { kind: 'standalone' },
         count: request.count,
       },
     }
@@ -24,7 +21,7 @@ export function buildWorkspaceCanvasCreateOperationInput(
   const common = {
     kind: request.capability.requestKind,
     outputPath,
-    ...optionalName,
+    schemaId: request.capability.defaultSchemaId,
     prompt: request.prompt,
     count: request.count,
   }

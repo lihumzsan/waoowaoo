@@ -7,8 +7,6 @@ import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selectio
 import { normalizeVideoReferenceImages } from '@/lib/video-generation/reference-images'
 import { AppError } from '@/lib/errors/app-error'
 
-const ARK_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
-
 export interface ArkVideoTaskRequest {
   model: string
   content: Array<{
@@ -276,13 +274,13 @@ function validateArkVideoTaskRequest(request: ArkVideoTaskRequest) {
 
 export async function arkCreateVideoTask(
   request: ArkVideoTaskRequest,
-  options: { apiKey: string; timeoutMs?: number; logPrefix?: string },
+  options: { apiKey: string; baseUrl: string; timeoutMs?: number; logPrefix?: string },
 ): Promise<{ id: string; [key: string]: unknown }> {
   if (!options.apiKey) throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'ark' })
   validateArkVideoTaskRequest(request)
 
-  const { apiKey, timeoutMs, logPrefix = '[Ark Video]' } = options
-  const url = `${ARK_BASE_URL}/contents/generations/tasks`
+  const { apiKey, baseUrl, timeoutMs, logPrefix = '[Ark Video]' } = options
+  const url = `${baseUrl.replace(/\/+$/, '')}/contents/generations/tasks`
 
   _ulogInfo(`${logPrefix} 创建视频任务, 模型: ${request.model}`)
   const response = await fetchWithRetry(url, {
@@ -306,12 +304,12 @@ export async function arkCreateVideoTask(
 
 export async function arkQueryVideoTask(
   taskId: string,
-  options: { apiKey: string; timeoutMs?: number; logPrefix?: string },
+  options: { apiKey: string; baseUrl: string; timeoutMs?: number; logPrefix?: string },
 ): Promise<ArkVideoTaskResponse> {
   if (!options.apiKey) throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'ark' })
 
-  const { apiKey, timeoutMs } = options
-  const url = `${ARK_BASE_URL}/contents/generations/tasks/${taskId}`
+  const { apiKey, baseUrl, timeoutMs } = options
+  const url = `${baseUrl.replace(/\/+$/, '')}/contents/generations/tasks/${taskId}`
 
   const response = await fetchWithRetry(url, {
     method: 'GET',
@@ -328,7 +326,8 @@ export async function executeArkVideoGeneration(input: AiProviderVideoExecutionC
   const options: ArkVideoOptions = input.options ?? {}
   assertAllowedArkVideoOptions(options)
 
-  const { apiKey } = await getProviderConfig(input.userId, input.selection.provider)
+  const { apiKey, baseUrl } = await getProviderConfig(input.userId, input.selection.provider)
+  if (!baseUrl) throw new Error('PROVIDER_BASE_URL_MISSING: ark (video)')
   const { prompt, ...providerOptions } = options
 
   const modelId = requireSelectedModelId(input.selection, 'ark:video')
@@ -503,7 +502,7 @@ export async function executeArkVideoGeneration(input: AiProviderVideoExecutionC
     }
   }
 
-  const taskData = await arkCreateVideoTask(requestBody, { apiKey, logPrefix: '[ARK Video]' })
+  const taskData = await arkCreateVideoTask(requestBody, { apiKey, baseUrl, logPrefix: '[ARK Video]' })
   const taskId = taskData.id
   if (!taskId) {
     throw new Error('ARK_VIDEO_TASK_CREATE_INVALID_RESPONSE: missing task id')

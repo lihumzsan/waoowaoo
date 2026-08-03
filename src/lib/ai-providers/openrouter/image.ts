@@ -24,6 +24,10 @@ import {
 } from './image-options'
 import { OPENROUTER_GPT_IMAGE_2_MODEL_ID } from './models'
 import { ProviderPreAcceptRejectedError } from '@/lib/ai-exec/submission-error'
+import {
+  classifyOpenRouterMachineErrorCode,
+  throwNormalizedOpenRouterSdkError,
+} from './error-normalization'
 
 const OPENROUTER_IMAGE_TIMEOUT_MS = 5 * 60 * 1000
 
@@ -137,6 +141,19 @@ async function projectStreamingImage(
     }
     if (event.type === 'error') {
       const code = event.error.code?.trim() || 'unknown'
+      const errorCode = classifyOpenRouterMachineErrorCode(code)
+      if (errorCode) {
+        throw new AppError(
+          errorCode,
+          errorCode === 'SENSITIVE_CONTENT'
+            ? 'OpenRouter rejected the image under its content or real-person safety policy'
+            : event.error.message,
+          {
+            provider: 'openrouter',
+            details: { providerErrorType: code },
+          },
+        )
+      }
       throw new Error(`OPENROUTER_IMAGE_STREAM_ERROR: ${code}: ${event.error.message}`)
     }
     throw new Error(`OPENROUTER_IMAGE_STREAM_EVENT_UNSUPPORTED: ${String(event.type)}`)
@@ -198,7 +215,7 @@ export async function requestOpenRouterImage(input: {
         { cause: error },
       )
     }
-    throw error
+    throwNormalizedOpenRouterSdkError(error)
   }
 }
 

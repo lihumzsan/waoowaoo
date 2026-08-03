@@ -5,8 +5,7 @@ import { buildFalQueueUrl } from '@/lib/ai-providers/fal/base-url'
 import { FAL_LYRIA_3_PRO_MODEL_ID } from '@/lib/ai-providers/fal/models'
 import { RETRY_POLICY, fetchWithRetry } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
-
-type FalMusicOptions = NonNullable<AiProviderMusicExecutionContext['options']>
+import { compileMusicPrompt } from '@/lib/ai-providers/shared/music-prompt'
 
 interface FalMusicSubmitResponse {
   request_id?: unknown
@@ -14,22 +13,6 @@ interface FalMusicSubmitResponse {
 
 function readTrimmedString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
-}
-
-function buildFalLyriaPrompt(prompt: string, options: FalMusicOptions): string {
-  const lines = [prompt.trim()]
-  const genre = readTrimmedString(options.genre)
-  const mood = readTrimmedString(options.mood)
-
-  if (genre) lines.push(`Genre: ${genre}`)
-  if (mood) lines.push(`Mood: ${mood}`)
-  if (typeof options.durationSeconds === 'number') lines.push(`Target duration: ${options.durationSeconds} seconds`)
-  if (typeof options.bpm === 'number') lines.push(`BPM: ${options.bpm}`)
-  if (options.vocalMode === 'instrumental') lines.push('Instrumental only. Do not include vocals or lyrics.')
-  if (options.vocalMode === 'vocal') lines.push('Vocals are allowed when musically appropriate.')
-  if (options.outputFormat) lines.push(`Output format: ${options.outputFormat}`)
-
-  return lines.join('\n')
 }
 
 async function submitFalMusic(endpoint: string, apiKey: string, payload: Record<string, unknown>): Promise<string> {
@@ -60,7 +43,7 @@ export async function executeFalMusicGeneration(input: AiProviderMusicExecutionC
     throw new Error(`FAL_MUSIC_MODEL_UNSUPPORTED:${modelId}`)
   }
 
-  const prompt = buildFalLyriaPrompt(input.prompt, options)
+  const prompt = compileMusicPrompt(input.prompt, options)
   if (!prompt.trim()) throw new Error('FAL_MUSIC_PROMPT_REQUIRED')
   const negativePrompt = readTrimmedString(options.negativePrompt)
 

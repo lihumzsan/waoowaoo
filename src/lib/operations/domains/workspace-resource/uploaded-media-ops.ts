@@ -18,7 +18,9 @@ import { resolveProjectAssistantAttachmentRegistration } from '@/lib/project-age
 
 const registerUploadedMediaInputSchema = z.object({
   attachmentToken: z.string().min(1).max(PROJECT_ASSISTANT_ATTACHMENT_TOKEN_MAX_CHARS),
-  outputPath: z.string().trim().min(1).max(512),
+  outputPath: z.string().trim().min(1).max(512)
+    .regex(/\.resource$/u, 'Uploaded media outputPath must end in .resource.')
+    .describe('Complete project-relative pointer path ending in .resource.'),
   name: z.string().max(200).optional(),
 }).strict()
 
@@ -90,7 +92,11 @@ export function createWorkspaceResourceUploadedMediaOperations(): ProjectAgentOp
         const existing = await tx.workspaceResource.findUnique({ where: { id: resourceId } })
         if (existing?.status === 'ready') {
           if (existing.workspacePath !== input.outputPath || existing.deletedAt) {
-            throw new Error(`UPLOADED_MEDIA_EXISTING_PLACEMENT_CONFLICT:${existing.workspacePath}`)
+            throw new ApiError('CONFLICT', {
+              code: 'UPLOADED_MEDIA_EXISTING_PLACEMENT_CONFLICT',
+              field: 'outputPath',
+              existingWorkspacePath: existing.workspacePath,
+            })
           }
           return registerUploadedMediaOutputSchema.parse({
             success: true,

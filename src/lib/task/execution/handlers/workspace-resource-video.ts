@@ -1,5 +1,3 @@
-import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
-import { supportsTextToVideoModel } from '@/lib/ai-registry/video-model-helpers'
 import {
   parseWorkspaceResourceGenerationTaskPayload,
   type WorkspaceResourceGenerationTaskPayload,
@@ -15,6 +13,16 @@ import {
   resolveVideoSourceFromGeneration,
   uploadVideoSourceToStorage,
 } from '../provider-media'
+
+function frozenVideoOptions(
+  value: WorkspaceResourceGenerationTaskPayload['generationOptions'],
+): Record<string, string | number | boolean> {
+  return Object.fromEntries(
+    Object.entries(value).filter((entry): entry is [string, string | number | boolean] => (
+      entry[1] !== null
+    )),
+  )
+}
 
 async function loadVideoImageReferences(
   context: TaskExecutionContext,
@@ -91,32 +99,6 @@ export async function handleWorkspaceResourceVideoTask(
   await reportTaskProgress(context, 20, { stage: 'workspace_resource_prepare' })
   const referenceImages = await loadVideoImageReferences(context, payload)
   const referenceAudios = await loadVideoAudioReferences(data.userId, data.projectId, payload)
-  if (referenceAudios.length > 0 && referenceImages.length === 0) {
-    throw new Error(`VIDEO_MODEL_REFERENCE_AUDIO_REQUIRES_IMAGE:${payload.resource.modelKey}`)
-  }
-  if (
-    referenceAudios.length > 0
-    && referenceImages.some((reference) => reference.role === 'first_frame' || reference.role === 'last_frame')
-  ) {
-    throw new Error(`VIDEO_MODEL_REFERENCE_AUDIO_FRAME_ROLE_CONFLICT:${payload.resource.modelKey}`)
-  }
-  if (referenceImages.length === 0 && !supportsTextToVideoModel(payload.resource.modelKey)) {
-    throw new Error(`VIDEO_MODEL_TEXT_TO_VIDEO_UNSUPPORTED:${payload.resource.modelKey}`)
-  }
-  const maxReferences = resolveBuiltinCapabilitiesByModelKey('video', payload.resource.modelKey)
-    ?.video?.maxReferenceImages ?? 1
-  if (referenceImages.length > maxReferences) {
-    throw new Error(
-      `VIDEO_MODEL_REFERENCE_LIMIT_EXCEEDED:${payload.resource.modelKey}:${String(referenceImages.length)}:${String(maxReferences)}`,
-    )
-  }
-  const maxReferenceAudios = resolveBuiltinCapabilitiesByModelKey('video', payload.resource.modelKey)
-    ?.video?.maxReferenceAudios
-  if (referenceAudios.length > 0 && (!maxReferenceAudios || referenceAudios.length > maxReferenceAudios)) {
-    throw new Error(
-      `VIDEO_MODEL_AUDIO_REFERENCE_LIMIT_EXCEEDED:${payload.resource.modelKey}:${String(referenceAudios.length)}:${String(maxReferenceAudios ?? 0)}`,
-    )
-  }
   const options = payload.generationOptions
   const durationSeconds = payload.durationSeconds
   if (!durationSeconds) {
@@ -130,12 +112,10 @@ export async function handleWorkspaceResourceVideoTask(
     referenceAudios,
     allowTextOnly: referenceImages.length === 0,
     options: {
+      ...frozenVideoOptions(options),
       prompt: payload.resource.prompt,
       duration: durationSeconds,
-      ...(typeof options.resolution === 'string' ? { resolution: options.resolution } : {}),
-      ...(typeof options.aspectRatio === 'string' ? { aspectRatio: options.aspectRatio } : {}),
-      ...(typeof options.generateAudio === 'boolean' ? { generateAudio: options.generateAudio } : {}),
-      generationMode: 'normal',
+      generationMode: options.generationMode === 'firstlastframe' ? 'firstlastframe' : 'normal',
     },
   })
   const providerRoute = await requireTaskProviderRouteSelection(

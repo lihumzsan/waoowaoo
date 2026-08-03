@@ -11,8 +11,8 @@ import type {
   ChatMessage,
 } from '@/lib/ai-registry/types'
 import { resolveModelSelection } from '@/lib/user-api/runtime-config'
-import { normalizeAiOptions } from '@/lib/ai-exec/normalize'
 import { resolveAiProviderAdapter } from '@/lib/ai-providers'
+import { normalizeMediaOptionsForSelection } from '@/lib/ai-exec/media-preflight'
 import { runLlmCompletion, runLlmStream } from '@/lib/ai-exec/llm/completion-runner'
 import {
   runVisionCompletion,
@@ -65,6 +65,7 @@ export type AiImageExecutionOptions = {
   background?: string
   outputCompression?: number
   moderation?: string
+  [key: string]: string | number | boolean | string[] | undefined
 }
 
 export type AiVideoExecutionOptions = {
@@ -188,11 +189,11 @@ export async function executeMediaGeneration(
       if (!modalityAdapter) {
         throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${routeSelection.provider}:${input.modality}`)
       }
-      const descriptor = modalityAdapter.describe(routeSelection)
-      const options = normalizeAiOptions({
-        schema: descriptor.optionSchema,
+      const options = normalizeMediaOptionsForSelection({
+        selection: routeSelection,
+        modality: input.modality,
         options: input.options,
-        context: `${input.modality}:${routeSelection.modelKey}`,
+        prompt: input.prompt,
       }) as AiImageExecutionOptions | undefined
       return {
         provider: routeSelection.provider,
@@ -211,11 +212,11 @@ export async function executeMediaGeneration(
       if (!modalityAdapter) {
         throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${routeSelection.provider}:${input.modality}`)
       }
-      const descriptor = modalityAdapter.describe(routeSelection)
-      const options = normalizeAiOptions({
-        schema: descriptor.optionSchema,
+      const options = normalizeMediaOptionsForSelection({
+        selection: routeSelection,
+        modality: input.modality,
         options: input.options,
-        context: `${input.modality}:${routeSelection.modelKey}`,
+        prompt: input.options?.prompt,
       }) as AiVideoExecutionOptions | undefined
       return {
         provider: routeSelection.provider,
@@ -234,11 +235,11 @@ export async function executeMediaGeneration(
       if (!modalityAdapter) {
         throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${routeSelection.provider}:${input.modality}`)
       }
-      const descriptor = modalityAdapter.describe(routeSelection)
-      const options = normalizeAiOptions({
-        schema: descriptor.optionSchema,
+      const options = normalizeMediaOptionsForSelection({
+        selection: routeSelection,
+        modality: input.modality,
         options: input.options,
-        context: `${input.modality}:${routeSelection.modelKey}`,
+        prompt: input.prompt,
       }) as AiMusicExecutionOptions | undefined
       return {
         provider: routeSelection.provider,
@@ -257,11 +258,10 @@ export async function executeMediaGeneration(
       if (!modalityAdapter) {
         throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${routeSelection.provider}:${input.modality}`)
       }
-      const descriptor = modalityAdapter.describe(routeSelection)
-      const options = normalizeAiOptions({
-        schema: descriptor.optionSchema,
+      const options = normalizeMediaOptionsForSelection({
+        selection: routeSelection,
+        modality: input.modality,
         options: input.options,
-        context: `${input.modality}:${routeSelection.modelKey}`,
       }) as AiVoiceExecutionOptions | undefined
       return {
         provider: routeSelection.provider,

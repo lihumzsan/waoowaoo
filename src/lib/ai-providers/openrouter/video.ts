@@ -19,6 +19,10 @@ import {
   createOpenRouterVideoClient,
   serializeErrorForLog,
 } from './video-transport'
+import {
+  isOpenRouterSensitiveRejection,
+  throwNormalizedOpenRouterSdkError,
+} from './error-normalization'
 
 type OpenRouterVideoOptions = NonNullable<AiProviderVideoExecutionContext['options']>
 
@@ -312,6 +316,17 @@ function normalizeOpenRouterVideoSubmitValidationError(error: ResponseValidation
   }
 
   const message = formatSubmitRejection(rejection)
+  if (isOpenRouterSensitiveRejection(rejection.errorType)) {
+    throw new AppError(
+      'SENSITIVE_CONTENT',
+      'OpenRouter rejected an input reference under its content or real-person safety policy',
+      {
+        provider: 'openrouter',
+        details: rejection.errorType ? { providerErrorType: rejection.errorType } : null,
+        cause: error,
+      },
+    )
+  }
   if (rejection.code !== null) {
     throw new FetchStatusError(rejection.code, message)
   }
@@ -342,8 +357,11 @@ export async function submitOpenRouterVideoTask(input: {
     )
     requestId = response.id.trim()
   } catch (error) {
-    if (!(error instanceof ResponseValidationError)) throw error
-    requestId = normalizeOpenRouterVideoSubmitValidationError(error)
+    if (error instanceof ResponseValidationError) {
+      requestId = normalizeOpenRouterVideoSubmitValidationError(error)
+    } else {
+      throwNormalizedOpenRouterSdkError(error)
+    }
   }
   if (!requestId) throw new Error('OPENROUTER_VIDEO_SUBMIT_ID_MISSING')
   return requestId
@@ -358,13 +376,18 @@ export async function queryOpenRouterVideoStatus(input: {
     throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'openrouter' })
   }
 
-  const response = await createOpenRouterVideoClient({
-    ...input,
-    timeoutMs: OPENROUTER_VIDEO_STATUS_TIMEOUT_MS,
-  }).videoGeneration.getGeneration(
-    { jobId: input.requestId },
-    { retries: { strategy: 'none' }, cache: 'no-store' },
-  )
+  let response: Awaited<ReturnType<ReturnType<typeof createOpenRouterVideoClient>['videoGeneration']['getGeneration']>>
+  try {
+    response = await createOpenRouterVideoClient({
+      ...input,
+      timeoutMs: OPENROUTER_VIDEO_STATUS_TIMEOUT_MS,
+    }).videoGeneration.getGeneration(
+      { jobId: input.requestId },
+      { retries: { strategy: 'none' }, cache: 'no-store' },
+    )
+  } catch (error) {
+    throwNormalizedOpenRouterSdkError(error)
+  }
   const status = response.status
   if (status === 'pending' || status === 'in_progress') {
     return { status: 'pending' }
@@ -393,11 +416,12 @@ export async function queryOpenRouterVideoStatus(input: {
   }
 
   if (status === 'failed' || status === 'cancelled' || status === 'canceled' || status === 'expired') {
+    const message = response.error?.trim() || `OpenRouter video generation ${status}`
     return {
       status: 'failed',
       failureDisposition: 'retryable',
       errorCode: 'EXTERNAL_ERROR',
-      error: response.error?.trim() || `OpenRouter video generation ${status}`,
+      error: message,
     }
   }
 

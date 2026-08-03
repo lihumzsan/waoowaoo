@@ -46,12 +46,19 @@ function requireBuiltinApiConfigCatalog(): BuiltinApiConfigCatalogRegistration {
 }
 
 export const API_CONFIG_CATALOG_PROVIDERS: readonly ApiConfigCatalogProvider[] = [
-  { id: 'ark', name: 'Volcengine Ark' },
+  { id: 'ark', name: 'Volcengine Ark', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3' },
   { id: 'openrouter', name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1' },
   { id: 'fal', name: 'FAL' },
   { id: 'google', name: 'Google AI Studio' },
-  { id: 'mureka', name: 'Mureka' },
+  { id: 'mureka', name: 'Mureka', baseUrl: 'https://api.mureka.ai' },
 ]
+
+export function requireApiConfigCatalogProviderBaseUrl(providerId: string): string {
+  const providerKey = getApiConfigProviderKey(providerId.trim().toLowerCase())
+  const baseUrl = API_CONFIG_CATALOG_PROVIDERS.find((provider) => provider.id === providerKey)?.baseUrl?.trim()
+  if (!baseUrl) throw new Error(`API_CONFIG_PROVIDER_BASE_URL_MISSING: ${providerId}`)
+  return baseUrl
+}
 
 const API_CONFIG_CATALOG_PROVIDER_IDS = new Set(
   API_CONFIG_CATALOG_PROVIDERS.map((provider) => provider.id),

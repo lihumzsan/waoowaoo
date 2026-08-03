@@ -6,8 +6,7 @@ import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import { withProviderProxyDispatcher } from '@/lib/http/outbound-proxy'
 import { GOOGLE_PROVIDER_PROXY_TARGET } from '@/lib/ai-providers/google/proxy-target'
 import { AppError } from '@/lib/errors/app-error'
-
-type GoogleMusicOptions = NonNullable<AiProviderMusicExecutionContext['options']>
+import { compileMusicPrompt } from '@/lib/ai-providers/shared/music-prompt'
 
 interface GoogleMusicPart {
   inlineData?: {
@@ -28,22 +27,6 @@ interface GoogleMusicResponse {
 
 function trim(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
-}
-
-function buildMusicPrompt(prompt: string, options: GoogleMusicOptions): string {
-  const lines = [prompt.trim()]
-  const genre = trim(options.genre)
-  const mood = trim(options.mood)
-
-  if (genre) lines.push(`Genre: ${genre}`)
-  if (mood) lines.push(`Mood: ${mood}`)
-  if (typeof options.durationSeconds === 'number') lines.push(`Target duration: ${options.durationSeconds} seconds`)
-  if (typeof options.bpm === 'number') lines.push(`BPM: ${options.bpm}`)
-  if (options.vocalMode === 'instrumental') lines.push('Instrumental only. Do not include vocals or lyrics.')
-  if (options.vocalMode === 'vocal') lines.push('Vocals are allowed when musically appropriate.')
-  if (options.outputFormat) lines.push(`Requested output format: ${options.outputFormat}`)
-
-  return lines.join('\n')
 }
 
 function getFinishReason(response: GoogleMusicResponse): string | undefined {
@@ -113,7 +96,7 @@ export async function executeGoogleMusicGeneration(input: AiProviderMusicExecuti
       GOOGLE_PROVIDER_PROXY_TARGET,
       async () => await ai.models.generateContent({
         model: modelId,
-        contents: [{ parts: [{ text: buildMusicPrompt(input.prompt, options) }] }],
+        contents: [{ parts: [{ text: compileMusicPrompt(input.prompt, options) }] }],
       }),
     ),
   })

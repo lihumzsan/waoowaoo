@@ -15,7 +15,6 @@ export const ARK_IMAGE_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:
 export const ARK_VIDEO_RATIOS = ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9', 'adaptive'] as const
 export const ARK_IMAGE_RESOLUTIONS = ['4K', '3K'] as const
 export const ARK_VIDEO_SERVICE_TIERS = ['default', 'flex'] as const
-export const ARK_PROVIDER_DEFAULT_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
 export const ARK_PROVIDER_TEST_LLM_MODEL_ID = 'doubao-seed-2-0-lite-260215'
 export const ARK_PLATFORM_MODEL_PRESETS = [
   { provider: 'ark', modelId: 'doubao-seedance-2-0-260128', name: 'Doubao Seedance 2.0', type: 'video' },

@@ -6,8 +6,6 @@ import { fetchWithRetry, RETRY_POLICY } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { AppError } from '@/lib/errors/app-error'
 
-const ARK_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
-
 const DEFAULT_TIMEOUT_MS = 60 * 1000
 
 export interface ArkImageGenerationRequest {
@@ -28,12 +26,12 @@ export interface ArkImageGenerationResponse {
 
 export async function arkImageGeneration(
   request: ArkImageGenerationRequest,
-  options?: { apiKey: string; timeoutMs?: number; logPrefix?: string },
+  options: { apiKey: string; baseUrl: string; timeoutMs?: number; logPrefix?: string },
 ): Promise<ArkImageGenerationResponse> {
-  if (!options?.apiKey) throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'ark' })
+  if (!options.apiKey) throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'ark' })
 
-  const { apiKey, timeoutMs = DEFAULT_TIMEOUT_MS, logPrefix = '[Ark Image]' } = options
-  const url = `${ARK_BASE_URL}/images/generations`
+  const { apiKey, baseUrl, timeoutMs = DEFAULT_TIMEOUT_MS, logPrefix = '[Ark Image]' } = options
+  const url = `${baseUrl.replace(/\/+$/, '')}/images/generations`
 
   _ulogInfo(`${logPrefix} 开始图片生成请求, 模型: ${request.model}`)
   _ulogInfo(
@@ -130,7 +128,8 @@ export async function executeArkImageGeneration(input: AiProviderImageExecutionC
   const options: ArkImageOptions = input.options ?? {}
   assertAllowedArkImageOptions(options)
 
-  const { apiKey } = await getProviderConfig(input.userId, input.selection.provider)
+  const { apiKey, baseUrl } = await getProviderConfig(input.userId, input.selection.provider)
+  if (!baseUrl) throw new Error('PROVIDER_BASE_URL_MISSING: ark (image)')
   const modelId = requireSelectedModelId(input.selection, 'ark:image')
 
   const resolution = options.resolution
@@ -166,7 +165,7 @@ export async function executeArkImageGeneration(input: AiProviderImageExecutionC
     watermark: false,
     ...(size ? { size } : {}),
     ...(referenceImages.length > 0 ? { image: referenceImages } : {}),
-  }, { apiKey, logPrefix: '[ARK Image]' })
+  }, { apiKey, baseUrl, logPrefix: '[ARK Image]' })
 
   const imageUrls = Array.isArray(arkData.data)
     ? arkData.data

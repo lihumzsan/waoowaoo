@@ -178,6 +178,8 @@
         "src/lib/ai-providers",
         "src/lib/ai-registry",
         "src/lib/config-service",
+        "src/lib/platform-runtime",
+        "src/lib/user-api/runtime-config.ts",
         "src/lib/llm-observe",
         "src/lib/media",
         "scripts/check-outbound-image-runtime-sample.ts",
