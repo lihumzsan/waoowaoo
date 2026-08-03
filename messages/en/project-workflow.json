@@ -126,7 +126,9 @@
         "loadFailed": "Files could not be loaded",
         "retry": "Retry",
         "openFolder": "Open folder",
-        "sectionCount": "{count} items"
+        "sectionCount": "{count} items",
+        "directory": "Directory",
+        "directoryEmpty": "No folders yet"
       },
       "nodes": {
         "resourceCard": {

@@ -126,7 +126,9 @@
         "loadFailed": "文件加载失败",
         "retry": "重试",
         "openFolder": "打开文件夹",
-        "sectionCount": "{count} 项"
+        "sectionCount": "{count} 项",
+        "directory": "目录",
+        "directoryEmpty": "暂无文件夹"
       },
       "nodes": {
         "resourceCard": {

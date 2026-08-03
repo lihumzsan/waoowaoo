@@ -37,7 +37,7 @@ Canvas 是 WorkspaceResource 文件树的空间化投影，不是第二套文件
 ## 权威入口
 
 - 节点 registry：`src/features/project-workspace/canvas/registry/workspace-canvas-node-registry.ts`。
-- folder/root scope、返回与搜索定位：`ProjectWorkspaceCanvas.tsx`、`controls/CanvasFolderNavigation.tsx`（返回按钮 + 搜索，无面包屑）；root identity 只来自 `WORKSPACE_RESOURCE_ROOT_FOLDER_KEY`。
+- folder/root scope、返回与搜索定位：`ProjectWorkspaceCanvas.tsx`、`controls/CanvasFolderNavigation.tsx`（返回按钮 + 默认折叠的目录树面板 + 搜索，无面包屑；目录树消费 root `scope=subtree` 列表投影，选中走同一导航 callback，不维护第二份目录结构）；root identity 只来自 `WORKSPACE_RESOURCE_ROOT_FOLDER_KEY`。
 - 子树展开/收起唯一裁判：`projection/workspace-canvas-expansion-policy.ts`（预算常量、树构建与确定性收起规则）；renderer 只消费 `folder.display`。
 - children/subtree/search Query：`src/lib/query/hooks/useWorkspaceResources.ts` 与 `src/lib/workspace-resource/view-service.ts`（`scope=children|subtree`）；tree/search 返回 bounded summary，单资源读取才允许返回完整内容。
 - 媒体 presentation 契约：`src/features/project-workspace/canvas/node-presentation-profiles.ts`（每媒体族 shell 声明与唯一尺寸 resolver）。
