@@ -26,6 +26,9 @@
 - **BA-12 — 破坏性审批冻结精确输入。** 非计费删除在展示审批卡前先按 Operation schema 规范化输入；approval identity 必须包含 canonical input hash，卡片展示精确目标，执行只消费同一份规范化输入。只绑定 Turn/call/operation 的通用“确认删除”不能授权另一组目标。
 - **BA-13 — 取消或清空先到则不得开始副作用。** 浏览器 Turn cancel 与 pending/decided interaction 在 Project 锁下原子关闭；浏览器审批证明要求同 Turn 未取消且 Thread 未进入 clear。同步写、approved-plan 提交和 direct durable execution 在业务事务内按 Project→Thread→Turn 获取同一 effect fence，先取消或 clear 则不能创建 Task、扣费或删除资源。
 - **BA-14 — 图片能力参数只有一个编译入口。** 所有项目图片 producer 在 Plan 阶段通过 `buildImageBillingPayload` 取得当前模型已配置的分辨率、质量与业务画幅，再把同一 `generationOptions` 同时交给 quote 和 Task。新 Resource producer 不得只传模型和画幅、另行猜测价格档位或绕过 capability catalog。
+- **BA-15 — 余额是两个池，订阅池先花。** 订阅池按周期发放、周期末过期，充值池永久有效；可用额度 = 未过期订阅池 + 充值池。冻结必须记录各池出资额，结算与回滚按原出资归还；周期已过期后释放的订阅额度不得复活，必须作废并落流水。过期只能在读取时按 `subscriptionExpiresAt` 判定（lazy），正确性不得依赖定时任务是否按时执行；清零流水由发放事务或显式终止写入。取消订阅只结束订阅池，绝不动充值池。
+- **BA-16 — 每期发放只有一个幂等写入者。** `SubscriptionGrant(subscriptionId, periodIndex)` 是发放身份；年付一次付款按月分 12 期发放，重投 webhook、重放 Activity 与并发 sweep 只发放一次。发放替换（而非累加）订阅池，上期余额在同一事务作废并落流水。升级即时把本期补足到新档，降级只记录新档、下期生效，已发放额度不回收。套餐只能从我们在 checkout 写入的 metadata 读取，禁止从 Stripe price id 或金额反推。
+- **BA-17 — LLM 后付、按日聚合、事前只做门禁。** 模型价格只有跑完才知道，因此不进入 `plan → quote → freeze` 链路。用量按调用如实写入 `UsageCost`，按「用户 × 自然日」聚合为一次扣费，只结算已完整过去的日期，小数在全天累计后统一向上取整一次；幂等键为 `llm-daily:<UTC 日期>`。事前只检查「是否还有可用额度」这一条下限，不得伪造预估报价来拒绝工作。供应商回报的成本只作为成本观测事实进入 metadata，永远不得成为扣费金额。
 
 ## 权威入口
 
@@ -36,6 +39,10 @@
 | 可选模型价格覆盖校验 | `src/lib/ai-registry/pricing-coverage.ts`（由 `catalog-bootstrap` 注册末尾调用） |
 | 跨 provider 同能力零售价 | `src/lib/ai-providers/shared/*-pricing.ts` |
 | credit 单位与整数化边界 | `src/lib/billing/credits.ts` |
+| 两池消费/归还/过期裁决 | `src/lib/billing/credit-pools.ts` |
+| 订阅发放与清零写入 | `src/lib/billing/subscription-ledger.ts` |
+| 订阅期次、升降级、终止 | `src/lib/billing/subscription-service.ts` |
+| LLM 按日结算与余额门禁 | `src/lib/billing/llm-daily-settlement.ts`、`llm-balance-gate.ts` |
 | 套餐档位、发放额度、最低有效 credit 单价 | `src/lib/billing/subscription-plans.ts` |
 | PlanSnapshot 与 request identity | `src/lib/operations/planning.ts`、`operation-plan-snapshot.ts`、`api-request-identity.ts` |
 | Grant 与执行重验证 | operation approval routes + `operation-plan-revalidation.ts` |
