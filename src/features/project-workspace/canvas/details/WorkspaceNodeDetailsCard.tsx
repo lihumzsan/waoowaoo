@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ViewportPortal } from '@xyflow/react'
+import { ViewportPortal, useInternalNode } from '@xyflow/react'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import type { WorkspaceCanvasFlowNode } from '../node-canvas-types'
 import { WorkspaceNodeImagePreviewContext } from '../nodes/renderers/renderer-shared'
@@ -37,12 +37,16 @@ export function WorkspaceNodeDetailsCard({
   readonly actions: WorkspaceNodeDetailsActions
 }) {
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
+  // Section members carry parent-relative positions; the viewport-layer card
+  // must anchor to the node's absolute canvas position.
+  const internalNode = useInternalNode(node.id)
   if (node.data.kind !== 'resourceCard') return null
   const resource = node.data.resourceDetails.resource
   const prompt = resource.prompt
   const modelKey = resource.modelKey
   const inputs = node.data.resourceDetails.inputSummaries
   const width = Math.max(node.data.width, DETAILS_CARD_MIN_WIDTH)
+  const anchor = internalNode?.internals.positionAbsolute ?? node.position
 
   return (
     <WorkspaceNodeImagePreviewContext.Provider value={setPreviewImageUrl}>
@@ -50,7 +54,7 @@ export function WorkspaceNodeDetailsCard({
         <div
           className="nodrag nopan pointer-events-auto absolute"
           style={{
-            transform: `translate(${node.position.x - (width - node.data.width) / 2}px, ${node.position.y + node.data.height + DETAILS_CARD_GAP}px)`,
+            transform: `translate(${anchor.x - (width - node.data.width) / 2}px, ${anchor.y + node.data.height + DETAILS_CARD_GAP}px)`,
             width,
             zIndex: 40,
           }}
