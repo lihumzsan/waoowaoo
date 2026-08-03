@@ -53,37 +53,37 @@ export default function ImagePreviewModal({ imageUrl, onClose }: ImagePreviewMod
       style={{ margin: 0, padding: 0 }}
     >
       <div
-        className="relative max-w-7xl max-h-[90vh] p-4"
+        className="relative inline-block"
         onClick={(event) => event.stopPropagation()}
       >
-        {/* 关闭按钮 */}
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-6 right-6 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-[var(--glass-overlay)] hover:bg-[var(--glass-overlay)] text-white transition-colors"
-        >
-          <AppIcon name="close" className="w-6 h-6" />
-        </button>
-        {originalImageUrl && (
-          <a
-            href={originalImageUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="absolute top-6 right-20 z-10 px-3 h-10 inline-flex items-center rounded-full bg-[var(--glass-overlay)] hover:bg-[var(--glass-overlay)] text-white text-sm transition-colors"
-          >
-            {t('viewOriginal')}
-          </a>
-        )}
-
-        {/* 图片 */}
         <MediaImageWithLoading
           src={displayImageUrl}
           alt={t('preview')}
-          containerClassName="max-w-full max-h-[90vh] !bg-transparent"
-          className="block max-w-full max-h-[90vh] object-contain shadow-2xl"
+          containerClassName="max-w-[calc(100vw-3rem)] max-h-[90vh] !bg-transparent"
+          className="block max-w-[calc(100vw-3rem)] max-h-[90vh] object-contain shadow-2xl"
           onClick={(e) => e.stopPropagation()}
         />
+        {/* 操作按钮贴着图片右上角,随图片实际比例走 */}
+        <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+          {originalImageUrl && (
+            <a
+              href={originalImageUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex h-9 items-center rounded-full bg-black/45 px-3 text-sm text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+            >
+              {t('viewOriginal')}
+            </a>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+          >
+            <AppIcon name="close" className="h-5 w-5" />
+          </button>
+        </div>
       </div>
     </div>,
     document.body,
