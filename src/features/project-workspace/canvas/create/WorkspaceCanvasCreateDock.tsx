@@ -15,13 +15,16 @@ const MEDIA_ICON: Readonly<Record<WorkspaceCanvasCreateCapabilityView['mediaKind
   voice: 'mic',
 }
 
-const DOCK_WIDTH = 340
+const FRAME_WIDTH = 340
+const COMPOSE_PANEL_WIDTH = 480
 
 /**
- * An in-place creation draft on the canvas: an empty media frame with the
- * prompt panel attached below it, born where the user double-clicked. It is
- * pure UI state — nothing persists until the create Operation is confirmed or
- * an upload lands; refreshing simply discards unsubmitted drafts.
+ * In-place creation, two steps at the double-clicked position:
+ * 1. a compact type chooser (capabilities come from the server catalog);
+ * 2. after picking a type, a placeholder media frame with a compose panel
+ *    below it — the panel reuses the selected-card details panel shell.
+ * Drafts are pure UI state; nothing persists until the create Operation is
+ * confirmed or an upload lands, and refreshing discards unsubmitted drafts.
  */
 export function WorkspaceCanvasCreateDock({
   position,
@@ -45,11 +48,11 @@ export function WorkspaceCanvasCreateDock({
   readonly onClose: () => void
 }) {
   const t = useTranslations('projectWorkflow.canvas.workspace.create')
-  const [selectedKind, setSelectedKind] = useState<WorkspaceCanvasCreateCapabilityView['mediaKind']>('image')
+  const [selectedKind, setSelectedKind] = useState<WorkspaceCanvasCreateCapabilityView['mediaKind'] | null>(null)
   const capability = useMemo(
-    () => capabilities.find((candidate) => candidate.mediaKind === selectedKind)
-      ?? capabilities[0]
-      ?? null,
+    () => (selectedKind
+      ? capabilities.find((candidate) => candidate.mediaKind === selectedKind) ?? null
+      : null),
     [capabilities, selectedKind],
   )
   const [name, setName] = useState('')
@@ -58,17 +61,94 @@ export function WorkspaceCanvasCreateDock({
   const [durationText, setDurationText] = useState('')
   const [voicePreviewText, setVoicePreviewText] = useState('')
 
-  const mediaKind = capability?.mediaKind ?? 'image'
+  const closeOnEscape = (event: KeyboardEvent) => {
+    if (event.key !== 'Escape') return
+    event.stopPropagation()
+    onClose()
+  }
+
+  if (!capability) {
+    return (
+      <div
+        className="nodrag nopan pointer-events-auto absolute"
+        style={{ transform: `translate(${position.x}px, ${position.y}px)`, width: 240, zIndex: 50 }}
+        onClick={(event) => event.stopPropagation()}
+        onMouseDownCapture={(event) => event.stopPropagation()}
+        onKeyDown={closeOnEscape}
+      >
+        <div className="rounded-[18px] border border-slate-200 bg-white/96 p-2 shadow-[0_18px_48px_rgba(15,23,42,0.14)] backdrop-blur-xl">
+          <div className="flex items-center justify-between px-2 pb-1 pt-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--glass-text-tertiary)]">
+              {t('chooseTitle')}
+            </span>
+            <button
+              type="button"
+              aria-label={t('close')}
+              title={t('close')}
+              className="rounded-full p-1 text-[var(--glass-text-tertiary)] hover:bg-slate-100"
+              onClick={onClose}
+            >
+              <AppIcon name="close" className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {loading ? (
+            <span className="flex items-center gap-2 px-2 py-2 text-xs text-[var(--glass-text-secondary)]">
+              <AppIcon name="loader" className="h-3.5 w-3.5 animate-spin" />
+              {t('loading')}
+            </span>
+          ) : loadFailed ? (
+            <span className="flex items-center gap-2 px-2 py-2 text-xs text-[var(--glass-text-secondary)]">
+              {t('loadFailed')}
+              <button
+                type="button"
+                className="font-medium text-[var(--glass-text-primary)] underline underline-offset-2"
+                onClick={onRetryCapabilities}
+              >
+                {t('retry')}
+              </button>
+            </span>
+          ) : (
+            <div className="space-y-0.5">
+              {capabilities.map((candidate) => (
+                <button
+                  key={candidate.operationId}
+                  type="button"
+                  className="flex w-full items-center gap-2.5 rounded-[12px] px-2.5 py-2 text-left text-sm font-medium text-[var(--glass-text-primary)] transition hover:bg-slate-100"
+                  onClick={() => setSelectedKind(candidate.mediaKind)}
+                >
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-[10px] bg-slate-100 text-[var(--glass-text-secondary)]">
+                    <AppIcon name={MEDIA_ICON[candidate.mediaKind]} className="h-3.5 w-3.5" />
+                  </span>
+                  {t(`kind.${candidate.mediaKind}`)}
+                </button>
+              ))}
+              <button
+                type="button"
+                className="flex w-full items-center gap-2.5 rounded-[12px] px-2.5 py-2 text-left text-sm font-medium text-[var(--glass-text-primary)] transition hover:bg-slate-100"
+                onClick={onUpload}
+              >
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-[10px] bg-slate-100 text-[var(--glass-text-secondary)]">
+                  <AppIcon name="upload" className="h-3.5 w-3.5" />
+                </span>
+                {t('kind.upload')}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const mediaKind = capability.mediaKind
   const needsDuration = mediaKind === 'video' || mediaKind === 'music'
   const needsVoicePreview = mediaKind === 'voice'
-  const durationRange = capability?.inputLimits.durationSeconds ?? null
-  const countMin = capability ? Math.max(1, capability.alternatives.min) : 1
-  const countMax = capability?.alternatives.max ?? 1
+  const durationRange = capability.inputLimits.durationSeconds ?? null
+  const countMin = Math.max(1, capability.alternatives.min)
+  const countMax = capability.alternatives.max
   const count = countText.trim() ? Number(countText) : countMin
   const durationSeconds = durationText.trim() ? Number(durationText) : null
 
-  const valid = !!capability
-    && prompt.trim().length > 0
+  const valid = prompt.trim().length > 0
     && (
       capability.inputLimits.promptMaxLength === null
       || prompt.trim().length <= capability.inputLimits.promptMaxLength
@@ -93,7 +173,7 @@ export function WorkspaceCanvasCreateDock({
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    if (!capability || !valid) return
+    if (!valid) return
     onSubmit({
       capability,
       name: name.trim(),
@@ -105,16 +185,10 @@ export function WorkspaceCanvasCreateDock({
     })
   }
 
-  const closeOnEscape = (event: KeyboardEvent) => {
-    if (event.key !== 'Escape') return
-    event.stopPropagation()
-    onClose()
-  }
-
   return (
     <div
       className="nodrag nopan pointer-events-auto absolute"
-      style={{ transform: `translate(${position.x}px, ${position.y}px)`, width: DOCK_WIDTH, zIndex: 50 }}
+      style={{ transform: `translate(${position.x}px, ${position.y}px)`, width: FRAME_WIDTH, zIndex: 50 }}
       onClick={(event) => event.stopPropagation()}
       onMouseDownCapture={(event) => event.stopPropagation()}
       onKeyDown={closeOnEscape}
@@ -127,37 +201,23 @@ export function WorkspaceCanvasCreateDock({
       </div>
 
       <form
-        className="mt-2 space-y-2.5 rounded-[16px] border border-slate-200 bg-white/96 p-3 shadow-[0_14px_40px_rgba(15,23,42,0.12)] backdrop-blur-xl"
+        className="mt-3 space-y-2.5 rounded-[20px] border border-slate-200 bg-white/96 p-4 shadow-[0_18px_48px_rgba(15,23,42,0.14)] backdrop-blur-xl"
+        style={{ width: COMPOSE_PANEL_WIDTH, marginLeft: (FRAME_WIDTH - COMPOSE_PANEL_WIDTH) / 2 }}
         onSubmit={submit}
       >
-        <div className="flex items-center gap-1">
-          {loading ? (
-            <span className="flex items-center gap-2 px-1 py-0.5 text-xs text-[var(--glass-text-secondary)]">
-              <AppIcon name="loader" className="h-3.5 w-3.5 animate-spin" />
-              {t('loading')}
-            </span>
-          ) : loadFailed ? (
-            <span className="flex items-center gap-2 px-1 py-0.5 text-xs text-[var(--glass-text-secondary)]">
-              {t('loadFailed')}
-              <button
-                type="button"
-                className="font-medium text-[var(--glass-text-primary)] underline underline-offset-2"
-                onClick={onRetryCapabilities}
-              >
-                {t('retry')}
-              </button>
-            </span>
-          ) : capabilities.map((candidate) => (
-            <button
-              key={candidate.operationId}
-              type="button"
-              className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium transition ${candidate.mediaKind === mediaKind ? 'bg-slate-900 text-white' : 'text-[var(--glass-text-secondary)] hover:bg-slate-100'}`}
-              onClick={() => setSelectedKind(candidate.mediaKind)}
-            >
-              <AppIcon name={MEDIA_ICON[candidate.mediaKind]} className="h-3 w-3" />
-              {t(`kind.${candidate.mediaKind}`)}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded-lg px-1.5 py-1 text-xs font-medium text-[var(--glass-text-secondary)] transition hover:bg-slate-100 hover:text-[var(--glass-text-primary)]"
+            onClick={() => setSelectedKind(null)}
+          >
+            <AppIcon name="chevronLeft" className="h-3.5 w-3.5" />
+            {t('back')}
+          </button>
+          <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--glass-text-primary)]">
+            <AppIcon name={MEDIA_ICON[mediaKind]} className="h-3.5 w-3.5 text-[var(--glass-text-secondary)]" />
+            {t(`kind.${mediaKind}`)}
+          </span>
           <span className="flex-1" />
           <button
             type="button"
@@ -174,7 +234,7 @@ export function WorkspaceCanvasCreateDock({
           value={prompt}
           onChange={(event) => setPrompt(event.target.value)}
           rows={3}
-          maxLength={capability?.inputLimits.promptMaxLength ?? undefined}
+          maxLength={capability.inputLimits.promptMaxLength ?? undefined}
           placeholder={needsVoicePreview ? t('voiceDescriptionPlaceholder') : t('promptPlaceholder')}
           className="glass-input-base w-full resize-y px-2.5 py-2 text-sm"
           autoFocus
@@ -193,7 +253,7 @@ export function WorkspaceCanvasCreateDock({
               value={voicePreviewText}
               onChange={(event) => setVoicePreviewText(event.target.value)}
               rows={2}
-              maxLength={capability?.inputLimits.previewTextMaxLength ?? undefined}
+              maxLength={capability.inputLimits.previewTextMaxLength ?? undefined}
               placeholder={t('voicePreviewPlaceholder')}
               className="glass-input-base w-full resize-y px-2.5 py-1.5 text-xs"
             />

@@ -51,6 +51,8 @@
         "close": "关闭",
         "submit": "生成",
         "frameHint": "生成结果将出现在这里",
+        "chooseTitle": "要创建什么？",
+        "back": "重选类型",
         "namePlaceholder": "可选的资源名称",
         "voiceDescriptionPlaceholder": "描述音色、语气、口音和表达方式",
         "promptPlaceholder": "描述你想生成的内容，或点上传添加本地素材",

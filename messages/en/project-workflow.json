@@ -51,6 +51,8 @@
         "close": "Close",
         "submit": "Create",
         "frameHint": "Your result will appear here",
+        "chooseTitle": "What do you want to create?",
+        "back": "Change type",
         "namePlaceholder": "Optional Resource name",
         "voiceDescriptionPlaceholder": "Describe the voice, delivery, accent, and tone",
         "promptPlaceholder": "Describe what you want to create, or upload local media",
