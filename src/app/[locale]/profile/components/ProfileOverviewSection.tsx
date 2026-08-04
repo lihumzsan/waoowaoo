@@ -12,9 +12,21 @@ import { formatCredits } from '@/lib/billing/credits'
 
 export interface ProfileBalanceSummary {
   currency?: string
+  /** Spendable total: unexpired plan credits plus bought credits. */
   balance?: number
+  /** Bought outright. Never expires. */
+  rechargeCredits?: number
+  /** Granted by the current plan period. Cleared when the period ends. */
+  subscriptionCredits?: number
+  subscriptionExpiresAt?: string | null
   frozenAmount?: number
   totalSpent?: number
+  subscription?: {
+    planId: string
+    interval: string
+    status: string
+    currentPeriodEnd: string
+  } | null
 }
 
 function normalizeAmount(value: number | undefined): number {
@@ -23,6 +35,19 @@ function normalizeAmount(value: number | undefined): number {
 
 function formatStatAmount(value: number | undefined): string {
   return formatCredits(normalizeAmount(value))
+}
+
+function daysUntil(iso: string): number {
+  const end = new Date(iso).getTime()
+  if (Number.isNaN(end)) return 0
+  return Math.max(0, Math.ceil((end - Date.now()) / (24 * 60 * 60 * 1000)))
+}
+
+function formatDay(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  // Fixed parts rather than a locale format, so server and client agree.
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
 interface ProfileOverviewSectionProps {
@@ -95,7 +120,32 @@ export default function ProfileOverviewSection({
           <div className="glass-meter-fill" style={{ width: `${Math.round(usageRatio * 100)}%` }} />
         </div>
 
+        {/* The two pools behave differently — one expires, one does not — so a
+            single total hides the thing a user most needs to know. */}
         <div className="mt-5 grid grid-cols-2 gap-3">
+          <div className="rounded-xl border border-[var(--glass-stroke-soft)] bg-white/70 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+            <p className="text-xs font-medium text-[var(--glass-text-tertiary)]">{t('planCredits')}</p>
+            <p className="glass-num mt-1 text-xl font-semibold tracking-tight text-[var(--glass-text-primary)]">
+              {formatStatAmount(balance?.subscriptionCredits)}
+              <span className="ml-1.5 text-xs font-medium text-[var(--glass-text-tertiary)]">{currency}</span>
+            </p>
+            <p className="mt-1 text-[11px] text-[var(--glass-text-tertiary)]">
+              {balance?.subscriptionExpiresAt
+                ? t('planCreditsExpireOn', { date: formatDay(balance.subscriptionExpiresAt) })
+                : t('planCreditsNone')}
+            </p>
+          </div>
+          <div className="rounded-xl border border-[var(--glass-stroke-soft)] bg-white/70 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+            <p className="text-xs font-medium text-[var(--glass-text-tertiary)]">{t('boughtCredits')}</p>
+            <p className="glass-num mt-1 text-xl font-semibold tracking-tight text-[var(--glass-text-primary)]">
+              {formatStatAmount(balance?.rechargeCredits)}
+              <span className="ml-1.5 text-xs font-medium text-[var(--glass-text-tertiary)]">{currency}</span>
+            </p>
+            <p className="mt-1 text-[11px] text-[var(--glass-text-tertiary)]">{t('boughtCreditsNeverExpire')}</p>
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-3">
           <div className="rounded-xl border border-[var(--glass-stroke-soft)] bg-white/70 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
             <p className="text-xs font-medium text-[var(--glass-text-tertiary)]">{t('frozen')}</p>
             <p className="glass-num mt-1 text-xl font-semibold tracking-tight text-[var(--glass-text-primary)]">
@@ -112,6 +162,36 @@ export default function ProfileOverviewSection({
           </div>
         </div>
       </section>
+
+      {/* What plan is in force, and how long it still runs. A term that is
+          bought rather than auto-renewed has to say when it ends, or the user
+          only finds out when the credits stop. */}
+      {balance?.subscription ? (
+        <section className="glass-surface-elevated p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-medium text-[var(--glass-text-tertiary)]">{t('currentPlan')}</p>
+              <p className="mt-1 text-xl font-semibold tracking-tight text-[var(--glass-text-primary)]">
+                {t(`planNames.${balance.subscription.planId}` as 'planNames.creator')}
+              </p>
+              <p className="glass-num mt-1 text-[13px] text-[var(--glass-text-secondary)]">
+                {t('planMonthlyGrant', {
+                  credits: formatCredits(normalizeAmount(balance.subscriptionCredits)),
+                })}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs font-medium text-[var(--glass-text-tertiary)]">{t('planEndsAt')}</p>
+              <p className="glass-num mt-1 text-[15px] font-semibold text-[var(--glass-text-primary)]">
+                {formatDay(balance.subscription.currentPeriodEnd)}
+              </p>
+              <p className="mt-1 text-[12px] text-[var(--glass-text-tertiary)]">
+                {t('planDaysLeft', { days: daysUntil(balance.subscription.currentPeriodEnd) })}
+              </p>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {showInviteCode ? <ProfileInviteCodeCard onCreditsChanged={onCreditsChanged} /> : null}
 

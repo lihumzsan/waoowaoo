@@ -50,6 +50,10 @@
     "planDialogTitle": "Buy the {plan} plan",
     "planDialogSummary": "¥{amount} — {credits} credits granted monthly",
     "payWithWechatHint": "Scan to pay, without leaving this page",
-    "payWithCardHint": "Continue on Stripe's secure checkout"
+    "payWithCardHint": "Continue on Stripe's secure checkout",
+    "paymentSucceeded": "Payment received",
+    "planActivated": "The {plan} plan is active — {credits} credits are in your balance",
+    "paymentDone": "Start creating",
+    "rechargeSucceeded": "{credits} credits added"
   }
 }

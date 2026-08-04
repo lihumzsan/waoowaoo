@@ -41,6 +41,8 @@ export interface WechatRechargeState {
   readonly available: boolean
   readonly busy: boolean
   readonly payment: WechatQrPayment | null
+  /** Set once the ledger confirms the payment, so the dialog can say so. */
+  readonly settled: WechatQrPayment | null
   readonly status: { kind: 'error' | 'info'; text: string } | null
   readonly start: (request: WechatIntentRequest) => void
   readonly dismiss: () => void
@@ -93,6 +95,7 @@ export function useWechatRecharge(
   const resolveClientError = useClientErrorMessage()
   const [busy, setBusy] = useState(false)
   const [payment, setPayment] = useState<WechatQrPayment | null>(null)
+  const [settled, setSettled] = useState<WechatQrPayment | null>(null)
   const [status, setStatus] = useState<WechatRechargeState['status']>(null)
   const creditedRef = useRef(false)
 
@@ -101,6 +104,7 @@ export function useWechatRecharge(
 
   const dismiss = useCallback(() => {
     setPayment(null)
+    setSettled(null)
     setStatus(null)
     setBusy(false)
   }, [])
@@ -129,6 +133,7 @@ export function useWechatRecharge(
 
       setBusy(true)
       setStatus(null)
+      setSettled(null)
       creditedRef.current = false
 
       void (async () => {
@@ -195,6 +200,9 @@ export function useWechatRecharge(
           if (isRecord(payload) && payload.credited === true) {
             creditedRef.current = true
             window.clearInterval(timer)
+            // Hold the dialog open on a success state instead of vanishing —
+            // a payment that disappears without a word reads as a failure.
+            setSettled(payment)
             setPayment(null)
             onCredited()
           }
@@ -211,7 +219,7 @@ export function useWechatRecharge(
     }
   }, [payment, onCredited])
 
-  return { available, busy, payment, status, start, dismiss }
+  return { available, busy, payment, settled, status, start, dismiss }
 }
 
 export function WechatQrDialog({

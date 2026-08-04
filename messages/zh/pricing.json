@@ -50,6 +50,10 @@
     "planDialogTitle": "购买 {plan} 套餐",
     "planDialogSummary": "应付 ¥{amount}，每月发放 {credits} credits",
     "payWithWechatHint": "扫码支付，无需离开本页",
-    "payWithCardHint": "跳转 Stripe 安全结账页"
+    "payWithCardHint": "跳转 Stripe 安全结账页",
+    "paymentSucceeded": "支付成功",
+    "planActivated": "{plan} 套餐已生效，本月 {credits} credits 已到账",
+    "paymentDone": "开始创作",
+    "rechargeSucceeded": "已到账 {credits} credits"
   }
 }

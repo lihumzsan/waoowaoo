@@ -56,7 +56,10 @@
     "recharge": "Credits Added",
     "consume": "Service Consumption",
     "freeze": "Credits Frozen",
-    "refund": "Freeze Refunded"
+    "refund": "Freeze Refunded",
+    "planPurchase": "Plan purchase",
+    "planGrant": "Plan credits granted",
+    "planExpire": "Plan credits expired"
   },
   "transactionType": "Type",
   "transactionOperation": "Operation",
@@ -174,5 +177,21 @@
     "workspace_resource_voice": "Voice Resource Generation",
     "workspace_resource_video": "Video Resource Generation",
     "workspace_resource_video_merge": "Video Resource Merge"
+  },
+  "planCredits": "Plan credits",
+  "planCreditsExpireOn": "Clears {date}",
+  "planCreditsNone": "No plan credits",
+  "boughtCredits": "Bought credits",
+  "boughtCreditsNeverExpire": "Never expire",
+  "currentPlan": "Current plan",
+  "planMonthlyGrant": "{credits} this period",
+  "planEndsAt": "Runs until",
+  "planDaysLeft": "{days} days left",
+  "planNames": {
+    "starter": "Starter",
+    "creator": "Creator",
+    "pro": "Pro",
+    "studio": "Studio",
+    "flagship": "Flagship"
   }
 }

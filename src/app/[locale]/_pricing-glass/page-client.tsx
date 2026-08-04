@@ -205,11 +205,10 @@ export default function PricingGlassPageClient({ content }: { readonly content: 
   const t = useTranslations('pricing.glass')
   const recharge = useRecharge()
   const purchase = usePlanPurchase()
-  const wechat = useWechatRecharge(recharge.config, useCallback(() => {
-    // Credits landed. A reload is the simplest way to make every balance the
-    // page shows agree with the ledger again.
-    window.location.reload()
-  }, []))
+  // Nothing to do the moment credits land: the dialog shows its success state
+  // and the page refreshes when the user closes it, so the confirmation is not
+  // yanked away by a reload.
+  const wechat = useWechatRecharge(recharge.config, useCallback(() => {}, []))
   const [interval, setInterval] = useState<SubscriptionInterval>('month')
   // Which plan's payment dialog is open. Clicking a card opens the choice
   // of method rather than committing to one.
@@ -331,8 +330,10 @@ export default function PricingGlassPageClient({ content }: { readonly content: 
           if (payingFor) purchase.start(payingFor.id, interval)
         }}
         onClose={() => {
+          const settled = wechat.settled !== null
           setPayingFor(null)
           wechat.dismiss()
+          if (settled) window.location.reload()
         }}
       />
       {/* The top-up box has its own QR dialog; the plan dialog renders its own. */}

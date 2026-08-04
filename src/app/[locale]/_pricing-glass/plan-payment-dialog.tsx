@@ -89,6 +89,7 @@ export function PlanPaymentDialog({
   }, [plan])
 
   if (!plan) return null
+  const settled = wechat.settled
   const priced = plan.intervals[interval]
   const chargedCny = interval === 'month' && plan.firstMonthPromoCny !== null
     ? plan.firstMonthPromoCny
@@ -106,7 +107,34 @@ export function PlanPaymentDialog({
         credits: plan.creditsAmount.toLocaleString('en-US'),
       })}
     >
-      {qr ? (
+      {settled ? (
+        <div className="flex flex-col items-center gap-3 py-6">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--glass-tone-success-bg)]">
+            <AppIcon
+              name="check"
+              strokeWidth={2.6}
+              className="h-7 w-7 text-[var(--glass-tone-success-fg)]"
+              aria-hidden="true"
+            />
+          </span>
+          <p className="text-[16px] font-semibold text-[var(--glass-text-primary)]">
+            {t('paymentSucceeded')}
+          </p>
+          <p className="text-center text-[13px] leading-6 text-[var(--glass-text-secondary)]">
+            {t('planActivated', {
+              plan: plan.label,
+              credits: plan.creditsAmount.toLocaleString('en-US'),
+            })}
+          </p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="glass-btn-base glass-btn-primary mt-2 h-10 w-full rounded-xl text-[13px] font-medium"
+          >
+            {t('paymentDone')}
+          </button>
+        </div>
+      ) : qr ? (
         <div className="flex flex-col items-center gap-4 py-2">
           {/* A data: URI produced by Stripe. next/image would only add a proxy
               round-trip to bytes we already hold, and cannot optimise a QR
