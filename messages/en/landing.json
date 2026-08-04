@@ -1,9 +1,15 @@
 {
   "title": "waoowaoo",
   "hero": {
-    "headline": "The idea is the hard part",
-    "highlight": "and you already have one",
-    "sub": "No screenwriting, no storyboarding. Just say the thing you keep turning over — how it's told, how it's shot, how it should feel, we work out together.",
-    "ctaPrimary": "Tell us your idea"
+    "headline": "An idea is enough",
+    "highlight": "AI handles the making",
+    "sub": "No software to learn, no shot lists to plan. Say what you want and it runs the whole thing — script, visuals, voice, edit. Something feels off? Just say so.",
+    "ctaPrimary": "Tell us your idea",
+    "ctaNote": "No editing experience. No footage to prepare.",
+    "steps": {
+      "one": "Say the idea",
+      "two": "AI makes it",
+      "three": "You say what to change"
+    }
   }
 }
