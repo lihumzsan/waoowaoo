@@ -139,21 +139,42 @@ type WebSearchSource = {
   readonly previewImageUrl: string | null
 }
 
+/**
+ * Reads the cited sources out of a completed research result.
+ *
+ * The Operation's output is wrapped by the MCP success envelope, and its
+ * citations are `sources` — the contract guarantees the array is non-empty, so
+ * an empty render here means the shape moved, not that the research found
+ * nothing. Preview images are matched back to their own source page; a source
+ * without one simply renders without a thumbnail.
+ */
 function resolveWebSearchSources(result: unknown): WebSearchSource[] {
-  const output = isRecord(result) ? result : null
-  if (!Array.isArray(output?.results)) return []
+  const envelope = isRecord(result) ? result : null
+  const data = isRecord(envelope?.data) ? envelope.data : envelope
+  if (!Array.isArray(data?.sources)) return []
+  const previewBySourceUrl = new Map<string, string>()
+  if (Array.isArray(data.images)) {
+    for (const entry of data.images) {
+      if (!isRecord(entry)) continue
+      const sourceUrl = readPublicWebUrl(entry.sourceUrl)
+      const imageUrl = readPublicWebUrl(entry.thumbnailUrl) ?? readPublicWebUrl(entry.imageUrl)
+      if (sourceUrl && imageUrl && !previewBySourceUrl.has(sourceUrl)) {
+        previewBySourceUrl.set(sourceUrl, imageUrl)
+      }
+    }
+  }
   const byUrl = new Map<string, WebSearchSource>()
-  for (const entry of output.results) {
+  for (const entry of data.sources) {
     if (!isRecord(entry)) continue
-    const url = readPublicWebUrl(entry.source_url) ?? readPublicWebUrl(entry.url)
+    const url = readPublicWebUrl(entry.url)
     if (!url || byUrl.has(url)) continue
     try {
-      const parsed = new URL(url)
+      const domain = new URL(url).hostname.replace(/^www\./, '')
       byUrl.set(url, {
         url,
-        title: readText(entry.title) ?? parsed.hostname.replace(/^www\./, ''),
-        domain: readText(entry.source_domain) ?? parsed.hostname.replace(/^www\./, ''),
-        previewImageUrl: readPublicWebUrl(entry.preview_image_url) ?? readPublicWebUrl(entry.image_url),
+        title: readText(entry.title) ?? domain,
+        domain,
+        previewImageUrl: previewBySourceUrl.get(url) ?? null,
       })
     } catch {}
   }
