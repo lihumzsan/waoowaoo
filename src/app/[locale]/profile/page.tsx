@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import Navbar from '@/components/Navbar'
 import AccountSecurityTab from './components/AccountSecurityTab'
 import ApiConfigTab from './components/ApiConfigTab'
+import PlatformModelPreferencesTab from './components/PlatformModelPreferencesTab'
 import ProfileSidebar, { type ProfileSectionItem } from './components/ProfileSidebar'
 import ProfileOverviewSection, { type ProfileBalanceSummary } from './components/ProfileOverviewSection'
 import ProfileBillingSection from './components/ProfileBillingSection'
@@ -45,6 +46,7 @@ function isTransactionsPayload(value: unknown): value is TransactionsPayload {
 
 function getDefaultProfileSection(features: PublicDeploymentFeatures): ProfileSection {
   if (features.showBilling) return 'overview'
+  if (features.usePlatformProviderConfig) return 'models'
   if (features.showAccountSecurity) return 'security'
   if (features.showApiConfig) return 'apiConfig'
   return 'overview'
@@ -52,6 +54,7 @@ function getDefaultProfileSection(features: PublicDeploymentFeatures): ProfileSe
 
 function isProfileSectionEnabled(section: ProfileSection, features: PublicDeploymentFeatures): boolean {
   if (section === 'security') return features.showAccountSecurity
+  if (section === 'models') return features.usePlatformProviderConfig
   if (section === 'apiConfig') return features.showApiConfig
   return features.showBilling
 }
@@ -193,6 +196,9 @@ export default function ProfilePage() {
     ...(deploymentFeatures?.showAccountSecurity === true
       ? [{ section: 'security' as const, icon: 'lock' as const, label: t('accountSecurity.title') }]
       : []),
+    ...(deploymentFeatures?.usePlatformProviderConfig === true
+      ? [{ section: 'models' as const, icon: 'brain' as const, label: t('modelPreferences.title') }]
+      : []),
     ...(deploymentFeatures?.showApiConfig === true
       ? [{ section: 'apiConfig' as const, icon: 'settingsHexAlt' as const, label: t('apiConfig') }]
       : []),
@@ -245,6 +251,10 @@ export default function ProfilePage() {
             ) : activeSection === 'apiConfig' && deploymentFeatures.showApiConfig ? (
               <div className="glass-surface-elevated overflow-hidden">
                 <ApiConfigTab />
+              </div>
+            ) : activeSection === 'models' && deploymentFeatures.usePlatformProviderConfig ? (
+              <div className="glass-surface-elevated overflow-hidden">
+                <PlatformModelPreferencesTab />
               </div>
             ) : activeSection === 'overview' && showBilling ? (
               <ProfileOverviewSection

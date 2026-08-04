@@ -1,0 +1,384 @@
+import { AppError } from '@/lib/errors/app-error'
+import type {
+  AiProviderVideoExecutionContext,
+  GenerateResult,
+} from '@/lib/ai-providers/runtime-types'
+import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
+import { ProviderPreAcceptRejectedError } from '@/lib/ai-exec/submission-error'
+import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
+import {
+  FetchStatusError,
+  RETRY_POLICY,
+  fetchWithRetry,
+} from '@/lib/retry'
+import { getProviderConfig } from '@/lib/user-api/runtime-config'
+import {
+  TOONFLOW_SEEDANCE_2_FAST_MODEL_ID,
+  TOONFLOW_SEEDANCE_2_FAST_WIRE_MODEL,
+  TOONFLOW_SEEDANCE_2_MODEL_ID,
+  TOONFLOW_SEEDANCE_2_WIRE_MODEL,
+} from './models'
+
+const TOONFLOW_SUBMIT_TIMEOUT_MS = 5 * 60_000
+const TOONFLOW_STATUS_TIMEOUT_MS = 60_000
+
+type ToonflowReference =
+  | {
+    type: 'image_url'
+    image_url: { url: string }
+    role: 'first_frame' | 'last_frame' | 'reference_image'
+  }
+  | {
+    type: 'audio_url'
+    audio_url: { url: string }
+    role: 'reference_audio'
+  }
+
+type ToonflowGeneratePayload = {
+  model: string
+  prompt: string
+  resolution: string
+  duration: number
+  metadata: {
+    ratio: string
+    generate_audio: boolean
+    references: ToonflowReference[]
+    watermark: false
+    seed: -1
+  }
+}
+
+type ToonflowVideoPollResult =
+  | { status: 'pending' }
+  | { status: 'completed'; videoUrl: string }
+  | {
+    status: 'failed'
+    failureDisposition: 'permanent'
+    errorCode: 'PROVIDER_SUBMISSION_REJECTED'
+    error: string
+  }
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function readString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function readNumericCode(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isInteger(value)) return value
+  if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
+    return Number.parseInt(value.trim(), 10)
+  }
+  return null
+}
+
+function buildToonflowUrl(baseUrl: string | undefined, path: string): string {
+  const normalized = baseUrl?.trim().replace(/\/+$/u, '') ?? ''
+  if (!normalized) throw new Error('PROVIDER_BASE_URL_MISSING: toonflow (video)')
+  return `${normalized}${path}`
+}
+
+function classifyToonflowError(input: {
+  code: number | null
+  status?: number
+  phase: 'submit' | 'poll'
+  cause?: unknown
+}): Error {
+  const code = input.code ?? input.status ?? null
+  if (code === 402 && input.phase === 'submit') {
+    return new ProviderPreAcceptRejectedError(
+      'provider_account_limit',
+      'Toonflow account balance is insufficient',
+      { cause: input.cause },
+    )
+  }
+  if (code === 401 || code === 403) {
+    return new AppError('PROVIDER_AUTH_INVALID', undefined, {
+      provider: 'toonflow',
+      cause: input.cause,
+    })
+  }
+  if (code === 402) {
+    return new AppError('PROVIDER_BILLING_REQUIRED', undefined, {
+      provider: 'toonflow',
+      cause: input.cause,
+    })
+  }
+  if (code === 429) {
+    return new AppError('QUOTA_EXCEEDED', undefined, {
+      provider: 'toonflow',
+      cause: input.cause,
+    })
+  }
+  if (code !== null && code >= 400 && code < 500) {
+    return new AppError('PROVIDER_SUBMISSION_REJECTED', undefined, {
+      provider: 'toonflow',
+      details: { providerStatus: code },
+      cause: input.cause,
+    })
+  }
+  return new AppError('EXTERNAL_ERROR', undefined, {
+    provider: 'toonflow',
+    details: code === null ? null : { providerStatus: code },
+    cause: input.cause,
+  })
+}
+
+function throwToonflowFetchError(error: unknown, phase: 'submit' | 'poll'): never {
+  if (error instanceof FetchStatusError) {
+    let payload: unknown = null
+    try {
+      payload = JSON.parse(error.responseText) as unknown
+    } catch {}
+    const envelope = asRecord(payload)
+    throw classifyToonflowError({
+      code: readNumericCode(envelope?.code),
+      status: error.status,
+      phase,
+      cause: error,
+    })
+  }
+  throw error
+}
+
+async function postToonflowJson(input: {
+  path: string
+  baseUrl: string | undefined
+  apiKey: string
+  payload: Record<string, unknown>
+  phase: 'submit' | 'poll'
+}): Promise<unknown> {
+  let response: Response
+  try {
+    response = await fetchWithRetry(buildToonflowUrl(input.baseUrl, input.path), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${input.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(input.payload),
+      cache: 'no-store',
+      timeoutMs: input.phase === 'submit'
+        ? TOONFLOW_SUBMIT_TIMEOUT_MS
+        : TOONFLOW_STATUS_TIMEOUT_MS,
+      policy: input.phase === 'submit'
+        ? RETRY_POLICY.providerSubmit
+        : RETRY_POLICY.mediaPoll,
+      scope: `toonflow:video:${input.phase}`,
+      fetchFn: fetchWithProviderProxy,
+    })
+  } catch (error) {
+    throwToonflowFetchError(error, input.phase)
+  }
+  return await response.json() as unknown
+}
+
+function requireCanonicalTaskCode(value: unknown): string {
+  const taskCode = readString(value)
+  if (!taskCode || !/^[A-Za-z0-9_-]+$/u.test(taskCode)) {
+    throw new Error('TOONFLOW_VIDEO_SUBMIT_RESPONSE_MISSING_TASK_CODE')
+  }
+  return taskCode
+}
+
+function requireCanonicalVideoUrl(value: unknown): string {
+  const rawUrl = readString(value)
+  if (!rawUrl) throw new Error('TOONFLOW_VIDEO_RESULT_URL_MISSING')
+  const url = new URL(rawUrl)
+  if (url.protocol !== 'https:' || url.username || url.password) {
+    throw new Error('TOONFLOW_VIDEO_RESULT_URL_INVALID')
+  }
+  return url.toString()
+}
+
+function uniqueUrls(values: readonly string[] | undefined): string[] {
+  return Array.from(new Set((values ?? []).map((value) => value.trim()).filter(Boolean)))
+}
+
+function requireStringOption(value: unknown, field: string): string {
+  const normalized = readString(value)
+  if (!normalized) {
+    throw new AppError('INVALID_PARAMS', `Toonflow video option is required: ${field}`, {
+      provider: 'toonflow',
+    })
+  }
+  return normalized
+}
+
+function buildReferences(input: {
+  imageUrl: string
+  lastFrameImageUrl?: string
+  referenceImages?: readonly string[]
+  referenceAudios?: readonly string[]
+}): ToonflowReference[] {
+  const firstFrame = input.imageUrl.trim()
+  const lastFrame = input.lastFrameImageUrl?.trim() ?? ''
+  const extraImages = uniqueUrls(input.referenceImages).filter((url) => url !== firstFrame)
+  const audios = uniqueUrls(input.referenceAudios)
+
+  if (lastFrame) {
+    if (!firstFrame) {
+      throw new AppError('INVALID_PARAMS', 'Toonflow last frame requires a first frame', {
+        provider: 'toonflow',
+      })
+    }
+    return [
+      { type: 'image_url', image_url: { url: firstFrame }, role: 'first_frame' },
+      { type: 'image_url', image_url: { url: lastFrame }, role: 'last_frame' },
+    ]
+  }
+
+  return [
+    ...(firstFrame
+      ? [{ type: 'image_url' as const, image_url: { url: firstFrame }, role: 'first_frame' as const }]
+      : []),
+    ...extraImages.map((url) => ({
+      type: 'image_url' as const,
+      image_url: { url },
+      role: 'reference_image' as const,
+    })),
+    ...audios.map((url) => ({
+      type: 'audio_url' as const,
+      audio_url: { url },
+      role: 'reference_audio' as const,
+    })),
+  ]
+}
+
+function buildGeneratePayload(
+  input: AiProviderVideoExecutionContext,
+): ToonflowGeneratePayload {
+  const options = input.options ?? {}
+  const duration = options.duration
+  const generateAudio = options.generateAudio
+  if (typeof duration !== 'number' || !Number.isInteger(duration)) {
+    throw new AppError('INVALID_PARAMS', 'Toonflow video duration is required', {
+      provider: 'toonflow',
+    })
+  }
+  if (typeof generateAudio !== 'boolean') {
+    throw new AppError('INVALID_PARAMS', 'Toonflow generateAudio must be explicit', {
+      provider: 'toonflow',
+    })
+  }
+  const modelId = requireSelectedModelId(input.selection, 'toonflow:video')
+  const wireModel = modelId === TOONFLOW_SEEDANCE_2_MODEL_ID
+    ? TOONFLOW_SEEDANCE_2_WIRE_MODEL
+    : modelId === TOONFLOW_SEEDANCE_2_FAST_MODEL_ID
+      ? TOONFLOW_SEEDANCE_2_FAST_WIRE_MODEL
+      : null
+  if (!wireModel) {
+    throw new AppError('INVALID_PARAMS', `Toonflow video model is unsupported: ${modelId}`, {
+      provider: 'toonflow',
+    })
+  }
+  return {
+    model: wireModel,
+    prompt: requireStringOption(options.prompt, 'prompt'),
+    resolution: requireStringOption(options.resolution, 'resolution'),
+    duration,
+    metadata: {
+      ratio: requireStringOption(options.aspectRatio, 'aspectRatio'),
+      generate_audio: generateAudio,
+      references: buildReferences({
+        imageUrl: input.imageUrl,
+        lastFrameImageUrl: options.lastFrameImageUrl,
+        referenceImages: options.referenceImages,
+        referenceAudios: options.referenceAudios,
+      }),
+      watermark: false,
+      seed: -1,
+    },
+  }
+}
+
+export async function submitToonflowVideoTask(input: {
+  baseUrl: string | undefined
+  apiKey: string
+  payload: ToonflowGeneratePayload
+}): Promise<string> {
+  const raw = await postToonflowJson({
+    path: '/video/generateVideo',
+    baseUrl: input.baseUrl,
+    apiKey: input.apiKey,
+    payload: input.payload as unknown as Record<string, unknown>,
+    phase: 'submit',
+  })
+  const envelope = asRecord(raw)
+  const code = readNumericCode(envelope?.code)
+  if (code !== 200) throw classifyToonflowError({ code, phase: 'submit' })
+  return requireCanonicalTaskCode(envelope?.data)
+}
+
+export async function queryToonflowVideoStatus(input: {
+  baseUrl: string | undefined
+  apiKey: string
+  taskCode: string
+}): Promise<ToonflowVideoPollResult> {
+  const raw = await postToonflowJson({
+    path: '/video/getVideoStatus',
+    baseUrl: input.baseUrl,
+    apiKey: input.apiKey,
+    payload: { taskICode: input.taskCode },
+    phase: 'poll',
+  })
+  const envelope = asRecord(raw)
+  const code = readNumericCode(envelope?.code)
+  if (code !== 200) throw classifyToonflowError({ code, phase: 'poll' })
+  const data = asRecord(envelope?.data)
+  const returnedTaskCode = readString(data?.id)
+  if (returnedTaskCode !== input.taskCode) {
+    throw new Error('TOONFLOW_VIDEO_STATUS_TASK_CODE_MISMATCH')
+  }
+  const status = readString(data?.status)
+  if (status === 'running') return { status: 'pending' }
+  if (status === 'success') {
+    return {
+      status: 'completed',
+      videoUrl: requireCanonicalVideoUrl(data?.data),
+    }
+  }
+  if (status === 'failed') {
+    return {
+      status: 'failed',
+      failureDisposition: 'permanent',
+      errorCode: 'PROVIDER_SUBMISSION_REJECTED',
+      error: `TOONFLOW_VIDEO_TASK_FAILED:${input.taskCode}`,
+    }
+  }
+  throw new Error(`TOONFLOW_VIDEO_STATUS_UNKNOWN:${status || '<missing>'}`)
+}
+
+export async function executeToonflowVideoGeneration(
+  input: AiProviderVideoExecutionContext,
+): Promise<GenerateResult> {
+  const modelId = requireSelectedModelId(input.selection, 'toonflow:video')
+  if (
+    modelId !== TOONFLOW_SEEDANCE_2_MODEL_ID
+    && modelId !== TOONFLOW_SEEDANCE_2_FAST_MODEL_ID
+  ) {
+    throw new AppError('INVALID_PARAMS', `Toonflow video model is unsupported: ${modelId}`, {
+      provider: 'toonflow',
+    })
+  }
+  const { apiKey, baseUrl } = await getProviderConfig(input.userId, input.selection.provider)
+  if (!apiKey.trim()) {
+    throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'toonflow' })
+  }
+  const taskCode = await submitToonflowVideoTask({
+    baseUrl,
+    apiKey,
+    payload: buildGeneratePayload(input),
+  })
+  return {
+    success: true,
+    async: true,
+    requestId: taskCode,
+    endpoint: 'video',
+    externalId: `TOONFLOW:VIDEO:${taskCode}`,
+  }
+}

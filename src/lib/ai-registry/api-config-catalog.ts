@@ -51,6 +51,7 @@ export const API_CONFIG_CATALOG_PROVIDERS: readonly ApiConfigCatalogProvider[] =
   { id: 'fal', name: 'FAL' },
   { id: 'google', name: 'Google AI Studio' },
   { id: 'mureka', name: 'Mureka', baseUrl: 'https://api.mureka.ai' },
+  { id: 'toonflow', name: 'Toonflow', baseUrl: 'https://api.toonflow.net/v1' },
 ]
 
 export function requireApiConfigCatalogProviderBaseUrl(providerId: string): string {

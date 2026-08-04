@@ -52,7 +52,11 @@ import {
 } from '@/lib/ai-registry/llm-protocol'
 import { resolveProviderRouteSet } from '@/lib/ai-registry/provider-route-set'
 import { listBuiltinPricingCatalog } from '@/lib/ai-registry/pricing-catalog'
-import { getPlatformModels } from '@/lib/platform-models/catalog'
+import {
+  getPlatformModels,
+  getPlatformUserSelectableModels,
+} from '@/lib/platform-models/catalog'
+import { PLATFORM_USER_MODEL_KEYS } from '@/lib/ai-registry/platform-models'
 
 const ORIGINAL_REASONING_ENV = {
   PROVIDER_CREDENTIAL_MODE: process.env.PROVIDER_CREDENTIAL_MODE,
@@ -112,9 +116,9 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
     })).toThrow(AiOptionValidationError)
   })
 
-  it('derives only the declared GPT Image 2 provider routes from the production catalog', () => {
+  it('keeps every production model on its explicitly selected provider', () => {
     expect(resolveProviderRouteSet('image', `openrouter::${OPENROUTER_GPT_IMAGE_2_MODEL_ID}`)).toEqual({
-      logicalCapabilityId: 'image.gpt-image-2',
+      logicalCapabilityId: `image:openrouter::${OPENROUTER_GPT_IMAGE_2_MODEL_ID}`,
       primaryModelKey: `openrouter::${OPENROUTER_GPT_IMAGE_2_MODEL_ID}`,
       failoverPolicy: 'pre_accept_only',
       routes: [
@@ -124,12 +128,6 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
           modelKey: `openrouter::${OPENROUTER_GPT_IMAGE_2_MODEL_ID}`,
           priority: 0,
         },
-        {
-          provider: 'fal',
-          modelId: FAL_GPT_IMAGE_2_MODEL_ID,
-          modelKey: `fal::${FAL_GPT_IMAGE_2_MODEL_ID}`,
-          priority: 1,
-        },
       ],
     })
     expect(resolveProviderRouteSet('image', `fal::${FAL_GPT_IMAGE_2_MODEL_ID}`).routes).toEqual([
@@ -137,9 +135,10 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
         provider: 'fal',
         modelId: FAL_GPT_IMAGE_2_MODEL_ID,
         modelKey: `fal::${FAL_GPT_IMAGE_2_MODEL_ID}`,
-        priority: 1,
+        priority: 0,
       },
     ])
+    expect(listBuiltinCapabilityCatalog().every((entry) => entry.providerRoute === undefined)).toBe(true)
   })
 
   it('registers one explicit transport protocol for every configured LLM model', () => {
@@ -176,6 +175,30 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
       expect(pricing.has(model.modelId)).toBe(model.pricingUsdPerMillion !== null)
       expect(apiConfig.has(model.modelId)).toBe(model.showInApiConfig)
       expect(platform.has(model.modelId)).toBe(model.showInPlatform)
+    }
+  })
+
+  it('publishes only priced and capable models through the platform choice policy', () => {
+    const choices = getPlatformUserSelectableModels()
+    expect(choices.map((model) => model.modelKey)).toEqual([
+      ...PLATFORM_USER_MODEL_KEYS.llm,
+      ...PLATFORM_USER_MODEL_KEYS.image,
+      ...PLATFORM_USER_MODEL_KEYS.video,
+    ])
+    for (const model of choices) {
+      if (model.type === 'llm') {
+        expect(resolveRegisteredLlmProtocol(model.modelKey)).toBe('openrouter-chat')
+      }
+      expect(listBuiltinCapabilityCatalog().some((entry) => (
+        entry.modelType === model.type
+        && entry.provider === model.provider
+        && entry.modelId === model.modelId
+      ))).toBe(true)
+      expect(listBuiltinPricingCatalog().some((entry) => (
+        entry.apiType === (model.type === 'llm' ? 'text' : model.type)
+        && entry.provider === model.provider
+        && entry.modelId === model.modelId
+      ))).toBe(true)
     }
   })
 

@@ -25,7 +25,6 @@ import {
 export const FAL_GPT_IMAGE_2_MODEL_ID = 'gpt-image-2'
 export const FAL_LYRIA_3_PRO_MODEL_ID = 'fal-ai/lyria3/pro'
 export const FAL_QWEN_3_TTS_VOICE_DESIGN_1_7B_MODEL_ID = QWEN_3_TTS_VOICE_DESIGN_1_7B_MODEL_ID
-export const FAL_PLATFORM_DEFAULT_IMAGE_MODEL_KEY = `fal::${FAL_GPT_IMAGE_2_MODEL_ID}`
 export const FAL_PLATFORM_DEFAULT_MUSIC_MODEL_KEY = `fal::${FAL_LYRIA_3_PRO_MODEL_ID}`
 export const FAL_PLATFORM_DEFAULT_VOICE_MODEL_KEY = PLATFORM_VOICE_DESIGN_MODEL_KEY
 export const FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID = 'alibaba/happy-horse/image-to-video'
@@ -77,11 +76,6 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelType: 'image',
     provider: 'fal',
     modelId: FAL_GPT_IMAGE_2_MODEL_ID,
-    providerRoute: {
-      logicalCapabilityId: 'image.gpt-image-2',
-      priority: 1,
-      failoverPolicy: 'pre_accept_only',
-    },
     capabilities: { image: { resolutionOptions: [...FAL_IMAGE_RESOLUTIONS], qualityOptions: [...FAL_GPT_IMAGE_2_QUALITY_OPTIONS] } },
   },
   {

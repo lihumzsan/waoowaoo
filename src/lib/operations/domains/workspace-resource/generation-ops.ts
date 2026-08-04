@@ -536,10 +536,11 @@ async function compileMediaExecution(input: {
           generationMode,
         },
       })
+      const providerConfigured = { ...configured }
+      delete providerConfigured.generationMode
       requested = {
-        ...configured,
+        ...providerConfigured,
         duration: item.durationSeconds,
-        generationMode,
         ...(aspectRatio ? { aspectRatio } : {}),
       }
     } else {

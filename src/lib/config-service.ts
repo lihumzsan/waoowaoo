@@ -24,7 +24,10 @@ import {
 import { findBuiltinCapabilities, resolveGenerationOptionsForModel } from '@/lib/ai-registry/capabilities-catalog'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { getDeploymentConfig, isPlatformProviderCredentialMode } from '@/lib/deployment/config'
-import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
+import {
+  getPlatformDefaultModels,
+  resolvePlatformUserModelPreferences,
+} from '@/lib/platform-models/catalog'
 import { getPlatformCapabilityDefaults } from '@/lib/platform-runtime/presets'
 import {
   type WorkflowConcurrencyConfig,
@@ -171,13 +174,17 @@ export async function getProjectModelConfig(
   const projectDataPromise = prisma.project.findUnique({ where: { id: projectId } })
 
   if (platformDefaults) {
-    const projectData = await projectDataPromise
+    const [projectData, userPreference] = await Promise.all([
+      projectDataPromise,
+      prisma.userPreference.findUnique({ where: { userId } }),
+    ])
+    const userModels = resolvePlatformUserModelPreferences(userPreference ?? undefined)
     return {
       analysisModel: platformDefaults.analysisModel,
-      characterModel: platformDefaults.characterModel,
-      locationModel: platformDefaults.locationModel,
-      editModel: platformDefaults.editModel,
-      videoModel: platformDefaults.videoModel,
+      characterModel: userModels.characterModel,
+      locationModel: userModels.locationModel,
+      editModel: userModels.editModel,
+      videoModel: userModels.videoModel,
       musicModel: platformDefaults.musicModel,
       videoRatio: projectData?.videoRatio ?? null,
       capabilityDefaults: getPlatformCapabilityDefaults(),
@@ -210,14 +217,16 @@ export async function getUserModelConfig(userId: string): Promise<UserModelConfi
   const deployment = getDeploymentConfig()
   if (isPlatformProviderCredentialMode(deployment)) {
     const platformDefaults = getPlatformDefaultModels()
+    const userPreference = await prisma.userPreference.findUnique({ where: { userId } })
+    const userModels = resolvePlatformUserModelPreferences(userPreference ?? undefined)
 
     return {
-      assistantModel: platformDefaults.assistantModel,
+      assistantModel: userModels.assistantModel,
       analysisModel: platformDefaults.analysisModel,
-      characterModel: platformDefaults.characterModel,
-      locationModel: platformDefaults.locationModel,
-      editModel: platformDefaults.editModel,
-      videoModel: platformDefaults.videoModel,
+      characterModel: userModels.characterModel,
+      locationModel: userModels.locationModel,
+      editModel: userModels.editModel,
+      videoModel: userModels.videoModel,
       musicModel: platformDefaults.musicModel,
       capabilityDefaults: getPlatformCapabilityDefaults(),
     }

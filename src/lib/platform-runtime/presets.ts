@@ -1,7 +1,12 @@
 import type { CapabilitySelections, CapabilityValue } from '@/lib/ai-registry/types'
-import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
+import {
+  getPlatformDefaultModels,
+  getPlatformUserSelectableModels,
+} from '@/lib/platform-models/catalog'
 import type { SystemModelPurpose } from '@/lib/model-access/system-model-resolver'
 import { PLATFORM_VOICE_DESIGN_MODEL_KEY } from '@/lib/ai-registry/voice-design-contract'
+import { findBuiltinCapabilities } from '@/lib/ai-registry/capabilities-catalog'
+import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 
 export type PlatformRuntimePurpose = SystemModelPurpose
 
@@ -121,15 +126,27 @@ function assignCapabilityDefault(
 }
 
 export function getPlatformCapabilityDefaults(): CapabilitySelections {
+  ensureAiCatalogsRegistered()
   const defaults: CapabilitySelections = {}
   const imageOptions = platformImageOptions()
   const videoOptions = getPlatformVideoGenerationOptions()
   const musicOptions = getPlatformMusicGenerationOptions()
 
-  assignCapabilityDefault(defaults, getPlatformRuntimePlan('character-image').modelKey, imageOptions)
-  assignCapabilityDefault(defaults, getPlatformRuntimePlan('location-image').modelKey, imageOptions)
-  assignCapabilityDefault(defaults, getPlatformRuntimePlan('edit-image').modelKey, imageOptions)
-  assignCapabilityDefault(defaults, getPlatformRuntimePlan('video').modelKey, videoOptions)
+  for (const model of getPlatformUserSelectableModels()) {
+    if (model.type === 'image') {
+      const capabilities = findBuiltinCapabilities('image', model.provider, model.modelId)?.image
+      const compatibleImageOptions: Record<string, CapabilityValue> = {
+        ...(imageOptions.resolution !== undefined ? { resolution: imageOptions.resolution } : {}),
+        ...(imageOptions.quality !== undefined && capabilities?.qualityOptions?.length
+          ? { quality: imageOptions.quality }
+          : {}),
+      }
+      assignCapabilityDefault(defaults, model.modelKey, compatibleImageOptions)
+    }
+    if (model.type === 'video') {
+      assignCapabilityDefault(defaults, model.modelKey, videoOptions)
+    }
+  }
   assignCapabilityDefault(defaults, getPlatformRuntimePlan('music').modelKey, musicOptions)
 
   return defaults

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { requestOpenRouterImage } from '@/lib/ai-providers/openrouter/image'
 import type { OpenRouterImageOptions } from '@/lib/ai-providers/openrouter/image-options'
 import {
+  OPENROUTER_BANANA_2_IMAGE_MODEL_ID,
   OPENROUTER_GPT_IMAGE_2_MODEL_ID,
   resolveOpenRouterOptionSchema,
 } from '@/lib/ai-providers/openrouter/models'
@@ -17,6 +18,14 @@ function normalizeImageOptions(options: Record<string, unknown>): OpenRouterImag
     schema: resolveOpenRouterOptionSchema('image', OPENROUTER_GPT_IMAGE_2_MODEL_ID),
     options,
     context: 'openrouter-image-contract',
+  }) as OpenRouterImageOptions
+}
+
+function normalizeBananaImageOptions(options: Record<string, unknown>): OpenRouterImageOptions {
+  return normalizeAiOptions({
+    schema: resolveOpenRouterOptionSchema('image', OPENROUTER_BANANA_2_IMAGE_MODEL_ID),
+    options,
+    context: 'openrouter-banana-image-contract',
   }) as OpenRouterImageOptions
 }
 
@@ -153,6 +162,61 @@ describe('provider contract - OpenRouter image', () => {
       },
     })
     expect(requests[0]?.headers.accept).toBe('text/event-stream')
+  })
+
+  it('uses the same dedicated Image API for Nano Banana without provider failover', async () => {
+    server!.defineScenario({
+      method: 'POST',
+      path: '/openrouter/images',
+      mode: 'success',
+      submitResponse: {
+        status: 200,
+        body: {
+          created: 1_785_406_500,
+          data: [{ b64_json: PNG_1X1_BASE64, media_type: 'image/png' }],
+          usage: {
+            prompt_tokens: 20,
+            completion_tokens: 1_120,
+            total_tokens: 1_140,
+            cost: 0.067,
+          },
+        },
+      },
+    })
+
+    const result = await requestOpenRouterImage({
+      baseUrl: `${server!.baseUrl}/openrouter`,
+      apiKey: 'openrouter-image-key',
+      modelId: OPENROUTER_BANANA_2_IMAGE_MODEL_ID,
+      prompt: 'cinematic desert city at sunrise',
+      options: normalizeBananaImageOptions({
+        referenceImages: [PNG_1X1_DATA_URL],
+        aspectRatio: '16:9',
+        resolution: '2K',
+      }),
+    })
+
+    expect(result).toMatchObject({
+      success: true,
+      imageUrl: `data:image/png;base64,${PNG_1X1_BASE64}`,
+      metadata: {
+        openRouterUsage: { inputTokens: 20, outputTokens: 1_120, totalTokens: 1_140 },
+      },
+    })
+    const requests = server!.getRequests('POST', '/openrouter/images')
+    expect(requests).toHaveLength(1)
+    expect(JSON.parse(requests[0]?.bodyText || '{}')).toEqual({
+      model: OPENROUTER_BANANA_2_IMAGE_MODEL_ID,
+      prompt: 'cinematic desert city at sunrise',
+      n: 1,
+      resolution: '2K',
+      aspect_ratio: '16:9',
+      input_references: [{
+        type: 'image_url',
+        image_url: { url: PNG_1X1_DATA_URL },
+      }],
+      stream: false,
+    })
   })
 
   it('does not retry an uncertain image POST', async () => {

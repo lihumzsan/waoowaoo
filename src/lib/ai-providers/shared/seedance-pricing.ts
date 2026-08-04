@@ -1,14 +1,13 @@
 /**
  * Seedance retail prices, in credits per second of output.
  *
- * Seedance is reachable through Ark, FAL and OpenRouter, and what each of them
+ * Seedance is reachable through Ark, FAL, OpenRouter and Toonflow, and what each of them
  * charges us differs. What the user pays must not: the same model at the same
- * resolution is one product with one price, so all three provider catalogs
- * import these rates instead of each deriving their own from their own cost.
+ * resolution is one product with one price, so every registered provider
+ * catalog imports these rates instead of deriving retail from its own cost.
  *
- * The rates are set against the most expensive route we actually bill through
- * (OpenRouter, the platform default video provider), so every route clears the
- * margin floor. Ark and FAL simply earn more.
+ * The rates are set against the most expensive route we actually bill through,
+ * so every registered route clears the margin floor.
  */
 export const SEEDANCE_2_RETAIL_CREDITS_PER_SECOND = {
   standard: { '480p': 9, '720p': 19, '1080p': 44 },
