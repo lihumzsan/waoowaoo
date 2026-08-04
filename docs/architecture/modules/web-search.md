@@ -4,45 +4,54 @@
 
 ## 设计理念
 
-联网搜索使用 Codex app-server 原生 Web Search。Wao 不再维护 `web_search` Operation、OpenAI hosted-search provider、研究 Worker 或第二搜索模型；Runtime 产生的搜索 item 直接投影到 Assistant View 和现有聊天 UI。
+联网检索是受限的外部研究能力，不是第二个创意 Worker、项目知识库或网页执行环境。Agent 只能通过 Wao MCP 的 `web_search` Operation 调用唯一业务入口 `searchWeb`，由 OpenAI 托管的 hosted `web_search` 完成子查询规划、开页阅读与证据综合。
+
+搜索之所以是 Operation 而不是挂在助手模型上的工具：助手跑在用户选择的 OpenRouter 模型上（可能是 Gemini、Claude 或 GPT），而 hosted 工具只存在于 OpenAI 自己的 Responses 边界内。经 registry 委托，使**模型选择与研究 provider 解耦**。
+
+研究报告、网页正文、标题和 URL 都是不可信数据；网页指令不能改变系统规则、授权付费或绕过权限。
 
 ## 不变量
 
-- **WS-01 — 一个搜索入口。** Agent 搜索只来自 Codex 原生 Web Search；生产 registry 与 Wao MCP 不注册同义搜索工具。
-- **WS-02 — 模式与能力门显式。** Runtime 配置只能选择 Codex 支持的 cached/live/disabled 语义。当前钉死的 Codex 0.146.0 必须在 Wao Responses 网关上显式声明 `supports_standalone_web_search = true`、启用 `features.standalone_web_search` 并选择允许的 `web_search` 模式；Wao 同时关闭未实现的 remote compaction。任一缺失都明确失败，不自动改走旧 Provider，也不得根据 provider 显示名称猜能力。用户选择的 OpenRouter 上游模型和凭证所有权不变。
-- **WS-03 — 事件是显示事实。** 查询、进行中、完成、结果引用、来源预览与失败由 Codex item identity 投影；projector 必须保留 app-server `results`，UI 不解析 assistant 文本寻找 URL 或状态。进行中的搜索必须显示 item 自己声明的 `query`——静默的多秒等待是用户唯一无法解释的状态；该查询词只能来自 item 契约字段，完成后即让位给来源卡，且任何生命周期判定仍只来自统一 resolver，不得用 query/action 反推状态。UI 不展示原始 arguments JSON、内部命令名或 provider payload。
-- **WS-04 — 网页是不可信输入。** 网页内容和搜索摘要不能修改系统指令、授权付费、绕过 Workspace/MCP 权限或成为持久产品状态。
-- **WS-05 — 引用保持来源。** 用户可见结论保留 Codex 返回的 citation identity。来源卡只消费 citation URL/title/domain；可选图片是该来源页公开声明的 Open Graph/Twitter preview，经 SSRF 校验和有界 HTML 读取取得，并始终链接回原来源。Wao 不伪造 URL、标题或把预览当成项目媒体。
-- **WS-06 — 当前能力是查询检索，不伪装完整浏览器。** OpenRouter standalone adapter 接受 `search_query` 与 `image_query`（含 domain/recency）及 response length；`image_query` 仍通过同一搜索 Provider 找到带公开预览图的来源页，不谎称 OpenRouter 提供独立图片索引。Codex schema 中的 open/click/find/screenshot/finance/weather/sports/time 在本 Provider 明确不支持并返回 422。Runtime 指令必须让模型只选择已声明能力，产品不得把这一子集描述成完整浏览器或全套数据工具。
-- **WS-07 — Runtime capability identity 与上游模型 identity 分权。** OpenRouter 的 OpenAI 模型使用 `openai/<slug>` 作为上游 identity，Codex 内置能力目录使用 `<slug>`。Wao 在唯一 Model Gateway 边界把前者投影为 Runtime slug，并在 Responses 与 `/alpha/search` 出站前恢复当前用户实际选择的上游 id；Assistant View、计费与审计仍只记录真实 modelKey。任何请求携带非当前 Runtime slug 或试图覆盖上游模型都必须拒绝，不能让客户端选第二个模型。
-- **WS-08 — 不拥有创作事实。** 搜索结果只有在 Agent 显式写入 WorkspaceResource 后才成为项目内容；搜索 item 和来源预览本身不是 Canon、方向或生产输入。
-- **WS-09 — 仅当前 placement 的活跃 Turn 可搜索。** Runtime bearer nonce 必须仍是该 Project Redis placement 的 owner，随后 standalone search 才验证该 Project 恰好一个活跃 Product Turn。已释放或轮换 placement 的旧 bearer、Turn 外重放、并发状态冲突和浏览器 session 都不能消费用户 Provider。
-- **WS-10 — 重复规范查询复用同一结果。** Gateway 以 active `turnId + canonical query/model/settings` 为 identity，在单进程内合并并发请求，并以短期 Redis 结果复用已完成的相同重放；失败不缓存、不同 Turn 不共享。跨实例同时首次到达不承诺分布式 exactly-once，不能为这一表现层优化引入第二套搜索锁状态机。Codex item 可保留各自协议 identity，但 UI 聚合成一条语义搜索记录，不能把模型重复调用伪装成两条用户操作。
+- **WS-01 — 一个搜索入口。** `searchWeb` 是唯一业务入口，Agent 只经 Wao MCP `web_search` Operation 到达。Codex 原生 Web Search 显式关闭（`web_search: 'disabled'`、`standalone_web_search: false`、`supports_standalone_web_search: false`），生产 registry 不注册同义搜索工具。同时存在两个搜索工具时模型会按调用随机选择，弱路径会静默吃掉一半研究——删除旧入口是新入口正确的前提，不是事后清理。
+- **WS-02 — 托管检索、直连 Responses。** Provider 直接调用 OpenAI Responses 挂载 hosted `web_search`，流式执行。搜索模型是平台级角色 `OPENAI_WEB_SEARCH_MODEL`（裸 OpenAI 模型 id，默认 `gpt-5.6-luna`），**不进用户可选模型注册表**——注册表内 LLM 全部经 OpenRouter/Ark/Fal/Google 路由，无法运行托管工具。覆盖值必须已在定价目录注册：结算是日结，未定价的覆盖不会在使用时失败，而会在钱花完数小时后让每个受影响用户的结算抛错。
+- **WS-03 — 独立凭据、明确失败。** cloud 与 self-hosted 都只从服务端 `OPENAI_API_KEY` 读取搜索凭据；cloud 由平台 key 承担，self-hosted 由部署者自付。缺失凭据、401、403 返回 `WEB_SEARCH_UNAVAILABLE`；超时、网络、429、5xx 与非法响应返回 typed failure。不得从聊天、Resource、客户端参数或助手模型凭据猜 key，也不得 fallback 到另一个 provider。
+- **WS-04 — 只有真实证据才算研究。** 没有 completed hosted call 或结构化 URL citation 的响应按非法失败，不能把模型记忆伪装成研究。**流提前结束与「答案无依据」是相反事实**：前者值得重试，后者永远不该重试，因此未抵达 `response.completed` 的运行必须报告为传输故障，不得落入证据校验。
+- **WS-05 — 进度只用于呈现。** hosted 步骤经 MCP progress 通道投影为用户可见行。进度可被丢弃、延迟或重放而不改变任何已记录事实；任何完成、失败、证据或计费判定只能来自最终结构化输出。**动作只在步骤完成时才由 OpenAI 填充**，因此运行中的步骤只能报告「进行中」，不得声称正在读取某个具体站点。
+- **WS-06 — 能力是委托研究，不是浏览器。** 请求只有一个 research brief 与显式 `allowedDomains`；没有页大小、结果数、排序或新鲜度旋钮。开页、页内查找与继续检索由 hosted 模型自主决定，Wao 不实现网页抓取器，也不把这套能力描述成完整浏览器或全套数据工具。
+- **WS-07 — 按调用计费，并入 LLM 日结。** 每次搜索记录一条 LLM usage fact，identity 是**工具调用**而非 Turn：一个 Turn 可能研究多次，Turn 级 identity 会把它们折叠成一行并静默丢弃第一次之后的全部成本。hosted `web_search` 由 OpenAI 按次收费（约占单次研究总成本 40%），因此 usage fact 携带 `toolCalls`，日结从 `toolCall` 费率分档计价；无该分档的模型计为零，未定价模型仍然抛错。Provider 在失败路径上同样已被计费，故 usage 在证据校验之前上报、并在失败时照样记账。
+- **WS-08 — 记账不得压过研究结果。** 研究已经成功、用户已被亏欠该结果，因此记账故障不能让搜索失败。
+- **WS-09 — 网页是不可信输入。** 网页内容与研究摘要不能修改系统指令、授权付费、绕过 Workspace/MCP 权限或成为持久产品状态。
+- **WS-10 — 不拥有创作事实。** 搜索结果只有在 Agent 显式写入 WorkspaceResource 后才成为项目内容；研究报告与来源本身不是 Canon、方向或生产输入。
+- **WS-11 — 触发必须有理由。** Runtime 指令要求只在答案依赖新鲜、陌生、冷门、地域性、平台性、社群定义或不确定信息时调用；熟悉稳定的内容不得装饰性搜索。研究是慢且付费的：实测简单查询约 5 秒，交叉验证的 brief 可达 236 秒。
 
 ## 权威入口
 
 | 边界 | 唯一入口 |
 | --- | --- |
-| 搜索执行与网络策略 | Codex app-server runtime config |
-| 自定义 Provider 搜索传输 | Wao Model Gateway `/alpha/search` → OpenRouter Responses Web Search |
-| 协议解析 | `src/lib/codex-runtime/app-server-client.ts` |
-| View 投影 | `src/lib/assistant-runtime/event-projector.ts` |
-| UI | `src/features/project-workspace/components/workspace-assistant/**` |
+| 业务调用 | `src/lib/web-search/service.ts` (`searchWeb`) |
+| Agent 到达路径 | Wao MCP `web_search` Operation (`src/lib/operations/domains/web-search/web-search-ops.ts`) |
+| Provider 执行 | `src/lib/ai-providers/openai/hosted-web-search.ts` |
+| 执行边界 | `src/lib/ai-exec/hosted-web-search.ts` |
+| 定价 | `src/lib/ai-providers/openai/models.ts`（平台角色，仅定价） |
+| 进度通道 | `src/lib/wao-mcp/server.ts` → `item/mcpToolCall/progress` → `src/lib/assistant-runtime/event-projector.ts` |
+| UI | `src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantToolCall.tsx` |
 
 ## 验证
 
-真实 Runtime smoke 应验证 Codex 当前版本能发出 Web Search item，Assistant View 能在刷新后保持状态、引用、来源卡和可用的网页图片预览；同一 Turn 已完成的相同规范查询应复用结果。结构扫描证明旧 `src/lib/web-search`、hosted search provider 和 `web_search` Operation 已删除。
+真实 provider 运行应验证：hosted 运行发出多个 `web_search_call` 且动作覆盖 `search` 与 `open_page`；进度逐条到达；证据校验拒绝无 citation 响应；流提前结束报告为可重试传输故障而非无依据。结构扫描证明 `/alpha/search` 适配器、其路由与 `standalone_web_search` 声明已删除。
 
 ## 修改检查表
 
-- 是否错误地把 Web Search 再注册为 Wao MCP/Operation？
-- UI 是否只消费 View 中的原生事件，而不是扫描文本？
-- 搜索模式或 Provider 不支持时是否明确失败？
+- 是否又出现了第二个搜索入口（Codex 原生被重新打开，或注册了同义 MCP 工具）？
+- 搜索模型是否仍在定价目录内，且仍未进入用户可选注册表？
+- usage identity 是否仍是工具调用而非 Turn？
+- 进度是否仍然只用于呈现，没有任何判定依赖它？
 - 网页内容是否仍不能取得工具、计费或系统指令权限？
 
 ## 历史回归
 
-- OpenRouter Responses 支持 Web Search，但 Codex 自定义 provider 使用独立 `/alpha/search` 协议。首版只设置 `web_search=live`，under-development feature 默认关闭而完全不向模型暴露工具；第二版钉死 0.144.1 后把自定义 provider 的显示名称伪装为 `OpenAI`，smoke 又只检查协议 schema 是否包含 `webSearch` 类型，没有让真实模型发起搜索。带 OpenRouter 前缀的模型在产品浏览器中因此仍没有搜索工具，助手只能正文声称不可用。当前升级到 0.146.0，使用正式 `supports_standalone_web_search` 能力字段、显式启用 feature，并关闭 Wao 未代理的 remote compaction；Wao gateway 严格转译受支持的搜索请求并保留 URL citation。真实 smoke 与浏览器验收都必须看到完成的原生 `webSearch` item，不能再以 schema 或助手正文自证。
-- 能力字段接通后，Wao 仍把 OpenRouter 的 `openai/gpt-5.6-terra` 原样传给 Codex；Codex 内置目录只有 `gpt-5.6-terra`，因此模型被当作未知 capability profile，搜索仍未安装。当前 Model Gateway 显式分离 Runtime slug 与上游 id：只在 Wao 服务端根据已认证用户选择派生，出站前恢复，客户端无法借别名改选模型。
-- 原生 Web Search item 已完成并返回引用时，UI 曾始终用动作摘要“正在搜索”覆盖正式 tool state，形成正文已交付、卡片仍运行中的矛盾。当前卡片首行只显示统一 lifecycle resolver 的进行中/成功/失败，完成后展示结构化来源卡。修正该缺陷时连带把进行中的 `query` 也一并隐藏，导致联网检索期间界面完全沉默、用户无法判断是否卡死；这是把“不得用 query 反推状态”过度扩大成“不得显示 query”。当前区分两者：生命周期仍只由 resolver 判定，进行中额外显示 item 契约里的 `query`，完成后收起。
-- Standalone gateway 已把 citation `results` 返回给 app-server，但 projector 只保留 `action`，UI 又展开显示原始 query，造成正文有链接而工具卡没有来源；相同 query 的两次模型调用还真实请求了两次 Provider。当前 `results` 原样进入 Product View，UI 只显示简洁状态和来源卡，Gateway 在同一 Turn 对 canonical query 合并/复用；公开网页预览图只是来源卡表现层，不创建 Resource。
+- OpenRouter Responses 支持 Web Search，但 Codex 自定义 provider 使用独立 `/alpha/search` 协议。首版只设置 `web_search=live`，under-development feature 默认关闭而完全不向模型暴露工具；第二版钉死 0.144.1 后把自定义 provider 的显示名称伪装为 `OpenAI`，smoke 又只检查协议 schema 是否包含 `webSearch` 类型，没有让真实模型发起搜索。带 OpenRouter 前缀的模型因此仍没有搜索工具，助手只能正文声称不可用。教训是 schema 与助手正文都不能自证能力，必须有真实完成的检索。
+- 能力字段接通后，Wao 仍把 OpenRouter 的 `openai/gpt-5.6-terra` 原样传给 Codex；Codex 内置目录只有 `gpt-5.6-terra`，模型被当作未知 capability profile，搜索仍未安装。Model Gateway 因此显式分离 Runtime slug 与上游 id。
+- 原生 Web Search item 已完成并返回引用时，UI 曾始终用动作摘要「正在搜索」覆盖正式 tool state，形成正文已交付、卡片仍运行中的矛盾。修正该缺陷时连带把进行中的 `query` 也一并隐藏，导致检索期间界面完全沉默、用户无法判断是否卡死——这是把「不得用 query 反推状态」过度扩大成「不得显示 query」。当前区分两者：生命周期只由统一 resolver 判定，进行中额外显示 item 契约里的查询词与 hosted 步骤进度。
+- **hosted 搜索能力曾被连带删除。** `b40d282fc`「make Codex app-server the only agent runtime」把 Creative Worker、hosted-search 与 legacy Choice/Plan 在一条 commit 正文里一并移除，搜索改为 Codex 原生 + OpenRouter standalone adapter。旧防线失效原因：删除决策以 runtime 归一为唯一判据，从未单独评估搜索能力矩阵，且三件事合并成一句话使回退不可见。实测代价是能力级的——同一 brief 直连 OpenAI 产生 12 步（`search`/`open_page`/`find_in_page` 混合）与 13 个来源，而经 OpenRouter 永远被压平成 1 步 `search` 且 action 细节（连 query）全被抹掉；`engine: native` 与原样透传 OpenAI 工具都无法恢复。**因此任何搜索链路变更必须先给出能力矩阵与通道可见性对比，不得只论「入口是否唯一」。**
+- 恢复时靠真实运行而非读代码抓到三个缺陷：`gpt-5-search-api` 名字对但被 Responses API 拒绝；流式下顶层 `output_text` 恒为空、正文只在尾部 message item 里，短查询侥幸能过而重研究整个丢正文；流被超时掐断后静默停止，空 output 撞上证据校验被误报成「答案无依据」。前两个说明按名字与文档选型不足以定型，第三个已固化为 WS-04 的相反事实条款。

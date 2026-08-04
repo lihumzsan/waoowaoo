@@ -208,12 +208,13 @@
     {
       "id": "web-search",
       "document": "docs/architecture/modules/web-search.md",
-      "title": "Codex 原生 Web Search",
+      "title": "托管联网研究",
       "sourcePaths": [
-        "src/lib/assistant-runtime/event-projector.ts",
-        "src/lib/assistant-runtime/view-contract.ts",
-        "src/lib/codex-runtime/app-server-client.ts",
-        "src/lib/codex-model-gateway/standalone-search.ts",
+        "src/lib/web-search",
+        "src/lib/operations/domains/web-search",
+        "src/lib/ai-providers/openai",
+        "src/lib/ai-exec/hosted-web-search.ts",
+        "src/lib/wao-mcp",
         "src/lib/media/outbound-fetch.ts",
         "src/features/project-workspace/components/workspace-assistant"
       ]
