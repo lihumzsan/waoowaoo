@@ -15,11 +15,19 @@ import { usdToCredits } from '@/lib/ai-registry/pricing-currency'
  * markup, so this file never states what a user is charged.
  */
 
-/** Platform-level role, not a user selection. */
-export const OPENAI_WEB_SEARCH_MODEL_ID = 'gpt-5-search-api'
+/**
+ * Platform-level role, not a user selection.
+ *
+ * `gpt-5-search-api` looks like the obvious choice by name and is half the
+ * price, but OpenAI rejects it on the Responses API (`model_not_found`), and
+ * the hosted web_search tool with its `open_page` actions only exists there.
+ * This model is the one actually verified to run the tool and report those
+ * actions.
+ */
+export const OPENAI_WEB_SEARCH_MODEL_ID = 'gpt-5.4'
 
-const INPUT_USD_PER_MILLION_TOKENS = 1.25
-const OUTPUT_USD_PER_MILLION_TOKENS = 10
+const INPUT_USD_PER_MILLION_TOKENS = 2.5
+const OUTPUT_USD_PER_MILLION_TOKENS = 15
 
 /**
  * The hosted web_search tool is billed per call ($10.00 / 1k calls) on top of
