@@ -92,12 +92,20 @@ function PlanCapacity({ plan }: { readonly plan: GlassPlan }) {
       <p className="text-[11px] font-medium tracking-wide text-[var(--glass-text-tertiary)]">
         {t('capacityTitle')}
       </p>
-      <span className="mt-2 flex items-center gap-2 text-[15px] text-[var(--glass-text-primary)]">
-        <AppIcon name="video" className="h-4 w-4 shrink-0 text-[var(--glass-text-tertiary)]" aria-hidden="true" />
-        <span className="glass-num font-semibold">
-          {t('capacityMinutes', { minutes: plan.monthlyVideoMinutes })}
+      <div className="mt-2 flex flex-col gap-1.5">
+        <span className="flex items-center gap-2 text-[13px] text-[var(--glass-text-primary)]">
+          <AppIcon name="video" className="h-3.5 w-3.5 shrink-0 text-[var(--glass-text-tertiary)]" aria-hidden="true" />
+          <span className="glass-num font-semibold">
+            {t('capacityVideos', { count: formatCny(plan.monthlyVideos) })}
+          </span>
         </span>
-      </span>
+        <span className="flex items-center gap-2 text-[13px] text-[var(--glass-text-primary)]">
+          <AppIcon name="image" className="h-3.5 w-3.5 shrink-0 text-[var(--glass-text-tertiary)]" aria-hidden="true" />
+          <span className="glass-num font-semibold">
+            {t('capacityImages', { count: formatCny(plan.monthlyImages) })}
+          </span>
+        </span>
+      </div>
     </div>
   )
 }
@@ -301,8 +309,10 @@ export default function PricingGlassPageClient({ content }: { readonly content: 
             repeated inside each of them. */}
         <p className="mx-auto mt-7 max-w-4xl text-center text-[12px] leading-5 text-[var(--glass-text-tertiary)]">
           {t('capacityFootnote', {
+            duration: content.capacityReference.videoDurationSeconds,
             resolution: content.capacityReference.videoResolution,
-            perSecond: content.capacityReference.videoCreditsPerSecond,
+            videoCredits: content.capacityReference.videoCredits,
+            imageCredits: content.capacityReference.imageCredits,
           })}
         </p>
 

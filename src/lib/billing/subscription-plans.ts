@@ -9,12 +9,12 @@ import { CREDITS_PER_CNY } from './credits'
  * the round numbers are the product decision, and the implied bonus is derived
  * from them for display only.
  *
- * The grants encode a deliberate margin ladder, read against the markups in
- * `pricing-retail.ts`: buying credits outright holds ~75%, the entry plan ~70%,
- * and the deepest discount available anywhere — flagship on the yearly term —
- * bottoms out near 30%. The revenue-weighted blend is ~50%. A grant edited on
- * its own silently moves that plan's margin, so any change here belongs with a
- * recomputed ladder rather than a single number.
+ * The grants encode a deliberate markup ladder, read against the markups in
+ * `pricing-retail.ts`: credits bought outright carry +80% over provider cost,
+ * the entry plan +71%, and the deepest discount available anywhere — flagship
+ * on the yearly term — bottoms out at +30%. A grant edited on its own silently
+ * moves that plan's markup, so any change here belongs with a recomputed ladder
+ * rather than a single number.
  */
 
 export type SubscriptionPlanId = 'starter' | 'creator' | 'pro' | 'studio' | 'flagship'
@@ -55,7 +55,7 @@ export const SUBSCRIPTION_PLANS: readonly SubscriptionPlanDefinition[] = [
     id: 'starter',
     monthlyPriceCny: 199,
     yearlyPriceCny: 1_990,
-    monthlyCredits: 2_400,
+    monthlyCredits: 2_100,
     featured: false,
     firstMonthPromoCny: null,
   },
@@ -63,7 +63,7 @@ export const SUBSCRIPTION_PLANS: readonly SubscriptionPlanDefinition[] = [
     id: 'creator',
     monthlyPriceCny: 499,
     yearlyPriceCny: 4_990,
-    monthlyCredits: 9_000,
+    monthlyCredits: 5_450,
     featured: true,
     firstMonthPromoCny: 399,
   },
@@ -71,7 +71,7 @@ export const SUBSCRIPTION_PLANS: readonly SubscriptionPlanDefinition[] = [
     id: 'pro',
     monthlyPriceCny: 1_599,
     yearlyPriceCny: 15_900,
-    monthlyCredits: 32_000,
+    monthlyCredits: 17_800,
     featured: false,
     firstMonthPromoCny: null,
   },
@@ -79,7 +79,7 @@ export const SUBSCRIPTION_PLANS: readonly SubscriptionPlanDefinition[] = [
     id: 'studio',
     monthlyPriceCny: 3_999,
     yearlyPriceCny: 39_900,
-    monthlyCredits: 88_000,
+    monthlyCredits: 45_300,
     featured: false,
     firstMonthPromoCny: null,
   },
@@ -87,7 +87,7 @@ export const SUBSCRIPTION_PLANS: readonly SubscriptionPlanDefinition[] = [
     id: 'flagship',
     monthlyPriceCny: 8_999,
     yearlyPriceCny: 89_900,
-    monthlyCredits: 210_000,
+    monthlyCredits: 104_000,
     featured: false,
     firstMonthPromoCny: null,
   },

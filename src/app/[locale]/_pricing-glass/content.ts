@@ -26,16 +26,19 @@ export interface GlassPlan {
   readonly featured: boolean
   /** First-period promotional price, monthly only. Null when there is none. */
   readonly firstMonthPromoCny: number | null
-  /** Minutes of reference footage a month's credits cover, to one decimal. */
-  readonly monthlyVideoMinutes: number
+  /** What a month's credits cover, if spent entirely on one kind of work. */
+  readonly monthlyVideos: number
+  readonly monthlyImages: number
   readonly details: readonly string[]
   /** Both billing cycles, so the page can switch without another request. */
   readonly intervals: Readonly<Record<SubscriptionInterval, GlassPlanInterval>>
 }
 
 export interface GlassCapacityReference {
-  readonly videoCreditsPerSecond: number
+  readonly videoCredits: number
+  readonly videoDurationSeconds: number
   readonly videoResolution: string
+  readonly imageCredits: number
 }
 
 export interface GlassPricingContent {
@@ -43,7 +46,7 @@ export interface GlassPricingContent {
   readonly title: string
   readonly subtitle: string
   readonly plans: readonly GlassPlan[]
-  /** The per-second rate behind the claim, so the page can show its maths. */
+  /** Unit prices behind the capacity claims, so the page can show its maths. */
   readonly capacityReference: GlassCapacityReference
   readonly creditUnitCny: number
   readonly creditPolicy: {
@@ -114,7 +117,8 @@ export function buildGlassPricingContent(input: BuildGlassPricingInput): GlassPr
         tagline: plan.tagline,
         featured: catalogPlan.featured,
         firstMonthPromoCny: catalogPlan.firstMonthPromoCny,
-        monthlyVideoMinutes: catalogPlan.monthlyVideoMinutes,
+        monthlyVideos: catalogPlan.monthlyCapacity.videos,
+        monthlyImages: catalogPlan.monthlyCapacity.images,
         details: plan.details,
         intervals: toIntervalMap(catalogPlan),
       }

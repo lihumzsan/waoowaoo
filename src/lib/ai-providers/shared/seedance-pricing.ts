@@ -10,6 +10,6 @@
  * so every registered route clears the margin floor.
  */
 export const SEEDANCE_2_RETAIL_CREDITS_PER_SECOND = {
-  standard: { '480p': 20, '720p': 43, '1080p': 98 },
-  fast: { '480p': 16, '720p': 34 },
+  standard: { '480p': 9, '720p': 19, '1080p': 44 },
+  fast: { '480p': 7, '720p': 15 },
 } as const

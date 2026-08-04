@@ -18,23 +18,25 @@ import type {
 /**
  * Retail markup over provider cost, by api type.
  *
- * This is the top of the margin ladder, not the middle of it: it sets what a
- * credit bought at face value earns, and every plan then discounts down from
- * here. A one-off recharge holds ~75%; the deepest plan discount lands near
- * 30%; the revenue-weighted blend is ~50%.
+ * Stated as a multiple of cost: 1.8 means a credit bought at face value sells
+ * the work for 1.8x what the provider charges, which is a 44% gross margin —
+ * the two are the same fact with different denominators, and confusing them
+ * moves prices by a factor of two.
  *
- * Raising these does not by itself raise margin — a credit's face value and a
- * plan's grant are the same knob seen from two sides, so a markup change must
- * be paired with the plan table in `subscription-plans.ts`. What the markup
- * alone does own is the price of buying credits outright, which is why it has
- * to sit above every plan rather than beside them.
+ * This is the top of the ladder. Every plan discounts below it, so the entry
+ * plan lands near +70% and the deepest yearly term near +30%. Raising these
+ * does not by itself raise margin: a credit's face value and a plan's grant
+ * are the same knob seen from two sides, so a markup change only means
+ * something alongside the plan table in `subscription-plans.ts`. What the
+ * markup alone does own is the price of buying credits outright, which is why
+ * it has to sit above every plan rather than beside them.
  */
 export const RETAIL_MARKUP_BY_API_TYPE: Record<PricingApiType, number> = {
-  text: 3.8,
-  image: 4.4,
-  video: 3.9,
-  music: 3.9,
-  voice: 3.9,
+  text: 1.75,
+  image: 2.0,
+  video: 1.8,
+  music: 1.8,
+  voice: 1.8,
 }
 
 /**
@@ -56,11 +58,11 @@ const INTEGER_RETAIL_RATE_API_TYPES: ReadonlySet<PricingApiType> = new Set<Prici
  * the catalog. This is a fuse, not a target: it exists so a price edit or a new
  * plan can never quietly put a model underwater.
  *
- * Set just under the thinnest entry the current catalog produces (~26%, text at
- * the flagship yearly rate) rather than at a comfortable distance below it — a
- * fuse with slack in it does not trip until the damage is already done.
+ * Set just under the thinnest entry the current catalog produces rather than at
+ * a comfortable distance below it — a fuse with slack in it does not trip until
+ * the damage is already done.
  */
-export const MINIMUM_RETAIL_MARGIN = 0.25
+export const MINIMUM_RETAIL_MARGIN = 0.18
 
 function toRetailAmount(costCny: number, apiType: PricingApiType): number {
   const credits = costCny * RETAIL_MARKUP_BY_API_TYPE[apiType] * CREDITS_PER_CNY
