@@ -353,7 +353,6 @@ export default function Navbar({
           creditsUnit={creditsUnit}
           showBilling={showBilling}
           showRecharge={showRecharge}
-          showPricingLink={showPricingLink}
           showDownloadLogs={showDownloadLogs}
           showUpdateCheck={showUpdateCheck}
           manualChecking={manualChecking}

@@ -25,7 +25,6 @@ interface NavbarAccountMenuProps {
   creditsUnit: string
   showBilling: boolean
   showRecharge: boolean
-  showPricingLink: boolean
   showDownloadLogs: boolean
   showUpdateCheck: boolean
   manualChecking: boolean
@@ -58,7 +57,6 @@ export default function NavbarAccountMenu({
   creditsUnit,
   showBilling,
   showRecharge,
-  showPricingLink,
   showDownloadLogs,
   showUpdateCheck,
   manualChecking,
@@ -163,7 +161,7 @@ export default function NavbarAccountMenu({
         </Link>
       ))}
 
-      {/* 从 dock 收敛进来的入口:资产中心、价格 */}
+      {/* 从 dock 收敛进来的资产中心入口 */}
       <Link
         href={{ pathname: '/workspace/asset-hub' }}
         target="_blank"
@@ -175,19 +173,6 @@ export default function NavbarAccountMenu({
         <AppIcon name="folderHeart" className="h-4 w-4 shrink-0" />
         <span className="flex-1 text-left">{t('assetHub')}</span>
       </Link>
-      {showPricingLink ? (
-        <Link
-          href={{ pathname: '/pricing' }}
-          target="_blank"
-          rel="noopener noreferrer"
-          role="menuitem"
-          onClick={onClose}
-          className="glass-menu-item"
-        >
-          <AppIcon name="diamond" className="h-4 w-4 shrink-0" />
-          <span className="flex-1 text-left">{t('pricing')}</span>
-        </Link>
-      ) : null}
 
       {/* 语言(唯一切换入口,内嵌展开) */}
       <LanguageSwitcher variant="menu-row" />
