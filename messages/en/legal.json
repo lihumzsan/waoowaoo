@@ -43,7 +43,7 @@
       },
       "payments": {
         "title": "Payments and credits",
-        "body": "The official cloud edition supports self-service credit purchases through Stripe. Users enter a top-up amount in the account billing page and are redirected to Stripe-hosted Checkout. Currently available methods include Stripe-enabled cards, Link, Apple Pay, and other approved methods; local payment methods such as WeChat Pay and Alipay depend on payment-provider approval. Invite codes and manual grants are used only for trials, tests, or operational credits."
+        "body": "The official cloud edition supports self-service credit purchases through Stripe. Users enter a top-up amount in the account billing page and are redirected to Stripe-hosted Checkout. Currently available methods include Stripe-enabled cards, Link, Apple Pay, and other approved methods; local payment methods such as WeChat Pay and Alipay depend on payment-provider approval. Manual admin grants are used only for trials, tests, or operational credits."
       },
       "liability": {
         "title": "Limitation of liability",
@@ -107,7 +107,7 @@
     "sections": {
       "beta": {
         "title": "Beta credits",
-        "body": "Credits issued through invite codes or manual admin grants during beta are not purchased cash rights and are not eligible for cash refunds, withdrawals, or transfer."
+        "body": "Credits issued through manual admin grants are not purchased cash rights and are not eligible for cash refunds, withdrawals, or transfer."
       },
       "paidCredits": {
         "title": "Paid credits",

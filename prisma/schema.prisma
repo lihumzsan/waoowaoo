@@ -353,7 +353,7 @@ model VerificationToken {
 model UserBalance {
   id                    String    @id @default(uuid())
   userId                String    @unique
-  /// Permanent pool: top-ups, invite codes and manual grants. Never expires.
+  /// Permanent pool: top-ups and manual grants. Never expires.
   balance               Int       @default(0)
   /// Subscription pool: granted each period, expires at `subscriptionExpiresAt`
   /// and is always consumed before `balance` so it is not wasted.
