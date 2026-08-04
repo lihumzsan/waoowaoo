@@ -253,3 +253,63 @@ export function CustomRecharge({
 export function Tick({ className }: { className?: string }) {
   return <AppIcon name="check" className={className} strokeWidth={2.4} aria-hidden="true" />
 }
+
+/**
+ * The plan the visitor already holds, when they are signed in.
+ *
+ * The pricing page is public, so a missing session is the normal case, not an
+ * error — a failed read leaves the banner off rather than surfacing anything.
+ * Read-only: what the user owns is decided by the balance API, and this only
+ * projects it.
+ */
+export interface CurrentPlanSummary {
+  readonly planId: string
+  readonly interval: string
+  readonly currentPeriodEnd: string
+  readonly daysLeft: number
+  readonly balanceCredits: number
+}
+
+function readNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function parseCurrentPlan(payload: unknown): CurrentPlanSummary | null {
+  if (!isRecord(payload)) return null
+  const subscription = payload.subscription
+  if (!isRecord(subscription)) return null
+  const planId = subscription.planId
+  const interval = subscription.interval
+  const currentPeriodEnd = subscription.currentPeriodEnd
+  const daysLeft = readNumber(subscription.daysLeft)
+  if (typeof planId !== 'string' || typeof interval !== 'string') return null
+  if (typeof currentPeriodEnd !== 'string' || daysLeft === null) return null
+  return {
+    planId,
+    interval,
+    currentPeriodEnd,
+    daysLeft,
+    balanceCredits: readNumber(payload.balance) ?? 0,
+  }
+}
+
+export function useCurrentPlan(): CurrentPlanSummary | null {
+  const [plan, setPlan] = useState<CurrentPlanSummary | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    void apiFetch('/api/user/balance')
+      .then(async (r) => (r.ok ? ((await r.json()) as unknown) : null))
+      .then((payload) => {
+        if (alive) setPlan(parseCurrentPlan(payload))
+      })
+      .catch(() => {
+        // Signed out, offline, or rate limited: the page still sells plans.
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  return plan
+}

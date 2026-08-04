@@ -54,6 +54,11 @@
     "paymentSucceeded": "支付成功",
     "planActivated": "{plan} 套餐已生效，本月 {credits} credits 已到账",
     "paymentDone": "开始创作",
-    "rechargeSucceeded": "已到账 {credits} credits"
+    "rechargeSucceeded": "已到账 {credits} credits",
+    "currentPlanBadge": "当前套餐",
+    "planExtendCta": "追加购买",
+    "currentPlanTitle": "当前套餐 · {plan}",
+    "currentPlanDetail": "有效期至 {date}（剩余 {days} 天）· 可用额度 {credits}",
+    "currentPlanStacks": "再次购买会在现有有效期上叠加，剩余时长不会作废。"
   }
 }

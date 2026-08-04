@@ -12,6 +12,8 @@ import {
   Tick,
   useRecharge,
   usePlanPurchase,
+  useCurrentPlan,
+  type CurrentPlanSummary,
 } from './shared'
 import { useWechatRecharge, WechatQrDialog } from './wechat-recharge'
 import { PlanPaymentDialog } from './plan-payment-dialog'
@@ -113,11 +115,14 @@ function PlanCard({
   interval,
   busy,
   onSubscribe,
+  owned,
 }: {
   readonly plan: GlassPlan
   readonly interval: SubscriptionInterval
   readonly busy: boolean
   readonly onSubscribe: () => void
+  /** True when this is the plan the signed-in visitor already holds. */
+  readonly owned: boolean
 }) {
   const t = useTranslations('pricing.glass')
   const priced = plan.intervals[interval]
@@ -128,12 +133,18 @@ function PlanCard({
       className="glass-surface relative flex flex-col p-5"
       style={{
         borderRadius: 'var(--glass-radius-lg)',
-        ...(featured
-          ? { boxShadow: '0 0 0 1.5px var(--glass-accent-from), 0 8px 30px -12px rgba(0,0,0,0.25)' }
-          : {}),
+        ...(owned
+          ? { boxShadow: '0 0 0 1.5px var(--glass-tone-success-fg), 0 8px 30px -12px rgba(0,0,0,0.25)' }
+          : featured
+            ? { boxShadow: '0 0 0 1.5px var(--glass-accent-from), 0 8px 30px -12px rgba(0,0,0,0.25)' }
+            : {}),
       }}
     >
-      {featured ? (
+      {owned ? (
+        <span className="absolute -top-2.5 left-5 rounded-full bg-[var(--glass-tone-success-fg)] px-2.5 py-0.5 text-[10px] font-semibold tracking-wide text-white">
+          {t('currentPlanBadge')}
+        </span>
+      ) : featured ? (
         <span className="absolute -top-2.5 left-5 rounded-full bg-[var(--glass-accent-from)] px-2.5 py-0.5 text-[10px] font-semibold tracking-wide text-white">
           {t('featuredBadge')}
         </span>
@@ -180,7 +191,7 @@ function PlanCard({
           featured ? 'glass-btn-primary' : 'glass-btn-secondary',
         )}
       >
-        {busy ? t('subscribeBusy') : t('subscribe')}
+        {busy ? t('subscribeBusy') : owned ? t('planExtendCta') : t('subscribe')}
       </button>
 
       <p className="glass-num mt-3 text-center text-[12px] text-[var(--glass-text-secondary)]">
@@ -201,6 +212,48 @@ function PlanCard({
   )
 }
 
+/**
+ * What the visitor already owns, shown before the plan grid.
+ *
+ * Someone with a running term needs to know that buying again extends it
+ * rather than replacing it — without that, the page reads as a choice between
+ * keeping what they have and paying again.
+ */
+function CurrentPlanBanner({
+  current,
+  content,
+}: {
+  readonly current: CurrentPlanSummary | null
+  readonly content: GlassPricingContent
+}) {
+  const t = useTranslations('pricing.glass')
+  if (!current) return null
+  const plan = content.plans.find((entry) => entry.id === current.planId)
+  if (!plan) return null
+
+  return (
+    <section
+      className="glass-surface-soft mx-auto mt-8 flex max-w-3xl flex-wrap items-center justify-between gap-3 px-5 py-4"
+      style={{ borderRadius: 'var(--glass-radius-lg)' }}
+    >
+      <div className="min-w-0">
+        <p className="flex items-center gap-2 text-[13px] font-semibold text-[var(--glass-text-primary)]">
+          <AppIcon name="badgeCheck" className="h-4 w-4 shrink-0 text-[var(--glass-tone-success-fg)]" />
+          {t('currentPlanTitle', { plan: plan.label })}
+        </p>
+        <p className="glass-num mt-1 text-[12px] leading-5 text-[var(--glass-text-secondary)]">
+          {t('currentPlanDetail', {
+            date: current.currentPeriodEnd.slice(0, 10),
+            days: current.daysLeft,
+            credits: formatCny(current.balanceCredits),
+          })}
+        </p>
+      </div>
+      <p className="max-w-xs text-[12px] leading-5 text-[var(--glass-text-tertiary)]">{t('currentPlanStacks')}</p>
+    </section>
+  )
+}
+
 export default function PricingGlassPageClient({ content }: { readonly content: GlassPricingContent }) {
   const t = useTranslations('pricing.glass')
   const recharge = useRecharge()
@@ -213,6 +266,7 @@ export default function PricingGlassPageClient({ content }: { readonly content: 
   // Which plan's payment dialog is open. Clicking a card opens the choice
   // of method rather than committing to one.
   const [payingFor, setPayingFor] = useState<GlassPlan | null>(null)
+  const currentPlan = useCurrentPlan()
 
   return (
     <div className="glass-page min-h-screen pb-20">
@@ -229,6 +283,8 @@ export default function PricingGlassPageClient({ content }: { readonly content: 
           </div>
         </header>
 
+        <CurrentPlanBanner current={currentPlan} content={content} />
+
         <div className="mt-10 grid items-start gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {content.plans.map((plan) => (
             <PlanCard
@@ -237,6 +293,7 @@ export default function PricingGlassPageClient({ content }: { readonly content: 
               interval={interval}
               busy={purchase.busy}
               onSubscribe={() => setPayingFor(plan)}
+              owned={currentPlan?.planId === plan.id}
             />
           ))}
         </div>

@@ -54,6 +54,11 @@
     "paymentSucceeded": "Payment received",
     "planActivated": "The {plan} plan is active — {credits} credits are in your balance",
     "paymentDone": "Start creating",
-    "rechargeSucceeded": "{credits} credits added"
+    "rechargeSucceeded": "{credits} credits added",
+    "currentPlanBadge": "Your plan",
+    "planExtendCta": "Extend",
+    "currentPlanTitle": "Your plan · {plan}",
+    "currentPlanDetail": "Runs to {date} ({days} days left) · {credits} credits available",
+    "currentPlanStacks": "Buying again adds to the term you already have — nothing left over is lost."
   }
 }
