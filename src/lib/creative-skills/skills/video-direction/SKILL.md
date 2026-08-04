@@ -106,7 +106,7 @@ description: Turn a screenplay into executable direction, generation segments, p
 ## 参考素材
 
 - 使用有明确顺序的参考清单作为媒体参考清单。图片和声音各自按传入顺序独立编号，编号提及是视频模型分辨多参考素材的唯一手段：中文提示词写 `@图片1`“@图片2 中的场景”，声音写 `@音频1`；英文提示词写 `@Image 1`、`@Audio 1`。不要写“图片1（@Image1）”式双重记法，也不要只写资产名、文件名、内部 ID 或聊天代称让模型猜。
-- `mediaResourceIds` 只列本 Segment 实际使用的精确 source-material Resource ID，并按传给模型的媒体顺序排列；图片在图片序列中映射为 `@ImageN`，声音在声音序列中映射为 `@AudioN`。这是唯一引用字段，不增加第二套别名或 key。
+- `references` 只列本 Segment 实际使用的精确 ready Resource 身份与版本，并按传给模型的媒体顺序排列；图片在图片序列中映射为 `@ImageN`，声音在声音序列中映射为 `@AudioN`。这是唯一引用字段，不再输出过时的 `mediaResourceIds` 或第二套别名。
 - 按叙事重要性和首次使用顺序排列。通常优先放身份最重要的角色，再放关键道具或必须呈现的 UI，最后放按首次出现顺序使用的场景；当前故事重点高于固定模板。
 - 每张图只承担清楚的主要职责。只传当前片段实际使用的素材，并遵守 `productionCapabilities.video` 给出的参考数量上限；不得自行截断、替换或重排用户锁定的引用。
 - 声音参考不能单独存在：任何引用了声音编号（`@音频N`）的 Segment 必须同时至少引用一张图片。需要画外人声但当前段没有可用图片参考时，改为引用该角色或所在空间的图片，或把这句台词放到有图片参考的相邻 Shot。
@@ -132,26 +132,7 @@ description: Turn a screenplay into executable direction, generation segments, p
 - `aspectRatio` 必须显式写入项目确认画幅；不能只在 Prompt 中提到比例。
 - `durationSeconds` 必须等于该段真实装载时长且不超过 15 秒。
 - `references` 只列该段实际使用的 ready Resource，并精确复制 `resourceId`、`contentVersion`、`workspacePath`、`role`、`position` 与 `channel`。Prompt 中的 `@图片N` / `@音频N` 顺序必须与这些引用的媒体顺序一致。
-- Manifest 是严格 JSON 文件，最小结构如下：
-
-```json
-{
-  "schemaVersion": 1,
-  "manifestId": "video-v1",
-  "items": [
-    {
-      "itemId": "shot-001",
-      "mediaType": "video",
-      "schemaId": "project.video_segment",
-      "outputPath": "shots/001.resource",
-      "aspectRatio": "16:9",
-      "durationSeconds": 15,
-      "prompt": "完整、可直接交给视频模型的最终提示词",
-      "references": []
-    }
-  ]
-}
-```
+- 唯一正式交付是 Agent profile 注入的 `outputKind: "video_prompt_set"` 严格 JSON。该机器 Schema 是字段、必填项和层级的唯一权威；本 Skill 不另写一份可能漂移的 JSON 模板或导演说明文件。
 
 ## 镜头切换与条件式转场
 
@@ -281,7 +262,7 @@ description: Turn a screenplay into executable direction, generation segments, p
 自检只能评价提示词文字设计本身，不得声称尚未生成的视频画面或声音已经合格。
 
 - 是否只使用已有剧情事实和确认资产，逐字保留对白，且每个镜头有明确叙事作用、可见动作和可信时长？
-- 每个图片和声音参考编号是否精确指向对应人物、场景、道具、UI 或角色锁定音色？`mediaResourceIds` 是否只列实际使用的精确 Resource ID 并按媒体顺序排列？
+- 每个图片和声音参考编号是否精确指向对应人物、场景、道具、UI 或角色锁定音色？`references` 是否只列实际使用的精确 Resource 身份与版本并按媒体顺序排列？
 - 引用了声音的 Segment 是否同时至少引用一张图片，并且没有与首帧/末帧定格用途的图片参考共存？
 - 每个镜头是否能在分配时长内完成，并有明确入口、动作顺序和落点？
 - 是否先判断了转场必要性？普通衔接是否保持简洁，创意转场是否有明确动机、可见终点与起点，并避免主体变形？

@@ -10,7 +10,7 @@ Codex app-server 是唯一通用 Agent Runtime。主 Agent只接收产品边界�
 
 主 Agent：Codex 内置基础指令 → Runtime 全局 `AGENTS.md` 自主委派授权 → Wao `developerInstructions` → Wao MCP schema → Turn locale/context → 用户消息。
 
-专业子 Agent：Codex 内置基础指令 → 固定 custom agent `developer_instructions`（worker 边界 + 精确 Skill 正文 + 交付契约）→ 主 Agent分派的输入/输出路径。专业子 Agent不拥有 Wao MCP。
+专业子 Agent：Codex 内置基础指令 → 固定 custom agent `developer_instructions`（worker 边界 + 唯一 outputKind JSON Schema + `creative-core` + 一个精确专业 Skill）→ 主 Agent分派的输入路径与一个独占 `.json` 输出路径。专业子 Agent不拥有 Wao MCP。
 
 这是同一 Runtime 的 parent/child 上下文隔离，不是第二套模型循环。
 
@@ -20,7 +20,7 @@ Codex app-server 是唯一通用 Agent Runtime。主 Agent只接收产品边界�
 - **APO-02 — 主 Prompt 只声明边界。** 主 Agent developer instructions 只说明 scope、工作区所有权、固定 worker 路由、locale 与 MCP 使用原则，不复制 Skill 正文。
 - **APO-03 — 固定子上下文。** 专业子 Agent的角色和 Skill 集由 Registry 决定并在载入时注入；description、用户措辞和模型输出不能改变 Skill 集。
 - **APO-04 — 结构来自协议。** Plan、Goal、request_user_input、Web Search、命令、Diff、MCP、审批、compaction 与 Subagent 状态只消费 Codex 原生 JSON-RPC item/event。
-- **APO-05 — 专业输出先落文件。** 固定专业子 Agent是剧本、方向、提示词和 Manifest 的 writer；主 Agent不得复制或改写，只能引用路径。
+- **APO-05 — 专业输出是固定 JSON。** 固定专业子 Agent是剧本、方向、长篇计划、资产、视频和音乐 JSON 的唯一 writer；Registry 给每个角色恰好一个 outputKind 和 strict schema，主 Agent不得复制、修复或改写，只能引用路径。Workspace checkpoint 与媒体提交复用同一 schema，不从 Skill 散文猜字段。
 - **APO-06 — 业务输入冻结。** `submit_production_manifest` 按 `manifestPath` 读取 ready 文本 Resource，冻结 `resourceId + contentVersion + workspacePath + sha256 + manifestId`，再把其完整 Prompt、参数与引用冻结到 Task payload。
 - **APO-07 — 参数分权。** 专业子 Agent拥有完整创作 Prompt 与叙事相关参数（资产 4:3、视频画幅/时长、音乐时长/模式）；系统拥有模型选择、Provider 路由、能力校验、计费、审批、Task 和终态。视频/音乐子 Agent只读取 `system/project.json.productionCapabilities` 的当前只读能力事实，能力为空时不得猜测或交付可执行 Manifest。
 - **APO-08 — 缺能力显式失败。** 缺 custom agent、无效 Manifest、未知 event、缺 MCP capability 或版本不兼容必须原地失败；禁止 fallback 到主 Agent创作、直接媒体 MCP 或服务端 Prompt 编译。
@@ -35,6 +35,7 @@ Codex app-server 是唯一通用 Agent Runtime。主 Agent只接收产品边界�
 - 固定角色与 Skill 注入：`src/lib/creative-skills/agent-profiles.ts`。
 - 原生 item/event → View：`src/lib/assistant-runtime/event-projector.ts`。
 - Manifest 契约：`src/lib/workspace-resource/production-manifest.ts`。
+- 全部专业 outputKind 契约：`src/lib/creative-skills/output-registry.ts`。
 - 只读生产能力投影：`src/lib/codex-workspace/projector.ts` → `system/project.json`。
 - 业务执行：Wao MCP → Operation registry → Task/Temporal/Provider。
 
@@ -46,3 +47,4 @@ Codex app-server 是唯一通用 Agent Runtime。主 Agent只接收产品边界�
 
 - 旧视频模型不接收真人时，`HUMAN_VISUAL_SAFETY_POLICY` 曾作为唯一正文注入主 Agent，避免分散到 Creative Skill。后续正文虽缩窄为只禁可识别真人、公众人物和真人相似物，仍把已过期的 Provider 能力限制固化成常驻 Agent 政策。当前模型已支持真人与真实风格，政策文件、导出和主 Agent注入已一并删除；Creative Skill 中不存在同义副本，Provider 自有拒绝继续由 adapter 的 typed failure 表达。
 - Codex 固定专业 Worker 首版把“必须委派”写进 Wao developer instructions，却没有落到 Codex 默认多代理策略认可的用户、`AGENTS.md` 或 Skill 指令面。真实普通创作请求因此处于“主 Agent不能写、Subagent 又不能自动启动”的死锁。当前唯一自主委派授权由 Runtime 全局 `AGENTS.md` 提供，Worker Registry 仍是角色选择与专业内容的唯一权威。
+- 固定 custom agent 曾只有自然语言交付说明，Skill 内手写示例与执行层 strict schema 分别演化；错误边界又只返回 `Invalid parameters`，模型无法知道应删除哪个字段，转而猜测路径并连续重试。当前 `CREATIVE_OUTPUT_REGISTRY` 是字段契约唯一权威，自动生成的 JSON Schema只注入对应 child；checkpoint/提交失败返回精确字段 correction，主 Agent只能把它交回同一 worker，不能自己改专业文件。

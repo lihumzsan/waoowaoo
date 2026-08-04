@@ -21,6 +21,25 @@ export const CREATIVE_WORKER_KINDS = [
 
 export type CreativeWorkerKind = (typeof CREATIVE_WORKER_KINDS)[number]
 
+export const CREATIVE_OUTPUT_KINDS = [
+  'screenplay',
+  'long_form_plan',
+  'creative_direction',
+  'asset_manifest',
+  'video_prompt_set',
+  'music_direction',
+] as const
+
+export type CreativeOutputKind = (typeof CREATIVE_OUTPUT_KINDS)[number]
+
+export const CREATIVE_PRODUCTION_OUTPUT_KINDS = [
+  'asset_manifest',
+  'video_prompt_set',
+  'music_direction',
+] as const satisfies readonly CreativeOutputKind[]
+
+export type CreativeProductionOutputKind = (typeof CREATIVE_PRODUCTION_OUTPUT_KINDS)[number]
+
 export type CreativeSkillUri = `skill://${CreativeSkillId}/SKILL.md`
 
 export interface CreativeSkillDefinition {

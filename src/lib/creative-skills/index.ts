@@ -16,7 +16,19 @@ export {
   parseCreativeSkillUri,
 } from './uri'
 export { CREATIVE_SKILL_IDS, CREATIVE_WORKER_KINDS } from './types'
+export {
+  CREATIVE_OUTPUT_REGISTRY,
+  CREATIVE_OUTPUT_SCHEMAS,
+  CREATIVE_WORKER_OUTPUT_KIND,
+  creativeOutputJsonSchema,
+  parseCreativeOutput,
+  readCreativeOutputDefinition,
+  readCreativeOutputKind,
+  safeParseCreativeOutput,
+} from './output-registry'
 export type {
+  CreativeOutputKind,
+  CreativeProductionOutputKind,
   CreativeSkillDefinition,
   CreativeSkillId,
   CreativeSkillResource,
@@ -24,4 +36,5 @@ export type {
   ReadCreativeSkillResourceInput,
   CreativeWorkerKind,
 } from './types'
+export type { CreativeOutput } from './output-registry'
 export type { CreativeWorkerDefinition } from './agent-profiles'

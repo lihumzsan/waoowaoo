@@ -8,7 +8,7 @@
 
 ## 不变量
 
-- **AP-01 — 方向是普通文件。** 配乐方向、cue 和对白/音效说明由 Agent 写入用户目录；没有 Creative Worker output、BGM plan 实体或“规划完成自动生成”。
+- **AP-01 — 方向是固定 JSON 文件。** 配乐方向、cue 和对白/音效说明由 `wao_music` 写入唯一 `outputKind: music_direction` JSON；没有第二份 Markdown、Creative Worker output、BGM plan 实体或“规划完成自动生成”。`decision=no_music` 是同一 schema 的显式空配乐分支，不能提交为生产任务。
 - **AP-02 — 每次生成显式提交。** 音乐 Production Manifest / voice capability 必须给出 Placement、模态公共参数和精确输入引用；alternatives 仍由 registry 声明数量上限。成功只生成对应 Resource，不自动触发混音或视频。
 - **AP-03 — Provider 能力只约束单次执行。** 时长、格式和输入上限由模型 capability registry 唯一声明；不得据此自动拆分作品或创建系统 Episode/Chapter。
 - **AP-04 — 音色是资源。** 角色/旁白参考音色只有在本次输入显式引用并冻结其 resourceId/version 时才传给 Provider；“当前音色”或最近记录不是事实。

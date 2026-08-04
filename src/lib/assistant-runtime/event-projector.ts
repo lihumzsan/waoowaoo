@@ -116,6 +116,10 @@ export function projectAssistantRuntimeToolOutput(item: RuntimeJsonObject): Runt
     if (status === 'declined' || status === 'interrupted' || status === 'cancelled') {
       return { status, error: item.error ?? null }
     }
+    // Wao MCP structuredContent is already the canonical success, decline, or
+    // typed failure envelope. Wrapping it again changes the protocol shape and
+    // hides actionable corrections from both the model and the persisted View.
+    if (structuredContent) return structuredContent
     if (result?.isError === true || status === 'failed' || status === 'errored') {
       return {
         ok: false,
@@ -123,7 +127,6 @@ export function projectAssistantRuntimeToolOutput(item: RuntimeJsonObject): Runt
         error: item.error ?? structuredContent ?? result?.content ?? null,
       }
     }
-    if (structuredContent) return structuredContent
     return {
       status,
       result: result ?? item.result ?? null,

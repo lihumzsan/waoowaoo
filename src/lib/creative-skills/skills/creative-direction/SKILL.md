@@ -130,4 +130,4 @@ description: Establish one coherent visual, narrative, directing, editing, sound
 
 ## 边界
 
-本 Skill 只提供项目级呈现政策的方法，不负责创建系统状态、筛选生产资产、编写最终镜头、生成媒体或执行 Operation。Direction 是普通工作区文件；主 Agent把同一路径分派给需要它的固定专业子 Agent，由各自专业边界判断相关性。
+本 Skill 只提供项目级呈现政策的方法，不负责创建系统状态、筛选生产资产、编写最终镜头、生成媒体或执行 Operation。唯一正式交付是 Agent profile 注入的 `outputKind: "creative_direction"` 严格 JSON，不另建 Markdown 方向文档；主 Agent把同一路径分派给需要它的固定专业子 Agent，由各自专业边界判断相关性。

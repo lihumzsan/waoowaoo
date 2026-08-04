@@ -13,6 +13,7 @@ import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabili
 import { supportsTextToVideoModel } from '@/lib/ai-registry/video-model-helpers'
 import type { CapabilityValue } from '@/lib/ai-registry/types'
 import { ApiError } from '@/lib/api-errors'
+import { readCreativeOutputDefinition } from '@/lib/creative-skills/output-registry'
 import type {
   WorkspaceResourceInputRef,
   WorkspaceResourceJsonValue,
@@ -47,6 +48,10 @@ import {
 import { buildWorkspaceResourceLifecycleProjection } from '@/lib/workspace-resource/task-runtime-envelope'
 import { readWorkspaceResource } from '@/lib/workspace-resource/view-service'
 import { defineOperation } from '@/lib/operations/define-operation'
+import {
+  buildProjectAgentToolInputCorrections,
+  createProjectAgentToolInputSchema,
+} from '@/lib/operations/tool-input-schema'
 import { resolveOperationLocale } from '@/lib/operations/environment-input'
 import {
   PROJECT_VIDEO_RATIO_METADATA_KEY,
@@ -80,6 +85,15 @@ const DIRECT_IMAGE_SCHEMA_IDS = [
   WORKSPACE_RESOURCE_SCHEMA.GENERIC_IMAGE,
   WORKSPACE_RESOURCE_SCHEMA.STYLE,
 ] as const
+
+const productionManifestCorrectionInputSchema = z.object({
+  manifest: productionManifestSchema,
+}).strict()
+
+const productionManifestCorrectionToolSchema = createProjectAgentToolInputSchema({
+  operationId: 'submit_production_manifest.manifest',
+  inputSchema: productionManifestCorrectionInputSchema,
+})
 
 const workspaceResourceJsonValueSchema: z.ZodType<WorkspaceResourceJsonValue> = z.lazy(() => z.union([
   z.string(),
@@ -223,7 +237,21 @@ const textInputSchema = z.object({
     z.object({ kind: z.literal('structured'), data: workspaceResourceJsonValueSchema }).strict(),
   ]),
   references: z.array(generationReferenceSchema).max(16).optional(),
-}).strict()
+}).strict().superRefine((input, context) => {
+  if (
+    input.content.kind === 'structured'
+    && input.content.data !== null
+    && typeof input.content.data === 'object'
+    && !Array.isArray(input.content.data)
+    && Object.prototype.hasOwnProperty.call(input.content.data, 'outputKind')
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['content', 'data', 'outputKind'],
+      message: 'Professional outputKind JSON must be authored and registered through the fixed creative Subagent workspace checkpoint.',
+    })
+  }
+})
 
 const textOutputSchema = z.object({
   success: z.literal(true),
@@ -1003,13 +1031,24 @@ async function loadProductionManifest(
   }
   const parsed = productionManifestSchema.safeParse(value)
   if (!parsed.success) {
+    const issues = parsed.error.issues
     throw new ApiError('INVALID_PARAMS', {
       code: 'PRODUCTION_MANIFEST_SCHEMA_INVALID',
       field: 'manifestPath',
-      issues: parsed.error.issues.map((issue) => ({
-        path: issue.path.join('.'),
-        message: issue.message,
-      })),
+      reasonCode: 'PRODUCTION_MANIFEST_SCHEMA_INVALID',
+      corrections: buildProjectAgentToolInputCorrections({
+        input: { manifest: value },
+        toolInputSchema: productionManifestCorrectionToolSchema,
+        issues: issues.map((issue) => ({ ...issue, path: ['manifest', ...issue.path] })),
+      }),
+    })
+  }
+  const outputDefinition = readCreativeOutputDefinition(parsed.data.outputKind)
+  if (!outputDefinition.production || resource.schemaId !== outputDefinition.workspaceSchemaId) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'PRODUCTION_MANIFEST_RESOURCE_SCHEMA_MISMATCH',
+      field: 'manifestPath',
+      reasonCode: 'PRODUCTION_MANIFEST_RESOURCE_SCHEMA_MISMATCH',
     })
   }
   const digest = resource.current.sha256
@@ -1034,6 +1073,13 @@ async function planManifest(
 ): Promise<OperationPlan> {
   const operationId = 'submit_production_manifest'
   const loaded = await loadProductionManifest(ctx, input)
+  if (loaded.manifest.items.length === 0) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'PRODUCTION_MANIFEST_HAS_NO_MEDIA',
+      field: 'manifestPath',
+      reasonCode: 'PRODUCTION_MANIFEST_HAS_NO_MEDIA',
+    })
+  }
   const requestId = requestIdentity(ctx, operationId, loaded.source)
   const built = await Promise.all(loaded.manifest.items.map(async (item) => await buildPlannedItem({
     ctx,

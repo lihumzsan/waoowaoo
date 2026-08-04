@@ -1,5 +1,9 @@
 import { prisma } from '@/lib/prisma'
 import {
+  readCreativeOutputDefinition,
+  safeParseCreativeOutput,
+} from '@/lib/creative-skills/output-registry'
+import {
   validateWorkspaceBundle,
   type WorkspaceBundleFile,
   type WorkspaceBundleV1,
@@ -21,6 +25,10 @@ import {
 import type {
   WorkspaceResourceJsonValue,
 } from '@/lib/workspace-resource/contracts'
+import {
+  WORKSPACE_RESOURCE_FOLDER_SCHEMA_ID,
+  WORKSPACE_RESOURCE_SCHEMA,
+} from '@/lib/workspace-resource/schema-registry'
 import {
   CODEX_WORKSPACE_SYSTEM_PREFIX,
   CodexWorkspaceError,
@@ -73,9 +81,84 @@ function contentFromEditableFile(input: {
   const contentKind = contentKindFromPath(input.workspacePath)
   if (contentKind === 'text') return { kind: 'text', text: input.content }
   if (contentKind === 'structured') {
-    return { kind: 'structured', data: JSON.parse(input.content) as WorkspaceResourceJsonValue }
+    try {
+      return { kind: 'structured', data: JSON.parse(input.content) as WorkspaceResourceJsonValue }
+    } catch (error) {
+      throw new CodexWorkspaceError(
+        'CODEX_WORKSPACE_RESOURCE_CONTENT_INVALID',
+        `Invalid JSON at ${input.workspacePath}: ${error instanceof Error ? error.message : 'parse failed'}`,
+        {
+          cause: error,
+          details: {
+            field: 'workspacePath',
+            workspacePath: input.workspacePath,
+            corrections: [{
+              action: 'fix_invalid_value',
+              fieldPath: '$file',
+              message: error instanceof Error ? error.message : 'Write valid JSON.',
+            }],
+          },
+        },
+      )
+    }
   }
   throw new Error('CODEX_WORKSPACE_POINTER_CONTENT_UNEXPECTED')
+}
+
+function structuredSchemaId(input: {
+  readonly workspacePath: string
+  readonly data: WorkspaceResourceJsonValue
+}): string {
+  if (
+    !input.data
+    || typeof input.data !== 'object'
+    || Array.isArray(input.data)
+    || !Object.prototype.hasOwnProperty.call(input.data, 'outputKind')
+  ) {
+    return WORKSPACE_RESOURCE_SCHEMA.GENERIC_TEXT
+  }
+  const parsed = safeParseCreativeOutput(input.data)
+  if (!parsed.success) {
+    const issues = parsed.error.issues.slice(0, 20)
+    const corrections = issues.flatMap((issue) => {
+      if (issue.code === 'unrecognized_keys') {
+        return issue.keys.map((key) => ({
+          action: 'remove_unknown_field',
+          fieldPath: `$file.${[...issue.path, key].join('.')}`,
+          message: `Remove unknown field ${key}.`,
+        }))
+      }
+      return [{
+        action: 'fix_invalid_value',
+        fieldPath: `$file${issue.path.length > 0 ? `.${issue.path.join('.')}` : ''}`,
+        message: issue.message,
+      }]
+    }).slice(0, 20)
+    const summary = issues.map((issue) => (
+      `${issue.path.join('.') || '<root>'}: ${issue.message}`
+    )).join('; ')
+    throw new CodexWorkspaceError(
+      'CODEX_WORKSPACE_CREATIVE_OUTPUT_INVALID',
+      `Professional JSON does not match its registered outputKind schema at ${input.workspacePath}: ${summary}`,
+      {
+        details: {
+          field: 'workspacePath',
+          workspacePath: input.workspacePath,
+          corrections,
+        },
+      },
+    )
+  }
+  return readCreativeOutputDefinition(parsed.data.outputKind).workspaceSchemaId
+}
+
+function schemaIdForEditableContent(input: {
+  readonly workspacePath: string
+  readonly content: Extract<WorkspaceResourceTreeEntry['content'], object>
+}): string {
+  return input.content.kind === 'structured'
+    ? structuredSchemaId({ workspacePath: input.workspacePath, data: input.content.data })
+    : WORKSPACE_RESOURCE_SCHEMA.GENERIC_TEXT
 }
 
 function parseFileEntries(input: {
@@ -108,6 +191,7 @@ function parseFileEntries(input: {
         claimedIds.add(pointer.resourceId)
         return {
           resourceId: pointer.resourceId,
+          schemaId: baseline.schemaId,
           workspacePath,
           resourceKind: 'file',
           mediaType: baseline.mediaType,
@@ -135,14 +219,25 @@ function parseFileEntries(input: {
           workspacePath: baseline.workspacePath,
           content: baseline.fileContent,
         })
+        const content = previous.content === decoded.content
+          ? null
+          : contentFromEditableFile({ workspacePath, content: decoded.content })
+        const schemaId = content
+          ? schemaIdForEditableContent({ workspacePath, content })
+          : baseline.schemaId
+        if (schemaId !== baseline.schemaId) {
+          throw new CodexWorkspaceError(
+            'CODEX_WORKSPACE_CREATIVE_OUTPUT_KIND_CHANGE_FORBIDDEN',
+            `An existing file cannot change its registered outputKind: ${workspacePath}`,
+          )
+        }
         return {
           resourceId: decoded.resourceId,
+          schemaId,
           workspacePath,
           resourceKind: 'file',
           mediaType: 'text',
-          content: previous.content === decoded.content
-            ? null
-            : contentFromEditableFile({ workspacePath, content: decoded.content }),
+          content,
         }
       }
 
@@ -154,12 +249,14 @@ function parseFileEntries(input: {
       }
       const resourceId = createWorkspaceResourceId()
       claimedIds.add(resourceId)
+      const content = contentFromEditableFile({ workspacePath, content: decoded.content })
       return {
         resourceId,
+        schemaId: schemaIdForEditableContent({ workspacePath, content }),
         workspacePath,
         resourceKind: 'file',
         mediaType: 'text',
-        content: contentFromEditableFile({ workspacePath, content: decoded.content }),
+        content,
       }
     })
 }
@@ -210,6 +307,7 @@ function parseFolderEntries(input: {
     }
     return {
       resourceId: baselineByRuntimeIdentity.get(runtimeIdentity) ?? createWorkspaceResourceId(),
+      schemaId: WORKSPACE_RESOURCE_FOLDER_SCHEMA_ID,
       workspacePath,
       resourceKind: 'folder',
       mediaType: null,

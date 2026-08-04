@@ -11,6 +11,7 @@ export const WORKSPACE_RESOURCE_SCHEMA = {
   GENERIC_IMAGE: 'generic.image',
   GENERIC_VIDEO: 'generic.video',
   SCREENPLAY: 'project.screenplay',
+  LONG_FORM_PLAN: 'project.long_form_plan',
   CREATIVE_DIRECTION: 'project.creative_direction',
   ASSET_MANIFEST: 'project.asset_manifest',
   VIDEO_PROMPT_SET: 'project.video_prompt_set',
@@ -75,11 +76,14 @@ const STRUCTURED_SUMMARY_PROJECTORS: Partial<
   [WORKSPACE_RESOURCE_SCHEMA.CREATIVE_DIRECTION]: (data) => (
     stringValue(objectValue(data), 'styleSummary')
   ),
+  [WORKSPACE_RESOURCE_SCHEMA.LONG_FORM_PLAN]: (data) => (
+    stringValue(objectValue(data), 'overview')
+  ),
   [WORKSPACE_RESOURCE_SCHEMA.ASSET_MANIFEST]: (data) => (
     stringValue(objectValue(data), 'overview')
   ),
   [WORKSPACE_RESOURCE_SCHEMA.VIDEO_PROMPT_SET]: (data) => {
-    const firstSegment = objectValue(arrayField(objectValue(data), 'segments')[0] ?? null)
+    const firstSegment = objectValue(arrayField(objectValue(data), 'items')[0] ?? null)
     return firstText(
       stringValue(firstSegment, 'prompt'),
       stringValue(firstSegment, 'key'),
@@ -100,6 +104,7 @@ export const WORKSPACE_RESOURCE_SCHEMA_IDS_BY_MEDIA = {
   text: [
     WORKSPACE_RESOURCE_SCHEMA.GENERIC_TEXT,
     WORKSPACE_RESOURCE_SCHEMA.SCREENPLAY,
+    WORKSPACE_RESOURCE_SCHEMA.LONG_FORM_PLAN,
     WORKSPACE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
     WORKSPACE_RESOURCE_SCHEMA.ASSET_MANIFEST,
     WORKSPACE_RESOURCE_SCHEMA.VIDEO_PROMPT_SET,
@@ -150,11 +155,28 @@ const DEDICATED_ORIGIN_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new 
   WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
 ])
 
+/**
+ * Formal creative JSON identities are minted only by the Codex workspace
+ * checkpoint after the outputKind registry has validated the entire file.
+ * Generic text creation must not let a caller label arbitrary JSON as a
+ * screenplay, direction, or production manifest.
+ */
+const CREATIVE_OUTPUT_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new Set([
+  WORKSPACE_RESOURCE_SCHEMA.SCREENPLAY,
+  WORKSPACE_RESOURCE_SCHEMA.LONG_FORM_PLAN,
+  WORKSPACE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
+  WORKSPACE_RESOURCE_SCHEMA.ASSET_MANIFEST,
+  WORKSPACE_RESOURCE_SCHEMA.VIDEO_PROMPT_SET,
+  WORKSPACE_RESOURCE_SCHEMA.MUSIC_DIRECTION,
+])
+
 function generationMintableSchemas(
   schemaIds: readonly WorkspaceResourceSchemaId[],
 ): readonly WorkspaceResourceSchemaId[] {
   return schemaIds.filter((schemaId) => (
-    !IMPORT_ORIGIN_SCHEMA_IDS.has(schemaId) && !DEDICATED_ORIGIN_SCHEMA_IDS.has(schemaId)
+    !IMPORT_ORIGIN_SCHEMA_IDS.has(schemaId)
+    && !DEDICATED_ORIGIN_SCHEMA_IDS.has(schemaId)
+    && !CREATIVE_OUTPUT_SCHEMA_IDS.has(schemaId)
   ))
 }
 

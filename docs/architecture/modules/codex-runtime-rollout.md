@@ -13,7 +13,7 @@ Codex app-server 是唯一 Agent Runtime；Wao 保留产品 View、WorkspaceReso
 - **CRR-01 — 唯一 Runtime。** 每个活跃 `(userId, projectId)` 最多一个 Runtime session；同一 Project 同时最多一个活跃 Turn。旧 Agents SDK、Primary 模型循环和 Temporal Agent coordinator 不得执行 Turn。
 - **CRR-02 — 适配器隔离协议。** UI、route 和业务 service 只能通过 `AssistantRuntime`；Codex JSON-RPC 方法、版本差异和进程生命周期收敛在 `RuntimeAdapter` / Session Manager。本地与容器 driver 都必须在 app-server 进程启动时启用并验证钉死 Codex 包随附的 `codex-code-mode-host`，不能只在 Thread overlay 声明后假定进程级 host 已存在。
 - **CRR-03 — 双层隔离。** Cloud production driver 必须为 Docker，限制 CPU、内存、PID、磁盘/工作目录和网络；Codex 使用 `workspace-write`，只能写临时 Project workspace。development 可显式选择 local，即使产品 edition 为 Cloud 也不等同正式多租户部署；production 不能静默降级。
-- **CRR-04 — WorkspaceResource 才是持久事实。** 启动时从 Catalog/对象存储 materialize 普通目录，Turn checkpoint 时以完整基线 CAS 原子 capture；Runtime 文件夹、inode 和临时 Codex home 都不是产品权威。
+- **CRR-04 — WorkspaceResource 才是持久事实。** 启动时从 Catalog/对象存储 materialize 普通目录，Turn checkpoint 时以完整基线 CAS 原子 capture；注册 `outputKind` 的 JSON 同时由 Creative Output Registry strict 校验并登记唯一 schemaId。Runtime 文件夹、inode 和临时 Codex home 都不是产品权威。
 - **CRR-05 — 系统字段不可写。** Runtime 可自由组织用户工作区文件和目录，但不能修改 Resource status、Task、Artifact、Billing、media identity 或系统投影。媒体文件是受保护引用；改写、伪造或删除 pending 媒体必须失败。
 - **CRR-06 — Codex 状态与产品 View 分权。** 不透明 Codex session state 只用于 resume；MySQL Assistant View 是聊天、审批、计费归因和刷新显示的产品事实。两者必须先持久化再绑定 runtimeThreadId。
 - **CRR-06A — Session resume 必须匹配 Runtime revision。** 钉死 Codex 版本、process host 或工具拓扑发生不兼容变化时只提升一个共享 Runtime revision；对象存储 session key 与 `ProjectAssistantThread.runtimeRevision` 必须使用同一值。revision 不匹配时先完整停止旧 Runtime，再原子清空旧 `runtimeThreadId` 并绑定新 revision；新原生 Thread 由 MySQL Product View 的既有消息 seed。普通重启、空闲停止与同 revision 崩溃仍 resume 原 Thread，禁止每 Turn 重建或保留新旧双轨。
@@ -85,6 +85,7 @@ Codex app-server 是唯一 Agent Runtime；Wao 保留产品 View、WorkspaceReso
 - 模块级 Runtime singleton 在 Next 开发热更新后会失去引用但继续续租 Redis，新的 route bundle 随即创建第二个 Manager，表现为恢复消息永久 ownership busy。当前进程级 global 只保存一个 service；代码变更后的完整进程重启负责切换实现版本。
 - Docker driver 首版把外层容器误当成唯一沙箱，向 Turn 声明 `danger-full-access`；同 UID 的 shell 因而可读取 app-server bearer 并直连内部模型网关。当前 local/Docker 都启用 Codex `workspace-write` 且关闭 shell 网络，模型/搜索网关再以唯一活跃 Product Turn fail closed；外层容器仍负责租户、CPU、内存、PID、挂载与网络边界。
 - 模型网关首版只验证“项目里恰好有一个活跃 Turn”，未证明请求来自当前 Runtime；旧容器 bearer 在一小时内可等待新 Turn 后重放。当前 bearer nonce 与 Redis placement owner 完全相同，租约释放后 Responses/Search/MCP 都立即拒绝旧 generation。
+- Wao MCP 的 typed failure 已经存在于原生 `structuredContent`，事件 projector 却在 `isError/status=failed` 时再次包成 `{ok:false,error:structuredContent}`，持久 View 与模型因此看到双层 error envelope，字段 corrections 被藏在错误层级。当前除原生 interrupt/decline 外，存在 canonical `structuredContent` 就原样投影；transport fallback 只处理没有结构化结果的外部 MCP。
 - MCP 首版在业务事务或 Temporal 提交成功后再次执行 ownership 授权检查；用户恰在提交后取消会让后置检查抛错，把真实成功返回成失败并诱导重复执行。当前授权复验截止于副作用之前，后置 workspace refresh 失败只触发 Runtime 恢复与告警，不覆盖已经提交的业务结果。
 - Local development driver 首版忽略 `stop('force')`，始终先等待 graceful shutdown；clear 已 claim 后本地 shell 仍可能继续数秒。当前 local app-server 使用独立进程组，force 直接终止整个组并等待 exit；graceful 仅用于已闭合 writer 的 checkpoint/idle 路径。
 - Product View history seed 首版把旧 user/assistant 消息与当前 Turn 的 developer context 原样塞进同一 Responses `input`；OpenRouter 的 Anthropic-compatible 路由会把中段 developer 转成非法 system message，导致新 Turn 以 HTTP 400 在任何模型执行前失败。当前唯一模型网关把全部 instruction item 提升到 top-level `instructions`，只保留对话与工具历史的原顺序；不支持的指令结构显式拒绝，不按具体 Provider 名称增加分支。

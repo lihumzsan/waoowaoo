@@ -184,6 +184,7 @@ export async function readCodexRuntimeWorkspace(input: {
   ]))
   const baselineResources: CodexWorkspaceBaselineResource[] = resources.map((resource) => ({
     resourceId: resource.resourceId,
+    schemaId: resource.schemaId,
     workspacePath: resource.workspacePath,
     resourceKind: resource.resourceKind,
     mediaType: resource.mediaType,

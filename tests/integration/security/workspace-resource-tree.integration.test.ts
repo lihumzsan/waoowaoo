@@ -1,4 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { captureCodexWorkspace } from '@/lib/codex-workspace/writeback'
+import { readCodexRuntimeWorkspace } from '@/lib/codex-workspace/projector'
+import {
+  validateWorkspaceBundle,
+  WORKSPACE_BUNDLE_SCHEMA_VERSION,
+} from '@/lib/codex-runtime/workspace-bundle'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 import { createWorkspaceResourceId } from '@/lib/workspace-resource/identity'
 import {
@@ -34,6 +40,90 @@ describe('WorkspaceResource canonical tree transaction boundary', () => {
     await resetBillingState()
   })
 
+  it('atomically registers only strict outputKind JSON at a Runtime checkpoint', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const projection = await readCodexRuntimeWorkspace({ userId: user.id, projectId: project.id })
+    const manifest = {
+      schemaVersion: 1,
+      outputKind: 'asset_manifest',
+      manifestId: 'checkpoint-assets',
+      decision: 'produce',
+      overview: 'One reusable character asset.',
+      items: [{
+        itemId: 'hero',
+        mediaType: 'image',
+        schemaId: 'project.character_image',
+        assetKind: 'character',
+        outputPath: 'assets/hero.resource',
+        aspectRatio: '4:3',
+        canonicalName: 'Hero',
+        aliases: [],
+        stableDescription: 'A stable visible hero design.',
+        consumedByShots: ['screenplay.json#scene-1'],
+        prompt: 'Complete final provider-ready character reference prompt.',
+        references: [],
+      }],
+      assumptions: [],
+      warnings: [],
+    }
+    const capturedBundle = (extraFile: boolean) => validateWorkspaceBundle({
+      schemaVersion: WORKSPACE_BUNDLE_SCHEMA_VERSION,
+      directories: [...projection.runtimeBundle.directories, 'production'],
+      files: [
+        ...projection.runtimeBundle.files,
+        { path: 'production/assets.json', content: `${JSON.stringify(manifest, null, 2)}\n` },
+        ...(extraFile ? [{
+          path: 'production/invalid.json',
+          content: `${JSON.stringify({ ...manifest, unexpected: true }, null, 2)}\n`,
+        }] : []),
+      ],
+    })
+
+    await expect(captureCodexWorkspace({
+      userId: user.id,
+      projectId: project.id,
+      baselineRuntimeBundle: projection.runtimeBundle,
+      baseline: projection.baseline,
+      capturedRuntimeBundle: capturedBundle(true),
+      capturedDirectoryIdentities: [{ path: 'production', runtimeIdentity: 'runtime-production' }],
+      sourceTurnId: 'turn-invalid-output',
+    })).rejects.toMatchObject({
+      code: 'CODEX_WORKSPACE_CREATIVE_OUTPUT_INVALID',
+      details: {
+        field: 'workspacePath',
+        workspacePath: 'production/invalid.json',
+        corrections: [{
+          action: 'remove_unknown_field',
+          fieldPath: '$file.unexpected',
+          message: 'Remove unknown field unexpected.',
+        }],
+      },
+    })
+    await expect(prisma.workspaceResource.count({ where: { projectId: project.id } })).resolves.toBe(0)
+
+    await expect(captureCodexWorkspace({
+      userId: user.id,
+      projectId: project.id,
+      baselineRuntimeBundle: projection.runtimeBundle,
+      baseline: projection.baseline,
+      capturedRuntimeBundle: capturedBundle(false),
+      capturedDirectoryIdentities: [{ path: 'production', runtimeIdentity: 'runtime-production' }],
+      sourceTurnId: 'turn-valid-output',
+    })).resolves.toMatchObject({
+      changes: expect.arrayContaining([
+        expect.objectContaining({ kind: 'created', afterPath: 'production/assets.json' }),
+      ]),
+    })
+    await expect(prisma.workspaceResource.findFirst({
+      where: { projectId: project.id, workspacePath: 'production/assets.json' },
+      select: { schemaId: true, currentVersion: true },
+    })).resolves.toEqual({
+      schemaId: WORKSPACE_RESOURCE_SCHEMA.ASSET_MANIFEST,
+      currentVersion: 1,
+    })
+  })
+
   it('preserves identities across a subtree move and rejects stale checkpoint overwrite', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)
@@ -45,8 +135,8 @@ describe('WorkspaceResource canonical tree transaction boundary', () => {
       projectId: project.id,
       baseline: [],
       entries: [
-        { resourceId: seriesId, workspacePath: 'drafts', resourceKind: 'folder', mediaType: null, content: null },
-        { resourceId: sectionId, workspacePath: 'drafts/01', resourceKind: 'folder', mediaType: null, content: null },
+        { resourceId: seriesId, schemaId: WORKSPACE_RESOURCE_SCHEMA.FOLDER, workspacePath: 'drafts', resourceKind: 'folder', mediaType: null, content: null },
+        { resourceId: sectionId, schemaId: WORKSPACE_RESOURCE_SCHEMA.FOLDER, workspacePath: 'drafts/01', resourceKind: 'folder', mediaType: null, content: null },
       ],
       sourceTurnId: 'turn-create',
     }))
@@ -57,8 +147,8 @@ describe('WorkspaceResource canonical tree transaction boundary', () => {
       projectId: project.id,
       baseline: originalBaseline,
       entries: [
-        { resourceId: seriesId, workspacePath: 'series', resourceKind: 'folder', mediaType: null, content: null },
-        { resourceId: sectionId, workspacePath: 'series/01', resourceKind: 'folder', mediaType: null, content: null },
+        { resourceId: seriesId, schemaId: WORKSPACE_RESOURCE_SCHEMA.FOLDER, workspacePath: 'series', resourceKind: 'folder', mediaType: null, content: null },
+        { resourceId: sectionId, schemaId: WORKSPACE_RESOURCE_SCHEMA.FOLDER, workspacePath: 'series/01', resourceKind: 'folder', mediaType: null, content: null },
       ],
       sourceTurnId: 'turn-move',
     }))
@@ -99,8 +189,8 @@ describe('WorkspaceResource canonical tree transaction boundary', () => {
       projectId: project.id,
       baseline: [],
       entries: [
-        { resourceId: seriesId, workspacePath: 'series', resourceKind: 'folder', mediaType: null, content: null },
-        { resourceId: sectionId, workspacePath: 'series/01', resourceKind: 'folder', mediaType: null, content: null },
+        { resourceId: seriesId, schemaId: WORKSPACE_RESOURCE_SCHEMA.FOLDER, workspacePath: 'series', resourceKind: 'folder', mediaType: null, content: null },
+        { resourceId: sectionId, schemaId: WORKSPACE_RESOURCE_SCHEMA.FOLDER, workspacePath: 'series/01', resourceKind: 'folder', mediaType: null, content: null },
       ],
     }))
     const baseline = await activeBaseline(project.id)
@@ -119,8 +209,8 @@ describe('WorkspaceResource canonical tree transaction boundary', () => {
       projectId: project.id,
       baseline,
       entries: [
-        { resourceId: seriesId, workspacePath: 'series', resourceKind: 'folder', mediaType: null, content: null },
-        { resourceId: sectionId, workspacePath: 'series/02', resourceKind: 'folder', mediaType: null, content: null },
+        { resourceId: seriesId, schemaId: WORKSPACE_RESOURCE_SCHEMA.FOLDER, workspacePath: 'series', resourceKind: 'folder', mediaType: null, content: null },
+        { resourceId: sectionId, schemaId: WORKSPACE_RESOURCE_SCHEMA.FOLDER, workspacePath: 'series/02', resourceKind: 'folder', mediaType: null, content: null },
       ],
     }))).rejects.toThrow('WORKSPACE_RESOURCE_ACTIVE_TASK_CONFLICT')
 
@@ -140,7 +230,7 @@ describe('WorkspaceResource canonical tree transaction boundary', () => {
       projectId: project.id,
       baseline: [],
       entries: [
-        { resourceId: replacementId, workspacePath: 'series', resourceKind: 'folder', mediaType: null, content: null },
+        { resourceId: replacementId, schemaId: WORKSPACE_RESOURCE_SCHEMA.FOLDER, workspacePath: 'series', resourceKind: 'folder', mediaType: null, content: null },
       ],
     }))
     await expect(restoreWorkspaceResource({

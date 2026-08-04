@@ -355,7 +355,9 @@ async function runAppServerSmoke(params: {
   for (const worker of CREATIVE_WORKERS) {
     const profile = await readFile(path.join(codexHome, 'agents', `${worker.agentType}.toml`), 'utf8')
     assert.ok(profile.includes(`name = "${worker.agentType}"`))
-    assert.ok(profile.includes('Never expand them to absolute host or Runtime paths.'))
+    assert.ok(profile.includes('Never expand any path to an absolute host or Runtime path.'))
+    assert.ok(profile.includes(`outputKind=\\"${worker.outputKind}\\"`))
+    assert.ok(profile.includes('<wao_output_schema'))
     assert.ok(profile.includes(
       '[mcp_servers.wao]\nurl = "http://127.0.0.1:1/disabled-wao-mcp"\nenabled = false',
     ))

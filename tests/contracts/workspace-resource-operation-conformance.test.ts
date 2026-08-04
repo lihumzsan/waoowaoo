@@ -77,12 +77,18 @@ describe('WorkspaceResource Operation registry conformance', () => {
 
     expect(productionManifestSchema.safeParse({
       schemaVersion: 1,
+      outputKind: 'video_prompt_set',
       manifestId: 'feature-film',
+      overview: 'Complete feature-film generation segments.',
       items: items.map((item) => ({ ...item, aspectRatio: '16:9' })),
+      assumptions: [],
+      warnings: [],
     }).success).toBe(true)
     expect(productionManifestSchema.safeParse({
       schemaVersion: 1,
+      outputKind: 'video_prompt_set',
       manifestId: 'feature-film-overflow',
+      overview: 'Too many generation segments.',
       items: [...items, {
         itemId: `shot-${OPERATION_EXECUTION_MAX_TASKS}`,
         mediaType: 'video',
@@ -91,13 +97,18 @@ describe('WorkspaceResource Operation registry conformance', () => {
         prompt: `Shot ${OPERATION_EXECUTION_MAX_TASKS}`,
         durationSeconds: 15,
       }].map((item) => ({ ...item, aspectRatio: '16:9' })),
+      assumptions: [],
+      warnings: [],
     }).success).toBe(false)
   })
 
   it('requires complete explicit asset identity and 4:3 execution parameters', () => {
     const base = {
       schemaVersion: 1 as const,
+      outputKind: 'asset_manifest' as const,
       manifestId: 'assets-v1',
+      decision: 'produce' as const,
+      overview: 'One reusable character asset.',
       items: [{
         itemId: 'character-one',
         mediaType: 'image' as const,
@@ -105,8 +116,14 @@ describe('WorkspaceResource Operation registry conformance', () => {
         assetKind: 'character' as const,
         outputPath: 'assets/character-one.resource',
         aspectRatio: '4:3',
+        canonicalName: 'Character One',
+        aliases: [],
+        stableDescription: 'A stable visible character design.',
+        consumedByShots: ['screenplay.json#scene-1'],
         prompt: 'Complete final character asset prompt including the required presentation.',
       }],
+      assumptions: [],
+      warnings: [],
     }
     expect(productionManifestSchema.safeParse(base).success).toBe(true)
     expect(productionManifestSchema.safeParse({
@@ -116,6 +133,10 @@ describe('WorkspaceResource Operation registry conformance', () => {
     expect(productionManifestSchema.safeParse({
       ...base,
       items: [{ ...base.items[0], assetKind: 'location' }],
+    }).success).toBe(false)
+    expect(productionManifestSchema.safeParse({
+      ...base,
+      items: [{ ...base.items[0], outputPath: '/tmp/runtime/assets/character-one.resource' }],
     }).success).toBe(false)
   })
 

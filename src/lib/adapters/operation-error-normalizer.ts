@@ -1,4 +1,5 @@
 import { ApiError } from '@/lib/api-errors'
+import { CodexWorkspaceError } from '@/lib/codex-workspace/contracts'
 import { createScopedLogger } from '@/lib/logging/core'
 import type { ProjectAgentToolError, ProjectAgentToolErrorCode } from '@/lib/operations/types'
 import { getErrorSpec } from '@/lib/errors/codes'
@@ -73,14 +74,25 @@ function buildOperationExecutionToolError(params: {
           workspacePath: params.error.workspacePath,
         },
       }
-    : params.error instanceof WorkspaceResourcePathError
+      : params.error instanceof WorkspaceResourcePathError
       ? {
           code: 'INVALID_PARAMS' as const,
           details: {
-            field: 'outputPath',
             reasonCode: params.error.code,
           },
         }
+        : params.error instanceof CodexWorkspaceError
+          ? {
+              code: params.error.code === 'CODEX_WORKSPACE_RESOURCE_CONFLICT'
+                || params.error.code === 'CODEX_WORKSPACE_CREATIVE_OUTPUT_KIND_CHANGE_FORBIDDEN'
+                || params.error.code === 'CODEX_WORKSPACE_POINTER_EDIT_FORBIDDEN'
+                ? 'CONFLICT' as const
+                : 'INVALID_PARAMS' as const,
+              details: {
+                reasonCode: params.error.code,
+                ...(params.error.details ?? {}),
+              },
+            }
       : null
   const normalized = workspaceError ?? (params.error instanceof ApiError
     ? {

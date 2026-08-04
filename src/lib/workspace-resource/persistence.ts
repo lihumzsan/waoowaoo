@@ -23,7 +23,6 @@ import {
 } from './path'
 import {
   WORKSPACE_RESOURCE_FOLDER_SCHEMA_ID,
-  WORKSPACE_RESOURCE_SCHEMA,
   requireWorkspaceResourceSchema,
 } from './schema-registry'
 
@@ -42,6 +41,7 @@ export type WorkspaceResourceTreeBaselineEntry = {
 
 export type WorkspaceResourceTreeEntry = {
   readonly resourceId: string
+  readonly schemaId: string
   readonly workspacePath: string
   readonly resourceKind: WorkspaceResourceKind
   readonly mediaType: WorkspaceResourceMediaType | null
@@ -148,6 +148,10 @@ function assertExactTreeTargets(entries: readonly WorkspaceResourceTreeEntry[]):
     }
     if ((entry.resourceKind === 'folder') !== (entry.mediaType === null)) {
       throw new Error(`WORKSPACE_RESOURCE_KIND_MEDIA_MISMATCH:${entry.resourceId}`)
+    }
+    const schema = requireWorkspaceResourceSchema(entry.schemaId)
+    if (schema.resourceKind !== entry.resourceKind || schema.mediaType !== entry.mediaType) {
+      throw new Error(`WORKSPACE_RESOURCE_TREE_SCHEMA_MISMATCH:${entry.resourceId}:${entry.schemaId}`)
     }
     if (entry.content && (entry.resourceKind !== 'file' || entry.mediaType !== 'text')) {
       throw new Error(`WORKSPACE_RESOURCE_TREE_CONTENT_INVALID:${entry.resourceId}`)
@@ -267,7 +271,7 @@ export async function reconcileWorkspaceResourceTreeInTransaction(
             activePath: entry.workspacePath,
             resourceKind: 'folder',
             mediaType: null,
-            schemaId: WORKSPACE_RESOURCE_FOLDER_SCHEMA_ID,
+            schemaId: entry.schemaId,
             name: resourceNameFromPath(entry.workspacePath, 'folder'),
             status: 'ready',
             currentVersion: 0,
@@ -299,7 +303,7 @@ export async function reconcileWorkspaceResourceTreeInTransaction(
             activePath: entry.workspacePath,
             resourceKind: 'file',
             mediaType: 'text',
-            schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_TEXT,
+            schemaId: entry.schemaId,
             name: resourceNameFromPath(entry.workspacePath),
             status: 'ready',
             currentVersion: 1,
@@ -329,6 +333,9 @@ export async function reconcileWorkspaceResourceTreeInTransaction(
     if (!row) throw new Error(`WORKSPACE_RESOURCE_BASELINE_DIVERGED:${entry.resourceId}`)
     if (entry.resourceKind !== baseline.resourceKind || entry.mediaType !== baseline.mediaType) {
       throw new Error(`WORKSPACE_RESOURCE_TREE_KIND_CHANGE_FORBIDDEN:${entry.resourceId}`)
+    }
+    if (entry.schemaId !== row.schemaId) {
+      throw new Error(`WORKSPACE_RESOURCE_TREE_SCHEMA_CHANGE_FORBIDDEN:${entry.resourceId}`)
     }
     let nextVersion = row.currentVersion
     if (entry.content) {

@@ -13,11 +13,11 @@ description: Scope reusable production assets and define stable visible designs 
 
 - 资产必须同时通过三个门槛：在画面中真实出现或承载可见动作；其身份/空间结构需要跨镜头保持一致或被后续生成独立引用；不能被另一已选资产完整代表而不丢失关键视觉连续性。仅“被看见”本身不够。
 - 只在对白、旁白或背景设定中提及而没有画面呈现的实体不登记；瞬时背景物、无身份群众、普通装饰和不影响连续性的偶发物不登记。
-- 没有任何实体通过全部门槛时返回空 `assets` 并在 `overview` 解释原因；不得为了让清单非空而虚构或升级多余资产。
+- 没有任何实体通过全部门槛时使用 `decision: "no_assets"`、空 `items`，并在 `overview` 解释原因；不得为了让清单非空而虚构或升级多余资产，也不得提交这份无任务清单。
 - 同一实体的机位、景别、构图、光线或短暂动作变化不能成为新资产。只有独立且持久的视觉身份才拆分。
 - 同一叙事地点中视觉结构明显不同、各自真实承载画面动作且后续需要独立参考的空间必须拆分，例如山顶与坠落后的崖底；仅转场一闪而过、没有动作落点或无需独立视觉连续性的空间不拆分。
 - 同一个专业任务完成筛选、稳定身份设计与最终 Prompt；不输出第二套候选状态或让主 Agent 再拼接 Prompt。
-- `canonicalName + kind` 表达稳定创作身份；不得发明系统 ID、使用数组位置或新增含糊的 `other` 类型。实际身份由输出 WorkspaceResource 路径与 resourceId 拥有。
+- `canonicalName + assetKind` 表达稳定创作身份；不得发明系统 ID、使用数组位置或新增含糊的 `other` 类型。实际媒体身份由输出 WorkspaceResource 路径与 resourceId 拥有。
 
 ## 风格消费边界
 
@@ -91,26 +91,8 @@ description: Scope reusable production assets and define stable visible designs 
 - 道具：一张 4:3 横向图，只出现一个居中、完整、方向明确、无遮挡的道具；纯白背景；不得出现人物、其他道具或环境。
 - `aspectRatio` 必须显式写成 `"4:3"`。这是实际生成参数，不允许只在 Prompt 里提到比例。
 - `assetKind` 与 `schemaId` 必须严格对应：`character → project.character_image`、`location → project.location_image`、`prop → project.prop_image`。
-- Manifest 必须是严格 JSON 文件，最小结构如下；`references` 只使用主 Agent分配的精确 ready Resource 身份与版本：
-
-```json
-{
-  "schemaVersion": 1,
-  "manifestId": "assets-v1",
-  "items": [
-    {
-      "itemId": "character-xu-wu",
-      "mediaType": "image",
-      "schemaId": "project.character_image",
-      "assetKind": "character",
-      "outputPath": "assets/characters/xu-wu.resource",
-      "aspectRatio": "4:3",
-      "prompt": "完整、可直接交给图片模型的最终提示词",
-      "references": []
-    }
-  ]
-}
-```
+- 唯一正式交付是 Agent profile 注入的 `outputKind: "asset_manifest"` 严格 JSON。该机器 Schema 是字段、必填项和层级的唯一权威；本 Skill 不另写一份可能漂移的 JSON 模板。`references` 只使用主 Agent分配的精确 ready Resource 身份与版本。
+- `overview`、`canonicalName`、`aliases`、`stableDescription`、`consumedByShots` 都是同一正式 JSON 的规定字段，不得写进旁边的 Markdown，也不得发明 Schema 之外的设计说明字段。
 
 ## 自检
 

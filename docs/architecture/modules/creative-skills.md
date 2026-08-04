@@ -11,12 +11,12 @@ Codex app-server 是唯一 Agent Runtime。Wao 不维护第二套 Creative Worke
 ## 不变量
 
 - **CS-01 — Skill identity 单一。** `CREATIVE_SKILL_REGISTRY` 是 Skill id、版本和磁盘正文的唯一声明；加载器只读取 Registry 中的 `SKILL.md`。
-- **CS-02 — Worker 路由确定。** `CREATIVE_WORKER_REGISTRY` 是 `workerKind → agentType → 固定 Skill IDs → 交付契约` 的唯一声明。Skill description 只供解释，不能参与正确性、隐式路由或 fallback。
+- **CS-02 — Worker 路由确定。** `CREATIVE_WORKER_REGISTRY` 与 `CREATIVE_OUTPUT_REGISTRY` 共同穷尽 `workerKind → agentType → 固定 Skill IDs → 固定 outputKind → strict JSON schema → Workspace schemaId`；前者拥有角色装载，后者拥有输出协议。Skill description 只供解释，不能参与正确性、隐式路由或 fallback。
 - **CS-03 — 主 Agent零 Skill。** Wao Skill 不进入 Project 文件树、`$CODEX_HOME/skills`、主 Agent developer instructions 或主 Agent Tool schema；钉死 Codex 版本自带的 native Skills 也由生成的 `config.toml` 全部禁用。每 Turn 不做 Skill inventory admission；Runtime smoke 发现任何 enabled Skill 都失败。
 - **CS-04 — 子 Agent固定注入。** 每个 custom agent 只收到 `creative-core + 一个专业 Skill` 的完整正文；不得发现或加载其他 Wao Skill。子 Agent的 Wao MCP 必须使用合法 transport 配置并显式禁用，因此不能直接花费、审批、创建 Task 或执行媒体生产；只有 `enabled=false` 而缺 transport 的配置会被 Codex 视为整个 custom agent 无效。
 - **CS-05 — 专业内容单 writer。** 被选定的专业子 Agent独占其交付文件。主 Agent只检查文件存在、路径和提交前置条件，不复制、续写或改写专业内容。并行子 Agent必须写互斥路径；长篇共享连续性由 `wao_long_form` 单写。
-- **CS-06 — 普通文件交付。** 剧本、方向、连续性、最终提示词和 Production Manifest 都是普通 WorkspaceResource。没有 Skill output、Creative Worker Task、Episode、Chapter 或 Canon 系统实体。
-- **CS-07 — Manifest 是执行连接件。** 资产、视频、音乐子 Agent把完整最终 Prompt 与显式生成参数写入 JSON Manifest；主 Agent只有 `submit_production_manifest({manifestPath})` 这一条新媒体生产入口。视频/音乐角色必须同时读取 `system/project.json` 中对应的非空 `productionCapabilities`，不从示例或模型名猜能力。服务端只校验、冻结和执行，不补写创作内容。
+- **CS-06 — 固定 JSON 文件交付。** 每个专业角色只写一个被分派的 `.json`，根 `outputKind` 和完整内容必须通过同一 `CREATIVE_OUTPUT_REGISTRY` strict schema；Workspace checkpoint 原子校验并登记对应 `project.*` schemaId。没有第二份 Markdown 正式交付、Skill output、Creative Worker Task、Episode、Chapter 或 Canon 系统实体；不含 `outputKind` 的用户 JSON 仍是普通 `generic.text`。
+- **CS-07 — Manifest 是执行连接件。** `asset_manifest`、`video_prompt_set`、`music_direction` 本身就是可执行 JSON Manifest，不存在“设计 MD + 另一份执行 JSON”。它们把完整最终 Prompt、创作身份、显式生成参数和 Placement 写在同一 schema；主 Agent只有 `submit_production_manifest({manifestPath})` 这一条新媒体生产入口。视频/音乐角色必须同时读取 `system/project.json` 中对应的非空 `productionCapabilities`，不从示例或模型名猜能力。服务端只校验、冻结和执行，不补写创作内容。
 - **CS-08 — 原生生命周期。** 创建、等待、中断和完成只消费 Codex 原生 Subagent item/event，并投影到现有 UI；禁止恢复旧 Worker 卡片或第二状态机。
 - **CS-09 — 语言由用户决定。** Skill 可以使用适合模型的知识语言，但用户可见文本和工作区交付遵循当前 locale 或用户明确要求。
 - **CS-10 — 真人与写实风格是正常创作能力。** Wao Creative Skill 可以为真人参考、真实人物和照片写实风格设计资产与视频，不注入额外的真人、公众人物或相似度禁令。Provider 若拒绝具体输入，仍由 Provider adapter 的 typed failure 如实投影，不得把拒绝文案复制回 Skill 形成第二套能力政策。
@@ -24,14 +24,14 @@ Codex app-server 是唯一 Agent Runtime。Wao 不维护第二套 Creative Worke
 
 ## 固定角色
 
-| workerKind | agentType | 固定 Skill 集 | 交付 |
+| workerKind | agentType | 固定 Skill 集 | 固定 outputKind |
 | --- | --- | --- | --- |
-| story | `wao_story` | creative-core + story-development | 剧本文件 |
-| long_form | `wao_long_form` | creative-core + long-form-production | 连续性与长篇生产索引 |
-| direction | `wao_direction` | creative-core + creative-direction | Creative Direction |
-| assets | `wao_assets` | creative-core + asset-development | 资产设计与资产 Production Manifest |
-| video | `wao_video` | creative-core + video-direction | 视频 Production Manifest |
-| music | `wao_music` | creative-core + music-direction | 音乐 Production Manifest |
+| story | `wao_story` | creative-core + story-development | `screenplay` |
+| long_form | `wao_long_form` | creative-core + long-form-production | `long_form_plan` |
+| direction | `wao_direction` | creative-core + creative-direction | `creative_direction` |
+| assets | `wao_assets` | creative-core + asset-development | `asset_manifest` |
+| video | `wao_video` | creative-core + video-direction | `video_prompt_set` |
+| music | `wao_music` | creative-core + music-direction | `music_direction` |
 
 ## 权威入口
 
@@ -39,6 +39,7 @@ Codex app-server 是唯一 Agent Runtime。Wao 不维护第二套 Creative Worke
 | --- | --- |
 | Skill identity 与正文 | `src/lib/creative-skills/registry.ts`、`loader.ts` |
 | Worker identity、路由与 custom agent 配置 | `src/lib/creative-skills/agent-profiles.ts` |
+| outputKind、严格 JSON 与 Workspace schema 映射 | `src/lib/creative-skills/output-registry.ts` |
 | Runtime 配置物化 | `src/lib/assistant-runtime/runtime-persistence.ts` |
 | 主 Agent路由边界 | `src/lib/assistant-runtime/runtime-access.ts` |
 | 专业交付 | WorkspaceResource checkpoint |
@@ -47,7 +48,7 @@ Codex app-server 是唯一 Agent Runtime。Wao 不维护第二套 Creative Worke
 
 ## 验证
 
-- Runtime smoke 必须证明主 Agent的 `skills/list` 没有任何 enabled Skill、全局 `AGENTS.md` 明确允许自主委派、`agents.enabled` 显式开启，并证明每个固定 custom agent 文件只嵌入 Registry 声明的 Skill 且禁用 Wao MCP。
+- Runtime smoke 必须证明主 Agent的 `skills/list` 没有任何 enabled Skill、全局 `AGENTS.md` 明确允许自主委派、`agents.enabled` 显式开启，并证明每个固定 custom agent 文件只嵌入 Registry 声明的 Skill、自己的唯一 JSON Schema 且禁用 Wao MCP。
 - Registry conformance 必须证明直接 image/audio/video Operation 不进入 MCP，Manifest 仍是唯一 MCP 新媒体入口。
 - Manifest schema 必须拒绝资产 kind/schema 不匹配、资产非 4:3、重复 item/path/reference position 和缺失最终 Prompt。
 
@@ -61,3 +62,4 @@ Codex app-server 是唯一 Agent Runtime。Wao 不维护第二套 Creative Worke
 - 固定专业 Subagent 首版只验收了 custom agent 文件与 Skill 注入，没有用普通创作请求经过 Codex 的真实委派门槛。Codex 默认 `explicitRequestOnly` 接受用户、适用 `AGENTS.md` 或 Skill 的显式委派要求，但 Wao 的路由当时只在普通 developer instructions 中，导致主 Agent既被禁止创作又不能自动委派。当前 Runtime 通过 Codex 官方全局 `AGENTS.md` 指令面授权主 Agent自主委派，保持专业 Skill 隔离且不把所有 Turn 强制提升为 Ultra；Runtime revision 同步切换，旧 Thread 不继续携带失效指令拓扑。
 - 同一首版为 custom agent 写入 `[mcp_servers.wao] enabled=false`，但没有同时提供 Codex MCP 配置必需的 `command` 或 `url` transport。Codex 因 `invalid transport` 忽略了整份 agent role，而字符串 smoke 仍然通过。当前每个固定 Worker 使用禁用的 loopback 空 transport；它在配置层可解析、在能力层保持关闭，并且即使 `enabled` 被意外改写也只能连接失败，不能越过父 Agent的 Wao MCP 权限边界。
 - 自主委派首次真实验收时，主 Agent先用默认全历史 fork 选择 `wao_direction`，Codex 明确拒绝后才重试 `fork_turns="none"`；用户会看到一次本可避免的工具失败。当前全局编排指令直接固定无历史 fork，并要求父 Agent提供完整输入、输出和范围，专业 Skill 仍只来自 custom agent profile。
+- 固定专业 Worker 首版只绑定 agentType 与 Skill，自然语言 `deliveryContract` 没有绑定机器 `outputKind`。资产 Skill 要求 `overview/canonicalName/stableDescription/consumedByShots`，付费入口的 strict Manifest 却禁止这些字段；错误投影又丢弃 Zod issue 并把所有路径错误归成 `outputPath`，主 Agent于是把原本正确的相对路径改成必然过期的 Runtime 绝对路径并重复提交。当前六个 worker 一对一绑定六个 strict JSON schema；同一 schema 同时注入 custom agent、在 Workspace checkpoint 登记 `project.*` identity，并在媒体提交时复验。Skill 只讲方法，不再手写第二份字段清单；精确 corrections 返回原 worker，未改文件版本不得重复提交。

@@ -92,6 +92,9 @@ function projectModelCorrection(value: unknown): Record<string, unknown> | null 
     action: source.action,
     fieldPath: source.fieldPath,
   }
+  if (typeof source.message === 'string' && source.message.length <= 512) {
+    projected.message = source.message
+  }
   if (typeof source.targetPath === 'string' && source.targetPath.length <= 256) {
     projected.targetPath = source.targetPath
   }

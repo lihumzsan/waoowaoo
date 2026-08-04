@@ -68,6 +68,6 @@ description: Develop faithful, coherent, duration-aware, filmable stories and sc
 
 ## 边界
 
-本 Skill 只负责剧本创作方法，结果写入用户选择的普通 WorkspaceResource 文件。不得在剧本中登记系统资产、生成 Resource ID、建立媒体任务或替资产设计决定视觉空间；路径、格式和后续执行由当前任务决定。
+本 Skill 只负责剧本创作方法。唯一正式交付是 Agent profile 注入的 `outputKind: "screenplay"` 严格 JSON；完整剧本写入 `screenplayText`，摘要、来源、假设与开放问题写入各自固定字段，不另建 Markdown 剧本或第二份解释文件。不得在剧本中登记系统资产、生成 Resource ID、建立媒体任务或替资产设计决定视觉空间。
 
 Creative Direction 可选。主 Agent分派了精确方向文件时，完整读取并使用会实质影响当前写作的领域，同时保持彼此协调；不得把制作政策复制成剧本元数据，也不得改变已经成立的故事事实。未提供时，根据用户要求和已提供故事事实工作，不得临时发明项目级方向。

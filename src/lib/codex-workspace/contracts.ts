@@ -45,6 +45,7 @@ export type CodexWorkspaceProjectSnapshot = {
 
 export type CodexWorkspaceBaselineResource = {
   readonly resourceId: string
+  readonly schemaId: string
   readonly workspacePath: string
   readonly resourceKind: WorkspaceResourceKind
   readonly mediaType: WorkspaceResourceMediaType | null
@@ -86,6 +87,8 @@ export type CodexWorkspaceErrorCode =
   | 'CODEX_WORKSPACE_PROTECTED_FILE_CHANGED'
   | 'CODEX_WORKSPACE_RUNTIME_PATH_INVALID'
   | 'CODEX_WORKSPACE_RESOURCE_CONTENT_INVALID'
+  | 'CODEX_WORKSPACE_CREATIVE_OUTPUT_INVALID'
+  | 'CODEX_WORKSPACE_CREATIVE_OUTPUT_KIND_CHANGE_FORBIDDEN'
   | 'CODEX_WORKSPACE_RESOURCE_ID_INVALID'
   | 'CODEX_WORKSPACE_RESOURCE_LIMIT_EXCEEDED'
   | 'CODEX_WORKSPACE_RESOURCE_CONFLICT'
@@ -94,10 +97,16 @@ export type CodexWorkspaceErrorCode =
 
 export class CodexWorkspaceError extends Error {
   readonly code: CodexWorkspaceErrorCode
+  readonly details: Readonly<Record<string, unknown>> | null
 
-  constructor(code: CodexWorkspaceErrorCode, message: string, options?: ErrorOptions) {
+  constructor(
+    code: CodexWorkspaceErrorCode,
+    message: string,
+    options?: ErrorOptions & { readonly details?: Readonly<Record<string, unknown>> },
+  ) {
     super(message, options)
     this.name = 'CodexWorkspaceError'
     this.code = code
+    this.details = options?.details ?? null
   }
 }

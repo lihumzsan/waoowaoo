@@ -77,11 +77,11 @@ description: Design continuous instrumental scoring, dynamics, silence, and dial
 
 这些只是决策示例，不能复制为固定配器模板。
 
-## 每个 cue 的最终生成指令 `generationPrompt`
+## 每个 cue 的最终生成指令 `prompt`
 
-配乐的最终执行按 cue 独立进行：调用方对每个 cue 把该 cue 的 `generationPrompt` 原样交给音乐生成模型，模型只观看该 cue 时间窗口内的画面，一个字都不会改写或补充。cue 的 purpose/musicalDirection/dialogueSafety 字段给人阅读与混音参考，音乐模型永远看不到。因此这个 cue 的全部可执行决策都必须内化进它自己的 `generationPrompt`。判定整部作品应刻意不配乐时，输出空的 `cues: []` 并在 overview/warnings 中说明理由。
+配乐的最终执行按 cue 独立进行：调用方对每个 item 把其 `prompt` 原样交给音乐生成模型，模型只观看该 cue 时间窗口内的画面，一个字都不会改写或补充。`purpose`、`musicalDirection`、`dialogueSafety` 字段给人阅读与混音参考，音乐模型永远看不到。因此这个 cue 的全部可执行决策都必须内化进它自己的 `prompt`。判定整部作品应刻意不配乐时使用 `decision: "no_music"`、空 `items` 并在 `overview`/`warnings` 中说明理由；不要提交这份无任务清单。
 
-每条 `generationPrompt` 应遵守模型的真实能力边界：
+每条 `prompt` 应遵守模型的真实能力边界：
 
 - 始终用英文撰写：当前音乐生成模型对英文指令的服从度显著更好，对中文支持很差。这只影响生成指令；其他给人阅读的字段仍使用与用户内容一致的语言。
 - 模型看不到 cue 之外的画面：本段的叙事前后文必须写进指令里（此刻人物处境、情绪从何而来、要走向哪里），否则模型只能凭孤立画面猜测。
@@ -93,7 +93,7 @@ description: Design continuous instrumental scoring, dynamics, silence, and dial
 
 ## 自检
 
-- 每个 cue 的 `generationPrompt` 是否已内化该段全部可执行决策与叙事前后文，不依赖其他字段被再次阅读？决定不配乐时是否显式输出空 `cues: []` 并说明理由？
+- 每个 cue 的 `prompt` 是否已内化该段全部可执行决策与叙事前后文，不依赖其他字段被再次阅读？决定不配乐时是否显式使用 `decision: "no_music"` 与空 `items` 并说明理由？
 - cue 切分是否只发生在约 6 秒以上的静音间隔处，每段时长与指令字符数是否都在 `system/project.json` 的 `productionCapabilities.music` 预算内？
 - 是否使用真实时间线时长，并且没有声称分析未提供的画面或音轨？
 - 注入完整 Creative Direction 时，是否把所有与音乐有关的政策具体转译为音乐气质、声场、节奏密度和配器，而不是忽略、照抄或强行塞进配乐？
@@ -106,28 +106,9 @@ description: Design continuous instrumental scoring, dynamics, silence, and dial
 
 ## 写入 Production Manifest
 
-- 每个 cue 对应一个 `mediaType: "audio"` item；`prompt` 必须是该 cue 完整最终 `generationPrompt`，主 Agent与服务端不会再补写。
+- 每个 cue 对应一个 `mediaType: "audio"` item；`prompt` 必须是该 cue 完整最终生成指令，主 Agent与服务端不会再补写。
 - 显式填写 `durationSeconds`、`vocalMode`，以及确实需要的 `genre`、`mood`、`bpm`。当前 BGM 默认 `schemaId` 为 `project.bgm_audio`。
-- Manifest 是严格 JSON 文件，最小结构如下：
-
-```json
-{
-  "schemaVersion": 1,
-  "manifestId": "music-v1",
-  "items": [
-    {
-      "itemId": "cue-001",
-      "mediaType": "audio",
-      "schemaId": "project.bgm_audio",
-      "outputPath": "audio/cue-001.resource",
-      "durationSeconds": 60,
-      "vocalMode": "instrumental",
-      "prompt": "Complete final English generation prompt",
-      "references": []
-    }
-  ]
-}
-```
+- 唯一正式交付是 Agent profile 注入的 `outputKind: "music_direction"` 严格 JSON。该机器 Schema 是字段、必填项和层级的唯一权威；本 Skill 不另写一份可能漂移的 JSON 模板或配乐说明文件。
 
 ## 边界
 

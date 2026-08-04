@@ -1,8 +1,13 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { readCreativeSkillResource } from './loader'
+import {
+  CREATIVE_WORKER_OUTPUT_KIND,
+  creativeOutputJsonSchema,
+  readCreativeOutputDefinition,
+} from './output-registry'
 import { getCreativeSkillDefinition } from './registry'
-import type { CreativeSkillId, CreativeWorkerKind } from './types'
+import type { CreativeOutputKind, CreativeSkillId, CreativeWorkerKind } from './types'
 
 export type CreativeWorkerDefinition = {
   readonly kind: CreativeWorkerKind
@@ -10,57 +15,62 @@ export type CreativeWorkerDefinition = {
   readonly title: string
   readonly description: string
   readonly skillIds: readonly ['creative-core', Exclude<CreativeSkillId, 'creative-core'>]
-  readonly deliveryContract: string
+  readonly outputKind: CreativeOutputKind
+  readonly executionFacts: string | null
 }
 
 function defineWorker(
-  definition: Omit<CreativeWorkerDefinition, 'agentType'>,
+  definition: Omit<CreativeWorkerDefinition, 'agentType' | 'outputKind'>,
 ): CreativeWorkerDefinition {
-  return { ...definition, agentType: `wao_${definition.kind}` }
+  return {
+    ...definition,
+    agentType: `wao_${definition.kind}`,
+    outputKind: CREATIVE_WORKER_OUTPUT_KIND[definition.kind],
+  }
 }
 
 export const CREATIVE_WORKER_REGISTRY: Readonly<Record<CreativeWorkerKind, CreativeWorkerDefinition>> = {
   story: defineWorker({
     kind: 'story',
     title: '故事与剧本专业子 Agent',
-    description: '只负责故事、剧本创作与修改；把最终文本写入被指派的工作区路径。',
+    description: '只负责故事、剧本创作与修改；交付固定 screenplay JSON。',
     skillIds: ['creative-core', 'story-development'],
-    deliveryContract: 'Write the complete final story or screenplay deliverable to the exact assigned workspace path.',
+    executionFacts: null,
   }),
   long_form: defineWorker({
     kind: 'long_form',
     title: '长篇制作专业子 Agent',
-    description: '只负责长篇目录、连续性文档与生产索引；不代写资产、视频或音乐提示词。',
+    description: '只负责长篇目录、连续性事实与生产索引；交付固定 long_form_plan JSON。',
     skillIds: ['creative-core', 'long-form-production'],
-    deliveryContract: 'Write the complete continuity and long-form production index to the exact assigned paths. Point to domain manifests owned by other fixed professional workers; never author their prompts.',
+    executionFacts: 'Point to JSON deliverables owned by other fixed professional workers; never author their prompts.',
   }),
   direction: defineWorker({
     kind: 'direction',
     title: '创作方向专业子 Agent',
-    description: '只负责创作方向；把最终 Creative Direction 写入被指派的工作区路径。',
+    description: '只负责创作方向；交付固定 creative_direction JSON。',
     skillIds: ['creative-core', 'creative-direction'],
-    deliveryContract: 'Write the complete final Creative Direction to the exact assigned workspace path.',
+    executionFacts: null,
   }),
   assets: defineWorker({
     kind: 'assets',
     title: '资产设计专业子 Agent',
-    description: '只负责资产筛选、设计和最终资产图片提示词；把完整生产清单写入被指派的路径。',
+    description: '只负责资产筛选、设计和最终资产图片提示词；交付固定 asset_manifest JSON。',
     skillIds: ['creative-core', 'asset-development'],
-    deliveryContract: 'Write complete final asset prompts and explicit generation parameters into the assigned production manifest. Never call production tools.',
+    executionFacts: 'Every produced asset must include its stable creative identity, complete final prompt, explicit generation parameters, and project-relative .resource placement in the one assigned JSON file.',
   }),
   video: defineWorker({
     kind: 'video',
     title: '视频导演专业子 Agent',
-    description: '只负责视频导演、分段与最终视频提示词；把完整生产清单写入被指派的路径。',
+    description: '只负责视频导演、分段与最终视频提示词；交付固定 video_prompt_set JSON。',
     skillIds: ['creative-core', 'video-direction'],
-    deliveryContract: 'Read the exact system/project.json assigned by the parent and use only its non-null productionCapabilities.video facts. Write complete final video prompts and explicit generation parameters into the assigned production manifest. Never guess capability limits or call production tools.',
+    executionFacts: 'Read the exact system/project.json assigned by the parent and use only its non-null productionCapabilities.video facts. Never guess capability limits.',
   }),
   music: defineWorker({
     kind: 'music',
     title: '音乐导演专业子 Agent',
-    description: '只负责音乐设计和最终音乐提示词；把完整生产清单写入被指派的路径。',
+    description: '只负责音乐设计和最终音乐提示词；交付固定 music_direction JSON。',
     skillIds: ['creative-core', 'music-direction'],
-    deliveryContract: 'Read the exact system/project.json assigned by the parent and use only its non-null productionCapabilities.music facts. Write complete final music prompts and explicit generation parameters into the assigned production manifest. Never guess capability limits or call production tools.',
+    executionFacts: 'Read the exact system/project.json assigned by the parent and use only its non-null productionCapabilities.music facts. Never guess capability limits.',
   }),
 }
 
@@ -81,8 +91,10 @@ export const PRIMARY_AGENT_DISABLED_NATIVE_SKILL_IDS = [
 export const PRIMARY_AGENT_GLOBAL_INSTRUCTIONS = `# Wao orchestration
 
 - The primary Wao Agent may autonomously spawn and coordinate Subagents whenever delegation materially improves exploration, planning, or execution. The user does not need to ask for Subagents explicitly.
-- For professional creative work, the primary Agent must use the fixed native custom Subagent routing supplied by Wao developer instructions and must give every worker exact input paths and exclusive output paths. Spawn every fixed custom agent with \`fork_turns="none"\`; full-history forks cannot select a custom \`agent_type\`.
+- For professional creative work, the primary Agent must use the fixed native custom Subagent routing supplied by Wao developer instructions. Assign exactly one exclusive project-relative .json output path for the worker's registered outputKind. Spawn every fixed custom agent with \`fork_turns="none"\`; full-history forks cannot select a custom \`agent_type\`.
 - Fixed Wao professional workers execute their assigned bounded deliverable directly. They must not spawn or delegate to additional agents.
+- The primary Agent never writes, copies, repairs, or rewrites professional creative contents. It may read the completed JSON and, for asset_manifest, video_prompt_set, or music_direction with actual items, submit that exact file through Wao MCP.
+- If Workspace checkpoint or production validation rejects a professional JSON, send the exact reported field correction back to the same fixed worker. Do not change paths, rewrite the manifest, or repeat the same submission until that worker has produced a new file version.
 - Keep delegation bounded: do not create redundant workers, and never let two agents write the same file or directory.`
 
 function tomlString(value: string): string {
@@ -90,6 +102,13 @@ function tomlString(value: string): string {
 }
 
 async function buildDeveloperInstructions(worker: CreativeWorkerDefinition): Promise<string> {
+  const outputDefinition = readCreativeOutputDefinition(worker.outputKind)
+  if (
+    outputDefinition.workerKind !== worker.kind
+    || outputDefinition.professionalSkillId !== worker.skillIds[1]
+  ) {
+    throw new Error(`CREATIVE_WORKER_OUTPUT_REGISTRY_MISMATCH:${worker.kind}`)
+  }
   const skills = await Promise.all(worker.skillIds.map(async (skillId) => {
     const definition = getCreativeSkillDefinition(skillId)
     const resource = await readCreativeSkillResource({ uri: definition.entryUri })
@@ -97,16 +116,22 @@ async function buildDeveloperInstructions(worker: CreativeWorkerDefinition): Pro
 ${resource.content.trim()}
 </wao_skill>`
   }))
+  const jsonSchema = JSON.stringify(creativeOutputJsonSchema(worker.outputKind), null, 2)
   return [
     `You are the fixed Wao professional worker ${worker.agentType}.`,
     'Your role and Skill set were selected deterministically by the Wao worker registry. Do not discover, load, or apply any other Wao Skill.',
     'Work only on the exact files or directories assigned by the parent Agent. Do not modify system/** or .resource pointer contents.',
-    'Use assigned project-relative output paths exactly as written. Never expand them to absolute host or Runtime paths.',
+    `Your only formal deliverable is exactly one strict JSON object with outputKind=${JSON.stringify(worker.outputKind)}, written to the one assigned project-relative .json path. Do not create an auxiliary Markdown deliverable, a second manifest, or a parallel explanation file.`,
+    'Use the assigned project-relative output path exactly as written. Never expand any path to an absolute host or Runtime path. Every media outputPath inside a production JSON must be project-relative, must end in .resource, and must not start with /, ./, ../, system/, or .wao/.',
     'The wao MCP server is disabled for this worker. Never submit paid production, billing, Task, approval, or Resource operations.',
     'You are the sole author of the professional deliverable for this assignment. The parent Agent may submit your file but must not copy, rewrite, or complete its professional contents.',
-    worker.deliveryContract,
+    worker.executionFacts,
     ...skills,
-  ].join('\n\n')
+    'The JSON must match the authoritative schema below exactly: include every required field, include no unknown field, emit raw JSON without Markdown fences, and never invent a schema from a Skill example. This schema is the same machine contract enforced at Workspace checkpoint and production submission.',
+    `<wao_output_schema outputKind=${JSON.stringify(worker.outputKind)}>
+${jsonSchema}
+</wao_output_schema>`,
+  ].filter((value): value is string => value !== null).join('\n\n')
 }
 
 export async function materializeCreativeRuntimeConfiguration(codexHomeDirectory: string): Promise<void> {
@@ -157,6 +182,6 @@ export async function materializeCreativeRuntimeConfiguration(codexHomeDirectory
 
 export function creativeWorkerRoutingInstructions(): readonly string[] {
   return CREATIVE_WORKERS.map((worker) => (
-    `${worker.kind} -> native Subagent agent_type=${worker.agentType}: ${worker.description}`
+    `${worker.kind} -> native Subagent agent_type=${worker.agentType}, outputKind=${worker.outputKind}: ${worker.description}`
   ))
 }
