@@ -26,17 +26,23 @@ const STATUS_POLL_TIMEOUT_MS = 10 * 60 * 1000
 export interface WechatQrPayment {
   readonly paymentIntentId: string
   readonly imageDataUrl: string
-  readonly credits: number
-  readonly paymentAmount: number
-  readonly paymentCurrency: string
+  readonly amountCny: number
+  /** What the payment buys, so the dialog can say which it is. */
+  readonly purpose: 'recharge' | 'plan'
+  readonly credits: number | null
 }
+
+/** What a WeChat payment is being started for. */
+export type WechatIntentRequest =
+  | { readonly kind: 'recharge'; readonly credits: number }
+  | { readonly kind: 'plan'; readonly planId: string; readonly interval: 'month' | 'year' }
 
 export interface WechatRechargeState {
   readonly available: boolean
   readonly busy: boolean
   readonly payment: WechatQrPayment | null
   readonly status: { kind: 'error' | 'info'; text: string } | null
-  readonly start: (credits: number) => void
+  readonly start: (request: WechatIntentRequest) => void
   readonly dismiss: () => void
 }
 
@@ -62,28 +68,20 @@ function readQrImageDataUrl(nextAction: unknown): string | null {
 function readIntentResponse(payload: unknown): {
   paymentIntentId: string
   clientSecret: string
-  credits: number
-  paymentAmount: number
-  paymentCurrency: string
+  amountCny: number
 } | null {
   if (!isRecord(payload)) return null
-  const quote = isRecord(payload.quote) ? payload.quote : null
   if (
     typeof payload.paymentIntentId !== 'string'
     || typeof payload.clientSecret !== 'string'
-    || !quote
-    || typeof quote.credits !== 'number'
-    || typeof quote.paymentAmount !== 'number'
-    || typeof quote.paymentCurrency !== 'string'
+    || typeof payload.amountCny !== 'number'
   ) {
     return null
   }
   return {
     paymentIntentId: payload.paymentIntentId,
     clientSecret: payload.clientSecret,
-    credits: quote.credits,
-    paymentAmount: quote.paymentAmount,
-    paymentCurrency: quote.paymentCurrency,
+    amountCny: payload.amountCny,
   }
 }
 
@@ -108,20 +106,25 @@ export function useWechatRecharge(
   }, [])
 
   const start = useCallback(
-    (credits: number) => {
+    (request: WechatIntentRequest) => {
       if (!available || !publishableKey) {
         setStatus({ kind: 'info', text: t('rechargeUnavailable') })
         return
       }
-      if (!config || !Number.isSafeInteger(credits) || credits < config.minCredits || credits > config.maxCredits) {
-        setStatus({
-          kind: 'error',
-          text: t('creditRangeError', {
-            min: config?.minCredits.toLocaleString() ?? '',
-            max: config?.maxCredits.toLocaleString() ?? '',
-          }),
-        })
-        return
+      // Only a top-up has an amount the user typed, so only it needs bounds
+      // checking here; a plan's price comes from the catalog.
+      if (request.kind === 'recharge') {
+        const credits = request.credits
+        if (!config || !Number.isSafeInteger(credits) || credits < config.minCredits || credits > config.maxCredits) {
+          setStatus({
+            kind: 'error',
+            text: t('creditRangeError', {
+              min: config?.minCredits.toLocaleString() ?? '',
+              max: config?.maxCredits.toLocaleString() ?? '',
+            }),
+          })
+          return
+        }
       }
 
       setBusy(true)
@@ -133,7 +136,7 @@ export function useWechatRecharge(
           const response = await apiFetch('/api/payments/stripe/wechat/intent', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ credits }),
+            body: JSON.stringify(request),
           })
           const payload: unknown = await response.json().catch(() => null)
           if (!response.ok) throw createClientApiError(payload, response.status)
@@ -158,9 +161,9 @@ export function useWechatRecharge(
           setPayment({
             paymentIntentId: intent.paymentIntentId,
             imageDataUrl,
-            credits: intent.credits,
-            paymentAmount: intent.paymentAmount,
-            paymentCurrency: intent.paymentCurrency,
+            amountCny: intent.amountCny,
+            purpose: request.kind === 'plan' ? 'plan' : 'recharge',
+            credits: request.kind === 'recharge' ? request.credits : null,
           })
         } catch (error) {
           setStatus({ kind: 'error', text: resolveClientError(error, t('checkoutCreateFailedFallback')) })
@@ -225,7 +228,13 @@ export function WechatQrDialog({
       onClose={onClose}
       size="sm"
       title={t('wechatDialogTitle')}
-      description={payment ? t('wechatDialogHint', { credits: payment.credits.toLocaleString('en-US') }) : undefined}
+      description={
+        payment
+          ? payment.purpose === 'plan'
+            ? t('wechatDialogPlanHint')
+            : t('wechatDialogHint', { credits: (payment.credits ?? 0).toLocaleString('en-US') })
+          : undefined
+      }
     >
       {payment ? (
         <div className="flex flex-col items-center gap-4 py-2">
@@ -239,7 +248,7 @@ export function WechatQrDialog({
             className="h-56 w-56 rounded-xl bg-white p-3"
           />
           <p className="glass-num text-2xl font-semibold text-[var(--glass-text-primary)]">
-            ¥{payment.paymentAmount.toFixed(2)}
+            ¥{payment.amountCny.toFixed(2)}
           </p>
           <p className="flex items-center gap-2 text-[13px] text-[var(--glass-text-tertiary)]">
             <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--glass-tone-success-fg)]" />

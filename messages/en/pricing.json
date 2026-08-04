@@ -45,6 +45,11 @@
     "payWithWechat": "WeChat Pay",
     "payWithCard": "Card",
     "wechatUnavailable": "WeChat Pay is not enabled yet",
-    "planNoAutoRenew": "A one-off payment — nothing renews automatically, and you can buy again when the term ends. WeChat Pay, Alipay and cards all work."
+    "planNoAutoRenew": "A one-off payment — nothing renews automatically, and you can buy again when the term ends. WeChat Pay, Alipay and cards all work.",
+    "wechatDialogPlanHint": "The plan starts as soon as the payment clears",
+    "planDialogTitle": "Buy the {plan} plan",
+    "planDialogSummary": "¥{amount} — {credits} credits granted monthly",
+    "payWithWechatHint": "Scan to pay, without leaving this page",
+    "payWithCardHint": "Continue on Stripe's secure checkout"
   }
 }

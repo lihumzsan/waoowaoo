@@ -4,7 +4,7 @@ import { addBalanceWithTransaction, applyBalanceAdjustmentWithTransaction } from
 import { BillingOperationError } from '@/lib/billing/errors'
 import { toMoneyNumber } from '@/lib/billing/money'
 import { PLAN_PURCHASE_KIND } from './stripe-plan-purchase'
-import { WECHAT_RECHARGE_KIND } from './stripe-wechat-intent'
+import { WECHAT_PLAN_KIND, WECHAT_RECHARGE_KIND } from './stripe-wechat-intent'
 import { applyPlanPurchase } from '@/lib/billing/plan-term-service'
 import {
   isSubscriptionInterval,
@@ -204,6 +204,27 @@ async function creditWechatPaymentIntent(
   intent: Stripe.PaymentIntent,
 ): Promise<StripeWebhookHandleResult> {
   const metadata = intent.metadata ?? {}
+
+  // A plan bought with WeChat grants a term instead of permanent credits, so
+  // it branches here rather than crediting the balance.
+  if (metadata.waoowaoo_kind === WECHAT_PLAN_KIND) {
+    const userId = readString(metadata.user_id)
+    const planId = readString(metadata.plan_id)
+    const interval = readString(metadata.plan_interval)
+    if (!userId) throw new Error('STRIPE_CHECKOUT_METADATA_USER_ID_REQUIRED')
+    if (!planId || !isSubscriptionPlanId(planId)) throw new Error('STRIPE_PLAN_METADATA_PLAN_ID_INVALID')
+    if (!interval || !isSubscriptionInterval(interval)) throw new Error('STRIPE_PLAN_METADATA_INTERVAL_INVALID')
+    const applied = await applyPlanPurchase({ userId, planId, interval, purchaseId: intent.id })
+    return {
+      received: true,
+      action: applied.status === 'applied' ? 'credited' : 'ignored',
+      eventType: 'payment_intent',
+      objectId: intent.id,
+      credits: applied.status === 'applied' ? applied.grantedCredits : undefined,
+      reason: applied.status === 'already_applied' ? 'plan_purchase_already_applied' : undefined,
+    }
+  }
+
   if (metadata.waoowaoo_kind !== WECHAT_RECHARGE_KIND) {
     return {
       received: true,

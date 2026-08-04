@@ -14,6 +14,7 @@ import {
   usePlanPurchase,
 } from './shared'
 import { useWechatRecharge, WechatQrDialog } from './wechat-recharge'
+import { PlanPaymentDialog } from './plan-payment-dialog'
 
 function cx(...v: readonly (string | false | null | undefined)[]) {
   return v.filter(Boolean).join(' ')
@@ -210,6 +211,9 @@ export default function PricingGlassPageClient({ content }: { readonly content: 
     window.location.reload()
   }, []))
   const [interval, setInterval] = useState<SubscriptionInterval>('month')
+  // Which plan's payment dialog is open. Clicking a card opens the choice
+  // of method rather than committing to one.
+  const [payingFor, setPayingFor] = useState<GlassPlan | null>(null)
 
   return (
     <div className="glass-page min-h-screen pb-20">
@@ -233,7 +237,7 @@ export default function PricingGlassPageClient({ content }: { readonly content: 
               plan={plan}
               interval={interval}
               busy={purchase.busy}
-              onSubscribe={() => purchase.start(plan.id, interval)}
+              onSubscribe={() => setPayingFor(plan)}
             />
           ))}
         </div>
@@ -266,7 +270,14 @@ export default function PricingGlassPageClient({ content }: { readonly content: 
             <p className="text-[12px] text-[var(--glass-text-tertiary)]">{t('oneOffHint')}</p>
           </div>
           <div className="mt-4">
-            <CustomRecharge recharge={recharge} wechat={wechat} />
+            <CustomRecharge
+              recharge={recharge}
+              wechat={{
+                available: wechat.available,
+                busy: wechat.busy,
+                start: (credits) => wechat.start({ kind: 'recharge', credits }),
+              }}
+            />
           </div>
           <RechargeStatus status={wechat.status} />
         </section>
@@ -311,7 +322,24 @@ export default function PricingGlassPageClient({ content }: { readonly content: 
           </div>
         </section>
       </main>
-      <WechatQrDialog payment={wechat.payment} onClose={wechat.dismiss} />
+      <PlanPaymentDialog
+        plan={payingFor}
+        interval={interval}
+        cardBusy={purchase.busy}
+        wechat={wechat}
+        onPayWithCard={() => {
+          if (payingFor) purchase.start(payingFor.id, interval)
+        }}
+        onClose={() => {
+          setPayingFor(null)
+          wechat.dismiss()
+        }}
+      />
+      {/* The top-up box has its own QR dialog; the plan dialog renders its own. */}
+      <WechatQrDialog
+        payment={payingFor ? null : wechat.payment}
+        onClose={wechat.dismiss}
+      />
     </div>
   )
 }

@@ -1,4 +1,10 @@
 import type Stripe from 'stripe'
+import {
+  getSubscriptionPlan,
+  subscriptionPeriodPriceCny,
+  type SubscriptionInterval,
+  type SubscriptionPlanId,
+} from '@/lib/billing/subscription-plans'
 import { quoteRecharge, STRIPE_PAYMENT_CURRENCY, type RechargeQuote } from './recharge-config'
 import { createStripeClient } from './stripe-client'
 
@@ -16,10 +22,25 @@ import { createStripeClient } from './stripe-client'
  */
 
 export const WECHAT_RECHARGE_KIND = 'credit_recharge_wechat'
+export const WECHAT_PLAN_KIND = 'credit_plan_wechat'
 
 export interface CreateWechatRechargeIntentInput {
   readonly userId: string
   readonly credits: number
+}
+
+export interface CreateWechatPlanIntentInput {
+  readonly userId: string
+  readonly planId: SubscriptionPlanId
+  readonly interval: SubscriptionInterval
+}
+
+export interface WechatPlanIntentResult {
+  readonly paymentIntentId: string
+  readonly clientSecret: string
+  readonly planId: SubscriptionPlanId
+  readonly interval: SubscriptionInterval
+  readonly amountCny: number
 }
 
 export interface WechatRechargeIntentResult {
@@ -61,5 +82,52 @@ export async function createWechatRechargeIntent(
     paymentIntentId: intent.id,
     clientSecret: intent.client_secret,
     quote,
+  }
+}
+
+/**
+ * Buy a plan term with WeChat, without leaving the page.
+ *
+ * The hosted Checkout works too, but it redirects away and asks for an email
+ * and a name that a QR scan does not need. This keeps the whole purchase on
+ * our page: the browser confirms the intent, Stripe returns a QR, and the
+ * webhook starts the term once the scan clears.
+ */
+export async function createWechatPlanIntent(
+  input: CreateWechatPlanIntentInput,
+): Promise<WechatPlanIntentResult> {
+  const plan = getSubscriptionPlan(input.planId)
+  const listPriceCny = subscriptionPeriodPriceCny(plan, input.interval)
+  // The promo is a first-purchase discount on the monthly term. It changes what
+  // is charged, never what the term grants.
+  const promoCny = input.interval === 'month' ? plan.firstMonthPromoCny : null
+  const amountCny = promoCny ?? listPriceCny
+  const minorAmount = Math.round(amountCny * 100)
+  if (!Number.isSafeInteger(minorAmount) || minorAmount <= 0) {
+    throw new Error('PAYMENT_AMOUNT_INVALID')
+  }
+
+  const intent = await createStripeClient().paymentIntents.create({
+    amount: minorAmount,
+    currency: STRIPE_PAYMENT_CURRENCY.toLowerCase(),
+    payment_method_types: ['wechat_pay'],
+    metadata: {
+      waoowaoo_kind: WECHAT_PLAN_KIND,
+      user_id: input.userId,
+      plan_id: plan.id,
+      plan_interval: input.interval,
+      monthly_credits: String(plan.monthlyCredits),
+      payment_amount: amountCny.toFixed(2),
+      payment_currency: STRIPE_PAYMENT_CURRENCY.toLowerCase(),
+    },
+  })
+
+  if (!intent.client_secret) throw new Error('STRIPE_PAYMENT_INTENT_MISSING_CLIENT_SECRET')
+  return {
+    paymentIntentId: intent.id,
+    clientSecret: intent.client_secret,
+    planId: plan.id,
+    interval: input.interval,
+    amountCny,
   }
 }

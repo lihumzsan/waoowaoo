@@ -4,12 +4,24 @@ import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { getDeploymentConfig } from '@/lib/deployment/config'
 import { getDeploymentFeatures } from '@/lib/deployment/features'
-import { createWechatRechargeIntent } from '@/lib/payments/stripe-wechat-intent'
+import {
+  createWechatPlanIntent,
+  createWechatRechargeIntent,
+} from '@/lib/payments/stripe-wechat-intent'
 import { isPaymentConfigurationError, readPaymentConfigurationErrorCode } from '@/lib/payments/config-errors'
 
-const wechatIntentSchema = z.object({
-  credits: z.number().int().positive(),
-})
+/**
+ * Either a credit top-up or a plan term — both are one-off WeChat payments and
+ * differ only in what the webhook does when the scan clears.
+ */
+const wechatIntentSchema = z.union([
+  z.object({ kind: z.literal('recharge'), credits: z.number().int().positive() }),
+  z.object({
+    kind: z.literal('plan'),
+    planId: z.enum(['starter', 'creator', 'pro', 'studio', 'flagship']),
+    interval: z.enum(['month', 'year']),
+  }),
+])
 
 /**
  * POST /api/payments/stripe/wechat/intent
@@ -37,16 +49,34 @@ export const POST = apiHandler(async (request: NextRequest) => {
   if (!parsed.success) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'PAYMENT_CHECKOUT_PAYLOAD_INVALID',
-      field: 'credits',
+      field: 'kind',
     })
   }
 
-  let intent: Awaited<ReturnType<typeof createWechatRechargeIntent>>
+  let intent: { paymentIntentId: string; clientSecret: string; amountCny: number }
   try {
-    intent = await createWechatRechargeIntent({
-      userId: authResult.session.user.id,
-      credits: parsed.data.credits,
-    })
+    if (parsed.data.kind === 'plan') {
+      const planIntent = await createWechatPlanIntent({
+        userId: authResult.session.user.id,
+        planId: parsed.data.planId,
+        interval: parsed.data.interval,
+      })
+      intent = {
+        paymentIntentId: planIntent.paymentIntentId,
+        clientSecret: planIntent.clientSecret,
+        amountCny: planIntent.amountCny,
+      }
+    } else {
+      const rechargeIntent = await createWechatRechargeIntent({
+        userId: authResult.session.user.id,
+        credits: parsed.data.credits,
+      })
+      intent = {
+        paymentIntentId: rechargeIntent.paymentIntentId,
+        clientSecret: rechargeIntent.clientSecret,
+        amountCny: rechargeIntent.quote.paymentAmount,
+      }
+    }
   } catch (error) {
     if (isPaymentConfigurationError(error)) {
       const code = readPaymentConfigurationErrorCode(error)
@@ -59,6 +89,6 @@ export const POST = apiHandler(async (request: NextRequest) => {
     success: true,
     paymentIntentId: intent.paymentIntentId,
     clientSecret: intent.clientSecret,
-    quote: intent.quote,
+    amountCny: intent.amountCny,
   })
 })

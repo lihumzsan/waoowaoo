@@ -27,18 +27,24 @@ export const GET = apiHandler(async (request: NextRequest) => {
     })
   }
 
-  const credited = await prisma.balanceTransaction.findFirst({
+  // A WeChat payment buys either credits or a plan term, and each writes its
+  // own ledger row under its own key. Checking only one of them leaves the
+  // dialog spinning after a payment that actually succeeded.
+  const applied = await prisma.balanceTransaction.findFirst({
     where: {
       userId: authResult.session.user.id,
-      type: 'recharge',
-      idempotencyKey: `stripe:payment_intent:${paymentIntentId}`,
+      OR: [
+        { type: 'recharge', idempotencyKey: `stripe:payment_intent:${paymentIntentId}` },
+        { type: 'plan_purchase', idempotencyKey: `stripe:plan:${paymentIntentId}` },
+      ],
     },
-    select: { id: true, amount: true },
+    select: { id: true, type: true, amount: true },
   })
 
   return NextResponse.json({
     success: true,
-    credited: credited !== null,
-    credits: credited?.amount ?? 0,
+    credited: applied !== null,
+    kind: applied?.type === 'plan_purchase' ? 'plan' : 'recharge',
+    credits: applied?.amount ?? 0,
   })
 })

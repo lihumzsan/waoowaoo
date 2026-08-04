@@ -45,6 +45,11 @@
     "payWithWechat": "微信支付",
     "payWithCard": "银行卡支付",
     "wechatUnavailable": "微信支付暂未开通",
-    "planNoAutoRenew": "一次性付款，不会自动续费；到期后可再次购买。支持微信支付、支付宝与银行卡。"
+    "planNoAutoRenew": "一次性付款，不会自动续费；到期后可再次购买。支持微信支付、支付宝与银行卡。",
+    "wechatDialogPlanHint": "支付成功后套餐立即生效，额度当月发放",
+    "planDialogTitle": "购买 {plan} 套餐",
+    "planDialogSummary": "应付 ¥{amount}，每月发放 {credits} credits",
+    "payWithWechatHint": "扫码支付，无需离开本页",
+    "payWithCardHint": "跳转 Stripe 安全结账页"
   }
 }
