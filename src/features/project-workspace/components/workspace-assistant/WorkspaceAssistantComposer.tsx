@@ -66,7 +66,7 @@ export function WorkspaceAssistantComposer({
 
   return (
     <div>
-      <div className="flex flex-col rounded-2xl border border-white/70 bg-white/85 px-4 pb-2.5 pt-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_6px_20px_-8px_rgba(15,23,42,0.12)] backdrop-blur-xl">
+      <div className="flex flex-col rounded-[28px] border border-[rgba(15,17,23,0.08)] bg-white/85 px-5 pb-3.5 pt-4 shadow-[0_2px_4px_rgba(15,17,23,0.03),0_8px_20px_-6px_rgba(15,17,23,0.07),0_32px_64px_-20px_rgba(15,17,23,0.16)] backdrop-blur-[20px] transition-all duration-300 focus-within:border-[rgba(47,123,255,0.38)] focus-within:bg-white/95 focus-within:shadow-[0_2px_4px_rgba(15,17,23,0.04),0_12px_28px_-8px_rgba(47,123,255,0.20),0_40px_80px_-24px_rgba(15,17,23,0.20)]">
         {selection ? (
           <div className="mb-2 flex items-center gap-2 rounded-xl bg-slate-50 px-2.5 py-2 ring-1 ring-slate-200">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white text-[var(--glass-text-tertiary)] ring-1 ring-slate-200">
@@ -105,7 +105,8 @@ export function WorkspaceAssistantComposer({
           ref={textareaRef}
           rows={2}
           value={value}
-          disabled={pending}
+          readOnly={pending}
+          aria-busy={pending}
           onChange={(event) => onChange(event.target.value)}
           placeholder={t('panel.composerPlaceholder')}
           onKeyDown={(event) => {
@@ -122,7 +123,7 @@ export function WorkspaceAssistantComposer({
             event.preventDefault()
             onPasteMediaFiles(files)
           }}
-          className="min-h-10 max-h-[7rem] w-full resize-none overflow-y-auto bg-transparent pr-1 text-base leading-6 text-[var(--glass-text-primary)] outline-none [field-sizing:content] placeholder:text-[var(--glass-text-tertiary)] disabled:cursor-not-allowed disabled:opacity-60"
+          className="min-h-10 max-h-[7rem] w-full resize-none overflow-y-auto bg-transparent pr-1 text-base leading-6 text-[var(--glass-text-primary)] outline-none [field-sizing:content] placeholder:text-[var(--glass-text-tertiary)] read-only:cursor-wait read-only:opacity-60"
         />
         <TextAttachmentChips
           attachments={attachments}
@@ -152,7 +153,7 @@ export function WorkspaceAssistantComposer({
             {attachmentError}
           </p>
         ) : null}
-        <div className="mt-1 flex h-8 shrink-0 items-center justify-between gap-2">
+        <div className="mt-1 flex h-9 shrink-0 items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -174,7 +175,7 @@ export function WorkspaceAssistantComposer({
                 onClick={() => {
                   void onStopReply()
                 }}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--glass-text-primary)] text-white transition hover:bg-slate-900"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--glass-text-primary)] text-white shadow-[0_6px_16px_-6px_rgba(15,23,42,0.55)] transition hover:bg-slate-900 hover:shadow-[0_8px_20px_-6px_rgba(15,23,42,0.6)]"
               >
                 <span className="h-2.5 w-2.5 rounded-[2px] bg-current" aria-hidden="true" />
               </button>
@@ -186,10 +187,15 @@ export function WorkspaceAssistantComposer({
                   (!value.trim() && attachments.length === 0 && mediaAttachments.length === 0) ||
                   pending
                 }
+                onMouseDown={(event) => {
+                  // Pointer activation must not move focus away from the
+                  // composer before the send transitions it to read-only.
+                  event.preventDefault()
+                }}
                 onClick={() => {
                   void onSubmit()
                 }}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--glass-text-primary)] text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--glass-text-primary)] text-white shadow-[0_6px_16px_-6px_rgba(15,23,42,0.55)] transition hover:bg-slate-900 hover:shadow-[0_8px_20px_-6px_rgba(15,23,42,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none"
               >
                 <AppIcon name="arrowRight" className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
