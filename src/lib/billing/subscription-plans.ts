@@ -1,5 +1,4 @@
 import { CREDITS_PER_CNY } from './credits'
-import type { WorkflowConcurrencyConfig } from '@/lib/workflow-concurrency'
 
 /**
  * The production subscription catalog.
@@ -21,21 +20,20 @@ export const SUBSCRIPTION_INTERVAL_MONTHS: Record<SubscriptionInterval, number> 
   year: 12,
 }
 
-/**
- * Months actually charged on a yearly plan. Two months are free, which is the
- * only discount a yearly commitment carries — the credit grant per month is
- * identical to the monthly plan.
- */
-const YEARLY_BILLED_MONTHS = 10
-
 export interface SubscriptionPlanDefinition {
   readonly id: SubscriptionPlanId
   /** Monthly list price in CNY. */
   readonly monthlyPriceCny: number
+  /**
+   * Yearly list price in CNY, declared rather than derived.
+   *
+   * A yearly price is a price, not the output of a formula: it is set to a
+   * round figure roughly ten months' worth, so the page shows ¥15,900 instead
+   * of whatever `monthlyPrice * 10` happens to produce.
+   */
+  readonly yearlyPriceCny: number
   /** Credits granted at the start of every month, on both intervals. */
   readonly monthlyCredits: number
-  /** Per-user execution capacity unlocked by this plan. */
-  readonly concurrency: WorkflowConcurrencyConfig
   /** Marks the plan the pricing page leads with. */
   readonly featured: boolean
   /**
@@ -45,54 +43,44 @@ export interface SubscriptionPlanDefinition {
   readonly firstMonthPromoCny: number | null
 }
 
-/**
- * Capacity unlocked without any subscription. Also the floor every plan
- * inherits, so a lapsed subscription degrades to this rather than to zero.
- */
-export const FREE_TIER_CONCURRENCY: WorkflowConcurrencyConfig = {
-  analysis: 2,
-  image: 2,
-  video: 2,
-}
-
 export const SUBSCRIPTION_PLANS: readonly SubscriptionPlanDefinition[] = [
   {
     id: 'starter',
     monthlyPriceCny: 99,
+    yearlyPriceCny: 990,
     monthlyCredits: 1_040,
-    concurrency: { analysis: 3, image: 2, video: 2 },
     featured: false,
     firstMonthPromoCny: null,
   },
   {
     id: 'creator',
     monthlyPriceCny: 499,
+    yearlyPriceCny: 4_990,
     monthlyCredits: 5_600,
-    concurrency: { analysis: 5, image: 6, video: 6 },
     featured: true,
     firstMonthPromoCny: 399,
   },
   {
     id: 'pro',
     monthlyPriceCny: 1_599,
+    yearlyPriceCny: 15_900,
     monthlyCredits: 18_400,
-    concurrency: { analysis: 8, image: 10, video: 10 },
     featured: false,
     firstMonthPromoCny: null,
   },
   {
     id: 'studio',
     monthlyPriceCny: 3_999,
+    yearlyPriceCny: 39_900,
     monthlyCredits: 48_000,
-    concurrency: { analysis: 12, image: 16, video: 16 },
     featured: false,
     firstMonthPromoCny: null,
   },
   {
     id: 'flagship',
     monthlyPriceCny: 8_999,
+    yearlyPriceCny: 89_900,
     monthlyCredits: 112_500,
-    concurrency: { analysis: 16, image: 24, video: 24 },
     featured: false,
     firstMonthPromoCny: null,
   },
@@ -121,9 +109,7 @@ export function subscriptionPeriodPriceCny(
   plan: SubscriptionPlanDefinition,
   interval: SubscriptionInterval,
 ): number {
-  return interval === 'year'
-    ? plan.monthlyPriceCny * YEARLY_BILLED_MONTHS
-    : plan.monthlyPriceCny
+  return interval === 'year' ? plan.yearlyPriceCny : plan.monthlyPriceCny
 }
 
 /** Total credits a full billing cycle eventually grants, across all its months. */

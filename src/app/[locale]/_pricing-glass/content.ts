@@ -26,9 +26,19 @@ export interface GlassPlan {
   readonly featured: boolean
   /** First-period promotional price, monthly only. Null when there is none. */
   readonly firstMonthPromoCny: number | null
+  /** What a month's credits cover, if spent entirely on one kind of work. */
+  readonly monthlyImages: number
+  readonly monthlyVideos: number
   readonly details: readonly string[]
   /** Both billing cycles, so the page can switch without another request. */
   readonly intervals: Readonly<Record<SubscriptionInterval, GlassPlanInterval>>
+}
+
+export interface GlassCapacityReference {
+  readonly imageCredits: number
+  readonly videoCredits: number
+  readonly videoDurationSeconds: number
+  readonly videoResolution: string
 }
 
 export interface GlassPricingContent {
@@ -36,7 +46,9 @@ export interface GlassPricingContent {
   readonly title: string
   readonly subtitle: string
   readonly plans: readonly GlassPlan[]
-  readonly compareRows: ReadonlyArray<{ readonly label: string; readonly values: readonly string[] }>
+  /** Unit prices behind the capacity claims, so the page can show its maths. */
+  readonly capacityReference: GlassCapacityReference
+  readonly creditUnitCny: number
   readonly creditPolicy: {
     readonly title: string
     readonly body: string
@@ -81,8 +93,11 @@ function toIntervalMap(
 }
 
 export function buildGlassPricingContent(input: BuildGlassPricingInput): GlassPricingContent {
-  const catalogPlans = new Map(buildSubscriptionPlanViews().plans.map((plan) => [plan.id, plan]))
+  const catalog = buildSubscriptionPlanViews()
+  const catalogPlans = new Map(catalog.plans.map((plan) => [plan.id, plan]))
   return {
+    capacityReference: catalog.capacityReference,
+    creditUnitCny: catalog.creditUnitCny,
     brand: input.pricing.brand,
     title: input.pricing.title,
     subtitle: input.pricing.description,
@@ -102,11 +117,12 @@ export function buildGlassPricingContent(input: BuildGlassPricingInput): GlassPr
         tagline: plan.tagline,
         featured: catalogPlan.featured,
         firstMonthPromoCny: catalogPlan.firstMonthPromoCny,
+        monthlyImages: catalogPlan.monthlyCapacity.images,
+        monthlyVideos: catalogPlan.monthlyCapacity.videos,
         details: plan.details,
         intervals: toIntervalMap(catalogPlan),
       }
     }),
-    compareRows: input.pricing.compareRows,
     creditPolicy: input.pricing.creditPolicy,
     paymentNote: input.pricing.paymentNote,
     faqs: input.pricing.faqs.map((faq) => ({

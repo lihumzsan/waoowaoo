@@ -10,10 +10,6 @@
 import { describeUnknownError } from '@/lib/errors/normalize'
 import { prisma } from '@/lib/prisma'
 import {
-  capConcurrencyByPlan,
-  resolveSubscriptionConcurrencyCap,
-} from '@/lib/billing/subscription-concurrency'
-import {
   type CapabilitySelections,
   type CapabilityValue,
 } from '@/lib/ai-registry/types'
@@ -149,15 +145,11 @@ export async function getUserWorkflowConcurrencyConfig(
     },
   })
 
-  const requested = normalizeWorkflowConcurrencyConfig({
+  return normalizeWorkflowConcurrencyConfig({
     analysis: userPref?.analysisConcurrency,
     image: userPref?.imageConcurrency,
     video: userPref?.videoConcurrency,
   }, defaultConcurrency)
-
-  // A user's own setting can lower their concurrency but never raise it past
-  // what their plan allows.
-  return capConcurrencyByPlan(requested, await resolveSubscriptionConcurrencyCap(userId))
 }
 
 /**

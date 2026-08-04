@@ -39,10 +39,6 @@ export interface OfficialPricingFaq {
   answer: string
 }
 
-export interface OfficialPricingCompareRow {
-  label: string
-  values: readonly string[]
-}
 
 export interface OfficialPricingPageContent {
   brand: string
@@ -52,7 +48,6 @@ export interface OfficialPricingPageContent {
   betaNotice: string
   paymentNote: string
   plans: readonly OfficialPricingPlan[]
-  compareRows: readonly OfficialPricingCompareRow[]
   faqs: readonly OfficialPricingFaq[]
   creditPolicy: OfficialTextSection
   checkout: {
@@ -149,17 +144,6 @@ function readFaqArray(record: Record<string, unknown>, key: string, schema: stri
   })
 }
 
-function readCompareRows(record: Record<string, unknown>, key: string, schema: string): readonly OfficialPricingCompareRow[] {
-  const value = record[key]
-  if (!Array.isArray(value)) fail(schema, `${key} must be an array`)
-  return value.map((item, index) => {
-    if (!isRecord(item)) fail(schema, `${key}[${index}] must be an object`)
-    return {
-      label: readRequiredString(item, 'label', `${schema}.${key}[${index}]`),
-      values: readStringArray(item, 'values', `${schema}.${key}[${index}]`),
-    }
-  })
-}
 
 function readContentDir(): string {
   const configured = process.env[OFFICIAL_CONTENT_DIR_ENV]?.trim()
@@ -243,7 +227,6 @@ export function readOfficialPricingPage(locale: Locale): OfficialPricingPageCont
     betaNotice: readRequiredString(record, 'betaNotice', schema),
     paymentNote: readRequiredString(record, 'paymentNote', schema),
     plans: planItems,
-    compareRows: readCompareRows(record, 'compareRows', schema),
     faqs: readFaqArray(record, 'faqs', schema),
     creditPolicy: readSection(readRequiredRecord(record, 'creditPolicy', schema), `${schema}.creditPolicy`),
     checkout: {

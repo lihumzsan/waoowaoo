@@ -75,10 +75,17 @@
     "yearlySaveBadge": "Save ¥{amount}",
     "perMonth": "/ mo",
     "billedYearly": "¥{amount} billed yearly",
-    "subscribe": "Subscribe",
+    "subscribe": "Choose plan",
     "subscribeBusy": "Redirecting…",
     "firstMonthPromo": "First month ¥{amount}",
-    "creditsPerMonth": "{credits} per month",
-    "oneOffTitle": "Or top up as you go"
+    "creditsPerMonth": "{credits} credits per month",
+    "oneOffTitle": "Prefer not to subscribe? Top up instead",
+    "yearlySaveHint": "2 months free",
+    "capacityTitle": "Roughly per month",
+    "capacityImages": "{count} images",
+    "capacityVideos": "{count} videos",
+    "capacityFootnote": "At 1 credit = ¥{unit}: one GPT Image 2 image is {imageCredits} credits, a {duration}s {resolution} Seedance 2.0 clip is {videoCredits} credits. Actual charges depend on the model and settings you pick.",
+    "oneOffHint": "Topped-up credits never expire and are not cleared by a billing period.",
+    "faqTitle": "FAQ"
   }
 }

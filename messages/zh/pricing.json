@@ -70,15 +70,22 @@
     "paymentTitle": "充值与支付",
     "compareTitle": "套餐对比",
     "merchantMoreLink": "查看更多商户信息",
-    "billingMonthly": "按月付费",
-    "billingYearly": "按年付费",
+    "billingMonthly": "按月",
+    "billingYearly": "按年",
     "yearlySaveBadge": "省 ¥{amount}",
     "perMonth": "/ 月",
     "billedYearly": "按年支付 ¥{amount}",
-    "subscribe": "订阅",
+    "subscribe": "选择此套餐",
     "subscribeBusy": "正在跳转…",
-    "firstMonthPromo": "首月 ¥{amount}",
-    "creditsPerMonth": "每月 {credits}",
-    "oneOffTitle": "或按需一次性充值"
+    "firstMonthPromo": "首月仅 ¥{amount}",
+    "creditsPerMonth": "每月 {credits} credits",
+    "oneOffTitle": "不想订阅？按需充值",
+    "yearlySaveHint": "省 2 个月",
+    "capacityTitle": "每月大约可以生成",
+    "capacityImages": "{count} 张图片",
+    "capacityVideos": "{count} 条视频",
+    "capacityFootnote": "按 1 credit = ¥{unit} 计算：GPT Image 2 单图 {imageCredits} credits，Seedance 2.0 {duration} 秒 {resolution} 视频 {videoCredits} credits。实际扣费按所选模型与参数确定。",
+    "oneOffHint": "充值额度永久有效，不随订阅周期清零。",
+    "faqTitle": "常见问题"
   }
 }
