@@ -88,3 +88,19 @@ export interface WebSearchProgressEvent {
 }
 
 export type WebSearchProgressListener = (event: WebSearchProgressEvent) => void
+
+/**
+ * What the hosted run cost, delivered out of band. It is deliberately not part
+ * of `WebSearchResponse`: the model must never see accounting, and the response
+ * schema is what the model sees.
+ */
+export interface WebSearchUsage {
+  readonly model: string
+  readonly inputTokens: number
+  readonly outputTokens: number
+  readonly cachedInputTokens: number
+  /** Hosted web_search calls, which OpenAI bills per call on top of tokens. */
+  readonly toolCalls: number
+}
+
+export type WebSearchUsageListener = (usage: WebSearchUsage) => void

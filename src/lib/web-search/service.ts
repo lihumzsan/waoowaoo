@@ -11,6 +11,7 @@ import {
   type WebSearchProgressListener,
   type WebSearchRequest,
   type WebSearchResponse,
+  type WebSearchUsageListener,
 } from './contracts'
 import { executeOpenAIHostedWebSearch } from '@/lib/ai-exec/hosted-web-search'
 import { OPENAI_WEB_SEARCH_MODEL_ID } from '@/lib/ai-providers/openai/models'
@@ -79,6 +80,7 @@ export function createConfiguredWebSearchProvider(
       request,
       signal: options.signal,
       onProgress: options.onProgress,
+      onUsage: options.onUsage,
     }),
   }
 }
@@ -94,6 +96,7 @@ export async function searchWeb(input: {
   readonly signal: AbortSignal
   readonly provider?: WebSearchProvider
   readonly onProgress?: WebSearchProgressListener
+  readonly onUsage?: WebSearchUsageListener
 }): Promise<WebSearchResponse> {
   const parsed = webSearchRequestSchema.safeParse(input.request)
   if (!parsed.success) {
@@ -107,5 +110,6 @@ export async function searchWeb(input: {
   return provider.search(parsed.data, {
     signal: input.signal,
     onProgress: input.onProgress,
+    onUsage: input.onUsage,
   })
 }

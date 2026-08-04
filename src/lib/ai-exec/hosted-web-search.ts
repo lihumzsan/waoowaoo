@@ -11,6 +11,7 @@ import type {
   NormalizedWebSearchRequest,
   WebSearchProgressListener,
   WebSearchResponse,
+  WebSearchUsageListener,
 } from '@/lib/web-search/contracts'
 
 export async function executeOpenAIHostedWebSearch(input: {
@@ -19,6 +20,7 @@ export async function executeOpenAIHostedWebSearch(input: {
   readonly request: NormalizedWebSearchRequest
   readonly signal: AbortSignal
   readonly onProgress?: WebSearchProgressListener
+  readonly onUsage?: WebSearchUsageListener
 }): Promise<WebSearchResponse> {
   const provider = createOpenAIWebSearchProvider({
     apiKey: input.apiKey,
@@ -27,5 +29,6 @@ export async function executeOpenAIHostedWebSearch(input: {
   return provider.search(input.request, {
     signal: input.signal,
     onProgress: input.onProgress,
+    onUsage: input.onUsage,
   })
 }

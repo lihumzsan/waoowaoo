@@ -20,7 +20,7 @@ export const llmUsageFactSchema = z
 export type LlmUsageFact = z.infer<typeof llmUsageFactSchema>
 
 export function buildLlmUsageFactId(
-  scope: 'agent-turn',
+  scope: 'agent-turn' | 'web-search',
   identityParts: readonly (string | number)[],
 ): string {
   const canonicalIdentity = identityParts

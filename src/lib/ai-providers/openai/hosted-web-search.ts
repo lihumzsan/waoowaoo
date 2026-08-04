@@ -32,6 +32,7 @@ import {
   type WebSearchImage,
   type WebSearchProgressEvent,
   type WebSearchProgressListener,
+  type WebSearchUsage,
   type WebSearchSource,
 } from '@/lib/web-search/contracts'
 import { WebSearchError } from '@/lib/web-search/errors'
@@ -110,6 +111,8 @@ interface OpenAIWebSearchToolRequest {
 export interface OpenAIHostedSearchRunResult {
   readonly outputText: string
   readonly output: readonly unknown[]
+  /** Raw provider usage from the terminal event; projected before it leaves. */
+  readonly usage: UnknownRecord | null
 }
 
 export type OpenAIHostedSearchRunner = (input: {
@@ -362,6 +365,30 @@ function buildWebSearchTool(
  * only: no completion, failure or evidence decision may be derived from it, and
  * a caller that ignores progress entirely still gets identical results.
  */
+/**
+ * Projects provider usage into the accounting shape. Hosted web_search calls
+ * are counted from the completed search items rather than read from a usage
+ * field, because they are what OpenAI bills per call and the item stream is
+ * the authority for how many actually ran.
+ */
+function projectUsage(
+  model: string,
+  usage: UnknownRecord | null,
+  completedSearchCalls: number,
+): WebSearchUsage {
+  const readCount = (value: unknown): number => (
+    typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0
+  )
+  const inputDetails = readRecord(usage?.input_tokens_details)
+  return {
+    model,
+    inputTokens: readCount(usage?.input_tokens),
+    outputTokens: readCount(usage?.output_tokens),
+    cachedInputTokens: readCount(inputDetails?.cached_tokens),
+    toolCalls: completedSearchCalls,
+  }
+}
+
 function readProgressAction(value: unknown): WebSearchProgressEvent['action'] {
   const type = readString(readRecord(value)?.type)
   return type === 'search' || type === 'open_page' || type === 'find_in_page' ? type : null
@@ -430,6 +457,7 @@ const runOpenAIHostedSearch: OpenAIHostedSearchRunner = async ({
   let output: readonly unknown[] = []
   let outputText = ''
   let completed = false
+  let usage: UnknownRecord | null = null
   for await (const eventValue of stream) {
     const event = readRecord(eventValue)
     if (!event) continue
@@ -439,6 +467,7 @@ const runOpenAIHostedSearch: OpenAIHostedSearchRunner = async ({
     if (!response) continue
     completed = true
     output = Array.isArray(response.output) ? response.output : []
+    usage = readRecord(response.usage)
     // Streaming never populates the top-level convenience field; the report
     // lives in the trailing `message` item. Read it anyway for the
     // non-streaming shape, but the item walk is the real source.
@@ -454,7 +483,7 @@ const runOpenAIHostedSearch: OpenAIHostedSearchRunner = async ({
       reason: 'hosted research stream ended before completion',
     }, { retryable: true })
   }
-  return { outputText, output }
+  return { outputText, output, usage }
 }
 
 /**
@@ -583,6 +612,10 @@ export function createOpenAIWebSearchProvider(input: {
         })
       }
       const evidence = projectHostedEvidence(result.output)
+      // Usage is reported before the evidence gate: the provider was paid for
+      // this run whether or not it returned citations, and silently dropping
+      // the cost of a rejected answer is how unbilled usage happens.
+      options.onUsage?.(projectUsage(model, result.usage, evidence.completedSearchCalls))
       const rawReport = readString(result.outputText) || readString(evidence.messageText)
       const report = rawReport.slice(0, MAX_REPORT_CHARS)
       logTruncation({

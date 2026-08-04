@@ -2,6 +2,7 @@ import type {
   NormalizedWebSearchRequest,
   WebSearchProgressListener,
   WebSearchResponse,
+  WebSearchUsageListener,
 } from './contracts'
 
 export interface WebSearchProvider {
@@ -11,6 +12,7 @@ export interface WebSearchProvider {
     options: {
       readonly signal: AbortSignal
       readonly onProgress?: WebSearchProgressListener
+      readonly onUsage?: WebSearchUsageListener
     },
   ): Promise<WebSearchResponse>
 }

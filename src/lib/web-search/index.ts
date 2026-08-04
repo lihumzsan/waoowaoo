@@ -18,6 +18,8 @@ export type {
   WebSearchRequest,
   WebSearchResponse,
   WebSearchSource,
+  WebSearchUsage,
+  WebSearchUsageListener,
 } from './contracts'
 export type { WebSearchErrorCode } from './errors'
 export type { WebSearchProvider } from './provider'
