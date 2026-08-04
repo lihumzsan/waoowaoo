@@ -57,7 +57,7 @@ function DirectoryTreeRow({
     <div>
       <div
         className={`group flex w-full items-center gap-1 rounded-lg py-1.5 pr-1.5 text-xs text-[var(--glass-text-secondary)] ${
-          inert ? 'cursor-default opacity-55' : 'cursor-pointer hover:bg-sky-50'
+          inert ? 'cursor-default opacity-55' : 'cursor-pointer hover:bg-[var(--glass-selection-hover-bg)]'
         }`}
         style={{ paddingLeft: 4 + depth * 14 }}
         title={inert ? undefined : jumpable ? jumpTitle : enterTitle}
@@ -65,7 +65,7 @@ function DirectoryTreeRow({
       >
         <button
           type="button"
-          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded text-[var(--glass-text-tertiary)] hover:bg-sky-100 ${childFolders.length > 0 ? '' : 'invisible'}`}
+          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded text-[var(--glass-text-tertiary)] hover:bg-[var(--glass-selection-hover-bg)] ${childFolders.length > 0 ? '' : 'invisible'}`}
           onClick={(event) => {
             event.stopPropagation()
             setExpanded((value) => !value)
@@ -76,23 +76,23 @@ function DirectoryTreeRow({
             className={`h-3 w-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
           />
         </button>
-        <AppIcon name="folder" className="h-3.5 w-3.5 shrink-0 text-sky-500" />
+        <AppIcon name="folder" className="h-3.5 w-3.5 shrink-0 text-[var(--glass-tone-info-fg)]" />
         <span className="min-w-0 flex-1 truncate font-medium text-[var(--glass-text-primary)]">
           {folderResource.name}
         </span>
-        <span className={`shrink-0 rounded-full px-1.5 text-[10px] ${inert ? 'bg-slate-100 text-[var(--glass-text-tertiary)]' : 'bg-sky-50 text-sky-600 group-hover:hidden'}`}>
+        <span className={`shrink-0 rounded-full px-1.5 text-[10px] ${inert ? 'bg-slate-100 text-[var(--glass-text-tertiary)]' : 'bg-[var(--glass-focus-ring)] text-[var(--glass-tone-info-fg)] group-hover:hidden'}`}>
           {countLabel(fileCount)}
         </span>
         <span className="hidden shrink-0 items-center gap-0.5 group-hover:flex">
           {jumpable ? (
-            <span className="rounded-md p-1 text-sky-500" title={jumpTitle}>
+            <span className="rounded-md p-1 text-[var(--glass-tone-info-fg)]" title={jumpTitle}>
               <AppIcon name="crosshair" className="h-3.5 w-3.5" />
             </span>
           ) : null}
           {canEnter ? (
             <button
               type="button"
-              className="rounded-md p-1 text-sky-500 hover:bg-sky-100 hover:text-sky-700"
+              className="rounded-md p-1 text-[var(--glass-tone-info-fg)] hover:bg-[var(--glass-selection-hover-bg)]"
               title={enterTitle}
               onClick={(event) => {
                 event.stopPropagation()
@@ -240,14 +240,14 @@ export function CanvasFolderNavigation(props: {
         <button
           type="button"
           aria-expanded={open}
-          className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-[12px] font-medium shadow-lg backdrop-blur-2xl transition-colors ${
+          className={`inline-flex h-9 items-center gap-1.5 rounded-full border border-white/80 px-3.5 text-[12px] font-medium shadow-lg ring-1 ring-[var(--glass-stroke-base)]/70 backdrop-blur-2xl transition-colors ${
             open
-              ? 'border-sky-200 bg-sky-50/95 text-sky-700 ring-1 ring-sky-200/80'
-              : 'border-white/80 bg-white/88 text-[var(--glass-text-secondary)] ring-1 ring-[var(--glass-stroke-base)]/70 hover:bg-white hover:text-[var(--glass-text-primary)]'
+              ? 'bg-white text-[var(--glass-text-primary)]'
+              : 'bg-white/88 text-[var(--glass-text-secondary)] hover:bg-white hover:text-[var(--glass-text-primary)]'
           }`}
           onClick={() => setOpen((value) => !value)}
         >
-          <AppIcon name="folder" className={`h-3.5 w-3.5 ${open ? 'text-sky-600' : 'text-sky-500'}`} />
+          <AppIcon name="folder" className="h-3.5 w-3.5 text-[var(--glass-tone-info-fg)]" />
           {t('directory')}
         </button>
       </div>
@@ -258,7 +258,7 @@ export function CanvasFolderNavigation(props: {
         <input
           value={props.search}
           placeholder={props.searchPlaceholder}
-          className="w-full rounded-xl border border-[var(--glass-stroke-base)] bg-white py-2 pl-8 pr-8 text-xs text-[var(--glass-text-primary)] outline-none focus:border-sky-300"
+          className="glass-input-base w-full py-2 pl-8 pr-8 text-xs"
           onChange={(event) => props.onSearchChange(event.target.value)}
         />
         {hasSearch ? (
@@ -272,8 +272,8 @@ export function CanvasFolderNavigation(props: {
         ) : null}
       </label>
       {hasSearch ? (
-        <div className="mt-2 overflow-hidden rounded-xl border border-[var(--glass-stroke-soft)] bg-white">
-          <p className="border-b border-[var(--glass-stroke-soft)] px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--glass-text-tertiary)]">
+        <div className="mt-1.5 overflow-hidden">
+          <p className="border-b border-[var(--glass-stroke-soft)] px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--glass-text-tertiary)]">
             {props.searchResultsLabel}
           </p>
           {props.searchFailed ? (
@@ -294,7 +294,7 @@ export function CanvasFolderNavigation(props: {
                   <button
                     type="button"
                     className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left ${
-                      searchResultInert(resource) ? 'cursor-default opacity-55' : 'hover:bg-sky-50/70'
+                      searchResultInert(resource) ? 'cursor-default opacity-55' : 'hover:bg-[var(--glass-selection-hover-bg)]'
                     }`}
                     onClick={searchResultInert(resource) ? undefined : () => enterFolder(resource)}
                   >
@@ -328,7 +328,7 @@ export function CanvasFolderNavigation(props: {
           )}
         </div>
       ) : (
-        <div className="mt-2 max-h-72 overflow-y-auto rounded-xl border border-[var(--glass-stroke-soft)] bg-white p-1.5">
+        <div className="mt-1.5 max-h-72 overflow-y-auto p-0.5">
           {treeQuery.isError ? (
             <div className="flex items-center justify-between gap-3 px-2 py-2 text-xs text-[var(--glass-tone-danger-fg)]">
               <span>{props.loadFailedLabel}</span>
