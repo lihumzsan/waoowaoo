@@ -1,53 +1,4 @@
 {
-  "eyebrow": "Pricing",
-  "title": "价格与额度",
-  "description": "waoowaoo 官方云端版按额度消耗提供 AI 文本、图片、视频和音乐生成。用户注册后可在个人中心使用 Stripe 自助充值。",
-  "betaNotice": "自助充值已开放。当前支持 Stripe 已启用的银行卡、Link、Apple Pay 等支付方式；微信支付和支付宝会在支付机构审核通过后自动出现在结账页。邀请码和管理员人工发放仅作为体验、测试或运营补贴方式。",
-  "checkout": {
-    "title": "立即充值并开始生成",
-    "body": "充值会进入真实 Stripe Checkout。1 credit 按人民币 0.1 元支付；支付成功并收到 Stripe webhook 后，额度会自动入账。",
-    "primaryCta": "前往充值",
-    "secondaryCta": "创建账户"
-  },
-  "plans": {
-    "starter": {
-      "label": "个人入门",
-      "name": "Starter",
-      "price": "US$9",
-      "status": "公开参考套餐",
-      "details": {
-        "credits": "包含 1,000 credits",
-        "usage": "可用于文本、图片、视频和音乐生成",
-        "support": "基础邮件支持"
-      }
-    },
-    "creator": {
-      "label": "创作者",
-      "name": "Creator",
-      "price": "US$29",
-      "status": "公开参考套餐",
-      "details": {
-        "credits": "包含 4,000 credits",
-        "usage": "适合连续项目创作和多资产生成",
-        "support": "优先邮件支持"
-      }
-    },
-    "studio": {
-      "label": "工作室",
-      "name": "Studio",
-      "price": "US$99",
-      "status": "公开参考套餐",
-      "details": {
-        "credits": "包含 15,000 credits",
-        "usage": "适合团队项目和高频视频生成",
-        "support": "优先支持与人工额度协助"
-      }
-    }
-  },
-  "creditPolicy": {
-    "title": "额度规则",
-    "body": "credits 是平台内 AI 生成额度，不是现金余额，不能提现、不可转让、不可用于平台外交易。实际扣除会根据任务类型、模型、分辨率、时长等因素确定。最终支付金额、币种、税费和可用支付方式会在 Stripe Checkout 页面展示。"
-  },
   "glass": {
     "featuredBadge": "最受欢迎",
     "checkoutBusy": "正在跳转…",
@@ -79,9 +30,9 @@
     "subscribeBusy": "正在跳转…",
     "firstMonthPromo": "首月仅 ¥{amount}",
     "creditsPerMonth": "每月 {credits} credits",
-    "oneOffTitle": "不想订阅？按需充值",
+    "oneOffTitle": "不想订阅？想到再买",
     "yearlySaveHint": "省 2 个月",
-    "capacityTitle": "每月大约可以生成",
+    "capacityTitle": "每月大概够做多少",
     "capacityImages": "{count} 张图片",
     "capacityVideos": "{count} 条视频",
     "capacityFootnote": "按 1 credit = ¥{unit} 计算：GPT Image 2 单图 {imageCredits} credits，Seedance 2.0 {duration} 秒 {resolution} 视频 {videoCredits} credits。实际扣费按所选模型与参数确定。",

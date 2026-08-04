@@ -1,33 +1,9 @@
 {
   "title": "waoowaoo",
-  "subtitle": "AI影视Studio",
-  "enterWorkspace": "进入工作区",
-  "loading": "加载中...",
-  "getStarted": "立即体验",
-  "learnMore": "了解更多",
-  "features": {
-    "title": "释放无限创造力",
-    "subtitle": "全流程 AI 辅助，从剧本到成片",
-    "character": {
-      "title": "角色工坊",
-      "description": "打造独一无二的动漫角色，保持高度一致性"
-    },
-    "shotPlanning": {
-      "title": "智能镜头规划",
-      "description": "将剧本转换为可直接生成视频的镜头与片段"
-    },
-    "world": {
-      "title": "世界构建",
-      "description": "沉浸式场景生成，构建宏大的故事背景"
-    }
-  },
-  "footer": {
-    "copyright": "2026 waoowaoo AI. All rights reserved."
-  },
-  "auto": {
-    "headline": "AI 全自动生成",
-    "highlight": "整部成片一次交付",
-    "sub": "剧本、角色、场景、分镜、配乐、配音、剪辑全流程自动完成，角色与画风全片保持一致",
-    "ctaPrimary": "开始一键成片"
+  "hero": {
+    "headline": "想法是最难的部分",
+    "highlight": "而你已经有了",
+    "sub": "不用会写剧本，不用会分镜。把那个念头说出来——怎么讲、怎么拍、怎么看起来才对，我们一起慢慢弄。",
+    "ctaPrimary": "说说你的想法"
   }
 }
