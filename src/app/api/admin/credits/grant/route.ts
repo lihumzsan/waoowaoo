@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
-import { grantUserCredits } from '@/lib/billing/invite-codes'
+import { grantUserCredits } from '@/lib/billing/admin-credit-grant'
 import { requireAdminUserId } from '@/lib/admin/admin-auth'
 
 const grantCreditsSchema = z.object({

@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs'
-import { createAuthUser, readSignupInviteInput } from '@/lib/auth/account-onboarding'
+import { createAuthUser,  } from '@/lib/auth/account-onboarding'
 import { AUTH_PASSWORD_MIN_LENGTH } from '@/lib/auth/password-policy'
 import { getDeploymentConfig } from '@/lib/deployment/config'
 import { getDeploymentFeatures } from '@/lib/deployment/features'
@@ -68,13 +68,11 @@ export async function authorizePasswordIdentity(input: {
   }
 
   const hashedPassword = await bcrypt.hash(password, 12)
-  const inviteCode = readSignupInviteInput({})
   try {
     const user = await prisma.$transaction(async (tx) => (
       await createAuthUser(tx, {
         name,
         password: hashedPassword,
-        inviteCode,
       })
     ))
     logAuthAction('REGISTER', 'Password registration succeeded', { success: true, provider: 'password' }, user.id, name)

@@ -35,13 +35,11 @@ const phoneProvider = deploymentFeatures.enablePhoneAuth
       credentials: {
         phoneNumber: { label: 'Phone number', type: 'tel' },
         code: { label: 'Verification code', type: 'text' },
-        inviteCode: { label: 'Invite code', type: 'text' },
       },
       async authorize(credentials) {
         return await authorizePhoneIdentity({
           phoneNumber: credentials?.phoneNumber,
           code: credentials?.code,
-          inviteCode: credentials?.inviteCode,
         })
       },
     })

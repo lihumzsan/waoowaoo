@@ -1,6 +1,6 @@
 import { createHmac, randomInt, randomUUID } from 'node:crypto'
 import { ApiError } from '@/lib/api-errors'
-import { createAuthUser, readSignupInviteInput } from '@/lib/auth/account-onboarding'
+import { createAuthUser,  } from '@/lib/auth/account-onboarding'
 import { PHONE_AUTH_RESULT_CODES, type PhoneAuthResultCode } from '@/lib/auth/phone-auth-contract'
 import { maskPhoneNumber, normalizePhoneNumber } from '@/lib/auth/phone-number'
 import {
@@ -312,7 +312,6 @@ async function readPhoneUser(phoneNumber: string): Promise<PhoneAuthUser | null>
 export async function authorizePhoneIdentity(input: {
   phoneNumber: unknown
   code: unknown
-  inviteCode?: unknown
 }): Promise<PhoneAuthUser | null> {
   requirePhoneAuthEnabled()
   const phoneNumber = normalizePhoneNumber(input.phoneNumber)
@@ -343,12 +342,10 @@ export async function authorizePhoneIdentity(input: {
     return existingUser
   }
 
-  const inviteCode = readSignupInviteInput({ inviteCode: input.inviteCode })
   try {
     const user = await prisma.$transaction(async (tx) => (
       await createAuthUser(tx, {
         name: phoneNumber,
-        inviteCode,
         account: {
           type: 'credentials',
           provider: 'phone',

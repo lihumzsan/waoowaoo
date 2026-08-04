@@ -7,7 +7,6 @@ export interface DeploymentFeatures {
   showLegalPages: boolean
   showRecharge: boolean
   showSubscription: boolean
-  showInviteCode: boolean
   showBilling: boolean
   showApiConfig: boolean
   showAccountSecurity: boolean
@@ -16,7 +15,6 @@ export interface DeploymentFeatures {
   enablePasswordAuth: boolean
   showDownloadLogs: boolean
   showUpdateCheck: boolean
-  requireInviteCodeOnSignup: boolean
 }
 
 type EditionDeploymentFeatures = Omit<DeploymentFeatures, 'showApiConfig'>
@@ -27,7 +25,6 @@ const SELF_HOSTED_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   showLegalPages: false,
   showRecharge: false,
   showSubscription: false,
-  showInviteCode: false,
   showBilling: false,
   showAccountSecurity: false,
   showGoogleOAuth: false,
@@ -35,7 +32,6 @@ const SELF_HOSTED_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   enablePasswordAuth: true,
   showDownloadLogs: false,
   showUpdateCheck: true,
-  requireInviteCodeOnSignup: false,
 }
 
 const CLOUD_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
@@ -44,7 +40,6 @@ const CLOUD_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   showLegalPages: true,
   showRecharge: true,
   showSubscription: true,
-  showInviteCode: true,
   showBilling: true,
   showAccountSecurity: true,
   showGoogleOAuth: true,
@@ -52,7 +47,6 @@ const CLOUD_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   enablePasswordAuth: false,
   showDownloadLogs: false,
   showUpdateCheck: false,
-  requireInviteCodeOnSignup: false,
 }
 
 function cloneEditionDeploymentFeatures(features: EditionDeploymentFeatures): EditionDeploymentFeatures {

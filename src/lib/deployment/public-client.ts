@@ -7,7 +7,6 @@ const DEPLOYMENT_FEATURE_KEYS: Array<keyof PublicDeploymentFeatures> = [
   'showPricingPage',
   'showLegalPages',
   'showRecharge',
-  'showInviteCode',
   'showBilling',
   'showApiConfig',
   'showAccountSecurity',
@@ -16,7 +15,6 @@ const DEPLOYMENT_FEATURE_KEYS: Array<keyof PublicDeploymentFeatures> = [
   'enablePasswordAuth',
   'showDownloadLogs',
   'showUpdateCheck',
-  'requireInviteCodeOnSignup',
 ]
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -28,8 +28,6 @@ interface AuthEntryCardProps {
     | 'enablePhoneAuth'
     | 'enablePasswordAuth'
     | 'showGoogleOAuth'
-    | 'showInviteCode'
-    | 'requireInviteCodeOnSignup'
   >
 }
 
@@ -66,7 +64,6 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
   const [captchaError, setCaptchaError] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [inviteCode, setInviteCode] = useState('')
   const [pendingAction, setPendingAction] = useState<PendingAction>(null)
   const [resendSeconds, setResendSeconds] = useState(0)
   const [error, setError] = useState('')
@@ -237,10 +234,6 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
       setError(t('phoneInvalid'))
       return
     }
-    if (features.requireInviteCodeOnSignup && !inviteCode.trim()) {
-      setError(t('inviteCodeRequired'))
-      return
-    }
 
     setPendingAction('submit')
     setError('')
@@ -249,7 +242,6 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
       const result = await signIn('phone', {
         phoneNumber: normalizedPhoneNumber,
         code: verificationCode,
-        inviteCode: inviteCode.trim(),
         redirect: false,
       })
       if (result?.error === 'RateLimited') {
@@ -290,9 +282,6 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
       setPendingAction(null)
     }
   }
-
-  const showInviteCode = features.enablePhoneAuth
-    && (features.showInviteCode || features.requireInviteCodeOnSignup)
   const hasPrimaryAuth = features.enablePhoneAuth || features.enablePasswordAuth
 
   return (
@@ -388,25 +377,6 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
                   </button>
                 </div>
               </div>
-
-              {showInviteCode ? (
-                <div>
-                  <label htmlFor="inviteCode" className="mb-2 block text-sm font-semibold text-slate-900">
-                    {features.requireInviteCodeOnSignup ? t('inviteCode') : t('inviteCodeOptional')}
-                  </label>
-                  <input
-                    id="inviteCode"
-                    name="inviteCode"
-                    type="text"
-                    autoComplete="off"
-                    value={inviteCode}
-                    onChange={(event) => setInviteCode(event.target.value)}
-                    required={features.requireInviteCodeOnSignup}
-                    className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-base text-black outline-none transition placeholder:text-slate-400 focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
-                    placeholder={t('inviteCodePlaceholder')}
-                  />
-                </div>
-              ) : null}
 
               <button
                 type="submit"
