@@ -7,7 +7,6 @@ import {
   createContext,
   useContext,
   useMemo,
-  useState,
   type ReactNode,
 } from 'react'
 import { AppIcon } from '@/components/ui/icons'
@@ -21,6 +20,7 @@ import {
   resolveWorkspaceAssistantSubagentLifecycleViews,
   resolveWorkspaceAssistantToolCallDisplayState,
   resolveWorkspaceAssistantToolCallGroupView,
+  resolveWorkspaceAssistantTurnStatusByMessageId,
   type WorkspaceAssistantSubagentLifecycleView,
   type WorkspaceAssistantRepeatedToolCallGroup,
   type WorkspaceAssistantToolCallDisplayState,
@@ -129,17 +129,6 @@ function resolveSubagentSummary(
   return t('runtime.native.subagentSummary', { active, completed, interrupted: failed })
 }
 
-function localizeSubagentLifecycle(
-  lifecycle: WorkspaceAssistantSubagentLifecycleView,
-  t: AssistantAgentTranslator,
-): string {
-  return t('runtime.native.subagentSummary', {
-    active: lifecycle.active,
-    completed: lifecycle.completed,
-    interrupted: lifecycle.interrupted,
-  })
-}
-
 type WebSearchSource = {
   readonly url: string
   readonly title: string
@@ -186,20 +175,9 @@ export function WorkspaceAssistantRepeatedToolCallGroupProvider({
       }
       for (const toolCallId of group.toolCallIds) repeatedByToolCallId.set(toolCallId, entry)
     }
-    const statusByAssistantMessageId = new Map(turns.flatMap((turn) => (
-      turn.assistantMessageId ? [[turn.assistantMessageId, turn.status] as const] : []
-    )))
-    const statusByTurnId = new Map(turns.map((turn) => [turn.turnId, turn.status] as const))
-    for (const message of messages) {
-      if (message.role !== 'assistant' || !isRecord(message.metadata)) continue
-      const custom = isRecord(message.metadata.custom) ? message.metadata.custom : null
-      const turnId = readText(custom?.waoAgentTurnId)
-      const status = turnId ? statusByTurnId.get(turnId) : null
-      if (status) statusByAssistantMessageId.set(message.id, status)
-    }
     const lifecycleByMessageId = resolveWorkspaceAssistantSubagentLifecycleViews(
       messages,
-      statusByAssistantMessageId,
+      resolveWorkspaceAssistantTurnStatusByMessageId(messages, turns),
     )
     const subagentsByToolCallId = new Map<string, WorkspaceAssistantSubagentLifecycleView>()
     const interruptedToolCallIds = new Set<string>()
@@ -267,7 +245,6 @@ function translateDisplayState(
 export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) {
   const t = useTranslations('assistantAgent')
   const locale = normalizeProjectAgentLocale(useLocale())
-  const [expanded, setExpanded] = useState(false)
   const context = useContext(WorkspaceAssistantToolCallContext)
   const repeatedEntry = context.repeatedByToolCallId.get(props.toolCallId)
   const subagentLifecycle = context.subagentsByToolCallId.get(props.toolCallId) ?? null
@@ -283,11 +260,10 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
     toolStatus === 'running' || toolStatus === 'requires-action',
   )
   if (groupView && groupView.leaderToolCallId !== props.toolCallId) return null
-  if (
-    subagentLifecycle
-    && NATIVE_SUBAGENT_TOOL_NAMES.has(props.toolName)
-    && props.toolName !== 'subagent_activity'
-  ) return null
+  // The subagent tab strip is the single renderer of child-agent lifecycle.
+  // Keeping these rows in the trace would give the same facts a second,
+  // competing surface that can disagree with the tabs.
+  if (subagentLifecycle && NATIVE_SUBAGENT_TOOL_NAMES.has(props.toolName)) return null
 
   // Two failure shapes exist: the app-level ToolResult envelope ({ok:false})
   // and the terminal-closure/SDK error output ({error}, isError=true) written
@@ -306,10 +282,8 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
   const failed = groupView ? groupView.failed > 0 : displayState === 'failed'
   const interrupted = groupView ? groupView.interrupted > 0 : displayState === 'interrupted'
   const nativeSummary = NATIVE_SUBAGENT_TOOL_NAMES.has(props.toolName)
-      ? subagentLifecycle
-        ? localizeSubagentLifecycle(subagentLifecycle, t)
-        : resolveSubagentSummary(props.args, props.result, t)
-      : null
+    ? resolveSubagentSummary(props.args, props.result, t)
+    : null
   const summaryText = nativeSummary ?? translateDisplayState(displayState, t)
   const iconName = failed || interrupted ? 'alert' : 'settingsHex'
   const displayTitle = groupView
@@ -328,6 +302,13 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
   const webSearchSources = props.toolName === 'web_search'
     ? resolveWebSearchSources(props.result)
     : []
+  // A running search shows the query it actually declared, because a silent
+  // multi-second wait is the one thing the user cannot interpret. This is the
+  // Codex item's own `query` field — never parsed out of assistant text — and
+  // it gives way to the source cards the moment results land.
+  const webSearchQuery = props.toolName === 'web_search' && displayState === 'running'
+    ? readText(isRecord(props.args) ? props.args.query : null)
+    : null
 
   return (
     <div className={`text-sm leading-5 ${failed || interrupted ? 'text-[var(--glass-tone-warn-fg)]' : 'text-[var(--glass-text-tertiary)]'}`}>
@@ -335,36 +316,10 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
         <AppIcon name={iconName} className="h-3.5 w-3.5 shrink-0" />
         <span className="min-w-0 truncate">{summaryText} · {displayTitle}</span>
       </div>
-      {subagentLifecycle && props.toolName === 'subagent_activity' ? (
-        <div className="ml-5 mt-1.5">
-          <button
-            type="button"
-            onClick={() => setExpanded((value) => !value)}
-            className="inline-flex items-center gap-1 text-xs font-medium text-[var(--glass-text-secondary)] hover:text-[var(--glass-text-primary)]"
-          >
-            {expanded ? t('toolCall.hide') : t('toolCall.show')}
-            <AppIcon name="chevronDown" className={`h-3 w-3 transition-transform ${expanded ? 'rotate-180' : ''}`} />
-          </button>
-          {expanded ? (
-            <div className="mt-2 space-y-3 rounded-xl bg-slate-50/80 px-3 py-2.5 ring-1 ring-slate-200/70">
-              {subagentLifecycle.agents.map((agent) => (
-                <div key={agent.agentThreadId} className="space-y-1.5">
-                  <div className="flex min-w-0 items-center justify-between gap-3 text-xs">
-                    <span className="truncate font-medium text-[var(--glass-text-secondary)]">{agent.agentPath}</span>
-                    <span className="shrink-0 text-[var(--glass-text-tertiary)]">{t(`runtime.native.subagentStatus.${agent.status}`)}</span>
-                  </div>
-                  {agent.activities.map((activity) => (
-                    <div key={activity.id} className="flex gap-2 text-xs leading-5 text-[var(--glass-text-tertiary)]">
-                      <span className={`mt-2 h-1.5 w-1.5 shrink-0 rounded-full ${activity.status === 'running' ? 'animate-pulse bg-blue-500' : activity.status === 'failed' ? 'bg-amber-500' : 'bg-slate-300'}`} />
-                      <span className="min-w-0 whitespace-pre-wrap break-words">
-                        {activity.text ?? activity.label ?? t(`runtime.native.subagentActivity.${activity.kind}`)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          ) : null}
+      {webSearchQuery ? (
+        <div className="ml-5 mt-1 flex min-w-0 items-center gap-1.5 text-xs leading-4">
+          <AppIcon name="search" className="h-3 w-3 shrink-0 opacity-70" aria-hidden="true" />
+          <span className="min-w-0 truncate text-[var(--glass-text-secondary)]">{webSearchQuery}</span>
         </div>
       ) : null}
       {webSearchSources.length > 0 ? (

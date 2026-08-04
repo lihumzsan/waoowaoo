@@ -225,5 +225,12 @@
     "interactionSubmitErrorFallback": "This response could not be submitted. Refresh the conversation and try again.",
     "contextCompacted": "Compressed {count} earlier context records",
     "contextCompactedUnknown": "Earlier context was compressed"
+  },
+  "subagentTabs": {
+    "label": "Subagents",
+    "mainThread": "Main thread",
+    "empty": "This subagent has not produced any activity yet.",
+    "readOnly": "{path} is read-only",
+    "backToMain": "Back to main thread"
   }
 }

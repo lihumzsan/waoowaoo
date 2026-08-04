@@ -1,4 +1,5 @@
 import { getToolName, isToolUIPart, type UIMessage } from 'ai'
+import type { AssistantRuntimeSessionTurnView } from '@/lib/assistant-runtime/view-contract'
 
 export const WORKSPACE_ASSISTANT_HIDDEN_TRACE_TOOL_NAMES = [
   'update_plan',
@@ -101,6 +102,12 @@ function readNonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value : null
 }
 
+function readRecord(value: unknown): Readonly<Record<string, unknown>> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Readonly<Record<string, unknown>>
+    : null
+}
+
 function subagentStatusForTurn(status: WorkspaceAssistantMessageTurnStatus | undefined): WorkspaceAssistantSubagentStatus {
   if (status === 'queued' || status === 'running' || status === 'waiting_approval') return 'active'
   if (status === 'failed' || status === 'interrupted' || status === 'cancelled') return 'interrupted'
@@ -189,6 +196,48 @@ export function resolveWorkspaceAssistantSubagentLifecycleViews(
     })
   }
   return views
+}
+
+/**
+ * The Wao Turn is the authority for whether an assistant message's collaboration
+ * is still running. Both the tool-call trace and the subagent tab strip resolve
+ * it here so a single rule decides "is this child still active".
+ */
+export function resolveWorkspaceAssistantTurnStatusByMessageId(
+  messages: readonly UIMessage[],
+  turns: readonly AssistantRuntimeSessionTurnView[],
+): ReadonlyMap<string, WorkspaceAssistantMessageTurnStatus> {
+  const statusByAssistantMessageId = new Map(turns.flatMap((turn) => (
+    turn.assistantMessageId ? [[turn.assistantMessageId, turn.status] as const] : []
+  )))
+  const statusByTurnId = new Map(turns.map((turn) => [turn.turnId, turn.status] as const))
+  for (const message of messages) {
+    if (message.role !== 'assistant') continue
+    const custom = readRecord(readRecord(message.metadata)?.custom)
+    const turnId = readNonEmptyString(custom?.waoAgentTurnId)
+    const status = turnId ? statusByTurnId.get(turnId) : null
+    if (status) statusByAssistantMessageId.set(message.id, status)
+  }
+  return statusByAssistantMessageId
+}
+
+/**
+ * The subagent tabs the panel should currently offer. A child that reached a
+ * terminal state closes immediately: its work product already lives in the main
+ * thread, and a settled tab would only be a stale surface to click.
+ */
+export function resolveWorkspaceAssistantOpenSubagentTabs(
+  messages: readonly UIMessage[],
+  statusByAssistantMessageId: ReadonlyMap<string, WorkspaceAssistantMessageTurnStatus>,
+): readonly WorkspaceAssistantSubagentView[] {
+  const byThreadId = new Map<string, WorkspaceAssistantSubagentView>()
+  const views = resolveWorkspaceAssistantSubagentLifecycleViews(messages, statusByAssistantMessageId)
+  for (const view of views.values()) {
+    // Message order is chronological, so a later projection of the same child
+    // thread deterministically replaces the earlier one.
+    for (const agent of view.agents) byThreadId.set(agent.agentThreadId, agent)
+  }
+  return [...byThreadId.values()].filter((agent) => agent.status === 'active')
 }
 
 function isSubmittedToolResult(result: unknown): boolean {

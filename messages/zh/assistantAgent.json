@@ -225,5 +225,12 @@
     "interactionSubmitErrorFallback": "该响应暂时无法提交，请刷新对话后重试。",
     "contextCompacted": "已压缩较早的 {count} 条上下文记录",
     "contextCompactedUnknown": "已压缩较早的上下文"
+  },
+  "subagentTabs": {
+    "label": "子代理",
+    "mainThread": "主线程",
+    "empty": "该子代理还没有产生可显示的活动。",
+    "readOnly": "{path} 为只读视图",
+    "backToMain": "回主线程发送"
   }
 }

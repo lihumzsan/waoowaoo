@@ -47,6 +47,16 @@ import { WorkspaceAssistantPlanCard } from './workspace-assistant/WorkspaceAssis
 import { WorkspaceAssistantSettings } from './workspace-assistant/WorkspaceAssistantSettings'
 import { WorkspaceAssistantComposer } from './workspace-assistant/WorkspaceAssistantComposer'
 import { WorkspaceAssistantRepeatedToolCallGroupProvider } from './workspace-assistant/WorkspaceAssistantToolCall'
+import {
+  useWorkspaceAssistantSubagentTab,
+  WorkspaceAssistantSubagentReadOnlyNotice,
+  WorkspaceAssistantSubagentStream,
+  WorkspaceAssistantSubagentTabStrip,
+} from './workspace-assistant/WorkspaceAssistantSubagentTabs'
+import {
+  resolveWorkspaceAssistantOpenSubagentTabs,
+  resolveWorkspaceAssistantTurnStatusByMessageId,
+} from './workspace-assistant/workspace-assistant-run-trace'
 import { WorkspaceAssistantRunningSurfaceProvider } from './workspace-assistant/WorkspaceAssistantReasoning'
 import {
   buildWorkspaceAssistantPanelLayout,
@@ -873,6 +883,17 @@ export default function WorkspaceAssistantPanel({
     if (current) byId.set(current.turnId, current)
     return [...byId.values()]
   }, [assistantRuntime.view?.currentTurn, assistantRuntime.view?.recentTurns])
+  // Child-agent tabs are derived from the same durable subagent projection the
+  // trace uses; nothing about a tab is stored, so a finished child simply stops
+  // being offered instead of leaving a stale surface behind.
+  const openSubagents = useMemo(
+    () => resolveWorkspaceAssistantOpenSubagentTabs(
+      assistantRuntime.messages,
+      resolveWorkspaceAssistantTurnStatusByMessageId(assistantRuntime.messages, assistantTurns),
+    ),
+    [assistantRuntime.messages, assistantTurns],
+  )
+  const subagentTab = useWorkspaceAssistantSubagentTab(openSubagents)
 
   return (
     <aside
@@ -908,9 +929,22 @@ export default function WorkspaceAssistantPanel({
                   className="relative flex h-full min-h-0 flex-col"
                 >
                 <WorkspaceAssistantSettings />
+                <WorkspaceAssistantSubagentTabStrip
+                  agents={openSubagents}
+                  activeThreadId={subagentTab.activeThreadId}
+                  onSelectThread={subagentTab.selectThread}
+                />
+                {subagentTab.activeAgent ? (
+                  <div
+                    className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 pb-4 pt-2"
+                    style={WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE}
+                  >
+                    <WorkspaceAssistantSubagentStream agent={subagentTab.activeAgent} />
+                  </div>
+                ) : (
                 <ThreadPrimitive.Viewport
                   autoScroll
-                  className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 pb-4 pt-12"
+                  className={`min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 pb-4 ${openSubagents.length > 0 ? 'pt-2' : 'pt-12'}`}
                   style={WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE}
                 >
                   <WorkspaceAssistantRunningSurfaceProvider
@@ -997,7 +1031,19 @@ export default function WorkspaceAssistantPanel({
                     </div>
                   </WorkspaceAssistantRunningSurfaceProvider>
                 </ThreadPrimitive.Viewport>
+                )}
 
+                {/* A subagent tab is a read-only projection of delegated work:
+                    the composer is not rendered there at all, because the user
+                    steers the main thread and the Agent owns delegation. */}
+                {subagentTab.activeAgent ? (
+                  <div className="mx-4 mb-2 shrink-0">
+                    <WorkspaceAssistantSubagentReadOnlyNotice
+                      agentPath={subagentTab.activeAgent.agentPath}
+                      onBackToMain={() => subagentTab.selectThread('main')}
+                    />
+                  </div>
+                ) : (
                 <div className="mx-4 mb-2 shrink-0">
                   {displayedRuntimeRequest ? (
                     <div className="mb-2">
@@ -1076,6 +1122,7 @@ export default function WorkspaceAssistantPanel({
                     />
                   </div>
                 </div>
+                )}
                 </ThreadPrimitive.Root>
               </AssistantRuntimeProvider>
             </WorkspaceAssistantWorkspaceLinkProvider>
