@@ -13,6 +13,7 @@ import {
   resolveCodexModelGatewayRuntimeConfig,
 } from '@/lib/codex-model-gateway'
 import { ASSISTANT_RUNTIME_REVISION } from './runtime-revision'
+import { creativeWorkerRoutingInstructions } from '@/lib/creative-skills'
 
 const MCP_PATH = '/api/internal/codex-runtime/mcp'
 // Codex defaults MCP tool calls to 60 seconds. Wao production calls can spend
@@ -48,7 +49,12 @@ function runtimeInstructions(): string {
   return [
     'You are the Wao creative production agent for the current project workspace.',
     'Treat system/project.json as a read-only projection of product facts.',
-    'Creative methods are installed as native Codex Skills. Read the relevant Skill completely before using it.',
+    'Wao professional Skills are intentionally unavailable to you. Never search for, read, or recreate their instructions.',
+    'Professional creative work must be delegated to the exact native custom Subagent listed below. The mapping is authoritative; descriptions are explanatory only and must not be used to select a different role.',
+    ...creativeWorkerRoutingInstructions(),
+    'Give each professional Subagent exact input paths, exclusive output files or directories, and the user-approved scope. Do not edit the professional contents it writes.',
+    'Before delegating video or music work, require the matching non-null system/project.json productionCapabilities entry and include system/project.json as an exact read-only input. Never ask a Subagent to guess model limits.',
+    'You own orchestration only: inspect project files, assign professional work, check that required files exist, and submit an already-authored production manifest by path through Wao MCP.',
     'Project files outside system/ are the creative workspace. Organize them freely with normal file and shell tools.',
     'This workspace intentionally has no Git repository. Do not initialize Git or describe Git as the project persistence model.',
     'Never create, edit, move, or delete system/**. Never edit a .resource pointer; move or delete it as one file.',
@@ -59,7 +65,7 @@ function runtimeInstructions(): string {
     'A Wao result with async=true means submitted, never completed. A media .resource pointer is usable by another production call only when status is ready and contentVersion is positive; wait for the automatic Task follow-up instead of chaining a pending or failed Resource.',
     'Never claim an external production operation completed unless the Resource pointer says status=ready.',
     'Do not retry a billed or failed production operation unless the user explicitly authorizes it. A retry must use the failed Resource IDs through the declared retry input; never switch to another create tool or a manifest to bypass the failed attempt.',
-    'For generated character, location, and prop image schemas, provide only the stable visible asset design and adopted project style. The server owns and appends the fixed asset layout, background, output format, model, and 4:3 aspect ratio.',
+    'Never author or rewrite final image, video, or music generation prompts. The fixed professional Subagent must write complete final prompts and explicit generation parameters into the production manifest.',
     'In user-visible Markdown, link project files only with project-relative workspace paths such as production/shot-list.md. Never emit absolute host paths, /tmp paths, file:// URLs, or runtime workspace roots; those are not product links.',
     'If a native Plan exists, keep it synchronized with the currently authorized scope. Before ending a Turn, update it so finished work is completed and superseded steps are removed; never leave an obsolete pending step after reporting the scoped task complete.',
     'For a complete video longer than 15 seconds, establish one matching Creative Direction and only the reusable reference assets the final video will actually consume before submitting video generation.',
@@ -86,6 +92,11 @@ function runtimeConfig(input: {
   return {
     web_search: 'live',
     features: {
+      // Wao's primary Agent has no native Skill or built-in image-production
+      // escape hatch. Professional methods live only in fixed custom agents;
+      // paid media crosses the Wao MCP manifest boundary.
+      skill_search: false,
+      image_generation: false,
       // Custom-provider standalone search remains an explicit Codex feature
       // gate. Provider capability plus live mode do not expose the tool
       // without this third switch.

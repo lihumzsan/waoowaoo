@@ -4,7 +4,6 @@ import type {
   RuntimeJsonValue,
   RuntimeSandboxMode,
   RuntimeSandboxPolicy,
-  RuntimeSkillsListEntry,
   RuntimeUserInput,
 } from '@/lib/codex-runtime/runtime-adapter'
 import type {
@@ -19,7 +18,6 @@ import {
   publishAgentSessionViewChanged,
 } from '@/lib/agent-turn/stream-publisher'
 import { createScopedLogger } from '@/lib/logging/core'
-import { CREATIVE_SKILL_IDS } from '@/lib/creative-skills'
 import type {
   AssistantRuntimeAdmissionReceipt,
   AssistantRuntimeClearCommand,
@@ -173,19 +171,6 @@ function isRuntimeEvent(
   event: RuntimeSessionManagerEvent,
 ): event is Extract<RuntimeSessionManagerEvent, { type: 'runtime' }> {
   return event.type === 'runtime'
-}
-
-function assertProductionSkillsInventory(entry: RuntimeSkillsListEntry): void {
-  if (entry.errors.length > 0) {
-    throw new Error(`ASSISTANT_RUNTIME_SKILLS_LOAD_FAILED:${String(entry.errors.length)}`)
-  }
-  const enabledNames = new Set(
-    entry.skills.filter((skill) => skill.enabled).map((skill) => skill.name),
-  )
-  const missing = CREATIVE_SKILL_IDS.filter((skillId) => !enabledNames.has(skillId))
-  if (missing.length > 0) {
-    throw new Error(`ASSISTANT_RUNTIME_SKILLS_MISSING:${missing.join(',')}`)
-  }
 }
 
 export class AssistantRuntimeService {
@@ -760,8 +745,6 @@ export class AssistantRuntimeService {
     let runtimeTurnId: string | null = null
     const bindingState: { identity: AssistantRuntimeTurnIdentity | null } = { identity: null }
     try {
-      const initialSkills = await this.manager.listSkills(scope)
-      assertProductionSkillsInventory(initialSkills)
       await claimAssistantRuntimeTurnStart({
         scope: input.scope,
         threadId: input.preparedThread.threadId,

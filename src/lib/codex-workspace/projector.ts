@@ -1,8 +1,6 @@
 import { prisma } from '@/lib/prisma'
-import {
-  CREATIVE_SKILLS,
-  readCreativeSkillResource,
-} from '@/lib/creative-skills'
+import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
+import { getProjectModelConfig, type ProjectModelConfig } from '@/lib/config-service'
 import {
   validateWorkspaceBundle,
   WORKSPACE_BUNDLE_SCHEMA_VERSION,
@@ -11,11 +9,12 @@ import {
 import { encodeEditableResourceFile, encodeMediaPointer } from '@/lib/workspace-resource/file-format'
 import { listAllWorkspaceResourcesForRuntime } from '@/lib/workspace-resource/view-service'
 import type { WorkspaceResourceView } from '@/lib/workspace-resource/contracts'
+import { CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS } from '@/lib/workspace-resource/generation-contract'
 import {
   CODEX_WORKSPACE_PROJECT_FILE,
-  CODEX_WORKSPACE_SKILL_ROOT,
   CodexWorkspaceError,
   type CodexWorkspaceBaselineResource,
+  type CodexWorkspaceProductionCapabilities,
   type CodexWorkspaceProjectSnapshot,
   type CodexWorkspaceProjection,
 } from './contracts'
@@ -68,21 +67,71 @@ function explicitDirectories(input: {
   return [...directories].sort((left, right) => left.localeCompare(right))
 }
 
-async function readCreativeSkillFiles(): Promise<WorkspaceBundleFile[]> {
-  return await Promise.all(CREATIVE_SKILLS.map(async (definition) => {
-    const resource = await readCreativeSkillResource({ uri: definition.entryUri })
-    return {
-      path: `${CODEX_WORKSPACE_SKILL_ROOT}/${definition.id}/SKILL.md`,
-      content: resource.content,
-    }
-  }))
+function productionCapabilities(config: ProjectModelConfig): CodexWorkspaceProductionCapabilities {
+  const video = config.videoModel
+    ? resolveBuiltinCapabilitiesByModelKey('video', config.videoModel)?.video
+    : undefined
+  const allowedSegmentDurationsSeconds = Array.from(new Set(
+    (video?.durationOptions ?? []).filter((duration): duration is number => (
+      Number.isInteger(duration)
+      && duration > 0
+      && duration <= CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS
+    )),
+  )).sort((left, right) => left - right)
+  const minSegmentDurationSeconds = allowedSegmentDurationsSeconds[0]
+  const maxSegmentDurationSeconds = allowedSegmentDurationsSeconds.at(-1)
+  const videoCapabilities = config.videoModel
+    && config.videoRatio
+    && video
+    && minSegmentDurationSeconds !== undefined
+    && maxSegmentDurationSeconds !== undefined
+    ? {
+        modelKey: config.videoModel,
+        aspectRatio: config.videoRatio,
+        allowedSegmentDurationsSeconds,
+        minSegmentDurationSeconds,
+        maxSegmentDurationSeconds,
+        maxReferenceImages: video.maxReferenceImages ?? 1,
+        maxReferenceAudios: video.maxReferenceAudios ?? 0,
+        supportsTextToVideo: video.supportsTextToVideo === true,
+      }
+    : null
+
+  const music = config.musicModel
+    ? resolveBuiltinCapabilitiesByModelKey('music', config.musicModel)?.music
+    : undefined
+  const durationSecondsRange = music?.durationSecondsRange
+    ? {
+        min: Math.ceil(music.durationSecondsRange.min),
+        max: Math.floor(music.durationSecondsRange.max),
+      }
+    : null
+  const durationSecondsOptions = Array.from(new Set(
+    (music?.durationSecondsOptions ?? []).filter((duration): duration is number => (
+      Number.isInteger(duration) && duration > 0
+    )),
+  )).sort((left, right) => left - right)
+  const musicCapabilities = config.musicModel
+    && music
+    && (durationSecondsRange !== null || durationSecondsOptions.length > 0)
+    ? {
+        modelKey: config.musicModel,
+        promptMaxCharacters: Math.min(music.promptMaxChars ?? 100_000, 100_000),
+        durationSecondsOptions,
+        durationSecondsRange,
+        vocalModeOptions: music.vocalModeOptions ?? [],
+        maxReferenceVideos: music.maxReferenceVideos ?? 0,
+      }
+    : null
+
+  return { video: videoCapabilities, music: musicCapabilities }
 }
 
 export async function readCodexRuntimeWorkspace(input: {
   readonly projectId: string
   readonly userId: string
 }): Promise<CodexWorkspaceProjection> {
-  const [project, resources, skillFiles] = await Promise.all([
+  const [project, resources, modelConfig] = await Promise.all([
     prisma.project.findFirst({
       where: { id: input.projectId, userId: input.userId },
       select: {
@@ -95,7 +144,7 @@ export async function readCodexRuntimeWorkspace(input: {
       },
     }),
     listAllWorkspaceResourcesForRuntime(input),
-    readCreativeSkillFiles(),
+    getProjectModelConfig(input.projectId, input.userId),
   ])
   if (!project) throw new Error('CODEX_WORKSPACE_PROJECT_NOT_OWNED')
   const snapshot: CodexWorkspaceProjectSnapshot = {
@@ -106,11 +155,12 @@ export async function readCodexRuntimeWorkspace(input: {
     videoRatio: project.videoRatio,
     videoResolution: project.videoResolution,
     imageResolution: project.imageResolution,
+    productionCapabilities: productionCapabilities(modelConfig),
     instructions: [
       'Project files outside system/ are the creative workspace and may be organized freely.',
       'system/ is read-only projected context. Never create, edit, move, or delete files there.',
       'Media .resource files are system-owned pointers. Move or delete them; never edit their contents.',
-      'Use Wao MCP capabilities for paid media creation and always provide an outputPath.',
+      'Paid creative production is submitted through a professional Subagent-authored Production Manifest.',
     ],
   }
   const fileResources = resources.filter((resource) => resource.resourceKind === 'file')
@@ -119,7 +169,6 @@ export async function readCodexRuntimeWorkspace(input: {
   const projectedFiles = [
     ...resourceFiles,
     { path: CODEX_WORKSPACE_PROJECT_FILE, content: formatJson(snapshot) },
-    ...skillFiles,
   ]
   const runtimeBundle = validateWorkspaceBundle({
     schemaVersion: WORKSPACE_BUNDLE_SCHEMA_VERSION,
@@ -145,6 +194,5 @@ export async function readCodexRuntimeWorkspace(input: {
   return {
     runtimeBundle,
     baseline: { schemaVersion: 1, resources: baselineResources },
-    skillEntryPaths: skillFiles.map((file) => file.path),
   }
 }

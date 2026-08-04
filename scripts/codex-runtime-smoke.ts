@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
@@ -26,8 +26,9 @@ import { createWaoMcpServer } from '@/lib/wao-mcp/server'
 import type { WaoMcpOperationExecutorResult } from '@/lib/wao-mcp/contracts'
 import { inspectCapturedCodexState } from '@/lib/assistant-runtime/runtime-persistence'
 import {
-  CREATIVE_SKILLS,
-  readCreativeSkillResource,
+  CREATIVE_SKILL_IDS,
+  CREATIVE_WORKERS,
+  materializeCreativeRuntimeConfiguration,
 } from '@/lib/creative-skills'
 import {
   ASSISTANT_RUNTIME_APPROVAL_METHODS,
@@ -37,6 +38,7 @@ import {
 const VALIDATED_CODEX_VERSION = 'codex-cli 0.146.0'
 const DEFAULT_MODEL = 'gpt-5.6-sol'
 const TURN_TIMEOUT_MS = 180_000
+const OFFLINE_STAGE_TIMEOUT_MS = 30_000
 
 type AppServerSmokeResult = {
   readonly initializedUserAgent: string
@@ -67,6 +69,20 @@ function createSignal(): { readonly promise: Promise<void>; readonly resolve: ()
       if (!resolver) throw new Error('CODEX_RUNTIME_SMOKE_SIGNAL_UNINITIALIZED')
       resolver()
     },
+  }
+}
+
+async function withStageTimeout<T>(label: string, action: () => Promise<T>): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | null = null
+  try {
+    return await Promise.race([
+      action(),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error(`CODEX_RUNTIME_SMOKE_STAGE_TIMEOUT:${label}`)), OFFLINE_STAGE_TIMEOUT_MS)
+      }),
+    ])
+  } finally {
+    if (timeout) clearTimeout(timeout)
   }
 }
 
@@ -248,8 +264,8 @@ async function runMcpSmoke(): Promise<void> {
     )
     let toolCallSettled = false
     const pendingResult = client.callTool({
-      name: 'create_image',
-      arguments: {},
+      name: 'submit_production_manifest',
+      arguments: { manifestPath: 'production/smoke-manifest.json' },
     }).finally(() => {
       toolCallSettled = true
     })
@@ -259,7 +275,7 @@ async function runMcpSmoke(): Promise<void> {
     approvalReleased.resolve()
     const result = await pendingResult
     assert.equal(result.isError, undefined)
-    assert.deepEqual(calls, ['create_image'])
+    assert.deepEqual(calls, ['submit_production_manifest'])
     assert.equal(completedCalls, 1)
     await clientTransport.terminateSession()
     assert.equal(sessionClosed, true)
@@ -328,15 +344,19 @@ async function runAppServerSmoke(params: {
 
   const codexHome = path.join(params.rootDir, 'codex-home')
   await mkdir(codexHome, { recursive: true, mode: 0o700 })
-  for (const definition of CREATIVE_SKILLS) {
-    const resource = await readCreativeSkillResource({ uri: definition.entryUri })
-    const skillDirectory = path.join(codexHome, 'skills', definition.id)
-    await mkdir(skillDirectory, { recursive: true, mode: 0o700 })
-    await writeFile(
-      path.join(skillDirectory, 'SKILL.md'),
-      resource.content,
-      { encoding: 'utf8', mode: 0o600 },
-    )
+  await materializeCreativeRuntimeConfiguration(codexHome)
+  for (const worker of CREATIVE_WORKERS) {
+    const profile = await readFile(path.join(codexHome, 'agents', `${worker.agentType}.toml`), 'utf8')
+    assert.ok(profile.includes(`name = "${worker.agentType}"`))
+    assert.ok(profile.includes('[mcp_servers.wao]\nenabled = false'))
+    for (const skillId of worker.skillIds) {
+      assert.ok(profile.includes(`<wao_skill id=\\"${skillId}\\"`))
+    }
+    for (const skillId of CREATIVE_SKILL_IDS.filter((skillId) => !worker.skillIds.includes(skillId))) {
+      assert.ok(!profile.includes(`<wao_skill id=\\"${skillId}\\"`), (
+        `Custom agent ${worker.agentType} received an undeclared Skill: ${skillId}`
+      ))
+    }
   }
   const createManager = (home: string) => new LocalRuntimeManager({
     clientInfo: {
@@ -359,6 +379,8 @@ async function runAppServerSmoke(params: {
   const customProviderConfig = {
     web_search: 'live',
     features: {
+      skill_search: false,
+      image_generation: false,
       standalone_web_search: true,
       code_mode: {
         enabled: true,
@@ -395,12 +417,13 @@ async function runAppServerSmoke(params: {
     assert.equal(listedSkills.data.length, 1)
     assert.equal(listedSkills.data[0]?.cwd, cwd)
     assert.deepEqual(listedSkills.data[0]?.errors, [])
-    for (const definition of CREATIVE_SKILLS) {
-      assert.ok(listedSkills.data[0]?.skills.some((skill) => (
-        skill.name === definition.id
-        && skill.enabled
-        && skill.scope === 'user'
-      )), `Production Skill was not loaded by Codex: ${definition.id}`)
+    assert.ok(listedSkills.data[0]?.skills.every((skill) => !skill.enabled), (
+      'The primary Agent must not have any enabled native Skill.'
+    ))
+    for (const skillId of CREATIVE_SKILL_IDS) {
+      assert.ok(!listedSkills.data[0]?.skills.some((skill) => skill.name === skillId), (
+        `Wao professional Skill leaked into the primary Agent inventory: ${skillId}`
+      ))
     }
     const thread = await firstRuntime.startThread({
       model: process.env.CODEX_RUNTIME_SMOKE_MODEL?.trim() || DEFAULT_MODEL,
@@ -474,6 +497,7 @@ async function runAppServerSmoke(params: {
         throw error
       })
     }
+    await materializeCreativeRuntimeConfiguration(restoredCodexHome)
     restoredManager = createManager(restoredCodexHome)
     const secondRuntime = await restoredManager.ensure({ runtimeKey, cwd })
     const resumed = await secondRuntime.resumeThread({
@@ -487,6 +511,10 @@ async function runAppServerSmoke(params: {
     })
     assert.equal(resumed.id, thread.id)
     assert.equal((await secondRuntime.readThread({ threadId: thread.id })).id, thread.id)
+    const restoredSkills = await secondRuntime.listSkills({ cwds: [cwd], forceReload: true })
+    assert.ok(restoredSkills.data[0]?.skills.every((skill) => !skill.enabled), (
+      'The resumed primary Agent must not regain native Skills.'
+    ))
 
     return {
       initializedUserAgent: initialized.userAgent,
@@ -497,7 +525,9 @@ async function runAppServerSmoke(params: {
       streamedText,
       capturedStateBytes,
       customResponsesProvider: true,
-      skillsListed: listedSkills.data[0]?.skills.map((skill) => skill.name) ?? [],
+      skillsListed: listedSkills.data[0]?.skills
+        .filter((skill) => skill.enabled)
+        .map((skill) => `${skill.name}@${skill.path}`) ?? [],
       protocolSurfaceValidated: true,
     }
   } finally {
@@ -512,9 +542,12 @@ async function main(): Promise<void> {
   const liveTurn = process.argv.includes('--live-turn')
   const rootDir = await mkdtemp(path.join(tmpdir(), 'wao-codex-runtime-smoke-'))
   try {
-    await runWorkspaceSmoke(rootDir)
-    await runMcpSmoke()
-    const appServer = await runAppServerSmoke({ rootDir, liveTurn })
+    await withStageTimeout('workspace', async () => await runWorkspaceSmoke(rootDir))
+    await withStageTimeout('mcp', async () => await runMcpSmoke())
+    const appServer = await withStageTimeout(
+      'app-server',
+      async () => await runAppServerSmoke({ rootDir, liveTurn }),
+    )
     process.stdout.write(`${JSON.stringify({
       ok: true,
       workspace: 'canonical_round_trip',
@@ -526,8 +559,11 @@ async function main(): Promise<void> {
   }
 }
 
-void main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.stack ?? error.message : String(error)
-  process.stderr.write(`${message}\n`)
-  process.exitCode = 1
-})
+const smokeKeepAlive = setInterval(() => undefined, 1_000)
+void main()
+  .catch((error: unknown) => {
+    const message = error instanceof Error ? error.stack ?? error.message : String(error)
+    process.stderr.write(`${message}\n`)
+    process.exitCode = 1
+  })
+  .finally(() => clearInterval(smokeKeepAlive))
