@@ -106,3 +106,6 @@ docs/**
 .github/*
 !.github/workflows/
 !.github/agents/
+
+# Locally downloaded dev binaries (Stripe CLI)
+.tools/
