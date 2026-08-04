@@ -341,6 +341,82 @@ describe('billing/stripe recharge integration', () => {
     expect((await getBalance(user.id)).balance).toBe(100)
   })
 
+  it('starts a plan term from a one-off purchase and grants its first month', async () => {
+    const user = await createTestUser()
+    const timestamp = currentStripeTimestamp()
+    const payload = JSON.stringify({
+      id: 'evt_plan_buy',
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: 'cs_plan_buy',
+          payment_intent: 'pi_plan_buy',
+          payment_status: 'paid',
+          metadata: {
+            waoowaoo_kind: 'credit_plan_purchase',
+            user_id: user.id,
+            plan_id: 'creator',
+            plan_interval: 'month',
+          },
+        },
+      },
+    })
+    const signature = signPayload(payload, timestamp)
+
+    const first = await handleStripeWebhook(payload, signature)
+    expect(first).toMatchObject({ action: 'credited', credits: 5600 })
+
+    // Replaying the delivery must not grant a second month.
+    const replay = await handleStripeWebhook(payload, signature)
+    expect(replay).toMatchObject({ action: 'ignored', reason: 'plan_purchase_already_applied' })
+
+    const balance = await prisma.userBalance.findUniqueOrThrow({ where: { userId: user.id } })
+    expect(balance.subscriptionCredits).toBe(5600)
+    // A plan grants the expiring pool, never the permanent one.
+    expect(balance.balance).toBe(0)
+
+    const term = await prisma.subscription.findUniqueOrThrow({ where: { userId: user.id } })
+    expect(term.planId).toBe('creator')
+    expect(term.interval).toBe('month')
+    expect(await prisma.subscriptionGrant.count({ where: { subscriptionId: term.id } })).toBe(1)
+  })
+
+  it('extends a running term instead of discarding what is left of it', async () => {
+    const user = await createTestUser()
+    const timestamp = currentStripeTimestamp()
+    const buy = (sessionId: string) => JSON.stringify({
+      id: `evt_${sessionId}`,
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: sessionId,
+          payment_intent: `pi_${sessionId}`,
+          payment_status: 'paid',
+          metadata: {
+            waoowaoo_kind: 'credit_plan_purchase',
+            user_id: user.id,
+            plan_id: 'creator',
+            plan_interval: 'month',
+          },
+        },
+      },
+    })
+
+    const firstPayload = buy('cs_term_1')
+    await handleStripeWebhook(firstPayload, signPayload(firstPayload, timestamp))
+    const afterFirst = await prisma.subscription.findUniqueOrThrow({ where: { userId: user.id } })
+
+    const secondPayload = buy('cs_term_2')
+    await handleStripeWebhook(secondPayload, signPayload(secondPayload, timestamp))
+    const afterSecond = await prisma.subscription.findUniqueOrThrow({ where: { userId: user.id } })
+
+    // The second month is added to the end of the first, not started over.
+    expect(afterSecond.currentPeriodEnd.getTime()).toBeGreaterThan(afterFirst.currentPeriodEnd.getTime())
+    expect(afterSecond.currentPeriodStart.getTime()).toBe(afterFirst.currentPeriodStart.getTime())
+    // Still one month granted: buying ahead does not hand out both months now.
+    expect(await prisma.subscriptionGrant.count({ where: { subscriptionId: afterSecond.id } })).toBe(1)
+  })
+
   it('fails closed when a refund cannot be tied to the canonical payment intent', async () => {
     const timestamp = currentStripeTimestamp()
     const refund = refundEvent({

@@ -5,14 +5,20 @@ import { apiHandler, ApiError } from '@/lib/api-errors'
 import { getDeploymentConfig } from '@/lib/deployment/config'
 import { getDeploymentFeatures } from '@/lib/deployment/features'
 import { resolveCheckoutLocale, resolveCheckoutPublicOrigin } from '@/lib/payments/checkout-request'
-import { createSubscriptionCheckoutSession } from '@/lib/payments/stripe-subscription-checkout'
+import { createPlanPurchaseSession } from '@/lib/payments/stripe-plan-purchase'
 import { isPaymentConfigurationError, readPaymentConfigurationErrorCode } from '@/lib/payments/config-errors'
 
-const subscriptionCheckoutSchema = z.object({
+const planPurchaseSchema = z.object({
   planId: z.enum(['starter', 'creator', 'pro', 'studio', 'flagship']),
   interval: z.enum(['month', 'year']),
 })
 
+/**
+ * POST /api/payments/stripe/plan
+ *
+ * Starts a one-off Checkout for a plan term. The term is only created once the
+ * webhook confirms payment, so abandoning Checkout leaves nothing behind.
+ */
 export const POST = apiHandler(async (request: NextRequest) => {
   const authResult = await requireUserAuth()
   if (isErrorResponse(authResult)) return authResult
@@ -28,17 +34,17 @@ export const POST = apiHandler(async (request: NextRequest) => {
     throw new ApiError('INVALID_PARAMS', { code: 'BODY_PARSE_FAILED', field: 'body' })
   }
 
-  const parsed = subscriptionCheckoutSchema.safeParse(body)
+  const parsed = planPurchaseSchema.safeParse(body)
   if (!parsed.success) {
     throw new ApiError('INVALID_PARAMS', {
-      code: 'SUBSCRIPTION_CHECKOUT_PAYLOAD_INVALID',
+      code: 'PLAN_PURCHASE_PAYLOAD_INVALID',
       field: 'planId',
     })
   }
 
-  let session: Awaited<ReturnType<typeof createSubscriptionCheckoutSession>>
+  let session: Awaited<ReturnType<typeof createPlanPurchaseSession>>
   try {
-    session = await createSubscriptionCheckoutSession({
+    session = await createPlanPurchaseSession({
       userId: authResult.session.user.id,
       email: authResult.session.user.email,
       locale: resolveCheckoutLocale(request),
@@ -60,7 +66,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     url: session.url,
     planId: session.planId,
     interval: session.interval,
-    periodPriceCny: session.periodPriceCny,
+    priceCny: session.priceCny,
     monthlyCredits: session.monthlyCredits,
   })
 })

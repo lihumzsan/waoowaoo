@@ -126,7 +126,7 @@ export function useRecharge(): RechargeState {
 }
 
 /* ----------------------------------------------------------------- */
-/* Subscription hook — starts a recurring Stripe Checkout              */
+/* Plan purchase hook — buys a plan term outright                      */
 /* ----------------------------------------------------------------- */
 
 export interface SubscriptionCheckoutState {
@@ -136,11 +136,11 @@ export interface SubscriptionCheckoutState {
 }
 
 /**
- * Subscribing is a different Stripe mode from topping up, so it is a different
- * request. Sharing the recharge hook would have meant one call site deciding
- * between a one-off payment and a recurring one from a flag.
+ * Buying a plan is a one-off payment like a top-up, but what it buys is a term
+ * of monthly credit grants rather than a lump of permanent credits — so it is
+ * its own request rather than a flag on the recharge one.
  */
-export function useSubscriptionCheckout(): SubscriptionCheckoutState {
+export function usePlanPurchase(): SubscriptionCheckoutState {
   const t = useTranslations('pricing.glass')
   const resolveClientError = useClientErrorMessage()
   const [busy, setBusy] = useState(false)
@@ -150,7 +150,7 @@ export function useSubscriptionCheckout(): SubscriptionCheckoutState {
     (planId: string, interval: 'month' | 'year') => {
       setBusy(true)
       setStatus(null)
-      void apiFetch('/api/payments/stripe/subscription/checkout', {
+      void apiFetch('/api/payments/stripe/plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ planId, interval }),

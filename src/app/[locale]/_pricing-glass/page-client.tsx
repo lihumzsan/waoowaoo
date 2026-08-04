@@ -11,7 +11,7 @@ import {
   RechargeStatus,
   Tick,
   useRecharge,
-  useSubscriptionCheckout,
+  usePlanPurchase,
 } from './shared'
 import { useWechatRecharge, WechatQrDialog } from './wechat-recharge'
 
@@ -203,7 +203,7 @@ function PlanCard({
 export default function PricingGlassPageClient({ content }: { readonly content: GlassPricingContent }) {
   const t = useTranslations('pricing.glass')
   const recharge = useRecharge()
-  const subscription = useSubscriptionCheckout()
+  const purchase = usePlanPurchase()
   const wechat = useWechatRecharge(recharge.config, useCallback(() => {
     // Credits landed. A reload is the simplest way to make every balance the
     // page shows agree with the ledger again.
@@ -232,12 +232,18 @@ export default function PricingGlassPageClient({ content }: { readonly content: 
               key={plan.id}
               plan={plan}
               interval={interval}
-              busy={subscription.busy}
-              onSubscribe={() => subscription.start(plan.id, interval)}
+              busy={purchase.busy}
+              onSubscribe={() => purchase.start(plan.id, interval)}
             />
           ))}
         </div>
-        <RechargeStatus status={subscription.status} />
+        <RechargeStatus status={purchase.status} />
+
+        {/* Plans are bought, not subscribed to — say so before checkout rather
+            than letting the user discover it at renewal time. */}
+        <p className="mx-auto mt-6 max-w-3xl text-center text-[12px] leading-5 text-[var(--glass-text-tertiary)]">
+          {t('planNoAutoRenew')}
+        </p>
 
         {/* The maths behind every card's capacity claim, stated once instead of
             repeated inside each of them. */}

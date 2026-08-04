@@ -16,14 +16,15 @@ import {
 const subscriptionLogger = createScopedLogger({ module: 'billing.subscription' })
 
 /**
- * Statuses in which a subscription still grants credits. Stripe owns the
- * status; this list is only our reading of which of them are "paid up".
- * `past_due` keeps granting on purpose — that is the grace period, and Stripe
- * moves the subscription to `unpaid`/`canceled` when retries are exhausted.
+ * Statuses in which a plan term still grants credits.
+ *
+ * A term is bought outright, so there is no dunning or grace period to model:
+ * it is either paid up or it has run out. `currentPeriodEnd` is what actually
+ * stops the grants; this status is the coarse flag alongside it.
  */
-const GRANTING_STATUSES: ReadonlySet<string> = new Set(['active', 'trialing', 'past_due'])
+const GRANTING_STATUSES: ReadonlySet<string> = new Set(['active'])
 
-export function isGrantingSubscriptionStatus(status: string): boolean {
+export function isGrantingPlanTermStatus(status: string): boolean {
   return GRANTING_STATUSES.has(status)
 }
 
@@ -71,7 +72,6 @@ export interface SubscriptionSnapshot {
   readonly planId: SubscriptionPlanId
   readonly interval: SubscriptionInterval
   readonly status: string
-  readonly cancelAtPeriodEnd: boolean
   readonly currentPeriodEnd: Date
   readonly grantsCredits: boolean
 }
@@ -82,7 +82,6 @@ type SubscriptionRow = {
   planId: string
   interval: string
   status: string
-  cancelAtPeriodEnd: boolean
   currentPeriodEnd: Date
   createdAt: Date
 }
@@ -95,9 +94,8 @@ export function toSubscriptionSnapshot(row: SubscriptionRow): SubscriptionSnapsh
     planId: row.planId,
     interval: row.interval,
     status: row.status,
-    cancelAtPeriodEnd: row.cancelAtPeriodEnd,
     currentPeriodEnd: row.currentPeriodEnd,
-    grantsCredits: isGrantingSubscriptionStatus(row.status),
+    grantsCredits: isGrantingPlanTermStatus(row.status),
   }
 }
 
@@ -116,7 +114,7 @@ export async function ensureCurrentPeriodGranted(
 ): Promise<{ status: 'granted' | 'already_granted' | 'no_subscription' | 'not_granting' }> {
   const subscription = await prisma.subscription.findUnique({ where: { userId } })
   if (!subscription) return { status: 'no_subscription' }
-  if (!isGrantingSubscriptionStatus(subscription.status)) return { status: 'not_granting' }
+  if (!isGrantingPlanTermStatus(subscription.status)) return { status: 'not_granting' }
   if (!isSubscriptionPlanId(subscription.planId)) {
     throw new Error(`SUBSCRIPTION_PLAN_UNKNOWN: ${subscription.planId}`)
   }
@@ -125,8 +123,8 @@ export async function ensureCurrentPeriodGranted(
   const periodIndex = resolvePeriodIndex(subscription.createdAt, now)
   const expiresAt = addMonths(subscription.createdAt, periodIndex + 1)
 
-  // A term that has run past what was paid for stops granting. Stripe will
-  // either renew it (advancing currentPeriodEnd) or end it.
+  // Grants stop at the boundary of what was paid for. Buying again extends
+  // `currentPeriodEnd` and the next month becomes grantable.
   if (expiresAt.getTime() > subscription.currentPeriodEnd.getTime()) {
     return { status: 'not_granting' }
   }
@@ -144,12 +142,12 @@ export async function ensureCurrentPeriodGranted(
 }
 
 /**
- * Top up the current period after an immediate upgrade.
+ * Grant a period, or top it up if it was already granted on a smaller plan.
  *
- * An upgrade takes effect at once, so the user gets the difference between the
- * new plan's monthly grant and what this period already granted. Credits
- * already spent are not clawed back, and a downgrade adds nothing — it takes
- * effect when the period ends, so this returns zero rather than a negative.
+ * Buying a bigger plan mid-month takes effect at once and adds the difference.
+ * Buying a smaller one adds nothing to a month already granted — credits
+ * already handed out are not clawed back, and the smaller grant applies from
+ * the next period.
  */
 export async function topUpCurrentPeriodForPlanChange(
   tx: Prisma.TransactionClient,

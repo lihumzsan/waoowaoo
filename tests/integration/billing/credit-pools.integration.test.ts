@@ -183,8 +183,6 @@ describe('billing/credit pools integration', () => {
         planId: 'creator',
         interval: 'year',
         status: 'active',
-        stripeSubscriptionId: `sub_${user.id}`,
-        stripeCustomerId: `cus_${user.id}`,
         currentPeriodStart: new Date(Date.now() - HOUR),
         currentPeriodEnd: new Date(Date.now() + 365 * 24 * HOUR),
       },

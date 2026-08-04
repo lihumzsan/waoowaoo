@@ -46,7 +46,6 @@ export const GET = apiHandler(async () => {
                 planId: subscription.planId,
                 interval: subscription.interval,
                 status: subscription.status,
-                cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
                 currentPeriodEnd: subscription.currentPeriodEnd.toISOString(),
             }
             : null,

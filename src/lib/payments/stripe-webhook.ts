@@ -3,26 +3,17 @@ import { prisma } from '@/lib/prisma'
 import { addBalanceWithTransaction, applyBalanceAdjustmentWithTransaction } from '@/lib/billing/ledger'
 import { BillingOperationError } from '@/lib/billing/errors'
 import { toMoneyNumber } from '@/lib/billing/money'
-import { createStripeClient } from './stripe-client'
-import { SUBSCRIPTION_CHECKOUT_KIND } from './stripe-subscription-checkout'
+import { PLAN_PURCHASE_KIND } from './stripe-plan-purchase'
 import { WECHAT_RECHARGE_KIND } from './stripe-wechat-intent'
+import { applyPlanPurchase } from '@/lib/billing/plan-term-service'
 import {
-  endSubscriptionFromStripe,
-  recordInvoicePaymentFailure,
-  renewSubscriptionFromInvoice,
-  startSubscription,
-  updateSubscription,
-  type SubscriptionWebhookAction,
-} from './stripe-subscription-webhook'
+  isSubscriptionInterval,
+  isSubscriptionPlanId,
+} from '@/lib/billing/subscription-plans'
 
 const STRIPE_SIGNATURE_TOLERANCE_SECONDS = 300
 
-type StripeWebhookAction =
-  | 'credited'
-  | 'debited'
-  | 'restored'
-  | 'ignored'
-  | SubscriptionWebhookAction
+type StripeWebhookAction = 'credited' | 'debited' | 'restored' | 'ignored'
 
 export interface StripeWebhookHandleResult {
   received: true
@@ -461,24 +452,41 @@ export async function handleStripeWebhook(rawBody: string, signatureHeader: stri
 
   if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
     const session = readCheckoutSession(event.data.object)
-    // A subscription session has no payment intent and must not reach the
-    // one-off recharge path, which requires one and would reject the event
-    // permanently.
-    if (session.metadata.waoowaoo_kind === SUBSCRIPTION_CHECKOUT_KIND) {
-      const stripeSubscriptionId = readExpandableId(
-        (event.data.object as unknown as { subscription?: string | { id: string } }).subscription,
-      )
-      if (!stripeSubscriptionId) throw new Error('STRIPE_CHECKOUT_SUBSCRIPTION_REQUIRED')
-      const subscription = await createStripeClient().subscriptions.retrieve(stripeSubscriptionId)
-      const result = await startSubscription(subscription)
+    // A plan purchase grants credits to the subscription pool instead of the
+    // permanent one, so it takes its own path rather than the recharge one.
+    if (session.metadata.waoowaoo_kind === PLAN_PURCHASE_KIND) {
+      if (session.paymentStatus !== 'paid') {
+        return {
+          received: true,
+          action: 'ignored',
+          eventType: event.type,
+          sessionId: session.id,
+          reason: 'payment_not_paid',
+        }
+      }
+      const userId = readString(session.metadata.user_id)
+      const planId = readString(session.metadata.plan_id)
+      const interval = readString(session.metadata.plan_interval)
+      if (!userId) throw new Error('STRIPE_CHECKOUT_METADATA_USER_ID_REQUIRED')
+      if (!planId || !isSubscriptionPlanId(planId)) {
+        throw new Error('STRIPE_PLAN_METADATA_PLAN_ID_INVALID')
+      }
+      if (!interval || !isSubscriptionInterval(interval)) {
+        throw new Error('STRIPE_PLAN_METADATA_INTERVAL_INVALID')
+      }
+      const applied = await applyPlanPurchase({
+        userId,
+        planId,
+        interval,
+        purchaseId: session.id,
+      })
       return {
         received: true,
-        action: result.action,
+        action: applied.status === 'applied' ? 'credited' : 'ignored',
         eventType: event.type,
         sessionId: session.id,
-        objectId: result.subscriptionId,
-        credits: result.credits,
-        reason: result.reason,
+        credits: applied.status === 'applied' ? applied.grantedCredits : undefined,
+        reason: applied.status === 'already_applied' ? 'plan_purchase_already_applied' : undefined,
       }
     }
     const result = await creditCheckoutSession(eventId, session)
@@ -491,52 +499,6 @@ export async function handleStripeWebhook(rawBody: string, signatureHeader: stri
   if (event.type === 'payment_intent.succeeded') {
     const result = await creditWechatPaymentIntent(eventId, event.data.object)
     return { ...result, eventType: event.type }
-  }
-
-  if (event.type === 'invoice.paid') {
-    const result = await renewSubscriptionFromInvoice(event.data.object)
-    return {
-      received: true,
-      action: result.action,
-      eventType: event.type,
-      objectId: result.subscriptionId,
-      credits: result.credits,
-      reason: result.reason,
-    }
-  }
-
-  if (event.type === 'invoice.payment_failed') {
-    const result = await recordInvoicePaymentFailure(event.data.object)
-    return {
-      received: true,
-      action: result.action,
-      eventType: event.type,
-      objectId: result.subscriptionId,
-      reason: result.reason,
-    }
-  }
-
-  if (event.type === 'customer.subscription.updated') {
-    const result = await updateSubscription(event.data.object)
-    return {
-      received: true,
-      action: result.action,
-      eventType: event.type,
-      objectId: result.subscriptionId,
-      credits: result.credits,
-      reason: result.reason,
-    }
-  }
-
-  if (event.type === 'customer.subscription.deleted') {
-    const result = await endSubscriptionFromStripe(event.data.object)
-    return {
-      received: true,
-      action: result.action,
-      eventType: event.type,
-      objectId: result.subscriptionId,
-      reason: result.reason,
-    }
   }
 
   if (event.type === 'checkout.session.async_payment_failed' || event.type === 'checkout.session.expired') {
