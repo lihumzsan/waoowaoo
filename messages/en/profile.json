@@ -84,15 +84,6 @@
     "globalLocation": "Asset location {name}",
     "globalLocationImage": "Asset location {name} · Image {index}"
   },
-  "inviteCode": {
-    "title": "Invite Code",
-    "description": "Redeem an invite code or contact an admin for credits.",
-    "placeholder": "Enter invite code",
-    "redeem": "Redeem",
-    "redeeming": "Redeeming",
-    "redeemSuccess": "Redeemed successfully. Credits have been added.",
-    "redeemFailed": "Invite code redemption failed"
-  },
   "recharge": {
     "unitValue": "1 credit = ¥0.1",
     "successNotice": "Payment submitted. Credits will be added after Stripe confirms the payment.",
@@ -162,10 +153,10 @@
   "planCreditsNone": "No plan credits",
   "boughtCredits": "Bought credits",
   "boughtCreditsNeverExpire": "Never expire",
-  "currentPlan": "Current plan",
   "planMonthlyGrant": "{credits} this period",
   "planEndsAt": "Runs until",
   "planDaysLeft": "{days} days left",
+  "planExtend": "Extend",
   "planNames": {
     "starter": "Starter",
     "creator": "Creator",

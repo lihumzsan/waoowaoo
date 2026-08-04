@@ -4,7 +4,6 @@ import { useTranslations } from 'next-intl'
 import { Link } from '@/i18n/navigation'
 import { AppIcon } from '@/components/ui/icons'
 import ProfileTransactionsTable, { type ProfileTransactionItem } from './ProfileTransactionsTable'
-import ProfileInviteCodeCard from './ProfileInviteCodeCard'
 import { formatCredits } from '@/lib/billing/credits'
 
 // 账户概览:大数字额度 hero、用量进度、冻结/已消费统计块与最近流水。
@@ -23,10 +22,29 @@ export interface ProfileBalanceSummary {
   totalSpent?: number
   subscription?: {
     planId: string
+    /** What the plan grants each period — distinct from what is left of it. */
+    monthlyCredits: number
     interval: string
     status: string
     currentPeriodEnd: string
   } | null
+}
+
+/**
+ * Each tier gets its own accent so a glance at the card says which plan is in
+ * force — a page where every plan looks identical gives the user nothing to
+ * recognise, and nothing to want.
+ */
+const PLAN_ACCENTS: Record<string, { readonly ring: string; readonly glow: string; readonly chip: string }> = {
+  starter: { ring: '#64748b', glow: 'rgba(100,116,139,0.18)', chip: 'rgba(100,116,139,0.14)' },
+  creator: { ring: '#3b82f6', glow: 'rgba(59,130,246,0.20)', chip: 'rgba(59,130,246,0.14)' },
+  pro: { ring: '#8b5cf6', glow: 'rgba(139,92,246,0.20)', chip: 'rgba(139,92,246,0.14)' },
+  studio: { ring: '#f59e0b', glow: 'rgba(245,158,11,0.20)', chip: 'rgba(245,158,11,0.16)' },
+  flagship: { ring: '#e11d48', glow: 'rgba(225,29,72,0.20)', chip: 'rgba(225,29,72,0.14)' },
+}
+
+function planAccent(planId: string | undefined) {
+  return (planId && PLAN_ACCENTS[planId]) || null
 }
 
 function normalizeAmount(value: number | undefined): number {
@@ -54,10 +72,8 @@ interface ProfileOverviewSectionProps {
   balance: ProfileBalanceSummary | null
   transactions: readonly ProfileTransactionItem[]
   showUpgrade: boolean
-  showInviteCode: boolean
   /** Stripe 回跳后的支付结果提示,由 page 拥有。 */
   paymentNotice: string | null
-  onCreditsChanged: () => Promise<void>
   onViewAllTransactions: () => void
 }
 
@@ -65,9 +81,7 @@ export default function ProfileOverviewSection({
   balance,
   transactions,
   showUpgrade,
-  showInviteCode,
   paymentNotice,
-  onCreditsChanged,
   onViewAllTransactions,
 }: ProfileOverviewSectionProps) {
   const t = useTranslations('profile')
@@ -76,6 +90,8 @@ export default function ProfileOverviewSection({
   const spent = normalizeAmount(balance?.totalSpent)
   const total = available + spent
   const usageRatio = total > 0 ? Math.min(1, Math.max(0, available / total)) : 1
+  const subscription = balance?.subscription ?? null
+  const accent = planAccent(subscription?.planId)
 
   return (
     <div className="space-y-5">
@@ -86,13 +102,30 @@ export default function ProfileOverviewSection({
         </div>
       ) : null}
 
-      {/* 可用额度 hero */}
-      <section className="glass-surface-elevated relative overflow-hidden p-7">
+      {/* Plan and balance are one fact — what you have, and what keeps refilling
+          it. Split across two cards they read as unrelated numbers. */}
+      <section
+        className="glass-surface-elevated relative overflow-hidden p-7"
+        style={accent ? { boxShadow: `0 0 0 1px ${accent.chip}, 0 18px 40px -28px ${accent.glow}` } : undefined}
+      >
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -right-24 -top-28 h-64 w-64 rounded-full bg-[image:var(--glass-cta-gradient)] opacity-[0.08] blur-2xl"
+          className="pointer-events-none absolute -right-24 -top-28 h-64 w-64 rounded-full blur-2xl"
+          style={
+            accent
+              ? { background: `radial-gradient(circle, ${accent.glow}, transparent 70%)` }
+              : { backgroundImage: 'var(--glass-cta-gradient)', opacity: 0.08 }
+          }
         />
-        <div className="flex flex-wrap items-start justify-between gap-4">
+        {accent ? (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 h-[3px]"
+            style={{ background: `linear-gradient(90deg, ${accent.ring}, transparent)` }}
+          />
+        ) : null}
+
+        <div className="relative flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--glass-text-tertiary)]">
               {t('availableBalance')}
@@ -105,7 +138,36 @@ export default function ProfileOverviewSection({
             </div>
             <div className="mt-1.5 text-xs text-[var(--glass-text-tertiary)]">{t('recharge.unitValue')}</div>
           </div>
-          {showUpgrade ? (
+
+          {subscription && accent ? (
+            <div className="flex flex-col items-end gap-2">
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold"
+                style={{
+                  backgroundColor: accent.chip,
+                  color: accent.ring,
+                  boxShadow: `inset 0 0 0 1px ${accent.ring}40`,
+                }}
+              >
+                <AppIcon name="sparkles" className="h-3.5 w-3.5" />
+                {t(`planNames.${subscription.planId}` as 'planNames.creator')}
+              </span>
+              <p className="glass-num text-[12px] text-[var(--glass-text-tertiary)]">
+                {t('planEndsAt')} {formatDay(subscription.currentPeriodEnd)}
+                <span className="mx-1.5 opacity-40">·</span>
+                {t('planDaysLeft', { days: daysUntil(subscription.currentPeriodEnd) })}
+              </p>
+              {showUpgrade ? (
+                <Link
+                  href="/pricing"
+                  className="glass-btn-base glass-btn-soft rounded-lg px-3 py-1.5 text-xs font-semibold"
+                >
+                  {t('planExtend')}
+                  <AppIcon name="arrowRight" className="h-3 w-3" />
+                </Link>
+              ) : null}
+            </div>
+          ) : showUpgrade ? (
             <Link
               href="/pricing"
               className="glass-btn-base glass-btn-cta rounded-xl px-4 py-2.5 text-sm font-semibold"
@@ -116,24 +178,43 @@ export default function ProfileOverviewSection({
           ) : null}
         </div>
 
-        <div className="glass-meter-track mt-6" aria-hidden="true">
-          <div className="glass-meter-fill" style={{ width: `${Math.round(usageRatio * 100)}%` }} />
+        <div className="glass-meter-track relative mt-6" aria-hidden="true">
+          <div
+            className="glass-meter-fill"
+            style={{
+              width: `${Math.round(usageRatio * 100)}%`,
+              ...(accent ? { background: `linear-gradient(90deg, ${accent.ring}, ${accent.ring}99)` } : {}),
+            }}
+          />
         </div>
 
         {/* The two pools behave differently — one expires, one does not — so a
             single total hides the thing a user most needs to know. */}
-        <div className="mt-5 grid grid-cols-2 gap-3">
-          <div className="rounded-xl border border-[var(--glass-stroke-soft)] bg-white/70 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+        <div className="relative mt-5 grid grid-cols-2 gap-3">
+          <div
+            className="rounded-xl border border-[var(--glass-stroke-soft)] bg-white/70 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
+            style={accent ? { borderColor: `${accent.ring}33` } : undefined}
+          >
             <p className="text-xs font-medium text-[var(--glass-text-tertiary)]">{t('planCredits')}</p>
             <p className="glass-num mt-1 text-xl font-semibold tracking-tight text-[var(--glass-text-primary)]">
               {formatStatAmount(balance?.subscriptionCredits)}
               <span className="ml-1.5 text-xs font-medium text-[var(--glass-text-tertiary)]">{currency}</span>
             </p>
-            <p className="mt-1 text-[11px] text-[var(--glass-text-tertiary)]">
-              {balance?.subscriptionExpiresAt
-                ? t('planCreditsExpireOn', { date: formatDay(balance.subscriptionExpiresAt) })
-                : t('planCreditsNone')}
-            </p>
+            {/* Remaining and granted are different numbers; showing only one of
+                them under a plan name is how a part-spent month reads as wrong. */}
+            {subscription ? (
+              <p className="glass-num mt-1 text-[11px] text-[var(--glass-text-tertiary)]">
+                {t('planMonthlyGrant', { credits: formatCredits(subscription.monthlyCredits) })}
+                {balance?.subscriptionExpiresAt ? (
+                  <>
+                    <span className="mx-1 opacity-40">·</span>
+                    {t('planCreditsExpireOn', { date: formatDay(balance.subscriptionExpiresAt) })}
+                  </>
+                ) : null}
+              </p>
+            ) : (
+              <p className="mt-1 text-[11px] text-[var(--glass-text-tertiary)]">{t('planCreditsNone')}</p>
+            )}
           </div>
           <div className="rounded-xl border border-[var(--glass-stroke-soft)] bg-white/70 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
             <p className="text-xs font-medium text-[var(--glass-text-tertiary)]">{t('boughtCredits')}</p>
@@ -145,7 +226,7 @@ export default function ProfileOverviewSection({
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-3">
+        <div className="relative mt-3 grid grid-cols-2 gap-3">
           <div className="rounded-xl border border-[var(--glass-stroke-soft)] bg-white/70 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
             <p className="text-xs font-medium text-[var(--glass-text-tertiary)]">{t('frozen')}</p>
             <p className="glass-num mt-1 text-xl font-semibold tracking-tight text-[var(--glass-text-primary)]">
@@ -162,38 +243,6 @@ export default function ProfileOverviewSection({
           </div>
         </div>
       </section>
-
-      {/* What plan is in force, and how long it still runs. A term that is
-          bought rather than auto-renewed has to say when it ends, or the user
-          only finds out when the credits stop. */}
-      {balance?.subscription ? (
-        <section className="glass-surface-elevated p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-xs font-medium text-[var(--glass-text-tertiary)]">{t('currentPlan')}</p>
-              <p className="mt-1 text-xl font-semibold tracking-tight text-[var(--glass-text-primary)]">
-                {t(`planNames.${balance.subscription.planId}` as 'planNames.creator')}
-              </p>
-              <p className="glass-num mt-1 text-[13px] text-[var(--glass-text-secondary)]">
-                {t('planMonthlyGrant', {
-                  credits: formatCredits(normalizeAmount(balance.subscriptionCredits)),
-                })}
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs font-medium text-[var(--glass-text-tertiary)]">{t('planEndsAt')}</p>
-              <p className="glass-num mt-1 text-[15px] font-semibold text-[var(--glass-text-primary)]">
-                {formatDay(balance.subscription.currentPeriodEnd)}
-              </p>
-              <p className="mt-1 text-[12px] text-[var(--glass-text-tertiary)]">
-                {t('planDaysLeft', { days: daysUntil(balance.subscription.currentPeriodEnd) })}
-              </p>
-            </div>
-          </div>
-        </section>
-      ) : null}
-
-      {showInviteCode ? <ProfileInviteCodeCard onCreditsChanged={onCreditsChanged} /> : null}
 
       {/* 最近账户流水 */}
       <section className="glass-surface-elevated p-6">

@@ -84,15 +84,6 @@
     "globalLocation": "素材场景 {name}",
     "globalLocationImage": "素材场景 {name} · 图片 {index}"
   },
-  "inviteCode": {
-    "title": "邀请码兑换",
-    "description": "可以使用邀请码兑换额度，或联系管理员发放额度。",
-    "placeholder": "输入邀请码",
-    "redeem": "兑换",
-    "redeeming": "兑换中",
-    "redeemSuccess": "兑换成功，额度已入账",
-    "redeemFailed": "邀请码兑换失败"
-  },
   "recharge": {
     "unitValue": "1 credit = ¥0.1",
     "successNotice": "支付已提交，余额会在 Stripe 确认后入账。可稍后刷新查看。",
@@ -162,10 +153,10 @@
   "planCreditsNone": "当前无套餐额度",
   "boughtCredits": "充值额度",
   "boughtCreditsNeverExpire": "永久有效",
-  "currentPlan": "当前套餐",
   "planMonthlyGrant": "本期额度 {credits}",
   "planEndsAt": "有效期至",
   "planDaysLeft": "剩余 {days} 天",
+  "planExtend": "续期 / 追加",
   "planNames": {
     "starter": "个人入门",
     "creator": "创作者",

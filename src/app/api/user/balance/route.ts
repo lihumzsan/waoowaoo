@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getBalance } from '@/lib/billing'
 import { BILLING_CURRENCY } from '@/lib/billing/currency'
 import { ensureCurrentPeriodGranted, getSubscriptionSnapshot } from '@/lib/billing/subscription-service'
+import { getSubscriptionPlan } from '@/lib/billing/subscription-plans'
 import {
     daysUntilPlanEnds,
     isPlanExpiringSoon,
@@ -46,6 +47,7 @@ export const GET = apiHandler(async () => {
         subscription: subscription
             ? {
                 planId: subscription.planId,
+                monthlyCredits: getSubscriptionPlan(subscription.planId).monthlyCredits,
                 interval: subscription.interval,
                 status: subscription.status,
                 currentPeriodEnd: subscription.currentPeriodEnd.toISOString(),

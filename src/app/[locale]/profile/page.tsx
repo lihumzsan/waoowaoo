@@ -185,7 +185,6 @@ export default function ProfilePage() {
   const noBillingText = t('openSourceNoBilling')
   const showBilling = deploymentFeatures?.showBilling === true
   const showRecharge = deploymentFeatures?.showRecharge === true
-  const showInviteCode = deploymentFeatures?.showInviteCode === true
   const sectionItems: ProfileSectionItem[] = [
     ...(deploymentFeatures?.showBilling === true
       ? [{ section: 'overview' as const, icon: 'user' as const, label: t('accountOverview') }]
@@ -251,12 +250,7 @@ export default function ProfilePage() {
                 balance={balance}
                 transactions={transactions}
                 showUpgrade={showRecharge}
-                showInviteCode={showInviteCode}
                 paymentNotice={paymentNotice}
-                onCreditsChanged={async () => {
-                  await loadBalance()
-                  await loadTransactions()
-                }}
                 onViewAllTransactions={() => handleSectionChange('billing')}
               />
             ) : activeSection === 'billing' && showBilling ? (
