@@ -1,20 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRef } from 'react'
-import {
-  clearTaskTargetOverlay,
-  upsertTaskTargetOverlay,
-} from '../task-target-overlay'
 import { queryKeys } from '../keys'
 import type { GlobalLocation } from '../hooks/useGlobalAssets'
 import type { AssetSummary } from '@/lib/assets/contracts'
 import {
-  requestJsonWithError,
-  requestVoidWithError,
+  requestOperationMutationVoidWithError,
 } from './mutation-shared'
-import {
-  GLOBAL_ASSET_PROJECT_ID,
-  invalidateGlobalLocations,
-} from './asset-hub-mutations-shared'
 
 interface SelectLocationImageContext {
   previousQueries: Array<{
@@ -70,7 +61,7 @@ function captureLocationQuerySnapshots(queryClient: ReturnType<typeof useQueryCl
 function captureUnifiedQuerySnapshots(queryClient: ReturnType<typeof useQueryClient>) {
   return queryClient
     .getQueriesData<AssetSummary[]>({
-      queryKey: queryKeys.assets.all('global'),
+      queryKey: queryKeys.assets.all(),
       exact: false,
     })
     .map(([queryKey, data]) => ({ queryKey, data }))
@@ -125,98 +116,9 @@ function restoreUnifiedQuerySnapshots(
   })
 }
 
-export function useGenerateLocationImage() {
-  const queryClient = useQueryClient()
-  const invalidateLocations = () => invalidateGlobalLocations(queryClient)
-
-  return useMutation({
-    mutationFn: async ({
-      locationId,
-      count,
-    }: {
-      locationId: string
-      count?: number
-    }) => {
-      return await requestJsonWithError(`/api/assets/${locationId}/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scope: 'global',
-          kind: 'location',
-          count,
-        }),
-      }, 'Failed to generate image')
-    },
-    onMutate: ({ locationId }) => {
-      upsertTaskTargetOverlay(queryClient, {
-        projectId: GLOBAL_ASSET_PROJECT_ID,
-        targetType: 'GlobalLocation',
-        targetId: locationId,
-        intent: 'generate',
-      })
-    },
-    onError: (_error, { locationId }) => {
-      clearTaskTargetOverlay(queryClient, {
-        projectId: GLOBAL_ASSET_PROJECT_ID,
-        targetType: 'GlobalLocation',
-        targetId: locationId,
-      })
-    },
-    onSettled: invalidateLocations,
-  })
-}
-
-export function useModifyLocationImage() {
-  const queryClient = useQueryClient()
-  const invalidateLocations = () => invalidateGlobalLocations(queryClient)
-
-  return useMutation({
-    mutationFn: async ({
-      locationId,
-      imageIndex,
-      modifyPrompt,
-      extraImageUrls,
-    }: {
-      locationId: string
-      imageIndex: number
-      modifyPrompt: string
-      extraImageUrls?: string[]
-    }) => {
-      return await requestJsonWithError(`/api/assets/${locationId}/modify-render`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scope: 'global',
-          kind: 'location',
-          imageIndex,
-          modifyPrompt,
-          extraImageUrls,
-        }),
-      }, 'Failed to modify image')
-    },
-    onMutate: ({ locationId, imageIndex }) => {
-      upsertTaskTargetOverlay(queryClient, {
-        projectId: GLOBAL_ASSET_PROJECT_ID,
-        targetType: 'GlobalLocationImage',
-        targetId: `${locationId}:${imageIndex}`,
-        intent: 'modify',
-      })
-    },
-    onError: (_error, { locationId, imageIndex }) => {
-      clearTaskTargetOverlay(queryClient, {
-        projectId: GLOBAL_ASSET_PROJECT_ID,
-        targetType: 'GlobalLocationImage',
-        targetId: `${locationId}:${imageIndex}`,
-      })
-    },
-    onSettled: invalidateLocations,
-  })
-}
-
 export function useSelectLocationImage() {
   const queryClient = useQueryClient()
   const latestRequestIdByTargetRef = useRef<Record<string, number>>({})
-  const invalidateLocations = () => invalidateGlobalLocations(queryClient)
 
   return useMutation({
     mutationFn: async ({
@@ -228,7 +130,7 @@ export function useSelectLocationImage() {
       imageIndex: number | null
       confirm?: boolean
     }) => {
-      return await requestJsonWithError(`/api/assets/${locationId}/select-render`, {
+      await requestOperationMutationVoidWithError(`/api/assets/${locationId}/select-render`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -237,7 +139,7 @@ export function useSelectLocationImage() {
           imageIndex,
           confirm,
         }),
-      }, 'Failed to select image')
+      }, queryClient)
     },
     onMutate: async (variables): Promise<SelectLocationImageContext> => {
       const targetKey = variables.locationId
@@ -253,7 +155,7 @@ export function useSelectLocationImage() {
         exact: false,
       })
       await queryClient.cancelQueries({
-        queryKey: queryKeys.assets.all('global'),
+        queryKey: queryKeys.assets.all(),
         exact: false,
       })
       const previousQueries = captureLocationQuerySnapshots(queryClient)
@@ -269,7 +171,7 @@ export function useSelectLocationImage() {
 
       queryClient.setQueriesData<AssetSummary[] | undefined>(
         {
-          queryKey: queryKeys.assets.all('global'),
+          queryKey: queryKeys.assets.all(),
           exact: false,
         },
         (previous) => applyUnifiedLocationSelection(previous, variables.locationId, variables.imageIndex),
@@ -289,36 +191,28 @@ export function useSelectLocationImage() {
       restoreLocationQuerySnapshots(queryClient, context.previousQueries)
       restoreUnifiedQuerySnapshots(queryClient, context.previousUnifiedQueries)
     },
-    onSettled: async (_data, _error, variables) => {
-      if (variables.confirm) {
-        await invalidateLocations()
-      }
-    },
   })
 }
 
 export function useUndoLocationImage() {
   const queryClient = useQueryClient()
-  const invalidateLocations = () => invalidateGlobalLocations(queryClient)
 
   return useMutation({
     mutationFn: async (locationId: string) => {
-      return await requestJsonWithError(`/api/assets/${locationId}/revert-render`, {
+      await requestOperationMutationVoidWithError(`/api/assets/${locationId}/revert-render`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           scope: 'global',
           kind: 'location',
         }),
-      }, 'Failed to undo image')
+      }, queryClient)
     },
-    onSuccess: invalidateLocations,
   })
 }
 
 export function useUploadLocationImage() {
   const queryClient = useQueryClient()
-  const invalidateLocations = () => invalidateGlobalLocations(queryClient)
 
   return useMutation({
     mutationFn: async ({
@@ -326,40 +220,40 @@ export function useUploadLocationImage() {
       locationId,
       labelText,
       imageIndex,
+      assetType,
     }: {
       file: File
       locationId: string
       labelText: string
       imageIndex?: number
+      assetType?: 'location' | 'prop'
     }) => {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('type', 'location')
+      formData.append('type', assetType ?? 'location')
       formData.append('id', locationId)
       formData.append('labelText', labelText)
       if (imageIndex !== undefined) {
         formData.append('imageIndex', imageIndex.toString())
       }
 
-      return await requestJsonWithError('/api/asset-hub/upload-image', {
+      await requestOperationMutationVoidWithError('/api/asset-hub/upload-image', {
         method: 'POST',
         body: formData,
-      }, 'Failed to upload image')
+      }, queryClient)
     },
-    onSuccess: invalidateLocations,
   })
 }
 
 export function useDeleteLocation() {
   const queryClient = useQueryClient()
-  const invalidateLocations = () => invalidateGlobalLocations(queryClient)
 
   return useMutation({
     mutationFn: async (locationId: string) => {
-      await requestVoidWithError(
+      await requestOperationMutationVoidWithError(
         `/api/asset-hub/locations/${locationId}`,
         { method: 'DELETE' },
-        'Failed to delete location',
+        queryClient,
       )
     },
     onMutate: async (locationId): Promise<DeleteLocationContext> => {
@@ -368,7 +262,7 @@ export function useDeleteLocation() {
         exact: false,
       })
       await queryClient.cancelQueries({
-        queryKey: queryKeys.assets.all('global'),
+        queryKey: queryKeys.assets.all(),
         exact: false,
       })
       const previousQueries = captureLocationQuerySnapshots(queryClient)
@@ -384,7 +278,7 @@ export function useDeleteLocation() {
 
       queryClient.setQueriesData<AssetSummary[] | undefined>(
         {
-          queryKey: queryKeys.assets.all('global'),
+          queryKey: queryKeys.assets.all(),
           exact: false,
         },
         (previous) => previous?.filter((asset) => asset.id !== locationId),
@@ -397,6 +291,5 @@ export function useDeleteLocation() {
       restoreLocationQuerySnapshots(queryClient, context.previousQueries)
       restoreUnifiedQuerySnapshots(queryClient, context.previousUnifiedQueries)
     },
-    onSettled: invalidateLocations,
   })
 }

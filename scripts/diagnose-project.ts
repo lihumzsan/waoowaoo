@@ -1,11 +1,9 @@
 /**
  * 诊断项目任务状态
- * 运行: npx tsx scripts/diagnose-project.ts <projectId>
+ * 运行: npx tsx --env-file=.env scripts/diagnose-project.ts <projectId>
  */
-import { config } from 'dotenv'
-config()
-
 import { prisma } from '../src/lib/prisma'
+import { resolveRedisRuntimeConfig } from '../src/lib/redis-config'
 
 async function diagnoseProject(projectId: string) {
   console.log(`🔍 诊断项目: ${projectId}\n`)
@@ -114,25 +112,15 @@ async function diagnoseProject(projectId: string) {
   // 尝试连接 Redis
   try {
     const { Redis } = await import('ioredis')
+    const redisConfig = resolveRedisRuntimeConfig()
     const redis = new Redis({
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
+      ...redisConfig,
       maxRetriesPerRequest: 3,
       connectTimeout: 5000
     })
     
     const pingResult = await redis.ping()
     console.log(`  ✅ Redis 连接: ${pingResult}`)
-    
-    // 检查 BullMQ 队列
-    const queueKeys = await redis.keys('bull:*:id')
-    console.log(`  BullMQ 队列数量: ${queueKeys.length}`)
-    
-    for (const key of queueKeys.slice(0, 5)) {
-      const queueName = key.replace('bull:', '').replace(':id', '')
-      const jobCounts = await redis.hgetall(`bull:${queueName}:id`)
-      console.log(`    - ${queueName}`)
-    }
     
     redis.disconnect()
   } catch (error) {
@@ -163,8 +151,8 @@ async function diagnoseProject(projectId: string) {
 
 const projectId = process.argv[2]
 if (!projectId) {
-  console.log('用法: npx tsx scripts/diagnose-project.ts <projectId>')
-  console.log('示例: npx tsx scripts/diagnose-project.ts fae709e9-9215-4b3f-9f53-dad871f09896')
+  console.log('用法: npx tsx --env-file=.env scripts/diagnose-project.ts <projectId>')
+  console.log('示例: npx tsx --env-file=.env scripts/diagnose-project.ts fae709e9-9215-4b3f-9f53-dad871f09896')
   process.exit(1)
 }
 

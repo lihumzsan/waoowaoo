@@ -49,24 +49,17 @@ interface SettingsModalProps {
     analysisModel?: string
     characterModel?: string
     locationModel?: string
-    imageModel?: string
     editModel?: string
-
     videoModel?: string
-    singleShotVideoModel?: string
-    sequenceVideoModel?: string
     musicModel?: string
-    videoRatio?: string
+    videoRatio?: string | null
     capabilityOverrides?: CapabilitySelections
     onAnalysisModelChange?: (value: string) => void
     onCharacterModelChange?: (value: string) => void
     onLocationModelChange?: (value: string) => void
-    onImageModelChange?: (value: string) => void
     onEditModelChange?: (value: string) => void
 
     onVideoModelChange?: (value: string) => void
-    onSingleShotVideoModelChange?: (value: string) => void
-    onSequenceVideoModelChange?: (value: string) => void
     onMusicModelChange?: (value: string) => void
     onVideoRatioChange?: (value: string) => void
     onCapabilityOverridesChange?: (value: CapabilitySelections) => void
@@ -196,22 +189,16 @@ export function SettingsModal({
     analysisModel,
     characterModel,
     locationModel,
-    imageModel,
     editModel,
     videoModel,
-    singleShotVideoModel,
-    sequenceVideoModel,
     musicModel,
-    videoRatio = '9:16',
+    videoRatio = null,
     capabilityOverrides,
     onAnalysisModelChange,
     onCharacterModelChange,
     onLocationModelChange,
-    onImageModelChange,
     onEditModelChange,
     onVideoModelChange,
-    onSingleShotVideoModelChange,
-    onSequenceVideoModelChange,
     onMusicModelChange,
     onVideoRatioChange,
     onCapabilityOverridesChange,
@@ -231,15 +218,9 @@ export function SettingsModal({
         [userModels.video],
     )
 
-    const effectiveSingleShotVideoModel = singleShotVideoModel || videoModel
-
-    const selectedSingleShotVideoModelOption = useMemo(
-        () => normalVideoModels.find((model) => model.value === effectiveSingleShotVideoModel) || null,
-        [normalVideoModels, effectiveSingleShotVideoModel],
-    )
-    const selectedSequenceVideoModelOption = useMemo(
-        () => normalVideoModels.find((model) => model.value === sequenceVideoModel) || null,
-        [normalVideoModels, sequenceVideoModel],
+    const selectedVideoModelOption = useMemo(
+        () => normalVideoModels.find((model) => model.value === videoModel) || null,
+        [normalVideoModels, videoModel],
     )
     const selectedAnalysisModelOption = useMemo(
         () => userModels.llm.find((model) => model.value === analysisModel) || null,
@@ -249,14 +230,9 @@ export function SettingsModal({
         () => userModels.music.find((model) => model.value === musicModel) || null,
         [userModels.music, musicModel],
     )
-
-    const singleShotVideoCapabilityFields = useMemo(
-        () => extractCapabilityFields(selectedSingleShotVideoModelOption?.capabilities, 'video'),
-        [selectedSingleShotVideoModelOption],
-    )
-    const sequenceVideoCapabilityFields = useMemo(
-        () => extractCapabilityFields(selectedSequenceVideoModelOption?.capabilities, 'video'),
-        [selectedSequenceVideoModelOption],
+    const videoCapabilityFields = useMemo(
+        () => extractCapabilityFields(selectedVideoModelOption?.capabilities, 'video'),
+        [selectedVideoModelOption],
     )
     const analysisCapabilityFields = useMemo(
         () => extractCapabilityFields(selectedAnalysisModelOption?.capabilities, 'llm'),
@@ -274,10 +250,6 @@ export function SettingsModal({
         () => userModels.image.find((model) => model.value === locationModel) || null,
         [userModels.image, locationModel],
     )
-    const selectedStoryboardModelOption = useMemo(
-        () => userModels.image.find((model) => model.value === imageModel) || null,
-        [userModels.image, imageModel],
-    )
     const selectedEditModelOption = useMemo(
         () => userModels.image.find((model) => model.value === editModel) || null,
         [userModels.image, editModel],
@@ -290,21 +262,14 @@ export function SettingsModal({
         () => extractCapabilityFields(selectedLocationModelOption?.capabilities, 'image'),
         [selectedLocationModelOption],
     )
-    const storyboardCapabilityFields = useMemo(
-        () => extractCapabilityFields(selectedStoryboardModelOption?.capabilities, 'image'),
-        [selectedStoryboardModelOption],
-    )
     const editCapabilityFields = useMemo(
         () => extractCapabilityFields(selectedEditModelOption?.capabilities, 'image'),
         [selectedEditModelOption],
     )
 
-    const selectedSingleShotVideoOverrides = useMemo<Record<string, CapabilityValue>>(() => {
-        return readCapabilitySelectionForModel(capabilityOverrides, effectiveSingleShotVideoModel)
-    }, [capabilityOverrides, effectiveSingleShotVideoModel])
-    const selectedSequenceVideoOverrides = useMemo<Record<string, CapabilityValue>>(() => {
-        return readCapabilitySelectionForModel(capabilityOverrides, sequenceVideoModel)
-    }, [capabilityOverrides, sequenceVideoModel])
+    const selectedVideoOverrides = useMemo<Record<string, CapabilityValue>>(() => {
+        return readCapabilitySelectionForModel(capabilityOverrides, videoModel)
+    }, [capabilityOverrides, videoModel])
     const selectedAnalysisOverrides = useMemo<Record<string, CapabilityValue>>(() => {
         return readCapabilitySelectionForModel(capabilityOverrides, analysisModel)
     }, [capabilityOverrides, analysisModel])
@@ -317,9 +282,6 @@ export function SettingsModal({
     const selectedLocationOverrides = useMemo<Record<string, CapabilityValue>>(() => {
         return readCapabilitySelectionForModel(capabilityOverrides, locationModel)
     }, [capabilityOverrides, locationModel])
-    const selectedStoryboardOverrides = useMemo<Record<string, CapabilityValue>>(() => {
-        return readCapabilitySelectionForModel(capabilityOverrides, imageModel)
-    }, [capabilityOverrides, imageModel])
     const selectedEditOverrides = useMemo<Record<string, CapabilityValue>>(() => {
         return readCapabilitySelectionForModel(capabilityOverrides, editModel)
     }, [capabilityOverrides, editModel])
@@ -330,10 +292,8 @@ export function SettingsModal({
             { modelKey: analysisModel, fields: analysisCapabilityFields },
             { modelKey: characterModel, fields: characterCapabilityFields },
             { modelKey: locationModel, fields: locationCapabilityFields },
-            { modelKey: imageModel, fields: storyboardCapabilityFields },
             { modelKey: editModel, fields: editCapabilityFields },
-            { modelKey: effectiveSingleShotVideoModel, fields: singleShotVideoCapabilityFields },
-            { modelKey: sequenceVideoModel, fields: sequenceVideoCapabilityFields },
+            { modelKey: videoModel, fields: videoCapabilityFields },
             { modelKey: musicModel, fields: musicCapabilityFields },
         ]
         const defaultsSignature = JSON.stringify({
@@ -364,14 +324,10 @@ export function SettingsModal({
         characterCapabilityFields,
         locationModel,
         locationCapabilityFields,
-        imageModel,
-        storyboardCapabilityFields,
         editModel,
         editCapabilityFields,
-        effectiveSingleShotVideoModel,
-        singleShotVideoCapabilityFields,
-        sequenceVideoModel,
-        sequenceVideoCapabilityFields,
+        videoModel,
+        videoCapabilityFields,
         musicModel,
         musicCapabilityFields,
     ])
@@ -504,6 +460,7 @@ export function SettingsModal({
                                 <label className="text-sm font-medium text-[var(--glass-text-secondary)]">{t('aspectRatio')}</label>
                                 <RatioSelector
                                     value={videoRatio}
+                                    emptyLabel={t('notSet')}
                                     onChange={(value) => { handleChange(onVideoRatioChange)(value) }}
                                     options={VIDEO_RATIOS}
                                 />
@@ -561,20 +518,6 @@ export function SettingsModal({
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-[var(--glass-text-secondary)]">{t('storyboardModel')}</label>
-                                <ModelCapabilityDropdown
-                                    models={userModels.image}
-                                    value={imageModel}
-                                    onModelChange={(v) => handleModelChange(v, userModels.image, 'image', { storyboardModel: v }, onImageModelChange)}
-                                    capabilityFields={storyboardCapabilityFields}
-                                    capabilityOverrides={selectedStoryboardOverrides}
-                                    onCapabilityChange={(field, rawValue, sample) => {
-                                        applyCapabilityOverride(imageModel, field, rawValue, sample)
-                                    }}
-                                />
-                            </div>
-
-                            <div className="space-y-2">
                                 <label className="text-sm font-medium text-[var(--glass-text-secondary)]">{t('editModel')}</label>
                                 <ModelCapabilityDropdown
                                     models={userModels.image}
@@ -589,34 +532,15 @@ export function SettingsModal({
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-[var(--glass-text-secondary)]">{t('singleShotVideoModel')}</label>
+                                <label className="text-sm font-medium text-[var(--glass-text-secondary)]">{t('videoModel')}</label>
                                 <ModelCapabilityDropdown
                                     models={normalVideoModels}
-                                    value={effectiveSingleShotVideoModel}
-                                    onModelChange={(v) => {
-                                        handleModelChange(v, normalVideoModels, 'video', { singleShotVideoModel: v, videoModel: v }, (value) => {
-                                            onSingleShotVideoModelChange?.(value)
-                                            onVideoModelChange?.(value)
-                                        })
-                                    }}
-                                    capabilityFields={singleShotVideoCapabilityFields}
-                                    capabilityOverrides={selectedSingleShotVideoOverrides}
+                                    value={videoModel}
+                                    onModelChange={(v) => handleModelChange(v, normalVideoModels, 'video', { videoModel: v }, onVideoModelChange)}
+                                    capabilityFields={videoCapabilityFields}
+                                    capabilityOverrides={selectedVideoOverrides}
                                     onCapabilityChange={(field, rawValue, sample) => {
-                                        applyCapabilityOverride(effectiveSingleShotVideoModel, field, rawValue, sample)
-                                    }}
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-[var(--glass-text-secondary)]">{t('sequenceVideoModel')}</label>
-                                <ModelCapabilityDropdown
-                                    models={normalVideoModels}
-                                    value={sequenceVideoModel}
-                                    onModelChange={(v) => handleModelChange(v, normalVideoModels, 'video', { sequenceVideoModel: v }, onSequenceVideoModelChange)}
-                                    capabilityFields={sequenceVideoCapabilityFields}
-                                    capabilityOverrides={selectedSequenceVideoOverrides}
-                                    onCapabilityChange={(field, rawValue, sample) => {
-                                        applyCapabilityOverride(sequenceVideoModel, field, rawValue, sample)
+                                        applyCapabilityOverride(videoModel, field, rawValue, sample)
                                     }}
                                 />
                             </div>
@@ -635,6 +559,7 @@ export function SettingsModal({
                                     placeholder={t('pleaseSelect')}
                                 />
                             </div>
+
                         </div>
                     </div>
 

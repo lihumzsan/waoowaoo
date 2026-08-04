@@ -3,6 +3,7 @@ import type { TaskBillingInfo, TaskType } from '@/lib/task/types'
 import { TASK_STATUS } from '@/lib/task/types'
 import { Prisma } from '@prisma/client'
 import { prisma } from './prisma'
+import { createTaskExecutionFingerprint } from '@/lib/task/execution-identity'
 
 export async function createTestUser() {
   const suffix = randomUUID().slice(0, 8)
@@ -48,9 +49,23 @@ export async function createQueuedTask(params: {
   type: TaskType
   targetType: string
   targetId: string
+  operationId?: string | null
+  operationRequestId?: string | null
+  operationSource?: string | null
   billingInfo?: TaskBillingInfo | null
   payload?: Record<string, unknown> | null
 }) {
+  const executionInput = {
+    userId: params.userId,
+    projectId: params.projectId,
+    type: params.type,
+    targetType: params.targetType,
+    targetId: params.targetId,
+    payload: params.payload ?? null,
+    operationId: params.operationId ?? null,
+    operationSource: params.operationSource ?? null,
+    operationRequestId: params.operationRequestId ?? null,
+  }
   return await prisma.task.create({
     data: {
       id: params.id,
@@ -59,9 +74,13 @@ export async function createQueuedTask(params: {
       type: params.type,
       targetType: params.targetType,
       targetId: params.targetId,
+      operationId: params.operationId ?? null,
+      operationRequestId: params.operationRequestId ?? null,
+      operationSource: params.operationSource ?? null,
       status: TASK_STATUS.QUEUED,
       billingInfo: (params.billingInfo ?? Prisma.JsonNull) as unknown as Prisma.InputJsonValue,
       payload: (params.payload ?? Prisma.JsonNull) as unknown as Prisma.InputJsonValue,
+      executionFingerprint: createTaskExecutionFingerprint(executionInput),
       queuedAt: new Date(),
     },
   })

@@ -42,6 +42,7 @@ export function MediaImage({
           src={src}
           alt={alt}
           fill
+          unoptimized
           sizes={sizes || '100vw'}
           priority={priority}
           className={className}
@@ -58,6 +59,7 @@ export function MediaImage({
         alt={alt}
         width={width}
         height={height}
+        unoptimized
         sizes={sizes}
         priority={priority}
         className={className}

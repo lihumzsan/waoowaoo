@@ -1,7 +1,9 @@
-import { createScopedLogger, logError as _ulogError } from '@/lib/logging/core'
+import { createScopedLogger } from '@/lib/logging/core'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import type { AiProviderVideoExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 import { buildFalQueueUrl } from '@/lib/ai-providers/fal/base-url'
+import { fetchWithRetry, RETRY_POLICY } from '@/lib/retry'
+import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
 import {
   FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID,
@@ -100,6 +102,7 @@ type FalSeedance2ImageVideoPayload = {
 type FalSeedance2ReferenceVideoPayload = {
   prompt: string
   image_urls: string[]
+  audio_urls?: string[]
   resolution?: string
   duration?: string
   aspect_ratio?: string
@@ -239,11 +242,29 @@ function buildSeedance2Payload(input: {
     ...(inputImageUrl ? [inputImageUrl] : []),
     ...referenceImages,
   ]))
+  const referenceAudios = Array.isArray(input.options.referenceAudios)
+    ? Array.from(new Set(input.options.referenceAudios.filter(
+      (url): url is string => typeof url === 'string' && url.trim().length > 0,
+    )))
+    : []
   assertSeedance2VideoOptions(input.options, { fast: input.fast, textOnly: uniqueReferences.length === 0 })
+
+  if (referenceAudios.length > 3) {
+    throw new Error('FAL_VIDEO_OPTION_VALUE_UNSUPPORTED: referenceAudios>3')
+  }
+  if (uniqueReferences.length > 9) {
+    throw new Error('FAL_VIDEO_OPTION_VALUE_UNSUPPORTED: referenceImages>9')
+  }
+  if (referenceAudios.length > 0 && uniqueReferences.length === 0) {
+    throw new Error('FAL_VIDEO_REFERENCE_AUDIO_REQUIRES_IMAGE')
+  }
 
   if (input.options.lastFrameImageUrl) {
     if (!inputImageUrl) {
       throw new Error('FAL_VIDEO_OPTION_VALUE_UNSUPPORTED: lastFrameImageUrl_without_imageUrl')
+    }
+    if (referenceAudios.length > 0) {
+      throw new Error('FAL_VIDEO_OPTION_UNSUPPORTED: referenceAudios_with_lastFrameImageUrl')
     }
     return {
       endpoint: `${endpointPrefix}/image-to-video`,
@@ -256,12 +277,13 @@ function buildSeedance2Payload(input: {
     }
   }
 
-  if (uniqueReferences.length > 1) {
+  if (uniqueReferences.length > 1 || referenceAudios.length > 0) {
     return {
       endpoint: `${endpointPrefix}/reference-to-video`,
       payload: {
         prompt,
-        image_urls: uniqueReferences.slice(0, 9),
+        image_urls: uniqueReferences,
+        ...(referenceAudios.length > 0 ? { audio_urls: referenceAudios } : {}),
         ...sharedOptions,
       },
     }
@@ -301,10 +323,10 @@ function assertAllowedFalVideoOptions(options: FalVideoOptions) {
     'resolution',
     'aspectRatio',
     'prompt',
-    'fps',
     'generateAudio',
     'lastFrameImageUrl',
     'referenceImages',
+    'referenceAudios',
   ])
   for (const [key, value] of Object.entries(options)) {
     if (value === undefined) continue
@@ -372,6 +394,15 @@ export async function executeFalVideoGeneration(input: AiProviderVideoExecutionC
   const resolution = options.resolution
   const aspectRatio = options.aspectRatio
   const modelId = requireSelectedModelId(input.selection, 'fal:video')
+
+  if (
+    Array.isArray(options.referenceAudios)
+    && options.referenceAudios.length > 0
+    && modelId !== FAL_SEEDANCE_2_VIDEO_MODEL_ID
+    && modelId !== FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID
+  ) {
+    throw new Error(`FAL_VIDEO_OPTION_UNSUPPORTED: referenceAudios for ${modelId}`)
+  }
 
   let endpoint = FAL_VIDEO_ENDPOINTS[modelId]
   if (!endpoint) {
@@ -492,38 +523,30 @@ export async function executeFalVideoGeneration(input: AiProviderVideoExecutionC
   const logger = createScopedLogger({ module: 'worker.fal-video', action: 'fal_video_generate' })
   logger.info({ message: 'FAL video generation request', details: { modelId, endpoint } })
 
-  try {
-    const submitResponse = await fetch(buildFalQueueUrl(endpoint), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Key ${apiKey}`,
-      },
-      body: JSON.stringify(payload),
-      cache: 'no-store',
-    })
+  const submitResponse = await fetchWithRetry(buildFalQueueUrl(endpoint), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Key ${apiKey}`,
+    },
+    body: JSON.stringify(payload),
+    policy: RETRY_POLICY.providerSubmit,
+    cache: 'no-store',
+    scope: `fal:video:submit:${endpoint}`,
+    fetchFn: fetchWithProviderProxy,
+  })
 
-    if (!submitResponse.ok) {
-      const errorText = await submitResponse.text()
-      throw new Error(`FAL 提交失败 (${submitResponse.status}): ${errorText}`)
-    }
-
-    const submitData = (await submitResponse.json()) as { request_id?: unknown }
-    const requestId = typeof submitData.request_id === 'string' ? submitData.request_id : ''
-    if (!requestId) {
-      throw new Error('FAL 未返回 request_id')
-    }
-    logger.info({ message: 'FAL video task submitted', details: { requestId } })
-    return {
-      success: true,
-      async: true,
-      requestId,
-      endpoint,
-      externalId: `FAL:VIDEO:${endpoint}:${requestId}`,
-    }
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : '未知错误'
-    _ulogError('[FAL Video] 提交失败:', message)
-    throw new Error(`FAL 视频任务提交失败: ${message}`)
+  const submitData = (await submitResponse.json()) as { request_id?: unknown }
+  const requestId = typeof submitData.request_id === 'string' ? submitData.request_id : ''
+  if (!requestId) {
+    throw new Error('FAL 未返回 request_id')
+  }
+  logger.info({ message: 'FAL video task submitted', details: { requestId } })
+  return {
+    success: true,
+    async: true,
+    requestId,
+    endpoint,
+    externalId: `FAL:VIDEO:${endpoint}:${requestId}`,
   }
 }

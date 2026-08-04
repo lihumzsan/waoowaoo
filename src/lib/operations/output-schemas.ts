@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isTaskType, type TaskType } from '@/lib/task/types'
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
@@ -9,8 +10,8 @@ export const taskSubmitOperationOutputSchemaBase = z.object({
   success: z.boolean(),
   async: z.boolean(),
   taskId: z.string().min(1),
+  taskType: z.custom<TaskType>(isTaskType, { message: 'TASK_SUBMIT_OUTPUT_TASK_TYPE_INVALID' }),
   status: z.string().min(1),
-  runId: z.string().nullable(),
   deduped: z.boolean(),
 }).passthrough()
 
@@ -37,7 +38,6 @@ export const taskBatchSubmitOperationOutputSchemaBase = z.object({
     refId: z.string().min(1),
     taskId: z.string().min(1),
   }).passthrough()).optional(),
-  mutationBatchId: z.string().min(1).optional(),
 }).passthrough()
 
 export function refineTaskBatchSubmitOperationOutputSchema<
@@ -53,30 +53,3 @@ export function refineTaskBatchSubmitOperationOutputSchema<
 }
 
 export const taskBatchSubmitOperationOutputSchema = refineTaskBatchSubmitOperationOutputSchema(taskBatchSubmitOperationOutputSchemaBase)
-
-export const storyboardMutationOperationOutputSchemaBase = z.object({
-  success: z.boolean(),
-  mutationBatchId: z.string().min(1).optional(),
-  noop: z.boolean().optional(),
-}).passthrough()
-
-export function refineStoryboardMutationOperationOutputSchema<
-  TSchema extends z.ZodTypeAny,
->(schema: TSchema) {
-  return schema.refine((value) => {
-    const record = asRecord(value)
-    return record?.success === true
-  }, {
-    message: 'STORYBOARD_MUTATION_OUTPUT_EXPECTS_SUCCESS_TRUE',
-    path: ['success'],
-  }).refine((value) => {
-    const record = asRecord(value)
-    if (!record) return false
-    return record.noop === true || typeof record.mutationBatchId === 'string'
-  }, {
-    message: 'STORYBOARD_MUTATION_OUTPUT_MISSING_MUTATION_BATCH_ID (expected mutationBatchId unless noop=true)',
-    path: ['mutationBatchId'],
-  })
-}
-
-export const storyboardMutationOperationOutputSchema = refineStoryboardMutationOperationOutputSchema(storyboardMutationOperationOutputSchemaBase)

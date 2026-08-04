@@ -1,51 +1,21 @@
-/**
- * Product credit pricing.
- *
- * Billing no longer mirrors provider cost tables. Provider/model identifiers are
- * retained for audit metadata, while charged credits come from this product
- * pricing catalog.
- */
+import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
+import {
+  resolveBuiltinPricing,
+  type PricingResolution,
+} from '@/lib/ai-registry/pricing-resolution'
+import type { CapabilityValue } from '@/lib/ai-registry/types'
+import { resolveImageSizeFromGenerationOptions } from '@/lib/image-generation/runtime-options'
+import { BillingOperationError } from './errors'
 
-export const USD_TO_CNY = 7.2
-
-export const MARKUP = {
-  global: 1.0,
-  text: 1.0,
-  image: 1.0,
-  video: 1.0,
-  music: 1.0,
-} as const
-
-export type MarkupCategory = keyof typeof MARKUP
-export type ApiType = 'text' | 'image' | 'video' | 'music'
-export type UsageUnit = 'token' | 'image' | 'video' | 'second' | 'call'
-
-export interface LlmCustomPricing {
-  inputPerMillion?: number
-  outputPerMillion?: number
-}
-
-export interface MediaCustomPricing {
-  basePrice?: number
-  optionPrices?: Record<string, Record<string, number>>
-}
-
-export interface ModelCustomPricing {
-  llm?: LlmCustomPricing
-  image?: MediaCustomPricing
-  video?: MediaCustomPricing
-  music?: MediaCustomPricing
-}
-
-export const PRODUCT_CREDIT_PRICING = {
-  textPerThousandTokens: 0.01,
-  imagePerUnit: 1,
-  videoPerSecond: 1,
-  videoMinimumPerClip: 5,
-  musicPerSecond: 0.2,
-} as const
+export type ApiType = 'text' | 'image' | 'video' | 'music' | 'voice'
+export type UsageUnit = 'token' | 'image' | 'video' | 'second' | 'call' | 'character'
 
 type BillingMetadata = { [field: string]: unknown }
+type TextCacheCostMetadata = {
+  cachedInputTokens?: number
+}
+
+const GOOGLE_CONTEXT_CACHE_INPUT_PRICE_MULTIPLIER = 0.1
 
 function normalizePositiveInteger(value: number): number {
   if (!Number.isFinite(value)) return 0
@@ -79,54 +49,230 @@ function roundCredits(value: number): number {
   return Math.round(Math.max(0, value) * 1_000_000) / 1_000_000
 }
 
+function toCapabilitySelections(metadata?: BillingMetadata): Record<string, CapabilityValue> {
+  const selections: Record<string, CapabilityValue> = {}
+  if (!metadata) return selections
+  for (const [field, value] of Object.entries(metadata)) {
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      selections[field] = value
+    }
+  }
+  return selections
+}
+
+function describePricingResolution(resolution: PricingResolution): string {
+  switch (resolution.status) {
+    case 'not_configured':
+      return 'model pricing is not configured'
+    case 'ambiguous_model':
+      return 'model pricing is ambiguous; use provider::modelId'
+    case 'missing_capability_match':
+      return 'model pricing does not match selected capabilities'
+    case 'resolved':
+      return 'model pricing resolved'
+  }
+}
+
+function throwPricingResolutionError(
+  apiType: ApiType,
+  model: string,
+  resolution: Exclude<PricingResolution, { status: 'resolved' }>,
+): never {
+  if (resolution.status === 'ambiguous_model') {
+    throw new BillingOperationError(
+      'BILLING_PRICING_MODEL_AMBIGUOUS',
+      `BILLING_PRICING_MODEL_AMBIGUOUS: ${apiType} ${model}`,
+      {
+        apiType,
+        model,
+        candidates: resolution.candidates.map((candidate) => `${candidate.provider}::${candidate.modelId}`),
+      },
+    )
+  }
+
+  if (resolution.status === 'missing_capability_match') {
+    throw new BillingOperationError(
+      'BILLING_CAPABILITY_PRICE_NOT_FOUND',
+      `BILLING_CAPABILITY_PRICE_NOT_FOUND: ${apiType} ${model}`,
+      {
+        apiType,
+        model,
+        selections: resolution.selections,
+        provider: resolution.entry.provider,
+        modelId: resolution.entry.modelId,
+      },
+    )
+  }
+
+  throw new BillingOperationError(
+    'BILLING_UNKNOWN_MODEL',
+    `BILLING_UNKNOWN_MODEL: ${apiType} ${model}`,
+    {
+      apiType,
+      model,
+      reason: describePricingResolution(resolution),
+    },
+  )
+}
+
+/**
+ * Resolve the retail price of a model.
+ *
+ * Billing only ever reads the retail face — the cost face exists for margin
+ * reporting and never reaches a user-facing amount.
+ */
+function resolveCatalogPricing(input: {
+  apiType: ApiType
+  model: string
+  selections?: Record<string, CapabilityValue>
+}): Extract<PricingResolution, { status: 'resolved' }> {
+  ensureAiCatalogsRegistered()
+  const resolution = resolveBuiltinPricing({
+    apiType: input.apiType,
+    model: input.model,
+    face: 'retail',
+    selections: input.selections,
+  })
+  if (resolution.status === 'resolved') return resolution
+  return throwPricingResolutionError(input.apiType, input.model, resolution)
+}
+
 export function calcText(
-  _model: string,
+  model: string,
   inputTokens: number,
   outputTokens: number,
-  _customPricing?: ModelCustomPricing | null,
 ): number {
-  const totalTokens = normalizePositiveInteger(inputTokens) + normalizePositiveInteger(outputTokens)
-  return roundCredits((totalTokens / 1000) * PRODUCT_CREDIT_PRICING.textPerThousandTokens)
+  return calcTextWithCache(model, inputTokens, outputTokens)
+}
+
+export function calcTextWithCache(
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+  metadata?: TextCacheCostMetadata,
+): number {
+  const normalizedInputTokens = normalizePositiveInteger(inputTokens)
+  const normalizedOutputTokens = normalizePositiveInteger(outputTokens)
+  if (normalizedInputTokens === 0 && normalizedOutputTokens === 0) return 0
+
+  let cost = 0
+  if (normalizedInputTokens > 0) {
+    const inputPricing = resolveCatalogPricing({
+      apiType: 'text',
+      model,
+      selections: { tokenType: 'input' },
+    })
+    const cachedInputTokens = Math.min(
+      normalizePositiveInteger(metadata?.cachedInputTokens ?? 0),
+      normalizedInputTokens,
+    )
+    const useGoogleContextCachePricing = inputPricing.entry.provider === 'google' && cachedInputTokens > 0
+    const fullPriceInputTokens = useGoogleContextCachePricing
+      ? normalizedInputTokens - cachedInputTokens
+      : normalizedInputTokens
+    cost += (fullPriceInputTokens / 1_000_000) * inputPricing.amount
+    if (useGoogleContextCachePricing) {
+      cost += (
+        cachedInputTokens
+        / 1_000_000
+        * inputPricing.amount
+        * GOOGLE_CONTEXT_CACHE_INPUT_PRICE_MULTIPLIER
+      )
+    }
+  }
+
+  if (normalizedOutputTokens > 0) {
+    const outputPricing = resolveCatalogPricing({
+      apiType: 'text',
+      model,
+      selections: { tokenType: 'output' },
+    })
+    cost += (normalizedOutputTokens / 1_000_000) * outputPricing.amount
+  }
+
+  return roundCredits(cost)
 }
 
 export function calcImage(
-  _model: string,
+  model: string,
   quantity = 1,
-  _metadata?: BillingMetadata,
-  _customPricing?: ModelCustomPricing | null,
+  metadata?: BillingMetadata,
 ): number {
   const units = Math.max(1, normalizePositiveInteger(quantity))
-  return roundCredits(units * PRODUCT_CREDIT_PRICING.imagePerUnit)
+  const selections = toCapabilitySelections(metadata)
+  const imageSize = resolveImageSizeFromGenerationOptions(metadata)
+  if (imageSize) selections.imageSize = imageSize
+  if (!selections.quality) selections.quality = 'high'
+
+  const pricing = resolveCatalogPricing({
+    apiType: 'image',
+    model,
+    selections,
+  })
+  return roundCredits(units * pricing.amount)
 }
 
 export function calcVideo(
-  _model: string,
-  _resolution = '720p',
+  model: string,
+  resolution = '720p',
   quantity = 1,
   metadata?: BillingMetadata,
-  _customPricing?: ModelCustomPricing | null,
 ): number {
   const units = Math.max(1, normalizePositiveInteger(quantity))
   const duration = resolveDurationSeconds(metadata)
-  const unitCost = duration === null
-    ? PRODUCT_CREDIT_PRICING.videoMinimumPerClip
-    : Math.max(PRODUCT_CREDIT_PRICING.videoMinimumPerClip, duration * PRODUCT_CREDIT_PRICING.videoPerSecond)
+  const selections = {
+    ...toCapabilitySelections(metadata),
+    resolution,
+    ...(duration !== null ? { duration } : {}),
+  }
+
+  const pricing = resolveCatalogPricing({
+    apiType: 'video',
+    model,
+    selections,
+  })
+  if (pricing.mode === 'capability' && !pricing.unit) {
+    throw new BillingOperationError(
+      'BILLING_CAPABILITY_PRICE_NOT_FOUND',
+      `BILLING_CAPABILITY_PRICE_NOT_FOUND: video ${model} missing pricing unit`,
+      { apiType: 'video', model, selections },
+    )
+  }
+
+  const pricingUnit = pricing.mode === 'flat' ? 'per_call' : pricing.unit
+  if (pricingUnit === 'per_second' && duration === null) {
+    throw new BillingOperationError(
+      'BILLING_CAPABILITY_PRICE_NOT_FOUND',
+      `BILLING_CAPABILITY_PRICE_NOT_FOUND: video ${model} requires duration`,
+      { apiType: 'video', model, selections },
+    )
+  }
+
+  const unitCost = pricing.mode === 'flat' || pricingUnit === 'per_call'
+    ? pricing.amount
+    : pricing.amount * normalizePositiveNumber(duration || 0)
   return roundCredits(units * unitCost)
 }
 
-export function calcVideoByTokens(
+export function calcMusic(
   model: string,
-  _totalTokens: number,
+  quantity = 1,
   metadata?: BillingMetadata,
 ): number {
-  return calcVideo(model, typeof metadata?.resolution === 'string' ? metadata.resolution : '720p', 1, metadata)
+  const units = Math.max(1, normalizePositiveInteger(quantity))
+  const pricing = resolveCatalogPricing({
+    apiType: 'music',
+    model,
+    selections: toCapabilitySelections(metadata),
+  })
+  return roundCredits(units * pricing.amount)
 }
 
-export function calcMusic(
-  _model: string,
-  durationSeconds: number,
-  _metadata?: BillingMetadata,
-  _customPricing?: ModelCustomPricing | null,
-): number {
-  return roundCredits(normalizePositiveNumber(durationSeconds) * PRODUCT_CREDIT_PRICING.musicPerSecond)
+export function calcVoice(model: string, characters: number): number {
+  const units = Math.max(1, normalizePositiveInteger(characters))
+  const pricing = resolveCatalogPricing({
+    apiType: 'voice',
+    model,
+  })
+  return roundCredits(units * pricing.amount)
 }

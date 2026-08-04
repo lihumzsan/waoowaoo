@@ -8,7 +8,8 @@ import { useEffect, useRef, useState } from 'react'
 import { AppIcon } from '@/components/ui/icons'
 
 interface RatioSelectorProps {
-  value: string
+  value: string | null
+  emptyLabel: string
   onChange: (value: string) => void
   options: Array<{ value: string; label: string }>
 }
@@ -30,7 +31,7 @@ function RatioShape({ ratio, selected, size = 26 }: { ratio: string; selected: b
   )
 }
 
-export function RatioSelector({ value, onChange, options }: RatioSelectorProps) {
+export function RatioSelector({ value, emptyLabel, onChange, options }: RatioSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -54,9 +55,13 @@ export function RatioSelector({ value, onChange, options }: RatioSelectorProps) 
         className="glass-input-base h-11 px-3 flex items-center justify-between gap-2 cursor-pointer transition-colors"
       >
         <div className="flex items-center gap-2.5">
-          <RatioShape ratio={value} size={18} selected />
+          {value ? (
+            <RatioShape ratio={value} size={18} selected />
+          ) : (
+            <span className="h-[18px] w-[18px] rounded-md border-2 border-dashed border-[var(--glass-stroke-strong)]" />
+          )}
           <span className="text-sm text-[var(--glass-text-primary)] font-medium">
-            {selectedOption?.label || value}
+            {selectedOption?.label || value || emptyLabel}
           </span>
         </div>
         <AppIcon name="chevronDown" className={`w-4 h-4 text-[var(--glass-text-tertiary)] transition-transform ${isOpen ? 'rotate-180' : ''}`} />

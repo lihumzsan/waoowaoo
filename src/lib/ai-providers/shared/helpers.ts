@@ -1,3 +1,5 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
+
 export type UnknownObject = { [key: string]: unknown }
 
 export function asUnknownObject(value: unknown): UnknownObject | null {
@@ -8,6 +10,6 @@ export function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
   const record = asUnknownObject(error)
   if (record && typeof record.message === 'string') return record.message
-  return String(error)
+  return describeUnknownError(error)
 }
 

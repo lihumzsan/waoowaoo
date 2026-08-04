@@ -19,5 +19,6 @@ export function isUnifiedModelType(value: unknown): value is UnifiedModelType {
     || value === 'image'
     || value === 'video'
     || value === 'music'
+    || value === 'voice'
   )
 }

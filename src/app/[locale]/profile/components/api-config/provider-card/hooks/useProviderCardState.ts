@@ -16,21 +16,17 @@ import type {
 } from '../types'
 import { VERIFIABLE_PROVIDER_KEYS } from '../types'
 import type { CustomModel } from '../../types'
-import { CODEX_PROVIDER_KEY } from '@/lib/ai-registry/codex-defaults'
 import { apiFetch } from '@/lib/api-fetch'
+import { useToast } from '@/contexts/ToastContext'
 
 type KeyTestStepStatus = 'pass' | 'fail' | 'skip'
 interface KeyTestStep {
   name: string
   status: KeyTestStepStatus
-  message: string
+  messageKey: `connectionTest.${string}`
   model?: string
-  detail?: string
 }
 type KeyTestStatus = 'idle' | 'testing' | 'passed' | 'failed'
-
-
-
 interface UseProviderCardStateParams {
   provider: ProviderCardProps['provider']
   models: ProviderCardProps['models']
@@ -46,148 +42,43 @@ interface UseProviderCardStateParams {
 const EMPTY_MODEL_FORM: ModelFormState = {
   name: '',
   modelId: '',
-  enableCustomPricing: false,
-  priceInput: '',
-  priceOutput: '',
-  basePrice: '',
-  optionPricesJson: '',
 }
-
-/**
- * Provider keys that require user-defined pricing when adding custom models
- * (they are not in the built-in pricing catalog).
- */
-type AddModelCustomPricing = {
-  llm?: { inputPerMillion?: number; outputPerMillion?: number }
-  image?: { basePrice?: number; optionPrices?: Record<string, Record<string, number>> }
-  video?: { basePrice?: number; optionPrices?: Record<string, Record<string, number>> }
-  music?: { basePrice?: number; optionPrices?: Record<string, Record<string, number>> }
-}
-
-type BuildCustomPricingResult =
-  | { ok: true; customPricing?: AddModelCustomPricing }
-  | { ok: false; reason: 'invalid' }
 
 interface ProviderConnectionPayload {
-  apiType: string
-  apiKey: string
-  baseUrl?: string
-  llmModel?: string
+  providerId: string; apiType: string
+  apiKey?: string; baseUrl?: string; llmModel?: string
 }
 
 function pickConfiguredLlmModel(params: {
   models: CustomModel[]
+  defaultAssistantModel?: string
   defaultAnalysisModel?: string
 }): string | undefined {
   const enabledLlmModels = params.models.filter((model) => model.type === 'llm' && model.enabled)
   if (enabledLlmModels.length === 0) return undefined
-  const preferredModel = enabledLlmModels.find((model) => model.modelKey === params.defaultAnalysisModel)
+  const preferredModel = enabledLlmModels.find((model) => model.modelKey === params.defaultAssistantModel)
+    ?? enabledLlmModels.find((model) => model.modelKey === params.defaultAnalysisModel)
   return (preferredModel ?? enabledLlmModels[0])?.modelId
 }
 
 export function buildProviderConnectionPayload(params: {
+  providerId: string
   providerKey: string
-  apiKey: string
+  apiKey?: string
   baseUrl?: string
   llmModel?: string
 }): ProviderConnectionPayload {
-  const apiKey = params.apiKey.trim()
+  const apiKey = params.apiKey?.trim()
   const baseUrl = params.baseUrl?.trim()
   const llmModel = params.llmModel?.trim()
 
   return {
+    providerId: params.providerId,
     apiType: params.providerKey,
-    apiKey,
-    ...(params.providerKey === CODEX_PROVIDER_KEY && baseUrl ? { baseUrl } : {}),
+    ...(apiKey ? { apiKey } : {}),
+    ...(baseUrl ? { baseUrl } : {}),
     ...(llmModel ? { llmModel } : {}),
   }
-}
-
-export function buildCustomPricingFromModelForm(
-  modelType: ProviderCardModelType,
-  form: ModelFormState,
-  options: { needsCustomPricing: boolean },
-): BuildCustomPricingResult {
-  if (!options.needsCustomPricing || form.enableCustomPricing !== true) {
-    return { ok: true }
-  }
-
-  if (modelType === 'llm') {
-    const inputVal = parseFloat(form.priceInput || '')
-    const outputVal = parseFloat(form.priceOutput || '')
-    if (!Number.isFinite(inputVal) || inputVal < 0 || !Number.isFinite(outputVal) || outputVal < 0) {
-      return { ok: false, reason: 'invalid' }
-    }
-    return {
-      ok: true,
-      customPricing: {
-        llm: {
-          inputPerMillion: inputVal,
-          outputPerMillion: outputVal,
-        },
-      },
-    }
-  }
-
-  if (modelType === 'image' || modelType === 'video') {
-    const basePriceRaw = parseFloat(form.basePrice || '')
-    const hasBasePrice = Number.isFinite(basePriceRaw) && basePriceRaw >= 0
-    if (form.basePrice && !hasBasePrice) {
-      return { ok: false, reason: 'invalid' }
-    }
-
-    let optionPrices: Record<string, Record<string, number>> | undefined
-    if (form.optionPricesJson && form.optionPricesJson.trim().length > 0) {
-      try {
-        const parsed = JSON.parse(form.optionPricesJson) as unknown
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-          throw new Error('invalid option prices object')
-        }
-        optionPrices = {}
-        for (const [field, rawOptionMap] of Object.entries(parsed as Record<string, unknown>)) {
-          if (!rawOptionMap || typeof rawOptionMap !== 'object' || Array.isArray(rawOptionMap)) continue
-          const normalizedOptions: Record<string, number> = {}
-          for (const [optionKey, rawAmount] of Object.entries(rawOptionMap as Record<string, unknown>)) {
-            if (typeof rawAmount !== 'number' || !Number.isFinite(rawAmount) || rawAmount < 0) {
-              throw new Error('invalid option price amount')
-            }
-            normalizedOptions[optionKey] = rawAmount
-          }
-          if (Object.keys(normalizedOptions).length > 0) {
-            optionPrices[field] = normalizedOptions
-          }
-        }
-        if (Object.keys(optionPrices).length === 0) {
-          optionPrices = undefined
-        }
-      } catch {
-        return { ok: false, reason: 'invalid' }
-      }
-    }
-
-    if (!hasBasePrice && !optionPrices) {
-      return { ok: false, reason: 'invalid' }
-    }
-
-    return {
-      ok: true,
-      customPricing: modelType === 'image'
-        ? {
-          image: {
-            ...(hasBasePrice ? { basePrice: basePriceRaw } : {}),
-            ...(optionPrices ? { optionPrices } : {}),
-          },
-        }
-        : {
-          video: {
-            ...(hasBasePrice ? { basePrice: basePriceRaw } : {}),
-            ...(optionPrices ? { optionPrices } : {}),
-          },
-        },
-    }
-  }
-
-  return { ok: true }
 }
 
 function toProviderCardModelType(type: CustomModel['type']): ProviderCardModelType | null {
@@ -250,7 +141,6 @@ export interface UseProviderCardStateResult {
   handleSaveModel: (originalModelKey: string) => Promise<void>
   handleAddModel: (type: ProviderCardModelType) => Promise<void>
   handleCancelAdd: () => void
-  needsCustomPricing: boolean
   keyTestStatus: KeyTestStatus
   keyTestSteps: KeyTestStep[]
   handleForceSaveKey: () => void
@@ -270,6 +160,7 @@ export function useProviderCardState({
   onAddModel,
   t,
 }: UseProviderCardStateParams): UseProviderCardStateResult {
+  const { showToast } = useToast()
   const [isEditing, setIsEditing] = useState(false)
   const [isEditingUrl, setIsEditingUrl] = useState(false)
   const [showKey, setShowKey] = useState(false)
@@ -299,14 +190,14 @@ export function useProviderCardState({
   const isPresetModel = () => false
 
   const isDefaultModel = (model: CustomModel) => {
-    if (model.type === 'llm' && matchesModelKey(defaultModels.analysisModel, model.provider, model.modelId)) {
-      return true
+    if (model.type === 'llm') {
+      if (matchesModelKey(defaultModels.assistantModel, model.provider, model.modelId)) return true
+      if (matchesModelKey(defaultModels.analysisModel, model.provider, model.modelId)) return true
     }
 
     if (model.type === 'image') {
       if (matchesModelKey(defaultModels.characterModel, model.provider, model.modelId)) return true
       if (matchesModelKey(defaultModels.locationModel, model.provider, model.modelId)) return true
-      if (matchesModelKey(defaultModels.storyboardModel, model.provider, model.modelId)) return true
       if (matchesModelKey(defaultModels.editModel, model.provider, model.modelId)) return true
     }
 
@@ -322,7 +213,7 @@ export function useProviderCardState({
   }
 
   const startEditKey = () => {
-    setTempKey(provider.apiKey || '')
+    setTempKey('')
     setIsEditing(true)
   }
 
@@ -350,9 +241,11 @@ export function useProviderCardState({
     try {
       const fallbackLlmModel = pickConfiguredLlmModel({
         models,
+        defaultAssistantModel: defaultModels.assistantModel,
         defaultAnalysisModel: defaultModels.analysisModel,
       })
       const payload = buildProviderConnectionPayload({
+        providerId: provider.id,
         providerKey,
         apiKey: tempKey,
         baseUrl: provider.baseUrl,
@@ -376,10 +269,10 @@ export function useProviderCardState({
         setKeyTestStatus('failed')
       }
     } catch {
-      setKeyTestSteps([{ name: 'models', status: 'fail', message: 'Network error' }])
+      setKeyTestSteps([{ name: 'models', status: 'fail', messageKey: 'connectionTest.networkError' }])
       setKeyTestStatus('failed')
     }
-  }, [defaultModels.analysisModel, doSaveKey, models, provider.baseUrl, providerKey, tempKey])
+  }, [defaultModels.analysisModel, defaultModels.assistantModel, doSaveKey, models, provider.baseUrl, provider.id, providerKey, tempKey])
 
   const handleForceSaveKey = useCallback(() => {
     doSaveKey()
@@ -392,11 +285,12 @@ export function useProviderCardState({
     try {
       const fallbackLlmModel = pickConfiguredLlmModel({
         models,
+        defaultAssistantModel: defaultModels.assistantModel,
         defaultAnalysisModel: defaultModels.analysisModel,
       })
       const payload = buildProviderConnectionPayload({
+        providerId: provider.id,
         providerKey,
-        apiKey: provider.apiKey || '',
         baseUrl: provider.baseUrl,
         llmModel: fallbackLlmModel,
       })
@@ -409,10 +303,10 @@ export function useProviderCardState({
       setKeyTestSteps(data.steps || [])
       setKeyTestStatus(data.success ? 'passed' : 'failed')
     } catch {
-      setKeyTestSteps([{ name: 'models', status: 'fail', message: 'Network error' }])
+      setKeyTestSteps([{ name: 'models', status: 'fail', messageKey: 'connectionTest.networkError' }])
       setKeyTestStatus('failed')
     }
-  }, [defaultModels.analysisModel, models, provider.apiKey, provider.baseUrl, providerKey])
+  }, [defaultModels.analysisModel, defaultModels.assistantModel, models, provider.baseUrl, provider.id, providerKey])
 
   const handleDismissTest = useCallback(() => {
     setKeyTestStatus('idle')
@@ -420,7 +314,7 @@ export function useProviderCardState({
   }, [])
 
   const handleCancelEdit = () => {
-    setTempKey(provider.apiKey || '')
+    setTempKey('')
     setIsEditing(false)
     setKeyTestStatus('idle')
     setKeyTestSteps([])
@@ -452,7 +346,7 @@ export function useProviderCardState({
   const handleSaveModel = async (originalModelKey: string): Promise<void> => {
     if (isModelSavePending) return
     if (!editModel.name || !editModel.modelId) {
-      alert(t('fillComplete'))
+      showToast(t('fillComplete'), 'warning')
       return
     }
 
@@ -465,7 +359,7 @@ export function useProviderCardState({
     )
 
     if (duplicate) {
-      alert(t('modelIdExists'))
+      showToast(t('modelIdExists'), 'warning')
       return
     }
 
@@ -485,7 +379,7 @@ export function useProviderCardState({
   const handleAddModel = async (type: ProviderCardModelType): Promise<void> => {
     if (isModelSavePending) return
     if (!newModel.name || !newModel.modelId) {
-      alert(t('fillComplete'))
+      showToast(t('fillComplete'), 'warning')
       return
     }
 
@@ -497,7 +391,7 @@ export function useProviderCardState({
 
     const all = allModels || models
     if (all.some((model) => model.modelKey === finalModelKey)) {
-      alert(t('modelIdExists'))
+      showToast(t('modelIdExists'), 'warning')
       return
     }
 
@@ -531,11 +425,7 @@ export function useProviderCardState({
     setBatchMode(false)
   }
 
-  const maskedKey = (() => {
-    const key = provider.apiKey || ''
-    if (key.length <= 8) return '•'.repeat(key.length)
-    return `${key.slice(0, 4)}${'•'.repeat(50)}`
-  })()
+  const maskedKey = '••••••••••••'
 
   return {
     providerKey,
@@ -577,7 +467,6 @@ export function useProviderCardState({
     handleSaveModel,
     handleAddModel,
     handleCancelAdd,
-    needsCustomPricing: false,
     keyTestStatus,
     keyTestSteps,
     handleForceSaveKey,

@@ -19,6 +19,10 @@ describe('billing/runtime-usage', () => {
         model: 'test-model',
         inputTokens: 10.9,
         outputTokens: -2,
+        cachedInputTokens: 7.2,
+        cacheWriteTokens: 3.8,
+        cacheHitRate: 1.2,
+        providerCostCredits: 0.1234567,
       })
       return { ok: true }
     })
@@ -28,6 +32,10 @@ describe('billing/runtime-usage', () => {
         model: 'test-model',
         inputTokens: 10,
         outputTokens: 0,
+        cachedInputTokens: 7,
+        cacheWriteTokens: 3,
+        cacheHitRate: 1,
+        providerCostCredits: 0.1234567,
       },
     ])
   })

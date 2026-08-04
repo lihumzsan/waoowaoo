@@ -1,19 +1,18 @@
 import { ApiError } from '@/lib/api-errors'
 import { composeModelKey, parseModelKeyStrict } from '@/lib/ai-registry/selection'
-import { getCapabilityOptionFields, resolveBuiltinModelContext } from '@/lib/ai-registry/capabilities-catalog'
 import { findBuiltinPricingCatalogEntry, type PricingApiType } from '@/lib/ai-registry/pricing-catalog'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import type { StoredModel, StoredProvider } from './api-config-types'
 import { isRecord, isUnifiedModelType, readTrimmedString } from './api-config-shared'
 import { resolveProviderByIdOrKey } from './api-config-provider-normalization'
 import { resolveBuiltinCapabilities } from './api-config-pricing-display'
-import { hasCustomPricingForType, normalizeCustomPricing } from './api-config-custom-pricing'
 
 const BILLABLE_MODEL_TYPE_TO_PRICING_API_TYPE: Readonly<Record<StoredModel['type'], PricingApiType | null>> = {
   llm: 'text',
   image: 'image',
   video: 'video',
   music: 'music',
+  voice: 'voice',
 }
 
 export function withBuiltinCapabilities(model: StoredModel): StoredModel {
@@ -31,7 +30,7 @@ export function withBuiltinCapabilities(model: StoredModel): StoredModel {
   }
 }
 
-function normalizeStoredModel(raw: unknown, index: number, options?: { strictCustomPricing?: boolean }): StoredModel {
+function normalizeStoredModel(raw: unknown, index: number): StoredModel {
   if (!isRecord(raw)) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'MODEL_PAYLOAD_INVALID',
@@ -69,12 +68,14 @@ function normalizeStoredModel(raw: unknown, index: number, options?: { strictCus
     })
   }
 
-  const modelName = readTrimmedString(raw.name) || modelId
+  if (raw.customPricing !== undefined) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'MODEL_CUSTOM_PRICING_UNSUPPORTED',
+      field: `models[${index}].customPricing`,
+    })
+  }
 
-  const customPricing = normalizeCustomPricing(raw.customPricing, {
-    strict: options?.strictCustomPricing,
-    field: `models[${index}].customPricing`,
-  })
+  const modelName = readTrimmedString(raw.name) || modelId
 
   return {
     modelId,
@@ -83,7 +84,6 @@ function normalizeStoredModel(raw: unknown, index: number, options?: { strictCus
     type: modelType,
     provider,
     price: 0,
-    ...(customPricing ? { customPricing } : {}),
   }
 }
 
@@ -96,7 +96,7 @@ export function normalizeModelList(rawModels: unknown): StoredModel[] {
     })
   }
 
-  return rawModels.map((item, index) => normalizeStoredModel(item, index, { strictCustomPricing: true }))
+  return rawModels.map((item, index) => normalizeStoredModel(item, index))
 }
 
 export function validateModelProviderConsistency(models: StoredModel[], providers: StoredProvider[]) {
@@ -117,50 +117,6 @@ export function validateModelProviderTypeSupport(models: StoredModel[], provider
   void providers
 }
 
-export function validateCustomPricingCapabilityMappings(models: StoredModel[]) {
-  for (let index = 0; index < models.length; index += 1) {
-    const model = models[index]
-    if (model.type !== 'image' && model.type !== 'video' && model.type !== 'music') continue
-
-    const mediaPricing = model.type === 'image'
-      ? model.customPricing?.image
-      : model.type === 'video'
-        ? model.customPricing?.video
-        : model.customPricing?.music
-    const optionPrices = mediaPricing?.optionPrices
-    if (!optionPrices || Object.keys(optionPrices).length === 0) continue
-
-    const context = resolveBuiltinModelContext(model.type, model.modelKey)
-    if (!context) {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'CAPABILITY_MODEL_UNSUPPORTED',
-          field: `models[${index}].customPricing.${model.type}.optionPrices`,
-      })
-    }
-
-    const optionFields = getCapabilityOptionFields(model.type, context.capabilities)
-    for (const [field, optionMap] of Object.entries(optionPrices)) {
-      const allowedValues = optionFields[field]
-      if (!allowedValues) {
-        throw new ApiError('INVALID_PARAMS', {
-          code: 'CAPABILITY_FIELD_INVALID',
-          field: `models[${index}].customPricing.${model.type}.optionPrices.${field}`,
-        })
-      }
-      for (const optionValue of Object.keys(optionMap)) {
-        if (allowedValues.includes(optionValue)) continue
-        throw new ApiError('INVALID_PARAMS', {
-          code: 'CAPABILITY_VALUE_NOT_ALLOWED',
-          field: `models[${index}].customPricing.${model.type}.optionPrices.${field}.${optionValue}`,
-          allowedValues,
-        })
-      }
-    }
-  }
-}
-
-
-
 export function hasBuiltinPricingForModel(apiType: PricingApiType, provider: string, modelId: string): boolean {
   // findBuiltinPricingCatalogEntry handles providerKey stripping and alias fallback internally
   return !!findBuiltinPricingCatalogEntry(apiType, provider, modelId)
@@ -171,10 +127,6 @@ export function validateBillableModelPricing(models: StoredModel[]) {
     const model = models[index]
     const apiType = BILLABLE_MODEL_TYPE_TO_PRICING_API_TYPE[model.type]
     if (!apiType) continue
-    if (apiType === 'music') continue
-
-    // Skip validation if user provided custom pricing
-    if (hasCustomPricingForType(model)) continue
 
     if (!hasBuiltinPricingForModel(apiType, model.provider, model.modelId)) {
       throw new ApiError('INVALID_PARAMS', {

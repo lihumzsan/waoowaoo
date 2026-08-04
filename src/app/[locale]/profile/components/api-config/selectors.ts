@@ -1,11 +1,6 @@
 import type { CustomModel, PricingDisplayItem, PricingDisplayMap, Provider } from './types'
-import { encodeModelKey, getProviderKey, isPresetComingSoonModelKey, parseModelKey } from './types'
+import { encodeModelKey, getProviderKey, isPresetComingSoonModelKey } from './types'
 import type { CapabilitySelections, CapabilityValue } from '@/lib/ai-registry/types'
-import {
-  CODEX_DEFAULT_IMAGE_MODEL_KEY,
-  CODEX_DEFAULT_MODEL_KEY,
-  CODEX_PROVIDER_KEY,
-} from '@/lib/ai-registry/codex-defaults'
 import {
   DEFAULT_ANALYSIS_WORKFLOW_CONCURRENCY,
   DEFAULT_IMAGE_WORKFLOW_CONCURRENCY,
@@ -20,10 +15,10 @@ export interface WorkflowConcurrency {
 }
 
 export interface DefaultModels {
+  assistantModel?: string
   analysisModel?: string
   characterModel?: string
   locationModel?: string
-  storyboardModel?: string
   editModel?: string
   videoModel?: string
   musicModel?: string
@@ -35,42 +30,17 @@ export interface CapabilityFieldDefaults {
 }
 
 export const DEFAULT_MODEL_FIELDS = [
+  'assistantModel',
   'analysisModel',
   'characterModel',
   'locationModel',
-  'storyboardModel',
   'editModel',
   'videoModel',
   'musicModel',
 ] as const satisfies ReadonlyArray<keyof DefaultModels>
 
-const CODEX_IMAGE_DEFAULT_FIELDS = [
-  'characterModel',
-  'locationModel',
-  'storyboardModel',
-  'editModel',
-] as const satisfies ReadonlyArray<keyof DefaultModels>
-
-function isCodexProvider(providerId: string): boolean {
-  return getProviderKey(providerId) === CODEX_PROVIDER_KEY
-}
-
-function hasProviderConnection(providerId: string, apiKey?: string): boolean {
-  if (isCodexProvider(providerId)) return true
-  return typeof apiKey === 'string' && apiKey.trim().length > 0
-}
-
-function isComfyUiModelKey(modelKey: string | undefined): boolean {
-  const parsed = parseModelKey(modelKey)
-  return parsed ? getProviderKey(parsed.provider) === 'comfyui' : false
-}
-
 export function createInitialProviders(presetProviders: Provider[]): Provider[] {
-  return presetProviders.map((provider) => ({
-    ...provider,
-    apiKey: '',
-    hasApiKey: isCodexProvider(provider.id),
-  }))
+  return presetProviders.map((provider) => ({ ...provider, apiKey: '', hasApiKey: false }))
 }
 
 export function createInitialModels(presetModels: ReadonlyArray<Omit<CustomModel, 'modelKey' | 'price' | 'priceLabel' | 'enabled'> & Partial<Pick<CustomModel, 'modelKey' | 'price' | 'priceLabel' | 'enabled'>>>): CustomModel[] {
@@ -101,11 +71,9 @@ export function mergeProvidersForDisplay(
     const providerKey = getProviderKey(savedProvider.id)
     const matchedPreset = presetProviders.find((presetProvider) => presetProvider.id === providerKey)
     if (matchedPreset) {
-      const apiKey = savedProvider.apiKey || ''
       merged.push({
         ...matchedPreset,
-        apiKey,
-        hasApiKey: hasProviderConnection(savedProvider.id, apiKey),
+        hasApiKey: savedProvider.hasApiKey === true,
         hidden: savedProvider.hidden === true,
         baseUrl: savedProvider.baseUrl || matchedPreset.baseUrl,
       })
@@ -115,7 +83,8 @@ export function mergeProvidersForDisplay(
 
     merged.push({
       ...savedProvider,
-      hasApiKey: hasProviderConnection(savedProvider.id, savedProvider.apiKey),
+      apiKey: undefined,
+      hasApiKey: savedProvider.hasApiKey === true,
     })
   }
 
@@ -124,7 +93,7 @@ export function mergeProvidersForDisplay(
     merged.push({
       ...presetProvider,
       apiKey: '',
-      hasApiKey: isCodexProvider(presetProvider.id),
+      hasApiKey: false,
       hidden: false,
     })
   }
@@ -266,104 +235,6 @@ export function mergeModelsForDisplay(
     }, pricingDisplay))
 
   return [...presetModels, ...customModels]
-}
-
-export function applyCodexTextPresetDefault(params: {
-  models: CustomModel[]
-  defaultModels: DefaultModels
-  shouldAutoSelect: boolean
-}): { models: CustomModel[]; defaultModels: DefaultModels; changed: boolean } {
-  if (!params.shouldAutoSelect) {
-    return {
-      models: params.models,
-      defaultModels: params.defaultModels,
-      changed: false,
-    }
-  }
-
-  const modelIndex = params.models.findIndex((model) =>
-    model.modelKey === CODEX_DEFAULT_MODEL_KEY
-    && getProviderKey(model.provider) === CODEX_PROVIDER_KEY
-    && model.type === 'llm',
-  )
-  if (modelIndex < 0) {
-    return {
-      models: params.models,
-      defaultModels: params.defaultModels,
-      changed: false,
-    }
-  }
-
-  const nextModels = [...params.models]
-  const nextDefaultModels: DefaultModels = {
-    ...params.defaultModels,
-    analysisModel: CODEX_DEFAULT_MODEL_KEY,
-  }
-  let changed = params.defaultModels.analysisModel !== CODEX_DEFAULT_MODEL_KEY
-  const targetModel = nextModels[modelIndex]
-  if (targetModel && !targetModel.enabled) {
-    nextModels[modelIndex] = {
-      ...targetModel,
-      enabled: true,
-    }
-    changed = true
-  }
-
-  return {
-    models: nextModels,
-    defaultModels: nextDefaultModels,
-    changed,
-  }
-}
-
-export function applyCodexPresetDefaults(params: {
-  models: CustomModel[]
-  defaultModels: DefaultModels
-  shouldAutoSelectText: boolean
-}): { models: CustomModel[]; defaultModels: DefaultModels; changed: boolean } {
-  const textResolved = applyCodexTextPresetDefault({
-    models: params.models,
-    defaultModels: params.defaultModels,
-    shouldAutoSelect: params.shouldAutoSelectText,
-  })
-
-  const modelIndex = textResolved.models.findIndex((model) =>
-    model.modelKey === CODEX_DEFAULT_IMAGE_MODEL_KEY
-    && getProviderKey(model.provider) === CODEX_PROVIDER_KEY
-    && model.type === 'image',
-  )
-  if (modelIndex < 0) {
-    return textResolved
-  }
-
-  const nextModels = [...textResolved.models]
-  const nextDefaultModels: DefaultModels = { ...textResolved.defaultModels }
-  let changed = textResolved.changed
-
-  for (const field of CODEX_IMAGE_DEFAULT_FIELDS) {
-    const currentModelKey = nextDefaultModels[field]
-    if (!currentModelKey || isComfyUiModelKey(currentModelKey)) {
-      if (currentModelKey !== CODEX_DEFAULT_IMAGE_MODEL_KEY) {
-        nextDefaultModels[field] = CODEX_DEFAULT_IMAGE_MODEL_KEY
-        changed = true
-      }
-    }
-  }
-
-  const targetModel = nextModels[modelIndex]
-  if (targetModel && !targetModel.enabled) {
-    nextModels[modelIndex] = {
-      ...targetModel,
-      enabled: true,
-    }
-    changed = true
-  }
-
-  return {
-    models: nextModels,
-    defaultModels: nextDefaultModels,
-    changed,
-  }
 }
 
 export function replaceDefaultModelKey(

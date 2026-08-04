@@ -9,6 +9,30 @@ export const ERROR_CATEGORY = {
 
 export type ErrorCategory = (typeof ERROR_CATEGORY)[keyof typeof ERROR_CATEGORY]
 
+export const ERROR_FAILURE_CLASS = {
+  TRANSIENT_PROVIDER: 'TRANSIENT_PROVIDER',
+  PERMANENT_PROVIDER: 'PERMANENT_PROVIDER',
+  OUTPUT_VALIDATION: 'OUTPUT_VALIDATION',
+} as const
+
+export type ErrorFailureClass = (typeof ERROR_FAILURE_CLASS)[keyof typeof ERROR_FAILURE_CLASS]
+
+function defineErrorSpec<const Code extends string>(
+  code: Code,
+  httpStatus: number,
+  retryable: boolean,
+  category: ErrorCategory,
+  defaultMessage: string,
+) {
+  return {
+    httpStatus,
+    retryable,
+    category,
+    userMessageKey: `errors.${code}` as const,
+    defaultMessage,
+  }
+}
+
 export const ERROR_CATALOG = {
   UNAUTHORIZED: {
     httpStatus: 401,
@@ -38,6 +62,30 @@ export const ERROR_CATALOG = {
     userMessageKey: 'errors.INVALID_PARAMS',
     defaultMessage: 'Invalid parameters',
   },
+  PAYLOAD_TOO_LARGE: defineErrorSpec('PAYLOAD_TOO_LARGE', 413, false, ERROR_CATEGORY.VALIDATION, 'Payload is too large'),
+  UPLOAD_FILE_EMPTY: defineErrorSpec('UPLOAD_FILE_EMPTY', 400, false, ERROR_CATEGORY.VALIDATION, 'Uploaded file is empty'),
+  UPLOAD_MEDIA_TYPE_UNSUPPORTED: defineErrorSpec('UPLOAD_MEDIA_TYPE_UNSUPPORTED', 415, false, ERROR_CATEGORY.VALIDATION, 'Uploaded media type is unsupported'),
+  PROJECT_ASSISTANT_TEXT_ATTACHMENT_FILE_NAME_EMPTY: defineErrorSpec('PROJECT_ASSISTANT_TEXT_ATTACHMENT_FILE_NAME_EMPTY', 400, false, ERROR_CATEGORY.VALIDATION, 'Text attachment file name is empty'),
+  PROJECT_ASSISTANT_TEXT_ATTACHMENT_UNSUPPORTED_TYPE: defineErrorSpec('PROJECT_ASSISTANT_TEXT_ATTACHMENT_UNSUPPORTED_TYPE', 415, false, ERROR_CATEGORY.VALIDATION, 'Text attachment type is unsupported'),
+  PROJECT_ASSISTANT_TEXT_ATTACHMENT_EMPTY: defineErrorSpec('PROJECT_ASSISTANT_TEXT_ATTACHMENT_EMPTY', 400, false, ERROR_CATEGORY.VALIDATION, 'Text attachment is empty'),
+  PROJECT_ASSISTANT_TEXT_ATTACHMENT_SIZE_LIMIT_EXCEEDED: defineErrorSpec('PROJECT_ASSISTANT_TEXT_ATTACHMENT_SIZE_LIMIT_EXCEEDED', 413, false, ERROR_CATEGORY.VALIDATION, 'Text attachment exceeds the size limit'),
+  PROJECT_ASSISTANT_TEXT_ATTACHMENT_CHAR_LIMIT_EXCEEDED: defineErrorSpec('PROJECT_ASSISTANT_TEXT_ATTACHMENT_CHAR_LIMIT_EXCEEDED', 413, false, ERROR_CATEGORY.VALIDATION, 'Text attachment exceeds the character limit'),
+  PROJECT_ASSISTANT_TEXT_ATTACHMENTS_TOO_MANY: defineErrorSpec('PROJECT_ASSISTANT_TEXT_ATTACHMENTS_TOO_MANY', 400, false, ERROR_CATEGORY.VALIDATION, 'Too many text attachments'),
+  PROJECT_ASSISTANT_MEDIA_ATTACHMENT_UNSUPPORTED_TYPE: defineErrorSpec('PROJECT_ASSISTANT_MEDIA_ATTACHMENT_UNSUPPORTED_TYPE', 415, false, ERROR_CATEGORY.VALIDATION, 'Media attachment type is unsupported'),
+  PROJECT_ASSISTANT_MEDIA_ATTACHMENT_SIZE_LIMIT_EXCEEDED: defineErrorSpec('PROJECT_ASSISTANT_MEDIA_ATTACHMENT_SIZE_LIMIT_EXCEEDED', 413, false, ERROR_CATEGORY.VALIDATION, 'Media attachment exceeds the size limit'),
+  PROJECT_ASSISTANT_MEDIA_ATTACHMENTS_TOO_MANY: defineErrorSpec('PROJECT_ASSISTANT_MEDIA_ATTACHMENTS_TOO_MANY', 400, false, ERROR_CATEGORY.VALIDATION, 'Too many media attachments'),
+  OPERATION_IDEMPOTENCY_KEY_REQUIRED: defineErrorSpec('OPERATION_IDEMPOTENCY_KEY_REQUIRED', 400, false, ERROR_CATEGORY.VALIDATION, 'This operation requires a stable request identity'),
+  OPERATION_IDEMPOTENCY_KEY_INVALID: defineErrorSpec('OPERATION_IDEMPOTENCY_KEY_INVALID', 400, false, ERROR_CATEGORY.VALIDATION, 'The stable request identity is invalid'),
+  OPERATION_PLAN_REQUEST_REPLAY_DIVERGED: defineErrorSpec('OPERATION_PLAN_REQUEST_REPLAY_DIVERGED', 409, false, ERROR_CATEGORY.VALIDATION, 'This request identity was already used for a different operation plan'),
+  WORKSPACE_RESOURCE_RETRY_TARGET_NOT_FOUND: defineErrorSpec('WORKSPACE_RESOURCE_RETRY_TARGET_NOT_FOUND', 404, false, ERROR_CATEGORY.VALIDATION, 'The failed Resource to retry was not found'),
+  WORKSPACE_RESOURCE_RETRY_TARGET_DUPLICATE: defineErrorSpec('WORKSPACE_RESOURCE_RETRY_TARGET_DUPLICATE', 400, false, ERROR_CATEGORY.VALIDATION, 'The same Resource was selected more than once'),
+  WORKSPACE_RESOURCE_RETRY_TARGET_INVALID: defineErrorSpec('WORKSPACE_RESOURCE_RETRY_TARGET_INVALID', 409, false, ERROR_CATEGORY.VALIDATION, 'This Resource is not currently retryable'),
+  WORKSPACE_RESOURCE_RETRY_FROZEN_INPUT_MISSING: defineErrorSpec('WORKSPACE_RESOURCE_RETRY_FROZEN_INPUT_MISSING', 409, false, ERROR_CATEGORY.VALIDATION, 'The original generation input is unavailable'),
+  WORKSPACE_RESOURCE_RETRY_FROZEN_INPUT_AMBIGUOUS: defineErrorSpec('WORKSPACE_RESOURCE_RETRY_FROZEN_INPUT_AMBIGUOUS', 409, false, ERROR_CATEGORY.SYSTEM, 'The original generation input is ambiguous'),
+  WORKSPACE_RESOURCE_RETRY_FROZEN_INPUT_INVALID: defineErrorSpec('WORKSPACE_RESOURCE_RETRY_FROZEN_INPUT_INVALID', 409, false, ERROR_CATEGORY.SYSTEM, 'The original generation input is no longer valid'),
+  WORKSPACE_RESOURCE_RETRY_FROZEN_INPUT_MISMATCH: defineErrorSpec('WORKSPACE_RESOURCE_RETRY_FROZEN_INPUT_MISMATCH', 409, false, ERROR_CATEGORY.SYSTEM, 'The original generation input no longer matches this Resource'),
+  WORKSPACE_RESOURCE_RETRY_TARGET_CHANGED: defineErrorSpec('WORKSPACE_RESOURCE_RETRY_TARGET_CHANGED', 409, false, ERROR_CATEGORY.VALIDATION, 'The Resource changed before the retry could be submitted'),
+  VOICE_RESOURCE_ALTERNATIVE_GROUP_MEMBER: defineErrorSpec('VOICE_RESOURCE_ALTERNATIVE_GROUP_MEMBER', 409, false, ERROR_CATEGORY.VALIDATION, 'This voice is part of an alternatives group and cannot be physically deleted'),
   MISSING_CONFIG: {
     httpStatus: 400,
     retryable: false,
@@ -51,6 +99,13 @@ export const ERROR_CATALOG = {
     category: ERROR_CATEGORY.VALIDATION,
     userMessageKey: 'errors.CONFLICT',
     defaultMessage: 'Conflict',
+  },
+  OPERATION_PLAN_CHANGED: {
+    httpStatus: 409,
+    retryable: false,
+    category: ERROR_CATEGORY.VALIDATION,
+    userMessageKey: 'errors.OPERATION_PLAN_CHANGED',
+    defaultMessage: 'The task plan or price changed. Generate a new quote before continuing.',
   },
   TASK_NOT_READY: {
     httpStatus: 202,
@@ -94,6 +149,20 @@ export const ERROR_CATALOG = {
     userMessageKey: 'errors.MODEL_NOT_CONFIGURED',
     defaultMessage: 'Model is not configured. Please add a model in the settings first.',
   },
+  PROVIDER_AUTH_INVALID: {
+    httpStatus: 400,
+    retryable: false,
+    category: ERROR_CATEGORY.PROVIDER,
+    userMessageKey: 'errors.PROVIDER_AUTH_INVALID',
+    defaultMessage: 'Provider credentials are missing or invalid',
+  },
+  PROVIDER_BILLING_REQUIRED: {
+    httpStatus: 402,
+    retryable: false,
+    category: ERROR_CATEGORY.PROVIDER,
+    userMessageKey: 'errors.PROVIDER_BILLING_REQUIRED',
+    defaultMessage: 'Provider account billing requires attention',
+  },
   QUOTA_EXCEEDED: {
     httpStatus: 429,
     retryable: true,
@@ -122,6 +191,69 @@ export const ERROR_CATALOG = {
     userMessageKey: 'errors.EMPTY_RESPONSE',
     defaultMessage: 'Model returned empty response',
   },
+  MODEL_OUTPUT_TRUNCATED: {
+    httpStatus: 502,
+    retryable: false,
+    category: ERROR_CATEGORY.PROVIDER,
+    userMessageKey: 'errors.MODEL_OUTPUT_TRUNCATED',
+    defaultMessage: 'Model output was truncated by the token limit',
+  },
+  CONTEXT_BUDGET_EXCEEDED: {
+    httpStatus: 413,
+    retryable: false,
+    category: ERROR_CATEGORY.VALIDATION,
+    userMessageKey: 'errors.CONTEXT_BUDGET_EXCEEDED',
+    defaultMessage: 'The assistant context is too large to process',
+  },
+  PARSE_ERROR: {
+    httpStatus: 502,
+    retryable: true,
+    category: ERROR_CATEGORY.PROVIDER,
+    userMessageKey: 'errors.PARSE_ERROR',
+    defaultMessage: 'Model output could not be parsed',
+  },
+  MODEL_OUTPUT_SCHEMA_INVALID: {
+    httpStatus: 502,
+    retryable: true,
+    category: ERROR_CATEGORY.PROVIDER,
+    userMessageKey: 'errors.MODEL_OUTPUT_SCHEMA_INVALID',
+    defaultMessage: 'Model output did not match the required schema',
+  },
+  PLAN_VALIDATION_FAILED: {
+    httpStatus: 502,
+    retryable: false,
+    category: ERROR_CATEGORY.PROVIDER,
+    userMessageKey: 'errors.PLAN_VALIDATION_FAILED',
+    defaultMessage: 'Generated plan did not pass validation',
+  },
+  PROVIDER_POLL_FAILED: {
+    httpStatus: 502,
+    retryable: true,
+    category: ERROR_CATEGORY.PROVIDER,
+    userMessageKey: 'errors.PROVIDER_POLL_FAILED',
+    defaultMessage: 'Provider polling failed',
+  },
+  PROVIDER_SUBMIT_FAILED: {
+    httpStatus: 502,
+    retryable: true,
+    category: ERROR_CATEGORY.PROVIDER,
+    userMessageKey: 'errors.PROVIDER_SUBMIT_FAILED',
+    defaultMessage: 'Provider submission failed',
+  },
+  PROVIDER_SUBMISSION_REJECTED: {
+    httpStatus: 502,
+    retryable: false,
+    category: ERROR_CATEGORY.PROVIDER,
+    userMessageKey: 'errors.PROVIDER_SUBMISSION_REJECTED',
+    defaultMessage: 'Provider rejected the generation request',
+  },
+  PROVIDER_SUBMISSION_OUTCOME_UNKNOWN: {
+    httpStatus: 502,
+    retryable: false,
+    category: ERROR_CATEGORY.PROVIDER,
+    userMessageKey: 'errors.PROVIDER_SUBMISSION_OUTCOME_UNKNOWN',
+    defaultMessage: 'Provider submission outcome is unknown',
+  },
   INSUFFICIENT_BALANCE: {
     httpStatus: 402,
     retryable: false,
@@ -143,12 +275,28 @@ export const ERROR_CATALOG = {
     userMessageKey: 'errors.GENERATION_TIMEOUT',
     defaultMessage: 'Generation timed out',
   },
+  // 外部任务在 provider 队列中排队超预算：与 GENERATION_TIMEOUT（生成阶段超时）分开，
+  // 补偿协议为“作废旧 external id + 尽力取消 + 新 attempt 全新提交”（PG-06 扩展）。
+  GENERATION_QUEUE_TIMEOUT: {
+    httpStatus: 504,
+    retryable: true,
+    category: ERROR_CATEGORY.PROVIDER,
+    userMessageKey: 'errors.GENERATION_QUEUE_TIMEOUT',
+    defaultMessage: 'Generation queue wait timed out',
+  },
   VIDEO_API_FORMAT_UNSUPPORTED: {
     httpStatus: 400,
     retryable: false,
     category: ERROR_CATEGORY.VALIDATION,
     userMessageKey: 'errors.VIDEO_API_FORMAT_UNSUPPORTED',
     defaultMessage: 'Video API format is unsupported',
+  },
+  MUSIC_PROMPT_TOO_LONG: {
+    httpStatus: 400,
+    retryable: false,
+    category: ERROR_CATEGORY.VALIDATION,
+    userMessageKey: 'errors.MUSIC_PROMPT_TOO_LONG',
+    defaultMessage: 'Music prompt exceeds the model limit',
   },
   GENERATION_FAILED: {
     httpStatus: 500,
@@ -178,15 +326,28 @@ export const ERROR_CATALOG = {
     userMessageKey: 'errors.INTERNAL_ERROR',
     defaultMessage: 'Internal server error',
   },
+  AGENT_TEMPORAL_UNAVAILABLE: defineErrorSpec('AGENT_TEMPORAL_UNAVAILABLE', 503, true, ERROR_CATEGORY.SYSTEM, 'Assistant execution service is unavailable'),
+  AGENT_THREAD_BUSY: defineErrorSpec('AGENT_THREAD_BUSY', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant thread is busy'),
+  AGENT_TURN_COMMAND_REPLAY_DIVERGED: defineErrorSpec('AGENT_TURN_COMMAND_REPLAY_DIVERGED', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant command identity conflicts with an earlier command'),
+  AGENT_STEER_HANDOFF_UNCERTAIN: defineErrorSpec('AGENT_STEER_HANDOFF_UNCERTAIN', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant steer handoff outcome is unknown'),
+  AGENT_START_HANDOFF_UNCERTAIN: defineErrorSpec('AGENT_START_HANDOFF_UNCERTAIN', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant turn start handoff outcome is unknown'),
+  PROJECT_AGENT_RUNTIME_FAILED: defineErrorSpec('PROJECT_AGENT_RUNTIME_FAILED', 502, true, ERROR_CATEGORY.SYSTEM, 'Assistant runtime failed'),
+  ASSISTANT_PROVIDER_REQUEST_INVALID: defineErrorSpec('ASSISTANT_PROVIDER_REQUEST_INVALID', 400, false, ERROR_CATEGORY.PROVIDER, 'The assistant provider rejected the conversation request'),
+  ASSISTANT_RUNTIME_PROTOCOL_ERROR: defineErrorSpec('ASSISTANT_RUNTIME_PROTOCOL_ERROR', 502, false, ERROR_CATEGORY.SYSTEM, 'The assistant runtime protocol is incompatible'),
+  PROJECT_AGENT_ASSISTANT_MODEL_NOT_CONFIGURED: defineErrorSpec('PROJECT_AGENT_ASSISTANT_MODEL_NOT_CONFIGURED', 400, false, ERROR_CATEGORY.PROVIDER, 'Assistant model is not configured'),
+  PROJECT_AGENT_ASSISTANT_MODEL_INVALID: defineErrorSpec('PROJECT_AGENT_ASSISTANT_MODEL_INVALID', 400, false, ERROR_CATEGORY.PROVIDER, 'Assistant model configuration is invalid'),
+  PROJECT_DELETE_ACTIVE_EXECUTION: defineErrorSpec('PROJECT_DELETE_ACTIVE_EXECUTION', 409, false, ERROR_CATEGORY.VALIDATION, 'Project has active work'),
+  PROJECT_AGENT_AI_TURN_PROTOCOL_REQUIRED: defineErrorSpec('PROJECT_AGENT_AI_TURN_PROTOCOL_REQUIRED', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant turn protocol requires another user instruction'),
+  PROJECT_AGENT_RUN_ACTIVE: defineErrorSpec('PROJECT_AGENT_RUN_ACTIVE', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant run is already active'),
+  PROJECT_AGENT_CONTROL_ALREADY_RESOLVED: defineErrorSpec('PROJECT_AGENT_CONTROL_ALREADY_RESOLVED', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant control was already resolved'),
+  PROJECT_AGENT_INTERRUPTION_NOT_PENDING: defineErrorSpec('PROJECT_AGENT_INTERRUPTION_NOT_PENDING', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant interruption is no longer pending'),
+  PROJECT_ASSISTANT_CARD_RESPONSE_FAILED: defineErrorSpec('PROJECT_ASSISTANT_CARD_RESPONSE_FAILED', 502, true, ERROR_CATEGORY.SYSTEM, 'Assistant card response failed'),
+  PROJECT_ASSISTANT_BACKGROUND_FOLLOW_UP_FAILED: defineErrorSpec('PROJECT_ASSISTANT_BACKGROUND_FOLLOW_UP_FAILED', 502, true, ERROR_CATEGORY.SYSTEM, 'Assistant background follow-up failed'),
 } as const
 
 export type UnifiedErrorCode = keyof typeof ERROR_CATALOG
 
 export const DEFAULT_ERROR_CODE: UnifiedErrorCode = 'INTERNAL_ERROR'
-
-export const LEGACY_ERROR_CODE_ALIASES: Record<string, UnifiedErrorCode> = {
-  OPERATION_FAILED: 'INTERNAL_ERROR',
-}
 
 export function isKnownErrorCode(code: unknown): code is UnifiedErrorCode {
   return typeof code === 'string' && code in ERROR_CATALOG
@@ -196,9 +357,24 @@ export function resolveUnifiedErrorCode(code: unknown): UnifiedErrorCode | null 
   if (isKnownErrorCode(code)) return code
   if (typeof code !== 'string') return null
   const normalized = code.trim().toUpperCase()
-  return LEGACY_ERROR_CODE_ALIASES[normalized] || null
+  return isKnownErrorCode(normalized) ? normalized : null
 }
 
 export function getErrorSpec(code: UnifiedErrorCode) {
   return ERROR_CATALOG[code]
+}
+
+export function getErrorFailureClass(code: UnifiedErrorCode): ErrorFailureClass {
+  if (
+    code === 'EMPTY_RESPONSE'
+    || code === 'MODEL_OUTPUT_TRUNCATED'
+    || code === 'PARSE_ERROR'
+    || code === 'MODEL_OUTPUT_SCHEMA_INVALID'
+    || code === 'PLAN_VALIDATION_FAILED'
+  ) {
+    return ERROR_FAILURE_CLASS.OUTPUT_VALIDATION
+  }
+  return ERROR_CATALOG[code].retryable
+    ? ERROR_FAILURE_CLASS.TRANSIENT_PROVIDER
+    : ERROR_FAILURE_CLASS.PERMANENT_PROVIDER
 }

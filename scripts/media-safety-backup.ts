@@ -2,8 +2,9 @@ import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core
 import { createHash } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import COS from 'cos-nodejs-sdk-v5'
+import { S3Client, paginateListObjectsV2 } from '@aws-sdk/client-s3'
 import { prisma } from '@/lib/prisma'
+import { loadS3StorageConfig, toS3ClientConfig } from '@/lib/storage/s3-config'
 
 type SnapshotTask = {
   name: string
@@ -15,17 +16,6 @@ type StorageIndexRow = {
   hash: string | null
   sizeBytes: number
   lastModified: string | null
-}
-
-type CosBucketPage = {
-  Contents?: Array<{
-    Key: string
-    ETag?: string
-    Size?: string | number
-    LastModified?: string
-  }>
-  IsTruncated?: string | boolean
-  NextMarker?: string
 }
 
 const BACKUP_ROOT = path.join(process.cwd(), 'data', 'migration-backups')
@@ -60,101 +50,39 @@ function resolveDatabaseFilePath(databaseUrl: string | undefined): string | null
   return null
 }
 
-async function listLocalFilesRecursively(rootDir: string, prefix = ''): Promise<StorageIndexRow[]> {
-  const fullDir = path.join(rootDir, prefix)
-  const entries = await fs.readdir(fullDir, { withFileTypes: true })
+async function listStorageObjects(): Promise<StorageIndexRow[]> {
+  const config = loadS3StorageConfig()
+  const client = new S3Client(toS3ClientConfig(config))
   const out: StorageIndexRow[] = []
-
-  for (const entry of entries) {
-    const rel = path.join(prefix, entry.name)
-    if (entry.isDirectory()) {
-      out.push(...(await listLocalFilesRecursively(rootDir, rel)))
-      continue
-    }
-    if (!entry.isFile()) continue
-
-    const filePath = path.join(rootDir, rel)
-    const stat = await fs.stat(filePath)
-    const buf = await fs.readFile(filePath)
-    out.push({
-      key: rel.split(path.sep).join('/'),
-      hash: createHash('sha256').update(buf).digest('hex'),
-      sizeBytes: stat.size,
-      lastModified: stat.mtime.toISOString(),
-    })
-  }
-
-  return out
-}
-
-async function listCosObjects(): Promise<StorageIndexRow[]> {
-  const secretId = process.env.COS_SECRET_ID
-  const secretKey = process.env.COS_SECRET_KEY
-  const bucket = process.env.COS_BUCKET
-  const region = process.env.COS_REGION
-
-  if (!secretId || !secretKey || !bucket || !region) {
-    throw new Error('Missing COS env: COS_SECRET_ID/COS_SECRET_KEY/COS_BUCKET/COS_REGION')
-  }
-
-  const cos = new COS({ SecretId: secretId, SecretKey: secretKey, Timeout: 60_000 })
-  const out: StorageIndexRow[] = []
-  let marker = ''
-
-  while (true) {
-    const page = await new Promise<CosBucketPage>((resolve, reject) => {
-      cos.getBucket(
-        {
-          Bucket: bucket,
-          Region: region,
-          Marker: marker,
-          MaxKeys: 1000,
-        },
-        (err, data) => (err ? reject(err) : resolve((data || {}) as CosBucketPage)),
-      )
-    })
-
-    const contents = page.Contents || []
-    for (const item of contents) {
+  for await (const page of paginateListObjectsV2({ client }, {
+    Bucket: config.bucket,
+    MaxKeys: 1000,
+  })) {
+    for (const item of page.Contents || []) {
+      if (!item.Key) continue
       out.push({
         key: item.Key,
-        hash: item.ETag ? String(item.ETag).replaceAll('"', '') : null,
+        hash: item.ETag ? item.ETag.replaceAll('"', '') : null,
         sizeBytes: Number(item.Size || 0),
-        lastModified: item.LastModified || null,
+        lastModified: item.LastModified ? item.LastModified.toISOString() : null,
       })
     }
-
-    const truncated = String(page.IsTruncated || 'false') === 'true'
-    if (!truncated) break
-    marker = page.NextMarker || (contents.length ? contents[contents.length - 1].Key : '')
-    if (!marker) break
   }
 
   return out
 }
 
 async function buildStorageIndex(): Promise<{ storageType: string; rows: StorageIndexRow[] }> {
-  const storageType = process.env.STORAGE_TYPE || 'cos'
-  if (storageType === 'local') {
-    const uploadDir = process.env.UPLOAD_DIR || './data/uploads'
-    const rootDir = path.isAbsolute(uploadDir) ? uploadDir : path.join(process.cwd(), uploadDir)
-    const exists = await fs.stat(rootDir).then(() => true).catch(() => false)
-    if (!exists) {
-      return { storageType, rows: [] }
-    }
-    const rows = await listLocalFilesRecursively(rootDir)
-    return { storageType, rows }
+  return {
+    storageType: 's3',
+    rows: await listStorageObjects(),
   }
-
-  const rows = await listCosObjects()
-  return { storageType, rows }
 }
 
 async function snapshotTables(backupDir: string) {
   const tasks: SnapshotTask[] = [
     { name: 'projects', tableName: 'projects' },
     { name: 'projects', tableName: 'projects' },
-    { name: 'project_episodes', tableName: 'project_episodes' },
     { name: 'project_panels', tableName: 'project_panels' },
     { name: 'global_characters', tableName: 'global_characters' },
     { name: 'global_character_appearances', tableName: 'global_character_appearances' },
@@ -211,7 +139,7 @@ async function main() {
     createdAt: new Date().toISOString(),
     backupDir,
     databaseUrl: process.env.DATABASE_URL || null,
-    storageType: process.env.STORAGE_TYPE || 'cos',
+    storageType: 's3',
     nodeEnv: process.env.NODE_ENV || null,
   }
 

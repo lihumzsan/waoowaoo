@@ -1,44 +1,35 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { WheelEvent } from 'react'
+import type { MouseEvent as ReactMouseEvent, WheelEvent } from 'react'
 import {
-  applyNodeChanges,
   Background,
   BackgroundVariant,
   MiniMap,
   Panel,
   ReactFlow,
   ReactFlowProvider,
+  ViewportPortal,
   type NodeMouseHandler,
   type OnNodeDrag,
-  type NodeChange,
   type Viewport,
   useReactFlow,
 } from '@xyflow/react'
 import { useTranslations } from 'next-intl'
-import { AppIcon } from '@/components/ui/icons'
 import { logWarn as _ulogWarn } from '@/lib/logging/core'
-import {
-  isTaskRuntimeRunningPhase,
-  taskRuntimeStateMapSignature,
-  TASK_RUNTIME_TARGETS,
-  type TaskRuntimeStateLike,
-} from '@/lib/task/runtime-targets'
-import { useTaskTargetTerminalInvalidation } from '@/lib/query/hooks/useTaskTargetTerminalInvalidation'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
-import { useProjectEditCinematographyShotPlan, useProjectEditDirectorDecoupage, useProjectEditScreenplay, useProjectEditScript } from '@/lib/query/hooks'
-import { useProjectAssets } from '@/lib/query/hooks/useProjectAssets'
+import { useProjectData, useWorkspaceResources } from '@/lib/query/hooks'
 import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
-import { useWorkspaceEpisodeCanvasData } from '../hooks/useWorkspaceEpisodeCanvasData'
-import { useWorkspaceProvider } from '../WorkspaceProvider'
-import { useWorkspaceRuntime } from '../WorkspaceRuntimeContext'
-import { useCanvasLayoutPersistence } from './hooks/useCanvasLayoutPersistence'
 import {
-  buildWorkspaceNodeCanvasProjection,
-  useWorkspaceNodeCanvasProjection,
-} from './hooks/useWorkspaceNodeCanvasProjection'
-import { useWorkspaceNodeCanvasActions } from './hooks/useWorkspaceNodeCanvasActions'
+  WORKSPACE_RESOURCE_ROOT_FOLDER_KEY,
+  type WorkspaceResourceAncestorView,
+  type WorkspaceResourceView,
+} from '@/lib/workspace-resource/contracts'
+import { useWorkspaceProvider } from '../WorkspaceProvider'
+import type { WorkspaceAssistantActiveFocusRequest } from '../workspace-assistant-focus'
+import { useCanvasLayoutPersistence } from './hooks/useCanvasLayoutPersistence'
+import { useWorkspaceNodeCanvasProjection } from './hooks/useWorkspaceNodeCanvasProjection'
+import { resolveWorkspaceCanvasFocusNodeIds, useCanvasFocusFollow } from './hooks/useCanvasFocusFollow'
 import { buildWorkspaceCanvasLayoutInput } from './canvasLayoutInput'
 import {
   buildWorkspaceCanvasEdgeSignature,
@@ -50,609 +41,525 @@ import {
   WORKSPACE_CANVAS_MAX_ZOOM,
   WORKSPACE_CANVAS_MIN_ZOOM,
 } from './canvasViewport'
+import { isWorkspaceCanvasWheelLockedTarget } from './canvas-scroll-lock'
+import { WorkspaceNodeDetailsCard } from './details/WorkspaceNodeDetailsCard'
 import { workspaceNodeTypes } from './nodes/workspaceNodeTypes'
+import { WorkspaceCanvasResourceSelectionContext } from './nodes/workspace-node-selection'
+import {
+  WorkspaceCanvasFolderActionsContext,
+  type WorkspaceCanvasFolderOpenTarget,
+} from './nodes/renderers/folder-card'
+import type { WorkspaceCanvasFlowEdge, WorkspaceCanvasFlowNode } from './node-canvas-types'
+import type { WorkspaceCanvasFolderNodeData, WorkspaceCanvasNodeRecord } from './node-canvas-types'
+import { collectWorkspaceNodeRuntimeTargets, resolveWorkspaceCanvasNodeData } from './workspace-node-runtime'
 import type {
-  WorkspaceCanvasFlowEdge,
-  WorkspaceCanvasFlowNode,
-  WorkspaceCanvasNodeAction,
-} from './node-canvas-types'
-import VideoBlockArrangementModal from './VideoBlockArrangementModal'
-import {
-  getWorkspaceCanvasNodePresentationProfile,
-  resolveWorkspaceCanvasMeasuredNodeHeight,
-  resolveWorkspaceCanvasNodeSize,
-} from './node-presentation-profiles'
-import {
-  alignSpaceConsistencyNodesToMeasuredEditScript,
-  preserveWorkspaceNodePositions,
-  type WorkspaceNodeDynamicLayoutOptions,
-} from './layout/workspace-node-auto-layout'
-import {
-  buildWorkspaceCanvasLegacyLayoutModel,
-  captureLayoutBasePositions,
-  composeWorkspaceCanvasLegacyLayout,
-  mergePreservedNodePositions,
-  normalizeNodesToLayoutBasePositions,
-  preservedNodeIdSet,
-  relayoutEditAssetsBelowScript,
-  repairWorkspaceCanvasDraggedLayout,
-} from './layout/workspace-layout-composer'
-import {
-  collectWorkspaceNodeRuntimeTargets,
-  resolveWorkspaceNodeRuntimePatch,
-} from './workspace-node-runtime'
+  WorkspaceAssistantDraftRequest,
+  WorkspaceCanvasCreateRequest,
+  WorkspaceCanvasPathFocusRequest,
+  WorkspaceCanvasResourceOperationView,
+  WorkspaceCanvasSelection,
+  WorkspaceResourceCardMemberView,
+} from './contracts/workspace-canvas-interactions'
+import { useCanvasOperationAction } from './actions/useCanvasOperationAction'
+import { useCanvasResourceDeleteAction } from './actions/useCanvasResourceDeleteAction'
+import { CanvasOperationConfirmationModal } from './actions/CanvasOperationConfirmationModal'
+import { WorkspaceResourcePreviewModal } from './preview/WorkspaceResourcePreviewModal'
+import { useCanvasActions } from '@/lib/query/hooks/useCanvasActions'
+import { WorkspaceCanvasCreateDock } from './create/WorkspaceCanvasCreateDock'
+import { workspaceNodeId } from './workspace-canvas-node-ids'
+import { useCanvasUploadQueue, type CanvasUploadQueueItem } from './upload/useCanvasUploadQueue'
+import { CanvasUploadQueue } from './upload/CanvasUploadQueue'
+import { CanvasViewportControls } from './controls/CanvasViewportControls'
+import { CanvasFolderNavigation } from './controls/CanvasFolderNavigation'
+import { buildWorkspaceCanvasCreateOperationInput } from './create/canvas-create-input'
+import { buildCanvasCreationOutputPath } from './create/canvas-output-path'
+import { useCanvasUploadBridge } from './upload/useCanvasUploadBridge'
 
 const EMPTY_SAVED_NODE_LAYOUTS: readonly CanvasNodeLayout[] = []
 const CANVAS_FLOATING_PANEL_BOTTOM_OFFSET_PX = 56
-const OPTIMISTIC_NODE_RUNNING_TIMEOUT_MS = 15000
-const MEASURED_NODE_SIZE_EPSILON = 1
+const WORKSPACE_REACT_FLOW_PRO_OPTIONS = { hideAttribution: true } as const
 
-export interface WorkspaceAssistantSelectionContext {
-  selectedScopeRef?: string | null
-  selectedPanelId?: string | null
-  selectedClipId?: string | null
-  selectedAssetId?: string | null
+interface CurrentCanvasFolder {
+  readonly folderKey: string
+  readonly name: string
+  readonly workspacePath: string
+  readonly ancestors: readonly WorkspaceResourceAncestorView[]
 }
 
 interface ProjectWorkspaceCanvasContentProps {
-  onAssistantSelectionChange?: (selection: WorkspaceAssistantSelectionContext) => void
-  editScriptPending?: boolean
+  readonly selection: WorkspaceCanvasSelection | null
+  readonly onSelectionChange: (selection: WorkspaceCanvasSelection | null) => void
+  readonly onAssistantDraftRequest: (request: WorkspaceAssistantDraftRequest) => void
+  readonly activeAssistantFocusRequest?: WorkspaceAssistantActiveFocusRequest | null
+  readonly workspacePathFocusRequest?: WorkspaceCanvasPathFocusRequest | null
 }
 
-interface CanvasViewportControlsProps {
-  readonly resetLabel: string
-  readonly fitViewLabel: string
-  readonly zoomInLabel: string
-  readonly zoomOutLabel: string
-  readonly onResetLayout: () => void
-  readonly onFitView: () => void
-  readonly onZoomIn: () => void
-  readonly onZoomOut: () => void
+interface WorkspaceCanvasUserPosition {
+  readonly x: number
+  readonly y: number
 }
 
-function numericStyleDimension(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
+function applyWorkspaceCanvasUserPositions(params: {
+  readonly nodes: readonly WorkspaceCanvasFlowNode[]
+  readonly positions: ReadonlyMap<string, WorkspaceCanvasUserPosition>
+}): WorkspaceCanvasFlowNode[] {
+  return params.nodes.map((node) => {
+    const position = params.positions.get(node.id)
+    if (!position) return node
+    return {
+      ...node,
+      position,
+      data: { ...node.data, layoutBasePosition: position },
+    }
+  })
 }
 
-function CanvasViewportControls({
-  resetLabel,
-  fitViewLabel,
-  zoomInLabel,
-  zoomOutLabel,
-  onResetLayout,
-  onFitView,
-  onZoomIn,
-  onZoomOut,
-}: CanvasViewportControlsProps) {
-  const buttonClassName = 'inline-flex h-10 w-10 items-center justify-center border-r border-[var(--glass-stroke-soft)] text-[var(--glass-text-primary)] transition last:border-r-0 hover:bg-[var(--glass-bg-hover)]'
-
-  return (
-    <div className="overflow-hidden rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)]/95 shadow-lg backdrop-blur-md">
-      <button
-        type="button"
-        className={buttonClassName}
-        aria-label={zoomInLabel}
-        title={zoomInLabel}
-        onClick={onZoomIn}
-      >
-        <AppIcon name="plus" className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        className={buttonClassName}
-        aria-label={zoomOutLabel}
-        title={zoomOutLabel}
-        onClick={onZoomOut}
-      >
-        <AppIcon name="minus" className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        className={buttonClassName}
-        aria-label={fitViewLabel}
-        title={fitViewLabel}
-        onClick={onFitView}
-      >
-        <AppIcon name="searchPlus" className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        className={buttonClassName}
-        aria-label={resetLabel}
-        title={resetLabel}
-        onClick={onResetLayout}
-      >
-        <AppIcon name="refresh" className="h-4 w-4" />
-      </button>
-    </div>
-  )
+function flattenResources(data: ReturnType<typeof useWorkspaceResources>['data']): WorkspaceResourceView[] {
+  const byId = new Map<string, WorkspaceResourceView>()
+  for (const page of data?.pages ?? []) {
+    for (const resource of page.items) byId.set(resource.resourceId, resource)
+  }
+  return [...byId.values()]
 }
 
-function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptPending = false }: ProjectWorkspaceCanvasContentProps) {
+function folderFromResource(resource: WorkspaceResourceView): CurrentCanvasFolder {
+  if (resource.resourceKind !== 'folder') {
+    throw new Error(`WORKSPACE_CANVAS_FOLDER_REQUIRED:${resource.resourceId}`)
+  }
+  return {
+    folderKey: resource.resourceId,
+    name: resource.name,
+    workspacePath: resource.workspacePath,
+    ancestors: resource.ancestors,
+  }
+}
+
+function parentFolderFromResource(resource: WorkspaceResourceView, rootName: string): CurrentCanvasFolder {
+  const parent = resource.ancestors.at(-1)
+  if (!parent) {
+    return {
+      folderKey: WORKSPACE_RESOURCE_ROOT_FOLDER_KEY,
+      name: rootName,
+      workspacePath: '',
+      ancestors: [],
+    }
+  }
+  return {
+    folderKey: parent.resourceId,
+    name: parent.name,
+    workspacePath: parent.workspacePath,
+    ancestors: resource.ancestors.slice(0, -1),
+  }
+}
+
+function isFolderNodeData(
+  data: WorkspaceCanvasNodeRecord,
+): data is WorkspaceCanvasFolderNodeData & Record<string, unknown> {
+  return data.kind === 'folder'
+}
+
+function ProjectWorkspaceFolderCanvas({
+  folder,
+  rootName,
+  pendingLocateResourceId,
+  onNavigate,
+  onLocateConsumed,
+  selection,
+  onSelectionChange,
+  onAssistantDraftRequest,
+  activeAssistantFocusRequest = null,
+}: ProjectWorkspaceCanvasContentProps & {
+  readonly folder: CurrentCanvasFolder
+  readonly rootName: string
+  readonly pendingLocateResourceId: string | null
+  readonly onNavigate: (folder: CurrentCanvasFolder, locateResourceId?: string | null) => void
+  readonly onLocateConsumed: () => void
+}) {
   const t = useTranslations('projectWorkflow.canvas.workspace')
-  const { projectId, episodeId } = useWorkspaceProvider()
-  const runtime = useWorkspaceRuntime()
-  const { episodeName, novelText, clips, storyboards, shots, finalVideo, videoGroups } = useWorkspaceEpisodeCanvasData()
-  const { data: editScreenplay } = useProjectEditScreenplay(projectId, episodeId ?? null)
-  const { data: editDirectorDecoupage } = useProjectEditDirectorDecoupage(projectId, episodeId ?? null)
-  const { data: editScript } = useProjectEditScript(projectId, episodeId ?? null)
-  const { data: editCinematographyShotPlan } = useProjectEditCinematographyShotPlan(projectId, episodeId ?? null)
-  const { data: projectAssets } = useProjectAssets(projectId)
-  const locations = projectAssets.locations
-  const reactFlow = useReactFlow<WorkspaceCanvasFlowNode>()
-  const runNodeAction = useWorkspaceNodeCanvasActions()
-  const canvasRef = useRef<HTMLDivElement | null>(null)
-  const [sourceNodes, setSourceNodes] = useState<WorkspaceCanvasFlowNode[]>([])
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
-  const [videoBlockArrangementInitialBlockIndex, setVideoBlockArrangementInitialBlockIndex] = useState<number | null>(null)
-  const [nodeExpansionOverrides, setNodeExpansionOverrides] = useState<ReadonlyMap<string, boolean>>(() => new Map())
-  const defaultExpandedNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
-  const optimisticRunningNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
-  const optimisticRunningClearTimersRef = useRef<Map<string, number>>(new Map())
-  const workspaceTaskStateByQueryKeyRef = useRef<ReadonlyMap<string, TaskRuntimeStateLike>>(new Map())
-  const projectedNodeByIdRef = useRef<ReadonlyMap<string, WorkspaceCanvasFlowNode>>(new Map())
-  const expansionAnchorNodePositionsRef = useRef<ReadonlyMap<string, { readonly x: number; readonly y: number }>>(new Map())
-  const appliedProjectionNodeSignatureRef = useRef<string | null>(null)
-  const stableEdgesRef = useRef<{
-    signature: string
-    edges: WorkspaceCanvasFlowEdge[]
-  } | null>(null)
+  const { projectId } = useWorkspaceProvider()
+  const { data: projectData } = useProjectData(projectId)
+  const projectAspectRatio = projectData?.videoRatio ?? null
+  const {
+    data: canvasActions,
+    isLoading: canvasActionsLoading,
+    isError: canvasActionsFailed,
+    refetch: retryCanvasActions,
+  } = useCanvasActions(projectId)
+  const folderQuery = useWorkspaceResources({
+    projectId,
+    prefix: folder.workspacePath || null,
+    search: null,
+    scope: 'subtree',
+  })
+  const resources = useMemo(() => flattenResources(folderQuery.data), [folderQuery.data])
+  const fetchNextFolderPage = folderQuery.fetchNextPage
+  const folderHasNextPage = folderQuery.hasNextPage
+  const folderFetchingNextPage = folderQuery.isFetchingNextPage
+  useEffect(() => {
+    if (!folderHasNextPage || folderFetchingNextPage) return
+    void fetchNextFolderPage()
+  }, [fetchNextFolderPage, folderFetchingNextPage, folderHasNextPage])
 
+  const [search, setSearch] = useState('')
+  const normalizedSearch = search.trim()
+  const searchQuery = useWorkspaceResources({
+    projectId,
+    prefix: null,
+    search: normalizedSearch || null,
+    enabled: Boolean(normalizedSearch),
+  })
+  const searchResults = useMemo(() => flattenResources(searchQuery.data), [searchQuery.data])
+  const [createDraft, setCreateDraft] = useState<{
+    readonly id: string
+    readonly position: WorkspaceCanvasCreateRequest['position']
+    readonly handoffTargetNodeIds: readonly string[] | null
+  } | null>(null)
+  const closeCreateDraft = useCallback((draftId: string) => {
+    setCreateDraft((current) => current?.id === draftId ? null : current)
+  }, [])
+  const reactFlow = useReactFlow<WorkspaceCanvasFlowNode>()
+  const canvasRef = useRef<HTMLDivElement | null>(null)
+  const [userNodePositions, setUserNodePositions] = useState<ReadonlyMap<string, WorkspaceCanvasUserPosition>>(() => new Map())
+  const [preview, setPreview] = useState<{
+    readonly members: readonly WorkspaceResourceCardMemberView[]
+    readonly initialResourceId: string
+  } | null>(null)
+  const [reactFlowReady, setReactFlowReady] = useState(false)
+  const resolvedProjectedNodesRef = useRef<readonly WorkspaceCanvasFlowNode[]>([])
+  const projectedFlowNodesRef = useRef<readonly WorkspaceCanvasFlowNode[]>([])
+  const projectedFlowEdgesRef = useRef<readonly WorkspaceCanvasFlowEdge[]>([])
+  const initialReactFlowNodesRef = useRef<WorkspaceCanvasFlowNode[] | null>(null)
+  const initialReactFlowEdgesRef = useRef<WorkspaceCanvasFlowEdge[] | null>(null)
+  const appliedProjectionSignatureRef = useRef<string | null>(null)
+  const appliedInitialViewportRef = useRef(false)
+  const projectionSignatureRef = useRef('')
+  const reactFlowRef = useRef(reactFlow)
+  reactFlowRef.current = reactFlow
+  const userNodePositionsRef = useRef<ReadonlyMap<string, WorkspaceCanvasUserPosition>>(new Map())
+  const layoutWriteChainRef = useRef<Promise<void>>(Promise.resolve())
+  const pendingPlacementNodeIdsRef = useRef<Set<string>>(new Set())
+  const operationAction = useCanvasOperationAction({ projectId })
+  const deleteAction = useCanvasResourceDeleteAction({
+    projectId,
+    onDeleted: (resourceId) => {
+      if (selection?.targetId === resourceId) onSelectionChange(null)
+    },
+  })
+  const placeUploadedResource = useCallback((item: CanvasUploadQueueItem, resourceId: string, reused: boolean) => {
+    if (reused) return
+    const nodeId = workspaceNodeId.resourceCard(resourceId)
+    pendingPlacementNodeIdsRef.current.add(nodeId)
+    setUserNodePositions((current) => new Map(current).set(nodeId, item.position))
+  }, [])
+  const uploadQueue = useCanvasUploadQueue({
+    projectId,
+    directoryPath: folder.workspacePath,
+    onMaterialized: placeUploadedResource,
+  })
   const {
     layout,
+    isLoading: layoutLoading,
+    loadError: layoutLoadError,
+    reloadLayout,
     saveLayout,
-    resetLayout: resetSavedLayout,
-  } = useCanvasLayoutPersistence({
-    projectId,
-    episodeId: episodeId ?? '',
-  })
+  } = useCanvasLayoutPersistence({ projectId, folderKey: folder.folderKey })
+  const projectionComplete = !folderQuery.isLoading
+    && !folderQuery.isError
+    && !folderQuery.hasNextPage
+    && !folderQuery.isFetchingNextPage
+    && !layoutLoading
+    && !layoutLoadError
 
   const savedNodeLayouts = layout?.nodeLayouts ?? EMPTY_SAVED_NODE_LAYOUTS
-  const editScriptGenerationTargets = useMemo(
-    () => {
-      const target = TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)
-      return target ? [target] : []
-    },
-    [episodeId],
-  )
-  const editScriptGenerationTaskStateMap = useTaskTargetStateMap(projectId, editScriptGenerationTargets, {
-    enabled: Boolean(projectId && episodeId),
-    staleTime: 1000,
-  })
-  const editScriptGenerationTaskState = editScriptGenerationTaskStateMap.getQueryState(editScriptGenerationTargets[0] ?? { targetType: '', targetId: '' })
-  const editScriptGenerationActive = isTaskRuntimeRunningPhase(editScriptGenerationTaskState?.phase)
-  const projectedEditScript = useMemo(() => (
-    editScript
-      ? {
-          ...editScript,
-          status: editScriptGenerationActive
-            ? 'generating'
-            : editScript.status === 'generating'
-              ? 'ready'
-              : editScript.status,
-        }
-      : editScript
-  ), [editScript, editScriptGenerationActive])
-  const effectiveEditScriptPending = editScriptPending || (editScriptGenerationActive && !editScript)
-  const nodeRunningStatusLabel = useCallback((node: WorkspaceCanvasFlowNode): string => (
-    node.data.kind === 'finalTimeline'
-      ? t('status.aiEditing')
-      : node.data.kind === 'bgmScore'
-        ? t('status.generatingBgm')
-        : t('status.processing')
-  ), [t])
-  const clearOptimisticRunningNode = useCallback((nodeId: string) => {
-    const timer = optimisticRunningClearTimersRef.current.get(nodeId)
-    if (timer !== undefined) {
-      window.clearTimeout(timer)
-      optimisticRunningClearTimersRef.current.delete(nodeId)
-    }
-    const nextIds = new Set(optimisticRunningNodeIdsRef.current)
-    nextIds.delete(nodeId)
-    optimisticRunningNodeIdsRef.current = nextIds
-  }, [])
-  const restoreNodeRuntimeBaseline = useCallback((nodeId: string) => {
-    setSourceNodes((currentNodes) => currentNodes.map((node) => {
-      if (node.id !== nodeId) return node
-      const projectedNode = projectedNodeByIdRef.current.get(nodeId)
-      if (!projectedNode) {
-        return {
-          ...node,
-          data: {
-            ...node.data,
-            isRunning: false,
-          },
-        }
-      }
-      const runtimePatch = resolveWorkspaceNodeRuntimePatch({
-        node: projectedNode,
-        statesByQueryKey: workspaceTaskStateByQueryKeyRef.current,
-        isOptimisticallyRunning: false,
-        labels: {
-          running: nodeRunningStatusLabel(projectedNode),
-          failed: t('status.failed'),
-        },
-      })
-      return {
-        ...node,
-        data: {
-          ...node.data,
-          ...runtimePatch,
-        },
-      }
-    }))
-  }, [nodeRunningStatusLabel, t])
-  const markNodeOptimisticallyRunning = useCallback((nodeId: string) => {
-    const previousTimer = optimisticRunningClearTimersRef.current.get(nodeId)
-    if (previousTimer !== undefined) window.clearTimeout(previousTimer)
-    const nextIds = new Set(optimisticRunningNodeIdsRef.current)
-    nextIds.add(nodeId)
-    optimisticRunningNodeIdsRef.current = nextIds
-    const timer = window.setTimeout(() => {
-      clearOptimisticRunningNode(nodeId)
-      restoreNodeRuntimeBaseline(nodeId)
-    }, OPTIMISTIC_NODE_RUNNING_TIMEOUT_MS)
-    optimisticRunningClearTimersRef.current.set(nodeId, timer)
-    setSourceNodes((currentNodes) => currentNodes.map((node) => node.id === nodeId
-      ? {
-          ...node,
-          data: {
-            ...node.data,
-            isRunning: true,
-            statusLabel: nodeRunningStatusLabel(node),
-          },
-        }
-      : node))
-  }, [clearOptimisticRunningNode, nodeRunningStatusLabel, restoreNodeRuntimeBaseline])
-  const onNodeAction = useCallback(async (action: WorkspaceCanvasNodeAction, nodeId?: string) => {
-    if (action.type === 'open_video_block_arrangement') {
-      setVideoBlockArrangementInitialBlockIndex(action.blockIndex)
-      return
-    }
-
-    if (nodeId) markNodeOptimisticallyRunning(nodeId)
-    try {
-      await runNodeAction(action)
-    } catch (error: unknown) {
-      if (nodeId) {
-        clearOptimisticRunningNode(nodeId)
-        restoreNodeRuntimeBaseline(nodeId)
-      }
-      _ulogWarn('[ProjectWorkspaceCanvas] node action failed', error)
-      throw error
-    }
-  }, [clearOptimisticRunningNode, markNodeOptimisticallyRunning, restoreNodeRuntimeBaseline, runNodeAction])
-  const toggleNodeExpanded = useCallback((nodeId: string) => {
-    const anchorNode = reactFlow.getNode(nodeId)
-    if (anchorNode) {
-      const nextAnchors = new Map(expansionAnchorNodePositionsRef.current)
-      nextAnchors.set(nodeId, anchorNode.position)
-      expansionAnchorNodePositionsRef.current = nextAnchors
-    }
-    setNodeExpansionOverrides((current) => {
-      const defaultExpanded = defaultExpandedNodeIdsRef.current.has(nodeId)
-      const currentExpanded = current.get(nodeId) ?? defaultExpanded
-      const next = new Map(current)
-      next.set(nodeId, !currentExpanded)
-      return next
-    })
-  }, [reactFlow])
-  const handleMeasuredNodeSize = useCallback((
-    nodeId: string,
-    size: { readonly width: number; readonly height: number },
-  ) => {
-    setSourceNodes((currentNodes) => {
-      let changed = false
-      let measuredKind: WorkspaceCanvasFlowNode['data']['kind'] | null = null
-      let measuredPosition: { readonly x: number; readonly y: number } | null = null
-      const measuredNodes = currentNodes.map((node) => {
-        if (node.id !== nodeId) return node
-        measuredKind = node.data.kind
-        measuredPosition = node.position
-
-        const nextHeight = resolveWorkspaceCanvasMeasuredNodeHeight({
-          kind: node.data.kind,
-          measuredHeight: size.height,
-        })
-        const currentStyleHeight = numericStyleDimension(node.style?.height) ?? node.data.height
-        if (
-          Math.abs(nextHeight - node.data.height) <= MEASURED_NODE_SIZE_EPSILON &&
-          Math.abs(nextHeight - currentStyleHeight) <= MEASURED_NODE_SIZE_EPSILON
-        ) {
-          return node
-        }
-
-        changed = true
-        return {
-          ...node,
-          style: {
-            ...node.style,
-            height: nextHeight,
-          },
-          data: {
-            ...node.data,
-            height: nextHeight,
-          },
-        }
-      })
-      if (!changed) return currentNodes
-
-      const normalizedNodes = normalizeNodesToLayoutBasePositions(measuredNodes)
-      const relayoutedNodes = relayoutEditAssetsBelowScript(normalizedNodes)
-      const measuredNodePosition = measuredPosition
-        ? new Map([[nodeId, measuredPosition]])
-        : undefined
-      const preservedNodePositions = mergePreservedNodePositions(
-        expansionAnchorNodePositionsRef.current,
-        measuredNodePosition,
-      )
-      const alignOptions = { preservedNodeIds: preservedNodeIdSet(preservedNodePositions) }
-      const alignedNodes = alignSpaceConsistencyNodesToMeasuredEditScript(relayoutedNodes, alignOptions)
-      const baseAlignedNodes = measuredKind === 'editScript'
-        ? captureLayoutBasePositions(alignedNodes)
-        : alignedNodes
-      return composeWorkspaceCanvasLegacyLayout({
-        nodes: baseAlignedNodes,
-        model: buildWorkspaceCanvasLegacyLayoutModel(baseAlignedNodes, { preservedNodePositions }),
-        preservedNodePositions,
-      })
-    })
-  }, [])
-  const attachNodeUiState = useCallback((
-    inputNodes: readonly WorkspaceCanvasFlowNode[],
-    options?: WorkspaceNodeDynamicLayoutOptions,
-  ) => {
-    const defaultExpandedNodeIds = new Set<string>()
-    const baseNodes = preserveWorkspaceNodePositions(
-      normalizeNodesToLayoutBasePositions(inputNodes),
-      options?.preservedNodePositions,
-    )
-    const nextNodes = baseNodes.map((node) => {
-      const isOptimisticallyRunning = optimisticRunningNodeIdsRef.current.has(node.id)
-      const runtimePatch = resolveWorkspaceNodeRuntimePatch({
-        node,
-        statesByQueryKey: workspaceTaskStateByQueryKeyRef.current,
-        isOptimisticallyRunning,
-        labels: {
-          running: nodeRunningStatusLabel(node),
-          failed: t('status.failed'),
-        },
-      })
-      const profile = getWorkspaceCanvasNodePresentationProfile(node.data.kind)
-      const defaultExpanded = node.data.defaultExpanded ?? profile.defaultExpanded
-      if (defaultExpanded) defaultExpandedNodeIds.add(node.id)
-      const expanded = nodeExpansionOverrides.get(node.id) ?? defaultExpanded
-      const size = resolveWorkspaceCanvasNodeSize({
-        kind: node.data.kind,
-        expanded,
-        collapsedSize: {
-          width: node.data.width,
-          height: node.data.height,
-        },
-      })
-      return {
-        ...node,
-        style: {
-          ...node.style,
-          width: size.width,
-          height: size.height,
-        },
-        data: {
-          ...node.data,
-          ...runtimePatch,
-          expanded,
-          expandedLayout: expanded ? profile.expandedLayout : undefined,
-          onToggleExpanded: toggleNodeExpanded,
-          onMeasureNodeSize: handleMeasuredNodeSize,
-        },
-      }
-    })
-    defaultExpandedNodeIdsRef.current = defaultExpandedNodeIds
-    return composeWorkspaceCanvasLegacyLayout({
-      nodes: nextNodes,
-      model: buildWorkspaceCanvasLegacyLayoutModel(nextNodes, options),
-      preservedNodePositions: options?.preservedNodePositions,
-    })
-  }, [handleMeasuredNodeSize, nodeExpansionOverrides, nodeRunningStatusLabel, t, toggleNodeExpanded])
-  const readExpansionAnchorNodePositions = useCallback(() => (
-    expansionAnchorNodePositionsRef.current.size > 0 ? expansionAnchorNodePositionsRef.current : undefined
-  ), [])
-
+  // Session-monotonic collapse seed: folders folded during this canvas visit
+  // never pop back open mid-session (the ref resets with the per-folder mount).
+  const collapsedFoldersRef = useRef<ReadonlySet<string>>(new Set())
   const projection = useWorkspaceNodeCanvasProjection({
     projectId,
-    episodeId: episodeId ?? 'pending-episode',
-    episodeName,
-    storyText: novelText,
-    clips,
-    locations,
-    storyboards,
-    shots,
-    editScreenplay,
-    editDirectorDecoupage,
-    editScript: projectedEditScript,
-    editCinematographyShotPlan,
-    editScriptPending: effectiveEditScriptPending,
-    finalVideo,
-    videoGroups,
-    defaultVideoModel: runtime.singleShotVideoModel ?? runtime.videoModel ?? null,
-    defaultSequenceVideoModel: runtime.sequenceVideoModel ?? null,
+    projectAspectRatio,
+    currentFolderPath: folder.workspacePath || null,
+    collapsedSeed: collapsedFoldersRef.current,
+    workspaceResources: resources,
     savedLayouts: savedNodeLayouts,
     translate: t,
-    onAction: onNodeAction,
   })
+  const projectedNodes = projection.nodes
   const projectionEdges = projection.edges
-  projectedNodeByIdRef.current = new Map(projection.nodes.map((node) => [node.id, node]))
+  useEffect(() => {
+    const next = new Set<string>()
+    for (const node of projectedNodes) {
+      if (node.data.kind === 'folder' && node.data.folder.display === 'card') {
+        next.add(node.data.folder.resourceId)
+      }
+    }
+    const current = collapsedFoldersRef.current
+    if (next.size === current.size && [...next].every((id) => current.has(id))) return
+    collapsedFoldersRef.current = next
+  }, [projectedNodes])
   const workspaceRuntimeTargets = useMemo(
-    () => collectWorkspaceNodeRuntimeTargets(projection.nodes),
-    [projection.nodes],
+    () => collectWorkspaceNodeRuntimeTargets(projectedNodes),
+    [projectedNodes],
   )
   const workspaceTaskStateMap = useTaskTargetStateMap(projectId, workspaceRuntimeTargets, {
     enabled: Boolean(projectId && workspaceRuntimeTargets.length > 0),
     staleTime: 1000,
   })
-  const workspaceTaskStateSignature = useMemo(
-    () => taskRuntimeStateMapSignature(workspaceTaskStateMap.byQueryKey),
-    [workspaceTaskStateMap.byQueryKey],
+  const attachNodeUiState = useCallback((inputNodes: readonly WorkspaceCanvasFlowNode[]) => (
+    inputNodes.map((node) => {
+      const resolvedData = resolveWorkspaceCanvasNodeData({
+        node,
+        statesByQueryKey: workspaceTaskStateMap.byQueryKey,
+      })
+      const isSelected = node.id === selection?.nodeId
+      return {
+        ...node,
+        zIndex: isSelected ? 30 : undefined,
+        data: { ...resolvedData, uiSelected: isSelected },
+      }
+    })
+  ), [selection?.nodeId, workspaceTaskStateMap.byQueryKey])
+  const resolvedProjectedNodes = useMemo(
+    () => attachNodeUiState(projectedNodes),
+    [attachNodeUiState, projectedNodes],
   )
-  workspaceTaskStateByQueryKeyRef.current = workspaceTaskStateMap.byQueryKey
-  const terminalInvalidationStates = useMemo(
-    () => [
-      ...editScriptGenerationTaskStateMap.data,
-      ...workspaceTaskStateMap.data,
-    ],
-    [editScriptGenerationTaskStateMap.data, workspaceTaskStateMap.data],
-  )
-  useTaskTargetTerminalInvalidation({
-    projectId,
-    episodeId,
-    states: terminalInvalidationStates,
-    enabled: terminalInvalidationStates.length > 0,
-  })
-
+  resolvedProjectedNodesRef.current = resolvedProjectedNodes
+  userNodePositionsRef.current = userNodePositions
+  const flowNodes = useMemo(() => applyWorkspaceCanvasUserPositions({
+    nodes: resolvedProjectedNodes,
+    positions: userNodePositions,
+  }), [resolvedProjectedNodes, userNodePositions])
+  const flowNodeSignature = useMemo(() => buildWorkspaceCanvasNodeSignature(flowNodes), [flowNodes])
+  if (initialReactFlowNodesRef.current === null) initialReactFlowNodesRef.current = [...flowNodes]
+  projectedFlowNodesRef.current = flowNodes
   const projectionNodeSignature = useMemo(
-    () => buildWorkspaceCanvasNodeSignature(projection.nodes),
-    [projection.nodes],
+    () => buildWorkspaceCanvasNodeSignature(resolvedProjectedNodes),
+    [resolvedProjectedNodes],
+  )
+  const visibleNodeIds = useMemo(() => new Set(flowNodes.map((node) => node.id)), [flowNodes])
+  const visibleProjectionEdges = useMemo(
+    () => projectionEdges.filter((edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target)),
+    [projectionEdges, visibleNodeIds],
   )
   const projectionEdgeSignature = useMemo(
-    () => buildWorkspaceCanvasEdgeSignature(projectionEdges),
-    [projectionEdges],
+    () => buildWorkspaceCanvasEdgeSignature(visibleProjectionEdges),
+    [visibleProjectionEdges],
   )
-  if (stableEdgesRef.current?.signature !== projectionEdgeSignature) {
-    stableEdgesRef.current = {
-      signature: projectionEdgeSignature,
-      edges: [...projectionEdges],
-    }
-  }
-  const flowEdges = stableEdgesRef.current.edges
-
-  useEffect(() => {
-    if (appliedProjectionNodeSignatureRef.current === projectionNodeSignature) return
-    appliedProjectionNodeSignatureRef.current = projectionNodeSignature
-    setSourceNodes(attachNodeUiState(projection.nodes, {
-      preservedNodePositions: readExpansionAnchorNodePositions(),
-    }))
-  }, [attachNodeUiState, projection.nodes, projectionNodeSignature, readExpansionAnchorNodePositions])
-
-  useEffect(() => {
-    setSourceNodes((currentNodes) => attachNodeUiState(currentNodes, {
-      preservedNodePositions: readExpansionAnchorNodePositions(),
-    }))
-  }, [
-    attachNodeUiState,
-    workspaceTaskStateSignature,
-    readExpansionAnchorNodePositions,
-  ])
-
-  useEffect(() => {
-    const projectionByNodeId = new Map(projection.nodes.map((node) => [node.id, node]))
-    let changed = false
-    const nextIds = new Set<string>()
-    optimisticRunningNodeIdsRef.current.forEach((nodeId) => {
-      const projectedNode = projectionByNodeId.get(nodeId)
-      if (!projectedNode || projectedNode.data.isRunning === true) {
-        const timer = optimisticRunningClearTimersRef.current.get(nodeId)
-        if (timer !== undefined) {
-          window.clearTimeout(timer)
-          optimisticRunningClearTimersRef.current.delete(nodeId)
-        }
-        changed = true
-        return
-      }
-      nextIds.add(nodeId)
+  projectedFlowEdgesRef.current = visibleProjectionEdges
+  if (initialReactFlowEdgesRef.current === null) initialReactFlowEdgesRef.current = [...visibleProjectionEdges]
+  projectionSignatureRef.current = `${flowNodeSignature}\n--edges--\n${projectionEdgeSignature}`
+  const syncProjectionToReactFlow = useCallback((flow = reactFlowRef.current) => {
+    const signature = projectionSignatureRef.current
+    if (appliedProjectionSignatureRef.current === signature) return
+    appliedProjectionSignatureRef.current = signature
+    flow.setNodes((currentNodes) => {
+      const currentById = new Map(currentNodes.map((node) => [node.id, node] as const))
+      return projectedFlowNodesRef.current.map((node) => {
+        const current = currentById.get(node.id)
+        return current?.measured ? { ...node, measured: current.measured } : node
+      })
     })
-    if (changed) optimisticRunningNodeIdsRef.current = nextIds
-  }, [projection.nodes, projectionNodeSignature])
-
-  useEffect(() => () => {
-    optimisticRunningClearTimersRef.current.forEach((timer) => window.clearTimeout(timer))
-    optimisticRunningClearTimersRef.current.clear()
+    flow.setEdges([...projectedFlowEdgesRef.current])
   }, [])
+  const handleReactFlowInit = useCallback((flow: typeof reactFlow) => {
+    reactFlowRef.current = flow
+    setReactFlowReady(true)
+  }, [])
+  useEffect(() => {
+    if (!reactFlowReady) return
+    syncProjectionToReactFlow()
+  }, [flowNodeSignature, projectionEdgeSignature, reactFlowReady, syncProjectionToReactFlow])
+  useEffect(() => {
+    if (!reactFlowReady || layoutLoading || appliedInitialViewportRef.current) return
+    appliedInitialViewportRef.current = true
+    void reactFlow.setViewport(layout?.viewport ?? DEFAULT_WORKSPACE_CANVAS_VIEWPORT, { duration: 0 })
+  }, [layout?.viewport, layoutLoading, reactFlow, reactFlowReady])
+  const focusNodeIds = useMemo(() => resolveWorkspaceCanvasFocusNodeIds(
+    flowNodes,
+    activeAssistantFocusRequest?.taskTargets ?? [],
+  ), [activeAssistantFocusRequest?.taskTargets, flowNodes])
+  const { notifyUserInteraction: notifyCanvasUserInteraction } = useCanvasFocusFollow({
+    reactFlow,
+    containerRef: canvasRef,
+    enabled: true,
+    focusNodeIds,
+    focusRequestKey: activeAssistantFocusRequest?.requestKey ?? null,
+  })
+  const {
+    accept: uploadAccept,
+    uploadInputRef,
+    openPicker: openUploadPicker,
+    handleInputChange: handleUploadInputChange,
+    handleDrop: handleCanvasDrop,
+    handlePaste: handleCanvasPaste,
+    handleDragOver: handleCanvasDragOver,
+  } = useCanvasUploadBridge({
+    canvasRef,
+    screenToFlowPosition: reactFlow.screenToFlowPosition,
+    addFiles: uploadQueue.addFiles,
+    onUserInteraction: notifyCanvasUserInteraction,
+  })
 
   useEffect(() => {
-    setSourceNodes((currentNodes) => attachNodeUiState(currentNodes, {
-      preservedNodePositions: readExpansionAnchorNodePositions(),
-    }))
-  }, [attachNodeUiState, readExpansionAnchorNodePositions])
-
-  useEffect(() => {
-    const projectedNodeIds = new Set(projection.nodes.map((node) => node.id))
-    const nextAnchorPositions = new Map<string, { readonly x: number; readonly y: number }>()
-    expansionAnchorNodePositionsRef.current.forEach((position, nodeId) => {
-      if (projectedNodeIds.has(nodeId)) nextAnchorPositions.set(nodeId, position)
-    })
-    if (nextAnchorPositions.size !== expansionAnchorNodePositionsRef.current.size) {
-      expansionAnchorNodePositionsRef.current = nextAnchorPositions
-    }
-    setNodeExpansionOverrides((current) => {
+    const projectedNodeIds = new Set(projectedNodes.map((node) => node.id))
+    setUserNodePositions((current) => {
       let changed = false
-      const next = new Map<string, boolean>()
-      current.forEach((expanded, nodeId) => {
-        if (projectedNodeIds.has(nodeId)) {
-          next.set(nodeId, expanded)
-        } else {
-          changed = true
-        }
+      const next = new Map<string, WorkspaceCanvasUserPosition>()
+      current.forEach((position, nodeId) => {
+        if (projectedNodeIds.has(nodeId)) next.set(nodeId, position)
+        else changed = true
       })
       return changed ? next : current
     })
-  }, [projection.nodes, projectionNodeSignature])
+  }, [projectedNodes, projectionNodeSignature])
 
   const persistCurrentLayout = useCallback(async (nextNodes: readonly WorkspaceCanvasFlowNode[]) => {
-    if (!episodeId) return
-
+    if (!projectionComplete) return
     const input = buildWorkspaceCanvasLayoutInput({
-      episodeId,
+      folderKey: folder.folderKey,
+      viewport: reactFlowRef.current.getViewport(),
       nodes: nextNodes,
     })
+    const write = layoutWriteChainRef.current
+      .catch(() => undefined)
+      .then(async () => { await saveLayout(input) })
+    layoutWriteChainRef.current = write.catch(() => undefined)
+    await write
+  }, [folder.folderKey, projectionComplete, saveLayout])
 
-    await saveLayout(input)
-  }, [episodeId, saveLayout])
+  useEffect(() => {
+    if (pendingPlacementNodeIdsRef.current.size === 0) return
+    const projectedNodeIds = new Set(resolvedProjectedNodes.map((node) => node.id))
+    const matched = [...pendingPlacementNodeIdsRef.current].filter((nodeId) => projectedNodeIds.has(nodeId))
+    if (matched.length === 0) return
+    matched.forEach((nodeId) => pendingPlacementNodeIdsRef.current.delete(nodeId))
+    void persistCurrentLayout(applyWorkspaceCanvasUserPositions({
+      nodes: resolvedProjectedNodes,
+      positions: userNodePositionsRef.current,
+    })).catch((error: unknown) => {
+      _ulogWarn('[ProjectWorkspaceCanvas] generated Resource placement save failed', error)
+    })
+  }, [persistCurrentLayout, resolvedProjectedNodes, userNodePositions])
 
   const persistCurrentLayoutSafely = useCallback((nextNodes: readonly WorkspaceCanvasFlowNode[]) => {
     void persistCurrentLayout(nextNodes).catch((error: unknown) => {
       _ulogWarn('[ProjectWorkspaceCanvas] canvas layout save failed', error)
     })
   }, [persistCurrentLayout])
-
-  const handleNodesChange = useCallback((changes: NodeChange<WorkspaceCanvasFlowNode>[]) => {
-    setSourceNodes((currentNodes) => applyNodeChanges(changes, currentNodes))
-  }, [])
-
-  const handleNodeDragStop = useCallback<OnNodeDrag<WorkspaceCanvasFlowNode>>((_event, node, draggedNodes) => {
-    const movedNodesById = new Map<string, WorkspaceCanvasFlowNode>(
-      [node, ...draggedNodes].map((movedNode) => [movedNode.id, movedNode]),
-    )
-    const movedNodeIds = new Set(movedNodesById.keys())
-    if ([...movedNodeIds].some((nodeId) => expansionAnchorNodePositionsRef.current.has(nodeId))) {
-      const nextAnchors = new Map(expansionAnchorNodePositionsRef.current)
-      movedNodeIds.forEach((nodeId) => nextAnchors.delete(nodeId))
-      expansionAnchorNodePositionsRef.current = nextAnchors
-    }
-    const currentNodes = reactFlow.getNodes().map((currentNode) => movedNodesById.get(currentNode.id) ?? currentNode)
-    const repairedLayoutNodes = repairWorkspaceCanvasDraggedLayout({
-      nodes: currentNodes,
-      movedNodeIds,
+  const handleNodeDragStart = useCallback<OnNodeDrag<WorkspaceCanvasFlowNode>>(() => {
+    notifyCanvasUserInteraction()
+  }, [notifyCanvasUserInteraction])
+  const applyUserNodePositions = useCallback((nodes: readonly WorkspaceCanvasFlowNode[]) => {
+    setUserNodePositions((current) => {
+      const next = new Map(current)
+      nodes.forEach((node) => next.set(node.id, { x: node.position.x, y: node.position.y }))
+      return next
     })
-    const repairedNodes = attachNodeUiState(repairedLayoutNodes)
-    setSourceNodes(repairedNodes)
-    persistCurrentLayoutSafely(repairedNodes)
-  }, [attachNodeUiState, persistCurrentLayoutSafely, reactFlow])
-
-  const handleNodeClick = useCallback<NodeMouseHandler<WorkspaceCanvasFlowNode>>((_event, node) => {
-    if (node.data.kind === 'analysis') return
-    setSelectedNodeId(node.id)
   }, [])
+  const handleNodeDrag = useCallback<OnNodeDrag<WorkspaceCanvasFlowNode>>((_event, node, draggedNodes) => {
+    applyUserNodePositions([node, ...draggedNodes])
+  }, [applyUserNodePositions])
+  const handleNodeDragStop = useCallback<OnNodeDrag<WorkspaceCanvasFlowNode>>((_event, node, draggedNodes) => {
+    notifyCanvasUserInteraction()
+    const movedNodes = [node, ...draggedNodes]
+    const nextPositions = new Map(userNodePositionsRef.current)
+    movedNodes.forEach((movedNode) => nextPositions.set(movedNode.id, movedNode.position))
+    applyUserNodePositions(movedNodes)
+    persistCurrentLayoutSafely(applyWorkspaceCanvasUserPositions({
+      nodes: resolvedProjectedNodesRef.current,
+      positions: nextPositions,
+    }))
+  }, [applyUserNodePositions, notifyCanvasUserInteraction, persistCurrentLayoutSafely])
 
+  const selectionForNode = useCallback((node: WorkspaceCanvasFlowNode): WorkspaceCanvasSelection | null => {
+    if (node.data.kind !== 'resourceCard') return null
+    const summary = node.data.resourceDetails.presentation.summary
+    return {
+      nodeId: node.id,
+      targetType: 'workspaceResource',
+      targetId: node.data.targetId,
+      selectedScopeRef: `workspaceResource:${node.data.targetId}`,
+      selectedAssetId: null,
+      name: node.data.title,
+      mediaType: node.data.resourceDetails.resource.mediaType,
+      previewUrl: summary.kind === 'media' ? summary.url : null,
+    }
+  }, [])
+  const openProjectedFolder = useCallback((target: WorkspaceCanvasFolderOpenTarget) => {
+    const parent: WorkspaceResourceAncestorView[] = folder.folderKey === WORKSPACE_RESOURCE_ROOT_FOLDER_KEY
+      ? []
+      : [...folder.ancestors, {
+          resourceId: folder.folderKey,
+          name: folder.name,
+          workspacePath: folder.workspacePath,
+        }]
+    onNavigate({
+      folderKey: target.resourceId,
+      name: target.name,
+      workspacePath: target.workspacePath,
+      ancestors: parent,
+    })
+  }, [folder, onNavigate])
+  const selectResourceNode = useCallback((nodeId: string) => {
+    canvasRef.current?.focus()
+    const node = flowNodes.find((candidate) => candidate.id === nodeId)
+    if (!node) return
+    const nextSelection = selectionForNode(node)
+    if (nextSelection) onSelectionChange(nextSelection)
+  }, [flowNodes, onSelectionChange, selectionForNode])
+  const handleNodeClick = useCallback<NodeMouseHandler<WorkspaceCanvasFlowNode>>((_event, node) => {
+    canvasRef.current?.focus()
+    if (!isFolderNodeData(node.data)) return
+    // Expanded section frames behave like canvas background on single click;
+    // only the collapsed folder card keeps click-to-enter (CN-02C).
+    if (node.data.folder.display === 'section') {
+      onSelectionChange(null)
+      return
+    }
+    openProjectedFolder({
+      resourceId: node.data.folder.resourceId,
+      name: node.data.title,
+      workspacePath: node.data.folder.workspacePath,
+    })
+  }, [onSelectionChange, openProjectedFolder])
+  const handleNodeDoubleClick = useCallback<NodeMouseHandler<WorkspaceCanvasFlowNode>>((_event, node) => {
+    if (!isFolderNodeData(node.data)) return
+    openProjectedFolder({
+      resourceId: node.data.folder.resourceId,
+      name: node.data.title,
+      workspacePath: node.data.folder.workspacePath,
+    })
+  }, [openProjectedFolder])
+  const handlePaneClick = useCallback((event: ReactMouseEvent<Element, globalThis.MouseEvent>) => {
+    canvasRef.current?.focus()
+    onSelectionChange(null)
+    if (event.detail !== 2) return
+    if (operationAction.busy || deleteAction.busy || createDraft?.handoffTargetNodeIds) return
+    notifyCanvasUserInteraction()
+    const flow = reactFlow.screenToFlowPosition({ x: event.clientX, y: event.clientY })
+    setCreateDraft({ id: crypto.randomUUID(), position: flow, handoffTargetNodeIds: null })
+  }, [createDraft?.handoffTargetNodeIds, deleteAction.busy, notifyCanvasUserInteraction, onSelectionChange, operationAction.busy, reactFlow])
+  useEffect(() => {
+    const targetNodeIds = createDraft?.handoffTargetNodeIds
+    if (!createDraft || !targetNodeIds || targetNodeIds.length === 0) return
+    const projectedNodeIds = new Set(projectedNodes.map((node) => node.id))
+    if (!targetNodeIds.every((nodeId) => projectedNodeIds.has(nodeId))) return
+    closeCreateDraft(createDraft.id)
+  }, [closeCreateDraft, createDraft, projectedNodes, projectionNodeSignature])
+  const handleMoveStart = useCallback((event: MouseEvent | TouchEvent | null) => {
+    if (event) notifyCanvasUserInteraction()
+  }, [notifyCanvasUserInteraction])
+  const handleMoveEnd = useCallback((event: MouseEvent | TouchEvent | null) => {
+    if (event) notifyCanvasUserInteraction()
+  }, [notifyCanvasUserInteraction])
   const applyWheelZoom = useCallback((event: WheelEvent<HTMLDivElement>) => {
+    if (isWorkspaceCanvasWheelLockedTarget(event.target)) return
     const bounds = canvasRef.current?.getBoundingClientRect()
     if (!bounds) return
-
     event.preventDefault()
-
     const viewport = reactFlow.getViewport()
     const nextZoom = getNextWorkspaceCanvasWheelZoom(viewport.zoom, event.deltaY)
     if (nextZoom === viewport.zoom) return
-
+    notifyCanvasUserInteraction()
     const pointerX = event.clientX - bounds.left
     const pointerY = event.clientY - bounds.top
     const zoomRatio = nextZoom / viewport.zoom
@@ -661,99 +568,239 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
       y: pointerY - (pointerY - viewport.y) * zoomRatio,
       zoom: nextZoom,
     }
-
     void reactFlow.setViewport(nextViewport)
-  }, [reactFlow])
-
-  const resetLayout = useCallback(() => {
-    if (!episodeId) return
-    expansionAnchorNodePositionsRef.current = new Map()
-    const defaultProjection = buildWorkspaceNodeCanvasProjection({
-      projectId,
-      episodeId,
-      episodeName,
-      storyText: novelText,
-      clips,
-      locations,
-      storyboards,
-      shots,
-      editScreenplay,
-      editDirectorDecoupage,
-      editScript: projectedEditScript,
-      editCinematographyShotPlan,
-      editScriptPending: effectiveEditScriptPending,
-      finalVideo,
-      videoGroups,
-      defaultVideoModel: runtime.singleShotVideoModel ?? runtime.videoModel ?? null,
-      defaultSequenceVideoModel: runtime.sequenceVideoModel ?? null,
-      savedLayouts: EMPTY_SAVED_NODE_LAYOUTS,
-      translate: t,
-      onAction: onNodeAction,
-    })
-    setSourceNodes(attachNodeUiState(defaultProjection.nodes))
-    void resetSavedLayout().catch((error: unknown) => {
-      _ulogWarn('[ProjectWorkspaceCanvas] canvas layout reset failed', error)
-    })
-  }, [attachNodeUiState, clips, editCinematographyShotPlan, editDirectorDecoupage, editScreenplay, effectiveEditScriptPending, episodeId, episodeName, finalVideo, locations, novelText, onNodeAction, projectId, projectedEditScript, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, shots, storyboards, t, videoGroups])
-
+  }, [notifyCanvasUserInteraction, reactFlow])
   const fitView = useCallback(() => {
+    notifyCanvasUserInteraction()
     void reactFlow.fitView({ padding: 0.14, duration: 180 })
-  }, [reactFlow])
+  }, [notifyCanvasUserInteraction, reactFlow])
   const zoomIn = useCallback(() => {
+    notifyCanvasUserInteraction()
     void reactFlow.zoomIn({ duration: 160 })
-  }, [reactFlow])
+  }, [notifyCanvasUserInteraction, reactFlow])
   const zoomOut = useCallback(() => {
+    notifyCanvasUserInteraction()
     void reactFlow.zoomOut({ duration: 160 })
-  }, [reactFlow])
+  }, [notifyCanvasUserInteraction, reactFlow])
   const selectedNode = useMemo(
-    () => sourceNodes.find((node) => node.id === selectedNodeId) ?? null,
-    [sourceNodes, selectedNodeId],
+    () => flowNodes.find((node) => node.id === selection?.nodeId && node.data.kind === 'resourceCard') ?? null,
+    [flowNodes, selection?.nodeId],
   )
-  const assistantSelection = useMemo<WorkspaceAssistantSelectionContext>(() => {
-    if (!selectedNode) return {}
-    const targetType = selectedNode.data.targetType
-    const targetId = selectedNode.data.targetId
-    return {
-      selectedScopeRef: `${targetType}:${targetId}`,
-      selectedPanelId: targetType === 'panel' ? targetId : null,
-      selectedClipId: targetType === 'clip' ? targetId : null,
-      selectedAssetId: null,
-    }
-  }, [selectedNode])
-
   useEffect(() => {
-    onAssistantSelectionChange?.(assistantSelection)
-  }, [assistantSelection, onAssistantSelectionChange])
+    if (!selection || folderQuery.isLoading || selectedNode) return
+    onSelectionChange(null)
+  }, [folderQuery.isLoading, onSelectionChange, selectedNode, selection])
+  useEffect(() => {
+    if (!pendingLocateResourceId || !reactFlowReady) return
+    const node = flowNodes.find((candidate) => candidate.data.targetId === pendingLocateResourceId)
+    if (!node) return
+    const nextSelection = selectionForNode(node)
+    if (nextSelection) onSelectionChange(nextSelection)
+    void reactFlow.fitView({ nodes: [node], padding: 0.35, maxZoom: 1, duration: 180 })
+    onLocateConsumed()
+  }, [flowNodes, onLocateConsumed, onSelectionChange, pendingLocateResourceId, reactFlow, reactFlowReady, selectionForNode])
 
-  const handleArrangeVideoBlocks = useCallback(async (blocks: readonly { readonly shotNumbers: readonly number[] }[]) => {
-    if (!projectedEditScript) throw new Error('EDIT_SCRIPT_REQUIRED')
-    await runtime.onArrangeVideoBlocks(projectedEditScript.id, blocks)
-    setVideoBlockArrangementInitialBlockIndex(null)
-  }, [projectedEditScript, runtime])
+  const requestAssistantDraft = useCallback((text: string | null) => {
+    onAssistantDraftRequest({ requestId: crypto.randomUUID(), text, focus: true })
+  }, [onAssistantDraftRequest])
+  const beginResourceOperation = useCallback((operation: WorkspaceCanvasResourceOperationView) => {
+    if (operation.confirmation === 'destructive') {
+      if (!selectedNode || selectedNode.data.kind !== 'resourceCard') return
+      deleteAction.begin(operation, selectedNode.data.resourceDetails.resource.workspacePath)
+      return
+    }
+    void operationAction.begin({
+      operationId: operation.operationId,
+      input: operation.input,
+      confirmation: operation.confirmation,
+    })
+  }, [deleteAction, operationAction, selectedNode])
+  const placePlannedResources = useCallback((request: WorkspaceCanvasCreateRequest, targetIds: readonly string[]) => {
+    const uniqueTargetIds = [...new Set(targetIds)]
+    setUserNodePositions((current) => {
+      const next = new Map(current)
+      uniqueTargetIds.forEach((targetId, index) => {
+        const nodeId = workspaceNodeId.resourceCard(targetId)
+        pendingPlacementNodeIdsRef.current.add(nodeId)
+        next.set(nodeId, {
+          x: request.position.x + (index % 3) * 36,
+          y: request.position.y + Math.floor(index / 3) * 36,
+        })
+      })
+      return next
+    })
+  }, [])
+  const submitCanvasCreation = useCallback((draftId: string, request: WorkspaceCanvasCreateRequest) => {
+    const outputPath = buildCanvasCreationOutputPath({
+      directoryPath: folder.workspacePath,
+      name: request.name || request.capability.mediaKind,
+      kind: request.capability.mediaKind,
+      uniqueSuffix: crypto.randomUUID(),
+    })
+    void operationAction.begin({
+      operationId: request.capability.operationId,
+      input: buildWorkspaceCanvasCreateOperationInput(request, outputPath),
+      confirmation: 'billable_media',
+      onAccepted: (plan) => {
+        if (!plan) return
+        const targetIds = [...new Set(plan.tasks.map((task) => task.targetId))]
+        placePlannedResources(request, targetIds)
+        setCreateDraft((current) => current?.id === draftId ? {
+          ...current,
+          handoffTargetNodeIds: targetIds.map((targetId) => workspaceNodeId.resourceCard(targetId)),
+        } : current)
+      },
+    })
+  }, [folder.workspacePath, operationAction, placePlannedResources])
+  const selectionForCard = useCallback((card: WorkspaceResourceCardMemberView): WorkspaceCanvasSelection | null => {
+    const node = flowNodes.find((candidate) => candidate.data.targetId === card.resource.resourceId)
+    return node ? selectionForNode(node) : null
+  }, [flowNodes, selectionForNode])
+  const handleGoBack = useCallback(() => {
+    if (folder.folderKey === WORKSPACE_RESOURCE_ROOT_FOLDER_KEY) return
+    const parent = folder.ancestors.at(-1)
+    onNavigate(parent ? {
+      folderKey: parent.resourceId,
+      name: parent.name,
+      workspacePath: parent.workspacePath,
+      ancestors: folder.ancestors.slice(0, -1),
+    } : {
+      folderKey: WORKSPACE_RESOURCE_ROOT_FOLDER_KEY,
+      name: rootName,
+      workspacePath: '',
+      ancestors: [],
+    })
+  }, [folder.ancestors, folder.folderKey, onNavigate, rootName])
+  const handleSearchResult = useCallback((resource: WorkspaceResourceView) => {
+    setSearch('')
+    if (resource.resourceKind === 'folder') onNavigate(folderFromResource(resource))
+    else onNavigate(parentFolderFromResource(resource, rootName), resource.resourceId)
+  }, [onNavigate, rootName])
 
-  if (!episodeId) return null
-
+  const loading = folderQuery.isLoading || layoutLoading
+  const failed = folderQuery.isError || Boolean(layoutLoadError)
+  const folderActions = useMemo(() => ({
+    busy: deleteAction.busy || operationAction.busy,
+    open: openProjectedFolder,
+    remove: (target: WorkspaceCanvasFolderOpenTarget & {
+      readonly operation: WorkspaceCanvasFolderNodeData['folder']['deleteOperation']
+    }) => deleteAction.begin(target.operation, target.workspacePath),
+  }), [deleteAction, openProjectedFolder, operationAction.busy])
   return (
-    <div className="h-full min-h-0 w-full overflow-hidden bg-[var(--glass-bg-canvas)]">
-      <div ref={canvasRef} className="h-full" onWheelCapture={applyWheelZoom}>
+    <WorkspaceCanvasFolderActionsContext.Provider value={folderActions}>
+      <WorkspaceCanvasResourceSelectionContext.Provider value={selectResourceNode}>
+      <div
+      className="workspace-canvas-layout-animated relative h-full min-h-0 w-full overflow-hidden bg-[var(--glass-bg-canvas)]"
+      onDragOver={handleCanvasDragOver}
+      onDrop={handleCanvasDrop}
+      onPaste={handleCanvasPaste}
+    >
+      <input
+        ref={uploadInputRef}
+        type="file"
+        multiple
+        accept={uploadAccept}
+        className="hidden"
+        onChange={handleUploadInputChange}
+      />
+      <div ref={canvasRef} className="h-full outline-none" tabIndex={0} onWheelCapture={applyWheelZoom}>
         <ReactFlow
-          nodes={sourceNodes}
-          edges={flowEdges}
+          defaultNodes={initialReactFlowNodesRef.current ?? []}
+          defaultEdges={initialReactFlowEdgesRef.current ?? []}
           nodeTypes={workspaceNodeTypes}
-          onNodesChange={handleNodesChange}
+          onInit={handleReactFlowInit}
           onNodeClick={handleNodeClick}
-          onPaneClick={() => setSelectedNodeId(null)}
+          onNodeDoubleClick={handleNodeDoubleClick}
+          onPaneClick={handlePaneClick}
+          onNodeDragStart={handleNodeDragStart}
+          onNodeDrag={handleNodeDrag}
           onNodeDragStop={handleNodeDragStop}
+          onMoveStart={handleMoveStart}
+          onMoveEnd={handleMoveEnd}
           nodesDraggable
           nodesConnectable={false}
-          elementsSelectable
+          elementsSelectable={false}
+          onlyRenderVisibleElements
           minZoom={WORKSPACE_CANVAS_MIN_ZOOM}
           maxZoom={WORKSPACE_CANVAS_MAX_ZOOM}
           zoomOnScroll={false}
-          defaultViewport={DEFAULT_WORKSPACE_CANVAS_VIEWPORT}
-          proOptions={{ hideAttribution: true }}
+          zoomOnDoubleClick={false}
+          defaultViewport={layout?.viewport ?? DEFAULT_WORKSPACE_CANVAS_VIEWPORT}
+          proOptions={WORKSPACE_REACT_FLOW_PRO_OPTIONS}
         >
           <Background variant={BackgroundVariant.Dots} gap={24} size={1} />
+          <Panel position="top-left" className="!z-[80] !m-0" style={{ left: 16, top: 72 }}>
+            <CanvasFolderNavigation
+              canGoBack={folder.folderKey !== WORKSPACE_RESOURCE_ROOT_FOLDER_KEY}
+              onBack={handleGoBack}
+              search={search}
+              backLabel={t('folderNavigation.back')}
+              searchPlaceholder={t('folderNavigation.searchPlaceholder')}
+              searchResultsLabel={t('folderNavigation.searchResults')}
+              noResultsLabel={t('folderNavigation.noResults')}
+              loadingLabel={t('folderNavigation.loading')}
+              loadFailedLabel={t('folderNavigation.loadFailed')}
+              retryLabel={t('folderNavigation.retry')}
+              loadMoreLabel={t('folderNavigation.loadMore')}
+              searchResults={searchResults}
+              searchLoading={searchQuery.isLoading || searchQuery.isFetching}
+              searchFailed={searchQuery.isError}
+              searchHasMore={Boolean(searchQuery.hasNextPage)}
+              onSearchChange={setSearch}
+              onSearchResult={handleSearchResult}
+              onRetrySearch={() => { void searchQuery.refetch() }}
+              onLoadMoreSearch={() => { void searchQuery.fetchNextPage() }}
+            />
+          </Panel>
+          {folderQuery.isFetchingNextPage ? (
+            <Panel position="top-right" className="!m-0" style={{ right: 16, top: 16 }}>
+              <span className="rounded-full bg-white/90 px-3 py-1.5 text-xs text-[var(--glass-text-secondary)] shadow-sm">
+                {t('folderNavigation.loading')}
+              </span>
+            </Panel>
+          ) : null}
+          {createDraft ? (
+            <ViewportPortal key={createDraft.id}>
+              <WorkspaceCanvasCreateDock
+                position={createDraft.position}
+                capabilities={canvasActions?.creation ?? []}
+                loading={canvasActionsLoading}
+                loadFailed={canvasActionsFailed}
+                projectAspectRatio={projectAspectRatio}
+                dismissible={
+                  !operationAction.busy
+                  && createDraft.handoffTargetNodeIds === null
+                }
+                onRetryCapabilities={() => { void retryCanvasActions() }}
+                onSubmit={(request) => submitCanvasCreation(createDraft.id, request)}
+                onUpload={() => {
+                  openUploadPicker(createDraft.position)
+                  closeCreateDraft(createDraft.id)
+                }}
+                onClose={() => closeCreateDraft(createDraft.id)}
+              />
+            </ViewportPortal>
+          ) : null}
+          {selectedNode ? (
+            <WorkspaceNodeDetailsCard
+              node={selectedNode}
+              actions={{
+                busy: operationAction.busy || deleteAction.busy,
+                onAssistantPrefill: requestAssistantDraft,
+                onPreview: () => {
+                  const card = selectedNode.data.kind === 'resourceCard'
+                    ? selectedNode.data.resourceDetails
+                    : null
+                  if (!card) return
+                  setPreview({
+                    members: card.alternativeGroup?.members ?? [card],
+                    initialResourceId: card.resource.resourceId,
+                  })
+                },
+                onOperation: beginResourceOperation,
+              }}
+            />
+          ) : null}
           <MiniMap
             pannable
             zoomable
@@ -766,27 +813,17 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
             nodeBorderRadius={10}
             offsetScale={0}
             className="!z-[60] !m-0 !overflow-hidden !rounded-[22px] !border-0 !bg-white/82 !shadow-lg !ring-1 !ring-[var(--glass-stroke-base)]/70 !backdrop-blur-2xl"
-            style={{
-              left: 16,
-              bottom: CANVAS_FLOATING_PANEL_BOTTOM_OFFSET_PX + 72,
-              width: 180,
-              height: 96,
-            }}
+            style={{ left: 16, bottom: CANVAS_FLOATING_PANEL_BOTTOM_OFFSET_PX + 72, width: 180, height: 96 }}
           />
           <Panel
             position="bottom-left"
             className="!z-[70] !m-0"
-            style={{
-              left: 16,
-              bottom: CANVAS_FLOATING_PANEL_BOTTOM_OFFSET_PX + 16,
-            }}
+            style={{ left: 16, bottom: CANVAS_FLOATING_PANEL_BOTTOM_OFFSET_PX + 16 }}
           >
             <CanvasViewportControls
-              resetLabel={t('toolbar.resetLayout')}
               fitViewLabel={t('toolbar.fitView')}
               zoomInLabel={t('toolbar.zoomIn')}
               zoomOutLabel={t('toolbar.zoomOut')}
-              onResetLayout={resetLayout}
               onFitView={fitView}
               onZoomIn={zoomIn}
               onZoomOut={zoomOut}
@@ -794,31 +831,122 @@ function ProjectWorkspaceCanvasContent({ onAssistantSelectionChange, editScriptP
           </Panel>
         </ReactFlow>
       </div>
-      {projectedEditScript && videoBlockArrangementInitialBlockIndex !== null ? (
-        <VideoBlockArrangementModal
-          editScript={projectedEditScript}
-          storyboards={storyboards}
-          initialBlockIndex={videoBlockArrangementInitialBlockIndex}
-          onClose={() => setVideoBlockArrangementInitialBlockIndex(null)}
-          onSubmit={handleArrangeVideoBlocks}
+      {loading || failed ? (
+        <div className="pointer-events-none absolute inset-0 z-[75] flex items-center justify-center bg-[var(--glass-bg-canvas)]/45 backdrop-blur-[1px]">
+          <div className="pointer-events-auto rounded-2xl bg-white px-5 py-4 text-sm text-[var(--glass-text-secondary)] shadow-lg ring-1 ring-[var(--glass-stroke-base)]">
+            {failed ? (
+              <div className="flex items-center gap-3">
+                <span>{t('folderNavigation.loadFailed')}</span>
+                <button
+                  type="button"
+                  className="font-semibold text-[var(--glass-text-primary)]"
+                  onClick={() => {
+                    void folderQuery.refetch()
+                    if (layoutLoadError) void reloadLayout()
+                  }}
+                >
+                  {t('folderNavigation.retry')}
+                </button>
+              </div>
+            ) : t('folderNavigation.loading')}
+          </div>
+        </div>
+      ) : null}
+      {preview ? (
+        <WorkspaceResourcePreviewModal
+          members={preview.members}
+          initialResourceId={preview.initialResourceId}
+          onClose={() => setPreview(null)}
+          onDiscuss={(card) => {
+            const nextSelection = selectionForCard(card)
+            if (nextSelection) onSelectionChange(nextSelection)
+            setPreview(null)
+            requestAssistantDraft(null)
+          }}
         />
       ) : null}
-    </div>
+      {operationAction.pending ? (
+        <CanvasOperationConfirmationModal
+          plan={operationAction.pending.plan}
+          destructive={false}
+          executing={operationAction.phase === 'executing'}
+          onConfirm={() => { void operationAction.confirm() }}
+          onCancel={operationAction.cancel}
+        />
+      ) : null}
+      {deleteAction.pending ? (
+        <CanvasOperationConfirmationModal
+          plan={null}
+          destructive
+          destructiveTarget={deleteAction.pending.targetLabel}
+          executing={deleteAction.phase === 'executing'}
+          onConfirm={() => { void deleteAction.confirm() }}
+          onCancel={deleteAction.cancel}
+        />
+      ) : null}
+      <CanvasUploadQueue items={uploadQueue.items} onRetry={uploadQueue.retry} onDismiss={uploadQueue.dismiss} />
+      </div>
+      </WorkspaceCanvasResourceSelectionContext.Provider>
+    </WorkspaceCanvasFolderActionsContext.Provider>
   )
 }
 
-interface ProjectWorkspaceCanvasProps {
-  onAssistantSelectionChange?: (selection: WorkspaceAssistantSelectionContext) => void
-  editScriptPending?: boolean
+function ProjectWorkspaceCanvasContent(props: ProjectWorkspaceCanvasContentProps) {
+  const t = useTranslations('projectWorkflow.canvas.workspace')
+  const { projectId } = useWorkspaceProvider()
+  const rootName = t('folderNavigation.root')
+  const [folder, setFolder] = useState<CurrentCanvasFolder>({
+    folderKey: WORKSPACE_RESOURCE_ROOT_FOLDER_KEY,
+    name: rootName,
+    workspacePath: '',
+    ancestors: [],
+  })
+  const [pendingLocateResourceId, setPendingLocateResourceId] = useState<string | null>(null)
+  const pathFocusQuery = useWorkspaceResources({
+    projectId,
+    prefix: null,
+    search: props.workspacePathFocusRequest?.workspacePath ?? null,
+    scope: 'subtree',
+    enabled: Boolean(props.workspacePathFocusRequest),
+    refreshToken: props.workspacePathFocusRequest?.requestId ?? null,
+  })
+  const handledPathFocusRequestId = useRef<string | null>(null)
+  const navigate = useCallback((nextFolder: CurrentCanvasFolder, locateResourceId: string | null = null) => {
+    props.onSelectionChange(null)
+    setPendingLocateResourceId(locateResourceId)
+    setFolder(nextFolder)
+  }, [props])
+  useEffect(() => {
+    const request = props.workspacePathFocusRequest
+    if (!request || pathFocusQuery.isLoading || handledPathFocusRequestId.current === request.requestId) return
+    const resource = flattenResources(pathFocusQuery.data).find((entry) => (
+      entry.workspacePath === request.workspacePath
+    ))
+    handledPathFocusRequestId.current = request.requestId
+    if (!resource) return
+    if (resource.resourceKind === 'folder') {
+      navigate(folderFromResource(resource))
+      return
+    }
+    navigate(parentFolderFromResource(resource, rootName), resource.resourceId)
+  }, [navigate, pathFocusQuery.data, pathFocusQuery.isLoading, props.workspacePathFocusRequest, rootName])
+  return (
+    <ProjectWorkspaceFolderCanvas
+      key={folder.folderKey}
+      {...props}
+      folder={folder}
+      rootName={rootName}
+      pendingLocateResourceId={pendingLocateResourceId}
+      onNavigate={navigate}
+      onLocateConsumed={() => setPendingLocateResourceId(null)}
+    />
+  )
 }
 
-export default function ProjectWorkspaceCanvas({ onAssistantSelectionChange, editScriptPending = false }: ProjectWorkspaceCanvasProps) {
+export default function ProjectWorkspaceCanvas(props: ProjectWorkspaceCanvasContentProps) {
   return (
     <ReactFlowProvider>
-      <ProjectWorkspaceCanvasContent
-        onAssistantSelectionChange={onAssistantSelectionChange}
-        editScriptPending={editScriptPending}
-      />
+      <ProjectWorkspaceCanvasContent {...props} />
     </ReactFlowProvider>
   )
 }

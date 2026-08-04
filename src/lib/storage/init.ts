@@ -1,24 +1,27 @@
 import { ensureStorageReady } from '@/lib/storage/bootstrap'
-import { requireEnv } from '@/lib/storage/utils'
+import { loadS3StorageConfig } from '@/lib/storage/s3-config'
 
 async function main() {
-  const result = await ensureStorageReady()
-
-  if (result === 'skipped') {
-    return
-  }
-
-  const bucket = requireEnv('MINIO_BUCKET')
-  if (result === 'created') {
-    console.log(`[storage:init] created MinIO bucket "${bucket}"`)
-    return
-  }
-
-  console.log(`[storage:init] verified MinIO bucket "${bucket}"`)
+  const config = loadS3StorageConfig()
+  await ensureStorageReady()
+  console.log(`[storage:init] verified S3-compatible bucket "${config.bucket}" at ${config.endpoint}`)
 }
 
 void main().catch((error: unknown) => {
-  console.error('[storage:init] failed to prepare storage')
+  const config = (() => {
+    try {
+      return loadS3StorageConfig()
+    } catch {
+      return null
+    }
+  })()
+  console.error('[storage:init] failed to verify required S3-compatible storage', {
+    operation: 'HeadBucket',
+    endpoint: config?.endpoint ?? '<invalid>',
+    bucket: config?.bucket ?? '<invalid>',
+    region: config?.region ?? '<invalid>',
+    forcePathStyle: config?.forcePathStyle ?? '<invalid>',
+  })
   console.error(error)
   process.exit(1)
 })

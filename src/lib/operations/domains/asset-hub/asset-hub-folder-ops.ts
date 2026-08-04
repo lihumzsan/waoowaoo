@@ -40,6 +40,7 @@ export function createAssetHubFolderOperations(): ProjectAgentOperationRegistryD
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'global_assets',
         billable: false,
         destructive: false,
         overwrite: false,
@@ -51,12 +52,12 @@ export function createAssetHubFolderOperations(): ProjectAgentOperationRegistryD
         name: z.string().min(1),
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const name = normalizeString(input.name)
         if (!name) {
           throw new ApiError('INVALID_PARAMS')
         }
-        const folder = await prisma.globalAssetFolder.create({
+        const folder = await transaction.globalAssetFolder.create({
           data: {
             userId: ctx.userId,
             name,
@@ -72,6 +73,7 @@ export function createAssetHubFolderOperations(): ProjectAgentOperationRegistryD
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'global_assets',
         billable: false,
         destructive: false,
         overwrite: true,
@@ -84,13 +86,13 @@ export function createAssetHubFolderOperations(): ProjectAgentOperationRegistryD
         name: z.string().min(1),
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const name = normalizeString(input.name)
         if (!name) {
           throw new ApiError('INVALID_PARAMS')
         }
 
-        const folder = await prisma.globalAssetFolder.findUnique({
+        const folder = await transaction.globalAssetFolder.findUnique({
           where: { id: input.folderId },
           select: { id: true, userId: true },
         })
@@ -98,7 +100,7 @@ export function createAssetHubFolderOperations(): ProjectAgentOperationRegistryD
           throw new ApiError('FORBIDDEN')
         }
 
-        const updatedFolder = await prisma.globalAssetFolder.update({
+        const updatedFolder = await transaction.globalAssetFolder.update({
           where: { id: input.folderId },
           data: { name },
         })
@@ -112,6 +114,7 @@ export function createAssetHubFolderOperations(): ProjectAgentOperationRegistryD
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'global_assets',
         billable: false,
         destructive: true,
         overwrite: false,
@@ -121,15 +124,14 @@ export function createAssetHubFolderOperations(): ProjectAgentOperationRegistryD
       },
       confirmation: {
         required: true,
-        summary: '将删除该资产文件夹（文件夹内资产会移动到根目录）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将删除该资产文件夹（文件夹内资产会移动到根目录）。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({
-        confirmed: z.boolean().optional(),
         folderId: z.string().min(1),
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const folder = await prisma.globalAssetFolder.findUnique({
+      executeInTransaction: async (ctx, input, transaction) => {
+        const folder = await transaction.globalAssetFolder.findUnique({
           where: { id: input.folderId },
           select: { id: true, userId: true },
         })
@@ -138,17 +140,17 @@ export function createAssetHubFolderOperations(): ProjectAgentOperationRegistryD
           throw new ApiError('FORBIDDEN')
         }
 
-        await prisma.globalCharacter.updateMany({
+        await transaction.globalCharacter.updateMany({
           where: { folderId: input.folderId },
           data: { folderId: null },
         })
 
-        await prisma.globalLocation.updateMany({
+        await transaction.globalLocation.updateMany({
           where: { folderId: input.folderId },
           data: { folderId: null },
         })
 
-        await prisma.globalAssetFolder.delete({
+        await transaction.globalAssetFolder.delete({
           where: { id: input.folderId },
         })
 

@@ -24,10 +24,13 @@ export interface UseGithubReleaseUpdateResult {
   shouldPulse: boolean
   showModal: boolean
   isChecking: boolean
-  checkError: string | null
   openModal: () => void
   dismissCurrentUpdate: () => void
   checkNow: () => Promise<void>
+}
+
+export interface UseGithubReleaseUpdateOptions {
+  enabled?: boolean
 }
 
 function readMutedUpdateVersion(): string | null {
@@ -40,17 +43,25 @@ function writeMutedUpdateVersion(version: string): void {
   window.localStorage.setItem(MUTED_UPDATE_VERSION_KEY, version)
 }
 
-export function useGithubReleaseUpdate(): UseGithubReleaseUpdateResult {
+export function useGithubReleaseUpdate(options: UseGithubReleaseUpdateOptions = {}): UseGithubReleaseUpdateResult {
+  const enabled = options.enabled === true
   const currentVersion = useMemo(() => normalizeSemverTag(APP_VERSION), [])
 
   const [update, setUpdate] = useState<ReleaseUpdateInfo | null>(null)
   const [shouldPulse, setShouldPulse] = useState(false)
-  const [checkError, setCheckError] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [isChecking, setIsChecking] = useState(false)
   const latestRequestRef = useRef(0)
 
   const checkNow = useCallback(async () => {
+    if (!enabled) {
+      setUpdate(null)
+      setShouldPulse(false)
+      setShowModal(false)
+      setIsChecking(false)
+      return
+    }
+
     const requestId = latestRequestRef.current + 1
     latestRequestRef.current = requestId
     setIsChecking(true)
@@ -62,15 +73,12 @@ export function useGithubReleaseUpdate(): UseGithubReleaseUpdateResult {
     if (requestId !== latestRequestRef.current) return
 
     if (result.kind === 'error') {
-      setCheckError(result.message)
       setUpdate(null)
       setShouldPulse(false)
       setShowModal(false)
       setIsChecking(false)
       return
     }
-
-    setCheckError(null)
 
     if (result.kind === 'no-release') {
       setUpdate(null)
@@ -99,9 +107,17 @@ export function useGithubReleaseUpdate(): UseGithubReleaseUpdateResult {
     setShouldPulse(shouldPulseUpdate(nextUpdate.latestVersion, mutedVersion))
     setUpdate(nextUpdate)
     setIsChecking(false)
-  }, [currentVersion])
+  }, [currentVersion, enabled])
 
   useEffect(() => {
+    if (!enabled) {
+      setUpdate(null)
+      setShouldPulse(false)
+      setShowModal(false)
+      setIsChecking(false)
+      return
+    }
+
     let cancelled = false
 
     const run = async () => {
@@ -118,7 +134,7 @@ export function useGithubReleaseUpdate(): UseGithubReleaseUpdateResult {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [checkNow])
+  }, [checkNow, enabled])
 
   const dismissCurrentUpdate = useCallback(() => {
     if (update) {
@@ -139,7 +155,6 @@ export function useGithubReleaseUpdate(): UseGithubReleaseUpdateResult {
     shouldPulse,
     showModal,
     isChecking,
-    checkError,
     openModal,
     dismissCurrentUpdate,
     checkNow,

@@ -19,6 +19,9 @@
   "downloading": "打包中...",
   "downloadSuccess": "下载完成",
   "downloadFailed": "下载失败",
+  "folderCreateFailed": "创建文件夹失败",
+  "folderUpdateFailed": "更新文件夹失败",
+  "folderDeleteFailed": "删除文件夹失败",
   "downloadEmpty": "当前没有可下载的图片资产",
   "filteredEmptyHint": "点击新建资产添加资产",
   "filteredEmpty": {

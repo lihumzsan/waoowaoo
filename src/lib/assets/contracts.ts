@@ -1,7 +1,6 @@
 import type { MediaRef } from '@/types/project'
-import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
 
-export type AssetScope = 'global' | 'project'
+export type AssetScope = 'global'
 
 export type AssetKind = 'character' | 'location' | 'prop'
 
@@ -9,7 +8,6 @@ export type AssetFamily = 'visual'
 
 export type AssetTaskError = {
   code: string
-  message: string
 }
 
 export type AssetTaskState = {
@@ -36,11 +34,6 @@ export type AssetRenderSummary = {
   id: string
   index: number
   imageUrl: string | null
-  spatialProfileJson?: unknown | null
-  spatialProfileStatus?: LocationSpatialProfileStatus | null
-  spatialProfileError?: string | null
-  spatialProfileAnalyzedAt?: string | Date | null
-  spatialProfileModel?: string | null
   media: MediaRef | null
   isSelected: boolean
   previousImageUrl: string | null
@@ -108,7 +101,6 @@ export type AssetSummary =
 
 export type AssetQueryInput = {
   scope: AssetScope
-  projectId?: string | null
   folderId?: string | null
   kind?: AssetKind | null
 }

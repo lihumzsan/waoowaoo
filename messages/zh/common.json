@@ -32,6 +32,8 @@
     "generate": "生成",
     "regenerate": "重新生成",
     "preview": "预览",
+    "play": "播放",
+    "pause": "暂停",
     "download": "下载",
     "upload": "上传",
     "select": "选择",
@@ -51,19 +53,13 @@
     "apply": "应用",
     "autoSave": "自动保存",
     "saved": "已保存",
-    "episode": "剧集",
     "project": "项目",
     "editProjectName": "编辑项目名称",
     "projectNamePlaceholder": "输入项目名称...",
     "projectRenameFailed": "项目名称保存失败",
-    "editEpisodeName": "编辑剧集名称",
-    "deleteEpisode": "删除剧集",
-    "deleteEpisodeConfirm": "确认删除",
-    "newEpisode": "新建剧集",
     "optional": "（可选）",
     "rename": "重命名",
     "dragToReorder": "拖动调整位置",
-    "episodeNamePlaceholder": "输入剧集名称...",
     "cancelSelection": "取消选择",
     "referenceImage": "参考图",
     "previewLarge": "预览大图",
@@ -83,6 +79,7 @@
         "switchConfirmAction": "确认切换"
     },
     "taskStatus": {
+        "progressLabel": "生成进度",
         "intent": {
             "generate": {
                 "running": {
@@ -142,6 +139,7 @@
             }
         },
         "failed": {
+            "generic": "生成失败",
             "image": "处理失败",
             "video": "处理失败",
             "audio": "处理失败",

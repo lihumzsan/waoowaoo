@@ -1,9 +1,9 @@
 import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
-import { prisma } from '@/lib/prisma'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
+import { requireOwnedAssetTarget } from '@/lib/assets/services/asset-scope-ownership'
 
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -33,9 +33,20 @@ function assertNoLegacyArtStyle(body: Record<string, unknown>) {
   throw new ApiError('INVALID_PARAMS', {
     code: 'LEGACY_ART_STYLE_REMOVED',
     field: 'artStyle',
-    message: 'artStyle is no longer supported; use the AI-generated Style Bible workflow.',
+    message: 'artStyle is no longer supported; use the AI-generated Creative Direction workflow.',
   })
 }
+
+const assetHubUpdateCharacterAppearanceInputSchema = z.object({
+  characterId: z.string().trim().min(1),
+  appearanceIndex: z.union([
+    z.number().int().min(0),
+    z.string().trim().regex(/^\d+$/),
+  ]),
+  description: z.string().optional(),
+  descriptionIndex: z.number().int().min(0).optional(),
+  changeReason: z.string().optional(),
+}).strict()
 
 export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOperationRegistryDraft {
   return {
@@ -45,6 +56,7 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'global_assets',
         billable: false,
         destructive: false,
         overwrite: true,
@@ -52,55 +64,49 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
         externalSideEffects: false,
         longRunning: false,
       },
-      inputSchema: z.object({
-        characterId: z.string().min(1),
-        appearanceIndex: z.union([z.number().int().min(0), z.string().min(1)]),
-      }).passthrough(),
+      inputSchema: assetHubUpdateCharacterAppearanceInputSchema,
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const body = input as unknown as Record<string, unknown>
-        assertNoLegacyArtStyle(body)
-        const characterId = normalizeString(body.characterId)
-        const appearanceIndex = parseAppearanceIndex(body.appearanceIndex)
+      executeInTransaction: async (ctx, input, transaction) => {
+        const characterId = input.characterId
+        const appearanceIndex = parseAppearanceIndex(input.appearanceIndex)
 
-        const character = await prisma.globalCharacter.findUnique({
-          where: { id: characterId },
-          select: { id: true, userId: true },
-        })
-        if (!character || character.userId !== ctx.userId) throw new ApiError('FORBIDDEN')
+        await requireOwnedAssetTarget({
+          access: { scope: 'global', userId: ctx.userId },
+          kind: 'character',
+          assetId: characterId,
+        }, transaction)
 
-        const appearance = await prisma.globalCharacterAppearance.findFirst({
+        const appearance = await transaction.globalCharacterAppearance.findFirst({
           where: { characterId, appearanceIndex },
         })
         if (!appearance) throw new ApiError('NOT_FOUND')
 
         const updateData: Record<string, unknown> = {}
-        if (body.description !== undefined) {
-          if (typeof body.description !== 'string') throw new ApiError('INVALID_PARAMS')
-          const trimmedDescription = body.description.trim()
+        if (input.description !== undefined) {
+          const trimmedDescription = input.description.trim()
           const descriptions = (() => {
             const existing = parseDescriptions(appearance.descriptions)
             if (existing.length > 0) return existing
             return [typeof appearance.description === 'string' ? appearance.description : '']
           })()
 
-          const indexRaw = body.descriptionIndex
-          const index = typeof indexRaw === 'number' && Number.isInteger(indexRaw) && indexRaw >= 0 ? indexRaw : null
-          if (index !== null) {
-            while (descriptions.length <= index) {
-              descriptions.push('')
-            }
-            descriptions[index] = trimmedDescription
-          } else {
-            descriptions[0] = trimmedDescription
+          const index = input.descriptionIndex ?? 0
+          if (index >= descriptions.length) {
+            throw new ApiError('INVALID_PARAMS', {
+              code: 'ASSET_DESCRIPTION_INDEX_OUT_OF_RANGE',
+              field: 'descriptionIndex',
+              requestedValue: index,
+              allowedValues: descriptions.map((_, currentIndex) => currentIndex),
+            })
           }
+          descriptions[index] = trimmedDescription
           updateData.descriptions = JSON.stringify(descriptions)
           updateData.description = descriptions[0]
         }
 
-        if (body.changeReason !== undefined) updateData.changeReason = body.changeReason
+        if (input.changeReason !== undefined) updateData.changeReason = input.changeReason
 
-        await prisma.globalCharacterAppearance.update({
+        await transaction.globalCharacterAppearance.update({
           where: { id: appearance.id },
           data: updateData,
         })
@@ -115,6 +121,7 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'global_assets',
         billable: false,
         destructive: false,
         overwrite: false,
@@ -127,23 +134,27 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
         description: z.string().min(1),
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const body = input as unknown as Record<string, unknown>
         assertNoLegacyArtStyle(body)
         const characterId = normalizeString(body.characterId)
         const description = normalizeString(body.description)
         if (!characterId || !description) throw new ApiError('INVALID_PARAMS')
 
-        const character = await prisma.globalCharacter.findUnique({
+        await requireOwnedAssetTarget({
+          access: { scope: 'global', userId: ctx.userId },
+          kind: 'character',
+          assetId: characterId,
+        }, transaction)
+        const character = await transaction.globalCharacter.findUniqueOrThrow({
           where: { id: characterId },
           include: { appearances: true },
         })
-        if (!character || character.userId !== ctx.userId) throw new ApiError('FORBIDDEN')
 
         const maxIndex = character.appearances.reduce((max, appearance) => Math.max(max, appearance.appearanceIndex), 0)
         const newIndex = maxIndex + 1
 
-        const appearance = await prisma.globalCharacterAppearance.create({
+        const appearance = await transaction.globalCharacterAppearance.create({
           data: {
             characterId,
             appearanceIndex: newIndex,
@@ -165,6 +176,7 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'global_assets',
         billable: false,
         destructive: true,
         overwrite: false,
@@ -174,32 +186,35 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
       },
       confirmation: {
         required: true,
-        summary: '将删除该角色形象记录（不可恢复）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将删除该角色形象记录（不可恢复）。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({
-        confirmed: z.boolean().optional(),
         characterId: z.string().min(1),
         appearanceIndex: z.union([z.number().int().min(0), z.string().min(1)]),
       }),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const appearanceIndex = parseAppearanceIndex(input.appearanceIndex)
 
-        const character = await prisma.globalCharacter.findUnique({
+        await requireOwnedAssetTarget({
+          access: { scope: 'global', userId: ctx.userId },
+          kind: 'character',
+          assetId: input.characterId,
+        }, transaction)
+        const character = await transaction.globalCharacter.findUniqueOrThrow({
           where: { id: input.characterId },
           include: { appearances: true },
         })
-        if (!character || character.userId !== ctx.userId) throw new ApiError('FORBIDDEN')
 
         if (character.appearances.length <= 1) throw new ApiError('INVALID_PARAMS')
 
-        const appearance = await prisma.globalCharacterAppearance.findFirst({
+        const appearance = await transaction.globalCharacterAppearance.findFirst({
           where: { characterId: input.characterId, appearanceIndex },
           select: { id: true },
         })
         if (!appearance) throw new ApiError('NOT_FOUND')
 
-        await prisma.globalCharacterAppearance.delete({ where: { id: appearance.id } })
+        await transaction.globalCharacterAppearance.delete({ where: { id: appearance.id } })
         return { success: true }
       },
     }),

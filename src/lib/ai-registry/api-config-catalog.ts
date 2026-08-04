@@ -1,6 +1,5 @@
 import { composeModelKey, parseModelKeyStrict } from '@/lib/ai-registry/selection'
 import type { ModelCapabilities, UnifiedModelType } from '@/lib/ai-registry/types'
-import { CODEX_DEFAULT_EXECUTABLE_PATH } from '@/lib/ai-providers/codex/constants'
 import { resolveBuiltinCapabilitiesByModelKey } from './capabilities-catalog'
 import { cloneCapabilities, isPlainObject, isUnifiedModelType, readTrimmedString } from './catalog-utils'
 
@@ -46,20 +45,31 @@ function requireBuiltinApiConfigCatalog(): BuiltinApiConfigCatalogRegistration {
   return registeredApiConfigCatalog
 }
 
-export const API_CONFIG_CATALOG_PROVIDERS: ApiConfigCatalogProvider[] = [
-  { id: 'ark', name: 'Volcengine Ark' },
-  { id: 'codex', name: 'Codex Local', baseUrl: CODEX_DEFAULT_EXECUTABLE_PATH },
+export const API_CONFIG_CATALOG_PROVIDERS: readonly ApiConfigCatalogProvider[] = [
+  { id: 'ark', name: 'Volcengine Ark', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3' },
   { id: 'openrouter', name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1' },
   { id: 'fal', name: 'FAL' },
   { id: 'google', name: 'Google AI Studio' },
+  { id: 'mureka', name: 'Mureka', baseUrl: 'https://api.mureka.ai' },
 ]
 
+export function requireApiConfigCatalogProviderBaseUrl(providerId: string): string {
+  const providerKey = getApiConfigProviderKey(providerId.trim().toLowerCase())
+  const baseUrl = API_CONFIG_CATALOG_PROVIDERS.find((provider) => provider.id === providerKey)?.baseUrl?.trim()
+  if (!baseUrl) throw new Error(`API_CONFIG_PROVIDER_BASE_URL_MISSING: ${providerId}`)
+  return baseUrl
+}
+
+const API_CONFIG_CATALOG_PROVIDER_IDS = new Set(
+  API_CONFIG_CATALOG_PROVIDERS.map((provider) => provider.id),
+)
 const CATALOG_PROVIDER_ORDER = new Map(API_CONFIG_CATALOG_PROVIDERS.map((provider, index) => [provider.id, index]))
 const CATALOG_TYPE_ORDER: Readonly<Record<UnifiedModelType, number>> = {
   llm: 0,
   image: 1,
   video: 2,
   music: 3,
+  voice: 4,
 }
 
 function normalizeApiConfigCatalogModel(raw: unknown, index: number): ApiConfigCatalogModel {
@@ -136,6 +146,11 @@ export function getApiConfigProviderKey(providerId?: string): string {
   return colonIndex === -1 ? providerId : providerId.slice(0, colonIndex)
 }
 
+export function isApiConfigCatalogProviderId(providerId: string): boolean {
+  const providerKey = getApiConfigProviderKey(providerId.trim().toLowerCase())
+  return API_CONFIG_CATALOG_PROVIDER_IDS.has(providerKey)
+}
+
 export function encodeApiConfigModelKey(provider: string, modelId: string): string {
   return composeModelKey(provider, modelId)
 }
@@ -157,7 +172,6 @@ export function matchesApiConfigModelKey(key: string | undefined | null, provide
 
 const ZH_PROVIDER_NAME_MAP: Readonly<Record<string, string>> = {
   ark: '火山引擎 Ark',
-  codex: 'Codex 本机',
 }
 
 function isZhLocale(locale?: string): boolean {

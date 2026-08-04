@@ -1,178 +1,29 @@
 import type { LLMStreamKind } from '@/lib/llm-observe/types'
 import type { InternalLLMStreamStepMeta } from '@/lib/llm-observe/internal-stream-context'
+import {
+  chatMessageHasCacheControl,
+  flattenChatMessageContent,
+  normalizeChatMessageContentParts,
+  type ChatMessage,
+  type ChatMessageContent,
+  type PromptCacheControl,
+  type TextContentPart,
+} from '@/lib/ai-registry/message-content'
+import type {
+  AiLlmCallOptions,
+  AiLlmStreamCallbacks,
+} from '@/lib/ai-registry/types'
 
-export interface ProviderChatCompletionOptions {
-  temperature?: number
-  reasoning?: boolean
-  reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high'
-  maxRetries?: number
-  projectId?: string
-  action?: string
-  streamStepId?: string
-  streamStepAttempt?: number
-  streamStepTitle?: string
-  streamStepIndex?: number
-  streamStepTotal?: number
-  __skipAutoStream?: boolean
-}
+export type ProviderPromptCacheControl = PromptCacheControl
+export type ProviderTextContentPart = TextContentPart
+export type ProviderChatMessageContent = ChatMessageContent
+export type ProviderChatMessage = ChatMessage
 
-export interface ProviderChatCompletionStreamCallbacks {
-  onStage?: (stage: {
-    stage: 'submit' | 'streaming' | 'fallback' | 'completed'
-    provider?: string | null
-    step?: InternalLLMStreamStepMeta
-  }) => void
-  onChunk?: (chunk: {
-    kind: LLMStreamKind
-    delta: string
-    seq: number
-    lane?: string | null
-    step?: InternalLLMStreamStepMeta
-  }) => void
-  onComplete?: (text: string, step?: InternalLLMStreamStepMeta) => void
-  onError?: (error: unknown, step?: InternalLLMStreamStepMeta) => void
-}
+export const flattenProviderMessageContent = flattenChatMessageContent
+export const normalizeProviderContentParts = normalizeChatMessageContentParts
+export const providerMessageHasCacheControl = chatMessageHasCacheControl
 
-export type ProviderChatMessage = { role: 'user' | 'assistant' | 'system'; content: string }
-
-export function completionUsageSummary(
-  completion: {
-    usage?: {
-      prompt_tokens?: number
-      completion_tokens?: number
-      promptTokens?: number
-      completionTokens?: number
-    } | null
-  },
-) {
-  const usage = completion.usage
-  if (!usage) return null
-  const promptTokens = Number(usage.prompt_tokens ?? usage.promptTokens ?? 0)
-  const completionTokens = Number(usage.completion_tokens ?? usage.completionTokens ?? 0)
-  return { promptTokens, completionTokens }
-}
-
-function splitThinkTaggedContent(input: string): { text: string; reasoning: string } {
-  const thinkTagPattern = /<(think|thinking)\b[^>]*>([\s\S]*?)<\/\1>/gi
-  const reasoningParts: string[] = []
-  let matched = false
-  const stripped = input.replace(thinkTagPattern, (_fullMatch, _tagName: string, inner: string) => {
-    matched = true
-    const trimmed = inner.trim()
-    if (trimmed) reasoningParts.push(trimmed)
-    return ''
-  })
-  if (!matched) return { text: input, reasoning: '' }
-  return {
-    text: stripped.trim(),
-    reasoning: reasoningParts.join('\n\n').trim(),
-  }
-}
-
-function collectTextValue(value: unknown): string {
-  if (!value) return ''
-  if (typeof value === 'string') return value
-  if (Array.isArray(value)) return value.map((item) => collectTextValue(item)).join('')
-  if (typeof value === 'object') {
-    const obj = value as { [key: string]: unknown }
-    if (typeof obj.text === 'string') return obj.text
-    if (typeof obj.content === 'string') return obj.content
-    if (typeof obj.delta === 'string') return obj.delta
-    if (Array.isArray(obj.parts)) return obj.parts.map((part) => collectTextValue(part)).join('')
-  }
-  return ''
-}
-
-export function extractStreamDeltaParts(part: unknown): { textDelta: string; reasoningDelta: string } {
-  const partObject =
-    typeof part === 'object' && part !== null
-      ? (part as {
-        choices?: Array<{ delta?: { [key: string]: unknown } }>
-        response?: {
-          output_text?: { delta?: unknown }
-          reasoning?: { delta?: unknown }
-        }
-      })
-      : {}
-  const delta = partObject.choices?.[0]?.delta || {}
-  const contentParts = extractCompletionPartsFromContent(delta.content)
-  const responseDelta = partObject.response?.output_text?.delta || ''
-  const responseReasoning = partObject.response?.reasoning?.delta || ''
-  const explicitReasoning =
-    collectTextValue(delta.reasoning) ||
-    collectTextValue(delta.reasoning_content) ||
-    collectTextValue(delta.reasoningContent) ||
-    collectTextValue(delta.thinking) ||
-    collectTextValue(delta.reasoning_details) ||
-    collectTextValue(responseReasoning)
-  const textDelta =
-    contentParts.text ||
-    collectTextValue(delta.output_text) ||
-    collectTextValue(delta.text) ||
-    collectTextValue(responseDelta) ||
-    ''
-  const reasoningDelta = contentParts.reasoning || explicitReasoning || ''
-  return { textDelta, reasoningDelta }
-}
-
-function extractCompletionPartsFromContent(content: unknown): { text: string; reasoning: string } {
-  if (typeof content === 'string') return splitThinkTaggedContent(content)
-  if (!Array.isArray(content)) return splitThinkTaggedContent(collectTextValue(content))
-
-  let text = ''
-  let reasoning = ''
-  for (const part of content) {
-    if (typeof part === 'string') {
-      text += part
-      continue
-    }
-    if (!part || typeof part !== 'object') continue
-    const obj = part as { [key: string]: unknown }
-    const kind = typeof obj.type === 'string' ? obj.type.toLowerCase() : ''
-    const value =
-      (typeof obj.text === 'string' && obj.text) ||
-      (typeof obj.content === 'string' && obj.content) ||
-      collectTextValue(obj.delta) ||
-      collectTextValue(obj.output_text) ||
-      ''
-    if (!value) continue
-    if (kind.includes('reason') || kind.includes('think')) {
-      reasoning += value
-    } else {
-      const parsed = splitThinkTaggedContent(value)
-      text += parsed.text
-      if (parsed.reasoning) reasoning += parsed.reasoning
-    }
-  }
-  return { text, reasoning }
-}
-
-export function getSystemPrompt(messages: ProviderChatMessage[]) {
-  const systemParts = messages.filter((message) => message.role === 'system').map((message) => message.content).filter(Boolean)
-  return systemParts.length === 0 ? undefined : systemParts.join('\n')
-}
-
-export function getConversationMessages(messages: ProviderChatMessage[]) {
-  return messages
-    .filter((message) => message.role !== 'system')
-    .map((message) => ({ role: message.role, content: message.content }))
-}
-
-export function mapReasoningEffort(effort: 'minimal' | 'low' | 'medium' | 'high' | undefined) {
-  if (effort === 'low' || effort === 'medium' || effort === 'high') return effort
-  if (effort === 'minimal') return 'low'
-  return 'high'
-}
-
-export function buildReasoningAwareContent(text: string, reasoning: string) {
-  if (!reasoning) return text
-  return [
-    { type: 'reasoning', text: reasoning },
-    { type: 'text', text },
-  ]
-}
-
-export function resolveStreamStepMeta(options: ProviderChatCompletionOptions): InternalLLMStreamStepMeta | undefined {
+export function resolveStreamStepMeta(options: AiLlmCallOptions): InternalLLMStreamStepMeta | undefined {
   const id = typeof options.streamStepId === 'string' ? options.streamStepId.trim() : ''
   const attempt = typeof options.streamStepAttempt === 'number' && Number.isFinite(options.streamStepAttempt)
     ? Math.max(1, Math.floor(options.streamStepAttempt))
@@ -195,7 +46,7 @@ export function resolveStreamStepMeta(options: ProviderChatCompletionOptions): I
 }
 
 export function emitStreamStage(
-  callbacks: ProviderChatCompletionStreamCallbacks | undefined,
+  callbacks: AiLlmStreamCallbacks | undefined,
   step: InternalLLMStreamStepMeta | undefined,
   stage: 'submit' | 'streaming' | 'fallback' | 'completed',
   provider?: string | null,
@@ -204,7 +55,7 @@ export function emitStreamStage(
 }
 
 export function emitStreamChunk(
-  callbacks: ProviderChatCompletionStreamCallbacks | undefined,
+  callbacks: AiLlmStreamCallbacks | undefined,
   step: InternalLLMStreamStepMeta | undefined,
   chunk: {
     kind: LLMStreamKind
@@ -214,28 +65,6 @@ export function emitStreamChunk(
   },
 ) {
   callbacks?.onChunk?.({ ...chunk, ...(step ? { step } : {}) })
-}
-
-export function emitChunkedText(
-  text: string,
-  callbacks?: ProviderChatCompletionStreamCallbacks,
-  kind: LLMStreamKind = 'text',
-  seqStart = 1,
-  step?: InternalLLMStreamStepMeta,
-) {
-  if (!text) return seqStart
-  let seq = seqStart
-  const chunkSize = 320
-  for (let i = 0; i < text.length; i += chunkSize) {
-    emitStreamChunk(callbacks, step, {
-      kind,
-      delta: text.slice(i, i + chunkSize),
-      seq,
-      lane: 'main',
-    })
-    seq += 1
-  }
-  return seq
 }
 
 export class StreamChunkTimeoutError extends Error {
@@ -251,38 +80,19 @@ export async function* withStreamChunkTimeout<T>(
 ): AsyncGenerator<T> {
   const iterator = source[Symbol.asyncIterator]()
   while (true) {
-    const result = await Promise.race([
-      iterator.next(),
-      new Promise<never>((_, reject) => {
-        const timer = setTimeout(() => reject(new StreamChunkTimeoutError(timeoutMs)), timeoutMs)
-        if (typeof timer === 'object' && 'unref' in timer) {
-          timer.unref()
-        }
-      }),
-    ])
-    if (result.done) return
-    yield result.value
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      const result = await Promise.race([
+        iterator.next(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new StreamChunkTimeoutError(timeoutMs)), timeoutMs)
+          if (typeof timer === 'object' && 'unref' in timer) timer.unref()
+        }),
+      ])
+      if (result.done) return
+      yield result.value
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
   }
-}
-
-function normalizeModelId(modelId: string): string {
-  return modelId.trim().toLowerCase()
-}
-
-export function isLikelyOpenAIReasoningModel(modelId: string): boolean {
-  const normalized = normalizeModelId(modelId)
-  if (!normalized) return false
-  return normalized.startsWith('o1')
-    || normalized.startsWith('o3')
-    || normalized.startsWith('o4')
-    || normalized.startsWith('gpt-5')
-}
-
-export function shouldUseOpenAIReasoningProviderOptions(input: {
-  providerKey: string
-  modelId: string
-}): boolean {
-  if (!isLikelyOpenAIReasoningModel(input.modelId)) return false
-  const normalizedProviderKey = input.providerKey.trim().toLowerCase()
-  return normalizedProviderKey === 'ark' || normalizedProviderKey === 'openrouter'
 }

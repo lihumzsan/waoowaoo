@@ -3,6 +3,9 @@ import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
 import type { AiProviderVideoExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
+import { RETRY_POLICY, withRetry } from '@/lib/retry'
+import { withProviderProxyDispatcher } from '@/lib/http/outbound-proxy'
+import { GOOGLE_PROVIDER_PROXY_TARGET } from '@/lib/ai-providers/google/proxy-target'
 
 type GoogleVeoOptions = NonNullable<AiProviderVideoExecutionContext['options']>
 
@@ -54,7 +57,6 @@ function assertAllowedGoogleVideoOptions(options: GoogleVeoOptions) {
     'duration',
     'lastFrameImageUrl',
     'prompt',
-    'fps',
   ])
   for (const [key, value] of Object.entries(options)) {
     if (value === undefined) continue
@@ -114,7 +116,14 @@ export async function executeGoogleVideoGeneration(input: AiProviderVideoExecuti
     request.config = config
   }
 
-  const response = await ai.models.generateVideos(request as unknown as Parameters<typeof ai.models.generateVideos>[0])
+  const response = await withRetry({
+    scope: `google:video:submit:${modelId}`,
+    policy: RETRY_POLICY.providerSubmit,
+    run: async () => await withProviderProxyDispatcher(
+      GOOGLE_PROVIDER_PROXY_TARGET,
+      async () => await ai.models.generateVideos(request as unknown as Parameters<typeof ai.models.generateVideos>[0]),
+    ),
+  })
   const operationName = extractOperationName(response)
   if (!operationName) {
     throw new Error('Veo 未返回 operation name')

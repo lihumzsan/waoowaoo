@@ -9,11 +9,17 @@ import {
   validateProjectDraft,
   type ProjectDraftInput,
 } from '@/lib/projects/validation'
-import { DEFAULT_GROUP_VIDEO_MODEL } from '@/lib/ai-exec/video-defaults'
-import { getDeploymentConfig } from '@/lib/deployment/config'
+import { getDeploymentConfig, isPlatformProviderCredentialMode } from '@/lib/deployment/config'
 import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
-import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import {
+  requireProjectAgentOperationRequest,
+  type ProjectAgentOperationRegistryDraft,
+} from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
+import {
+  isProjectVideoRatio,
+  writeProjectVideoRatioInTransaction,
+} from '@/lib/projects/video-ratio-write'
 
 function readProjectDraftBody(body: unknown): ProjectDraftInput {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -39,6 +45,7 @@ const EFFECTS_QUERY = {
 
 const EFFECTS_WRITE = {
   writes: true,
+  workspaceResourceImpact: 'none',
   billable: false,
   destructive: false,
   overwrite: false,
@@ -53,6 +60,7 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
       id: 'list_projects',
       summary: 'List user projects with pagination, cost and basic stats.',
       intent: 'query',
+      channels: { tool: false, api: true },
       effects: EFFECTS_QUERY,
       inputSchema: z.object({
         page: z.number().int().positive().max(10000).optional(),
@@ -93,7 +101,7 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
         })
 
         const projectIds = projects.map((project) => project.id)
-        const [costsByProject, projectEpisodes] = await Promise.all([
+        const [costsByProject, resourceCounts] = await Promise.all([
           projectIds.length === 0
             ? []
             : prisma.usageCost.groupBy({
@@ -103,35 +111,14 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
               }),
           projectIds.length === 0
             ? []
-            : prisma.project.findMany({
-                where: { id: { in: projectIds } },
-                select: {
-                  id: true,
-                  episodes: {
-                    orderBy: { episodeNumber: 'asc' },
-                    select: {
-                      episodeNumber: true,
-                      novelText: true,
-                      storyboards: {
-                        select: {
-                          _count: { select: { panels: true } },
-                          panels: {
-                            where: {
-                              OR: [
-                                { imageUrl: { not: null } },
-                                { videoUrl: { not: null } },
-                              ],
-                            },
-                            select: {
-                              imageUrl: true,
-                              videoUrl: true,
-                            },
-                          },
-                        },
-                      },
-                    },
-                  },
+            : prisma.workspaceResource.groupBy({
+                by: ['projectId', 'resourceKind', 'mediaType'],
+                where: {
+                  projectId: { in: projectIds },
+                  deletedAt: null,
+                  activePath: { not: null },
                 },
+                _count: { _all: true },
               }),
         ])
 
@@ -143,49 +130,34 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
         )
 
         const statsMap = new Map<string, {
-          episodes: number
+          resources: number
+          folders: number
           images: number
           videos: number
-          panels: number
-          firstEpisodePreview: string | null
-        }>(
-          projectEpisodes.map((projectEntry) => {
-            let imageCount = 0
-            let videoCount = 0
-            let panelCount = 0
-            for (const episode of projectEntry.episodes) {
-              for (const storyboard of episode.storyboards) {
-                panelCount += storyboard._count.panels
-                for (const panel of storyboard.panels) {
-                  if (panel.imageUrl) imageCount += 1
-                  if (panel.videoUrl) videoCount += 1
-                }
-              }
-            }
-            const firstEpisode = projectEntry.episodes[0]
-            const preview = firstEpisode?.novelText ? firstEpisode.novelText.slice(0, 100) : null
-            return [
-              projectEntry.id,
-              {
-                episodes: projectEntry.episodes.length,
-                images: imageCount,
-                videos: videoCount,
-                panels: panelCount,
-                firstEpisodePreview: preview,
-              },
-            ]
-          }),
-        )
+        }>()
+        for (const count of resourceCounts) {
+          const current = statsMap.get(count.projectId) ?? {
+            resources: 0,
+            folders: 0,
+            images: 0,
+            videos: 0,
+          }
+          const amount = count._count._all
+          current.resources += amount
+          if (count.resourceKind === 'folder') current.folders += amount
+          if (count.mediaType === 'image') current.images += amount
+          if (count.mediaType === 'video') current.videos += amount
+          statsMap.set(count.projectId, current)
+        }
 
         const projectsWithStats = projects.map((project) => ({
           ...project,
           totalCost: costMap.get(project.id) ?? 0,
           stats: statsMap.get(project.id) ?? {
-            episodes: 0,
+            resources: 0,
+            folders: 0,
             images: 0,
             videos: 0,
-            panels: 0,
-            firstEpisodePreview: null,
           },
         }))
 
@@ -205,17 +177,24 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
       id: 'create_project',
       summary: 'Create a new project for the current user.',
       intent: 'act',
+      channels: { tool: false, api: true },
       effects: EFFECTS_WRITE,
       inputSchema: z.object({
         name: z.string().min(1),
         description: z.string().optional().nullable(),
+        videoRatio: z.string().trim().min(1).refine(isProjectVideoRatio, {
+          message: 'Unsupported project video ratio.',
+        }).optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const draft = readProjectDraftBody(input)
         const validationIssue = validateProjectDraft(draft)
         if (validationIssue) {
-          const locale = resolveTaskLocale(ctx.request, input) ?? 'zh'
+          const locale = resolveTaskLocale(
+            requireProjectAgentOperationRequest(ctx),
+            input,
+          ) ?? 'zh'
           throw new ApiError('INVALID_PARAMS', {
             code: validationIssue.code,
             field: validationIssue.field,
@@ -225,47 +204,50 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
         }
 
         const normalized = normalizeProjectDraft(draft)
+        const deployment = getDeploymentConfig()
+        const platformDefaults = isPlatformProviderCredentialMode(deployment)
+          ? getPlatformDefaultModels()
+          : null
+        const userPreference = platformDefaults
+          ? null
+          : await transaction.userPreference.findUnique({
+              where: { userId: ctx.userId },
+            })
 
-	        const userPreference = await prisma.userPreference.findUnique({
-	          where: { userId: ctx.userId },
-	        })
-	        const deployment = getDeploymentConfig()
-	        const platformDefaults = deployment.providerCredentialMode === 'platform-key'
-	          ? getPlatformDefaultModels()
-	          : null
-
-	        const project = await prisma.project.create({
-	          data: {
-	            name: normalized.name.trim(),
-	            description: normalized.description?.trim() || null,
-	            userId: ctx.userId,
-	            ...(platformDefaults && {
-	              analysisModel: platformDefaults.analysisModel,
-	              characterModel: platformDefaults.characterModel,
-	              locationModel: platformDefaults.locationModel,
-	              storyboardModel: platformDefaults.storyboardModel,
-	              editModel: platformDefaults.editModel,
-	              videoModel: platformDefaults.videoModel,
-	              singleShotVideoModel: platformDefaults.videoModel,
-	              sequenceVideoModel: platformDefaults.videoModel,
-	              musicModel: platformDefaults.musicModel,
-	            }),
-	            ...(!platformDefaults && userPreference && {
-	              analysisModel: userPreference.analysisModel,
+        let project = await transaction.project.create({
+          data: {
+            name: normalized.name.trim(),
+            description: normalized.description?.trim() || null,
+            userId: ctx.userId,
+            videoRatio: null,
+            ...(platformDefaults && {
+              analysisModel: platformDefaults.analysisModel,
+              characterModel: platformDefaults.characterModel,
+              locationModel: platformDefaults.locationModel,
+              editModel: platformDefaults.editModel,
+              videoModel: platformDefaults.videoModel,
+              musicModel: platformDefaults.musicModel,
+            }),
+            ...(!platformDefaults && userPreference && {
+              analysisModel: userPreference.analysisModel,
               characterModel: userPreference.characterModel,
               locationModel: userPreference.locationModel,
-              storyboardModel: userPreference.storyboardModel,
               editModel: userPreference.editModel,
               videoModel: userPreference.videoModel,
-              singleShotVideoModel: userPreference.videoModel,
-              sequenceVideoModel: DEFAULT_GROUP_VIDEO_MODEL,
               musicModel: userPreference.musicModel,
-              videoRatio: userPreference.videoRatio,
               videoResolution: userPreference.videoResolution,
               imageResolution: userPreference.imageResolution,
             }),
           },
         })
+
+        if (input.videoRatio !== undefined) {
+          project = await writeProjectVideoRatioInTransaction({
+            transaction,
+            projectId: project.id,
+            videoRatio: input.videoRatio,
+          })
+        }
 
         return { project }
       },

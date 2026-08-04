@@ -1,9 +1,12 @@
 import { prisma } from '@/lib/prisma'
 import { toMoneyNumber } from '@/lib/billing/money'
+import { rollbackFreeze } from '@/lib/billing/ledger'
+import { TASK_STATUS } from '@/lib/task/types'
 
 type CleanupStats = {
   scanned: number
   stale: number
+  activeTaskSkipped: number
   rolledBack: number
   skipped: number
   errors: number
@@ -26,7 +29,9 @@ function writeJson(payload: unknown) {
 }
 
 function writeError(payload: unknown) {
-  process.stderr.write(`${typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2)}\n`)
+  process.stderr.write(
+    `${typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2)}\n`,
+  )
 }
 
 async function main() {
@@ -41,10 +46,26 @@ async function main() {
     },
     orderBy: { createdAt: 'asc' },
   })
+  const taskIds = pending.flatMap((freeze) => (freeze.taskId ? [freeze.taskId] : []))
+  const tasks =
+    taskIds.length > 0
+      ? await prisma.task.findMany({
+          where: { id: { in: taskIds } },
+          select: { id: true, status: true },
+        })
+      : []
+  const taskStatusById = new Map(tasks.map((task) => [task.id, task.status]))
+  const isActiveTaskFreeze = (taskId: string | null): boolean => {
+    if (!taskId) return false
+    const status = taskStatusById.get(taskId)
+    return status === TASK_STATUS.QUEUED || status === TASK_STATUS.PROCESSING
+  }
+  const eligible = pending.filter((freeze) => !isActiveTaskFreeze(freeze.taskId))
 
   const stats: CleanupStats = {
     scanned: pending.length,
-    stale: pending.length,
+    stale: eligible.length,
+    activeTaskSkipped: pending.length - eligible.length,
     rolledBack: 0,
     skipped: 0,
     errors: 0,
@@ -55,8 +76,9 @@ async function main() {
       mode: 'dry-run',
       hours,
       cutoff: cutoff.toISOString(),
-      stalePendingCount: pending.length,
-      stalePending: pending.map((f) => ({
+      stalePendingCount: eligible.length,
+      activeTaskSkipped: stats.activeTaskSkipped,
+      stalePending: eligible.map((f) => ({
         id: f.id,
         userId: f.userId,
         amount: toMoneyNumber(f.amount),
@@ -66,47 +88,11 @@ async function main() {
     return
   }
 
-  for (const freeze of pending) {
+  for (const freeze of eligible) {
     try {
-      await prisma.$transaction(async (tx) => {
-        const current = await tx.balanceFreeze.findUnique({
-          where: { id: freeze.id },
-        })
-        if (!current || current.status !== 'pending') {
-          stats.skipped += 1
-          return
-        }
-
-        const balance = await tx.userBalance.findUnique({
-          where: { userId: current.userId },
-        })
-        if (!balance) {
-          stats.skipped += 1
-          return
-        }
-
-        const frozenAmount = toMoneyNumber(balance.frozenAmount)
-        const freezeAmount = toMoneyNumber(current.amount)
-        const nextFrozenAmount = Math.max(0, frozenAmount - freezeAmount)
-        const frozenDelta = frozenAmount - nextFrozenAmount
-        const balanceIncrement = frozenDelta
-
-        await tx.userBalance.update({
-          where: { userId: current.userId },
-          data: {
-            balance: { increment: balanceIncrement },
-            frozenAmount: { decrement: frozenDelta },
-          },
-        })
-
-        await tx.balanceFreeze.update({
-          where: { id: current.id },
-          data: {
-            status: 'rolled_back',
-          },
-        })
-      })
-      stats.rolledBack += 1
+      const rolledBack = await rollbackFreeze(freeze.id)
+      if (rolledBack) stats.rolledBack += 1
+      else stats.errors += 1
     } catch (error) {
       stats.errors += 1
       writeError({

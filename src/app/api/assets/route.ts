@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, ApiError } from '@/lib/api-errors'
-import { isErrorResponse, requireProjectAuthLight, requireUserAuth } from '@/lib/api-auth'
+import { isErrorResponse, requireUserAuth } from '@/lib/api-auth'
 import { executeProjectAgentOperationFromApi } from '@/lib/adapters/api/execute-project-agent-operation'
 import type { AssetKind, AssetScope } from '@/lib/assets/contracts'
+import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
 
 function isAssetScope(value: string | null): value is AssetScope {
-  return value === 'global' || value === 'project'
+  return value === 'global'
 }
 
 function isAssetKind(value: string | null): value is AssetKind {
@@ -15,85 +16,39 @@ function isAssetKind(value: string | null): value is AssetKind {
 export const GET = apiHandler(async (request: NextRequest) => {
   const searchParams = request.nextUrl.searchParams
   const scope = searchParams.get('scope')
-  const projectId = searchParams.get('projectId')
   const folderId = searchParams.get('folderId')
   const kind = searchParams.get('kind')
 
   if (!isAssetScope(scope)) {
-    throw new ApiError('INVALID_PARAMS', { details: 'scope must be global or project' })
+    throw new ApiError('INVALID_PARAMS', { details: 'scope must be global' })
   }
 
-  if (scope === 'project') {
-    if (!projectId) {
-      throw new ApiError('INVALID_PARAMS', { details: 'projectId is required for project scope' })
-    }
-    const authResult = await requireProjectAuthLight(projectId)
-    if (isErrorResponse(authResult)) return authResult
-    const result = await executeProjectAgentOperationFromApi({
-      request,
-      operationId: 'api_assets_read',
-      projectId,
-      userId: authResult.session.user.id,
-      input: {
-        scope,
-        projectId,
-        folderId,
-        kind: isAssetKind(kind) ? kind : null,
-      },
-      source: 'project-ui',
-    })
-    return NextResponse.json(result)
-  } else {
-    const authResult = await requireUserAuth()
-    if (isErrorResponse(authResult)) return authResult
-    const result = await executeProjectAgentOperationFromApi({
-      request,
-      operationId: 'api_assets_read',
-      projectId: 'global-asset-hub',
-      userId: authResult.session.user.id,
-      input: {
-        scope,
-        projectId,
-        folderId,
-        kind: isAssetKind(kind) ? kind : null,
-      },
-      source: 'project-ui',
-    })
-    return NextResponse.json(result)
-  }
+  const authResult = await requireUserAuth()
+  if (isErrorResponse(authResult)) return authResult
+  const result = await executeProjectAgentOperationFromApi({
+    request,
+    operationId: 'api_assets_read',
+    projectId: GLOBAL_ASSET_PROJECT_ID,
+    userId: authResult.session.user.id,
+    input: {
+      scope,
+      folderId,
+      kind: isAssetKind(kind) ? kind : null,
+    },
+    source: 'asset-hub',
+  })
+  return NextResponse.json(result)
 })
 
 type CreateAssetBody = {
   scope?: AssetScope
   kind?: AssetKind
-  projectId?: string
 } & Record<string, unknown>
-
-function isCreatableKind(value: AssetKind | undefined): value is Extract<AssetKind, 'location' | 'prop'> {
-  return value === 'location' || value === 'prop'
-}
 
 export const POST = apiHandler(async (request: NextRequest) => {
   const body = await request.json() as CreateAssetBody
-  if (body.scope !== 'project' && body.scope !== 'global') {
+  if (body.scope !== 'global') {
     throw new ApiError('INVALID_PARAMS')
-  }
-
-  if (body.scope === 'project') {
-    if (!body.projectId) {
-      throw new ApiError('INVALID_PARAMS', { details: 'projectId is required for project scope' })
-    }
-    const authResult = await requireProjectAuthLight(body.projectId)
-    if (isErrorResponse(authResult)) return authResult
-    const result = await executeProjectAgentOperationFromApi({
-      request,
-      operationId: 'api_assets_create',
-      projectId: body.projectId,
-      userId: authResult.session.user.id,
-      input: body,
-      source: 'project-ui',
-    })
-    return NextResponse.json(result)
   }
 
   const authResult = await requireUserAuth()
@@ -101,10 +56,11 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const result = await executeProjectAgentOperationFromApi({
     request,
     operationId: 'api_assets_create',
-    projectId: 'global-asset-hub',
+    projectId: GLOBAL_ASSET_PROJECT_ID,
     userId: authResult.session.user.id,
     input: body,
-    source: 'project-ui',
+    source: 'asset-hub',
+    responseContract: 'operation_mutation_response_v1',
   })
   return NextResponse.json(result)
 })

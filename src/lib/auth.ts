@@ -1,57 +1,61 @@
-import { PrismaAdapter } from "@next-auth/prisma-adapter"
+import type { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
-import bcrypt from "bcryptjs"
 import { logAuthAction } from './logging/semantic'
-import { prisma } from './prisma'
+import { createAuthAdapter } from '@/lib/auth/next-auth-adapter'
+import { createGoogleOAuthProvider, readVerifiedGoogleProfileEmail } from '@/lib/auth/google-oauth'
+import { authorizePasswordIdentity } from '@/lib/auth/password-auth'
+import { authorizePhoneIdentity } from '@/lib/auth/phone-verification'
+import { getDeploymentConfig, isCloudDeployment } from '@/lib/deployment/config'
+import { getDeploymentFeatures } from '@/lib/deployment/features'
+import { prisma } from '@/lib/prisma'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const authOptions: any = {
-  adapter: PrismaAdapter(prisma),
-  // 🔥 允许从任意 Host 访问（解决局域网访问问题）
-  trustHost: true,
-  // 🔥 根据 URL 协议决定是否使用 Secure Cookie
-  // 局域网 HTTP 访问时需要关闭，否则 Cookie 无法设置
-  useSecureCookies: (process.env.NEXTAUTH_URL || '').startsWith('https://'),
-  providers: [
-    CredentialsProvider({
-      name: "credentials",
+const deploymentConfig = getDeploymentConfig()
+const deploymentFeatures = getDeploymentFeatures(deploymentConfig)
+const googleOAuthProvider = createGoogleOAuthProvider(deploymentFeatures)
+const passwordProvider = deploymentFeatures.enablePasswordAuth
+  ? CredentialsProvider({
+      id: 'credentials',
+      name: 'password',
       credentials: {
-        username: { label: "Username", type: "text" },
-        password: { label: "Password", type: "password" }
+        username: { label: 'Username', type: 'text' },
+        password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        if (!credentials?.username || !credentials?.password) {
-          logAuthAction('LOGIN', credentials?.username || 'unknown', { error: 'Missing credentials' })
-          return null
-        }
-
-        const user = await prisma.user.findUnique({
-          where: {
-            name: credentials.username
-          }
+        return await authorizePasswordIdentity({
+          username: credentials?.username,
+          password: credentials?.password,
         })
-
-        if (!user || !user.password) {
-          logAuthAction('LOGIN', credentials.username, { error: 'User not found' })
-          return null
-        }
-
-        // 验证密码
-        const isPasswordValid = await bcrypt.compare(credentials.password, user.password)
-
-        if (!isPasswordValid) {
-          logAuthAction('LOGIN', credentials.username, { error: 'Invalid password' })
-          return null
-        }
-
-        logAuthAction('LOGIN', user.name, { userId: user.id, success: true })
-
-        return {
-          id: user.id,
-          name: user.name,
-        }
-      }
+      },
     })
+  : null
+const phoneProvider = deploymentFeatures.enablePhoneAuth
+  ? CredentialsProvider({
+      id: 'phone',
+      name: 'phone',
+      credentials: {
+        phoneNumber: { label: 'Phone number', type: 'tel' },
+        code: { label: 'Verification code', type: 'text' },
+        inviteCode: { label: 'Invite code', type: 'text' },
+      },
+      async authorize(credentials) {
+        return await authorizePhoneIdentity({
+          phoneNumber: credentials?.phoneNumber,
+          code: credentials?.code,
+          inviteCode: credentials?.inviteCode,
+        })
+      },
+    })
+  : null
+const secureCookieRequired = (isCloudDeployment(deploymentConfig) && process.env.NODE_ENV === 'production')
+  || (process.env.NEXTAUTH_URL || '').startsWith('https://')
+
+export const authOptions: NextAuthOptions = {
+  adapter: createAuthAdapter(),
+  useSecureCookies: secureCookieRequired,
+  providers: [
+    ...(passwordProvider ? [passwordProvider] : []),
+    ...(phoneProvider ? [phoneProvider] : []),
+    ...(googleOAuthProvider ? [googleOAuthProvider] : []),
   ],
   session: {
     strategy: "jwt"
@@ -60,17 +64,36 @@ export const authOptions: any = {
     signIn: "/auth/signin",
   },
   callbacks: {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    async jwt({ token, user }: any) {
+    async signIn({ account, profile }) {
+      if (account?.provider !== 'google') return true
+
+      const verifiedEmail = readVerifiedGoogleProfileEmail(profile)
+      if (!verifiedEmail) {
+        logAuthAction('LOGIN', 'Google email not verified', { success: false, provider: 'google' })
+        return false
+      }
+
+      logAuthAction('LOGIN', 'Google login succeeded', { success: true, provider: 'google' }, undefined, verifiedEmail)
+      return true
+    },
+    async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id
       }
+      if (trigger === 'update' && typeof token.id === 'string') {
+        const currentUser = await prisma.user.findUnique({
+          where: { id: token.id },
+          select: { name: true },
+        })
+        if (currentUser) {
+          token.name = currentUser.name
+        }
+      }
       return token
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    async session({ session, token }: any) {
-      if (token && session.user) {
-        session.user.id = token.id as string
+    async session({ session, token }) {
+      if (session.user && typeof token.id === 'string') {
+        session.user.id = token.id
       }
       return session
     }

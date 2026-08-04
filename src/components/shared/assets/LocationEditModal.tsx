@@ -7,67 +7,36 @@ import { shouldShowError } from '@/lib/error-utils'
 import TaskStatusInline from '@/components/task/TaskStatusInline'
 import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import {
-    useAiModifyLocationDescription,
-    useAiModifyProjectLocationDescription,
     useUpdateLocationName,
     useUpdateLocationSummary,
-    useUpdateProjectLocationDescription,
-    useUpdateProjectLocationName,
 } from '@/lib/query/hooks'
-import { AiModifyDescriptionField } from './AiModifyDescriptionField'
+import { useToast } from '@/contexts/ToastContext'
 
 export interface LocationEditModalProps {
-    mode: 'asset-hub' | 'project'
     locationId: string
     locationName: string
     description: string
     summary?: string
-    imageIndex?: number
-    projectId?: string
-    descriptionIndex?: number
-    isTaskRunning?: boolean
     onClose: () => void
-    onSave: (locationId: string) => void
     onUpdate?: (newDescription: string) => void
     onNameUpdate?: (newName: string) => void
-    onRefresh?: () => void
 }
 
 export function LocationEditModal({
-    mode,
     locationId,
     locationName,
     description,
     summary,
-    imageIndex,
-    projectId,
-    descriptionIndex,
-    isTaskRunning = false,
     onClose,
-    onSave,
     onUpdate,
     onNameUpdate,
-    onRefresh,
 }: LocationEditModalProps) {
     const t = useTranslations('assets')
-
-    const resolvedImageIndex = mode === 'asset-hub'
-        ? (imageIndex ?? 0)
-        : (descriptionIndex ?? 0)
+    const { showError } = useToast()
 
     const [editingName, setEditingName] = useState(locationName)
     const [editingDescription, setEditingDescription] = useState(description || summary || '')
-    const [aiModifyInstruction, setAiModifyInstruction] = useState('')
-    const [isAiModifying, setIsAiModifying] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
-    const aiModifyingState = isAiModifying
-        ? resolveTaskPresentationState({
-            phase: 'processing',
-            intent: 'modify',
-            resource: 'image',
-            hasOutput: true,
-        })
-        : null
     const savingState = isSaving
         ? resolveTaskPresentationState({
             phase: 'processing',
@@ -76,108 +45,31 @@ export function LocationEditModal({
             hasOutput: false,
         })
         : null
-    const taskRunningState = isTaskRunning
-        ? resolveTaskPresentationState({
-            phase: 'processing',
-            intent: 'modify',
-            resource: 'image',
-            hasOutput: true,
-        })
-        : null
 
     const updateAssetHubName = useUpdateLocationName()
-    const updateProjectName = useUpdateProjectLocationName(projectId ?? '')
     const updateAssetHubSummary = useUpdateLocationSummary()
-    const updateProjectDescription = useUpdateProjectLocationDescription(projectId ?? '')
-    const aiModifyAssetHub = useAiModifyLocationDescription()
-    const aiModifyProject = useAiModifyProjectLocationDescription(projectId ?? '')
-
-    const getErrorMessage = (error: unknown, fallback: string) => {
-        if (error instanceof Error && error.message) return error.message
-        return fallback
-    }
 
     const persistNameIfNeeded = async () => {
         const nextName = editingName.trim()
         if (!nextName || nextName === locationName) return
 
-        if (mode === 'asset-hub') {
-            await updateAssetHubName.mutateAsync({ locationId, name: nextName })
-        } else {
-            await updateProjectName.mutateAsync({ locationId, name: nextName })
-        }
+        await updateAssetHubName.mutateAsync({ locationId, name: nextName })
         onNameUpdate?.(nextName)
     }
 
     const persistDescription = async () => {
-        if (mode === 'asset-hub') {
-            await updateAssetHubSummary.mutateAsync({
-                locationId,
-                summary: editingDescription,
-            })
-            return
-        }
-
-        await updateProjectDescription.mutateAsync({
+        await updateAssetHubSummary.mutateAsync({
             locationId,
-            imageIndex: resolvedImageIndex,
-            description: editingDescription,
+            summary: editingDescription,
         })
-    }
-
-    const handleAiModify = async () => {
-        if (!aiModifyInstruction.trim()) return false
-
-        try {
-            setIsAiModifying(true)
-
-            if (mode === 'asset-hub') {
-                const data = await aiModifyAssetHub.mutateAsync({
-                    locationId,
-                    imageIndex: resolvedImageIndex,
-                    currentDescription: editingDescription,
-                    modifyInstruction: aiModifyInstruction,
-                })
-                if (data?.modifiedDescription) {
-                    setEditingDescription(data.modifiedDescription)
-                    onUpdate?.(data.modifiedDescription)
-                    setAiModifyInstruction('')
-                    return true
-                }
-                return false
-            }
-
-            const data = await aiModifyProject.mutateAsync({
-                locationId,
-                imageIndex: resolvedImageIndex,
-                currentDescription: editingDescription,
-                modifyInstruction: aiModifyInstruction,
-            })
-            const nextDescription = data?.modifiedDescription || data?.prompt || ''
-            if (nextDescription) {
-                setEditingDescription(nextDescription)
-                onUpdate?.(nextDescription)
-                setAiModifyInstruction('')
-                return true
-            }
-            return false
-        } catch (error: unknown) {
-            if (shouldShowError(error)) {
-                alert(`${t('modal.modifyFailed')}: ${getErrorMessage(error, t('errors.failed'))}`)
-            }
-            return false
-        } finally {
-            setIsAiModifying(false)
-        }
     }
 
     const handleSaveName = async () => {
         try {
             await persistNameIfNeeded()
-            onRefresh?.()
         } catch (error: unknown) {
             if (shouldShowError(error)) {
-                alert(t('modal.saveName') + t('errors.failed'))
+                showError(error, t('modal.saveName') + t('errors.failed'))
             }
         }
     }
@@ -189,34 +81,14 @@ export function LocationEditModal({
             await persistDescription()
 
             onUpdate?.(editingDescription)
-            onRefresh?.()
             onClose()
         } catch (error: unknown) {
             if (shouldShowError(error)) {
-                alert(getErrorMessage(error, t('errors.saveFailed')))
+                showError(error, t('errors.saveFailed'))
             }
         } finally {
             setIsSaving(false)
         }
-    }
-
-    const handleSaveAndGenerate = async () => {
-        const savedDescription = editingDescription
-        onClose()
-
-        ; (async () => {
-            try {
-                await persistNameIfNeeded()
-                await persistDescription()
-                onUpdate?.(savedDescription)
-                onRefresh?.()
-                onSave(locationId)
-            } catch (error: unknown) {
-                if (shouldShowError(error)) {
-                    alert(getErrorMessage(error, t('errors.saveFailed')))
-                }
-            }
-        })()
     }
 
     return (
@@ -250,31 +122,28 @@ export function LocationEditModal({
                             {editingName !== locationName && (
                                 <button
                                     onClick={handleSaveName}
-                                    disabled={updateAssetHubName.isPending || updateProjectName.isPending || !editingName.trim()}
+                                    disabled={updateAssetHubName.isPending || !editingName.trim()}
                                     className="glass-btn-base glass-btn-tone-success px-3 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed text-sm whitespace-nowrap"
                                 >
-                                    {(updateAssetHubName.isPending || updateProjectName.isPending)
-                                        ? t('smartImport.preview.saving')
+                                    {updateAssetHubName.isPending
+                                        ? t('modal.processing')
                                         : t('modal.saveName')}
                                 </button>
                             )}
                         </div>
                     </div>
 
-                    <AiModifyDescriptionField
-                        label={t('location.description')}
-                        description={editingDescription}
-                        onDescriptionChange={setEditingDescription}
-                        descriptionPlaceholder={t('modal.descPlaceholder')}
-                        aiInstruction={aiModifyInstruction}
-                        onAiInstructionChange={setAiModifyInstruction}
-                        aiInstructionPlaceholder={t('modal.modifyPlaceholder')}
-                        onAiModify={handleAiModify}
-                        isAiModifying={isAiModifying}
-                        aiModifyingState={aiModifyingState}
-                        actionLabel={t('modal.modifyDescription')}
-                        cancelLabel={t('common.cancel')}
-                    />
+                    <div className="space-y-2">
+                        <label className="glass-field-label block">
+                            {t('location.description')}
+                        </label>
+                        <textarea
+                            value={editingDescription}
+                            onChange={(event) => setEditingDescription(event.target.value)}
+                            className="glass-textarea-base w-full h-48 px-3 py-2 resize-none"
+                            placeholder={t('modal.descPlaceholder')}
+                        />
+                    </div>
                 </div>
 
                 <div className="flex gap-3 justify-end p-4 border-t border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface-strong)] rounded-b-lg flex-shrink-0">
@@ -293,18 +162,7 @@ export function LocationEditModal({
                         {isSaving ? (
                             <TaskStatusInline state={savingState} className="text-white [&>span]:text-white [&_svg]:text-white" />
                         ) : (
-                            t('modal.saveOnly')
-                        )}
-                    </button>
-                    <button
-                        onClick={handleSaveAndGenerate}
-                        disabled={isSaving || isTaskRunning || !editingDescription.trim()}
-                        className="glass-btn-base glass-btn-primary px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                    >
-                        {isTaskRunning ? (
-                            <TaskStatusInline state={taskRunningState} className="text-white [&>span]:text-white [&_svg]:text-white" />
-                        ) : (
-                            t('modal.saveAndGenerate')
+                            t('modal.save')
                         )}
                     </button>
                 </div>

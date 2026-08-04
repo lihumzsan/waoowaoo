@@ -1,19 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { DragEvent, MouseEvent } from 'react'
+import { useState } from 'react'
+import type { MouseEvent } from 'react'
 import { useTranslations } from 'next-intl'
-import { useProjectAssets } from '@/lib/query/hooks'
 import CharacterCreationForm from './character-creation/CharacterCreationForm'
 import { useCharacterCreationSubmit } from './character-creation/hooks/useCharacterCreationSubmit'
 import { AppIcon } from '@/components/ui/icons'
-import ImageGenerationInlineCountButton from '@/components/image-generation/ImageGenerationInlineCountButton'
-import { getImageGenerationCountOptions } from '@/lib/image-generation/count'
 
 export interface CharacterCreationModalProps {
-  mode: 'asset-hub' | 'project'
   folderId?: string | null
-  projectId?: string
   onClose: () => void
   onSuccess: () => void
 }
@@ -23,141 +18,27 @@ const XMarkIcon = ({ className }: { className?: string }) => (
 )
 
 export function CharacterCreationModal({
-  mode,
   folderId,
-  projectId,
   onClose,
   onSuccess,
 }: CharacterCreationModalProps) {
   const t = useTranslations('assetModal')
-
-  const [createMode, setCreateMode] = useState<'reference' | 'description'>('description')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [aiInstruction, setAiInstruction] = useState('')
-  const [referenceImagesBase64, setReferenceImagesBase64] = useState<string[]>([])
-  const [referenceSubMode, setReferenceSubMode] = useState<'direct' | 'extract'>('direct')
-  const [isSubAppearance, setIsSubAppearance] = useState(false)
-  const [selectedCharacterId, setSelectedCharacterId] = useState('')
-  const [changeReason, setChangeReason] = useState('')
-
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const projectAssets = useProjectAssets(mode === 'project' ? (projectId ?? null) : null)
-  const availableCharacters = useMemo(() => {
-    if (mode !== 'project') return []
-    const items = projectAssets.data?.characters || []
-    return items.map((c) => ({
-      id: c.id,
-      name: c.name,
-      appearances: c.appearances || [],
-    }))
-  }, [mode, projectAssets.data?.characters])
 
   const {
     isSubmitting,
-    isAiDesigning,
-    isExtracting,
-    characterGenerationCount,
-    setCharacterGenerationCount,
-    referenceCharacterGenerationCount,
-    setReferenceCharacterGenerationCount,
-    handleExtractDescription,
-    handleCreateWithReference,
-    handleAiDesign,
     handleSubmit,
-    handleSubmitAndGenerate,
   } = useCharacterCreationSubmit({
-    mode,
     folderId,
-    projectId,
     name,
     description,
-    aiInstruction,
-    referenceImagesBase64,
-    referenceSubMode,
-    isSubAppearance,
-    selectedCharacterId,
-    changeReason,
-    setDescription,
-    setAiInstruction,
     onSuccess,
     onClose,
   })
 
-  const handleFileSelect = useCallback(async (files: FileList | File[]) => {
-    const fileArray = Array.from(files).filter((f) => f.type.startsWith('image/'))
-    if (fileArray.length === 0) return
-
-    const remaining = 5 - referenceImagesBase64.length
-    const toAdd = fileArray.slice(0, remaining)
-
-    for (const file of toAdd) {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        const base64 = e.target?.result as string
-        setReferenceImagesBase64((prev) => {
-          if (prev.length >= 5) return prev
-          if (prev.includes(base64)) return prev
-          return [...prev, base64]
-        })
-      }
-      reader.readAsDataURL(file)
-    }
-  }, [referenceImagesBase64.length])
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isSubmitting && !isAiDesigning) {
-        onClose()
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isAiDesigning, isSubmitting, onClose])
-
-  useEffect(() => {
-    const handleGlobalPaste = (e: ClipboardEvent) => {
-      if (createMode !== 'reference') return
-
-      const target = e.target as HTMLElement
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
-
-      const items = e.clipboardData?.items
-      if (!items) return
-
-      for (let i = 0; i < items.length; i++) {
-        if (!items[i].type.startsWith('image/')) continue
-        const file = items[i].getAsFile()
-        if (!file) continue
-        e.preventDefault()
-        void handleFileSelect([file])
-        break
-      }
-    }
-
-    document.addEventListener('paste', handleGlobalPaste)
-    return () => document.removeEventListener('paste', handleGlobalPaste)
-  }, [createMode, handleFileSelect])
-
-  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (e.dataTransfer.files.length > 0) {
-      void handleFileSelect(e.dataTransfer.files)
-    }
-  }
-
-  const handleClearReference = (index?: number) => {
-    if (typeof index === 'number') {
-      setReferenceImagesBase64((prev) => prev.filter((_, i) => i !== index))
-      return
-    }
-    setReferenceImagesBase64([])
-  }
-
-  const handleBackdropClick = (e: MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget && !isSubmitting && !isAiDesigning) {
+  const handleBackdropClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (event.target === event.currentTarget && !isSubmitting) {
       onClose()
     }
   }
@@ -182,34 +63,10 @@ export function CharacterCreationModal({
           </div>
 
           <CharacterCreationForm
-            mode={mode}
-            createMode={createMode}
-            setCreateMode={(value) => setCreateMode(value)}
             name={name}
-            setName={(value) => setName(value)}
+            setName={setName}
             description={description}
-            setDescription={(value) => setDescription(value)}
-            aiInstruction={aiInstruction}
-            setAiInstruction={(value) => setAiInstruction(value)}
-            referenceImagesBase64={referenceImagesBase64}
-            referenceSubMode={referenceSubMode}
-            setReferenceSubMode={(value) => setReferenceSubMode(value)}
-            isSubAppearance={isSubAppearance}
-            setIsSubAppearance={(value) => setIsSubAppearance(value)}
-            selectedCharacterId={selectedCharacterId}
-            setSelectedCharacterId={(value) => setSelectedCharacterId(value)}
-            changeReason={changeReason}
-            setChangeReason={(value) => setChangeReason(value)}
-            availableCharacters={availableCharacters}
-            fileInputRef={fileInputRef}
-            handleDrop={handleDrop}
-            handleFileSelect={(files) => void handleFileSelect(files)}
-            handleClearReference={handleClearReference}
-            handleExtractDescription={() => { void handleExtractDescription() }}
-            handleAiDesign={() => { void handleAiDesign() }}
-            isSubmitting={isSubmitting}
-            isAiDesigning={isAiDesigning}
-            isExtracting={isExtracting}
+            setDescription={setDescription}
           />
         </div>
 
@@ -221,52 +78,13 @@ export function CharacterCreationModal({
           >
             {t('common.cancel')}
           </button>
-          {createMode === 'reference' ? (
-            <ImageGenerationInlineCountButton
-              prefix={<span>{t('character.useReferenceGeneratePrefix')}</span>}
-              suffix={<span>{t('character.generateCountSuffix')}</span>}
-              value={referenceCharacterGenerationCount}
-              options={getImageGenerationCountOptions('reference-to-character')}
-              onValueChange={setReferenceCharacterGenerationCount}
-              onClick={() => { void handleCreateWithReference() }}
-              actionDisabled={!name.trim() || referenceImagesBase64.length === 0}
-              selectDisabled={isSubmitting}
-              ariaLabel={t('character.selectReferenceGenerateCount')}
-              className="glass-btn-base glass-btn-primary flex items-center justify-center gap-1 rounded-lg px-4 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-              selectClassName="appearance-none bg-transparent border-0 pl-0 pr-3 text-sm font-semibold text-current outline-none cursor-pointer leading-none transition-colors"
-            />
-          ) : isSubAppearance ? (
-            <button
-              onClick={() => { void handleSubmit() }}
-              disabled={isSubmitting || !selectedCharacterId.trim() || !changeReason.trim() || !description.trim()}
-              className="glass-btn-base glass-btn-primary px-4 py-2 rounded-lg text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {isSubmitting ? t('common.adding') : t('common.add')}
-            </button>
-          ) : (
-            <>
-              <button
-                onClick={() => { void handleSubmit() }}
-                disabled={isSubmitting || !name.trim() || !description.trim()}
-                className="glass-btn-base glass-btn-secondary px-4 py-2 rounded-lg text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {isSubmitting ? t('common.adding') : (mode === 'asset-hub' ? t('common.addOnlyToAssetHub') : t('common.addOnly'))}
-              </button>
-              <ImageGenerationInlineCountButton
-                prefix={<span>{t('common.addAndGeneratePrefix')}</span>}
-                suffix={<span>{t('common.generateCountSuffix')}</span>}
-                value={characterGenerationCount}
-                options={getImageGenerationCountOptions('character')}
-                onValueChange={setCharacterGenerationCount}
-                onClick={() => { void handleSubmitAndGenerate() }}
-                actionDisabled={!name.trim() || !description.trim()}
-                selectDisabled={isSubmitting}
-                ariaLabel={t('common.selectGenerateCount')}
-                className="glass-btn-base glass-btn-primary flex items-center justify-center gap-1 rounded-lg px-4 py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                selectClassName="appearance-none bg-transparent border-0 pl-0 pr-3 text-sm font-semibold text-current outline-none cursor-pointer leading-none transition-colors"
-              />
-            </>
-          )}
+          <button
+            onClick={() => { void handleSubmit() }}
+            disabled={isSubmitting || !name.trim() || !description.trim()}
+            className="glass-btn-base glass-btn-primary px-4 py-2 rounded-lg text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {isSubmitting ? t('common.adding') : t('common.add')}
+          </button>
         </div>
       </div>
     </div>

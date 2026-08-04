@@ -2,12 +2,26 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireProjectAuthLight, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import {
-  CanvasLayoutEpisodeMismatchError,
+  CanvasLayoutFolderMismatchError,
   getProjectCanvasLayout,
   resetProjectCanvasLayout,
   upsertProjectCanvasLayout,
 } from '@/lib/project-canvas/layout/canvas-layout-service'
 import { upsertCanvasLayoutInputSchema } from '@/lib/project-canvas/layout/canvas-layout-contract'
+import { projectCanvasFolderKeySchema } from '@/lib/project-canvas/layout/canvas-layout-contract'
+
+function readFolderKey(request: NextRequest): string {
+  const parsed = projectCanvasFolderKeySchema.safeParse(
+    request.nextUrl.searchParams.get('folderKey'),
+  )
+  if (!parsed.success) {
+    throw new ApiError('INVALID_PARAMS', {
+      field: 'folderKey',
+      message: 'folderKey is required',
+    })
+  }
+  return parsed.data
+}
 
 export const GET = apiHandler(async (
   request: NextRequest,
@@ -17,15 +31,19 @@ export const GET = apiHandler(async (
   const authResult = await requireProjectAuthLight(projectId)
   if (isErrorResponse(authResult)) return authResult
 
-  const episodeId = request.nextUrl.searchParams.get('episodeId')?.trim() || ''
-  if (!episodeId) {
-    throw new ApiError('INVALID_PARAMS', {
-      field: 'episodeId',
-      message: 'episodeId is required',
-    })
+  const folderKey = readFolderKey(request)
+  let layout
+  try {
+    layout = await getProjectCanvasLayout({ projectId, folderKey })
+  } catch (error) {
+    if (error instanceof CanvasLayoutFolderMismatchError) {
+      throw new ApiError('INVALID_PARAMS', {
+        field: 'folderKey',
+        message: 'folderKey does not belong to project',
+      })
+    }
+    throw error
   }
-
-  const layout = await getProjectCanvasLayout({ projectId, episodeId })
   return NextResponse.json({
     success: true,
     layout,
@@ -69,10 +87,10 @@ export const PATCH = apiHandler(async (
       input: parsed.data,
     })
   } catch (error) {
-    if (error instanceof CanvasLayoutEpisodeMismatchError) {
+    if (error instanceof CanvasLayoutFolderMismatchError) {
       throw new ApiError('INVALID_PARAMS', {
-        field: 'episodeId',
-        message: 'episodeId does not belong to project',
+        field: 'folderKey',
+        message: 'folderKey does not belong to project',
       })
     }
     throw error
@@ -92,21 +110,15 @@ export const DELETE = apiHandler(async (
   const authResult = await requireProjectAuthLight(projectId)
   if (isErrorResponse(authResult)) return authResult
 
-  const episodeId = request.nextUrl.searchParams.get('episodeId')?.trim() || ''
-  if (!episodeId) {
-    throw new ApiError('INVALID_PARAMS', {
-      field: 'episodeId',
-      message: 'episodeId is required',
-    })
-  }
+  const folderKey = readFolderKey(request)
 
   try {
-    await resetProjectCanvasLayout({ projectId, episodeId })
+    await resetProjectCanvasLayout({ projectId, folderKey })
   } catch (error) {
-    if (error instanceof CanvasLayoutEpisodeMismatchError) {
+    if (error instanceof CanvasLayoutFolderMismatchError) {
       throw new ApiError('INVALID_PARAMS', {
-        field: 'episodeId',
-        message: 'episodeId does not belong to project',
+        field: 'folderKey',
+        message: 'folderKey does not belong to project',
       })
     }
     throw error

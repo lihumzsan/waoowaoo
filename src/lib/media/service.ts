@@ -1,4 +1,5 @@
 import path from 'node:path'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { extractStorageKey } from '@/lib/storage'
 import { stablePublicIdFromStorageKey } from './hash'
@@ -22,7 +23,11 @@ type MediaModel = {
   upsert: (args: unknown) => Promise<unknown>
 }
 
-const mediaModel = (prisma as unknown as { mediaObject: MediaModel }).mediaObject
+export type MediaClient = Pick<Prisma.TransactionClient, 'mediaObject'> | typeof prisma
+
+function mediaModelFor(client: MediaClient = prisma): MediaModel {
+  return (client as unknown as { mediaObject: MediaModel }).mediaObject
+}
 
 const MIME_BY_EXT: Record<string, string> = {
   '.png': 'image/png',
@@ -87,9 +92,11 @@ function mapMediaObjectToRef(row: MediaObjectRow): MediaRef {
 
 export async function ensureMediaObjectFromStorageKey(
   rawStorageKey: string,
-  metadata?: Partial<Pick<MediaRef, 'mimeType' | 'sizeBytes' | 'width' | 'height' | 'durationMs'>>,
+  metadata?: Partial<Pick<MediaRef, 'sha256' | 'mimeType' | 'sizeBytes' | 'width' | 'height' | 'durationMs'>>,
+  client?: MediaClient,
 ): Promise<MediaRef> {
   const storageKey = normalizeStorageKey(rawStorageKey)
+  const mediaModel = mediaModelFor(client)
 
   const existing = (await mediaModel.findUnique({ where: { storageKey } })) as MediaObjectRow | null
   if (existing != null) {
@@ -102,6 +109,7 @@ export async function ensureMediaObjectFromStorageKey(
       where: { publicId },
       update: {
         storageKey,
+        sha256: metadata?.sha256 ?? undefined,
         mimeType: metadata?.mimeType ?? guessMimeTypeFromStorageKey(storageKey),
         sizeBytes: metadata?.sizeBytes == null ? undefined : BigInt(metadata.sizeBytes),
         width: metadata?.width ?? undefined,
@@ -111,6 +119,7 @@ export async function ensureMediaObjectFromStorageKey(
       create: {
         publicId,
         storageKey,
+        sha256: metadata?.sha256 ?? null,
         mimeType: metadata?.mimeType ?? guessMimeTypeFromStorageKey(storageKey),
         sizeBytes: metadata?.sizeBytes == null ? null : BigInt(metadata.sizeBytes),
         width: metadata?.width ?? null,
@@ -133,27 +142,29 @@ export async function ensureMediaObjectFromStorageKey(
   }
 }
 
-export async function getMediaObjectByPublicId(publicId: string) {
+export async function getMediaObjectByPublicId(publicId: string, client?: MediaClient) {
+  const mediaModel = mediaModelFor(client)
   const row = (await mediaModel.findUnique({ where: { publicId } })) as MediaObjectRow | null
   if (!row) return null
   return mapMediaObjectToRef(row)
 }
 
-export async function getMediaObjectById(id: string) {
+export async function getMediaObjectById(id: string, client?: MediaClient) {
+  const mediaModel = mediaModelFor(client)
   const row = (await mediaModel.findUnique({ where: { id } })) as MediaObjectRow | null
   if (!row) return null
   return mapMediaObjectToRef(row)
 }
 
 /**
- * 将任意媒体值（COS key / 签名URL / /m/publicId / 对象形态）归一化为 storageKey。
+ * 将任意媒体值（storage key / 签名 URL / /m/publicId / 对象形态）归一化为 storageKey。
  * 这是服务端写路径（保存、比较、删除）应使用的唯一入口。
  */
-export async function resolveStorageKeyFromMediaValue(value: unknown): Promise<string | null> {
+export async function resolveStorageKeyFromMediaValue(value: unknown, client?: MediaClient): Promise<string | null> {
   if (typeof value === 'string') {
     const publicId = extractPublicIdFromMediaRoute(value)
     if (publicId) {
-      const media = await getMediaObjectByPublicId(publicId)
+      const media = await getMediaObjectByPublicId(publicId, client)
       return media?.storageKey || null
     }
     const key = extractStorageKey(value)
@@ -165,7 +176,7 @@ export async function resolveStorageKeyFromMediaValue(value: unknown): Promise<s
       ?? (value as { url?: unknown; imageUrl?: unknown; key?: unknown }).url
       ?? (value as { imageUrl?: unknown }).imageUrl
       ?? (value as { key?: unknown }).key
-    return resolveStorageKeyFromMediaValue(maybeValue)
+    return resolveStorageKeyFromMediaValue(maybeValue, client)
   }
 
   return null
@@ -175,29 +186,30 @@ export function extractStorageKeyFromLegacyValue(value: unknown): string | null 
   if (typeof value !== 'string' || !value.trim()) return null
   if (value.startsWith('/m/')) return null
 
-  // Keep external URLs that are actually COS object URLs (path -> key).
-  if (isLikelyExternalUrl(value) || value.startsWith('/api/files/') || !value.startsWith('/')) {
+  // Keep external URLs that are actually configured storage object URLs (path -> key).
+  if (isLikelyExternalUrl(value) || !value.startsWith('/')) {
     return extractStorageKey(value)
   }
 
   return null
 }
 
-export async function resolveMediaRefFromLegacyValue(value: unknown): Promise<MediaRef | null> {
+export async function resolveMediaRefFromLegacyValue(value: unknown, client?: MediaClient): Promise<MediaRef | null> {
   const storageKey = extractStorageKeyFromLegacyValue(value)
   if (!storageKey) return null
-  return ensureMediaObjectFromStorageKey(storageKey)
+  return ensureMediaObjectFromStorageKey(storageKey, undefined, client)
 }
 
 export async function resolveMediaRef(
   mediaId: unknown,
   legacyValue: unknown,
+  client?: MediaClient,
 ): Promise<MediaRef | null> {
   if (typeof mediaId === 'string' && mediaId.trim()) {
-    const mediaById = await getMediaObjectById(mediaId)
+    const mediaById = await getMediaObjectById(mediaId, client)
     if (mediaById) return mediaById
   }
-  return resolveMediaRefFromLegacyValue(legacyValue)
+  return resolveMediaRefFromLegacyValue(legacyValue, client)
 }
 
 export async function resolveMediaRefsFromLegacyJsonArray(jsonStr: unknown): Promise<MediaRef[]> {
@@ -218,7 +230,3 @@ export async function resolveMediaRefsFromLegacyJsonArray(jsonStr: unknown): Pro
   }
 }
 
-export function mediaUrlFromRef(ref: MediaRef | null | undefined, fallback: string | null | undefined): string | null {
-  if (ref?.url) return ref.url
-  return fallback || null
-}

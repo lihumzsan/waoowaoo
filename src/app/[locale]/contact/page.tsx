@@ -2,6 +2,7 @@ import Navbar from '@/components/Navbar'
 import PublicFooter from '@/components/PublicFooter'
 import { normalizeOfficialLocale, readOfficialContactPage } from '@/lib/public-site/official-content'
 import { requireOfficialCloudPublicPage } from '@/lib/public-site/visibility'
+import { readPublicDeploymentFeatures } from '@/lib/deployment/server-features'
 import type { Locale } from '@/i18n/routing'
 
 export const dynamic = 'force-dynamic'
@@ -14,10 +15,11 @@ export default async function ContactPage({
   requireOfficialCloudPublicPage()
   const { locale } = await params
   const content = readOfficialContactPage(normalizeOfficialLocale(locale))
+  const deploymentFeatures = readPublicDeploymentFeatures()
 
   return (
     <div className="glass-page min-h-screen">
-      <Navbar />
+      <Navbar initialDeploymentFeatures={deploymentFeatures} />
       <main className="mx-auto w-full max-w-5xl px-4 pb-16 pt-12 sm:px-6 lg:px-8">
         <section className="mb-10 space-y-4">
           <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--glass-tone-info-fg)]">
@@ -65,7 +67,7 @@ export default async function ContactPage({
           </section>
         </div>
       </main>
-      <PublicFooter />
+      <PublicFooter initialDeploymentFeatures={deploymentFeatures} />
     </div>
   )
 }

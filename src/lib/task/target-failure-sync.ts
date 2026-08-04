@@ -1,56 +1,38 @@
-import { prisma } from '@/lib/prisma'
-import { TASK_TYPE } from './types'
+import type { Prisma } from '@prisma/client'
+import { getTaskDefinition } from './definition'
+import type { TaskType } from './types'
 
-type TaskTargetFailure = {
-  readonly projectId: string
-  readonly type: string
+export type TaskTargetTerminalKind = 'completed' | 'failed' | 'canceled'
+
+export type TaskTargetTerminalProjection = {
+  readonly kind: TaskTargetTerminalKind
+  readonly taskId: string
+  readonly type: TaskType
   readonly targetType: string
   readonly targetId: string
-  readonly errorCode: string
-  readonly errorMessage: string
+  readonly errorCode?: string | null
+  readonly errorMessage?: string | null
+  readonly errorDetails?: Record<string, unknown> | null
 }
 
-function truncate(value: string, maxLength: number): string {
-  return value.length > maxLength ? value.slice(0, maxLength) : value
-}
+export type TaskTargetTerminalProjectionResult = 'applied' | 'stale_owner' | 'success_materialized'
 
-export async function syncTaskTargetFailure(input: TaskTargetFailure): Promise<void> {
-  if (input.type === TASK_TYPE.IMAGE_LOCATION && input.targetType === 'LocationImage') {
-    const image = await prisma.locationImage.findUnique({
-      where: { id: input.targetId },
-      select: { locationId: true },
-    })
-    const targetIds = Array.from(new Set([
-      input.targetId,
-      ...(image?.locationId ? [image.locationId] : []),
-    ]))
-
-    await prisma.projectEditAssetRequirement.updateMany({
-      where: {
-        projectId: input.projectId,
-        kind: 'location',
-        targetId: { in: targetIds },
-        status: { not: 'completed' },
-      },
-      data: {
-        status: 'failed',
-        errorMessage: truncate(input.errorMessage, 2000),
-      },
-    })
-    return
+/**
+ * All surviving Task targets are Creative Resources. Their terminal state is
+ * committed by the unique Resource materializer, so there is no second
+ * domain-status projector to race it.
+ */
+export async function projectTaskTargetTerminalInTransaction(
+  tx: Prisma.TransactionClient,
+  input: TaskTargetTerminalProjection,
+): Promise<TaskTargetTerminalProjectionResult> {
+  void tx
+  const definition = getTaskDefinition(input.type)
+  if (
+    definition.terminalFailureProjector !== 'none'
+    || definition.terminalCancelProjector !== 'none'
+  ) {
+    throw new Error(`TASK_DOMAIN_TERMINAL_PROJECTOR_FORBIDDEN:${input.type}`)
   }
-
-  if (input.type !== TASK_TYPE.VIDEO_GROUP || input.targetType !== 'ProjectVideoGroup') return
-
-  await prisma.projectVideoGroup.updateMany({
-    where: {
-      id: input.targetId,
-    },
-    data: {
-      status: 'failed',
-      taskId: null,
-      errorCode: truncate(input.errorCode, 80),
-      errorMessage: truncate(input.errorMessage, 2000),
-    },
-  })
+  return 'applied'
 }

@@ -12,6 +12,7 @@ const RETRYABLE_PRISMA_CODES = new Set([
   'P1017',
   'P2024',
   'P2028',
+  'P2034',
 ])
 
 function toMessage(value: unknown): string {

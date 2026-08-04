@@ -1,5 +1,17 @@
+# ==================== Docker CLI used by the Web runtime manager ====================
+FROM docker:27.5.1-cli@sha256:851f91d241214e7c6db86513b270d58776379aacc5eb9c4a87e5b47115e3065c AS docker-cli
+
+# ==================== Shared glibc/OpenSSL base ====================
+FROM node:22-bookworm-slim AS base
+
+# Prisma generation must detect the same OpenSSL ABI used at runtime, while
+# Temporal's native bridge requires glibc rather than Alpine/musl.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates openssl \
+    && rm -rf /var/lib/apt/lists/*
+
 # ==================== Stage 1: Dependencies ====================
-FROM node:20-alpine AS deps
+FROM base AS deps
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -7,54 +19,54 @@ COPY prisma ./prisma
 RUN npm ci
 
 # ==================== Stage 2: Build ====================
-FROM node:20-alpine AS builder
+FROM base AS builder
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-
-# Prisma generate + Next.js build
 RUN npm run build
 
 # ==================== Stage 3: Production ====================
-FROM node:20-alpine AS runner
+FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Install tini for proper signal handling
-RUN apk add --no-cache tini
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gosu tini \
+    && rm -rf /var/lib/apt/lists/*
 
-# node_modules（含 devDeps，因为 npm run start 需要 concurrently + tsx）
+# One immutable image contains both entrypoints, but Compose runs Web and each
+# Temporal Worker slot as separate containers. They never share a process or
+# failure domain. The Worker is currently executed from TypeScript through tsx.
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 
-# Next.js 构建产物
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
-
-# Prisma schema（db push 需要）
 COPY --from=builder /app/prisma ./prisma
-
-# Worker 和 Watchdog 源码（tsx 运行 TypeScript）
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/scripts ./scripts
-COPY --from=builder /app/lib ./lib
-
-# 定价和配置标准
 COPY --from=builder /app/standards ./standards
-
-# 国际化 + 配置文件
 COPY --from=builder /app/messages ./messages
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
 COPY --from=builder /app/next.config.ts ./next.config.ts
 COPY --from=builder /app/middleware.ts ./middleware.ts
 COPY --from=builder /app/postcss.config.mjs ./postcss.config.mjs
 
-# 运行日志目录 + 空 .env（tsx --env-file=.env 需要文件存在，实际 env 由 docker-compose 注入）
-RUN mkdir -p /app/logs && touch /app/.env
+# The Web process starts one short-lived, restricted Codex container only while
+# a project is active. The Docker daemon remains a host concern; this image only
+# carries the client used by the Runtime Session Manager.
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 
-EXPOSE 3000 3010
+RUN mkdir -p /app/data /app/logs \
+    && touch /app/.env \
+    && chown -R node:node /app
 
-ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["npm", "run", "start"]
+COPY --chown=root:root docker-entrypoint.sh /usr/local/bin/waoowaoo-entrypoint
+RUN chmod 0755 /usr/local/bin/waoowaoo-entrypoint
+
+EXPOSE 3000
+
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/waoowaoo-entrypoint"]
+CMD ["npm", "run", "start:next"]

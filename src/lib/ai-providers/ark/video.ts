@@ -1,12 +1,11 @@
 import { logInfo as _ulogInfo } from '@/lib/logging/core'
 import type { AiProviderVideoExecutionContext } from '@/lib/ai-providers/runtime-types'
-import { fetchWithTimeoutAndRetry } from './image'
+import { fetchWithRetry, RETRY_POLICY } from '@/lib/retry'
+import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
-import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
 import { normalizeVideoReferenceImages } from '@/lib/video-generation/reference-images'
-
-const ARK_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
+import { AppError } from '@/lib/errors/app-error'
 
 export interface ArkVideoTaskRequest {
   model: string
@@ -164,6 +163,7 @@ type ArkVideoOptions = NonNullable<AiProviderVideoExecutionContext['options']> &
   watermark?: boolean
   frames?: number
   referenceImages?: string[]
+  referenceAudios?: string[]
 }
 
 function assertAllowedArkVideoOptions(options: ArkVideoOptions) {
@@ -185,8 +185,8 @@ function assertAllowedArkVideoOptions(options: ArkVideoOptions) {
     'cameraFixed',
     'watermark',
     'prompt',
-    'fps',
     'referenceImages',
+    'referenceAudios',
   ])
   for (const [key, value] of Object.entries(options)) {
     if (value === undefined) continue
@@ -274,31 +274,27 @@ function validateArkVideoTaskRequest(request: ArkVideoTaskRequest) {
 
 export async function arkCreateVideoTask(
   request: ArkVideoTaskRequest,
-  options: { apiKey: string; timeoutMs?: number; maxRetries?: number; logPrefix?: string },
+  options: { apiKey: string; baseUrl: string; timeoutMs?: number; logPrefix?: string },
 ): Promise<{ id: string; [key: string]: unknown }> {
-  if (!options.apiKey) throw new Error('请配置火山引擎 API Key')
+  if (!options.apiKey) throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'ark' })
   validateArkVideoTaskRequest(request)
 
-  const { apiKey, timeoutMs, maxRetries, logPrefix = '[Ark Video]' } = options
-  const url = `${ARK_BASE_URL}/contents/generations/tasks`
+  const { apiKey, baseUrl, timeoutMs, logPrefix = '[Ark Video]' } = options
+  const url = `${baseUrl.replace(/\/+$/, '')}/contents/generations/tasks`
 
   _ulogInfo(`${logPrefix} 创建视频任务, 模型: ${request.model}`)
-  const response = await fetchWithTimeoutAndRetry(url, {
+  const response = await fetchWithRetry(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(request),
+    policy: RETRY_POLICY.providerSubmit,
     timeoutMs,
-    maxRetries,
-    logPrefix,
+    scope: 'ark:video:create',
+    fetchFn: fetchWithProviderProxy,
   })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`${logPrefix} 创建视频任务失败: ${response.status} - ${errorText}`)
-  }
 
   const data = (await response.json()) as { id?: unknown; [key: string]: unknown }
   const taskId = typeof data.id === 'string' ? data.id : ''
@@ -308,25 +304,20 @@ export async function arkCreateVideoTask(
 
 export async function arkQueryVideoTask(
   taskId: string,
-  options: { apiKey: string; timeoutMs?: number; maxRetries?: number; logPrefix?: string },
+  options: { apiKey: string; baseUrl: string; timeoutMs?: number; logPrefix?: string },
 ): Promise<ArkVideoTaskResponse> {
-  if (!options.apiKey) throw new Error('请配置火山引擎 API Key')
+  if (!options.apiKey) throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'ark' })
 
-  const { apiKey, timeoutMs, maxRetries, logPrefix = '[Ark Video]' } = options
-  const url = `${ARK_BASE_URL}/contents/generations/tasks/${taskId}`
+  const { apiKey, baseUrl, timeoutMs } = options
+  const url = `${baseUrl.replace(/\/+$/, '')}/contents/generations/tasks/${taskId}`
 
-  const response = await fetchWithTimeoutAndRetry(url, {
+  const response = await fetchWithRetry(url, {
     method: 'GET',
     headers: { Authorization: `Bearer ${apiKey}` },
     timeoutMs,
-    maxRetries,
-    logPrefix,
+    scope: 'ark:video:query',
+    fetchFn: fetchWithProviderProxy,
   })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`${logPrefix} 查询视频任务失败: ${response.status} - ${errorText}`)
-  }
 
   return (await response.json()) as ArkVideoTaskResponse
 }
@@ -335,7 +326,8 @@ export async function executeArkVideoGeneration(input: AiProviderVideoExecutionC
   const options: ArkVideoOptions = input.options ?? {}
   assertAllowedArkVideoOptions(options)
 
-  const { apiKey } = await getProviderConfig(input.userId, input.selection.provider)
+  const { apiKey, baseUrl } = await getProviderConfig(input.userId, input.selection.provider)
+  if (!baseUrl) throw new Error('PROVIDER_BASE_URL_MISSING: ark (video)')
   const { prompt, ...providerOptions } = options
 
   const modelId = requireSelectedModelId(input.selection, 'ark:video')
@@ -430,10 +422,29 @@ export async function executeArkVideoGeneration(input: AiProviderVideoExecutionC
     }
   }
 
-  const imageBase64 = await normalizeToBase64ForGeneration(input.imageUrl)
+  const inputImageUrl = typeof input.imageUrl === 'string' ? input.imageUrl.trim() : ''
   const referenceImageUrls = Array.isArray(input.options?.referenceImages)
     ? input.options.referenceImages.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
     : []
+  const referenceAudioUrls = Array.isArray(input.options?.referenceAudios)
+    ? Array.from(new Set(input.options.referenceAudios.filter(
+      (item): item is string => typeof item === 'string' && item.trim().length > 0,
+    )))
+    : []
+  if (referenceAudioUrls.length > 0) {
+    if (referenceAudioUrls.length > 3) {
+      throw new Error('ARK_VIDEO_OPTION_VALUE_UNSUPPORTED: referenceAudios>3')
+    }
+    if (realModel !== 'doubao-seedance-2-0-260128' && realModel !== 'doubao-seedance-2-0-fast-260128') {
+      throw new Error(`ARK_VIDEO_OPTION_UNSUPPORTED: referenceAudios for ${realModel}`)
+    }
+    if (!inputImageUrl && referenceImageUrls.length === 0) {
+      throw new Error('ARK_VIDEO_REFERENCE_AUDIO_REQUIRES_IMAGE')
+    }
+    if (lastFrameImageUrl) {
+      throw new Error('ARK_VIDEO_OPTION_UNSUPPORTED: referenceAudios_with_lastFrameImageUrl')
+    }
+  }
   const content: ArkVideoTaskRequest['content'] = []
   const trimmedPrompt = typeof prompt === 'string' ? prompt.trim() : ''
   if (trimmedPrompt) {
@@ -441,10 +452,10 @@ export async function executeArkVideoGeneration(input: AiProviderVideoExecutionC
   }
 
   if (lastFrameImageUrl) {
-    const lastImageBase64 = await normalizeToBase64ForGeneration(lastFrameImageUrl)
+    if (!inputImageUrl) throw new Error('ARK_VIDEO_LAST_FRAME_REQUIRES_FIRST_FRAME')
     for (const image of normalizeVideoReferenceImages([
-      { url: imageBase64, role: 'first_frame', order: 1 },
-      { url: lastImageBase64, role: 'last_frame', order: 2 },
+      { url: inputImageUrl, role: 'first_frame', order: 1 },
+      { url: lastFrameImageUrl, role: 'last_frame', order: 2 },
     ])) {
       const frameRole = image.role === 'last_frame' ? 'last_frame' : 'first_frame'
       content.push({
@@ -454,15 +465,17 @@ export async function executeArkVideoGeneration(input: AiProviderVideoExecutionC
       })
     }
   } else {
-    const normalizedReferenceImages: string[] = []
-    for (const referenceImageUrl of referenceImageUrls) {
-      const normalizedReferenceImage = await normalizeToBase64ForGeneration(referenceImageUrl)
-      normalizedReferenceImages.push(normalizedReferenceImage)
-    }
     appendArkReferenceImageContents(content, normalizeVideoReferenceImages([
-      { url: imageBase64, role: 'reference', order: 1 },
-      ...normalizedReferenceImages.map((url, index) => ({ url, role: 'reference' as const, order: index + 2 })),
+      ...(inputImageUrl ? [{ url: inputImageUrl, role: 'reference' as const, order: 1 }] : []),
+      ...referenceImageUrls.map((url, index) => ({ url, role: 'reference' as const, order: index + 2 })),
     ]).map((image) => image.url))
+    for (const referenceAudioUrl of referenceAudioUrls) {
+      content.push({
+        type: 'audio_url',
+        audio_url: { url: referenceAudioUrl },
+        role: 'reference_audio',
+      })
+    }
   }
 
   const requestBody: ArkVideoTaskRequest = {
@@ -489,7 +502,7 @@ export async function executeArkVideoGeneration(input: AiProviderVideoExecutionC
     }
   }
 
-  const taskData = await arkCreateVideoTask(requestBody, { apiKey, logPrefix: '[ARK Video]' })
+  const taskData = await arkCreateVideoTask(requestBody, { apiKey, baseUrl, logPrefix: '[ARK Video]' })
   const taskId = taskData.id
   if (!taskId) {
     throw new Error('ARK_VIDEO_TASK_CREATE_INVALID_RESPONSE: missing task id')

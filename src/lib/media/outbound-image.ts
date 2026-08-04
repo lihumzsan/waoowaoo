@@ -1,9 +1,20 @@
-import net from 'node:net'
-import path from 'node:path'
-import { lookup } from 'node:dns/promises'
+import { describeUnknownError } from '@/lib/errors/normalize'
 import { createScopedLogger } from '@/lib/logging/core'
-import { getInternalBaseUrl } from '@/lib/env'
+import { resolveMediaMimeType } from '@/lib/media/media-mime'
+import {
+  assertSafeOutboundMediaUrl,
+  fetchSafeOutboundMedia,
+  OutboundMediaSecurityError,
+} from '@/lib/media/outbound-fetch'
+import {
+  OwnedMediaOutboundError,
+  resolveOwnedMediaForGeneration,
+} from '@/lib/media/outbound-owned-media'
+import { isOutboundImageStorageKey } from '@/lib/media/storage-key'
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
+import { MAX_IMAGE_BYTES, readResponseBufferWithLimit } from '@/lib/http/body-limits'
+
+export { detectMimeFromBuffer } from '@/lib/media/media-mime'
 
 type StorageHelpers = Pick<typeof import('@/lib/storage'), 'getSignedObjectUrl' | 'toFetchableUrl'>
 
@@ -68,24 +79,11 @@ const logger = createScopedLogger({
 const NEXT_IMAGE_PATH = '/_next/image'
 const MAX_NEXT_IMAGE_UNWRAP_DEPTH = 6
 const SIGNED_URL_TTL_SECONDS = 3600
-const STORAGE_KEY_PREFIXES = ['images/', 'video/'] as const
-const DEFAULT_CONTENT_TYPE = 'application/octet-stream'
-
-const MIME_BY_EXT: Record<string, string> = {
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
-  '.gif': 'image/gif',
-  '.svg': 'image/svg+xml',
-  '.mp4': 'video/mp4',
-  '.webm': 'video/webm',
-  '.mov': 'video/quicktime',
-  '.mp3': 'audio/mpeg',
-  '.wav': 'audio/wav',
-  '.ogg': 'audio/ogg',
-  '.m4a': 'audio/mp4',
-}
+const SUPPORTED_PROVIDER_IMAGE_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+])
 
 let storageHelpersPromise: Promise<StorageHelpers> | null = null
 
@@ -120,186 +118,18 @@ function isHttpUrl(value: string): boolean {
   return value.startsWith('http://') || value.startsWith('https://')
 }
 
-function ipv4ToInt(ip: string): number | null {
-  const parts = ip.split('.')
-  if (parts.length !== 4) return null
-  const nums = parts.map((part) => Number(part))
-  if (nums.some((num) => !Number.isInteger(num) || num < 0 || num > 255)) return null
-  return (((nums[0] << 24) >>> 0) + (nums[1] << 16) + (nums[2] << 8) + nums[3]) >>> 0
-}
-
-function isIpv4InRange(ip: string, cidr: { base: string; maskBits: number }): boolean {
-  const ipInt = ipv4ToInt(ip)
-  const baseInt = ipv4ToInt(cidr.base)
-  if (ipInt === null || baseInt === null) return false
-  const mask = cidr.maskBits === 0 ? 0 : (~((1 << (32 - cidr.maskBits)) - 1) >>> 0) >>> 0
-  return (ipInt & mask) === (baseInt & mask)
-}
-
-function isPrivateOrReservedIp(ip: string): boolean {
-  const family = net.isIP(ip)
-  if (family === 4) {
-    const ipv4Ranges: Array<{ base: string; maskBits: number }> = [
-      { base: '0.0.0.0', maskBits: 8 },
-      { base: '10.0.0.0', maskBits: 8 },
-      { base: '100.64.0.0', maskBits: 10 },
-      { base: '127.0.0.0', maskBits: 8 },
-      { base: '169.254.0.0', maskBits: 16 },
-      { base: '172.16.0.0', maskBits: 12 },
-      { base: '192.0.0.0', maskBits: 24 },
-      { base: '192.0.2.0', maskBits: 24 },
-      { base: '192.88.99.0', maskBits: 24 },
-      { base: '192.168.0.0', maskBits: 16 },
-      { base: '198.18.0.0', maskBits: 15 },
-      { base: '198.51.100.0', maskBits: 24 },
-      { base: '203.0.113.0', maskBits: 24 },
-      { base: '224.0.0.0', maskBits: 4 },
-      { base: '240.0.0.0', maskBits: 4 },
-      { base: '255.255.255.255', maskBits: 32 },
-    ]
-    return ipv4Ranges.some((range) => isIpv4InRange(ip, range))
-  }
-
-  if (family === 6) {
-    const normalized = ip.toLowerCase()
-    if (normalized === '::' || normalized === '::1') return true
-    if (normalized.startsWith('ff')) return true
-    if (/^(fc|fd)/.test(normalized)) return true
-    if (/^fe[89ab]/.test(normalized)) return true
-    if (normalized.startsWith('2001:db8')) return true
-    const v4MappedIndex = normalized.lastIndexOf('::ffff:')
-    if (v4MappedIndex !== -1) {
-      const v4 = normalized.slice(v4MappedIndex + '::ffff:'.length)
-      return isPrivateOrReservedIp(v4)
-    }
-    return false
-  }
-
-  return true
-}
-
-function isLikelyInternalHostname(hostname: string): boolean {
-  const lower = hostname.toLowerCase()
-  if (lower === 'localhost' || lower.endsWith('.localhost')) return true
-  if (lower.endsWith('.local')) return true
-  if (lower === 'metadata.google.internal') return true
-  if (lower === 'metadata' || lower === 'metadata.internal') return true
-  return false
-}
-
-function isLoopbackHostname(hostname: string): boolean {
-  const lower = hostname.toLowerCase()
-  return lower === 'localhost' || lower === '127.0.0.1' || lower === '::1'
-}
-
-function readHostnameFromUrl(value: string): string | null {
-  const raw = typeof value === 'string' ? value.trim() : ''
-  if (!raw) return null
-  try {
-    return new URL(raw).hostname.toLowerCase()
-  } catch {
-    return null
-  }
-}
-
-function getAllowedInternalHostnames(): Set<string> {
-  const candidates: string[] = [
-    getInternalBaseUrl(),
-    process.env.INTERNAL_APP_URL || '',
-    process.env.INTERNAL_TASK_API_BASE_URL || '',
-    process.env.NEXTAUTH_URL || '',
-  ]
-  const hostnames = candidates
-    .map(readHostnameFromUrl)
-    .filter((item): item is string => Boolean(item))
-  return new Set(hostnames)
-}
-
 async function assertSafeOutboundHttpUrl(input: string, stage: OutboundImageNormalizeStage): Promise<void> {
-  let url: URL
   try {
-    url = new URL(input)
-  } catch {
-    throw new OutboundImageNormalizeError({
-      code: 'OUTBOUND_IMAGE_UNSUPPORTED_INPUT',
-      stage,
-      input,
-      message: `invalid outbound http url: ${input}`,
-    })
-  }
-
-  if (url.username || url.password) {
-    throw new OutboundImageNormalizeError({
-      code: 'OUTBOUND_IMAGE_UNSAFE_URL',
-      stage,
-      input,
-      message: 'outbound url with credentials is not allowed',
-    })
-  }
-
-  const hostname = url.hostname.toLowerCase()
-  const allowedInternalHosts = getAllowedInternalHostnames()
-  if (allowedInternalHosts.has(hostname)) return
-  if (isLoopbackHostname(hostname) && [...allowedInternalHosts].some(isLoopbackHostname)) return
-
-  if (isLikelyInternalHostname(hostname)) {
-    throw new OutboundImageNormalizeError({
-      code: 'OUTBOUND_IMAGE_UNSAFE_URL',
-      stage,
-      input,
-      message: `outbound url hostname is not allowed: ${hostname}`,
-    })
-  }
-
-  if (net.isIP(hostname)) {
-    if (isPrivateOrReservedIp(hostname)) {
-      throw new OutboundImageNormalizeError({
-        code: 'OUTBOUND_IMAGE_UNSAFE_URL',
-        stage,
-        input,
-        message: `outbound url resolves to private ip: ${hostname}`,
-      })
-    }
-    return
-  }
-
-  let resolved: Array<{ address: string }> = []
-  try {
-    const lookupResult = await lookup(hostname, { all: true, verbatim: true }) as unknown
-    const candidates = Array.isArray(lookupResult) ? lookupResult : [lookupResult]
-    resolved = candidates
-      .map((item): { address: string } | null => {
-        if (!item || typeof item !== 'object') return null
-        const address = (item as { address?: unknown }).address
-        if (typeof address !== 'string' || !address.trim()) return null
-        return { address: address.trim() }
-      })
-      .filter((item): item is { address: string } => item !== null)
+    await assertSafeOutboundMediaUrl(input)
   } catch (error) {
     throw new OutboundImageNormalizeError({
-      code: 'OUTBOUND_IMAGE_UNSAFE_URL',
+      code: error instanceof OutboundMediaSecurityError
+        && error.code === 'OUTBOUND_MEDIA_URL_INVALID'
+        ? 'OUTBOUND_IMAGE_UNSUPPORTED_INPUT'
+        : 'OUTBOUND_IMAGE_UNSAFE_URL',
       stage,
       input,
-      message: `outbound url dns lookup failed: ${error instanceof Error ? error.message : String(error)}`,
-    })
-  }
-
-  if (resolved.length === 0) {
-    throw new OutboundImageNormalizeError({
-      code: 'OUTBOUND_IMAGE_UNSAFE_URL',
-      stage,
-      input,
-      message: 'outbound url dns lookup returned no results',
-    })
-  }
-
-  const firstPrivate = resolved.find((item) => isPrivateOrReservedIp(item.address))
-  if (firstPrivate) {
-    throw new OutboundImageNormalizeError({
-      code: 'OUTBOUND_IMAGE_UNSAFE_URL',
-      stage,
-      input,
-      message: `outbound url resolves to private ip: ${firstPrivate.address}`,
+      message: error instanceof Error ? error.message : 'outbound image URL validation failed',
     })
   }
 }
@@ -309,7 +139,7 @@ function isAbsoluteOrRootPath(value: string): boolean {
 }
 
 function isStorageKey(value: string): boolean {
-  return STORAGE_KEY_PREFIXES.some((prefix) => value.startsWith(prefix))
+  return isOutboundImageStorageKey(value)
 }
 
 function isNextImagePath(pathname: string): boolean {
@@ -351,119 +181,8 @@ function toUrlMaybe(value: string): URL | null {
   return null
 }
 
-function detectMimeFromBuffer(buffer: Uint8Array): string | null {
-  if (buffer.length >= 8) {
-    const isPng =
-      buffer[0] === 0x89
-      && buffer[1] === 0x50
-      && buffer[2] === 0x4e
-      && buffer[3] === 0x47
-      && buffer[4] === 0x0d
-      && buffer[5] === 0x0a
-      && buffer[6] === 0x1a
-      && buffer[7] === 0x0a
-    if (isPng) return 'image/png'
-  }
-
-  if (buffer.length >= 3) {
-    const isJpeg = buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff
-    if (isJpeg) return 'image/jpeg'
-  }
-
-  if (buffer.length >= 6) {
-    const isGif87a =
-      buffer[0] === 0x47
-      && buffer[1] === 0x49
-      && buffer[2] === 0x46
-      && buffer[3] === 0x38
-      && buffer[4] === 0x37
-      && buffer[5] === 0x61
-    const isGif89a =
-      buffer[0] === 0x47
-      && buffer[1] === 0x49
-      && buffer[2] === 0x46
-      && buffer[3] === 0x38
-      && buffer[4] === 0x39
-      && buffer[5] === 0x61
-    if (isGif87a || isGif89a) return 'image/gif'
-  }
-
-  if (buffer.length >= 12) {
-    const isWebp =
-      buffer[0] === 0x52
-      && buffer[1] === 0x49
-      && buffer[2] === 0x46
-      && buffer[3] === 0x46
-      && buffer[8] === 0x57
-      && buffer[9] === 0x45
-      && buffer[10] === 0x42
-      && buffer[11] === 0x50
-    if (isWebp) return 'image/webp'
-  }
-
-  if (buffer.length >= 12) {
-    const isWav =
-      buffer[0] === 0x52
-      && buffer[1] === 0x49
-      && buffer[2] === 0x46
-      && buffer[3] === 0x46
-      && buffer[8] === 0x57
-      && buffer[9] === 0x41
-      && buffer[10] === 0x56
-      && buffer[11] === 0x45
-    if (isWav) return 'audio/wav'
-  }
-
-  if (buffer.length >= 4) {
-    const isOgg =
-      buffer[0] === 0x4f
-      && buffer[1] === 0x67
-      && buffer[2] === 0x67
-      && buffer[3] === 0x53
-    if (isOgg) return 'audio/ogg'
-  }
-
-  if (buffer.length >= 3) {
-    const isMp3WithId3 =
-      buffer[0] === 0x49
-      && buffer[1] === 0x44
-      && buffer[2] === 0x33
-    const isMp3FrameSync =
-      buffer[0] === 0xff
-      && (buffer[1] & 0xe0) === 0xe0
-    if (isMp3WithId3 || isMp3FrameSync) return 'audio/mpeg'
-  }
-
-  if (buffer.length >= 12) {
-    const isWebm =
-      buffer[0] === 0x1a
-      && buffer[1] === 0x45
-      && buffer[2] === 0xdf
-      && buffer[3] === 0xa3
-    if (isWebm) return 'video/webm'
-  }
-
-  if (buffer.length >= 8) {
-    const isMp4 =
-      buffer[4] === 0x66
-      && buffer[5] === 0x74
-      && buffer[6] === 0x79
-      && buffer[7] === 0x70
-    if (isMp4) return 'video/mp4'
-  }
-
-  return null
-}
-
 function guessContentType(input: string, contentTypeHeader: string | null, buffer: Uint8Array): string {
-  const headerType = contentTypeHeader?.split(';')[0]?.trim()
-  if (headerType && headerType !== DEFAULT_CONTENT_TYPE) return headerType
-  const sniffedType = detectMimeFromBuffer(buffer)
-  if (sniffedType) return sniffedType
-  const parsed = toUrlMaybe(input)
-  const pathname = parsed?.pathname ?? input
-  const ext = path.extname(pathname).toLowerCase()
-  return MIME_BY_EXT[ext] || DEFAULT_CONTENT_TYPE
+  return resolveMediaMimeType(input, contentTypeHeader, buffer)
 }
 
 async function signStorageKey(storageKey: string): Promise<string> {
@@ -563,10 +282,6 @@ export async function normalizeToOriginalMediaUrl(input: string): Promise<string
   }
 
   if (unwrappedInput.startsWith('/')) {
-    if (unwrappedInput.startsWith('/api/')) {
-      const apiPath = unwrappedInput
-      return await toFetchableAbsoluteUrl(apiPath)
-    }
     const rootStorageKey = unwrappedInput.slice(1)
     if (isStorageKey(rootStorageKey)) {
       return await signStorageKey(rootStorageKey)
@@ -604,28 +319,21 @@ export async function normalizeToBase64ForGeneration(input: string): Promise<str
   }
 
   const fetchUrl = await toFetchableAbsoluteUrl(normalizedUrl)
-  const MAX_REDIRECTS = 3
 
   let response: Response | null = null
   try {
-    let currentUrl = fetchUrl
-    for (let attempt = 0; attempt <= MAX_REDIRECTS; attempt += 1) {
-      if (isHttpUrl(currentUrl)) {
-        await assertSafeOutboundHttpUrl(currentUrl, 'normalize_base64')
-      }
-      response = await fetch(currentUrl, { redirect: 'manual' })
-      const status = response.status
-      if (status >= 300 && status < 400) {
-        const location = response.headers.get('location')
-        if (!location) break
-        currentUrl = new URL(location, currentUrl).toString()
-        continue
-      }
-      break
-    }
+    response = await fetchSafeOutboundMedia(fetchUrl)
   } catch (error) {
     if (error instanceof OutboundImageNormalizeError) {
       throw error
+    }
+    if (error instanceof OutboundMediaSecurityError) {
+      throw new OutboundImageNormalizeError({
+        code: 'OUTBOUND_IMAGE_UNSAFE_URL',
+        stage: 'normalize_base64',
+        input: normalizedUrl,
+        message: error.message,
+      })
     }
     throw new OutboundImageNormalizeError({
       code: 'OUTBOUND_IMAGE_FETCH_EXCEPTION',
@@ -653,9 +361,57 @@ export async function normalizeToBase64ForGeneration(input: string): Promise<str
     })
   }
 
-  const buffer = Buffer.from(await response.arrayBuffer())
+  const buffer = await readResponseBufferWithLimit(response, MAX_IMAGE_BYTES, 'outbound image')
   const mimeType = guessContentType(normalizedUrl, response.headers.get('content-type'), buffer)
   return `data:${mimeType};base64,${buffer.toString('base64')}`
+}
+
+/**
+ * Worker-owned media is read directly from storage after the same relation-based
+ * ownership decision used by the authenticated media routes. This avoids using
+ * a browser session or a second internal-auth protocol for background work.
+ */
+export async function resolveOwnedImageHttpsForGeneration(
+  input: string,
+  userId: string,
+): Promise<string> {
+  const normalizedInput = normalizeInput(input)
+  try {
+    const media = await resolveOwnedMediaForGeneration(normalizedInput, userId, {
+      maxBytes: MAX_IMAGE_BYTES,
+      label: 'owned outbound image',
+      supportedMimeTypes: SUPPORTED_PROVIDER_IMAGE_MIME_TYPES,
+    })
+    return media.url
+  } catch (error) {
+    if (error instanceof OwnedMediaOutboundError) {
+      throw new OutboundImageNormalizeError({
+        code: error.code === 'OWNED_MEDIA_UNSUPPORTED_INPUT'
+          ? 'OUTBOUND_IMAGE_UNSUPPORTED_INPUT'
+          : 'OUTBOUND_IMAGE_FETCH_FAILED',
+        stage: 'normalize_original',
+        input: normalizedInput,
+        message: error.message,
+      })
+    }
+    throw error
+  }
+}
+
+function isOwnedStorageInputCandidate(input: string): boolean {
+  const unwrapped = unwrapNextImageInternal(input)
+  if (isStorageKey(unwrapped)) return true
+  const parsed = toUrlMaybe(unwrapped)
+  if (!parsed) return false
+  return parsed.pathname.startsWith('/m/')
+    || parsed.pathname === '/api/storage/sign'
+}
+
+async function normalizeReferenceForGeneration(input: string, ownerUserId?: string): Promise<string> {
+  if (ownerUserId && isOwnedStorageInputCandidate(input)) {
+    return await resolveOwnedImageHttpsForGeneration(input, ownerUserId)
+  }
+  return await normalizeToBase64ForGeneration(input)
 }
 
 function toNormalizationIssue(
@@ -677,7 +433,7 @@ function toNormalizationIssue(
     input,
     code: 'OUTBOUND_IMAGE_UNKNOWN',
     stage: 'normalize_reference',
-    message: error instanceof Error ? error.message : String(error),
+    message: describeUnknownError(error),
   }
 }
 
@@ -686,6 +442,7 @@ export async function normalizeReferenceImagesForGeneration(
   options: {
     onIssue?: (issue: OutboundImageNormalizationIssue) => void
     context?: Record<string, unknown>
+    ownerUserId?: string
   } = {},
 ): Promise<string[]> {
   const seen = new Set<string>()
@@ -701,7 +458,7 @@ export async function normalizeReferenceImagesForGeneration(
     candidateCount += 1
 
     try {
-      normalized.push(await normalizeToBase64ForGeneration(trimmed))
+      normalized.push(await normalizeReferenceForGeneration(trimmed, options.ownerUserId))
     } catch (error) {
       const issue = toNormalizationIssue(error, trimmed, index)
       options.onIssue?.(issue)
@@ -737,6 +494,7 @@ export async function normalizeOptionalReferenceImagesForGeneration(
   options: {
     onIssue?: (issue: OutboundImageNormalizationIssue) => void
     context?: Record<string, unknown>
+    ownerUserId?: string
   } = {},
 ): Promise<string[]> {
   try {

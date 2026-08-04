@@ -1,6 +1,10 @@
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { locales, type Locale } from '@/i18n/routing'
+import {
+  getSubscriptionPlan,
+  isSubscriptionPlanId,
+} from '@/lib/billing/subscription-plans'
 
 export const OFFICIAL_CONTENT_DIR_ENV = 'OFFICIAL_CONTENT_DIR'
 
@@ -21,17 +25,40 @@ export interface OfficialPricingPlan {
   label: string
   name: string
   price: string
+  unit: string
+  creditsAmount: number
+  tagline: string
   status: string
   details: readonly string[]
 }
 
+export interface OfficialPricingFaq {
+  question: string
+  answer: string
+}
+
+export interface OfficialPricingCompareRow {
+  label: string
+  values: readonly string[]
+}
+
 export interface OfficialPricingPageContent {
+  brand: string
   eyebrow: string
   title: string
   description: string
   betaNotice: string
+  paymentNote: string
   plans: readonly OfficialPricingPlan[]
+  compareRows: readonly OfficialPricingCompareRow[]
+  faqs: readonly OfficialPricingFaq[]
   creditPolicy: OfficialTextSection
+  checkout: {
+    title: string
+    body: string
+    primaryCta: string
+    secondaryCta: string
+  }
 }
 
 export interface OfficialContactField {
@@ -74,6 +101,7 @@ function readRequiredString(record: Record<string, unknown>, key: string, schema
   return value
 }
 
+
 function readRequiredRecord(record: Record<string, unknown>, key: string, schema: string): Record<string, unknown> {
   const value = record[key]
   if (!isRecord(value)) fail(schema, `${key} must be an object`)
@@ -104,6 +132,30 @@ function readSectionArray(record: Record<string, unknown>, key: string, schema: 
   return value.map((item, index) => {
     if (!isRecord(item)) fail(schema, `${key}[${index}] must be an object`)
     return readSection(item, `${schema}.${key}[${index}]`)
+  })
+}
+
+function readFaqArray(record: Record<string, unknown>, key: string, schema: string): readonly OfficialPricingFaq[] {
+  const value = record[key]
+  if (!Array.isArray(value)) fail(schema, `${key} must be an array`)
+  return value.map((item, index) => {
+    if (!isRecord(item)) fail(schema, `${key}[${index}] must be an object`)
+    return {
+      question: readRequiredString(item, 'question', `${schema}.${key}[${index}]`),
+      answer: readRequiredString(item, 'answer', `${schema}.${key}[${index}]`),
+    }
+  })
+}
+
+function readCompareRows(record: Record<string, unknown>, key: string, schema: string): readonly OfficialPricingCompareRow[] {
+  const value = record[key]
+  if (!Array.isArray(value)) fail(schema, `${key} must be an array`)
+  return value.map((item, index) => {
+    if (!isRecord(item)) fail(schema, `${key}[${index}] must be an object`)
+    return {
+      label: readRequiredString(item, 'label', `${schema}.${key}[${index}]`),
+      values: readStringArray(item, 'values', `${schema}.${key}[${index}]`),
+    }
   })
 }
 
@@ -154,12 +206,25 @@ export function readOfficialPricingPage(locale: Locale): OfficialPricingPageCont
   const schema = pageFileName('pricing', locale)
   const record = readJsonRecord(schema)
   const plans = readRequiredRecord(record, 'plans', schema)
+  const checkout = readRequiredRecord(record, 'checkout', schema)
+  // The content file supplies copy only. Every number comes from the same plan
+  // catalog that grants the credits and charges the card, so a marketing page
+  // cannot advertise a price the billing side has never heard of — which is
+  // exactly how the previous content ended up showing three identical ¥100
+  // plans against a catalog that had moved on.
   const planItems = Object.entries(plans).map(([planKey, planValue]) => {
     if (!isRecord(planValue)) fail(schema, `plans.${planKey} must be an object`)
+    if (!isSubscriptionPlanId(planKey)) {
+      fail(schema, `plans.${planKey} is not a declared subscription plan`)
+    }
+    const plan = getSubscriptionPlan(planKey)
     return {
       label: readRequiredString(planValue, 'label', `${schema}.plans.${planKey}`),
       name: readRequiredString(planValue, 'name', `${schema}.plans.${planKey}`),
-      price: readRequiredString(planValue, 'price', `${schema}.plans.${planKey}`),
+      price: `¥${plan.monthlyPriceCny.toLocaleString('en-US')}`,
+      unit: readRequiredString(planValue, 'unit', `${schema}.plans.${planKey}`),
+      creditsAmount: plan.monthlyCredits,
+      tagline: readRequiredString(planValue, 'tagline', `${schema}.plans.${planKey}`),
       status: readRequiredString(planValue, 'status', `${schema}.plans.${planKey}`),
       details: readStringArray(planValue, 'details', `${schema}.plans.${planKey}`),
     }
@@ -168,12 +233,22 @@ export function readOfficialPricingPage(locale: Locale): OfficialPricingPageCont
   if (planItems.length === 0) fail(schema, 'plans must contain at least one plan')
 
   return {
+    brand: readRequiredString(record, 'brand', schema),
     eyebrow: readRequiredString(record, 'eyebrow', schema),
     title: readRequiredString(record, 'title', schema),
     description: readRequiredString(record, 'description', schema),
     betaNotice: readRequiredString(record, 'betaNotice', schema),
+    paymentNote: readRequiredString(record, 'paymentNote', schema),
     plans: planItems,
+    compareRows: readCompareRows(record, 'compareRows', schema),
+    faqs: readFaqArray(record, 'faqs', schema),
     creditPolicy: readSection(readRequiredRecord(record, 'creditPolicy', schema), `${schema}.creditPolicy`),
+    checkout: {
+      title: readRequiredString(checkout, 'title', `${schema}.checkout`),
+      body: readRequiredString(checkout, 'body', `${schema}.checkout`),
+      primaryCta: readRequiredString(checkout, 'primaryCta', `${schema}.checkout`),
+      secondaryCta: readRequiredString(checkout, 'secondaryCta', `${schema}.checkout`),
+    },
   }
 }
 

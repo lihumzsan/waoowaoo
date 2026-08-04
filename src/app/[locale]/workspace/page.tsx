@@ -1,23 +1,29 @@
 'use client'
 import { logError as _ulogError } from '@/lib/logging/core'
 import { useState, useEffect, useCallback } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useSession } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 import Navbar from '@/components/Navbar'
 import ConfirmDialog from '@/components/ConfirmDialog'
+import { BrandPageLoading } from '@/components/ui/BrandLoading'
 import TaskStatusInline from '@/components/task/TaskStatusInline'
 import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import { AppIcon, IconGradientDefs } from '@/components/ui/icons'
 import { shouldGuideToModelSetup } from '@/lib/workspace/model-setup'
 import { Link, useRouter } from '@/i18n/navigation'
 import { apiFetch } from '@/lib/api-fetch'
-import { readApiErrorMessage } from '@/lib/api/read-error-message'
-import { validateProjectDraft } from '@/lib/projects/validation'
+import { readClientApiError } from '@/lib/errors/client'
+import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
+import { useToast } from '@/contexts/ToastContext'
+import { validateProjectDraft, type ProjectUpdateInput } from '@/lib/projects/validation'
 import {
-  mergeWorkspaceProjectListItemUpdate,
   type WorkspaceProjectListItem,
-  type WorkspaceProjectUpdatePayload,
 } from '@/lib/projects/workspace-list-item'
+import { formatCredits } from '@/lib/billing/credits'
+import {
+  requestOperationMutationVoidWithError,
+} from '@/lib/query/mutations/mutation-shared'
 
 type Project = WorkspaceProjectListItem
 
@@ -33,7 +39,7 @@ const DEFAULT_BILLING_CURRENCY = 'CREDITS'
 
 function formatProjectCost(amount: number, currency = DEFAULT_BILLING_CURRENCY): string {
   if (currency === 'USD') return `$${amount.toFixed(2)}`
-  if (currency === 'CREDITS') return `${amount.toFixed(2)} credits`
+  if (currency === 'CREDITS') return `${formatCredits(amount)} credits`
   return `${amount.toFixed(2)} ${currency}`
 }
 
@@ -58,6 +64,7 @@ function toProjectValidationMessage(
 export default function WorkspacePage() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -83,9 +90,12 @@ export default function WorkspacePage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [modelNotConfigured, setModelNotConfigured] = useState(false)
+  const [modelSetupCheckFailed, setModelSetupCheckFailed] = useState(false)
 
   const t = useTranslations('workspace')
   const tc = useTranslations('common')
+  const resolveClientError = useClientErrorMessage()
+  const { showError, showToast } = useToast()
 
   // 检查用户是否已登录
   useEffect(() => {
@@ -109,17 +119,17 @@ export default function WorkspacePage() {
       }
 
       const response = await apiFetch(`/api/projects?${params}`)
-      if (response.ok) {
-        const data = await response.json()
-        setProjects(data.projects)
-        setPagination(data.pagination)
-      }
+      if (!response.ok) throw await readClientApiError(response)
+      const data = await response.json()
+      setProjects(data.projects)
+      setPagination(data.pagination)
     } catch (error) {
       _ulogError('获取项目失败:', error)
+      showError(error, t('loadFailed'))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [showError, t])
 
   // 初始加载和搜索/分页变化时重新获取
   useEffect(() => {
@@ -137,17 +147,23 @@ export default function WorkspacePage() {
   // 打开新建项目弹窗并检测模型配置
   const openCreateModal = useCallback(() => {
     setCreateError(null)
+    setModelNotConfigured(false)
+    setModelSetupCheckFailed(false)
     setShowCreateModal(true)
     // 异步检测模型配置状态
     void (async () => {
       try {
         const res = await apiFetch('/api/user-preference')
-        if (res.ok) {
-          const payload: unknown = await res.json()
-          setModelNotConfigured(shouldGuideToModelSetup(payload))
+        if (!res.ok) {
+          _ulogError('检测用户模型配置失败:', { status: res.status })
+          setModelSetupCheckFailed(true)
+          return
         }
-      } catch {
-        // 忽略检测失败
+        const payload: unknown = await res.json()
+        setModelNotConfigured(shouldGuideToModelSetup(payload))
+      } catch (error) {
+        _ulogError('检测用户模型配置失败:', error)
+        setModelSetupCheckFailed(true)
       }
     })()
   }, [])
@@ -177,33 +193,45 @@ export default function WorkspacePage() {
       })
 
       if (response.ok) {
-        let shouldOpenModelSetup = true
-        const preferenceResponse = await apiFetch('/api/user-preference')
-        if (preferenceResponse.ok) {
-          const preferencePayload: unknown = await preferenceResponse.json()
-          shouldOpenModelSetup = shouldGuideToModelSetup(preferencePayload)
-        } else {
-          _ulogError('获取用户偏好失败:', { status: preferenceResponse.status })
+        let shouldOpenModelSetup = false
+        let modelSetupCheckFailedAfterCreate = false
+        try {
+          const preferenceResponse = await apiFetch('/api/user-preference')
+          if (preferenceResponse.ok) {
+            const preferencePayload: unknown = await preferenceResponse.json()
+            shouldOpenModelSetup = shouldGuideToModelSetup(preferencePayload)
+          } else {
+            modelSetupCheckFailedAfterCreate = true
+            _ulogError('获取用户偏好失败:', { status: preferenceResponse.status })
+          }
+        } catch (error) {
+          modelSetupCheckFailedAfterCreate = true
+          _ulogError('获取用户偏好失败:', error)
         }
 
         // 创建成功后刷新第一页
         setSearchQuery('')
         setSearchInput('')
         setPagination(prev => ({ ...prev, page: 1 }))
-        void fetchProjects(1, '')
+        if (!shouldOpenModelSetup) {
+          void fetchProjects(1, '')
+        }
         setShowCreateModal(false)
+        setModelSetupCheckFailed(false)
         setFormData({ name: '', description: '' })
 
-        if (shouldOpenModelSetup) {
-          alert(t('analysisModelRequiredAfterCreate'))
+        if (modelSetupCheckFailedAfterCreate) {
+          showToast(t('modelSetupCheckFailedAfterCreate'), 'warning')
+        } else if (shouldOpenModelSetup) {
+          showToast(t('analysisModelRequiredAfterCreate'), 'warning')
           router.push({ pathname: '/profile' })
         }
       } else {
-        setCreateError(await readApiErrorMessage(response, t('createFailed')))
+        throw await readClientApiError(response)
       }
     } catch (error) {
       _ulogError('创建项目失败:', error)
-      setCreateError(error instanceof Error ? error.message : t('createFailed'))
+      setCreateError(resolveClientError(error, t('createFailed')))
     } finally {
       setCreateLoading(false)
     }
@@ -236,29 +264,30 @@ export default function WorkspacePage() {
     setEditError(null)
     setCreateLoading(true)
     try {
-      const response = await apiFetch(`/api/projects/${editingProject.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json'
+      const input = {
+        command: {
+          kind: 'details',
+          name: editFormData.name,
+          description: editFormData.description,
         },
-        body: JSON.stringify(editFormData)
-      })
-
-      if (response.ok) {
-        const data = await response.json() as { project: WorkspaceProjectUpdatePayload }
-        setProjects((currentProjects) => currentProjects.map((project) => (
-          project.id === editingProject.id
-            ? mergeWorkspaceProjectListItemUpdate(project, data.project)
-            : project
-        )))
-        setShowEditModal(false)
-        setEditingProject(null)
-        setEditFormData({ name: '', description: '' })
-      } else {
-        setEditError(await readApiErrorMessage(response, t('updateFailed')))
-      }
+      } satisfies ProjectUpdateInput
+      await requestOperationMutationVoidWithError(
+        `/api/projects/${editingProject.id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(input),
+        },
+        queryClient,
+      )
+      await fetchProjects(pagination.page, searchQuery)
+      setShowEditModal(false)
+      setEditingProject(null)
+      setEditFormData({ name: '', description: '' })
     } catch (error) {
-      setEditError(error instanceof Error ? error.message : t('updateFailed'))
+      setEditError(resolveClientError(error, t('updateFailed')))
     } finally {
       setCreateLoading(false)
     }
@@ -272,17 +301,12 @@ export default function WorkspacePage() {
 
     try {
       const response = await apiFetch(`/api/projects/${projectToDelete.id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
       })
-
-      if (response.ok) {
-        // 删除成功后重新获取当前页
-        fetchProjects(pagination.page, searchQuery)
-      } else {
-        alert(t('deleteFailed'))
-      }
-    } catch {
-      alert(t('deleteFailed'))
+      if (!response.ok) throw await readClientApiError(response)
+      await fetchProjects(pagination.page, searchQuery)
+    } catch (error) {
+      showError(error, t('deleteFailed'))
     } finally {
       setDeletingProjectId(null)
       setProjectToDelete(null)
@@ -314,11 +338,7 @@ export default function WorkspacePage() {
   }
 
   if (status === 'loading' || !session) {
-    return (
-      <div className="glass-page min-h-screen flex items-center justify-center">
-        <div className="text-[var(--glass-text-secondary)]">{tc('loading')}</div>
-      </div>
-    )
+    return <BrandPageLoading />
   }
 
   return (
@@ -437,27 +457,27 @@ export default function WorkspacePage() {
                     {project.name}
                   </h3>
 
-                  {/* 描述：优先用户描述，fallback 到第一集故事 */}
-                  {(project.description || project.stats?.firstEpisodePreview) && (
+                  {/* 项目描述 */}
+                  {project.description && (
                     <div className="flex items-start gap-2 mb-4">
                       <AppIcon name="fileText" className="w-4 h-4 text-[var(--glass-text-tertiary)] mt-0.5 flex-shrink-0" />
                       <p className="text-sm text-[var(--glass-text-secondary)] line-clamp-2 leading-relaxed">
-                        {project.description || project.stats?.firstEpisodePreview}
+                        {project.description}
                       </p>
                     </div>
                   )}
 
                   {/* 统计信息 - 整行统一渐变 */}
-                  {project.stats && (project.stats.episodes > 0 || project.stats.images > 0 || project.stats.videos > 0) ? (
+                  {project.stats && project.stats.resources > 0 ? (
                     <div className="flex items-center gap-2 mb-3">
                       {/* 共享渐变定义 */}
                       <IconGradientDefs className="w-0 h-0 absolute" aria-hidden="true" />
                       <AppIcon name="statsBarGradient" className="w-4 h-4 flex-shrink-0" />
                       <div className="flex items-center gap-3 text-sm font-semibold bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">
-                        {project.stats.episodes > 0 && (
-                          <span className="flex items-center gap-1" title={t('statsEpisodes')}>
-                            <AppIcon name="statsEpisodeGradient" className="w-3.5 h-3.5" />
-                            {project.stats.episodes}
+                        {project.stats.folders > 0 && (
+                          <span className="flex items-center gap-1" title={t('statsFolders')}>
+                            <AppIcon name="folder" className="w-3.5 h-3.5" />
+                            {project.stats.folders}
                           </span>
                         )}
                         {project.stats.images > 0 && (
@@ -579,6 +599,14 @@ export default function WorkspacePage() {
         <div className="fixed inset-0 glass-overlay flex items-center justify-center z-50 backdrop-blur-sm">
           <div className="glass-surface-modal p-6 w-full max-w-md mx-4">
             <h2 className="text-xl font-bold text-[var(--glass-text-primary)] mb-4">{t('createProject')}</h2>
+            {modelSetupCheckFailed && (
+              <div className="flex items-start gap-2 mb-4 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400">
+                <AppIcon name="alert" className="w-4 h-4 shrink-0 mt-0.5" />
+                <span className="text-[12px] leading-relaxed">
+                  {t('modelSetupCheckFailedBeforeCreate')}
+                </span>
+              </div>
+            )}
             {modelNotConfigured && (
               <div className="flex items-start gap-2 mb-4 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400">
                 <AppIcon name="alert" className="w-4 h-4 shrink-0 mt-0.5" />

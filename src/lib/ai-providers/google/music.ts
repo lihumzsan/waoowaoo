@@ -2,9 +2,11 @@ import { GoogleGenAI } from '@google/genai'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import type { AiProviderMusicExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
-import { setProxy } from '../../../../lib/prompts/proxy'
-
-type GoogleMusicOptions = NonNullable<AiProviderMusicExecutionContext['options']>
+import { RETRY_POLICY, withRetry } from '@/lib/retry'
+import { withProviderProxyDispatcher } from '@/lib/http/outbound-proxy'
+import { GOOGLE_PROVIDER_PROXY_TARGET } from '@/lib/ai-providers/google/proxy-target'
+import { AppError } from '@/lib/errors/app-error'
+import { compileMusicPrompt } from '@/lib/ai-providers/shared/music-prompt'
 
 interface GoogleMusicPart {
   inlineData?: {
@@ -25,22 +27,6 @@ interface GoogleMusicResponse {
 
 function trim(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
-}
-
-function buildMusicPrompt(prompt: string, options: GoogleMusicOptions): string {
-  const lines = [prompt.trim()]
-  const genre = trim(options.genre)
-  const mood = trim(options.mood)
-
-  if (genre) lines.push(`Genre: ${genre}`)
-  if (mood) lines.push(`Mood: ${mood}`)
-  if (typeof options.durationSeconds === 'number') lines.push(`Target duration: ${options.durationSeconds} seconds`)
-  if (typeof options.bpm === 'number') lines.push(`BPM: ${options.bpm}`)
-  if (options.vocalMode === 'instrumental') lines.push('Instrumental only. Do not include vocals or lyrics.')
-  if (options.vocalMode === 'vocal') lines.push('Vocals are allowed when musically appropriate.')
-  if (options.outputFormat) lines.push(`Requested output format: ${options.outputFormat}`)
-
-  return lines.join('\n')
 }
 
 function getFinishReason(response: GoogleMusicResponse): string | undefined {
@@ -89,21 +75,30 @@ export function extractGoogleMusicResult(response: unknown): {
 
   const finishReason = getFinishReason(safe)
   if (isSafetyFinishReason(finishReason)) {
-    throw new Error(`GOOGLE_MUSIC_BLOCKED:${finishReason}`)
+    throw new AppError('SENSITIVE_CONTENT', 'Google blocked music generation by policy', {
+      provider: 'google',
+      details: { finishReason: finishReason ?? null },
+    })
   }
-  throw new Error('GOOGLE_MUSIC_EMPTY_RESPONSE: no audio inlineData returned')
+  throw new AppError('EMPTY_RESPONSE', 'Google returned no audio', { provider: 'google' })
 }
 
 export async function executeGoogleMusicGeneration(input: AiProviderMusicExecutionContext): Promise<GenerateResult> {
   const options = input.options ?? {}
   const { apiKey } = await getProviderConfig(input.userId, input.selection.provider)
-  await setProxy()
   const ai = new GoogleGenAI({ apiKey })
   const modelId = requireSelectedModelId(input.selection, 'google:music')
 
-  const response = await ai.models.generateContent({
-    model: modelId,
-    contents: [{ parts: [{ text: buildMusicPrompt(input.prompt, options) }] }],
+  const response = await withRetry({
+    scope: `google:music:generate:${modelId}`,
+    policy: RETRY_POLICY.providerSubmit,
+    run: async () => await withProviderProxyDispatcher(
+      GOOGLE_PROVIDER_PROXY_TARGET,
+      async () => await ai.models.generateContent({
+        model: modelId,
+        contents: [{ parts: [{ text: compileMusicPrompt(input.prompt, options) }] }],
+      }),
+    ),
   })
 
   const result = extractGoogleMusicResult(response)

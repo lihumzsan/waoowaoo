@@ -21,8 +21,8 @@ export const GET = apiHandler(async (request: NextRequest) => {
     projectId: 'system',
     userId: session.user.id,
     input: {
-      ...(page !== undefined ? { page } : {}),
-      ...(pageSize !== undefined ? { pageSize } : {}),
+      ...(page !== undefined ? { page: Number(page) } : {}),
+      ...(pageSize !== undefined ? { pageSize: Number(pageSize) } : {}),
       ...(type !== undefined ? { type } : {}),
       ...(startDate !== undefined ? { startDate } : {}),
       ...(endDate !== undefined ? { endDate } : {}),
@@ -32,4 +32,3 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   return NextResponse.json(result)
 })
-

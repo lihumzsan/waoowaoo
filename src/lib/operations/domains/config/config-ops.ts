@@ -2,8 +2,6 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { logProjectAction } from '@/lib/logging/semantic'
 import { ApiError } from '@/lib/api-errors'
-import { attachMediaFieldsToProject } from '@/lib/media/attach'
-import { buildProjectReadModel } from '@/lib/projects/build-project-read-model'
 import {
   type CapabilitySelections,
   type UnifiedModelType,
@@ -11,31 +9,57 @@ import {
 import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
 import { resolveBuiltinModelContext, getCapabilityOptionFields, validateCapabilitySelectionsPayload, type CapabilityModelContext } from '@/lib/ai-registry/capabilities-catalog'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
-import { getDeploymentConfig, toPublicDeploymentConfig } from '@/lib/deployment/config'
+import { getDeploymentConfig, isCloudDeployment, toPublicDeploymentConfig } from '@/lib/deployment/config'
+import {
+  capabilitySelectionCommandSchema,
+  capabilitySelectionCommandToSelections,
+} from '@/lib/ai-registry/capability-selection-command'
+import { defineOperation } from '@/lib/operations/define-operation'
+import {
+  isProjectVideoRatio,
+  PROJECT_VIDEO_RATIO_VALUES,
+  writeProjectVideoRatioInTransaction,
+} from '@/lib/projects/video-ratio-write'
 
 const MODEL_FIELDS = [
   'analysisModel',
   'characterModel',
   'locationModel',
-  'storyboardModel',
   'editModel',
   'videoModel',
-  'singleShotVideoModel',
-  'sequenceVideoModel',
   'musicModel',
 ] as const
+
+const CLOUD_PROJECT_CONFIG_FIELDS = ['videoRatio'] as const
 
 const MODEL_FIELD_TO_TYPE: Record<typeof MODEL_FIELDS[number], UnifiedModelType> = {
   analysisModel: 'llm',
   characterModel: 'image',
   locationModel: 'image',
-  storyboardModel: 'image',
   editModel: 'image',
   videoModel: 'video',
-  singleShotVideoModel: 'video',
-  sequenceVideoModel: 'video',
   musicModel: 'music',
 }
+
+const projectModelKeySchema = z.string().trim().min(1).nullable()
+  .describe('Exact provider::modelId returned by list_user_models, or null to clear the project override.')
+
+const projectVideoRatioSchema = z.string().trim().min(1).refine(
+  isProjectVideoRatio,
+  { message: 'Unsupported project video ratio.' },
+)
+
+const updateProjectConfigInputSchema = z.object({
+  analysisModel: projectModelKeySchema.optional(),
+  characterModel: projectModelKeySchema.optional(),
+  locationModel: projectModelKeySchema.optional(),
+  editModel: projectModelKeySchema.optional(),
+  videoModel: projectModelKeySchema.optional(),
+  musicModel: projectModelKeySchema.optional(),
+  videoRatio: projectVideoRatioSchema.optional()
+    .describe('Explicit project output aspect ratio, for example 16:9 or 9:16.'),
+  capabilityOverrides: capabilitySelectionCommandSchema.optional(),
+}).strict()
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -47,7 +71,17 @@ function assertNoLegacyStyleFields(body: Record<string, unknown>) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'LEGACY_STYLE_CONFIG_REMOVED',
       field,
-      message: 'legacy visual style config is no longer supported; use the AI-generated Style Bible workflow.',
+      message: 'legacy visual style config is no longer supported; use the AI-generated Creative Direction workflow.',
+    })
+  }
+}
+
+function assertCloudProjectConfigFields(body: Record<string, unknown>) {
+  for (const field of Object.keys(body)) {
+    if ((CLOUD_PROJECT_CONFIG_FIELDS as readonly string[]).includes(field)) continue
+    throw new ApiError('FORBIDDEN', {
+      code: 'PROJECT_CONFIG_MANAGED_BY_PLATFORM',
+      field,
     })
   }
 }
@@ -141,11 +175,8 @@ function getNextProjectModelMap(
     analysisModel: string | null
     characterModel: string | null
     locationModel: string | null
-    storyboardModel: string | null
     editModel: string | null
     videoModel: string | null
-    singleShotVideoModel: string | null
-    sequenceVideoModel: string | null
     musicModel: string | null
   },
   updates: Record<string, unknown>,
@@ -219,6 +250,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
       id: 'get_project_config',
       summary: 'Get project model and capability override configuration (sanitized).',
       intent: 'query',
+      channels: { tool: false, api: true },
       effects: {
         writes: false,
         billable: false,
@@ -235,7 +267,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
       }).passthrough(),
       execute: async (ctx) => {
         const deployment = getDeploymentConfig()
-        if (deployment.edition === 'cloud') {
+        if (isCloudDeployment(deployment)) {
           return {
             configurable: false,
             capabilityOverrides: {},
@@ -250,11 +282,8 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
               analysisModel: true,
             characterModel: true,
             locationModel: true,
-            storyboardModel: true,
             editModel: true,
             videoModel: true,
-            singleShotVideoModel: true,
-            sequenceVideoModel: true,
             musicModel: true,
           },
         })
@@ -269,11 +298,8 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
           analysisModel: projectData.analysisModel,
           characterModel: projectData.characterModel,
           locationModel: projectData.locationModel,
-          storyboardModel: projectData.storyboardModel,
           editModel: projectData.editModel,
           videoModel: projectData.videoModel,
-          singleShotVideoModel: projectData.singleShotVideoModel,
-          sequenceVideoModel: projectData.sequenceVideoModel,
           musicModel: projectData.musicModel,
         }, {})
         const cleanedOverrides = sanitizeCapabilityOverrides(storedOverrides, modelContextMap)
@@ -286,12 +312,15 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
       },
     },
 
-    update_project_config: {
+    update_project_config: defineOperation({
       id: 'update_project_config',
-      summary: 'Update project model keys and capability overrides.',
+      summary: 'Persist explicit project model, capability and output aspect-ratio configuration.',
       intent: 'act',
+      toolContractRevision: 'update_project_config/v1',
+      channels: { tool: true, api: true, mcp: true },
       effects: {
         writes: true,
+        workspaceResourceImpact: 'project_data',
         billable: false,
         destructive: false,
         overwrite: true,
@@ -299,32 +328,32 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
         externalSideEffects: false,
         longRunning: false,
       },
-      confirmation: { required: true },
-      inputSchema: z.object({
-        analysisModel: z.string().nullable().optional(),
-        characterModel: z.string().nullable().optional(),
-        locationModel: z.string().nullable().optional(),
-        storyboardModel: z.string().nullable().optional(),
-        editModel: z.string().nullable().optional(),
-        videoModel: z.string().nullable().optional(),
-        singleShotVideoModel: z.string().nullable().optional(),
-        sequenceVideoModel: z.string().nullable().optional(),
-        musicModel: z.string().nullable().optional(),
-        videoRatio: z.string().optional(),
-        capabilityOverrides: z.unknown().optional(),
-      }).passthrough(),
+      confirmation: { kind: 'none', required: false },
+      toolInputSchema: {
+        type: 'object',
+        properties: {
+          videoRatio: {
+            type: 'string',
+            enum: [...PROJECT_VIDEO_RATIO_VALUES],
+            minLength: 1,
+            description: 'Exact project output aspect ratio decided by the user, such as 16:9 or 9:16.',
+          },
+        },
+        required: ['videoRatio'],
+        additionalProperties: false,
+      },
+      inputSchema: updateProjectConfigInputSchema,
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        if (getDeploymentConfig().edition === 'cloud') {
-          throw new ApiError('FORBIDDEN', {
-            code: 'PROJECT_CONFIG_MANAGED_BY_PLATFORM',
-          })
+      executeInTransaction: async (ctx, input, transaction) => {
+        const deployment = getDeploymentConfig()
+        const cloudDeployment = isCloudDeployment(deployment)
+        const body: Record<string, unknown> = input
+        assertNoLegacyStyleFields(body)
+        if (cloudDeployment) {
+          assertCloudProjectConfigFields(body)
         }
 
-        const body = input as unknown as Record<string, unknown>
-        assertNoLegacyStyleFields(body)
-
-        const currentProjectConfig = await prisma.project.findUnique({
+        const currentProjectConfig = await transaction.project.findUnique({
           where: { id: ctx.projectId },
           select: {
             id: true,
@@ -332,11 +361,8 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
             analysisModel: true,
             characterModel: true,
             locationModel: true,
-            storyboardModel: true,
             editModel: true,
             videoModel: true,
-            singleShotVideoModel: true,
-            sequenceVideoModel: true,
             musicModel: true,
           },
         })
@@ -345,9 +371,9 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
         }
 
         const allowedProjectFields = [
-          ...MODEL_FIELDS,
+          ...(cloudDeployment ? [] : MODEL_FIELDS),
           'videoRatio',
-          'capabilityOverrides',
+          ...(cloudDeployment ? [] : ['capabilityOverrides'] as const),
         ] as const
 
         const updateData: Record<string, unknown> = {}
@@ -359,7 +385,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
           }
 
           if (field === 'capabilityOverrides') {
-            const overrides = normalizeCapabilitySelectionsInput(body.capabilityOverrides)
+            const overrides = capabilitySelectionCommandToSelections(input.capabilityOverrides ?? [])
             const modelContextMap = getNextProjectModelMap(currentProjectConfig, body)
             const cleanedOverrides = sanitizeCapabilityOverrides(overrides, modelContextMap)
             validateCapabilityOverrides(cleanedOverrides, modelContextMap)
@@ -367,16 +393,27 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
             continue
           }
 
+          if (field === 'videoRatio') continue
+
           updateData[field] = body[field]
         }
 
-        const updatedProject = await prisma.project.update({
+        if (Object.keys(updateData).length > 0) {
+          await transaction.project.update({
+            where: { id: ctx.projectId },
+            data: updateData,
+          })
+        }
+        if (body.videoRatio !== undefined) {
+          await writeProjectVideoRatioInTransaction({
+            transaction,
+            projectId: ctx.projectId,
+            videoRatio: body.videoRatio,
+          })
+        }
+        const updatedProject = await transaction.project.findUniqueOrThrow({
           where: { id: ctx.projectId },
-          data: updateData,
         })
-
-        const projectWithSignedUrls = await attachMediaFieldsToProject(updatedProject)
-        const fullProject = buildProjectReadModel(updatedProject, projectWithSignedUrls)
 
         logProjectAction(
           'UPDATE_NOVEL_PROMOTION',
@@ -387,8 +424,8 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
           { changes: body },
         )
 
-        return { project: fullProject }
+        return { project: updatedProject }
       },
-    },
+    }),
   }
 }

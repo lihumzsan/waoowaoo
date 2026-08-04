@@ -9,6 +9,15 @@ export interface WorkspaceAssistantSendMessagePayload {
 }
 
 const consumedWorkspaceAssistantMessageKeys = new Set<string>()
+const MAX_CONSUMED_WORKSPACE_ASSISTANT_MESSAGE_KEYS = 512
+
+function trimConsumedKeys(keys: Set<string>): void {
+  while (keys.size > MAX_CONSUMED_WORKSPACE_ASSISTANT_MESSAGE_KEYS) {
+    const oldest = keys.values().next().value as string | undefined
+    if (!oldest) return
+    keys.delete(oldest)
+  }
+}
 
 export function reserveWorkspaceAssistantMessageKey(
   key: string,
@@ -21,6 +30,8 @@ export function reserveWorkspaceAssistantMessageKey(
   }
   localConsumedKeys.add(normalizedKey)
   consumedWorkspaceAssistantMessageKeys.add(normalizedKey)
+  trimConsumedKeys(localConsumedKeys)
+  trimConsumedKeys(consumedWorkspaceAssistantMessageKeys)
   return normalizedKey
 }
 

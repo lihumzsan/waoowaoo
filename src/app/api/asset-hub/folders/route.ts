@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { executeProjectAgentOperationFromApi } from '@/lib/adapters/api/execute-project-agent-operation'
+import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
 
 export const GET = apiHandler(async (request: NextRequest) => {
   const authResult = await requireUserAuth()
@@ -11,7 +12,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const result = await executeProjectAgentOperationFromApi({
     request,
     operationId: 'asset_hub_list_folders',
-    projectId: 'global-asset-hub',
+    projectId: GLOBAL_ASSET_PROJECT_ID,
     userId: session.user.id,
     input: {},
     source: 'asset-hub',
@@ -39,12 +40,12 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const result = await executeProjectAgentOperationFromApi({
     request,
     operationId: 'asset_hub_create_folder',
-    projectId: 'global-asset-hub',
+    projectId: GLOBAL_ASSET_PROJECT_ID,
     userId: session.user.id,
     input: body,
     source: 'asset-hub',
+    responseContract: 'operation_mutation_response_v1',
   })
 
   return NextResponse.json(result)
 })
-

@@ -1,226 +1,217 @@
 'use client'
 
-import React, {
-  useCallback,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-} from 'react'
-import { createPortal } from 'react-dom'
+import type { RefObject } from 'react'
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
-import type { AssistantPermissionMode } from '@/lib/project-agent/permission-mode'
+import {
+  MediaAttachmentChips,
+  TextAttachmentChips,
+} from '@/components/project-assistant/AttachmentChips'
+import { submitFromEnterKey } from '@/lib/ui/keyboard-submit'
+import type { ProjectAssistantTextAttachment } from '@/lib/project-agent/text-attachments'
+import type { ProjectAssistantMediaAttachment } from '@/lib/project-agent/media-attachments'
+import { isProjectAssistantMediaFile } from '@/lib/project-agent/media-attachments/client'
+import type { WorkspaceCanvasSelection } from '../../canvas/contracts/workspace-canvas-interactions'
+import type { WorkspaceAssistantFailureView } from './workspace-assistant-panel-state'
 
 interface WorkspaceAssistantComposerProps {
   readonly value: string
-  readonly error: string | null
+  readonly textareaRef: RefObject<HTMLTextAreaElement | null>
+  readonly selection: WorkspaceCanvasSelection | null
+  /**
+   * Already-resolved failure view. A failed send must be unmissable: the user's
+   * message bubble stays in the thread without a reply, so the panel resolves
+   * the real reason once and the composer only renders it.
+   */
+  readonly error: WorkspaceAssistantFailureView | null
   readonly pending: boolean
-  readonly assistantPermissionMode: AssistantPermissionMode
+  readonly canStopReply: boolean
+  readonly attachments: readonly ProjectAssistantTextAttachment[]
+  readonly mediaAttachments?: readonly ProjectAssistantMediaAttachment[]
+  readonly attachDisabled?: boolean
+  readonly mediaUploadPending?: boolean
+  readonly attachmentError?: string | null
   readonly onChange: (value: string) => void
   readonly onSubmit: () => Promise<void>
-  readonly onAssistantPermissionModeChange: (mode: AssistantPermissionMode) => void
-}
-
-const PERMISSION_MENU_WIDTH = 320
-const PERMISSION_MENU_GAP = 6
-const PERMISSION_MODES: readonly AssistantPermissionMode[] = ['ask', 'auto']
-
-function cx(...names: Array<string | false | null | undefined>) {
-  return names.filter(Boolean).join(' ')
-}
-
-/**
- * Maps raw send-failure payloads (API error JSON, transport errors) to a
- * user-readable explanation. A failed send must be unmissable: the user's
- * message bubble stays in the thread without a reply, so a silent or truncated
- * error reads as "the assistant died".
- */
-function resolveComposerErrorMessageKey(error: string): 'panel.sendErrorBusy' | 'panel.sendErrorGeneric' {
-  return error.includes('PROJECT_AGENT_RUN_ACTIVE')
-    ? 'panel.sendErrorBusy'
-    : 'panel.sendErrorGeneric'
+  readonly onStopReply: () => Promise<void>
+  readonly onAttachClick: () => void
+  readonly onRemoveAttachment: (attachmentId: string) => void
+  readonly onRemoveMediaAttachment?: (resourceId: string) => void
+  readonly onPasteMediaFiles?: (files: readonly File[]) => void
+  readonly onClearSelection: () => void
 }
 
 export function WorkspaceAssistantComposer({
   value,
+  textareaRef,
+  selection,
   error,
   pending,
-  assistantPermissionMode,
+  canStopReply,
+  attachments,
+  mediaAttachments = [],
+  attachDisabled = false,
+  mediaUploadPending = false,
+  attachmentError = null,
   onChange,
   onSubmit,
-  onAssistantPermissionModeChange,
+  onStopReply,
+  onAttachClick,
+  onRemoveAttachment,
+  onRemoveMediaAttachment,
+  onPasteMediaFiles,
+  onClearSelection,
 }: WorkspaceAssistantComposerProps) {
   const t = useTranslations('assistantAgent')
-  const menuId = useId()
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [menuStyle, setMenuStyle] = useState<CSSProperties>({})
-  const permissionModeLabel = t(`panel.permissionMode${assistantPermissionMode === 'ask' ? 'Ask' : 'Auto'}`)
-
-  const updateMenuPlacement = useCallback(() => {
-    const trigger = triggerRef.current
-    if (!trigger) return
-    const rect = trigger.getBoundingClientRect()
-    const viewportWidth = window.innerWidth || document.documentElement.clientWidth
-    const viewportHeight = window.innerHeight || document.documentElement.clientHeight
-    const left = Math.max(8, Math.min(rect.left, viewportWidth - PERMISSION_MENU_WIDTH - 8))
-
-    setMenuStyle({
-      position: 'fixed',
-      left,
-      bottom: viewportHeight - rect.top + PERMISSION_MENU_GAP,
-      width: PERMISSION_MENU_WIDTH,
-    })
-  }, [])
-
-  const closeMenu = useCallback(() => {
-    setMenuOpen(false)
-  }, [])
-
-  const openMenu = useCallback(() => {
-    updateMenuPlacement()
-    setMenuOpen(true)
-  }, [updateMenuPlacement])
-
-  useEffect(() => {
-    if (!menuOpen) return
-
-    function handlePointerDown(event: MouseEvent) {
-      const target = event.target as Node
-      if (triggerRef.current?.contains(target)) return
-      if (menuRef.current?.contains(target)) return
-      closeMenu()
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') closeMenu()
-    }
-
-    document.addEventListener('mousedown', handlePointerDown)
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown)
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [closeMenu, menuOpen])
-
-  useLayoutEffect(() => {
-    if (!menuOpen) return
-    updateMenuPlacement()
-    window.addEventListener('resize', updateMenuPlacement)
-    window.addEventListener('scroll', updateMenuPlacement, true)
-    return () => {
-      window.removeEventListener('resize', updateMenuPlacement)
-      window.removeEventListener('scroll', updateMenuPlacement, true)
-    }
-  }, [menuOpen, updateMenuPlacement])
-
-  const selectPermissionMode = (mode: AssistantPermissionMode) => {
-    if (mode !== assistantPermissionMode) {
-      onAssistantPermissionModeChange(mode)
-    }
-    closeMenu()
-  }
 
   return (
     <div>
-      <div className="flex min-h-[7.25rem] flex-col rounded-[14px] bg-[var(--glass-bg-muted)] px-3.5 pb-2 pt-2">
+      <div className="flex flex-col rounded-2xl border border-white/70 bg-white/85 px-4 pb-2.5 pt-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_6px_20px_-8px_rgba(15,23,42,0.12)] backdrop-blur-xl">
+        {selection ? (
+          <div className="mb-2 flex items-center gap-2 rounded-xl bg-slate-50 px-2.5 py-2 ring-1 ring-slate-200">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white text-[var(--glass-text-tertiary)] ring-1 ring-slate-200">
+              {selection.previewUrl && selection.mediaType === 'image' ? (
+                // The URL is a protected server View, never a raw storage key.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={selection.previewUrl} alt="" className="h-full w-full object-cover" />
+              ) : selection.previewUrl && selection.mediaType === 'video' ? (
+                <video src={`${selection.previewUrl}#t=0.1`} muted preload="metadata" className="h-full w-full object-cover" />
+              ) : (
+                <AppIcon
+                  name={selection.mediaType === 'audio' ? 'audioWave' : selection.mediaType === 'text' ? 'fileText' : 'image'}
+                  className="h-4 w-4"
+                  aria-hidden="true"
+                />
+              )}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-semibold text-[var(--glass-text-primary)]">{selection.name}</p>
+              <p className="truncate text-[10px] text-[var(--glass-text-tertiary)]">
+                {t(`canvasContext.mediaType.${selection.mediaType}`)} · {t('canvasContext.active')}
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-label={t('canvasContext.clear')}
+              title={t('canvasContext.clear')}
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[var(--glass-text-tertiary)] hover:bg-white"
+              onClick={onClearSelection}
+            >
+              <AppIcon name="close" className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
         <textarea
-          rows={1}
+          ref={textareaRef}
+          rows={2}
           value={value}
           disabled={pending}
           onChange={(event) => onChange(event.target.value)}
           placeholder={t('panel.composerPlaceholder')}
           onKeyDown={(event) => {
-            if (event.key !== 'Enter' || event.shiftKey) return
-            event.preventDefault()
-            void onSubmit()
+            submitFromEnterKey(event, () => {
+              void onSubmit()
+            })
           }}
-          className="min-h-[4.75rem] max-h-[7rem] w-full flex-1 resize-none overflow-y-auto bg-transparent pr-1 text-sm leading-5 text-[var(--glass-text-primary)] outline-none [field-sizing:content] placeholder:text-[var(--glass-text-tertiary)] disabled:cursor-not-allowed disabled:opacity-60"
+          onPaste={(event) => {
+            if (!onPasteMediaFiles || pending) return
+            const files = Array.from(event.clipboardData?.files ?? []).filter(
+              isProjectAssistantMediaFile,
+            )
+            if (files.length === 0) return
+            event.preventDefault()
+            onPasteMediaFiles(files)
+          }}
+          className="min-h-10 max-h-[7rem] w-full resize-none overflow-y-auto bg-transparent pr-1 text-base leading-6 text-[var(--glass-text-primary)] outline-none [field-sizing:content] placeholder:text-[var(--glass-text-tertiary)] disabled:cursor-not-allowed disabled:opacity-60"
         />
+        <TextAttachmentChips
+          attachments={attachments}
+          onRemove={pending ? undefined : onRemoveAttachment}
+          className={attachments.length > 0 ? 'mt-2' : undefined}
+        />
+        <MediaAttachmentChips
+          attachments={mediaAttachments}
+          onRemove={pending ? undefined : onRemoveMediaAttachment}
+          className={mediaAttachments.length > 0 ? 'mt-2' : undefined}
+        />
+        {mediaUploadPending ? (
+          <div className="mt-2 inline-flex items-center gap-2 self-start rounded-lg border border-[var(--glass-stroke-base)] bg-white/90 px-2.5 py-1.5 text-xs leading-none text-[var(--glass-text-secondary)] shadow-sm">
+            <AppIcon
+              name="loader"
+              className="h-3.5 w-3.5 animate-spin text-[var(--glass-tone-info-fg)]"
+              aria-hidden="true"
+            />
+            {t('attachments.mediaUploading')}
+          </div>
+        ) : null}
+        {attachmentError ? (
+          <p
+            role="alert"
+            className="mt-2 rounded-lg bg-[var(--glass-tone-danger-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-danger-fg)]"
+          >
+            {attachmentError}
+          </p>
+        ) : null}
         <div className="mt-1 flex h-8 shrink-0 items-center justify-between gap-2">
-          <button
-            ref={triggerRef}
-            type="button"
-            aria-label={t('panel.permissionModeToggle', { mode: permissionModeLabel })}
-            aria-expanded={menuOpen}
-            aria-haspopup="menu"
-            aria-controls={menuOpen ? menuId : undefined}
-            title={t('panel.permissionModeMenuTitle')}
-            onClick={() => {
-              if (menuOpen) closeMenu()
-              else openMenu()
-            }}
-            className="glass-selection-control inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium leading-none"
-          >
-            <AppIcon name={assistantPermissionMode === 'ask' ? 'lock' : 'bolt'} className="h-3 w-3" aria-hidden="true" />
-            <span>{permissionModeLabel}</span>
-            <AppIcon name="chevronDown" className={cx('h-3 w-3 text-[var(--glass-text-tertiary)] transition-transform', menuOpen && 'rotate-180')} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            aria-label={t('panel.send')}
-            disabled={!value.trim() || pending}
-            onClick={() => { void onSubmit() }}
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[11px] bg-[var(--glass-text-primary)] text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <AppIcon name="arrowRight" className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label={t('attachments.openUpload')}
+              title={t('attachments.openUpload')}
+              disabled={pending || attachDisabled}
+              onClick={onAttachClick}
+              className="glass-selection-control inline-flex h-6 w-6 items-center justify-center rounded-md text-[var(--glass-text-secondary)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <AppIcon name="plus" className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </div>
+          <div className="flex items-center">
+            {canStopReply ? (
+              <button
+                type="button"
+                aria-label={t('panel.stopGenerating')}
+                title={t('panel.stopGenerating')}
+                onClick={() => {
+                  void onStopReply()
+                }}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--glass-text-primary)] text-white transition hover:bg-slate-900"
+              >
+                <span className="h-2.5 w-2.5 rounded-[2px] bg-current" aria-hidden="true" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                aria-label={t('panel.send')}
+                disabled={
+                  (!value.trim() && attachments.length === 0 && mediaAttachments.length === 0) ||
+                  pending
+                }
+                onClick={() => {
+                  void onSubmit()
+                }}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--glass-text-primary)] text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <AppIcon name="arrowRight" className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
-      {menuOpen && createPortal(
-        <div
-          ref={menuRef}
-          id={menuId}
-          role="menu"
-          className="glass-surface-modal z-[9999] rounded-xl border border-[var(--glass-stroke-base)] p-2 shadow-[0_12px_32px_rgba(15,23,42,0.16)]"
-          style={menuStyle}
-        >
-          <div className="px-2 pb-1 pt-0.5 text-[11px] font-medium text-[var(--glass-text-tertiary)]">
-            {t('panel.permissionModeMenuTitle')}
-          </div>
-          {PERMISSION_MODES.map((mode) => {
-            const selected = assistantPermissionMode === mode
-            const suffix = mode === 'ask' ? 'Ask' : 'Auto'
-            return (
-              <button
-                key={mode}
-                type="button"
-                role="menuitemradio"
-                aria-checked={selected}
-                onClick={() => selectPermissionMode(mode)}
-                className={cx(
-                  'glass-selection-control group flex w-full items-start gap-2 rounded-lg px-3 py-2.5 text-left',
-                  selected
-                    ? 'bg-[var(--glass-bg-surface-strong)] text-[var(--glass-text-primary)]'
-                    : 'text-[var(--glass-text-secondary)]',
-                )}
-              >
-                <AppIcon name={mode === 'ask' ? 'lock' : 'bolt'} className="mt-0.5 h-3.5 w-3.5 shrink-0 transition-transform group-hover:scale-110" aria-hidden="true" />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-xs font-semibold leading-4">{t(`panel.permissionMode${suffix}`)}</span>
-                  <span className="mt-1 block text-[11px] leading-4 text-[var(--glass-text-tertiary)]">
-                    {t(`panel.permissionModeDescription${suffix}`)}
-                  </span>
-                </span>
-                {selected ? <AppIcon name="check" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--glass-tone-info-fg)]" aria-hidden="true" /> : null}
-              </button>
-            )
-          })}
-        </div>,
-        document.body,
-      )}
       {error ? (
         <div
-          role="alert"
-          className="mt-1.5 rounded-lg bg-[var(--glass-tone-danger-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-danger-fg)]"
+          role={error.tone === 'info' ? 'status' : 'alert'}
+          className={
+            error.tone === 'info'
+              ? 'mt-1.5 rounded-lg bg-[var(--glass-tone-info-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-info-fg)]'
+              : 'mt-1.5 rounded-lg bg-[var(--glass-tone-danger-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-danger-fg)]'
+          }
         >
-          <p className="font-medium">{t(resolveComposerErrorMessageKey(error))}</p>
-          <p className="mt-0.5 break-all text-[11px] leading-4 opacity-75">{error}</p>
+          <p className="font-medium">{error.headline}</p>
+          {/* "Already handled" is an informative outcome: the protocol detail
+              would only add noise to a state the user cannot act on. */}
+          {error.tone === 'info' || !error.technical ? null : (
+            <p className="mt-0.5 break-all text-xs leading-4 opacity-75">{error.technical}</p>
+          )}
         </div>
       ) : null}
     </div>

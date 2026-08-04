@@ -1,10 +1,12 @@
-import { asSchema } from '@ai-sdk/provider-utils'
+import { asSchema } from 'ai'
+import { ApiError } from '@/lib/api-errors'
 import type {
   JsonObject,
   JsonValue,
   ProjectAgentToolInputSchema,
   RuntimeSchema,
 } from './types'
+import { isOperationEnvironmentInputKey } from './environment-input'
 
 type UnknownRecord = Record<string, unknown>
 
@@ -70,7 +72,8 @@ function readProperties(schema: JsonObject): Record<string, JsonValue> {
   if (!isRecord(value) || Array.isArray(value)) return {}
   const out: Record<string, JsonValue> = {}
   for (const [key, property] of Object.entries(value)) {
-    if (key === 'confirmed') continue
+    if (key === 'confirmed' || key === 'confirmedMaxCost') continue
+    if (isOperationEnvironmentInputKey(key)) continue
     if (isNeverSchema(property)) continue
     out[key] = toJsonValue(property)
   }
@@ -90,12 +93,401 @@ function schemaAllowsNull(schema: JsonValue): boolean {
   return Array.isArray(oneOf) && oneOf.some(schemaAllowsNull)
 }
 
+const OMIT_NULLISH_MODEL_VALUE = Symbol('omit-nullish-model-value')
+
+/** 单条纠错里回显 schema 的上限;超过则只给字段路径与 issue 文案。 */
+const MAX_CORRECTION_SCHEMA_CHARS = 1_200
+
+function schemaMatchesDiscriminator(value: unknown, schema: JsonValue): boolean {
+  if (!isRecord(schema)) return true
+  if (Object.prototype.hasOwnProperty.call(schema, 'const')) return value === schema.const
+  if (!isRecord(value)) return true
+  const properties = readProperties(schema)
+  const required = readStringArray(schema.required)
+  if (required.some((key) => !Object.prototype.hasOwnProperty.call(value, key))) {
+    return false
+  }
+  if (
+    schema.additionalProperties === false
+    && Object.keys(value).some((key) => !Object.prototype.hasOwnProperty.call(properties, key))
+  ) {
+    return false
+  }
+  for (const [key, propertySchema] of Object.entries(properties)) {
+    if (!isRecord(propertySchema) || !Object.prototype.hasOwnProperty.call(propertySchema, 'const')) continue
+    if (!Object.prototype.hasOwnProperty.call(value, key)) continue
+    // A null in strict-dialect input may encode absence, so it can never veto
+    // a branch through a const discriminator; the normalizer resolves it later.
+    if (value[key] === null) continue
+    if (!schemaMatchesDiscriminator(value[key], propertySchema)) return false
+  }
+  return true
+}
+
+function readUnionBranches(schema: JsonValue): JsonValue[] {
+  if (!isRecord(schema)) return []
+  const branches = Array.isArray(schema.oneOf)
+    ? schema.oneOf
+    : Array.isArray(schema.anyOf)
+      ? schema.anyOf
+      : []
+  return branches.map(toJsonValue)
+}
+
+function selectUnionBranchIndex(value: unknown, branches: readonly JsonValue[]): number {
+  const matches = branches.flatMap((branch, index) => (
+    schemaMatchesDiscriminator(value, branch) ? [index] : []
+  ))
+  return matches.length === 1 ? matches[0] ?? -1 : -1
+}
+
+function selectUnionBranch(value: unknown, schema: JsonObject): JsonValue | null {
+  const branches = readUnionBranches(schema)
+  if (branches.length === 0) return null
+  const index = selectUnionBranchIndex(value, branches)
+  return index >= 0 ? branches[index] ?? null : null
+}
+
+/**
+ * Picks the union branch a strict-dialect value belongs to. The canonical
+ * runtime schema is the only required-key authority: strict projection marks
+ * every key required, so tool-side required lists carry no discrimination
+ * evidence. The tool projection preserves union order, so once the canonical
+ * branch is known the matching tool branch is the same index.
+ */
+function selectUnionBranchPair(params: {
+  value: unknown
+  toolSchema: JsonObject
+  runtimeSchema: JsonValue | undefined
+}): { tool: JsonValue | null; runtime: JsonValue | null } {
+  const toolBranches = readUnionBranches(params.toolSchema)
+  const runtimeBranches = readUnionBranches(
+    params.runtimeSchema === undefined ? null : params.runtimeSchema,
+  )
+  if (runtimeBranches.length > 0) {
+    const runtimeIndex = selectUnionBranchIndex(params.value, runtimeBranches)
+    if (runtimeIndex >= 0) {
+      return {
+        tool: toolBranches.length === runtimeBranches.length
+          ? toolBranches[runtimeIndex] ?? null
+          : selectUnionBranch(params.value, params.toolSchema),
+        runtime: runtimeBranches[runtimeIndex] ?? null,
+      }
+    }
+  }
+  return {
+    tool: selectUnionBranch(params.value, params.toolSchema),
+    runtime: null,
+  }
+}
+
+function normalizeNullableModelValue(
+  value: unknown,
+  toolSchema: JsonValue,
+  runtimeSchema: JsonValue | undefined,
+): unknown | typeof OMIT_NULLISH_MODEL_VALUE {
+  if (value === null) {
+    return schemaAllowsNull(toolSchema)
+      && runtimeSchema !== undefined
+      && !schemaAllowsNull(runtimeSchema)
+      ? OMIT_NULLISH_MODEL_VALUE
+      : value
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => {
+      if (!isRecord(toolSchema) || toolSchema.items === undefined) return item
+      const runtimeItems = isRecord(runtimeSchema) && runtimeSchema.items !== undefined
+        ? toJsonValue(runtimeSchema.items)
+        : undefined
+      const normalized = normalizeNullableModelValue(
+        item,
+        toJsonValue(toolSchema.items),
+        runtimeItems,
+      )
+      return normalized === OMIT_NULLISH_MODEL_VALUE ? item : normalized
+    })
+  }
+  if (!isRecord(value) || !isRecord(toolSchema)) return value
+  const selectedBranches = selectUnionBranchPair({
+    value,
+    toolSchema,
+    runtimeSchema,
+  })
+  if (selectedBranches.tool || selectedBranches.runtime) {
+    return normalizeNullableModelValue(
+      value,
+      selectedBranches.tool ?? toolSchema,
+      selectedBranches.runtime ?? runtimeSchema,
+    )
+  }
+  const properties = readProperties(toolSchema)
+  const runtimeProperties = isRecord(runtimeSchema) ? readProperties(runtimeSchema) : {}
+  const normalized: UnknownRecord = {}
+  for (const [key, child] of Object.entries(value)) {
+    const propertySchema = properties[key]
+    if (propertySchema === undefined) {
+      normalized[key] = child
+      continue
+    }
+    const next = normalizeNullableModelValue(child, propertySchema, runtimeProperties[key])
+    if (next !== OMIT_NULLISH_MODEL_VALUE) normalized[key] = next
+  }
+  return normalized
+}
+
+/**
+ * Strict tool schemas must list every property. Optional runtime fields of
+ * legacy tools are therefore exposed to the model as nullable, but the
+ * canonical Zod runtime schema still models absence as undefined. Preserve
+ * real null values when Zod accepts them; otherwise, and only for a
+ * tool-schema property that explicitly permits null, normalize null to
+ * absence before the same Zod parser validates the request.
+ *
+ * When neither the raw input nor its normalization satisfies the canonical
+ * schema this fails loudly with the same typed OPERATION_INPUT_INVALID error
+ * the invocation authority raises: silently forwarding the raw input would
+ * let half-translated payloads reach planning and surface as unrelated
+ * downstream failures.
+ */
+export function normalizeProjectAgentToolInput(params: {
+  operationId: string
+  input: unknown
+  inputSchema: RuntimeSchema<unknown>
+  toolInputSchema: ProjectAgentToolInputSchema
+}): unknown {
+  const rawParse = params.inputSchema.safeParse(params.input)
+  if (rawParse.success) return params.input
+  const rawRuntimeSchema = asSchema(params.inputSchema).jsonSchema
+  if (isPromiseLike(rawRuntimeSchema)) {
+    throw new Error(`PROJECT_AGENT_TOOL_INPUT_SCHEMA_ASYNC_UNSUPPORTED:${params.operationId}`)
+  }
+  const runtimeSchema = toJsonObject(rawRuntimeSchema, params.operationId)
+  const normalized = normalizeNullableModelValue(params.input, {
+    type: params.toolInputSchema.type,
+    properties: params.toolInputSchema.properties,
+    required: params.toolInputSchema.required,
+    additionalProperties: params.toolInputSchema.additionalProperties,
+  }, runtimeSchema)
+  if (
+    normalized !== OMIT_NULLISH_MODEL_VALUE
+    && params.inputSchema.safeParse(normalized).success
+  ) {
+    return normalized
+  }
+  const issues = Array.isArray(rawParse.error.issues) ? rawParse.error.issues : []
+  throw new ApiError('INVALID_PARAMS', {
+    code: 'OPERATION_INPUT_INVALID',
+    operationId: params.operationId,
+    message: 'PROJECT_AGENT_INVALID_OPERATION_INPUT',
+    issues,
+    corrections: buildProjectAgentToolInputCorrections({
+      input: params.input,
+      toolInputSchema: params.toolInputSchema,
+      issues,
+    }),
+  })
+}
+
+export type ProjectAgentToolInputCorrectionAction =
+  | 'add_required_field'
+  | 'move_unknown_field'
+  | 'remove_unknown_field'
+  | 'fix_invalid_value'
+
+export interface ProjectAgentToolInputCorrection {
+  action: ProjectAgentToolInputCorrectionAction
+  fieldPath: string
+  message: string
+  targetPath?: string
+  allowedKeys?: string[]
+  expectedSchema?: JsonValue
+}
+
+function readIssuePath(issue: UnknownRecord): Array<string | number> {
+  if (!Array.isArray(issue.path)) return []
+  return issue.path.flatMap((part) => (
+    typeof part === 'string' || typeof part === 'number' ? [part] : []
+  ))
+}
+
+function formatInputPath(path: readonly (string | number)[]): string {
+  return path.reduce<string>((result, part) => (
+    typeof part === 'number'
+      ? `${result}[${String(part)}]`
+      : `${result}.${part}`
+  ), '$input')
+}
+
+function readInputAtPath(input: unknown, path: readonly (string | number)[]): unknown {
+  let current = input
+  for (const part of path) {
+    if (typeof part === 'number') {
+      if (!Array.isArray(current)) return undefined
+      current = current[part]
+      continue
+    }
+    if (!isRecord(current)) return undefined
+    current = current[part]
+  }
+  return current
+}
+
+function readSchemaAtPath(params: {
+  schema: JsonValue
+  input: unknown
+  path: readonly (string | number)[]
+}): JsonValue | undefined {
+  let currentSchema = params.schema
+  let currentInput = params.input
+  for (const part of params.path) {
+    if (!isRecord(currentSchema)) return undefined
+    const selectedBranch = selectUnionBranch(currentInput, currentSchema)
+    if (selectedBranch !== null) currentSchema = selectedBranch
+    if (!isRecord(currentSchema)) return undefined
+    if (typeof part === 'number') {
+      if (currentSchema.items === undefined) return undefined
+      currentSchema = toJsonValue(currentSchema.items)
+      currentInput = Array.isArray(currentInput) ? currentInput[part] : undefined
+      continue
+    }
+    const property = readProperties(currentSchema)[part]
+    if (property === undefined) return undefined
+    currentSchema = property
+    currentInput = isRecord(currentInput) ? currentInput[part] : undefined
+  }
+  if (isRecord(currentSchema)) {
+    return selectUnionBranch(currentInput, currentSchema) ?? currentSchema
+  }
+  return currentSchema
+}
+
+function readAllowedKeys(schema: JsonValue | undefined): string[] | undefined {
+  if (!isRecord(schema)) return undefined
+  const keys = Object.keys(readProperties(schema))
+  return keys.length > 0 ? keys : undefined
+}
+
+/**
+ * Converts canonical Zod issues into model-correctable instructions without
+ * creating a second validation contract. Paths and expected shapes are always
+ * projected from the same model-facing schema that accepted the tool call.
+ */
+export function buildProjectAgentToolInputCorrections(params: {
+  input: unknown
+  toolInputSchema: ProjectAgentToolInputSchema
+  issues: unknown
+}): ProjectAgentToolInputCorrection[] {
+  const rootSchema = serializeToolInputSchema(params.toolInputSchema)
+  const rootProperties = readProperties(rootSchema)
+  const corrections: ProjectAgentToolInputCorrection[] = []
+  const moveTargets = new Set<string>()
+  const issues = Array.isArray(params.issues) ? params.issues : []
+
+  for (const rawIssue of issues) {
+    if (!isRecord(rawIssue) || rawIssue.code !== 'unrecognized_keys') continue
+    const parentPath = readIssuePath(rawIssue)
+    const parentSchema = readSchemaAtPath({
+      schema: rootSchema,
+      input: params.input,
+      path: parentPath,
+    })
+    for (const key of readStringArray(rawIssue.keys)) {
+      const fieldPath = formatInputPath([...parentPath, key])
+      const targetPath = `$input.${key}`
+      if (
+        parentPath.length > 0
+        && rootProperties[key] !== undefined
+        && readInputAtPath(params.input, [key]) === undefined
+      ) {
+        moveTargets.add(targetPath)
+        corrections.push({
+          action: 'move_unknown_field',
+          fieldPath,
+          targetPath,
+          message: `Move ${fieldPath} to ${targetPath}; "${key}" is a top-level sibling of ${Object.keys(rootProperties).filter((rootKey) => rootKey !== key).map((rootKey) => `$input.${rootKey}`).join(' and ')}.`,
+          allowedKeys: readAllowedKeys(parentSchema),
+          expectedSchema: rootProperties[key],
+        })
+      } else {
+        corrections.push({
+          action: 'remove_unknown_field',
+          fieldPath,
+          message: `Remove ${fieldPath}; it is not allowed at ${formatInputPath(parentPath)}.`,
+          allowedKeys: readAllowedKeys(parentSchema),
+        })
+      }
+    }
+  }
+
+  for (const rawIssue of issues) {
+    if (!isRecord(rawIssue) || rawIssue.code === 'unrecognized_keys') continue
+    const path = readIssuePath(rawIssue)
+    const fieldPath = formatInputPath(path)
+    const expectedSchema = readSchemaAtPath({
+      schema: rootSchema,
+      input: params.input,
+      path,
+    })
+    const missing = path.length > 0 && readInputAtPath(params.input, path) === undefined
+    if (missing && moveTargets.has(fieldPath)) continue
+    const parentPath = path.slice(0, -1)
+    const parentSchema = readSchemaAtPath({
+      schema: rootSchema,
+      input: params.input,
+      path: parentPath,
+    })
+    const issueMessage = typeof rawIssue.message === 'string'
+      ? rawIssue.message
+      : 'Value does not match the operation input schema.'
+    // 顶层/大分支失败时把整棵 schema 回贴给模型只会淹没有效指令(实测单条可达 8KB)。
+    // 超限时省略 schema 回显,保留精确的字段路径与 issue 文案。
+    const serializedSchemaSize = expectedSchema === undefined
+      ? 0
+      : JSON.stringify(expectedSchema).length
+    const includeSchema = expectedSchema !== undefined
+      && serializedSchemaSize <= MAX_CORRECTION_SCHEMA_CHARS
+    corrections.push({
+      action: missing ? 'add_required_field' : 'fix_invalid_value',
+      fieldPath,
+      message: missing
+        ? `Add required field ${fieldPath} at this exact path.`
+        : `Fix ${fieldPath}: ${issueMessage}`,
+      allowedKeys: readAllowedKeys(parentSchema),
+      ...(includeSchema ? { expectedSchema } : {}),
+    })
+  }
+
+  return corrections
+}
+
 function addNullable(schema: JsonValue): JsonValue {
   if (schemaAllowsNull(schema)) return schema
   if (!isRecord(schema)) {
     return {
       anyOf: [
         { const: schema },
+        { type: 'null' },
+      ],
+    }
+  }
+
+  if (Array.isArray(schema.enum)) {
+    const type = schema.type
+    return {
+      ...schema,
+      ...(typeof type === 'string'
+        ? { type: [type, 'null'] }
+        : Array.isArray(type)
+          ? { type: Array.from(new Set([...type.filter((item): item is string => typeof item === 'string'), 'null'])) }
+          : {}),
+      enum: [...schema.enum, null].map(toJsonValue),
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(schema, 'const')) {
+    return {
+      anyOf: [
+        schema,
         { type: 'null' },
       ],
     }
@@ -112,13 +504,6 @@ function addNullable(schema: JsonValue): JsonValue {
     return {
       ...schema,
       type: Array.from(new Set([...schema.type.filter((item): item is string => typeof item === 'string'), 'null'])),
-    }
-  }
-
-  if (Array.isArray(schema.enum)) {
-    return {
-      ...schema,
-      enum: [...schema.enum, null].map(toJsonValue),
     }
   }
 
@@ -189,8 +574,15 @@ function assertNoForbiddenToolSchemaSurface(params: {
   if (!isRecord(value)) return
 
   const properties = value.properties
-  if (isRecord(properties) && Object.prototype.hasOwnProperty.call(properties, 'confirmed')) {
-    throw new Error(`PROJECT_AGENT_TOOL_INPUT_SCHEMA_CONFIRMED_EXPOSED:${operationId}:${path}`)
+  if (
+    isRecord(properties)
+    && (
+      Object.prototype.hasOwnProperty.call(properties, 'confirmed')
+      || Object.prototype.hasOwnProperty.call(properties, 'confirmedMaxCost')
+      || Object.keys(properties).some(isOperationEnvironmentInputKey)
+    )
+  ) {
+    throw new Error(`PROJECT_AGENT_TOOL_INPUT_SCHEMA_INTERNAL_FIELD_EXPOSED:${operationId}:${path}`)
   }
   if (isRecord(properties)) {
     for (const [propertyKey, propertySchema] of Object.entries(properties)) {

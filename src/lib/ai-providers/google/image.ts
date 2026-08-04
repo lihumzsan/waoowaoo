@@ -1,5 +1,6 @@
 import { GoogleGenAI, HarmBlockThreshold, HarmCategory } from '@google/genai'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
+import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import type { AiProviderImageExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 import {
   assertAllowedGoogleImageOptions,
@@ -8,7 +9,9 @@ import {
   type GoogleContentPart,
 } from '@/lib/ai-providers/shared/google-image-helpers'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
-import { setProxy } from '../../../../lib/prompts/proxy'
+import { withProviderProxyDispatcher } from '@/lib/http/outbound-proxy'
+import { GOOGLE_PROVIDER_PROXY_TARGET } from '@/lib/ai-providers/google/proxy-target'
+import { AppError } from '@/lib/errors/app-error'
 
 type GoogleImageOptions = NonNullable<AiProviderImageExecutionContext['options']>
 
@@ -25,23 +28,22 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
   assertAllowedGoogleImageOptions(options)
 
   const { apiKey } = await getProviderConfig(input.userId, input.selection.provider)
-  await setProxy()
   const ai = new GoogleGenAI({ apiKey })
 
   const modelId = requireSelectedModelId(input.selection, 'google:image')
   const referenceImages = options.referenceImages ?? []
 
   if (modelId === 'gemini-3-pro-image-preview-batch') {
-    const { submitGeminiBatch } = await import('@/lib/ai-providers/google/llm')
-    const result = await submitGeminiBatch(apiKey, input.prompt, {
-      referenceImages,
-      ...(options.aspectRatio ? { aspectRatio: options.aspectRatio } : {}),
-      ...(options.resolution ? { resolution: options.resolution } : {}),
+    const { submitGeminiBatch } = await import('@/lib/ai-providers/google/batch')
+    const result = await withRetry({
+      scope: `google:image:batch:${modelId}`,
+      policy: RETRY_POLICY.providerSubmit,
+      run: async () => await submitGeminiBatch(apiKey, input.prompt, {
+        referenceImages,
+        ...(options.aspectRatio ? { aspectRatio: options.aspectRatio } : {}),
+        ...(options.resolution ? { resolution: options.resolution } : {}),
+      }),
     })
-
-    if (!result.success || !result.batchName) {
-      return { success: false, error: result.error || 'Gemini Batch 提交失败' }
-    }
 
     return {
       success: true,
@@ -52,19 +54,26 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
   }
 
   if (modelId.startsWith('imagen-')) {
-    const response = await ai.models.generateImages({
-      model: modelId,
-      prompt: input.prompt,
-      config: {
-        numberOfImages: 1,
-        ...(options.aspectRatio ? { aspectRatio: options.aspectRatio } : {}),
-      },
+    const response = await withRetry({
+      scope: `google:image:imagen:${modelId}`,
+      policy: RETRY_POLICY.providerSubmit,
+      run: async () => await withProviderProxyDispatcher(
+        GOOGLE_PROVIDER_PROXY_TARGET,
+        async () => await ai.models.generateImages({
+          model: modelId,
+          prompt: input.prompt,
+          config: {
+            numberOfImages: 1,
+            ...(options.aspectRatio ? { aspectRatio: options.aspectRatio } : {}),
+          },
+        }),
+      ),
     })
 
     const generatedImages = (response as ImagenResponse).generatedImages
     const imageBytes = generatedImages?.[0]?.image?.imageBytes
     if (!imageBytes) {
-      throw new Error('Imagen 未返回图片')
+      throw new AppError('EMPTY_RESPONSE', 'Imagen returned no image', { provider: 'google' })
     }
     return {
       success: true,
@@ -88,21 +97,28 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
     { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
   ]
 
-  const response = await ai.models.generateContent({
-    model: modelId,
-    contents: [{ parts: contentParts }],
-    config: {
-      responseModalities: ['TEXT', 'IMAGE'],
-      safetySettings,
-      ...(options.aspectRatio || options.resolution
-        ? {
-          imageConfig: {
-            ...(options.aspectRatio ? { aspectRatio: options.aspectRatio } : {}),
-            ...(imageSize ? { imageSize } : {}),
-          },
-        }
-        : {}),
-    },
+  const response = await withRetry({
+    scope: `google:image:gemini:${modelId}`,
+    policy: RETRY_POLICY.providerSubmit,
+    run: async () => await withProviderProxyDispatcher(
+      GOOGLE_PROVIDER_PROXY_TARGET,
+      async () => await ai.models.generateContent({
+        model: modelId,
+        contents: [{ parts: contentParts }],
+        config: {
+          responseModalities: ['TEXT', 'IMAGE'],
+          safetySettings,
+          ...(options.aspectRatio || options.resolution
+            ? {
+              imageConfig: {
+                ...(options.aspectRatio ? { aspectRatio: options.aspectRatio } : {}),
+                ...(imageSize ? { imageSize } : {}),
+              },
+            }
+            : {}),
+        },
+      }),
+    ),
   })
 
   const candidate = response.candidates?.[0]
@@ -121,10 +137,10 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
 
   const finishReason = candidate?.finishReason
   if (finishReason === 'IMAGE_SAFETY' || finishReason === 'SAFETY') {
-    throw new Error('内容因安全策略被过滤')
+    throw new AppError('SENSITIVE_CONTENT', 'Google blocked image generation by policy', { provider: 'google' })
   }
 
-  throw new Error('Gemini 未返回图片')
+  throw new AppError('EMPTY_RESPONSE', 'Gemini returned no image', { provider: 'google' })
 }
 
 export async function executeGoogleImageGeneration(input: AiProviderImageExecutionContext): Promise<GenerateResult> {

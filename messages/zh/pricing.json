@@ -1,14 +1,20 @@
 {
   "eyebrow": "Pricing",
   "title": "价格与额度",
-  "description": "waoowaoo 官方云端版将按额度消耗提供 AI 文本、图片、视频和音乐生成。当前为内测占位价格，正式上线前可按你的商业策略调整。",
-  "betaNotice": "当前官方内测期间，自助充值暂未开放。用户可通过邀请码或联系管理员获取体验额度。以下价格用于支付审核和正式付费版本说明，不代表当前已开放付款。",
+  "description": "waoowaoo 官方云端版按额度消耗提供 AI 文本、图片、视频和音乐生成。用户注册后可在个人中心使用 Stripe 自助充值。",
+  "betaNotice": "自助充值已开放。当前支持 Stripe 已启用的银行卡、Link、Apple Pay 等支付方式；微信支付和支付宝会在支付机构审核通过后自动出现在结账页。邀请码和管理员人工发放仅作为体验、测试或运营补贴方式。",
+  "checkout": {
+    "title": "立即充值并开始生成",
+    "body": "充值会进入真实 Stripe Checkout。1 credit 按人民币 0.1 元支付；支付成功并收到 Stripe webhook 后，额度会自动入账。",
+    "primaryCta": "前往充值",
+    "secondaryCta": "创建账户"
+  },
   "plans": {
     "starter": {
       "label": "个人入门",
       "name": "Starter",
       "price": "US$9",
-      "status": "预计正式上线套餐",
+      "status": "公开参考套餐",
       "details": {
         "credits": "包含 1,000 credits",
         "usage": "可用于文本、图片、视频和音乐生成",
@@ -19,7 +25,7 @@
       "label": "创作者",
       "name": "Creator",
       "price": "US$29",
-      "status": "预计正式上线套餐",
+      "status": "公开参考套餐",
       "details": {
         "credits": "包含 4,000 credits",
         "usage": "适合连续项目创作和多资产生成",
@@ -30,7 +36,7 @@
       "label": "工作室",
       "name": "Studio",
       "price": "US$99",
-      "status": "预计正式上线套餐",
+      "status": "公开参考套餐",
       "details": {
         "credits": "包含 15,000 credits",
         "usage": "适合团队项目和高频视频生成",
@@ -40,6 +46,29 @@
   },
   "creditPolicy": {
     "title": "额度规则",
-    "body": "credits 是平台内 AI 生成额度，不是现金余额，不能提现、不可转让、不可用于平台外交易。实际扣除会根据任务类型、模型、分辨率、时长等因素确定。正式付款上线后，页面会展示最终价格、币种、税费和 checkout 入口。"
+    "body": "credits 是平台内 AI 生成额度，不是现金余额，不能提现、不可转让、不可用于平台外交易。实际扣除会根据任务类型、模型、分辨率、时长等因素确定。最终支付金额、币种、税费和可用支付方式会在 Stripe Checkout 页面展示。"
+  },
+  "glass": {
+    "featuredBadge": "最受欢迎",
+    "checkoutBusy": "正在跳转…",
+    "rechargePlan": "充值 {credits}",
+    "customRechargeTitle": "自定义充值",
+    "customRechargeDescription": "输入任意额度，直接进入 Stripe 安全结账。",
+    "customCreditLabel": "自定义额度（credits）",
+    "customCreditPlaceholder": "请输入额度",
+    "checkoutNow": "立即充值",
+    "configLoadError": "无法加载充值配置，请登录后重试。",
+    "configLoadErrorWithReason": "无法加载充值配置：{reason}",
+    "rechargeUnavailable": "当前充值未开放或需要登录。",
+    "creditRangeError": "请输入 {min} – {max} 之间的额度。",
+    "checkoutCreateFailed": "创建结账会话失败，请稍后重试。",
+    "checkoutCreateFailedWithReason": "创建结账会话失败：{reason}",
+    "checkoutCreateFailedFallback": "创建结账会话失败。",
+    "estimatePrefix": "预计支付 {amount}",
+    "estimateAmount": "{amount}",
+    "unitValue": "1 credit = ¥0.1",
+    "paymentTitle": "充值与支付",
+    "compareTitle": "套餐对比",
+    "merchantMoreLink": "查看更多商户信息"
   }
 }

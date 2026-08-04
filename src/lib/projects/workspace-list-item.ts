@@ -1,9 +1,8 @@
 export interface WorkspaceProjectStats {
-  episodes: number
+  resources: number
+  folders: number
   images: number
   videos: number
-  panels: number
-  firstEpisodePreview: string | null
 }
 
 export interface WorkspaceProjectListItem {

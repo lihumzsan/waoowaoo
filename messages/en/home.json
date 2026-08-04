@@ -1,8 +1,12 @@
 {
   "title": "From Inspiration to Screen",
   "subtitle": "Describe your story and let AI generate cinematic short dramas",
-  "inputPlaceholder": "Enter your story idea, novel excerpt, or script outline...",
+  "inputPlaceholder": "Describe a story, or paste a script…",
+  "aspectRatio": "Aspect ratio",
+  "aspectRatioCurrent": "Aspect ratio: {ratio}",
   "defaultProjectName": "New Project {timestamp}",
+  "createFailed": "Failed to create project. Please try again.",
+  "projectsLoadFailed": "Failed to load recent projects. Please retry.",
   "startCreation": "Start Creating",
   "recentProjects": "Recent Projects",
   "viewAll": "View All Projects",

@@ -1,4 +1,5 @@
 import type { ProjectCanvasLayout, ProjectCanvasNodeLayout } from '@prisma/client'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type {
   CanvasNodeLayoutInput,
@@ -7,15 +8,16 @@ import type {
   UpsertCanvasLayoutInput,
 } from '@/lib/project-canvas/layout/canvas-layout-contract'
 import { CANVAS_LAYOUT_SCHEMA_VERSION } from '@/lib/project-canvas/layout/canvas-layout-contract'
+import { WORKSPACE_RESOURCE_ROOT_FOLDER_KEY } from '@/lib/workspace-resource/contracts'
 
 type ProjectCanvasLayoutWithNodes = ProjectCanvasLayout & {
   nodeLayouts: ProjectCanvasNodeLayout[]
 }
 
-export class CanvasLayoutEpisodeMismatchError extends Error {
+export class CanvasLayoutFolderMismatchError extends Error {
   constructor() {
-    super('canvas layout episode does not belong to project')
-    this.name = 'CanvasLayoutEpisodeMismatchError'
+    super('canvas layout folder does not belong to project')
+    this.name = 'CanvasLayoutFolderMismatchError'
   }
 }
 
@@ -38,7 +40,7 @@ function mapNodeLayout(row: ProjectCanvasNodeLayout): CanvasNodeLayoutSnapshot {
 function mapLayout(row: ProjectCanvasLayoutWithNodes): ProjectCanvasLayoutSnapshot {
   return {
     projectId: row.projectId,
-    episodeId: row.episodeId,
+    folderKey: row.folderKey,
     schemaVersion: row.schemaVersion,
     viewport: {
       x: row.viewportX,
@@ -57,29 +59,34 @@ function dedupeNodeLayouts(nodeLayouts: readonly CanvasNodeLayoutInput[]): Canva
   return [...byNodeKey.values()]
 }
 
-async function assertEpisodeBelongsToProject(params: {
+async function assertFolderBelongsToProject(params: {
   readonly projectId: string
-  readonly episodeId: string
-}) {
-  const episode = await prisma.projectEpisode.findFirst({
+  readonly folderKey: string
+}, client: Pick<Prisma.TransactionClient, 'workspaceResource'> = prisma) {
+  if (params.folderKey === WORKSPACE_RESOURCE_ROOT_FOLDER_KEY) return
+  const folder = await client.workspaceResource.findFirst({
     where: {
-      id: params.episodeId,
+      id: params.folderKey,
       projectId: params.projectId,
+      resourceKind: 'folder',
+      deletedAt: null,
+      activePath: { not: null },
     },
     select: { id: true },
   })
 
-  if (!episode) {
-    throw new CanvasLayoutEpisodeMismatchError()
+  if (!folder) {
+    throw new CanvasLayoutFolderMismatchError()
   }
 }
 
 export async function getProjectCanvasLayout(params: {
   readonly projectId: string
-  readonly episodeId: string
+  readonly folderKey: string
 }): Promise<ProjectCanvasLayoutSnapshot | null> {
+  await assertFolderBelongsToProject(params)
   const row = await prisma.projectCanvasLayout.findUnique({
-    where: { projectId_episodeId: params },
+    where: { projectId_folderKey: params },
     include: {
       nodeLayouts: {
         orderBy: [
@@ -97,21 +104,23 @@ export async function upsertProjectCanvasLayout(params: {
   readonly projectId: string
   readonly input: UpsertCanvasLayoutInput
 }): Promise<ProjectCanvasLayoutSnapshot> {
-  await assertEpisodeBelongsToProject({
-    projectId: params.projectId,
-    episodeId: params.input.episodeId,
-  })
-
   const nodeLayouts = dedupeNodeLayouts(params.input.nodeLayouts)
 
   const row = await prisma.$transaction(async (tx) => {
+    await assertFolderBelongsToProject({
+      projectId: params.projectId,
+      folderKey: params.input.folderKey,
+    }, tx)
     const layout = await tx.projectCanvasLayout.upsert({
       where: {
-        episodeId: params.input.episodeId,
+        projectId_folderKey: {
+          projectId: params.projectId,
+          folderKey: params.input.folderKey,
+        },
       },
       create: {
         projectId: params.projectId,
-        episodeId: params.input.episodeId,
+        folderKey: params.input.folderKey,
         schemaVersion: CANVAS_LAYOUT_SCHEMA_VERSION,
         viewportX: params.input.viewport.x,
         viewportY: params.input.viewport.y,
@@ -166,14 +175,14 @@ export async function upsertProjectCanvasLayout(params: {
 
 export async function resetProjectCanvasLayout(params: {
   readonly projectId: string
-  readonly episodeId: string
+  readonly folderKey: string
 }): Promise<void> {
-  await assertEpisodeBelongsToProject(params)
+  await assertFolderBelongsToProject(params)
 
   await prisma.projectCanvasLayout.deleteMany({
     where: {
       projectId: params.projectId,
-      episodeId: params.episodeId,
+      folderKey: params.folderKey,
     },
   })
 }

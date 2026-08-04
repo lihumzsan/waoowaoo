@@ -1,207 +1,165 @@
-import type { WorkspaceCanvasNodeKind } from './node-canvas-types'
+import {
+  getAssetImageFormatPolicy,
+  resolveAssetImageKindForSchemaId,
+} from '@/lib/asset-generation'
+import type {
+  WorkspaceResourceJsonValue,
+  WorkspaceResourceMediaType,
+} from '@/lib/workspace-resource/contracts'
+import type {
+  WorkspaceCanvasMediaShell,
+  WorkspaceCanvasMediaShellForm,
+  WorkspaceCanvasNodeKind,
+} from './node-canvas-types'
 
 export interface WorkspaceCanvasNodeSize {
   readonly width: number
   readonly height: number
 }
 
-export type WorkspaceCanvasNodeExpandedLayout = 'stack' | 'wide'
+interface WorkspaceCanvasMediaPresentation {
+  readonly form: WorkspaceCanvasMediaShellForm
+  /** Bounding box the media area must fit; `frame` fits the aspect ratio inside it. */
+  readonly maxMediaWidth: number
+  readonly maxMediaHeight: number
+}
 
 export interface WorkspaceCanvasNodePresentationProfile {
-  readonly collapsed: WorkspaceCanvasNodeSize
-  readonly expanded?: WorkspaceCanvasNodeSize
-  readonly expandedLayout: WorkspaceCanvasNodeExpandedLayout
-  readonly defaultExpanded: boolean
+  readonly media: Record<WorkspaceResourceMediaType, WorkspaceCanvasMediaPresentation>
 }
 
-export const WORKSPACE_CANVAS_DEFAULT_NODE_SIZE: WorkspaceCanvasNodeSize = {
-  width: 320,
-  height: 214,
-}
+/** Card chrome around the media area: horizontal padding (14px × 2) + border. */
+const NODE_CHROME_WIDTH = 30
+/**
+ * Header block + content vertical padding + border for the compact card
+ * chrome: 10 (header top) + 24 (fixed header row) + 6 (header bottom)
+ * + 2 (content top) + 14 (content bottom) + 2 (borders).
+ */
+const NODE_CHROME_HEIGHT = 58
 
-export const WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE: WorkspaceCanvasNodeSize = {
-  width: 420,
-  height: 560,
-}
-
-export const WORKSPACE_CANVAS_SPACE_CONSISTENCY_NODE_SIZE: WorkspaceCanvasNodeSize = {
-  width: 460,
-  height: 620,
-}
-
-export const WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE: WorkspaceCanvasNodeSize = {
-  width: 420,
-  height: 320,
-}
-
-export const WORKSPACE_CANVAS_BGM_SCORE_TO_FINAL_GAP_X = 88
-
-export const WORKSPACE_CANVAS_FINAL_NODE_SIZE: WorkspaceCanvasNodeSize = {
-  width: 340,
-  height: 280,
-}
-
-export const WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE: WorkspaceCanvasNodeSize = {
-  width: 420,
-  height: 380,
-}
-
-export const WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE: WorkspaceCanvasNodeSize = {
-  width: 420,
-  height: 420,
-}
-
-export const WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE: WorkspaceCanvasNodeSize = {
-  width: 420,
-  height: 360,
-}
-
-export const WORKSPACE_CANVAS_EDIT_SCRIPT_TABLE_NODE_WIDTH = 1480
-export const WORKSPACE_CANVAS_EDIT_SCRIPT_TO_ASSET_GAP_Y = 80
-export const WORKSPACE_CANVAS_EDIT_ASSET_GRID_COLUMNS = 4
-export const WORKSPACE_CANVAS_EDIT_ASSET_GRID_GAP_Y = 120
-export const WORKSPACE_CANVAS_EDIT_ASSET_NODE_SIZE: WorkspaceCanvasNodeSize = {
-  width: 420,
-  height: 520,
-}
+/**
+ * Project video ratios are `W:H` strings validated by the project settings
+ * policy; an unset or malformed value falls back to the same 16:9 default as
+ * `getAspectRatioConfig`.
+ */
+const DEFAULT_FRAME_ASPECT = { width: 16, height: 9 } as const
 
 const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
-  analysis: {
-    collapsed: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
-    expandedLayout: 'stack',
-    defaultExpanded: false,
-  },
-  scriptClip: {
-    collapsed: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
-    expandedLayout: 'stack',
-    defaultExpanded: false,
-  },
-  shot: {
-    collapsed: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
-    expandedLayout: 'stack',
-    defaultExpanded: false,
-  },
-  imageAsset: {
-    collapsed: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
-    expandedLayout: 'stack',
-    defaultExpanded: false,
-  },
-  videoClip: {
-    collapsed: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
-    expandedLayout: 'stack',
-    defaultExpanded: false,
-  },
-  finalTimeline: {
-    collapsed: WORKSPACE_CANVAS_FINAL_NODE_SIZE,
-    expandedLayout: 'stack',
-    defaultExpanded: false,
-  },
-  editScreenplay: {
-    collapsed: WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE,
-    expandedLayout: 'stack',
-    defaultExpanded: false,
-  },
-  editStylePreview: {
-    collapsed: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE,
-    expanded: {
-      width: 620,
-      height: 760,
+  resourceCard: {
+    media: {
+      image: { form: 'frame', maxMediaWidth: 360, maxMediaHeight: 460 },
+      video: { form: 'frame', maxMediaWidth: 360, maxMediaHeight: 460 },
+      audio: { form: 'bar', maxMediaWidth: 360, maxMediaHeight: 64 },
+      text: { form: 'card', maxMediaWidth: 360, maxMediaHeight: 220 },
     },
-    expandedLayout: 'stack',
-    defaultExpanded: false,
   },
-  editStyleBible: {
-    collapsed: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE,
-    expanded: {
-      width: 620,
-      height: 720,
-    },
-    expandedLayout: 'stack',
-    defaultExpanded: false,
-  },
-  editDirectorDecoupage: {
-    collapsed: WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE,
-    expanded: {
-      width: 620,
-      height: 720,
-    },
-    expandedLayout: 'stack',
-    defaultExpanded: false,
-  },
-  editPipelineStep: {
-    collapsed: WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE,
-    expandedLayout: 'stack',
-    defaultExpanded: false,
-  },
-  editScript: {
-    collapsed: {
-      width: WORKSPACE_CANVAS_EDIT_SCRIPT_TABLE_NODE_WIDTH,
-      height: 420,
-    },
-    expandedLayout: 'stack',
-    defaultExpanded: false,
-  },
-  editCinematographyShotPlan: {
-    collapsed: WORKSPACE_CANVAS_SPACE_CONSISTENCY_NODE_SIZE,
-    expanded: {
-      width: 760,
-      height: 820,
-    },
-    expandedLayout: 'wide',
-    defaultExpanded: false,
-  },
-  spaceConsistency: {
-    collapsed: WORKSPACE_CANVAS_SPACE_CONSISTENCY_NODE_SIZE,
-    expanded: {
-      width: 760,
-      height: 820,
-    },
-    expandedLayout: 'wide',
-    defaultExpanded: false,
-  },
-  videoPlan: {
-    collapsed: WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE,
-    expandedLayout: 'stack',
-    defaultExpanded: false,
-  },
-  bgmScore: {
-    collapsed: WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE,
-    expanded: {
-      width: 960,
-      height: 680,
-    },
-    expandedLayout: 'wide',
-    defaultExpanded: false,
-  },
-  editRequiredAsset: {
-    collapsed: WORKSPACE_CANVAS_EDIT_ASSET_NODE_SIZE,
-    expandedLayout: 'stack',
-    defaultExpanded: false,
-  },
-} satisfies Record<WorkspaceCanvasNodeKind, WorkspaceCanvasNodePresentationProfile>
+} as const satisfies Record<Extract<WorkspaceCanvasNodeKind, 'resourceCard'>, WorkspaceCanvasNodePresentationProfile>
 
 export function getWorkspaceCanvasNodePresentationProfile(
-  kind: WorkspaceCanvasNodeKind,
+  kind: Extract<WorkspaceCanvasNodeKind, 'resourceCard'>,
 ): WorkspaceCanvasNodePresentationProfile {
   return WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES[kind]
 }
 
-export function resolveWorkspaceCanvasNodeSize(input: {
-  readonly kind: WorkspaceCanvasNodeKind
-  readonly expanded: boolean
-  readonly collapsedSize: WorkspaceCanvasNodeSize
-}): WorkspaceCanvasNodeSize {
-  const profile = getWorkspaceCanvasNodePresentationProfile(input.kind)
-  if (input.expanded && profile.expanded) return profile.expanded
-  return input.collapsedSize
+function parseFrameAspect(value: string | null | undefined): {
+  readonly width: number
+  readonly height: number
+} | null {
+  const match = value?.trim().match(/^(\d+):(\d+)$/)
+  if (!match) return null
+  const width = Number(match[1])
+  const height = Number(match[2])
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return null
+  }
+  return { width, height }
 }
 
-export function resolveWorkspaceCanvasMeasuredNodeHeight(input: {
-  readonly kind: WorkspaceCanvasNodeKind
-  readonly measuredHeight: number
-}): number {
-  const measuredHeight = Math.ceil(input.measuredHeight)
-  if (input.kind === 'videoPlan') return measuredHeight
-  const profile = getWorkspaceCanvasNodePresentationProfile(input.kind)
-  return Math.max(profile.collapsed.height, measuredHeight)
+function frozenAspectRatio(generationOptions: WorkspaceResourceJsonValue | null | undefined): string | null {
+  if (!generationOptions || typeof generationOptions !== 'object' || Array.isArray(generationOptions)) {
+    return null
+  }
+  const value = generationOptions.aspectRatio
+  return typeof value === 'string' && parseFrameAspect(value) ? value : null
+}
+
+function resolvedFrameAspect(input: {
+  readonly schemaId: string
+  readonly generationOptions?: WorkspaceResourceJsonValue | null
+  readonly mediaWidth?: number | null
+  readonly mediaHeight?: number | null
+  readonly projectAspectRatio: string | null | undefined
+}): { readonly width: number; readonly height: number } {
+  const frozen = parseFrameAspect(frozenAspectRatio(input.generationOptions))
+  if (frozen) return frozen
+  if (
+    typeof input.mediaWidth === 'number'
+    && Number.isFinite(input.mediaWidth)
+    && input.mediaWidth > 0
+    && typeof input.mediaHeight === 'number'
+    && Number.isFinite(input.mediaHeight)
+    && input.mediaHeight > 0
+  ) {
+    return { width: input.mediaWidth, height: input.mediaHeight }
+  }
+  const assetKind = resolveAssetImageKindForSchemaId(input.schemaId)
+  const assetAspect = assetKind
+    ? parseFrameAspect(getAssetImageFormatPolicy(assetKind).aspectRatio)
+    : null
+  return assetAspect
+    ?? parseFrameAspect(input.projectAspectRatio)
+    ?? DEFAULT_FRAME_ASPECT
+}
+
+/**
+ * Resolves the media area for a node. Pending and ready states share this
+ * exact shell, so a card never jumps in size when generation completes.
+ */
+export function resolveWorkspaceCanvasMediaShell(input: {
+  readonly kind: Extract<WorkspaceCanvasNodeKind, 'resourceCard'>
+  readonly mediaType: WorkspaceResourceMediaType
+  readonly schemaId: string
+  readonly generationOptions?: WorkspaceResourceJsonValue | null
+  readonly mediaWidth?: number | null
+  readonly mediaHeight?: number | null
+  readonly projectAspectRatio: string | null | undefined
+}): WorkspaceCanvasMediaShell {
+  const presentation = getWorkspaceCanvasNodePresentationProfile(input.kind).media[input.mediaType]
+  if (presentation.form !== 'frame') {
+    return {
+      form: presentation.form,
+      width: presentation.maxMediaWidth,
+      height: presentation.maxMediaHeight,
+      fit: 'contain',
+    }
+  }
+  const aspect = resolvedFrameAspect(input)
+  const scale = Math.min(
+    presentation.maxMediaWidth / aspect.width,
+    presentation.maxMediaHeight / aspect.height,
+  )
+  return {
+    form: 'frame',
+    width: Math.round(aspect.width * scale),
+    height: Math.round(aspect.height * scale),
+    fit: input.mediaType === 'video' || resolveAssetImageKindForSchemaId(input.schemaId)
+      ? 'contain'
+      : 'cover',
+  }
+}
+
+export function resolveWorkspaceCanvasNodeSize(input: {
+  readonly kind: Extract<WorkspaceCanvasNodeKind, 'resourceCard'>
+  readonly mediaType: WorkspaceResourceMediaType
+  readonly schemaId: string
+  readonly generationOptions?: WorkspaceResourceJsonValue | null
+  readonly mediaWidth?: number | null
+  readonly mediaHeight?: number | null
+  readonly projectAspectRatio: string | null | undefined
+}): WorkspaceCanvasNodeSize {
+  const shell = resolveWorkspaceCanvasMediaShell(input)
+  return {
+    width: shell.width + NODE_CHROME_WIDTH,
+    height: shell.height + NODE_CHROME_HEIGHT,
+  }
 }

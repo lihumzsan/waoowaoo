@@ -1,13 +1,9 @@
 /**
  * 测试 /api/storage/sign 端点
- * 运行: npx tsx scripts/test-sign-api.ts
+ * 运行: npx tsx --env-file=.env scripts/test-sign-api.ts
  */
-import { config } from 'dotenv'
-config()
-
 import { uploadObject, getSignedObjectUrl } from '../src/lib/storage'
 import { randomUUID } from 'crypto'
-import http from 'http'
 
 async function testSignApi() {
   console.log('🧪 测试 /api/storage/sign API...\n')
@@ -15,7 +11,7 @@ async function testSignApi() {
   // 1. 上传测试文件
   console.log('1️⃣ 上传测试文件:')
   const testKey = `images/test-${randomUUID()}.txt`
-  const testContent = 'Hello from MinIO test!'
+  const testContent = 'Hello from S3-compatible storage verification!'
   
   await uploadObject(Buffer.from(testContent), testKey)
   console.log(`  ✅ 上传成功: ${testKey}`)
@@ -70,21 +66,8 @@ async function testSignApi() {
     console.log(`  ❌ 请求失败（可能服务器未启动）:`, error)
   }
 
-  // 6. 测试 /api/cos/image 端点（旧版兼容）
-  console.log('\n6️⃣ 测试 /api/cos/image 端点（旧版兼容）:')
-  const cosApiUrl = `http://localhost:3000/api/cos/image?key=${encodeURIComponent(testKey)}&expires=300`
-  console.log(`  URL: ${cosApiUrl}`)
-  
-  try {
-    const response = await fetch(cosApiUrl, { redirect: 'manual' })
-    console.log(`  状态: ${response.status}`)
-    console.log(`  Location: ${response.headers.get('location')}`)
-  } catch (error) {
-    console.log(`  ❌ 请求失败（可能服务器未启动）:`, error)
-  }
-
   // 清理
-  console.log('\n7️⃣ 清理测试文件:')
+  console.log('\n6️⃣ 清理测试文件:')
   const { deleteObject } = await import('../src/lib/storage')
   await deleteObject(testKey)
   console.log(`  ✅ 清理完成`)

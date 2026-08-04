@@ -9,10 +9,14 @@
 
 import { prisma } from '@/lib/prisma'
 import { decryptApiKey } from '@/lib/crypto-utils'
+import { isApiConfigCatalogProviderId } from '@/lib/ai-registry/api-config-catalog'
 import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
-import { getDeploymentConfig } from '@/lib/deployment/config'
+import { getDeploymentConfig, isPlatformProviderCredentialMode } from '@/lib/deployment/config'
+import PLATFORM_PROVIDER_ENV from '@/lib/deployment/platform-provider-env.json'
 import { getPlatformModels } from '@/lib/platform-models/catalog'
 import type { UnifiedModelType } from '@/lib/ai-registry/types'
+import { isUnifiedModelType } from '@/lib/user-api/api-config-shared'
+import { AppError } from '@/lib/errors/app-error'
 import {
   findRuntimeModelByKey,
   normalizeProviderRuntimeBaseUrl,
@@ -47,8 +51,6 @@ type PlatformProviderEnv = {
   baseUrl?: string
 }
 
-const SUPPORTED_PROVIDER_IDS = new Set(['ark', 'codex', 'openrouter', 'fal', 'google'])
-
 function isPlainObject(value: unknown): value is object {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
@@ -69,48 +71,24 @@ function getProviderFamily(providerId: string): string {
 
 function resolvePlatformProviderEnv(providerId: string): PlatformProviderEnv {
   const providerFamily = getProviderFamily(providerId)
-  const envPrefix = (() => {
-    switch (providerFamily) {
-      case 'google':
-        return 'PLATFORM_GOOGLE'
-      case 'fal':
-        return 'PLATFORM_FAL'
-      case 'ark':
-        return 'PLATFORM_ARK'
-      case 'codex':
-        return 'PLATFORM_CODEX'
-      case 'openrouter':
-        return 'PLATFORM_OPENROUTER'
-      default:
-        throw new Error(`PLATFORM_PROVIDER_UNSUPPORTED: ${providerId}`)
-    }
-  })()
-
-  const apiKey = readEnvString(`${envPrefix}_API_KEY`)
-  const baseUrl = readEnvString(`${envPrefix}_BASE_URL`)
-  if (providerFamily === 'codex') {
-    return {
-      apiKey,
-      ...(baseUrl ? { baseUrl } : {}),
-    }
+  const entry = (PLATFORM_PROVIDER_ENV as Record<string, { envPrefix: string; requiresBaseUrl?: boolean }>)[providerFamily]
+  if (!entry) {
+    throw new Error(`PLATFORM_PROVIDER_UNSUPPORTED: ${providerId}`)
   }
+
+  const apiKey = readEnvString(`${entry.envPrefix}_API_KEY`)
   if (!apiKey) {
     throw new Error(`PLATFORM_PROVIDER_API_KEY_MISSING: ${providerId}`)
   }
 
+  const baseUrl = readEnvString(`${entry.envPrefix}_BASE_URL`)
+  if (entry.requiresBaseUrl && !baseUrl) {
+    throw new Error(`PLATFORM_PROVIDER_BASE_URL_MISSING: ${providerId}`)
+  }
   return {
     apiKey,
     ...(baseUrl ? { baseUrl } : {}),
   }
-}
-
-function isUnifiedModelType(value: unknown): value is UnifiedModelType {
-  return (
-    value === 'llm'
-    || value === 'image'
-    || value === 'video'
-    || value === 'music'
-  )
 }
 
 function assertModelKey(value: string, field: string): { provider: string; modelId: string; modelKey: string } {
@@ -147,7 +125,7 @@ function parseCustomProviders(rawProviders: string | null | undefined): CustomPr
     if (!id || !name) {
       throw new Error(`PROVIDER_PAYLOAD_INVALID: customProviders[${index}] id/name required`)
     }
-    if (!SUPPORTED_PROVIDER_IDS.has(id)) {
+    if (!isApiConfigCatalogProviderId(id)) {
       throw new Error(`PROVIDER_UNSUPPORTED: ${id}`)
     }
 
@@ -174,13 +152,13 @@ function normalizeStoredModel(raw: unknown, index: number): CustomModel {
 
   const modelId = parsed.modelId
   const provider = parsed.provider
-  if (!SUPPORTED_PROVIDER_IDS.has(provider)) {
+  if (!isApiConfigCatalogProviderId(provider)) {
     throw new Error(`MODEL_PROVIDER_UNSUPPORTED: customModels[${index}].provider`)
   }
 
   const typeRaw = Reflect.get(raw, 'type')
   if (!isUnifiedModelType(typeRaw)) {
-    throw new Error(`MODEL_PAYLOAD_INVALID: customModels[${index}].type must be one of llm/image/video/music`)
+    throw new Error(`MODEL_PAYLOAD_INVALID: customModels[${index}].type must be one of llm/image/video/music/voice`)
   }
 
   return {
@@ -219,7 +197,9 @@ function pickProviderStrict(providers: CustomProvider[], providerId: string): Cu
   const matched = providers.find((provider) => provider.id === providerId)
   if (matched) return matched
 
-  throw new Error(`PROVIDER_NOT_FOUND: ${providerId} is not configured`)
+  throw new AppError('PROVIDER_AUTH_INVALID', `Provider is not configured: ${providerId}`, {
+    provider: providerId,
+  })
 }
 
 async function readUserConfig(userId: string): Promise<{ models: CustomModel[]; providers: CustomProvider[] }> {
@@ -237,9 +217,13 @@ async function readUserConfig(userId: string): Promise<{ models: CustomModel[]; 
   }
 }
 
-async function getRuntimeModels(userId: string): Promise<CustomModel[]> {
+async function getRuntimeModels(userId: string, mediaType?: ModelMediaType): Promise<CustomModel[]> {
   const deployment = getDeploymentConfig()
-  if (deployment.providerCredentialMode === 'platform-key') {
+  // PG-16:voice 是平台固定模态,模型 identity 在任何凭证模式下都由平台目录唯一声明
+  // (用户配置面不存在 voice 类型)。provider 凭证仍按部署模式解析:
+  // user-key 部署用用户自己的 FAL provider key,缺失时报 PROVIDER_NOT_FOUND/API_KEY_MISSING,
+  // 而不是误导性的 MODEL_NOT_FOUND。
+  if (mediaType === 'voice' || isPlatformProviderCredentialMode(deployment)) {
     return getPlatformModels()
   }
 
@@ -259,12 +243,12 @@ export async function resolveModelSelection(
   model: string,
   mediaType: ModelMediaType,
 ): Promise<ModelSelection> {
-  const models = await getRuntimeModels(userId)
+  const models = await getRuntimeModels(userId, mediaType)
   return resolveRuntimeModelSelection(models, model, mediaType)
 }
 
 async function resolveSingleModelSelection(userId: string, mediaType: ModelMediaType): Promise<ModelSelection> {
-  const models = await getRuntimeModels(userId)
+  const models = await getRuntimeModels(userId, mediaType)
   return resolveSingleRuntimeModelSelection(models, mediaType)
 }
 
@@ -301,7 +285,7 @@ export interface ProviderConfig {
 
 export async function getProviderConfig(userId: string, providerId: string): Promise<ProviderConfig> {
   const deployment = getDeploymentConfig()
-  if (deployment.providerCredentialMode === 'platform-key') {
+  if (isPlatformProviderCredentialMode(deployment)) {
     const platform = resolvePlatformProviderEnv(providerId)
     return {
       id: providerId,
@@ -314,14 +298,16 @@ export async function getProviderConfig(userId: string, providerId: string): Pro
   const { providers } = await readUserConfig(userId)
   const provider = pickProviderStrict(providers, providerId)
 
-  if (!provider.apiKey && getProviderFamily(provider.id) !== 'codex') {
-    throw new Error(`PROVIDER_API_KEY_MISSING: ${provider.id}`)
+  if (!provider.apiKey) {
+    throw new AppError('PROVIDER_AUTH_INVALID', 'Provider API key is missing', {
+      provider: provider.id,
+    })
   }
 
   return {
     id: provider.id,
     name: provider.name,
-    apiKey: provider.apiKey ? decryptApiKey(provider.apiKey) : '',
+    apiKey: decryptApiKey(provider.apiKey),
     baseUrl: normalizeProviderRuntimeBaseUrl(provider.id, provider.baseUrl),
   }
 }
@@ -356,7 +342,7 @@ export async function getModelPrice(userId: string, model: string): Promise<numb
 }
 
 export async function hasApiConfig(userId: string): Promise<boolean> {
-  if (getDeploymentConfig().providerCredentialMode === 'platform-key') return true
+  if (isPlatformProviderCredentialMode()) return true
 
   const pref = await prisma.userPreference.findUnique({
     where: { userId },

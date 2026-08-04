@@ -4,17 +4,16 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { queryKeys } from '../keys'
 import { apiFetch } from '@/lib/api-fetch'
+import { readClientApiError } from '@/lib/errors/client'
 
 export type TaskItem = {
   id: string
   type: string
   targetType: string
   targetId: string
-  episodeId?: string | null
   status: string
   progress?: number | null
   errorCode?: string | null
-  errorMessage?: string | null
   error?: {
     code: string
     message: string
@@ -89,7 +88,7 @@ export function useTaskList(params: {
         limit: params.limit,
       })
       const res = await apiFetch(`/api/tasks?${search}`)
-      if (!res.ok) throw new Error('Failed to fetch tasks')
+      if (!res.ok) throw await readClientApiError(res)
       const data = await res.json()
       return (data.tasks || []) as TaskItem[]
     },
@@ -122,7 +121,7 @@ export function useActiveTasks(params: {
         statuses: ACTIVE_STATUS,
       })
       const res = await apiFetch(`/api/tasks?${search}`)
-      if (!res.ok) throw new Error('Failed to fetch active tasks')
+      if (!res.ok) throw await readClientApiError(res)
       const data = await res.json()
       return (data.tasks || []) as TaskItem[]
     },
@@ -153,7 +152,7 @@ export function useTaskSnapshot(params: {
         limit: 1,
       })
       const res = await apiFetch(`/api/tasks?${search}`)
-      if (!res.ok) throw new Error('Failed to fetch task snapshot')
+      if (!res.ok) throw await readClientApiError(res)
       const data = await res.json()
       const tasks = (data.tasks || []) as TaskItem[]
       return tasks[0] || null
@@ -186,7 +185,7 @@ export function useTaskStatus(params: {
   const data = useMemo(() => {
     const tasks = query.data || []
     const latest = snapshotQuery.data || tasks[0] || null
-    const lastFailed = latest?.status === 'failed' || latest?.status === 'canceled'
+    const lastFailed = latest?.status === 'failed'
       ? (latest.error || null)
       : null
     return {
@@ -195,7 +194,6 @@ export function useTaskStatus(params: {
       latest,
       lastFailed,
       lastTerminal: lastFailed,
-      // Backward compatibility: keep lastError but only represent FAILED.
       lastError: lastFailed,
     }
   }, [query.data, snapshotQuery.data])

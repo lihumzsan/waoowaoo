@@ -1,39 +1,38 @@
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { ApiError } from '@/lib/api-errors'
-import { listEventsAfter, getProjectChannel } from '@/lib/task/publisher'
-import { listMutationBatchReplayEvents } from '@/lib/mutation-batch/service'
-import { TASK_EVENT_TYPE, TASK_SSE_EVENT_TYPE, TASK_STATUS, type TaskSSEEvent } from '@/lib/task/types'
+import {
+  getProjectChannel,
+  listEventsAfter,
+  listRecentTerminalLifecycleEvents,
+} from '@/lib/task/publisher'
+import {
+  TASK_EVENT_TYPE,
+  TASK_STATUS,
+} from '@/lib/task/types'
+import {
+  TASK_SSE_EVENT_TYPE,
+  type TaskSSEEvent,
+} from '@/lib/sse/events'
 import { coerceTaskIntent } from '@/lib/task/intent'
+import { withTaskCoveredTargetsPayload } from '@/lib/task/covered-targets'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
-
-function parseReplayCursorId(value: string | null | undefined): number {
-  if (!value) return 0
-  const trimmed = value.trim()
-  if (!trimmed || !/^\d+$/.test(trimmed)) return 0
-  const parsed = Number.parseInt(trimmed, 10)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
-}
-
-function parseMutationReplayCursor(value: string | null | undefined): Date | null {
-  if (!value) return null
-  const trimmed = value.trim()
-  const match = /^mb:(\d+):/.exec(trimmed)
-  if (!match) return null
-  const timestamp = Number.parseInt(match[1], 10)
-  if (!Number.isFinite(timestamp) || timestamp <= 0) return null
-  return new Date(timestamp)
-}
-
+import { parseWorkspaceSseCursor } from '@/lib/sse/protocol'
 function asObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   return value as Record<string, unknown>
 }
 
+function uniqueTaskEvents(events: TaskSSEEvent[]): TaskSSEEvent[] {
+  const eventsById = new Map<string, TaskSSEEvent>()
+  for (const event of events) {
+    eventsById.set(event.id, event)
+  }
+  return Array.from(eventsById.values())
+}
+
 async function listActiveLifecycleSnapshot(params: {
   projectId: string
-  episodeId: string | null
   userId: string
   limit?: number
 }): Promise<TaskSSEEvent[]> {
@@ -45,7 +44,6 @@ async function listActiveLifecycleSnapshot(params: {
       status: {
         in: [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING],
       },
-      ...(params.episodeId ? { episodeId: params.episodeId } : {}),
     },
     orderBy: { updatedAt: 'desc' },
     take: limit,
@@ -54,7 +52,6 @@ async function listActiveLifecycleSnapshot(params: {
       type: true,
       targetType: true,
       targetId: true,
-      episodeId: true,
       userId: true,
       status: true,
       progress: true,
@@ -69,12 +66,18 @@ async function listActiveLifecycleSnapshot(params: {
     const lifecycleType = row.status === TASK_STATUS.QUEUED
       ? TASK_EVENT_TYPE.CREATED
       : TASK_EVENT_TYPE.PROCESSING
-    const eventPayload: Record<string, unknown> = {
-      ...(payload || {}),
-      lifecycleType,
-      intent: coerceTaskIntent(payloadUi?.intent ?? payload?.intent, row.type),
-      progress: typeof row.progress === 'number' ? row.progress : null,
-    }
+    const eventPayload = withTaskCoveredTargetsPayload({
+      taskType: row.type,
+      targetType: row.targetType,
+      targetId: row.targetId,
+      payload: {
+        ...(payload || {}),
+        lifecycleType,
+        intent: coerceTaskIntent(payloadUi?.intent ?? payload?.intent, row.type),
+        progress: typeof row.progress === 'number' ? row.progress : null,
+      },
+      coveragePayload: payload,
+    })
 
     return {
       id: `snapshot:${row.id}:${row.updatedAt.getTime()}`,
@@ -86,10 +89,34 @@ async function listActiveLifecycleSnapshot(params: {
       taskType: row.type,
       targetType: row.targetType,
       targetId: row.targetId,
-      episodeId: row.episodeId,
       payload: eventPayload,
     }
   })
+}
+
+async function listRecoverableTaskSnapshot(params: {
+  projectId: string
+  userId: string
+  activeLimit?: number
+  terminalLimit?: number
+}): Promise<TaskSSEEvent[]> {
+  const [terminalEvents, activeEvents] = await Promise.all([
+    listRecentTerminalLifecycleEvents({
+      projectId: params.projectId,
+      userId: params.userId,
+      limit: params.terminalLimit ?? 200,
+    }),
+    listActiveLifecycleSnapshot({
+      projectId: params.projectId,
+      userId: params.userId,
+      limit: params.activeLimit ?? 500,
+    }),
+  ])
+
+  return uniqueTaskEvents([
+    ...terminalEvents,
+    ...activeEvents,
+  ]).sort((left, right) => left.ts.localeCompare(right.ts) || left.id.localeCompare(right.id))
 }
 
 export function createSseOperations(): ProjectAgentOperationRegistryDraft {
@@ -108,63 +135,66 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
         longRunning: false,
       },
       inputSchema: z.object({
-        episodeId: z.string().optional().nullable(),
         lastEventId: z.string().optional().nullable(),
+        includeRecoverableSnapshot: z.boolean().optional(),
         replayLimit: z.number().int().positive().max(5000).optional(),
         snapshotLimit: z.number().int().positive().max(2000).optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
         const channel = getProjectChannel(ctx.projectId)
-        const lastEventId = parseReplayCursorId(input.lastEventId || null)
-        const lastMutationEventAt = parseMutationReplayCursor(input.lastEventId || null)
+        const cursor = parseWorkspaceSseCursor(input.lastEventId || null)
+        const includeRecoverableSnapshot = input.includeRecoverableSnapshot !== false
 
-        if (lastMutationEventAt) {
+        if (cursor.taskEventId > 0) {
           const replayLimit = input.replayLimit ?? 5000
-          const episodeId = input.episodeId ? input.episodeId.trim() : null
-          const mutationEvents = await listMutationBatchReplayEvents({
-            projectId: ctx.projectId,
-            userId: ctx.userId,
-            after: lastMutationEventAt,
-            episodeId,
-            limit: replayLimit,
-          })
-          const activeTaskEvents = await listActiveLifecycleSnapshot({
-            projectId: ctx.projectId,
-            episodeId,
-            userId: ctx.userId,
-            limit: input.snapshotLimit ?? 500,
-          })
+          const taskEvents = await listEventsAfter(
+            ctx.projectId,
+            cursor.taskEventId,
+            replayLimit,
+          )
+          const userTaskEvents = taskEvents.filter((event) => event.userId === ctx.userId)
+          const recoverableTaskEvents = includeRecoverableSnapshot
+            ? await listRecoverableTaskSnapshot({
+                projectId: ctx.projectId,
+                userId: ctx.userId,
+                activeLimit: input.snapshotLimit ?? 500,
+                terminalLimit: Math.min(input.snapshotLimit ?? 500, 200),
+              })
+            : []
+          const events = [
+            ...userTaskEvents,
+            ...recoverableTaskEvents,
+          ]
+            .sort((left, right) => left.ts.localeCompare(right.ts) || left.id.localeCompare(right.id))
           return {
             channel,
-            mode: 'mutation_replay_with_active_snapshot',
+            mode: includeRecoverableSnapshot
+              ? 'durable_replay_with_recoverable_snapshot'
+              : 'durable_replay',
             fromEventId: input.lastEventId,
-            events: [...mutationEvents, ...activeTaskEvents],
-          }
-        }
-
-        if (lastEventId > 0) {
-          const replayLimit = input.replayLimit ?? 5000
-          const missed = await listEventsAfter(ctx.projectId, lastEventId, replayLimit)
-          const events = missed.filter((event) => event.userId === ctx.userId)
-          return {
-            channel,
-            mode: 'replay',
-            fromEventId: lastEventId,
             events,
           }
         }
 
+        if (!includeRecoverableSnapshot) {
+          return {
+            channel,
+            mode: 'missed_event_replay_without_cursor',
+            events: [],
+          }
+        }
+
         const snapshotLimit = input.snapshotLimit ?? 500
-        const events = await listActiveLifecycleSnapshot({
+        const events = await listRecoverableTaskSnapshot({
           projectId: ctx.projectId,
-          episodeId: input.episodeId ? input.episodeId.trim() : null,
           userId: ctx.userId,
-          limit: snapshotLimit,
+          activeLimit: snapshotLimit,
+          terminalLimit: Math.min(snapshotLimit, 200),
         })
         return {
           channel,
-          mode: 'active_snapshot',
+          mode: 'recoverable_snapshot',
           events,
         }
       },

@@ -1,4 +1,5 @@
 import type { AsyncTaskProviderRegistration, ParsedAsyncExternalId } from '@/lib/ai-providers/async-task-types'
+import { normalizeAsyncPollResult } from '@/lib/ai-providers/async-task-types'
 import { queryGeminiBatchStatus, queryGoogleVideoStatus } from './poll'
 
 function parseGeminiExternalId(externalId: string): ParsedAsyncExternalId {
@@ -37,12 +38,14 @@ export const geminiBatchAsyncTaskProvider: AsyncTaskProviderRegistration = {
   poll: async ({ parsed, context }) => {
     const { apiKey } = await context.getProviderConfig(context.userId, 'google')
     const result = await queryGeminiBatchStatus(parsed.requestId, apiKey)
-    return {
+    return normalizeAsyncPollResult({
       status: result.status,
+      failureDisposition: result.failureDisposition,
+      ...(result.status === 'failed' ? { errorCode: result.errorCode } : {}),
       imageUrl: result.imageUrl,
       resultUrl: result.imageUrl,
       error: result.error,
-    }
+    })
   },
 }
 
@@ -54,12 +57,16 @@ export const googleVideoAsyncTaskProvider: AsyncTaskProviderRegistration = {
   poll: async ({ parsed, context }) => {
     const { apiKey } = await context.getProviderConfig(context.userId, 'google')
     const result = await queryGoogleVideoStatus(parsed.requestId, apiKey)
-    return {
+    return normalizeAsyncPollResult({
       status: result.status,
+      failureDisposition: result.failureDisposition,
+      ...(result.status === 'failed' ? { errorCode: result.errorCode } : {}),
       videoUrl: result.videoUrl,
       resultUrl: result.videoUrl,
+      downloadHeaders: result.videoUrl
+        ? { 'x-goog-api-key': apiKey }
+        : undefined,
       error: result.error,
-    }
+    })
   },
 }
-

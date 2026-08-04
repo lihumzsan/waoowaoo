@@ -1,9 +1,9 @@
 import type { ModelCapabilities, UnifiedModelType } from '@/lib/ai-registry/types'
 export type DefaultModelField =
+  | 'assistantModel'
   | 'analysisModel'
   | 'characterModel'
   | 'locationModel'
-  | 'storyboardModel'
   | 'editModel'
   | 'videoModel'
   | 'musicModel'
@@ -14,23 +14,6 @@ export interface StoredProvider {
   baseUrl?: string
   apiKey?: string
   hidden?: boolean
-}
-
-export interface StoredModelLlmCustomPricing {
-  inputPerMillion?: number
-  outputPerMillion?: number
-}
-
-export interface StoredModelMediaCustomPricing {
-  basePrice?: number
-  optionPrices?: Record<string, Record<string, number>>
-}
-
-export interface StoredModelCustomPricing {
-  llm?: StoredModelLlmCustomPricing
-  image?: StoredModelMediaCustomPricing
-  video?: StoredModelMediaCustomPricing
-  music?: StoredModelMediaCustomPricing
 }
 
 export interface StoredModel {
@@ -47,7 +30,6 @@ export interface StoredModel {
   priceInput?: number
   priceOutput?: number
   capabilities?: ModelCapabilities
-  customPricing?: StoredModelCustomPricing
 }
 
 export interface PricingDisplayItem {
@@ -61,10 +43,10 @@ export interface PricingDisplayItem {
 export type PricingDisplayMap = Record<string, PricingDisplayItem>
 
 export interface DefaultModelsPayload {
+  assistantModel?: string
   analysisModel?: string
   characterModel?: string
   locationModel?: string
-  storyboardModel?: string
   editModel?: string
   videoModel?: string
   musicModel?: string
@@ -85,10 +67,10 @@ export interface ApiConfigPutBody {
 }
 
 export const DEFAULT_MODEL_FIELDS: DefaultModelField[] = [
+  'assistantModel',
   'analysisModel',
   'characterModel',
   'locationModel',
-  'storyboardModel',
   'editModel',
   'videoModel',
   'musicModel',

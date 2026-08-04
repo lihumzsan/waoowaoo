@@ -5,13 +5,13 @@
 
 import { getServerSession } from 'next-auth/next'
 import { NextResponse } from 'next/server'
-import { headers as readHeaders } from 'next/headers'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { withPrismaRetry } from '@/lib/prisma-retry'
+import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import { extractModelKey } from '@/lib/config-service'
 import { getErrorSpec, type UnifiedErrorCode } from '@/lib/errors/codes'
 import { getLogContext, setLogContext } from '@/lib/logging/context'
+import { projectPublicErrorDetails } from '@/lib/errors/projection'
 
 // ============================================================
 // 类型定义
@@ -25,6 +25,12 @@ export interface AuthSession {
     }
 }
 
+type ExistingAuthUser = {
+    id: string
+    name: string
+    email: string | null
+}
+
 function bindAuthLogContext(session: AuthSession, projectId?: string) {
     const context = getLogContext()
     if (!context.requestId) return
@@ -34,51 +40,32 @@ function bindAuthLogContext(session: AuthSession, projectId?: string) {
     })
 }
 
-async function getInternalTaskSession(): Promise<AuthSession | null> {
-    const expectedToken = process.env.INTERNAL_TASK_TOKEN || ''
-
-    const incomingHeaders = await readHeaders()
-    const token = incomingHeaders.get('x-internal-task-token') || ''
-    const userId = incomingHeaders.get('x-internal-user-id') || ''
-    if (!userId) return null
-    if (expectedToken) {
-        if (token !== expectedToken) return null
-    } else if (process.env.NODE_ENV === 'production') {
-        return null
-    }
-
+function withCanonicalSessionUser(session: AuthSession, user: ExistingAuthUser): AuthSession {
     return {
         user: {
-            id: userId,
-            name: 'internal-worker',
-            email: null,
-        }
+            id: user.id,
+            name: user.name,
+            email: user.email ?? session.user.email ?? null,
+        },
     }
 }
 
-/**
- * 可选的关联数据加载配置
- */
-export type ProjectAuthIncludes = {
-    characters?: boolean
-    locations?: boolean
-    episodes?: boolean
+async function resolveExistingSession(session: AuthSession): Promise<AuthSession | null> {
+    const userById = await withRetry({
+        scope: 'prisma:requireUserAuth',
+        policy: RETRY_POLICY.prisma,
+        run: async () => await prisma.user.findUnique({
+            where: { id: session.user.id },
+            select: { id: true, name: true, email: true },
+        }),
+    })
+    return userById ? withCanonicalSessionUser(session, userById) : null
 }
 
-interface AuthCharacterLike {
-    name: string
-    introduction?: string | null
-    [key: string]: unknown
-}
-
-interface AuthLocationLike {
-    name: string
-    [key: string]: unknown
-}
-
-interface AuthEpisodeLike {
-    id: string
-    [key: string]: unknown
+async function requireExistingSession(): Promise<AuthSession | null> {
+    const session = await getAuthSession()
+    if (!session?.user?.id) return null
+    return await resolveExistingSession(session)
 }
 
 /**
@@ -92,15 +79,7 @@ export interface NovelDataBase {
 /**
  * 根据 include 选项推断的 projectData 类型
  */
-export type NovelDataWithIncludes<T extends ProjectAuthIncludes> = NovelDataBase
-    & (T['characters'] extends true ? { characters: AuthCharacterLike[] } : Record<string, never>)
-    & (T['locations'] extends true ? { locations: AuthLocationLike[] } : Record<string, never>)
-    & (T['episodes'] extends true ? { episodes: AuthEpisodeLike[] } : Record<string, never>)
-
-/**
- * 完整的认证上下文（带泛型）
- */
-export interface ProjectAuthContextWithIncludes<T extends ProjectAuthIncludes = ProjectAuthIncludes> {
+export interface ProjectAuthContext {
     session: AuthSession
     project: {
         id: string
@@ -108,58 +87,54 @@ export interface ProjectAuthContextWithIncludes<T extends ProjectAuthIncludes = 
         name: string
         [key: string]: unknown
     }
-    projectData: NovelDataWithIncludes<T>
+    projectData: NovelDataBase
 }
-
-/**
- * 向后兼容的类型别名
- */
-export type ProjectAuthContext = ProjectAuthContextWithIncludes<ProjectAuthIncludes>
 
 // ============================================================
 // 错误响应工具
 // ============================================================
 
-function buildErrorResponse(code: UnifiedErrorCode, message?: string, details: Record<string, unknown> = {}) {
+function buildErrorResponse(code: UnifiedErrorCode, details: Record<string, unknown> = {}) {
     const spec = getErrorSpec(code)
-    const finalMessage = message?.trim() || spec.defaultMessage
+    const requestId = getLogContext().requestId ?? null
+    const publicDetails = {
+        ...projectPublicErrorDetails(details),
+        ...(requestId ? { requestId } : {}),
+    }
     return NextResponse.json(
         {
             success: false,
             error: {
                 code,
-                message: finalMessage,
+                message: spec.defaultMessage,
                 retryable: spec.retryable,
                 category: spec.category,
                 userMessageKey: spec.userMessageKey,
-                details,
+                details: publicDetails,
             },
-            code,
-            message: finalMessage,
-            ...details,
         },
         { status: spec.httpStatus },
     )
 }
 
-export function unauthorized(message = 'Unauthorized') {
-    return buildErrorResponse('UNAUTHORIZED', message)
+export function unauthorized() {
+    return buildErrorResponse('UNAUTHORIZED')
 }
 
-export function forbidden(message = 'Forbidden') {
-    return buildErrorResponse('FORBIDDEN', message)
+export function forbidden() {
+    return buildErrorResponse('FORBIDDEN')
 }
 
-export function notFound(resource = 'Resource') {
-    return buildErrorResponse('NOT_FOUND', `${resource} not found`)
+export function notFound() {
+    return buildErrorResponse('NOT_FOUND')
 }
 
-export function badRequest(message: string) {
-    return buildErrorResponse('INVALID_PARAMS', message)
+export function badRequest() {
+    return buildErrorResponse('INVALID_PARAMS')
 }
 
-export function serverError(message = 'Internal server error') {
-    return buildErrorResponse('INTERNAL_ERROR', message)
+export function serverError() {
+    return buildErrorResponse('INTERNAL_ERROR')
 }
 
 // ============================================================
@@ -171,8 +146,6 @@ export function serverError(message = 'Internal server error') {
  * @returns session 或 null
  */
 export async function getAuthSession(): Promise<AuthSession | null> {
-    const internalSession = await getInternalTaskSession()
-    if (internalSession) return internalSession
     const session = await getServerSession(authOptions)
     return session as AuthSession | null
 }
@@ -182,8 +155,8 @@ export async function getAuthSession(): Promise<AuthSession | null> {
  * @throws 返回 401 响应
  */
 export async function requireAuth(): Promise<AuthSession> {
-    const session = await getAuthSession()
-    if (!session?.user?.id) {
+    const session = await requireExistingSession()
+    if (!session) {
         throw { response: unauthorized() }
     }
     bindAuthLogContext(session)
@@ -211,40 +184,26 @@ export async function requireAuth(): Promise<AuthSession> {
  * // authResult.projectData.characters 和 locations 自动可用
  * ```
  */
-export async function requireProjectAuth<T extends ProjectAuthIncludes = ProjectAuthIncludes>(
-    projectId: string,
-    options?: { include?: T }
-): Promise<ProjectAuthContextWithIncludes<T> | NextResponse> {
+export async function requireProjectAuth(projectId: string): Promise<ProjectAuthContext | NextResponse> {
     // 1. 验证 Session
-    const session = await getAuthSession()
-    if (!session?.user?.id) {
+    const session = await requireExistingSession()
+    if (!session) {
         return unauthorized()
     }
     bindAuthLogContext(session, projectId)
 
-    // 2. 构建动态 include 对象
-    const projectIncludes: Record<string, boolean> = {}
-    if (options?.include?.characters) {
-        projectIncludes.characters = true
-    }
-    if (options?.include?.locations) {
-        projectIncludes.locations = true
-    }
-    if (options?.include?.episodes) {
-        projectIncludes.episodes = true
-    }
-    // 3. 获取项目基础信息
-    const hasIncludes = Object.keys(projectIncludes).length > 0
-    const project = await withPrismaRetry(() =>
-        prisma.project.findUnique({
+    // 2. 获取项目基础信息
+    const project = await withRetry({
+        scope: 'prisma:requireProjectAuth',
+        policy: RETRY_POLICY.prisma,
+        run: async () => await prisma.project.findUnique({
             where: { id: projectId },
-            ...(hasIncludes ? { include: projectIncludes } : {}),
-        })
-    )
+        }),
+    })
 
     // 4. 项目存在检查
     if (!project) {
-        return notFound('Project')
+        return notFound()
     }
 
     // 5. 所有权验证
@@ -258,15 +217,9 @@ export async function requireProjectAuth<T extends ProjectAuthIncludes = Project
         analysisModel?: string | null
         characterModel?: string | null
         locationModel?: string | null
-        storyboardModel?: string | null
         editModel?: string | null
         videoModel?: string | null
-        singleShotVideoModel?: string | null
-        sequenceVideoModel?: string | null
         musicModel?: string | null
-        characters?: AuthCharacterLike[]
-        locations?: AuthLocationLike[]
-        episodes?: AuthEpisodeLike[]
         [key: string]: unknown
     }
     const processedProjectData = {
@@ -274,21 +227,15 @@ export async function requireProjectAuth<T extends ProjectAuthIncludes = Project
         analysisModel: extractModelKey(rawProjectData.analysisModel),
         characterModel: extractModelKey(rawProjectData.characterModel),
         locationModel: extractModelKey(rawProjectData.locationModel),
-        storyboardModel: extractModelKey(rawProjectData.storyboardModel),
         editModel: extractModelKey(rawProjectData.editModel),
         videoModel: extractModelKey(rawProjectData.videoModel),
-        singleShotVideoModel: extractModelKey(rawProjectData.singleShotVideoModel) || extractModelKey(rawProjectData.videoModel),
-        sequenceVideoModel: extractModelKey(rawProjectData.sequenceVideoModel),
         musicModel: extractModelKey(rawProjectData.musicModel),
-        ...(rawProjectData.characters ? { characters: rawProjectData.characters } : {}),
-        ...(rawProjectData.locations ? { locations: rawProjectData.locations } : {}),
-        ...(rawProjectData.episodes ? { episodes: rawProjectData.episodes } : {}),
     }
 
     return {
         session,
         project,
-        projectData: processedProjectData as unknown as NovelDataWithIncludes<T>
+        projectData: processedProjectData
     }
 }
 
@@ -305,8 +252,8 @@ export async function requireProjectAuth<T extends ProjectAuthIncludes = Project
  * ```
  */
 export async function requireUserAuth(): Promise<{ session: AuthSession } | NextResponse> {
-    const session = await getAuthSession()
-    if (!session?.user?.id) {
+    const session = await requireExistingSession()
+    if (!session) {
         return unauthorized()
     }
     bindAuthLogContext(session)
@@ -320,20 +267,22 @@ export async function requireUserAuth(): Promise<{ session: AuthSession } | Next
 export async function requireProjectAuthLight(
     projectId: string
 ): Promise<{ session: AuthSession; project: { id: string; userId: string; name: string; [key: string]: unknown } } | NextResponse> {
-    const session = await getAuthSession()
-    if (!session?.user?.id) {
+    const session = await requireExistingSession()
+    if (!session) {
         return unauthorized()
     }
     bindAuthLogContext(session, projectId)
 
-    const project = await withPrismaRetry(() =>
-        prisma.project.findUnique({
+    const project = await withRetry({
+        scope: 'prisma:requireProjectAuthLight',
+        policy: RETRY_POLICY.prisma,
+        run: async () => await prisma.project.findUnique({
             where: { id: projectId }
-        })
-    )
+        }),
+    })
 
     if (!project) {
-        return notFound('Project')
+        return notFound()
     }
 
     if (project.userId !== session.user.id) {

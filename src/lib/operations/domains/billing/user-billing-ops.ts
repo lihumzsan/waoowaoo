@@ -1,48 +1,60 @@
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { ApiError } from '@/lib/api-errors'
 import { BILLING_CURRENCY } from '@/lib/billing/currency'
 import { toMoneyNumber } from '@/lib/billing/money'
 import { getUserCostSummary } from '@/lib/billing'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import { resolveBillingTransactionTargets } from './transaction-targets'
+import {
+  aggregateBillingTransactionRows,
+  type BillingTransactionDisplayRow,
+} from './transaction-aggregation'
 
-const ACTION_KEY_PATTERN = /^[a-z][a-z0-9_]*$/
+const ACTION_KEY_PATTERN = /^[a-z][a-z0-9_-]*$/
 
-function readNumber(value: unknown, fallback: number): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number.parseInt(value, 10)
-    if (Number.isFinite(parsed)) return parsed
-  }
-  return fallback
-}
-
-function readString(value: unknown): string | null {
-  if (typeof value !== 'string') return null
-  const trimmed = value.trim()
-  return trimmed ? trimmed : null
-}
+const listUserTransactionsInputSchema = z.object({
+  page: z.number().int().min(1).optional().describe('One-based page number. Defaults to 1.'),
+  pageSize: z.number().int().min(1).max(200).optional().describe('Rows per page. Defaults to 20.'),
+  type: z.string().trim().min(1).optional()
+    .describe('Exact transaction type. Omit or use "all" to include every type.'),
+  startDate: z.string().datetime({ offset: true }).optional()
+    .describe('Inclusive ISO 8601 start timestamp with timezone.'),
+  endDate: z.string().datetime({ offset: true }).optional()
+    .describe('Inclusive ISO 8601 end timestamp with timezone.'),
+}).strict()
 
 function extractActionFromDescription(description: string | null): string | null {
   if (!description) return null
-  const cleaned = description.replace(/^\[SHADOW\]\s*/i, '').trim()
+  const cleaned = description.replace(/^\[(?:SHADOW|FREEZE|REFUND)\]\s*/i, '').trim()
   const firstPart = cleaned.split(' - ')[0]?.trim() || ''
   if (ACTION_KEY_PATTERN.test(firstPart)) return firstPart
   return null
 }
 
-function parseDateField(value: unknown, field: string): Date | null {
-  const raw = readString(value)
-  if (!raw) return null
-  const date = new Date(raw)
-  if (Number.isNaN(date.getTime())) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'DATE_INVALID',
-      field,
-    })
+function readBillingMetaNumber(meta: Record<string, unknown> | null, key: string): number | null {
+  const value = meta?.[key]
+  const numeric = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : NaN
+  return Number.isFinite(numeric) ? numeric : null
+}
+
+/**
+ * `freeze` / `refund` rows are amount = 0 ledger audit rows (like
+ * `shadow_consume`): the ledger keeps SUM(amount) aligned with
+ * balance + frozenAmount, while the moved amount lives in billingMeta.
+ * For display, project the available-balance delta from billingMeta so the
+ * row matches its balanceAfter movement.
+ */
+function resolveDisplayAmount(type: string, amount: number, billingMeta: Record<string, unknown> | null): number {
+  if (type === 'freeze') {
+    const freezeAmount = readBillingMetaNumber(billingMeta, 'freezeAmount')
+    if (freezeAmount !== null) return -freezeAmount
   }
-  return date
+  if (type === 'refund') {
+    const refundedAmount = readBillingMetaNumber(billingMeta, 'refundedAmount')
+    if (refundedAmount !== null) return refundedAmount
+  }
+  return amount
 }
 
 export function createUserBillingOperations(): ProjectAgentOperationRegistryDraft {
@@ -51,6 +63,7 @@ export function createUserBillingOperations(): ProjectAgentOperationRegistryDraf
       id: 'list_user_transactions',
       summary: 'List balance transactions for the current user with filters and pagination.',
       intent: 'query',
+      channels: { tool: false, api: true },
       effects: {
         writes: false,
         billable: false,
@@ -60,16 +73,15 @@ export function createUserBillingOperations(): ProjectAgentOperationRegistryDraf
         externalSideEffects: false,
         longRunning: false,
       },
-      inputSchema: z.object({}).passthrough(),
+      inputSchema: listUserTransactionsInputSchema,
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
-        const params = (input && typeof input === 'object' && !Array.isArray(input)) ? input as Record<string, unknown> : {}
-
-        const page = Math.max(1, readNumber(params.page, 1))
-        const pageSize = Math.min(200, Math.max(1, readNumber(params.pageSize, 20)))
-        const type = readString(params.type)
-        const startDate = parseDateField(params.startDate, 'startDate')
-        const endDate = parseDateField(params.endDate, 'endDate')
+        const params = listUserTransactionsInputSchema.parse(input)
+        const page = params.page ?? 1
+        const pageSize = params.pageSize ?? 20
+        const type = params.type ?? null
+        const startDate = params.startDate ? new Date(params.startDate) : null
+        const endDate = params.endDate ? new Date(params.endDate) : null
 
         const where: Prisma.BalanceTransactionWhereInput = { userId: ctx.userId }
         if (type && type !== 'all') {
@@ -98,28 +110,54 @@ export function createUserBillingOperations(): ProjectAgentOperationRegistryDraf
           prisma.balanceTransaction.count({ where }),
         ])
 
-        const projectIds = [...new Set(transactionsRaw.map((t) => t.projectId).filter(Boolean) as string[])]
-        const episodeIds = [...new Set(transactionsRaw.map((t) => t.episodeId).filter(Boolean) as string[])]
+        const freezeIds = [...new Set(transactionsRaw.map((t) => t.freezeId).filter(Boolean) as string[])]
+        const freezes = freezeIds.length > 0
+          ? await prisma.balanceFreeze.findMany({
+            where: { id: { in: freezeIds }, userId: ctx.userId },
+            select: { id: true, taskId: true },
+          })
+          : []
+        const taskIds = [...new Set(freezes.map((freeze) => freeze.taskId).filter(Boolean) as string[])]
+        const tasks = taskIds.length > 0
+          ? await prisma.task.findMany({
+            where: { id: { in: taskIds }, userId: ctx.userId },
+            select: {
+              id: true,
+              projectId: true,
+              type: true,
+              targetType: true,
+              targetId: true,
+              operationId: true,
+              operationRequestId: true,
+            },
+          })
+          : []
+        const taskById = new Map(tasks.map((task) => [task.id, task]))
+        const taskByFreezeId = new Map(
+          freezes
+            .map((freeze) => {
+              const task = freeze.taskId ? taskById.get(freeze.taskId) : null
+              return task ? [freeze.id, task] as const : null
+            })
+            .filter((item): item is readonly [string, NonNullable<(typeof tasks)[number]>] => item !== null),
+        )
 
-        const [projects, episodes] = await Promise.all([
-          projectIds.length > 0
-            ? prisma.project.findMany({
-              where: { id: { in: projectIds } },
-              select: { id: true, name: true },
-            })
-            : Promise.resolve([]),
-          episodeIds.length > 0
-            ? prisma.projectEpisode.findMany({
-              where: { id: { in: episodeIds } },
-              select: { id: true, episodeNumber: true, name: true },
-            })
-            : Promise.resolve([]),
-        ])
+        const targetByTaskId = await resolveBillingTransactionTargets(tasks)
+        const projectIds = [
+          ...new Set(transactionsRaw
+            .map((t) => t.projectId ?? (t.freezeId ? taskByFreezeId.get(t.freezeId)?.projectId ?? null : null))
+            .filter(Boolean) as string[]),
+        ]
+        const projects = projectIds.length > 0
+          ? await prisma.project.findMany({
+            where: { id: { in: projectIds } },
+            select: { id: true, name: true },
+          })
+          : []
 
         const projectMap = new Map(projects.map((p) => [p.id, p.name]))
-        const episodeMap = new Map(episodes.map((e) => [e.id, { episodeNumber: e.episodeNumber, name: e.name }]))
 
-        const transactions = transactionsRaw.map((item) => {
+        const transactions = transactionsRaw.map((item): BillingTransactionDisplayRow => {
           let billingMeta: Record<string, unknown> | null = null
           if (item.billingMeta && typeof item.billingMeta === 'string') {
             try {
@@ -129,21 +167,27 @@ export function createUserBillingOperations(): ProjectAgentOperationRegistryDraf
             }
           }
 
+          const task = item.freezeId ? taskByFreezeId.get(item.freezeId) ?? null : null
+          const projectId = item.projectId ?? task?.projectId ?? null
+          const action = item.taskType ?? task?.type ?? extractActionFromDescription(item.description)
+
           return {
             ...item,
-            amount: toMoneyNumber(item.amount),
+            amount: resolveDisplayAmount(item.type, toMoneyNumber(item.amount), billingMeta),
             balanceAfter: toMoneyNumber(item.balanceAfter),
-            action: item.taskType ?? extractActionFromDescription(item.description),
-            projectName: item.projectId ? (projectMap.get(item.projectId) ?? null) : null,
-            episodeNumber: item.episodeId ? (episodeMap.get(item.episodeId)?.episodeNumber ?? null) : null,
-            episodeName: item.episodeId ? (episodeMap.get(item.episodeId)?.name ?? null) : null,
+            action,
+            projectId,
+            projectName: projectId ? (projectMap.get(projectId) ?? null) : null,
             billingMeta,
+            target: task ? (targetByTaskId.get(task.id) ?? null) : null,
+            operationId: task?.operationId ?? null,
+            operationRequestId: task?.operationRequestId ?? null,
           }
         })
 
         return {
           currency: BILLING_CURRENCY,
-          transactions,
+          transactions: aggregateBillingTransactionRows(transactions),
           pagination: {
             page,
             pageSize,
@@ -158,6 +202,7 @@ export function createUserBillingOperations(): ProjectAgentOperationRegistryDraf
       id: 'get_user_costs',
       summary: 'Get current user cost summary by project.',
       intent: 'query',
+      channels: { tool: false, api: true },
       effects: {
         writes: false,
         billable: false,

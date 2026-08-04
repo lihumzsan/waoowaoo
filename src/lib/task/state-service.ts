@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import { normalizeTaskError } from '@/lib/errors/normalize'
 import { coerceTaskIntent, type TaskIntent } from './intent'
+import { buildTaskProgressGroupId, readTaskPayloadProgressGroupId } from './progress-group'
+import { resolveTaskCoveredTargets } from './covered-targets'
 
 export type TaskTargetQuery = {
   targetType: string
@@ -8,14 +10,16 @@ export type TaskTargetQuery = {
   types?: string[]
 }
 
-export type TaskTargetPhase = 'idle' | 'queued' | 'processing' | 'completed' | 'failed'
+export type TaskTargetPhase = 'idle' | 'queued' | 'processing' | 'completed' | 'failed' | 'canceled'
 
 export type TaskTargetState = {
+  taskId?: string | null
   targetType: string
   targetId: string
   phase: TaskTargetPhase
   runningTaskId: string | null
   runningTaskType: string | null
+  progressGroupId: string | null
   intent: TaskIntent
   hasOutputAtStart: boolean | null
   progress: number | null
@@ -23,12 +27,26 @@ export type TaskTargetState = {
   stageLabel: string | null
   lastError: {
     code: string
-    message: string
   } | null
   updatedAt: string | null
 }
 
 const ACTIVE_STATUS = new Set(['queued', 'processing'])
+
+type TaskStateRow = {
+  id: string
+  type: string
+  status: string
+  progress: number
+  payload: unknown
+  errorCode: string | null
+  errorMessage: string | null
+  targetType: string
+  targetId: string
+  operationId: string | null
+  operationRequestId: string | null
+  updatedAt: Date
+}
 
 export function pairKey(targetType: string, targetId: string) {
   return `${targetType}:${targetId}`
@@ -62,15 +80,23 @@ export function extractTaskStateFields(task: {
   type: string
   progress: number
   payload: unknown
+  operationId?: string | null
+  operationRequestId?: string | null
 }) {
   const payload = asObject(task.payload)
   const payloadUi = asObject(payload?.ui)
+  const progressGroupId = readTaskPayloadProgressGroupId(task.payload)
+    ?? buildTaskProgressGroupId({
+      operationId: task.operationId ?? null,
+      operationRequestId: task.operationRequestId ?? null,
+    })
   return {
     stage: asNonEmptyString(payload?.stage),
     stageLabel: asNonEmptyString(payload?.stageLabel),
     hasOutputAtStart: asBoolean(payloadUi?.hasOutputAtStart),
     intent: coerceTaskIntent(payloadUi?.intent ?? payload?.intent, task.type),
     progress: toProgress(task.progress),
+    progressGroupId,
   }
 }
 
@@ -82,7 +108,6 @@ export function normalizeFailedError(task: {
   if (!normalized) return null
   return {
     code: normalized.code,
-    message: normalized.message,
   }
 }
 
@@ -93,6 +118,7 @@ export function buildIdleState(target: TaskTargetQuery): TaskTargetState {
     phase: 'idle',
     runningTaskId: null,
     runningTaskType: null,
+    progressGroupId: null,
     intent: 'process',
     hasOutputAtStart: null,
     progress: null,
@@ -113,6 +139,8 @@ export function resolveTargetState(
     payload: unknown
     errorCode: string | null
     errorMessage: string | null
+    operationId?: string | null
+    operationRequestId?: string | null
     updatedAt: Date
   }>,
 ): TaskTargetState {
@@ -125,7 +153,7 @@ export function resolveTargetState(
 
   const running = filtered.find((task) => ACTIVE_STATUS.has(task.status)) || null
   const terminal = filtered.find((task) =>
-    task.status === 'completed' || task.status === 'failed' || task.status === 'canceled'
+    task.status === 'completed' || task.status === 'failed' || task.status === 'canceled' || task.status === 'dismissed'
   ) || null
   const latest = running || terminal
 
@@ -139,8 +167,10 @@ export function resolveTargetState(
       targetType: target.targetType,
       targetId: target.targetId,
       phase: running.status === 'processing' ? 'processing' : 'queued',
+      taskId: running.id,
       runningTaskId: running.id,
       runningTaskType: running.type,
+      progressGroupId: runningFields.progressGroupId,
       intent: runningFields.intent,
       hasOutputAtStart: runningFields.hasOutputAtStart,
       progress: runningFields.progress,
@@ -156,11 +186,32 @@ export function resolveTargetState(
       targetType: target.targetType,
       targetId: target.targetId,
       phase: 'completed',
+      taskId: latest.id,
       runningTaskId: null,
       runningTaskType: latest.type,
+      progressGroupId: latestFields.progressGroupId,
       intent: latestFields.intent,
       hasOutputAtStart: latestFields.hasOutputAtStart,
       progress: 100,
+      stage: latestFields.stage,
+      stageLabel: latestFields.stageLabel,
+      lastError: null,
+      updatedAt: latest.updatedAt.toISOString(),
+    }
+  }
+
+  if (latest.status === 'canceled' || latest.status === 'dismissed') {
+    return {
+      targetType: target.targetType,
+      targetId: target.targetId,
+      phase: 'canceled',
+      taskId: latest.id,
+      runningTaskId: null,
+      runningTaskType: latest.type,
+      progressGroupId: latestFields.progressGroupId,
+      intent: latestFields.intent,
+      hasOutputAtStart: latestFields.hasOutputAtStart,
+      progress: null,
       stage: latestFields.stage,
       stageLabel: latestFields.stageLabel,
       lastError: null,
@@ -172,8 +223,10 @@ export function resolveTargetState(
     targetType: target.targetType,
     targetId: target.targetId,
     phase: 'failed',
+    taskId: latest.id,
     runningTaskId: null,
     runningTaskType: latest.type,
+    progressGroupId: latestFields.progressGroupId,
     intent: latestFields.intent,
     hasOutputAtStart: latestFields.hasOutputAtStart,
     progress: null,
@@ -189,6 +242,15 @@ export function resolveTargetState(
  * 过大的 OR 列表 + ORDER BY 会导致 MySQL sort buffer 溢出（Error 1038）。
  */
 const QUERY_BATCH_SIZE = 50
+
+function taskTargetKeys(row: Pick<TaskStateRow, 'targetType' | 'targetId' | 'type' | 'payload'>): string[] {
+  return resolveTaskCoveredTargets({
+    taskType: row.type,
+    targetType: row.targetType,
+    targetId: row.targetId,
+    payload: row.payload,
+  }).map((target) => pairKey(target.targetType, target.targetId))
+}
 
 export async function queryTaskTargetStates(params: {
   projectId: string
@@ -216,18 +278,10 @@ export async function queryTaskTargetStates(params: {
   const typeFilter = typeUnion.size > 0 ? { type: { in: Array.from(typeUnion) } } : {}
 
   // 分批查询，避免 MySQL sort buffer 溢出
-  const allRows: Array<{
-    id: string
-    type: string
-    status: string
-    progress: number
-    payload: unknown
-    errorCode: string | null
-    errorMessage: string | null
-    targetType: string
-    targetId: string
-    updatedAt: Date
-  }> = []
+  const allRowsById = new Map<string, TaskStateRow>()
+  const appendRows = (rows: TaskStateRow[]) => {
+    for (const row of rows) allRowsById.set(row.id, row)
+  }
 
   for (let i = 0; i < pairs.length; i += QUERY_BATCH_SIZE) {
     const batch = pairs.slice(i, i + QUERY_BATCH_SIZE)
@@ -240,7 +294,7 @@ export async function queryTaskTargetStates(params: {
           targetId: item.targetId,
         })),
         status: {
-          in: ['queued', 'processing', 'completed', 'failed', 'canceled'],
+          in: ['queued', 'processing', 'completed', 'failed', 'canceled', 'dismissed'],
         },
         ...typeFilter,
       },
@@ -255,21 +309,25 @@ export async function queryTaskTargetStates(params: {
         errorMessage: true,
         targetType: true,
         targetId: true,
+        operationId: true,
+        operationRequestId: true,
         updatedAt: true,
       },
     })
-    allRows.push(...rows)
+    appendRows(rows)
   }
 
   // 应用层按 updatedAt desc 排序（每个 target 组内排序即可）
-  const grouped = new Map<string, typeof allRows>()
-  for (const row of allRows) {
-    const key = pairKey(row.targetType, row.targetId)
-    const existing = grouped.get(key)
-    if (existing) {
-      existing.push(row)
-    } else {
-      grouped.set(key, [row])
+  const grouped = new Map<string, TaskStateRow[]>()
+  for (const row of allRowsById.values()) {
+    for (const key of taskTargetKeys(row)) {
+      if (!pairEntries.has(key)) continue
+      const existing = grouped.get(key)
+      if (existing) {
+        existing.push(row)
+      } else {
+        grouped.set(key, [row])
+      }
     }
   }
 

@@ -1,5 +1,7 @@
 const LOCALE_PATH_PATTERN = /^\/(zh|en)(\/|$)/
 
+export const API_AUTH_REQUIRED_EVENT = 'waoowaoo:auth-required'
+
 function resolveLocaleFromPath(pathname: string): string {
   const match = pathname.match(LOCALE_PATH_PATTERN)
   return match?.[1] ?? 'zh'
@@ -45,8 +47,15 @@ export function mergeLocaleHeader(init?: RequestInit): RequestInit {
 }
 
 export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  if (!shouldInjectLocaleHeader(input)) {
-    return fetch(input, init)
+  const isApiRequest = shouldInjectLocaleHeader(input)
+  const response = await fetch(input, isApiRequest ? mergeLocaleHeader(init) : init)
+  if (
+    isApiRequest
+    && response.status === 401
+    && typeof window !== 'undefined'
+    && resolveRequestPathname(input) !== '/api/auth/session'
+  ) {
+    window.dispatchEvent(new Event(API_AUTH_REQUIRED_EVENT))
   }
-  return fetch(input, mergeLocaleHeader(init))
+  return response
 }

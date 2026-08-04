@@ -1,6 +1,5 @@
 'use client'
 import { logError as _ulogError } from '@/lib/logging/core'
-import { apiFetch } from '@/lib/api-fetch'
 import JSZip from 'jszip'
 
 import { useState } from 'react'
@@ -12,24 +11,23 @@ import { AssetGrid } from './components/AssetGrid'
 import { CharacterCreationModal, LocationCreationModal, PropCreationModal, CharacterEditModal, LocationEditModal, PropEditModal } from '@/components/shared/assets'
 import { FolderModal } from './components/FolderModal'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
-import ImageEditModal from '@/features/project-workspace/components/assets/ImageEditModal'
 import {
     useAssets,
-    useAssetActions,
-    useRefreshAssets,
     useGlobalFolders,
     useSSE,
 } from '@/lib/query/hooks'
-import { queryKeys } from '@/lib/query/keys'
 import { AppIcon } from '@/components/ui/icons'
 import { Link } from '@/i18n/navigation'
-import { useImageGenerationCount } from '@/lib/image-generation/use-image-generation-count'
+import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
+import {
+    requestOperationMutationVoidWithError,
+} from '@/lib/query/mutations/mutation-shared'
+import { useToast } from '@/contexts/ToastContext'
 
 export default function AssetHubPage() {
     const t = useTranslations('assetHub')
     const queryClient = useQueryClient()
-    const { count: characterGenerationCount } = useImageGenerationCount('character')
-    const { count: locationGenerationCount } = useImageGenerationCount('location')
+    const { showError, showToast } = useToast()
 
     // 文件夹选择状态
     const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
@@ -40,13 +38,8 @@ export default function AssetHubPage() {
         scope: 'global',
         folderId: selectedFolderId,
     })
-    const characterActions = useAssetActions({ scope: 'global', kind: 'character' })
-    const locationActions = useAssetActions({ scope: 'global', kind: 'location' })
-    const propActions = useAssetActions({ scope: 'global', kind: 'prop' })
-    const refreshAssets = useRefreshAssets({ scope: 'global' })
-
     const loading = foldersLoading || assetsLoading
-    useSSE({ projectId: 'global-asset-hub', enabled: true })
+    useSSE({ projectId: GLOBAL_ASSET_PROJECT_ID, enabled: true })
 
     // 弹窗状态
     const [showAddCharacter, setShowAddCharacter] = useState(false)
@@ -55,13 +48,6 @@ export default function AssetHubPage() {
     const [showFolderModal, setShowFolderModal] = useState(false)
     const [editingFolder, setEditingFolder] = useState<{ id: string; name: string } | null>(null)
     const [previewImage, setPreviewImage] = useState<string | null>(null)
-    const [imageEditModal, setImageEditModal] = useState<{
-        type: 'character' | 'location' | 'prop'
-        id: string
-        name: string
-        imageIndex: number
-        appearanceIndex?: number
-    } | null>(null)
 
     const [isDownloading, setIsDownloading] = useState(false)
 
@@ -70,7 +56,6 @@ export default function AssetHubPage() {
     const [characterEditModal, setCharacterEditModal] = useState<{
         characterId: string
         characterName: string
-        appearanceId: string
         appearanceIndex: number
         changeReason: string
         description: string
@@ -95,35 +80,39 @@ export default function AssetHubPage() {
     // 创建文件夹
     const handleCreateFolder = async (name: string) => {
         try {
-            const res = await apiFetch('/api/asset-hub/folders', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name })
-            })
-            if (res.ok) {
-                queryClient.invalidateQueries({ queryKey: queryKeys.globalAssets.folders() })
-                setShowFolderModal(false)
-            }
+            await requestOperationMutationVoidWithError(
+                '/api/asset-hub/folders',
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name }),
+                },
+                queryClient,
+            )
+            setShowFolderModal(false)
         } catch (error) {
             _ulogError('创建文件夹失败:', error)
+            showError(error, t('folderCreateFailed'))
         }
     }
 
     // 更新文件夹
     const handleUpdateFolder = async (folderId: string, name: string) => {
         try {
-            const res = await apiFetch(`/api/asset-hub/folders/${folderId}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name })
-            })
-            if (res.ok) {
-                queryClient.invalidateQueries({ queryKey: queryKeys.globalAssets.folders() })
-                setEditingFolder(null)
-                setShowFolderModal(false)
-            }
+            await requestOperationMutationVoidWithError(
+                `/api/asset-hub/folders/${folderId}`,
+                {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name }),
+                },
+                queryClient,
+            )
+            setEditingFolder(null)
+            setShowFolderModal(false)
         } catch (error) {
             _ulogError('更新文件夹失败:', error)
+            showError(error, t('folderUpdateFailed'))
         }
     }
 
@@ -132,61 +121,17 @@ export default function AssetHubPage() {
         if (!confirm(t('confirmDeleteFolder'))) return
 
         try {
-            const res = await apiFetch(`/api/asset-hub/folders/${folderId}`, {
-                method: 'DELETE'
-            })
-            if (res.ok) {
-                if (selectedFolderId === folderId) {
-                    setSelectedFolderId(null)
-                }
-                queryClient.invalidateQueries({ queryKey: queryKeys.globalAssets.all() })
-                refreshAssets()
+            await requestOperationMutationVoidWithError(
+                `/api/asset-hub/folders/${folderId}`,
+                { method: 'DELETE' },
+                queryClient,
+            )
+            if (selectedFolderId === folderId) {
+                setSelectedFolderId(null)
             }
         } catch (error) {
             _ulogError('删除文件夹失败:', error)
-        }
-    }
-
-    // 打开图片编辑弹窗
-    const handleOpenImageEdit = (type: 'character' | 'location' | 'prop', id: string, name: string, imageIndex: number, appearanceIndex?: number) => {
-        setImageEditModal({ type, id, name, imageIndex, appearanceIndex })
-    }
-
-    // 处理图片编辑确认 - 使用 mutation
-    const handleImageEdit = async (modifyPrompt: string, extraImageUrls?: string[]) => {
-        if (!imageEditModal) return
-
-        const { type, id, imageIndex, appearanceIndex } = imageEditModal
-        setImageEditModal(null)
-
-        if (type === 'character' && appearanceIndex !== undefined) {
-            void characterActions.modifyRender({
-                id,
-                appearanceIndex,
-                imageIndex,
-                modifyPrompt,
-                extraImageUrls
-            }).catch(() => {
-                alert(t('editFailed'))
-            })
-        } else if (type === 'location') {
-            void locationActions.modifyRender({
-                id,
-                imageIndex,
-                modifyPrompt,
-                extraImageUrls
-            }).catch(() => {
-                alert(t('editFailed'))
-            })
-        } else if (type === 'prop') {
-            void propActions.modifyRender({
-                id,
-                imageIndex,
-                modifyPrompt,
-                extraImageUrls,
-            }).catch(() => {
-                alert(t('editFailed'))
-            })
+            showError(error, t('folderDeleteFailed'))
         }
     }
 
@@ -211,7 +156,6 @@ export default function AssetHubPage() {
         setCharacterEditModal({
             characterId: typedCharacter.id,
             characterName: typedCharacter.name,
-            appearanceId: typedAppearance.id,
             appearanceIndex: typedAppearance.appearanceIndex,
             changeReason: typedAppearance.changeReason || t('appearanceLabel', { index: typedAppearance.appearanceIndex }),
             description: typedAppearance.description || ''
@@ -251,38 +195,6 @@ export default function AssetHubPage() {
             description: variant?.description || typedProp.summary || '',
             variantId: variant?.id,
         })
-    }
-
-    // 角色编辑后触发生成
-    const handleCharacterEditGenerate = async () => {
-        if (!characterEditModal) return
-
-        try {
-            await characterActions.generate({
-                id: characterEditModal.characterId,
-                appearanceId: characterEditModal.appearanceId,
-                appearanceIndex: characterEditModal.appearanceIndex,
-                count: characterGenerationCount,
-            })
-            refreshAssets()
-        } catch (error) {
-            _ulogError('触发生成失败:', error)
-        }
-    }
-
-    // 场景编辑后触发生成
-    const handleLocationEditGenerate = async () => {
-        if (!locationEditModal) return
-
-        try {
-            await locationActions.generate({
-                id: locationEditModal.locationId,
-                count: locationGenerationCount,
-            })
-            refreshAssets()
-        } catch (error) {
-            _ulogError('触发生成失败:', error)
-        }
     }
 
     // 打包下载所有图片资产
@@ -335,7 +247,7 @@ export default function AssetHubPage() {
         }
 
         if (imageEntries.length === 0) {
-            alert(t('downloadEmpty'))
+            showToast(t('downloadEmpty'), 'warning')
             return
         }
 
@@ -365,7 +277,7 @@ export default function AssetHubPage() {
             URL.revokeObjectURL(link.href)
         } catch (error) {
             _ulogError('打包下载失败:', error)
-            alert(t('downloadFailed'))
+            showError(error, t('downloadFailed'))
         } finally {
             setIsDownloading(false)
         }
@@ -415,7 +327,6 @@ export default function AssetHubPage() {
                         isDownloading={isDownloading}
                         selectedFolderId={selectedFolderId}
                         onImageClick={setPreviewImage}
-                        onImageEdit={handleOpenImageEdit}
                         onCharacterEdit={handleOpenCharacterEdit}
                         onLocationEdit={handleOpenLocationEdit}
                         onPropEdit={handleOpenPropEdit}
@@ -426,38 +337,26 @@ export default function AssetHubPage() {
             {/* 新建角色弹窗 */}
             {showAddCharacter && (
                 <CharacterCreationModal
-                    mode="asset-hub"
                     folderId={selectedFolderId}
                     onClose={() => setShowAddCharacter(false)}
-                    onSuccess={() => {
-                        setShowAddCharacter(false)
-                        refreshAssets()
-                    }}
+                    onSuccess={() => setShowAddCharacter(false)}
                 />
             )}
 
             {/* 新建场景弹窗 */}
             {showAddLocation && (
                 <LocationCreationModal
-                    mode="asset-hub"
                     folderId={selectedFolderId}
                     onClose={() => setShowAddLocation(false)}
-                    onSuccess={() => {
-                        setShowAddLocation(false)
-                        refreshAssets()
-                    }}
+                    onSuccess={() => setShowAddLocation(false)}
                 />
             )}
 
             {showAddProp && (
                 <PropCreationModal
-                    mode="asset-hub"
                     folderId={selectedFolderId}
                     onClose={() => setShowAddProp(false)}
-                    onSuccess={() => {
-                        setShowAddProp(false)
-                        refreshAssets()
-                    }}
+                    onSuccess={() => setShowAddProp(false)}
                 />
             )}
 
@@ -487,55 +386,37 @@ export default function AssetHubPage() {
                 />
             )}
 
-            {/* 图片编辑弹窗 */}
-            {imageEditModal && (
-                <ImageEditModal
-                    type={imageEditModal.type}
-                    name={imageEditModal.name}
-                    onClose={() => setImageEditModal(null)}
-                    onConfirm={handleImageEdit}
-                />
-            )}
-
             {/* 角色编辑弹窗 */}
             {characterEditModal && (
                 <CharacterEditModal
-                    mode="asset-hub"
                     characterId={characterEditModal.characterId}
                     characterName={characterEditModal.characterName}
-                    appearanceId={characterEditModal.appearanceId}
                     appearanceIndex={characterEditModal.appearanceIndex}
                     changeReason={characterEditModal.changeReason}
                     description={characterEditModal.description}
                     onClose={() => setCharacterEditModal(null)}
-                    onSave={handleCharacterEditGenerate}
                 />
             )}
 
             {/* 场景编辑弹窗 */}
             {locationEditModal && (
                 <LocationEditModal
-                    mode="asset-hub"
                     locationId={locationEditModal.locationId}
                     locationName={locationEditModal.locationName}
                     summary={locationEditModal.summary}
-                    imageIndex={locationEditModal.imageIndex}
                     description={locationEditModal.description}
                     onClose={() => setLocationEditModal(null)}
-                    onSave={handleLocationEditGenerate}
                 />
             )}
 
             {propEditModal && (
                 <PropEditModal
-                    mode="asset-hub"
                     propId={propEditModal.propId}
                     propName={propEditModal.propName}
                     summary={propEditModal.summary}
                     description={propEditModal.description}
                     variantId={propEditModal.variantId}
                     onClose={() => setPropEditModal(null)}
-                    onRefresh={refreshAssets}
                 />
             )}
 

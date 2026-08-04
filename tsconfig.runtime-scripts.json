@@ -1,0 +1,29 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/types/next-auth.d.ts",
+    "scripts/billing-cleanup-pending-freezes.ts",
+    "scripts/billing-reconcile-ledger.ts",
+    "scripts/bplus-cutover-preflight.ts",
+    "scripts/check-image-urls-contract.ts",
+    "scripts/check-media-normalization.ts",
+    "scripts/check-outbound-image-runtime-sample.ts",
+    "scripts/check-outbound-image-success-rate.ts",
+    "scripts/codex-runtime-smoke.ts",
+    "scripts/media-archive-legacy-refs.ts",
+    "scripts/media-backfill-refs.ts",
+    "scripts/media-build-unreferenced-index.ts",
+    "scripts/media-restore-dry-run.ts",
+    "scripts/media-safety-backup.ts",
+    "scripts/migrate-image-urls-contract.ts",
+    "scripts/migrations/migrate-graph-artifacts-unique-index.ts",
+    "scripts/task-error-stats.ts",
+    "scripts/test-services.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next",
+    ".next-verify",
+    "tmp"
+  ]
+}

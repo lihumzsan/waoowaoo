@@ -9,20 +9,20 @@ import type { DefaultModelsPayload, StoredModel } from '@/lib/user-api/api-confi
 import type { PlatformModelPreset } from './types'
 
 const PLATFORM_DEFAULT_MODEL_TYPES: Record<PlatformDefaultModelField, UnifiedModelType> = {
+  assistantModel: 'llm',
   analysisModel: 'llm',
   characterModel: 'image',
   locationModel: 'image',
-  storyboardModel: 'image',
   editModel: 'image',
   videoModel: 'video',
   musicModel: 'music',
 }
 
 const PLATFORM_DEFAULT_MODEL_ENV: Record<PlatformDefaultModelField, string> = {
+  assistantModel: 'PLATFORM_DEFAULT_ASSISTANT_MODEL',
   analysisModel: 'PLATFORM_DEFAULT_ANALYSIS_MODEL',
   characterModel: 'PLATFORM_DEFAULT_CHARACTER_MODEL',
   locationModel: 'PLATFORM_DEFAULT_LOCATION_MODEL',
-  storyboardModel: 'PLATFORM_DEFAULT_STORYBOARD_MODEL',
   editModel: 'PLATFORM_DEFAULT_EDIT_MODEL',
   videoModel: 'PLATFORM_DEFAULT_VIDEO_MODEL',
   musicModel: 'PLATFORM_DEFAULT_MUSIC_MODEL',

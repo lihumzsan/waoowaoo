@@ -1,5 +1,6 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslations } from 'next-intl'
 import { useQuery } from '@tanstack/react-query'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
@@ -15,7 +16,6 @@ import type {
 } from '@/lib/assets/contracts'
 
 interface GlobalAssetPickerProps {
-    isOpen: boolean
     onClose: () => void
     onSelect: (globalAssetId: string) => void
     type: 'character' | 'location' | 'prop'
@@ -71,7 +71,6 @@ const CheckCircleIcon = ({ className }: { className?: string }) => (
 
 
 export default function GlobalAssetPicker({
-    isOpen,
     onClose,
     onSelect,
     type,
@@ -138,26 +137,6 @@ export default function GlobalAssetPicker({
     const [searchQuery, setSearchQuery] = useState('')
     const [previewImage, setPreviewImage] = useState<string | null>(null)
 
-    // 提取稳定的 refetch 引用，避免 useEffect 无限循环
-    const refetchCharacters = charactersQuery.refetch
-    const refetchLocations = locationsQuery.refetch
-    const refetchProps = propsQuery.refetch
-
-    useEffect(() => {
-        if (isOpen) {
-            setSelectedId(null)
-            setSearchQuery('')
-            if (type === 'character') {
-                refetchCharacters()
-            } else if (type === 'location') {
-                refetchLocations()
-            } else if (type === 'prop') {
-                refetchProps()
-            }
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isOpen, type])
-
     const handleConfirm = () => {
         if (selectedId) {
             onSelect(selectedId)
@@ -176,8 +155,6 @@ export default function GlobalAssetPicker({
         l.name.toLowerCase().includes(searchQuery.toLowerCase())
     )
 
-    if (!isOpen) return null
-
     const items = type === 'character'
         ? filteredCharacters
         : type === 'location'
@@ -189,8 +166,16 @@ export default function GlobalAssetPicker({
             ? locations.length === 0
             : props.length === 0
 
-    return (
-        <div className="fixed inset-0 glass-overlay flex items-center justify-center z-50">
+    if (typeof document === 'undefined') {
+        return null
+    }
+
+    return createPortal(
+        <div
+            role="dialog"
+            aria-modal="true"
+            className="fixed inset-0 glass-overlay flex items-center justify-center z-50"
+        >
                 <div className="glass-surface-modal w-[600px] max-h-[80vh] flex flex-col">
                 {/* 头部 */}
                 <div className="flex items-center justify-between px-6 py-4">
@@ -404,6 +389,7 @@ export default function GlobalAssetPicker({
                     />
                 )
             }
-        </div >
+        </div>,
+        document.body,
     )
 }

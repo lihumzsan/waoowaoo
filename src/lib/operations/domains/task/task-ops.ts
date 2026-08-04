@@ -1,38 +1,127 @@
 import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
-import { normalizeTaskError } from '@/lib/errors/normalize'
-import { removeTaskJob } from '@/lib/task/queues'
-import { listTaskLifecycleEvents, publishTaskEvent } from '@/lib/task/publisher'
-import { cancelTask, dismissFailedTasks, getTaskById, queryTasks } from '@/lib/task/service'
-import { TASK_EVENT_TYPE, type TaskStatus } from '@/lib/task/types'
-import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import { projectErrorForModel } from '@/lib/errors/projection'
+import { listTaskLifecycleEvents } from '@/lib/task/publisher'
+import { getTaskById, queryTasks } from '@/lib/task/service'
+import { queryTaskTargetStates } from '@/lib/task/state-service'
+import { cancelTemporalTask } from '@/lib/temporal/task-client'
+import { RETRY_POLICY, withRetry } from '@/lib/retry'
+import {
+  isTaskType,
+  TASK_STATUS,
+  TASK_TYPE,
+  type TaskStatus,
+  type TaskType,
+} from '@/lib/task/types'
+import type {
+  ProjectAgentOperationContext,
+  ProjectAgentOperationRegistryDraft,
+} from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 
-function toObject(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  return value as Record<string, unknown>
-}
+const taskStatusSchema = z.enum(Object.values(TASK_STATUS) as [TaskStatus, ...TaskStatus[]])
+const taskTypeSchema = z.enum(Object.values(TASK_TYPE) as [TaskType, ...TaskType[]])
+const taskTargetSchema = z.object({
+  targetType: z.string().trim().min(1),
+  targetId: z.string().trim().min(1),
+  types: z.array(z.string().trim().min(1)).optional(),
+}).strict()
 
-function readString(value: unknown): string | null {
-  if (typeof value !== 'string') return null
-  const trimmed = value.trim()
-  return trimmed || null
-}
+const listTasksInputSchema = z
+  .object({
+    projectId: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe('Filter by the exact project ID. Omit to query tasks across the current user.'),
+    targetType: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe('Filter by the exact persisted task target type.'),
+    targetId: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe('Filter by the exact persisted task target ID.'),
+    status: z
+      .array(taskStatusSchema)
+      .min(1)
+      .optional()
+      .describe('Filter by one or more exact task lifecycle statuses.'),
+    type: z
+      .array(taskTypeSchema)
+      .min(1)
+      .optional()
+      .describe('Filter by one or more exact task types.'),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe('Maximum tasks to return. Defaults to 50.'),
+  })
+  .strict()
+
+const getTaskInputSchema = z
+  .object({
+    taskId: z.string().trim().min(1).describe('Exact task ID.'),
+    events: z
+      .discriminatedUnion('kind', [
+        z.object({ kind: z.literal('none') }).strict(),
+        z
+          .object({
+            kind: z.literal('include'),
+            limit: z
+              .number()
+              .int()
+              .min(1)
+              .max(5000)
+              .optional()
+              .describe('Maximum lifecycle events to return. Defaults to 500.'),
+          })
+          .strict(),
+      ])
+      .describe('Choose whether persisted lifecycle events are returned.'),
+  })
+  .strict()
+
+export type GetTaskInput = z.infer<typeof getTaskInputSchema>
 
 function withTaskError(task: Awaited<ReturnType<typeof queryTasks>>[number]) {
-  const error = normalizeTaskError(task.errorCode, task.errorMessage)
+  const publicTask: Partial<typeof task> = { ...task }
+  delete publicTask.errorCode
+  delete publicTask.errorMessage
+  const error = task.status === TASK_STATUS.FAILED
+    ? projectErrorForModel(task.errorCode)
+    : null
   return {
-    ...task,
+    ...publicTask,
+    errorCode: error?.code ?? null,
     error,
   }
 }
 
+function isTaskVisibleInOperationContext(
+  ctx: ProjectAgentOperationContext,
+  task: NonNullable<Awaited<ReturnType<typeof getTaskById>>>,
+): boolean {
+  if (task.userId !== ctx.userId) return false
+  if (ctx.invocationChannel === 'api') return true
+  return task.projectId === ctx.projectId
+}
+
 export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
   return {
-    list_tasks: defineOperation({
-      id: 'list_tasks',
-      summary: 'List tasks for the current user with optional filters.',
+    get_task_status: defineOperation({
+      id: 'get_task_status',
+      summary: 'API-only: Query current Task presentation state for exact project targets.',
       intent: 'query',
+      channels: { tool: false, api: true, mcp: false },
       effects: {
         writes: false,
         billable: false,
@@ -42,75 +131,57 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
         externalSideEffects: false,
         longRunning: false,
       },
-      inputSchema: z.object({}).passthrough(),
+      inputSchema: z.object({
+        targets: z.array(taskTargetSchema).min(1).max(500),
+      }).strict(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const payload = toObject(input)
-        const projectId = readString(payload.projectId) || undefined
-        const targetType = readString(payload.targetType) || undefined
-        const targetId = readString(payload.targetId) || undefined
-
-        const statusList = Array.isArray(payload.status) ? payload.status : []
-        const typeList = Array.isArray(payload.type) ? payload.type : []
-        const status = statusList.filter((value): value is TaskStatus => typeof value === 'string') as TaskStatus[]
-        const type = typeList.filter((value): value is string => typeof value === 'string')
-
-        const limitRaw = typeof payload.limit === 'string' || typeof payload.limit === 'number'
-          ? Number.parseInt(String(payload.limit), 10)
-          : 50
-        const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 50
-
-        const tasks = await queryTasks({
-          projectId,
-          targetType,
-          targetId,
-          status: status.length ? status : undefined,
-          type: type.length ? type : undefined,
-          limit,
-        })
-
-        const filtered = tasks
-          .filter((task) => task.userId === ctx.userId)
-          .map(withTaskError)
-        return { tasks: filtered }
-      },
+      execute: async (ctx, input) => ({
+        states: await withRetry({
+          scope: 'prisma:get_task_status',
+          policy: RETRY_POLICY.prisma,
+          run: async () => await queryTaskTargetStates({
+            projectId: ctx.projectId,
+            userId: ctx.userId,
+            targets: input.targets,
+          }),
+        }),
+      }),
     }),
-
-    dismiss_failed_tasks: defineOperation({
-      id: 'dismiss_failed_tasks',
-      summary: 'Dismiss failed tasks in bulk for the current user.',
-      intent: 'act',
+    list_tasks: defineOperation({
+      id: 'list_tasks',
+      summary: 'List tasks for the current user with optional filters.',
+      intent: 'query',
+      channels: { tool: false, api: true, mcp: false },
       effects: {
-        writes: true,
+        writes: false,
         billable: false,
-        destructive: true,
+        destructive: false,
         overwrite: false,
-        bulk: true,
+        bulk: false,
         externalSideEffects: false,
         longRunning: false,
       },
-      confirmation: {
-        required: true,
-        summary: '将批量 dismiss 失败任务（不可逆）。确认继续后请重新调用并传入 confirmed=true。',
-      },
-      inputSchema: z.object({}).passthrough(),
+      inputSchema: listTasksInputSchema,
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
-        const payload = toObject(input)
-        const taskIdsRaw = Array.isArray(payload.taskIds) ? payload.taskIds : null
-        const taskIds = taskIdsRaw
-          ? taskIdsRaw.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
-          : []
-
-        if (taskIds.length === 0) {
-          throw new ApiError('INVALID_PARAMS')
+        const restrictedToAssistantScope = ctx.invocationChannel !== 'api'
+        if (restrictedToAssistantScope && input.projectId && input.projectId !== ctx.projectId) {
+          throw new ApiError('INVALID_PARAMS', {
+            code: 'TASK_PROJECT_SCOPE_INVALID',
+            field: 'projectId',
+          })
         }
-        if (taskIds.length > 200) {
-          throw new ApiError('INVALID_PARAMS')
-        }
+        const tasks = await queryTasks({
+          userId: ctx.userId,
+          projectId: restrictedToAssistantScope ? ctx.projectId : input.projectId,
+          targetType: input.targetType,
+          targetId: input.targetId,
+          status: input.status,
+          type: input.type,
+          limit: input.limit ?? 50,
+        })
 
-        const count = await dismissFailedTasks(taskIds, ctx.userId)
-        return { success: true, dismissed: count }
+        return { tasks: tasks.map(withTaskError) }
       },
     }),
 
@@ -118,6 +189,7 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
       id: 'get_task',
       summary: 'Get task detail for the current user; optionally includes lifecycle events.',
       intent: 'query',
+      channels: { tool: false, api: true, mcp: false },
       effects: {
         writes: false,
         billable: false,
@@ -127,31 +199,22 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
         externalSideEffects: false,
         longRunning: false,
       },
-      inputSchema: z.object({}).passthrough(),
+      inputSchema: getTaskInputSchema,
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
-        const payload = toObject(input)
-        const taskId = readString(payload.taskId)
-        if (!taskId) {
-          throw new ApiError('INVALID_PARAMS')
-        }
-
-        const task = await getTaskById(taskId)
-        if (!task || task.userId !== ctx.userId) {
+        const task = await getTaskById(input.taskId)
+        if (!task || !isTaskVisibleInOperationContext(ctx, task)) {
           throw new ApiError('NOT_FOUND')
         }
 
-        const includeEvents = payload.includeEvents === true || payload.includeEvents === '1'
-        const eventsLimitRaw = typeof payload.eventsLimit === 'string' || typeof payload.eventsLimit === 'number'
-          ? Number.parseInt(String(payload.eventsLimit), 10)
-          : 500
-        const eventsLimit = Number.isFinite(eventsLimitRaw) ? Math.min(Math.max(eventsLimitRaw, 1), 5000) : 500
-        const events = includeEvents ? await listTaskLifecycleEvents(taskId, eventsLimit) : null
+        const events =
+          input.events.kind === 'include'
+            ? await listTaskLifecycleEvents(input.taskId, input.events.limit ?? 500)
+            : null
 
         return {
           task: {
-            ...task,
-            error: normalizeTaskError(task.errorCode, task.errorMessage),
+            ...withTaskError(task),
           },
           ...(events ? { events } : {}),
         }
@@ -164,19 +227,20 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: false,
         destructive: true,
         overwrite: true,
         bulk: false,
-        externalSideEffects: true,
+        externalSideEffects: false,
         longRunning: false,
       },
+      channels: { tool: false, api: true },
       confirmation: {
         required: true,
-        summary: '将取消该任务。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将取消该任务。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({
-        confirmed: z.boolean().optional(),
         taskId: z.string().min(1),
       }),
       outputSchema: z.unknown(),
@@ -186,39 +250,30 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
           throw new ApiError('NOT_FOUND')
         }
 
-        const { task: updatedTask, cancelled } = await cancelTask(input.taskId)
+        const active = task.status === TASK_STATUS.QUEUED || task.status === TASK_STATUS.PROCESSING
+        if (!isTaskType(task.type)) {
+          throw new ApiError('CONFLICT', { code: 'TASK_TYPE_INVALID' })
+        }
+        const workflow = active
+          ? await cancelTemporalTask({
+              reference: {
+                taskId: task.id,
+                userId: task.userId,
+                taskType: task.type,
+              },
+              reason: 'Task cancelled by user',
+            })
+          : null
+        const updatedTask = await getTaskById(input.taskId)
         if (!updatedTask) {
           throw new ApiError('NOT_FOUND')
         }
 
-        if (cancelled) {
-          await removeTaskJob(input.taskId).catch(() => false)
-          await publishTaskEvent({
-            taskId: updatedTask.id,
-            projectId: updatedTask.projectId,
-            userId: updatedTask.userId,
-            type: TASK_EVENT_TYPE.FAILED,
-            taskType: updatedTask.type,
-            targetType: updatedTask.targetType,
-            targetId: updatedTask.targetId,
-            episodeId: updatedTask.episodeId || null,
-            payload: {
-              ...toObject(updatedTask.payload),
-              stage: 'cancelled',
-              stageLabel: '任务已取消',
-              cancelled: true,
-              message: updatedTask.errorMessage || 'Task cancelled by user',
-            },
-            persist: false,
-          })
-        }
-
         return {
           success: true,
-          cancelled,
+          cancelAccepted: workflow?.cancelRequested === true || workflow?.status === 'canceled',
           task: {
-            ...updatedTask,
-            error: normalizeTaskError(updatedTask.errorCode, updatedTask.errorMessage),
+            ...withTaskError(updatedTask),
           },
         }
       },

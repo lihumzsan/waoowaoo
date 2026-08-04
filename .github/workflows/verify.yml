@@ -1,0 +1,77 @@
+name: Verify
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+
+    env:
+      NODE_ENV: test
+      CI_MYSQL_PASSWORD: root
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6380
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: ci-nextauth-secret
+      INTERNAL_APP_URL: http://127.0.0.1:3000
+      CRON_SECRET: ci-cron-secret
+      INTERNAL_TASK_TOKEN: ci-internal-task-token
+      API_ENCRYPTION_KEY: waoowaoo-opensource-fixed-key-2026
+      STORAGE_TYPE: local
+      DEPLOYMENT_EDITION: self-hosted
+      PROVIDER_CREDENTIAL_MODE: user-key
+      BILLING_MODE: OFF
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Configure test database URL
+        run: |
+          printf 'DATABASE_URL=%s%s%s\n' 'mysql://root:' "$CI_MYSQL_PASSWORD" '@127.0.0.1:3307/waoowaoo_test' >> "$GITHUB_ENV"
+
+      - name: Secret scan
+        run: npm run security:secrets:repo
+
+      - name: Static verification
+        run: npm run verify:push
+
+      - name: Logic tests
+        run: npm run test:logic
+
+      - name: Registry conformance
+        run: npm run test:conformance
+
+      - name: Critical infrastructure tests
+        run: npm run test:critical
+
+      - name: Install Playwright browser
+        if: github.event_name != 'pull_request'
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser security
+        if: github.event_name != 'pull_request'
+        run: npm run test:security

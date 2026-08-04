@@ -1,9 +1,13 @@
-import { InsufficientBalanceError } from '@/lib/billing/errors'
+import {
+  BillingOperationError,
+  InsufficientBalanceError,
+  type BillingOperationErrorCode,
+} from '@/lib/billing/errors'
 import { getPrismaErrorCode, isLikelyPrismaDisconnectError, isPrismaRetryableCode } from '@/lib/prisma-error'
-import { DEFAULT_ERROR_CODE, getErrorSpec, isKnownErrorCode, resolveUnifiedErrorCode, type UnifiedErrorCode } from './codes'
+import { DEFAULT_ERROR_CODE, getErrorFailureClass, getErrorSpec, resolveUnifiedErrorCode, type UnifiedErrorCode } from './codes'
 import type { ErrorContext, NormalizedError, NormalizedErrorDetails } from './types'
 
-type NormalizeOptions = {
+export type NormalizeOptions = {
   context?: ErrorContext
   fallbackCode?: UnifiedErrorCode
   details?: Record<string, unknown> | null
@@ -12,6 +16,7 @@ type NormalizeOptions = {
 type ErrorLike = {
   code?: unknown
   status?: unknown
+  statusCode?: unknown
   message?: unknown
   details?: unknown
   provider?: unknown
@@ -29,6 +34,16 @@ function toMessage(value: unknown): string {
   }
 }
 
+/**
+ * Human-readable description of an unknown thrown value. Plain objects are
+ * serialized whole (bounded) so provider error payloads thrown as raw JSON
+ * survive into logs and persisted error messages instead of "[object Object]".
+ */
+export function describeUnknownError(value: unknown): string {
+  const message = toMessage(value)
+  return (message || String(value)).slice(0, 4000)
+}
+
 function toLowerMessage(value: unknown): string {
   return toMessage(value).toLowerCase()
 }
@@ -40,80 +55,39 @@ function containsAny(haystack: string, needles: string[]) {
   return false
 }
 
+function readHttpStatus(value: unknown): number | null {
+  const raw = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && /^\d{3}$/.test(value.trim())
+      ? Number.parseInt(value.trim(), 10)
+      : NaN
+  if (!Number.isInteger(raw) || raw < 100 || raw > 599) return null
+  return raw
+}
+
+function codeFromHttpStatus(status: number): UnifiedErrorCode {
+  if (status === 401) return 'UNAUTHORIZED'
+  if (status === 403) return 'FORBIDDEN'
+  if (status === 404) return 'NOT_FOUND'
+  if (status === 409) return 'CONFLICT'
+  if (status === 422) return 'INVALID_PARAMS'
+  if (status === 429) return 'RATE_LIMIT'
+  if (status === 504) return 'GENERATION_TIMEOUT'
+  if (status >= 500) return 'EXTERNAL_ERROR'
+  if (status >= 400) return 'INVALID_PARAMS'
+  return DEFAULT_ERROR_CODE
+}
+
+function providerCodeFromHttpStatus(status: number): UnifiedErrorCode {
+  if (status === 401 || status === 403) return 'PROVIDER_AUTH_INVALID'
+  if (status === 402) return 'PROVIDER_BILLING_REQUIRED'
+  return codeFromHttpStatus(status)
+}
+
 function isModelNotOpenCode(code: unknown): boolean {
   if (typeof code !== 'string') return false
   const normalized = code.trim().toUpperCase()
   return normalized === 'MODELNOTOPEN' || normalized === 'MODEL_NOT_OPEN'
-}
-
-function isModelNotOpenMessage(message: string): boolean {
-  return containsAny(message, [
-    'modelnotopen',
-    'has not activated the model',
-    'not activated the model',
-    'activate the model service in the ark console',
-  ])
-}
-
-function isModelNotRegisteredMessage(message: string): boolean {
-  return containsAny(message, [
-    'model_not_registered',
-    'model not registered',
-  ])
-}
-
-/**
- * MODEL_NOT_CONFIGURED: 用户未配置对应类型的模型
- * 覆盖形式：model_not_found / model_not_configured / no xxx model is enabled
- */
-function isModelNotConfiguredMessage(message: string): boolean {
-  return containsAny(message, [
-    'model_not_found',
-    'model_not_configured',
-    'is not enabled for image',
-    'is not enabled for video',
-    'is not enabled for music',
-    'is not enabled for llm',
-    'no image model is enabled',
-    'no video model is enabled',
-    'no music model is enabled',
-    'no llm model is enabled',
-    'multiple image models are enabled',
-    'multiple video models are enabled',
-    'multiple music models are enabled',
-    'multiple llm models are enabled',
-  ])
-}
-
-function isEmptyResponseMessage(message: string): boolean {
-  return containsAny(message, [
-    'channel:empty_response',
-    'empty response',
-    'no meaningful content in candidates',
-    'stream_empty',
-  ])
-}
-
-function isVideoApiFormatUnsupportedMessage(message: string): boolean {
-  if (containsAny(message, [
-    'video_api_format_unsupported',
-    'openai_compat_video_template_required',
-    'openai_compat_video_template_media_type_invalid',
-    'openai_compat_video_template_create_body_required',
-    'openai_compat_video_template_output_not_found',
-    'openai_compat_video_template_task_id_not_found',
-    'openai_compat_template_variable_missing',
-    'openai_compat_template_multipart_body_invalid',
-    'openai_compat_template_multipart_file_invalid',
-  ])) {
-    return true
-  }
-
-  const templateStatusMatch = message.match(/template request failed with status (\d{3})/i)
-  if (!templateStatusMatch) return false
-
-  const parsedStatus = Number.parseInt(templateStatusMatch[1] || '', 10)
-  return parsedStatus === 404 || parsedStatus === 405 || parsedStatus === 415
 }
 
 function buildNormalizedError(
@@ -129,59 +103,11 @@ function buildNormalizedError(
     httpStatus: spec.httpStatus,
     retryable: spec.retryable,
     category: spec.category,
+    failureClass: getErrorFailureClass(code),
     userMessageKey: spec.userMessageKey,
     details,
     provider: provider || null,
   }
-}
-
-function inferCodeFromMessage(message: string): UnifiedErrorCode | null {
-  const upper = message.toUpperCase()
-  const explicitMatch = upper.match(/\b([A-Z_]{3,})\b/)
-  if (explicitMatch && isKnownErrorCode(explicitMatch[1])) {
-    return explicitMatch[1]
-  }
-
-  const statusMatch = message.match(/\bstatus\s+(\d{3})\b/)
-  if (statusMatch) {
-    const parsedStatus = Number.parseInt(statusMatch[1] || '', 10)
-    if (Number.isFinite(parsedStatus)) {
-      if (parsedStatus === 404 || parsedStatus === 405 || parsedStatus === 415) {
-        return 'VIDEO_API_FORMAT_UNSUPPORTED'
-      }
-      if (parsedStatus === 401) return 'UNAUTHORIZED'
-      if (parsedStatus === 403) return 'FORBIDDEN'
-      if (parsedStatus === 404) return 'NOT_FOUND'
-      if (parsedStatus === 409) return 'CONFLICT'
-      if (parsedStatus === 422) return 'SENSITIVE_CONTENT'
-      if (parsedStatus === 429) return 'RATE_LIMIT'
-      if (parsedStatus === 502 || parsedStatus === 503) return 'EXTERNAL_ERROR'
-      if (parsedStatus === 504) return 'GENERATION_TIMEOUT'
-      if (parsedStatus >= 500) return 'EXTERNAL_ERROR'
-      if (parsedStatus >= 400) return 'INVALID_PARAMS'
-    }
-  }
-
-  if (isModelNotOpenMessage(message)) return 'MODEL_NOT_OPEN'
-  if (isModelNotRegisteredMessage(message)) return 'MODEL_NOT_REGISTERED'
-  if (isModelNotConfiguredMessage(message)) return 'MODEL_NOT_CONFIGURED'
-  if (isEmptyResponseMessage(message)) return 'EMPTY_RESPONSE'
-  if (isVideoApiFormatUnsupportedMessage(message)) return 'VIDEO_API_FORMAT_UNSUPPORTED'
-  if (containsAny(message, ['task cancelled', 'canceled by user', 'cancelled by user', '任务已取消'])) return 'CONFLICT'
-  if (containsAny(message, ['unauthorized', 'not authenticated', 'need login', '401'])) return 'UNAUTHORIZED'
-  // AccountOverdueError（ARK 欠费 403）必须在 FORBIDDEN 之前检查
-  if (containsAny(message, ['accountoverdueerror', 'overdue balance', 'overdue', 'account has an overdue'])) return 'INSUFFICIENT_BALANCE'
-  if (containsAny(message, ['forbidden', 'permission denied', '403'])) return 'FORBIDDEN'
-  if (containsAny(message, ['not found', '不存在', 'missing record'])) return 'NOT_FOUND'
-  if (containsAny(message, ['invalid', 'missing', 'required', 'bad request', 'fieldinvalid'])) return 'INVALID_PARAMS'
-  if (containsAny(message, ['quota', 'rate limit', 'resource_exhausted', 'throttle', '429'])) return 'RATE_LIMIT'
-  if (containsAny(message, ['insufficient balance', 'creditinsufficient', 'balance is not enough', '402', 'insufficient credits', '余额不足', '余额不够', '请充值'])) return 'INSUFFICIENT_BALANCE'
-  if (containsAny(message, ['sensitive', 'unsafe', 'safety', 'blocked', 'prohibited', 'policy_violation', 'moderation', 'harm', '敏感', '违规', '不当', '安全策略', '被过滤']) && !containsAny(message, ['case-sensitive', 'case sensitive'])) return 'SENSITIVE_CONTENT'
-  if (containsAny(message, ['timeout', 'timed out', 'deadline exceeded'])) return 'GENERATION_TIMEOUT'
-  if (containsAny(message, ['503', 'unavailable', 'overloaded', 'upstream error'])) return 'EXTERNAL_ERROR'
-  if (containsAny(message, ['network', 'fetch failed', 'econnreset', 'enotfound', 'econnrefused', 'eai_again', 'terminated', 'aborted', 'socket hang up'])) return 'NETWORK_ERROR'
-  if (containsAny(message, ['conflict', 'already exists', 'duplicate'])) return 'CONFLICT'
-  return null
 }
 
 function inferCodeFromPrismaCode(prismaCode: string): UnifiedErrorCode {
@@ -189,6 +115,41 @@ function inferCodeFromPrismaCode(prismaCode: string): UnifiedErrorCode {
   if (prismaCode === 'P2001' || prismaCode === 'P2025') return 'NOT_FOUND'
   if (isPrismaRetryableCode(prismaCode)) return 'EXTERNAL_ERROR'
   return 'INTERNAL_ERROR'
+}
+
+function codeFromBillingOperation(errorCode: BillingOperationErrorCode): UnifiedErrorCode {
+  switch (errorCode) {
+    case 'BILLING_ADJUSTMENT_IDEMPOTENCY_CONFLICT':
+    case 'BILLING_FREEZE_NOT_PENDING':
+    case 'BILLING_FREEZE_OWNERSHIP_MISMATCH':
+    case 'BILLING_IDEMPOTENT_ALREADY_CONFIRMED':
+    case 'BILLING_IDEMPOTENT_IN_PROGRESS':
+    case 'BILLING_IDEMPOTENT_ROLLED_BACK':
+    case 'BILLING_USAGE_REPLAY_DIVERGED':
+      return 'CONFLICT'
+    case 'BILLING_INVALID_ADJUSTMENT_AMOUNT':
+    case 'BILLING_INVALID_API_TYPE':
+    case 'BILLING_INVALID_CHARGED_AMOUNT':
+    case 'BILLING_INVALID_DELTA':
+    case 'BILLING_INVALID_FREEZE':
+    case 'BILLING_INVALID_FREEZE_AMOUNT':
+    case 'BILLING_INVALID_PROJECT':
+    case 'BILLING_INVALID_USAGE_IDENTITY':
+    case 'BILLING_UNKNOWN_VIDEO_CAPABILITY_COMBINATION':
+    case 'BILLING_UNKNOWN_VIDEO_RESOLUTION':
+      return 'INVALID_PARAMS'
+    case 'BILLING_CAPABILITY_PRICE_NOT_FOUND':
+    case 'BILLING_CONFIRM_FAILED':
+    case 'BILLING_FREEZE_EXPAND_FAILED':
+    case 'BILLING_FREEZE_FAILED':
+    case 'BILLING_PRICING_MODEL_AMBIGUOUS':
+    case 'BILLING_UNKNOWN_MODEL':
+      return 'INTERNAL_ERROR'
+    default: {
+      const exhaustive: never = errorCode
+      return exhaustive
+    }
+  }
 }
 
 export function normalizeAnyError(input: unknown, options: NormalizeOptions = {}): NormalizedError {
@@ -239,6 +200,14 @@ export function normalizeAnyError(input: unknown, options: NormalizeOptions = {}
     })
   }
 
+  if (input instanceof BillingOperationError) {
+    return buildNormalizedError(
+      codeFromBillingOperation(input.code),
+      message || input.message,
+      options.details,
+    )
+  }
+
   const resolvedCode = resolveUnifiedErrorCode(errorLike.code)
   if (resolvedCode) {
     return buildNormalizedError(resolvedCode, message, {
@@ -247,43 +216,18 @@ export function normalizeAnyError(input: unknown, options: NormalizeOptions = {}
     }, provider)
   }
 
-  if (isModelNotOpenCode(errorLike.code) || isModelNotOpenMessage(lowerMessage)) {
+  if (isModelNotOpenCode(errorLike.code)) {
     return buildNormalizedError('MODEL_NOT_OPEN', message, options.details, provider)
   }
-  if (isModelNotRegisteredMessage(lowerMessage)) {
-    return buildNormalizedError('MODEL_NOT_REGISTERED', message, options.details, provider)
-  }
-  if (isModelNotConfiguredMessage(lowerMessage)) {
-    return buildNormalizedError('MODEL_NOT_CONFIGURED', message, options.details, provider)
-  }
-  if (isEmptyResponseMessage(lowerMessage)) {
-    return buildNormalizedError('EMPTY_RESPONSE', message, options.details, provider)
-  }
 
-  if (typeof errorLike.status === 'number') {
-    if (errorLike.status === 401) return buildNormalizedError('UNAUTHORIZED', message, options.details, provider)
-    // 403 可能是欠费（AccountOverdueError），需优先检查消息内容再决定错误码
-    if (errorLike.status === 403) {
-      if (containsAny(lowerMessage, ['accountoverdueerror', 'overdue balance', 'overdue', 'account has an overdue'])) {
-        return buildNormalizedError('INSUFFICIENT_BALANCE', message, options.details, provider)
-      }
-      return buildNormalizedError('FORBIDDEN', message, options.details, provider)
-    }
-    if (errorLike.status === 404) return buildNormalizedError('NOT_FOUND', message, options.details, provider)
-    if (errorLike.status === 409) return buildNormalizedError('CONFLICT', message, options.details, provider)
-    if (errorLike.status === 422) return buildNormalizedError('SENSITIVE_CONTENT', message, options.details, provider)
-    if (errorLike.status === 429) return buildNormalizedError('RATE_LIMIT', message, options.details, provider)
-    if (errorLike.status === 502 || errorLike.status === 503) return buildNormalizedError('EXTERNAL_ERROR', message, options.details, provider)
-    if (errorLike.status === 504) return buildNormalizedError('GENERATION_TIMEOUT', message, options.details, provider)
-  }
-
-  const inferredCode = inferCodeFromMessage(lowerMessage)
-  if (inferredCode) {
-    return buildNormalizedError(inferredCode, message, options.details, provider)
-  }
-
-  if (options.context === 'worker' && containsAny(lowerMessage, ['provider', 'generation failed'])) {
-    return buildNormalizedError('GENERATION_FAILED', message, options.details, provider)
+  const httpStatus = readHttpStatus(errorLike.status)
+    ?? readHttpStatus(errorLike.statusCode)
+    ?? readHttpStatus(errorLike.code)
+  if (httpStatus !== null) {
+    const code = options.context === 'worker'
+      ? providerCodeFromHttpStatus(httpStatus)
+      : codeFromHttpStatus(httpStatus)
+    return buildNormalizedError(code, message, options.details, provider)
   }
 
   return buildNormalizedError(fallbackCode, message || getErrorSpec(fallbackCode).defaultMessage, options.details, provider)
@@ -296,43 +240,10 @@ export function normalizeTaskError(
 ): NormalizedError | null {
   if (!code && !message) return null
 
-  if (code === 'TASK_CANCELLED') {
-    return buildNormalizedError(
-      'CONFLICT',
-      message || 'Task cancelled by user',
-      {
-        ...(details || {}),
-        cancelled: true,
-        originalCode: code,
-      },
-    )
-  }
-
   const resolvedTaskCode = resolveUnifiedErrorCode(code)
   if (resolvedTaskCode) {
-    return buildNormalizedError(resolvedTaskCode, message || undefined, details)
+    return buildNormalizedError(resolvedTaskCode, undefined, details)
   }
 
-  const inferred = normalizeAnyError(
-    {
-      code,
-      message,
-      details,
-    },
-    {
-      fallbackCode: DEFAULT_ERROR_CODE,
-    },
-  )
-
-  if (code && !resolveUnifiedErrorCode(code)) {
-    return {
-      ...inferred,
-      details: {
-        ...(inferred.details || {}),
-        originalCode: code,
-      },
-    }
-  }
-
-  return inferred
+  return buildNormalizedError(DEFAULT_ERROR_CODE, undefined, details)
 }

@@ -23,10 +23,10 @@ interface ModelOption {
 }
 
 type DefaultModelField =
+    | 'assistantModel'
     | 'analysisModel'
     | 'characterModel'
     | 'locationModel'
-    | 'storyboardModel'
     | 'editModel'
     | 'videoModel'
     | 'musicModel'
@@ -34,10 +34,10 @@ type DefaultModelField =
 interface DefaultModelCardsProps {
     t: (key: string) => string
     defaultModels: {
+        assistantModel?: string
         analysisModel?: string
         characterModel?: string
         locationModel?: string
-        storyboardModel?: string
         editModel?: string
         videoModel?: string
         musicModel?: string
@@ -325,7 +325,7 @@ export function DefaultModelCards(allProps: DefaultModelCardsProps) {
     setPipelineGlobalKey(newModelKey)
     setPipelineGlobalCapOverrides({})
     if (newModelKey) {
-      const pipelineFields = ['characterModel', 'locationModel', 'storyboardModel', 'editModel']
+      const pipelineFields = ['characterModel', 'locationModel', 'editModel']
       const newModel = pipelineGlobalOptions.find((option) => option.modelKey === newModelKey) ?? null
       const newCapabilityFields = computeCapabilityFields(newModel, 'image')
       batchUpdateDefaultModels(pipelineFields, newModelKey, newCapabilityFields)
@@ -337,7 +337,7 @@ export function DefaultModelCards(allProps: DefaultModelCardsProps) {
         const parsed = allProps.parseBySample(rawValue, sample)
         setPipelineGlobalCapOverrides((prev) => ({ ...prev, [field]: parsed }))
         // Batch update all 4 pipeline fields
-        const pipelineFields = ['characterModel', 'locationModel', 'storyboardModel', 'editModel']
+        const pipelineFields = ['characterModel', 'locationModel', 'editModel']
         for (const pField of pipelineFields) {
             allProps.updateCapabilityDefault(pipelineGlobalCurrent.modelKey, field, parsed)
             // Also update each individual pipeline model's capability if they share the same model
@@ -349,7 +349,8 @@ export function DefaultModelCards(allProps: DefaultModelCardsProps) {
     }, [pipelineGlobalCurrent, allProps, defaultModels])
 
     // Resolve all models
-    const textModel = resolveModel('analysisModel', 'llm', defaultModels, getEnabledModelsByType, parseModelKey, encodeModelKey)
+    const assistantModel = resolveModel('assistantModel', 'llm', defaultModels, getEnabledModelsByType, parseModelKey, encodeModelKey)
+    const analysisModel = resolveModel('analysisModel', 'llm', defaultModels, getEnabledModelsByType, parseModelKey, encodeModelKey)
     const videoModel = resolveModel('videoModel', 'video', defaultModels, getEnabledModelsByType, parseModelKey, encodeModelKey)
     const musicModel = resolveModel('musicModel', 'music', defaultModels, getEnabledModelsByType, parseModelKey, encodeModelKey)
 
@@ -361,7 +362,6 @@ export function DefaultModelCards(allProps: DefaultModelCardsProps) {
     }> = [
             { field: 'characterModel', modelType: 'image', titleKey: 'defaultModelSection.pipelineCharacter', icon: 'user' },
             { field: 'locationModel', modelType: 'image', titleKey: 'defaultModelSection.pipelineLocation', icon: 'image' },
-            { field: 'storyboardModel', modelType: 'image', titleKey: 'defaultModelSection.pipelineStoryboard', icon: 'film' },
             { field: 'editModel', modelType: 'image', titleKey: 'defaultModelSection.pipelineEdit', icon: 'edit' },
         ]
 
@@ -388,12 +388,29 @@ export function DefaultModelCards(allProps: DefaultModelCardsProps) {
                     <AppIcon name="bolt" className="w-5 h-5 text-blue-500" />
                     {t('defaultModelSection.coreFoundation')}
                 </h3>
-                <div className="flex flex-col md:flex-row gap-4 mb-8">
-                    {/* Text Model Card */}
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3 mb-8">
+                    {/* Assistant Model Card */}
                     <div className="flex-1 glass-surface glass-card-shadow-soft p-4 rounded-2xl border border-[var(--glass-stroke-base)] hover:border-blue-500/30 transition-colors bg-gradient-to-br from-[var(--glass-bg-surface)] to-transparent">
                         <div className="flex items-start justify-between mb-2">
                             <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
-                                <AppIcon name="fileText" className="w-4 h-4 text-blue-500" />
+                                <AppIcon name="brain" className="w-4 h-4 text-blue-500" />
+                            </div>
+                        </div>
+                        <h4 className="text-[14px] font-bold text-[var(--glass-text-primary)] mb-0.5">{t('defaultModelSection.coreAssistantTitle')}</h4>
+                        <p className="text-[11px] text-[var(--glass-text-tertiary)] mb-3">{t('defaultModelDesc.assistantModel')}</p>
+                        <SmartSelector
+                            field="assistantModel" modelType="llm"
+                            options={assistantModel.options} normalizedKey={assistantModel.normalizedKey} current={assistantModel.current}
+                            placeholder={t('defaultModelSection.corePlaceholder')}
+                            locale={locale} t={t} props={allProps}
+                        />
+                    </div>
+
+                    {/* Analysis Model Card */}
+                    <div className="flex-1 glass-surface glass-card-shadow-soft p-4 rounded-2xl border border-[var(--glass-stroke-base)] hover:border-cyan-500/30 transition-colors bg-gradient-to-br from-[var(--glass-bg-surface)] to-transparent">
+                        <div className="flex items-start justify-between mb-2">
+                            <div className="w-8 h-8 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                                <AppIcon name="fileText" className="w-4 h-4 text-cyan-500" />
                             </div>
                             <CompactConcurrencyControl
                                 value={workflowConcurrency.analysis}
@@ -408,7 +425,7 @@ export function DefaultModelCards(allProps: DefaultModelCardsProps) {
                         <p className="text-[11px] text-[var(--glass-text-tertiary)] mb-3">{t('defaultModelDesc.analysisModel')}</p>
                         <SmartSelector
                             field="analysisModel" modelType="llm"
-                            options={textModel.options} normalizedKey={textModel.normalizedKey} current={textModel.current}
+                            options={analysisModel.options} normalizedKey={analysisModel.normalizedKey} current={analysisModel.current}
                             placeholder={t('defaultModelSection.corePlaceholder')}
                             locale={locale} t={t} props={allProps}
                         />
@@ -533,6 +550,7 @@ export function DefaultModelCards(allProps: DefaultModelCardsProps) {
                             locale={locale} t={t} props={allProps}
                         />
                     </div>
+
                 </div>
             </div>
         </div>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { ApiError, apiHandler } from '@/lib/api-errors'
 import { executeProjectAgentOperationFromApi } from '@/lib/adapters/api/execute-project-agent-operation'
+import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
 
 // 更新形象描述
 export const PATCH = apiHandler(async (
@@ -28,7 +29,7 @@ export const PATCH = apiHandler(async (
     const result = await executeProjectAgentOperationFromApi({
       request,
       operationId: 'asset_hub_update_character_appearance',
-      projectId: 'global-asset-hub',
+      projectId: GLOBAL_ASSET_PROJECT_ID,
       userId: session.user.id,
       input: {
         ...(body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : {}),
@@ -36,6 +37,7 @@ export const PATCH = apiHandler(async (
         appearanceIndex,
       },
       source: 'asset-hub',
+      responseContract: 'operation_mutation_response_v1',
     })
 
     return NextResponse.json(result)
@@ -66,13 +68,14 @@ export const POST = apiHandler(async (
     const result = await executeProjectAgentOperationFromApi({
       request,
       operationId: 'asset_hub_add_character_appearance',
-      projectId: 'global-asset-hub',
+      projectId: GLOBAL_ASSET_PROJECT_ID,
       userId: session.user.id,
       input: {
         ...(body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : {}),
         characterId,
       },
       source: 'asset-hub',
+      responseContract: 'operation_mutation_response_v1',
     })
 
     return NextResponse.json(result)
@@ -92,13 +95,14 @@ export const DELETE = apiHandler(async (
     const result = await executeProjectAgentOperationFromApi({
       request,
       operationId: 'asset_hub_delete_character_appearance',
-      projectId: 'global-asset-hub',
+      projectId: GLOBAL_ASSET_PROJECT_ID,
       userId: session.user.id,
       input: {
         characterId,
         appearanceIndex,
       },
       source: 'asset-hub',
+      responseContract: 'operation_mutation_response_v1',
     })
 
     return NextResponse.json(result)

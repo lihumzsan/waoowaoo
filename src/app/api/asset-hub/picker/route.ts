@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { executeProjectAgentOperationFromApi } from '@/lib/adapters/api/execute-project-agent-operation'
+import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
 
 /**
  * GET /api/asset-hub/picker
@@ -18,7 +19,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const result = await executeProjectAgentOperationFromApi({
     request,
     operationId: 'asset_hub_picker',
-    projectId: 'global-asset-hub',
+    projectId: GLOBAL_ASSET_PROJECT_ID,
     userId: session.user.id,
     input: { type },
     source: 'asset-hub',
@@ -26,4 +27,3 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   return NextResponse.json(result)
 })
-

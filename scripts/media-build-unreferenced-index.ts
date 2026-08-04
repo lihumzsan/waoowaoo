@@ -1,20 +1,16 @@
 import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import COS from 'cos-nodejs-sdk-v5'
+import { S3Client, paginateListObjectsV2 } from '@aws-sdk/client-s3'
 import { prisma } from '@/lib/prisma'
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
+import { loadS3StorageConfig, toS3ClientConfig } from '@/lib/storage/s3-config'
 import { MEDIA_MODEL_MAPPINGS } from './media-mapping'
 
 type StorageEntry = {
   key: string
   sizeBytes: number
   lastModified: string | null
-}
-type CosBucketPage = {
-  Contents?: Array<{ Key: string; Size?: string | number; LastModified?: string }>
-  IsTruncated?: string | boolean
-  NextMarker?: string
 }
 type DynamicModel = {
   findMany: (args: unknown) => Promise<Array<Record<string, unknown>>>
@@ -27,90 +23,25 @@ function nowStamp() {
   return new Date().toISOString().replace(/[:.]/g, '-')
 }
 
-async function listLocalObjects(): Promise<StorageEntry[]> {
-  const uploadDir = process.env.UPLOAD_DIR || './data/uploads'
-  const rootDir = path.isAbsolute(uploadDir) ? uploadDir : path.join(process.cwd(), uploadDir)
-  const exists = await fs.stat(rootDir).then(() => true).catch(() => false)
-  if (!exists) return []
-
+async function listStorageObjects(): Promise<{ storageType: 's3'; rows: StorageEntry[] }> {
+  const config = loadS3StorageConfig()
+  const client = new S3Client(toS3ClientConfig(config))
   const rows: StorageEntry[] = []
-  const queue = ['']
-
-  while (queue.length > 0) {
-    const rel = queue.shift() as string
-    const full = path.join(rootDir, rel)
-    const entries = await fs.readdir(full, { withFileTypes: true })
-    for (const entry of entries) {
-      const childRel = path.join(rel, entry.name)
-      if (entry.isDirectory()) {
-        queue.push(childRel)
-        continue
-      }
-      if (!entry.isFile()) continue
-      const stat = await fs.stat(path.join(rootDir, childRel))
-      rows.push({
-        key: childRel.split(path.sep).join('/'),
-        sizeBytes: stat.size,
-        lastModified: stat.mtime.toISOString(),
-      })
-    }
-  }
-
-  return rows
-}
-
-async function listCosObjects(): Promise<StorageEntry[]> {
-  const secretId = process.env.COS_SECRET_ID
-  const secretKey = process.env.COS_SECRET_KEY
-  const bucket = process.env.COS_BUCKET
-  const region = process.env.COS_REGION
-
-  if (!secretId || !secretKey || !bucket || !region) {
-    throw new Error('Missing COS env: COS_SECRET_ID/COS_SECRET_KEY/COS_BUCKET/COS_REGION')
-  }
-
-  const cos = new COS({ SecretId: secretId, SecretKey: secretKey, Timeout: 60_000 })
-  const rows: StorageEntry[] = []
-  let marker = ''
-
-  while (true) {
-    const page = await new Promise<CosBucketPage>((resolve, reject) => {
-      cos.getBucket(
-        {
-          Bucket: bucket,
-          Region: region,
-          Marker: marker,
-          MaxKeys: 1000,
-        },
-        (err, data) => (err ? reject(err) : resolve(data as unknown as CosBucketPage)),
-      )
-    })
-
-    const contents = page.Contents || []
-    for (const item of contents) {
+  for await (const page of paginateListObjectsV2({ client }, {
+    Bucket: config.bucket,
+    MaxKeys: 1000,
+  })) {
+    for (const item of page.Contents || []) {
+      if (!item.Key) continue
       rows.push({
         key: item.Key,
         sizeBytes: Number(item.Size || 0),
-        lastModified: item.LastModified || null,
+        lastModified: item.LastModified ? item.LastModified.toISOString() : null,
       })
     }
-
-    const truncated = String(page.IsTruncated || 'false') === 'true'
-    if (!truncated) break
-    const nextMarker = typeof page.NextMarker === 'string' ? page.NextMarker : ''
-    marker = nextMarker || (contents.length ? contents[contents.length - 1].Key : '')
-    if (!marker) break
   }
 
-  return rows
-}
-
-async function listStorageObjects() {
-  const storageType = process.env.STORAGE_TYPE || 'cos'
-  if (storageType === 'local') {
-    return { storageType, rows: await listLocalObjects() }
-  }
-  return { storageType, rows: await listCosObjects() }
+  return { storageType: 's3', rows }
 }
 
 async function buildReferencedKeySet() {

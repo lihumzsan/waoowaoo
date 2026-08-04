@@ -3,11 +3,12 @@ export { BILLING_CURRENCY } from './currency'
 export { InsufficientBalanceError } from './errors'
 export { getProjectCostDetails, getProjectTotalCost, getUserCostDetails, getUserCostSummary } from './reporting'
 export { addBalance, addBalanceWithTransaction, getBalance } from './ledger'
+export type { FreezeBalanceResult } from './ledger'
 export {
   handleBillingError,
-  prepareTaskBilling,
-  rollbackTaskBilling,
-  settleTaskBilling,
+  prepareTaskBillingInTransaction,
+  rollbackTaskBillingInTransaction,
+  settleTaskBillingInTransaction,
   withImageBilling,
   withTextBilling,
   withVideoBilling,

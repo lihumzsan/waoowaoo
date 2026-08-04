@@ -1,11 +1,42 @@
 import { prisma } from './prisma'
 
+async function resetWorkspaceResourceState() {
+  await prisma.workspaceResourceLineage.deleteMany()
+  await prisma.workspaceResource.deleteMany()
+}
+
+async function resetAgentTurnState() {
+  await prisma.agentTurnInteraction.deleteMany()
+  await prisma.agentToolEffect.deleteMany()
+  await prisma.projectAgentTurn.deleteMany()
+  await prisma.projectAssistantThread.deleteMany()
+  await prisma.projectAssistantThreadArchive.deleteMany()
+}
+
+async function resetOperationExecutionState() {
+  await prisma.operationExecution.deleteMany()
+  await prisma.approvalGrant.deleteMany()
+  await prisma.operationPlanSnapshot.deleteMany()
+}
+
+async function resetTaskExecutionState() {
+  await prisma.followUpBatchMember.deleteMany()
+  await prisma.followUpBatch.deleteMany()
+  await prisma.taskExecutionCheckpoint.deleteMany()
+  await prisma.taskEvent.deleteMany()
+  await prisma.task.deleteMany()
+}
+
 export async function resetBillingState() {
   await prisma.balanceTransaction.deleteMany()
   await prisma.balanceFreeze.deleteMany()
   await prisma.usageCost.deleteMany()
-  await prisma.taskEvent.deleteMany()
-  await prisma.task.deleteMany()
+  await prisma.subscriptionGrant.deleteMany()
+  await prisma.subscription.deleteMany()
+  await resetAgentTurnState()
+  await resetWorkspaceResourceState()
+  await resetTaskExecutionState()
+  await resetOperationExecutionState()
   await prisma.inviteRedemption.deleteMany()
   await prisma.inviteCode.deleteMany()
   await prisma.userBalance.deleteMany()
@@ -17,8 +48,10 @@ export async function resetBillingState() {
 }
 
 export async function resetTaskState() {
-  await prisma.taskEvent.deleteMany()
-  await prisma.task.deleteMany()
+  await resetAgentTurnState()
+  await resetWorkspaceResourceState()
+  await resetTaskExecutionState()
+  await resetOperationExecutionState()
 }
 
 export async function resetAssetHubState() {
@@ -29,24 +62,9 @@ export async function resetAssetHubState() {
   await prisma.globalAssetFolder.deleteMany()
 }
 
-export async function resetProjectWorkflowState() {
-  await prisma.projectPanel.deleteMany()
-  await prisma.supplementaryPanel.deleteMany()
-  await prisma.projectStoryboard.deleteMany()
-  await prisma.projectShot.deleteMany()
-  await prisma.projectClip.deleteMany()
-  await prisma.characterAppearance.deleteMany()
-  await prisma.locationImage.deleteMany()
-  await prisma.projectCharacter.deleteMany()
-  await prisma.projectLocation.deleteMany()
-  await prisma.videoEditorProject.deleteMany()
-  await prisma.projectEpisode.deleteMany()
-}
-
 export async function resetSystemState() {
   await resetTaskState()
   await resetAssetHubState()
-  await resetProjectWorkflowState()
   await prisma.usageCost.deleteMany()
   await prisma.project.deleteMany()
   await prisma.userPreference.deleteMany()

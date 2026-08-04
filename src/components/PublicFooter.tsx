@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Link } from '@/i18n/navigation'
-import { fetchPublicDeploymentIsCloud } from '@/lib/deployment/public-client'
+import { fetchPublicDeploymentFeatures } from '@/lib/deployment/public-client'
+import type { PublicDeploymentFeatures } from '@/lib/deployment/public-client'
 
 const FOOTER_LINKS = [
   { href: '/pricing', labelKey: 'pricing' },
@@ -13,14 +14,18 @@ const FOOTER_LINKS = [
   { href: '/contact', labelKey: 'contact' },
 ] as const
 
-export default function PublicFooter() {
+interface PublicFooterProps {
+  initialDeploymentFeatures?: PublicDeploymentFeatures | null
+}
+
+export default function PublicFooter({ initialDeploymentFeatures = null }: PublicFooterProps) {
   const t = useTranslations('legal.publicFooter')
-  const [showOfficialLinks, setShowOfficialLinks] = useState(false)
+  const [deploymentFeatures, setDeploymentFeatures] = useState<PublicDeploymentFeatures | null>(initialDeploymentFeatures)
 
   useEffect(() => {
     let cancelled = false
-    fetchPublicDeploymentIsCloud().then((isCloud) => {
-      if (!cancelled) setShowOfficialLinks(isCloud)
+    fetchPublicDeploymentFeatures().then((features) => {
+      if (!cancelled) setDeploymentFeatures(features)
     })
     return () => {
       cancelled = true
@@ -34,7 +39,7 @@ export default function PublicFooter() {
           <p className="font-semibold text-[var(--glass-text-secondary)]">{t('brand')}</p>
           <p>{t('betaNotice')}</p>
         </div>
-        {showOfficialLinks ? (
+        {deploymentFeatures?.showOfficialPublicPages === true ? (
           <nav aria-label={t('navLabel')} className="flex flex-wrap gap-x-5 gap-y-2">
             {FOOTER_LINKS.map((item) => (
               <Link

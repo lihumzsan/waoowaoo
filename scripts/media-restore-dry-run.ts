@@ -40,7 +40,6 @@ async function currentCounts(): Promise<CountMap> {
   const entries: Array<[string, string]> = [
     ['projects', 'projects'],
     ['projects', 'projects'],
-    ['project_episodes', 'project_episodes'],
     ['project_panels', 'project_panels'],
     ['global_characters', 'global_characters'],
     ['global_character_appearances', 'global_character_appearances'],

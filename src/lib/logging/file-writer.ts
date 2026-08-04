@@ -1,12 +1,12 @@
 /**
  * Server-side log file writer.
  *
- * Routes log events to per-project log files following the naming convention:
- *   - `admin_{projectName}.log`    – API / user-facing operations
- *   - `Internal_{projectName}.log` – worker / internal operations
+ * stdout JSON 是日志的权威输出流；本模块只维护一份便利文件
+ * `logs/app.log`（供自托管管理员下载），超限时通过原子 rename 轮转为
+ * `logs/app.log.1`，避免多进程 read-modify-write 覆写丢行。
  *
  * This module is Edge-safe at import-time: all Node.js APIs are accessed via
- * async dynamic `import('node:fs')` calls that only run at write-time.
+ * async dynamic `import()` calls that only run at write-time.
  *
  * The writer is intentionally fire-and-forget: callers should never await it
  * and logging failures should never crash the application.
@@ -66,235 +66,50 @@ async function getNodeModules(): Promise<NodeModules | null> {
     }
 }
 
-// ─── project-name cache ───────────────────────────────────────────────
-const projectNameCache = new Map<string, string>()
-const pendingLookups = new Set<string>()
-
-/** Register a known projectId → projectName mapping. */
-export function registerProjectName(projectId: string, projectName: string): void {
-    if (projectId && projectName) {
-        projectNameCache.set(projectId, projectName)
-    }
-}
-
-/**
- * Resolve projectName from cache or DB.
- * Returns `null` if the name cannot be resolved right now.
- */
-async function resolveProjectName(projectId: string): Promise<string | null> {
-    const cached = projectNameCache.get(projectId)
-    if (cached) return cached
-
-    // Avoid duplicate concurrent lookups for the same projectId.
-    if (pendingLookups.has(projectId)) return null
-    pendingLookups.add(projectId)
-
-    try {
-        const { prisma } = await import('@/lib/prisma')
-        const project = await prisma.project.findUnique({
-            where: { id: projectId },
-            select: { name: true },
-        })
-        if (project?.name) {
-            projectNameCache.set(projectId, project.name)
-            return project.name
-        }
-    } catch {
-        // Swallow lookup errors – better to lose a log line than crash.
-    } finally {
-        pendingLookups.delete(projectId)
-    }
-
-    return null
-}
-
-// ─── file helpers ─────────────────────────────────────────────────────
-
-/**
- * Sanitize a project name so it can be safely used as part of a file name.
- * Replaces characters that are invalid on macOS/Linux/Windows with '_'.
- */
-function sanitizeProjectName(name: string): string {
-    return name.replace(/[/\\:\0*?"<>|]/g, '_').trim() || 'unknown'
-}
-
-async function appendLineAsync(filePath: string, line: string): Promise<void> {
-    const modules = await getNodeModules()
-    if (!modules) return
-
-    try {
-        // Ensure the logs directory exists
-        const dir = modules.path.dirname(filePath)
-        modules.fs.mkdirSync(dir, { recursive: true })
-        modules.fs.appendFileSync(filePath, line + '\n')
-        // 写入后异步检查是否需要清理（fire-and-forget）
-        void maybeCleanupProjectLog(filePath)
-    } catch (err) {
-        // Do not propagate, but surface so file-write failures are visible.
-        console.error('[file-writer] Failed to write log line to', filePath, err)
-    }
-}
-
-function buildLogFilePath(modules: NodeModules, prefix: string, projectName: string): string {
-    const fileName = `${prefix}_${sanitizeProjectName(projectName)}.log`
-    return modules.path.join(modules.cwd, 'logs', fileName)
-}
-
-// ─── 24h cleanup helpers ─────────────────────────────────────────────
-
-const PROJECT_LOG_MAX_BYTES = 2 * 1024 * 1024 // 2 MB 触发清理
-const LOG_RETENTION_MS = 24 * 60 * 60 * 1000   // 保留 24 小时
-
-/**
- * 从日志内容中过滤掉 24 小时前的行。
- * 每行是 JSON，通过 "ts" 字段判断时间。
- */
-function filterRecentLines(content: string): string {
-    const cutoff = Date.now() - LOG_RETENTION_MS
-    const lines = content.split('\n')
-    const kept = lines.filter((line) => {
-        if (!line.trim()) return false
-        try {
-            const parsed = JSON.parse(line) as { ts?: string }
-            if (parsed.ts) {
-                return new Date(parsed.ts).getTime() >= cutoff
-            }
-        } catch {
-            // 非 JSON 行（如分隔符）保留
-        }
-        return true
-    })
-    return kept.join('\n')
-}
-
-/**
- * 若项目日志文件超过阈值，清理 24 小时前的内容。
- */
-async function maybeCleanupProjectLog(filePath: string): Promise<void> {
-    const modules = await getNodeModules()
-    if (!modules) return
-    try {
-        const stat = modules.fs.statSync(filePath)
-        if (stat.size <= PROJECT_LOG_MAX_BYTES) return
-        const content = modules.fs.readFileSync(filePath, 'utf-8')
-        const cleaned = filterRecentLines(content)
-        modules.fs.writeFileSync(filePath, cleaned + '\n')
-    } catch {
-        // 文件不存在或读写失败，忽略
-    }
-}
-
-// ─── prefix mapping ──────────────────────────────────────────────────
-
-function getPrefix(module?: string): string {
-    if (module && module.startsWith('worker')) return 'Internal'
-    return 'admin'
-}
-
-// ─── buffered events ─────────────────────────────────────────────────
-// When a log event arrives before the project name is resolved we buffer
-// it so it can be flushed once the name becomes available.
-const bufferedLines = new Map<string, string[]>()
-
-async function flushBuffer(projectId: string, projectName: string): Promise<void> {
-    const lines = bufferedLines.get(projectId)
-    if (!lines || lines.length === 0) return
-    bufferedLines.delete(projectId)
-
-    const modules = await getNodeModules()
-    if (!modules) return
-
-    for (const entry of lines) {
-        // The prefix was stored as a "|" delimited header: "prefix|json"
-        const sepIdx = entry.indexOf('|')
-        if (sepIdx === -1) continue
-        const prefix = entry.slice(0, sepIdx)
-        const json = entry.slice(sepIdx + 1)
-        const filePath = buildLogFilePath(modules, prefix, projectName)
-        void appendLineAsync(filePath, json)
-    }
-}
-
-// ─── public API ──────────────────────────────────────────────────────
-
-/**
- * Write a log line to the appropriate project log file.
- *
- * This function is fire-and-forget – the returned promise should be
- * `void`-ed by the caller.
- */
-export async function writeLogToProjectFile(
-    line: string,
-    projectId: string | undefined,
-    module: string | undefined,
-): Promise<void> {
-    if (isEdgeOrBrowser()) return
-    if (!projectId) return
-
-    const prefix = getPrefix(module)
-
-    // Fast path – projectName already cached
-    const cachedName = projectNameCache.get(projectId)
-    if (cachedName) {
-        const modules = await getNodeModules()
-        if (!modules) return
-        const filePath = buildLogFilePath(modules, prefix, cachedName)
-        void appendLineAsync(filePath, line)
-        return
-    }
-
-    // Slow path – resolve asynchronously
-    const projectName = await resolveProjectName(projectId)
-    if (projectName) {
-        // Flush anything that was buffered while we were resolving
-        void flushBuffer(projectId, projectName)
-        const modules = await getNodeModules()
-        if (!modules) return
-        const filePath = buildLogFilePath(modules, prefix, projectName)
-        void appendLineAsync(filePath, line)
-        return
-    }
-
-    // Name not yet available – buffer the line
-    const buf = bufferedLines.get(projectId) || []
-    buf.push(`${prefix}|${line}`)
-    bufferedLines.set(projectId, buf)
-}
-
-/**
- * Called when a project name becomes available to flush any buffered
- * log events for that project.
- */
-export function onProjectNameAvailable(projectId: string, projectName: string): void {
-    registerProjectName(projectId, projectName)
-    void flushBuffer(projectId, projectName)
-}
-
 // ─── global log writer ──────────────────────────────────────────────
 
-const GLOBAL_LOG_MAX_BYTES = 10 * 1024 * 1024 // 10 MB
+// 保留是有界的：app.log 与数据库共享同一块盘，无上限的日志增长最终以磁盘写满、
+// 数据库不可用收场。默认 200MB × 10 代（约 2GB）；需要更长历史时调大环境变量即可。
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+    const parsed = Number.parseInt(value || '', 10)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+const GLOBAL_LOG_MAX_BYTES = parsePositiveInt(process.env.LOG_FILE_MAX_BYTES, 200 * 1024 * 1024)
+const GLOBAL_LOG_MAX_GENERATIONS = parsePositiveInt(process.env.LOG_FILE_MAX_GENERATIONS, 10)
+
+function appLogPath(modules: NodeModules): string {
+    return modules.path.join(modules.cwd, 'logs', 'app.log')
+}
 
 /**
- * Write a log line to the global `app.log` file.
- * Automatically rotates: when the file exceeds 10 MB, the oldest half is removed.
+ * Write a log line to `logs/app.log`.
+ * Rotation is rename-based (atomic per file): when the current file exceeds
+ * the limit, generations shift (`app.log.N-1` → `app.log.N`, …, `app.log` →
+ * `app.log.1`; the oldest generation is dropped) and appends continue into a
+ * fresh file. Writers in other processes that still hold the old path simply
+ * follow the rename – no current lines are dropped.
  */
 export async function writeGlobalLogLine(line: string): Promise<void> {
     if (isEdgeOrBrowser()) return
     const modules = await getNodeModules()
     if (!modules) return
 
-    const filePath = modules.path.join(modules.cwd, 'logs', 'app.log')
+    const filePath = appLogPath(modules)
     try {
         modules.fs.mkdirSync(modules.path.dirname(filePath), { recursive: true })
 
-        // Auto-rotate: if file exceeds limit, keep only the last half
         try {
             const stat = modules.fs.statSync(filePath)
             if (stat.size > GLOBAL_LOG_MAX_BYTES) {
-                const content = modules.fs.readFileSync(filePath, 'utf-8')
-                const lines = content.split('\n')
-                const half = Math.floor(lines.length / 2)
-                modules.fs.writeFileSync(filePath, lines.slice(half).join('\n'))
+                for (let generation = GLOBAL_LOG_MAX_GENERATIONS - 1; generation >= 1; generation -= 1) {
+                    try {
+                        modules.fs.renameSync(`${filePath}.${generation}`, `${filePath}.${generation + 1}`)
+                    } catch {
+                        // Missing generation is normal.
+                    }
+                }
+                modules.fs.renameSync(filePath, `${filePath}.1`)
             }
         } catch {
             // File may not exist yet, that's fine
@@ -306,88 +121,47 @@ export async function writeGlobalLogLine(line: string): Promise<void> {
     }
 }
 
-// ─── log file access (for download API) ─────────────────────────────
+// ─── log file access (for admin download) ───────────────────────────
 
-export interface LogFileInfo {
-    name: string
-    sizeBytes: number
-    modifiedAt: string
-}
+// 管理端下载的内存预算：完整历史留在磁盘（可直接取文件），下载只返回最近的整文件窗口。
+const DOWNLOAD_MAX_BYTES = 100 * 1024 * 1024
 
 /**
- * List all log files in the logs directory.
- */
-export async function getLogFilesList(): Promise<LogFileInfo[]> {
-    if (isEdgeOrBrowser()) return []
-    const modules = await getNodeModules()
-    if (!modules) return []
-
-    const logsDir = modules.path.join(modules.cwd, 'logs')
-    try {
-        const files = modules.fs.readdirSync(logsDir)
-        return files
-            .filter((f: string) => f.endsWith('.log'))
-            .map((f: string) => {
-                const stat = modules.fs.statSync(modules.path.join(logsDir, f))
-                return {
-                    name: f,
-                    sizeBytes: stat.size,
-                    modifiedAt: stat.mtime.toISOString(),
-                }
-            })
-            .sort((a: LogFileInfo, b: LogFileInfo) => b.modifiedAt.localeCompare(a.modifiedAt))
-    } catch {
-        return []
-    }
-}
-
-/**
- * Read and concatenate all log files into a single string for download.
+ * Read the most recent log history (chronological order) for admin download.
+ * Whole files only, newest first until DOWNLOAD_MAX_BYTES is reached, so the
+ * concatenated string stays memory-bounded regardless of retention settings.
  */
 export async function readAllLogs(): Promise<string> {
     if (isEdgeOrBrowser()) return ''
     const modules = await getNodeModules()
     if (!modules) return ''
 
-    const logsDir = modules.path.join(modules.cwd, 'logs')
-    try {
-        const files = modules.fs.readdirSync(logsDir)
-            .filter((f: string) => f.endsWith('.log'))
-            .sort()
-        const sections: string[] = []
-        for (const f of files) {
-            const content = modules.fs.readFileSync(modules.path.join(logsDir, f), 'utf-8')
-            sections.push(`\n========== ${f} ==========\n${content}`)
-        }
-        return sections.join('\n')
-    } catch {
-        return ''
+    const filePath = appLogPath(modules)
+    const newestFirst: string[] = [filePath]
+    for (let generation = 1; generation <= GLOBAL_LOG_MAX_GENERATIONS; generation += 1) {
+        newestFirst.push(`${filePath}.${generation}`)
     }
-}
-/**
- * 清理所有项目日志文件中 24 小时前的内容。
- * 供 watchdog 定期调用（建议每小时一次）。
- */
-export async function cleanupAllProjectLogs(): Promise<void> {
-    if (isEdgeOrBrowser()) return
-    const modules = await getNodeModules()
-    if (!modules) return
 
-    const logsDir = modules.path.join(modules.cwd, 'logs')
-    try {
-        const files = modules.fs.readdirSync(logsDir)
-        for (const f of files) {
-            if (!f.endsWith('.log') || f === 'app.log') continue
-            const filePath = modules.path.join(logsDir, f)
-            try {
-                const content = modules.fs.readFileSync(filePath, 'utf-8')
-                const cleaned = filterRecentLines(content)
-                modules.fs.writeFileSync(filePath, cleaned + '\n')
-            } catch {
-                // 单个文件失败不影响其他
-            }
+    const selected: string[] = []
+    let budget = DOWNLOAD_MAX_BYTES
+    for (const candidate of newestFirst) {
+        try {
+            const size = modules.fs.statSync(candidate).size
+            if (selected.length > 0 && size > budget) break
+            selected.push(candidate)
+            budget -= size
+        } catch {
+            // Missing generation is normal.
         }
-    } catch {
-        // logs 目录不存在等情况，忽略
     }
+
+    const sections: string[] = []
+    for (const candidate of selected.reverse()) {
+        try {
+            sections.push(modules.fs.readFileSync(candidate, 'utf-8'))
+        } catch {
+            // File may have rotated away between stat and read.
+        }
+    }
+    return sections.join('')
 }

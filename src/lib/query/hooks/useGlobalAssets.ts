@@ -2,12 +2,13 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '../keys'
-import { resolveTaskErrorMessage } from '@/lib/task/error-message'
 import type { MediaRef } from '@/types/project'
-import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
 import { apiFetch } from '@/lib/api-fetch'
 import { useAssets } from './useAssets'
 import { groupAssetsByKind } from '@/lib/assets/grouping'
+import {
+    requestOperationMutationVoidWithError,
+} from '@/lib/query/mutations/mutation-shared'
 
 // ============ 类型定义 ============
 export interface GlobalCharacterAppearance {
@@ -41,11 +42,6 @@ export interface GlobalLocationImage {
     imageIndex: number
     description: string | null
     imageUrl: string | null
-    spatialProfileJson?: unknown | null
-    spatialProfileStatus?: LocationSpatialProfileStatus | null
-    spatialProfileError?: string | null
-    spatialProfileAnalyzedAt?: string | Date | null
-    spatialProfileModel?: string | null
     media?: MediaRef | null
     previousImageUrl: string | null
     previousMedia?: MediaRef | null
@@ -88,7 +84,7 @@ export function useGlobalCharacters(folderId?: string | null) {
     })
     return {
         ...assetsQuery,
-        data: groupAssetsByKind(assetsQuery.data).character.map((asset) => ({
+        data: groupAssetsByKind(assetsQuery.data ?? []).character.map((asset) => ({
             id: asset.id,
             name: asset.name,
             folderId: asset.folderId,
@@ -131,7 +127,7 @@ export function useGlobalLocations(folderId?: string | null) {
     })
     return {
         ...assetsQuery,
-        data: groupAssetsByKind(assetsQuery.data).location.map((asset) => ({
+        data: groupAssetsByKind(assetsQuery.data ?? []).location.map((asset) => ({
             id: asset.id,
             name: asset.name,
             summary: asset.summary,
@@ -143,11 +139,6 @@ export function useGlobalLocations(folderId?: string | null) {
                     imageIndex: variant.index,
                     description: variant.description,
                     imageUrl: render?.imageUrl ?? null,
-                    spatialProfileJson: render?.spatialProfileJson ?? null,
-                    spatialProfileStatus: render?.spatialProfileStatus ?? null,
-                    spatialProfileError: render?.spatialProfileError ?? null,
-                    spatialProfileAnalyzedAt: render?.spatialProfileAnalyzedAt ?? null,
-                    spatialProfileModel: render?.spatialProfileModel ?? null,
                     media: render?.media ?? null,
                     previousImageUrl: render?.previousImageUrl ?? null,
                     previousMedia: render?.previousMedia ?? null,
@@ -168,7 +159,7 @@ export function useGlobalProps(folderId?: string | null) {
     })
     return {
         ...assetsQuery,
-        data: groupAssetsByKind(assetsQuery.data).prop.map((asset) => ({
+        data: groupAssetsByKind(assetsQuery.data ?? []).prop.map((asset) => ({
             id: asset.id,
             name: asset.name,
             summary: asset.summary,
@@ -180,11 +171,6 @@ export function useGlobalProps(folderId?: string | null) {
                     imageIndex: variant.index,
                     description: variant.description,
                     imageUrl: render?.imageUrl ?? null,
-                    spatialProfileJson: render?.spatialProfileJson ?? null,
-                    spatialProfileStatus: render?.spatialProfileStatus ?? null,
-                    spatialProfileError: render?.spatialProfileError ?? null,
-                    spatialProfileAnalyzedAt: render?.spatialProfileAnalyzedAt ?? null,
-                    spatialProfileModel: render?.spatialProfileModel ?? null,
                     media: render?.media ?? null,
                     previousImageUrl: render?.previousImageUrl ?? null,
                     previousMedia: render?.previousMedia ?? null,
@@ -221,21 +207,12 @@ export function useCreateFolder() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: async ({ name }: { name: string }) => {
-            const res = await apiFetch('/api/asset-hub/folders', {
+        mutationFn: async ({ name }: { name: string }) =>
+            await requestOperationMutationVoidWithError('/api/asset-hub/folders', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name }),
-            })
-            if (!res.ok) {
-                const error = await res.json()
-                throw new Error(resolveTaskErrorMessage(error, 'Failed to create folder'))
-            }
-            return res.json()
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.globalAssets.folders() })
-        },
+            }, queryClient),
     })
 }
 
@@ -246,21 +223,12 @@ export function useUpdateFolder() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: async ({ folderId, name }: { folderId: string; name: string }) => {
-            const res = await apiFetch('/api/asset-hub/folders', {
-                method: 'PUT',
+        mutationFn: async ({ folderId, name }: { folderId: string; name: string }) =>
+            await requestOperationMutationVoidWithError(`/api/asset-hub/folders/${folderId}`, {
+                method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ folderId, name }),
-            })
-            if (!res.ok) {
-                const error = await res.json()
-                throw new Error(resolveTaskErrorMessage(error, 'Failed to update folder'))
-            }
-            return res.json()
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.globalAssets.folders() })
-        },
+                body: JSON.stringify({ name }),
+            }, queryClient),
     })
 }
 
@@ -271,20 +239,10 @@ export function useDeleteFolder() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: async ({ folderId }: { folderId: string }) => {
-            const res = await apiFetch(`/api/asset-hub/folders?folderId=${folderId}`, {
+        mutationFn: async ({ folderId }: { folderId: string }) =>
+            await requestOperationMutationVoidWithError(`/api/asset-hub/folders/${folderId}`, {
                 method: 'DELETE',
-            })
-            if (!res.ok) {
-                const error = await res.json()
-                throw new Error(resolveTaskErrorMessage(error, 'Failed to delete folder'))
-            }
-            return res.json()
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.globalAssets.folders() })
-            queryClient.invalidateQueries({ queryKey: queryKeys.globalAssets.all() })
-        },
+            }, queryClient),
     })
 }
 
@@ -296,7 +254,7 @@ export function useRefreshGlobalAssets() {
 
     return () => {
         queryClient.invalidateQueries({
-            queryKey: queryKeys.assets.all('global'),
+            queryKey: queryKeys.assets.all(),
         })
         queryClient.invalidateQueries({ queryKey: queryKeys.globalAssets.all() })
     }

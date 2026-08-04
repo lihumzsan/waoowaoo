@@ -412,7 +412,7 @@
   {
     "modelType": "llm",
     "provider": "google",
-    "modelId": "gemini-3-flash-preview",
+    "modelId": "gemini-3.5-flash",
     "capabilities": {
       "llm": {
         "reasoningEffortOptions": [
@@ -861,6 +861,28 @@
         ],
         "firstlastframe": false,
         "supportGenerateAudio": false
+      }
+    }
+  },
+  {
+    "modelType": "voice",
+    "provider": "fal",
+    "modelId": "fal-ai/qwen-3-tts/voice-design/1.7b",
+    "capabilities": {
+      "voice": {
+        "languageOptions": [
+          "Auto",
+          "English",
+          "Chinese",
+          "Spanish",
+          "French",
+          "German",
+          "Italian",
+          "Japanese",
+          "Korean",
+          "Portuguese",
+          "Russian"
+        ]
       }
     }
   }

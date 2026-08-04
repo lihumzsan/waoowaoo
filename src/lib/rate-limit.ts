@@ -7,6 +7,7 @@
 
 import { redis } from '@/lib/redis'
 import { NextRequest } from 'next/server'
+import net from 'node:net'
 
 // ============================================================
 // 类型
@@ -38,10 +39,16 @@ export const AUTH_LOGIN_LIMIT: RateLimitConfig = {
     maxRequests: 5,
 }
 
-/** 注册：60 秒内最多 3 次 */
-export const AUTH_REGISTER_LIMIT: RateLimitConfig = {
+/** 验证码发送：单个可信客户端来源 60 秒内最多 10 次，手机号维度另有独立冷却和日限额。 */
+export const AUTH_SMS_SEND_LIMIT: RateLimitConfig = {
     windowSeconds: 60,
-    maxRequests: 3,
+    maxRequests: 10,
+}
+
+/** 图形验证码：单个可信客户端来源 60 秒内最多创建 20 个一次性挑战。 */
+export const AUTH_CAPTCHA_ISSUE_LIMIT: RateLimitConfig = {
+    windowSeconds: 60,
+    maxRequests: 20,
 }
 
 // ============================================================
@@ -112,8 +119,8 @@ export async function checkRateLimit(
             retryAfterSeconds: Math.ceil(result[2] / 1000),
         }
     } catch {
-        // Redis 不可用时放行，避免 Redis 故障阻塞登录
-        return { limited: false, remaining: config.maxRequests, retryAfterSeconds: 0 }
+        // 认证入口在限流状态不可判定时必须失败关闭，避免 Redis 故障变成暴力破解窗口。
+        return { limited: true, remaining: 0, retryAfterSeconds: config.windowSeconds }
     }
 }
 
@@ -122,24 +129,27 @@ export async function checkRateLimit(
 // ============================================================
 
 /**
- * 从 NextRequest 提取客户端真实 IP。
- * 依次检查常见反向代理头，最终回退到 127.0.0.1。
+ * 从 NextRequest 提取客户端真实 IP。只有显式配置的可信代理跳数可以授权
+ * x-forwarded-for；否则客户端可自行伪造该请求头绕过限流。
  */
 export function getClientIp(req: NextRequest): string {
-    // x-forwarded-for 可能包含多个 IP（逗号分隔），取第一个
-    const forwarded = req.headers.get('x-forwarded-for')
-    if (forwarded) {
-        const first = forwarded.split(',')[0]?.trim()
-        if (first) return first
-    }
-
-    const realIp = req.headers.get('x-real-ip')
-    if (realIp) return realIp.trim()
-
     // Next.js 14+ 的 ip 属性
     if ('ip' in req && typeof (req as NextRequest & { ip?: string }).ip === 'string') {
-        return (req as NextRequest & { ip?: string }).ip!
+        const directIp = (req as NextRequest & { ip?: string }).ip?.trim() || ''
+        if (net.isIP(directIp)) return directIp
     }
 
-    return '127.0.0.1'
+    const trustedProxyHops = Number.parseInt(process.env.TRUSTED_PROXY_HOPS || '0', 10)
+    if (Number.isSafeInteger(trustedProxyHops) && trustedProxyHops > 0) {
+        const forwarded = (req.headers.get('x-forwarded-for') || '')
+            .split(',')
+            .map((entry) => entry.trim())
+            .filter(Boolean)
+        const clientIndex = forwarded.length - trustedProxyHops
+        const clientIp = clientIndex >= 0 ? forwarded[clientIndex] : ''
+        if (clientIp && net.isIP(clientIp)) return clientIp
+    }
+
+    // 无法验证来源时聚合到一个共享桶，不能把它伪装成 loopback 身份。
+    return 'unresolved-client'
 }

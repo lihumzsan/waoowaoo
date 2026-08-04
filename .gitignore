@@ -15,6 +15,9 @@
 
 # next.js
 /.next/
+/.next-golden/
+/.next-security/
+/.tsconfig-security-*.json
 /.next-verify/
 /out/
 
@@ -56,6 +59,7 @@ next-env.d.ts
 
 # environment variables
 .env
+.env.production
 .env.local
 .env.test
 .env.*.local
@@ -63,6 +67,7 @@ docker-logs/
 
 # official cloud content (private, never commit)
 .official-content/
+/src/app/*/pricing-lab/
 
 # database
 *.db
@@ -77,6 +82,11 @@ certificates
 
 # local temporary snapshots for old-version verification
 .tmp-old-snapshot-*/
+# root-level throwaway debug scripts (may embed local project ids; never commit)
+/.tmp-*
+.stryker-tmp/
+reports/mutation/
+reports/test-results/
 
 # temporary files
 tmp/
@@ -87,11 +97,10 @@ AGENTS.md
 
 # internal docs (not for public)
 docs/**
-!docs/agent/
-!docs/agent/**
-
-# generated artifacts (local only)
-docs/agent/artifacts/*.export.json
+!docs/architecture/
+!docs/architecture/**
+/artifacts/browser-security/
+/artifacts/golden-journey/
 # GitHub CI workflows (internal)
 # .github/ — 只保留 workflows，忽略其他
 .github/*

@@ -1,33 +1,71 @@
 import { z } from 'zod'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
-import { addSignedUrlsToProject, deleteObjects } from '@/lib/storage'
-import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
+import { deleteProjectOwnedWorkspaceResourceLineage } from '@/lib/workspace-resource/project-deletion'
+import { addSignedUrlsToProject } from '@/lib/storage'
 import { logProjectAction } from '@/lib/logging/semantic'
-import { logError } from '@/lib/logging/core'
 import { resolveTaskLocale } from '@/lib/task/resolve-locale'
+import { TASK_STATUS } from '@/lib/task/types'
 import {
   formatProjectValidationIssue,
   normalizeProjectDraft,
+  PROJECT_DESCRIPTION_MAX_LENGTH,
+  PROJECT_NAME_MAX_LENGTH,
   validateProjectDraft,
   type ProjectDraftInput,
+  type ProjectUpdateInput,
 } from '@/lib/projects/validation'
-import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import {
+  requireProjectAgentOperationRequest,
+  type ProjectAgentOperationRegistryDraft,
+} from '@/lib/operations/types'
+import { defineOperation } from '@/lib/operations/define-operation'
 
-function readProjectDraftBody(body: unknown): ProjectDraftInput {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return { name: '' }
-  }
+const ACTIVE_ASSISTANT_TURN_STATUSES = [
+  'queued',
+  'running',
+  'waiting_approval',
+] as const
 
-  const payload = body as Record<string, unknown>
-  return {
-    name: typeof payload.name === 'string' ? payload.name : '',
-    description: typeof payload.description === 'string' ? payload.description : null,
-  }
-}
+const PENDING_ASSISTANT_INTERACTION_STATUSES = [
+  'pending',
+  'decided',
+] as const
 
-async function requireOwnedProject(params: { projectId: string; userId: string }) {
-  const project = await prisma.project.findUnique({
+const updateProjectInputSchema: z.ZodType<ProjectUpdateInput> = z
+  .object({
+    command: z
+      .discriminatedUnion('kind', [
+        z
+          .object({
+            kind: z.literal('name'),
+            name: z.string().trim().min(1).max(PROJECT_NAME_MAX_LENGTH),
+          })
+          .strict(),
+        z
+          .object({
+            kind: z.literal('description'),
+            description: z.string().trim().max(PROJECT_DESCRIPTION_MAX_LENGTH).nullable(),
+          })
+          .strict(),
+        z
+          .object({
+            kind: z.literal('details'),
+            name: z.string().trim().min(1).max(PROJECT_NAME_MAX_LENGTH),
+            description: z.string().trim().max(PROJECT_DESCRIPTION_MAX_LENGTH).nullable(),
+          })
+          .strict(),
+      ])
+      .describe('Choose exactly one project update command.'),
+  })
+  .strict()
+
+async function requireOwnedProject(
+  params: { projectId: string; userId: string },
+  client: Pick<Prisma.TransactionClient, 'project'> = prisma,
+) {
+  const project = await client.project.findUnique({
     where: { id: params.projectId },
     include: { user: true },
   })
@@ -43,102 +81,15 @@ async function requireOwnedProject(params: { projectId: string; userId: string }
   return project
 }
 
-async function collectProjectStorageKeys(projectId: string): Promise<string[]> {
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    include: {
-      characters: {
-        include: {
-          appearances: true,
-        },
-      },
-      locations: {
-        include: {
-          images: true,
-        },
-      },
-      episodes: {
-        include: {
-          storyboards: {
-            include: {
-              panels: true,
-            },
-          },
-        },
-      },
-    },
-  })
-
-  if (!project) {
-    throw new ApiError('NOT_FOUND')
-  }
-
-  const keys: string[] = []
-
-  for (const character of project.characters) {
-    for (const appearance of character.appearances) {
-      const key = await resolveStorageKeyFromMediaValue(appearance.imageUrl)
-      if (key) keys.push(key)
-    }
-  }
-
-  for (const location of project.locations) {
-    for (const image of location.images) {
-      const key = await resolveStorageKeyFromMediaValue(image.imageUrl)
-      if (key) keys.push(key)
-    }
-  }
-
-  for (const episode of project.episodes) {
-    const audioKey = await resolveStorageKeyFromMediaValue(episode.audioUrl)
-    if (audioKey) keys.push(audioKey)
-
-    for (const storyboard of episode.storyboards) {
-      const storyboardKey = await resolveStorageKeyFromMediaValue(storyboard.storyboardImageUrl)
-      if (storyboardKey) keys.push(storyboardKey)
-
-      if (storyboard.candidateImages) {
-        const raw = storyboard.candidateImages
-        const parsed = (() => {
-          try {
-            return JSON.parse(raw) as unknown
-          } catch (error) {
-            throw new ApiError('EXTERNAL_ERROR', {
-              code: 'PROJECT_CANDIDATE_IMAGES_JSON_INVALID',
-              message: error instanceof Error ? error.message : 'candidateImages JSON parse failed',
-            })
-          }
-        })()
-        if (Array.isArray(parsed)) {
-          for (const value of parsed) {
-            const key = await resolveStorageKeyFromMediaValue(value)
-            if (key) keys.push(key)
-          }
-        }
-      }
-
-      for (const panel of storyboard.panels) {
-        const imageKey = await resolveStorageKeyFromMediaValue(panel.imageUrl)
-        if (imageKey) keys.push(imageKey)
-
-        const videoKey = await resolveStorageKeyFromMediaValue(panel.videoUrl)
-        if (videoKey) keys.push(videoKey)
-
-      }
-    }
-  }
-
-  return keys
-}
-
 export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraft {
   return {
     get_project_basic: {
       id: 'get_project_basic',
-      summary: 'Load base project info and update lastAccessedAt.',
+      summary: 'Load base project info.',
       intent: 'query',
+      channels: { tool: false, api: true },
       effects: {
-        writes: true,
+        writes: false,
         billable: false,
         destructive: false,
         overwrite: false,
@@ -149,23 +100,22 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
       inputSchema: z.object({}),
       outputSchema: z.unknown(),
       execute: async (ctx) => {
-        const project = await requireOwnedProject({ projectId: ctx.projectId, userId: ctx.userId })
-
-        prisma.project.update({
-          where: { id: ctx.projectId },
-          data: { lastAccessedAt: new Date() },
-        }).catch((error: unknown) => logError('update lastAccessedAt failed', error))
-
+        const project = await requireOwnedProject({
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+        })
         return { project: addSignedUrlsToProject(project) }
       },
     },
 
-    update_project: {
+    update_project: defineOperation({
       id: 'update_project',
       summary: 'Update project name/description for the project owner.',
       intent: 'act',
+      channels: { tool: false, api: true, mcp: false },
       effects: {
         writes: true,
+        workspaceResourceImpact: 'project_data',
         billable: false,
         destructive: false,
         overwrite: false,
@@ -173,16 +123,31 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
         externalSideEffects: false,
         longRunning: false,
       },
-      inputSchema: z.object({
-        name: z.string().optional(),
-        description: z.string().optional().nullable(),
-      }).passthrough(),
+      inputSchema: updateProjectInputSchema,
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const draft = readProjectDraftBody(input)
+      executeInTransaction: async (ctx, input, transaction) => {
+        const existing = await requireOwnedProject(
+          { projectId: ctx.projectId, userId: ctx.userId },
+          transaction,
+        )
+        const draft: ProjectDraftInput =
+          input.command.kind === 'name'
+            ? {
+                name: input.command.name,
+                description: existing.description,
+              }
+            : input.command.kind === 'description'
+              ? {
+                  name: existing.name,
+                  description: input.command.description,
+                }
+              : {
+                  name: input.command.name,
+                  description: input.command.description,
+                }
         const validationIssue = validateProjectDraft(draft)
         if (validationIssue) {
-          const locale = resolveTaskLocale(ctx.request, input) ?? 'zh'
+          const locale = resolveTaskLocale(requireProjectAgentOperationRequest(ctx), input) ?? 'zh'
           throw new ApiError('INVALID_PARAMS', {
             code: validationIssue.code,
             field: validationIssue.field,
@@ -191,10 +156,9 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
           })
         }
 
-        const existing = await requireOwnedProject({ projectId: ctx.projectId, userId: ctx.userId })
         const normalized = normalizeProjectDraft(draft)
 
-        const updatedProject = await prisma.project.update({
+        const updatedProject = await transaction.project.update({
           where: { id: ctx.projectId },
           data: {
             name: normalized.name.trim(),
@@ -208,66 +172,129 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
           existing.user?.name,
           ctx.projectId,
           updatedProject.name,
-          { changes: { name: updatedProject.name, description: updatedProject.description } },
+          {
+            changes: {
+              name: updatedProject.name,
+              description: updatedProject.description,
+            },
+          },
         )
 
         return { project: updatedProject }
       },
-    },
+    }),
 
     delete_project: {
       id: 'delete_project',
-      summary: 'Delete the project and cleanup storage objects (destructive).',
+      summary: 'Delete the project and its domain relations (destructive).',
       intent: 'act',
+      channels: { tool: false, api: true },
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: false,
         destructive: true,
         overwrite: true,
         bulk: true,
-        externalSideEffects: true,
-        longRunning: true,
+        externalSideEffects: false,
+        longRunning: false,
       },
       confirmation: {
         required: true,
-        summary: '将删除整个项目及其关联数据（不可恢复）。确认继续后请重新调用并传入 confirmed=true。',
+        summary:
+          '将删除整个项目及其关联数据（不可恢复）。系统会在获得明确批准后执行同一份已审核请求。',
       },
-      inputSchema: z.object({
-        confirmed: z.boolean().optional(),
-      }).passthrough(),
+      inputSchema: z.object({}).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx) => {
-        const project = await requireOwnedProject({ projectId: ctx.projectId, userId: ctx.userId })
+      executeInTransaction: async (ctx, _input, transaction) => {
+        // Planned long-running Operations lock this same Project row before
+        // creating Tasks. Deletion joins that serialization boundary so a Task
+        // cannot be inserted between the non-terminal check and final delete.
+        const lockedProjects = await transaction.$queryRaw<
+          Array<{
+            id: string
+            userId: string
+          }>
+        >`
+          SELECT id, userId
+          FROM projects
+          WHERE id = ${ctx.projectId}
+          FOR UPDATE
+        `
+        const lockedProject = lockedProjects[0] ?? null
+        if (!lockedProject) throw new ApiError('NOT_FOUND')
+        if (lockedProject.userId !== ctx.userId) throw new ApiError('FORBIDDEN')
 
-        const keys = await collectProjectStorageKeys(ctx.projectId)
-        const cosKeys = Array.from(new Set(keys.filter(Boolean)))
+        const project = await requireOwnedProject(
+          { projectId: ctx.projectId, userId: ctx.userId },
+          transaction,
+        )
 
-        const cosResult = cosKeys.length > 0
-          ? await deleteObjects(cosKeys)
-          : { success: 0, failed: 0 }
+        const [activeTaskCount, activeTurnCount, activeInteractionCount] = await Promise.all([
+          transaction.task.count({
+            where: {
+              projectId: ctx.projectId,
+              status: {
+                notIn: [
+                  TASK_STATUS.COMPLETED,
+                  TASK_STATUS.FAILED,
+                  TASK_STATUS.CANCELED,
+                  TASK_STATUS.DISMISSED,
+                ],
+              },
+            },
+          }),
+          transaction.projectAgentTurn.count({
+            where: {
+              projectId: ctx.projectId,
+              status: { in: [...ACTIVE_ASSISTANT_TURN_STATUSES] },
+            },
+          }),
+          transaction.agentTurnInteraction.count({
+            where: {
+              turn: { projectId: ctx.projectId },
+              status: { in: [...PENDING_ASSISTANT_INTERACTION_STATUSES] },
+            },
+          }),
+        ])
+        if (activeTaskCount > 0 || activeTurnCount > 0 || activeInteractionCount > 0) {
+          throw new ApiError('CONFLICT', {
+            code: 'PROJECT_DELETE_ACTIVE_EXECUTION',
+            activeTaskCount,
+            activeTurnCount,
+            activeInteractionCount,
+          })
+        }
 
-        await prisma.project.delete({
+        await deleteProjectOwnedWorkspaceResourceLineage({
+          projectId: ctx.projectId,
+          transaction,
+        })
+        // FollowUpBatch deliberately has no Project foreign key because a
+        // terminal Task may settle after the originating Thread disappears.
+        // Project deletion must therefore close this recovery authority
+        // explicitly before cascading the Thread/Turn rows; otherwise a late
+        // Task terminal can still try to create a ghost Agent Turn.
+        await transaction.followUpBatch.updateMany({
+          where: {
+            projectId: ctx.projectId,
+            status: { in: ['pending', 'ready', 'notified'] },
+          },
+          data: {
+            status: 'cancelled',
+            cancelledAt: new Date(),
+          },
+        })
+
+        await transaction.project.delete({
           where: { id: ctx.projectId },
         })
 
-        logProjectAction(
-          'DELETE',
-          ctx.userId,
-          project.user?.name,
-          ctx.projectId,
-          project.name,
-          {
-            projectName: project.name,
-            cosFilesDeleted: cosResult.success,
-            cosFilesFailed: cosResult.failed,
-          },
-        )
+        logProjectAction('DELETE', ctx.userId, project.user?.name, ctx.projectId, project.name, {
+          projectName: project.name,
+        })
 
-        return {
-          success: true,
-          cosFilesDeleted: cosResult.success,
-          cosFilesFailed: cosResult.failed,
-        }
+        return { success: true }
       },
     },
   }

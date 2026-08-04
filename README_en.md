@@ -33,39 +33,101 @@
 
 ### Method 1: Pull Pre-built Image (Easiest)
 
-No need to clone the repository. Just download and run:
+No repository checkout is required. The Compose file contains the Temporal
+database, schema, and namespace bootstrap commands; it has no bind mount to a
+host-side repository script:
 
 ```bash
 # Download docker-compose.yml
 curl -O https://raw.githubusercontent.com/saturndec/waoowaoo/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/saturndec/waoowaoo/main/.env.example
+cp .env.example .env
+
+# Edit .env: generate a distinct random value for every blank secret. Keep
+# MYSQL_PASSWORD in sync with DATABASE_URL and COMPOSE_DATABASE_URL (URL-encode special characters).
+# Also configure a pre-created S3-compatible bucket reachable over public HTTPS.
+# TEMPORAL_WORKER_BLUE_IMAGE and TEMPORAL_WORKER_GREEN_IMAGE must both be full
+# repository@sha256:<64-hex-digest> references. They may initially use the same image.
+# APP_IMAGE must use that same digest; do not retain the all-zero placeholder.
+# TEMPORAL_WORKER_BLUE_BUILD_ID must be a unique, non-local release identity.
 
 # Start all services
 docker compose up -d
 ```
 
-> ⚠️ This is a beta version. Database is not compatible between versions. To upgrade, clear old data first:
+Web and Temporal Worker containers use the same immutable application image but
+run as separate processes and failure domains. Production Worker slots only
+pull that digest and never build from a local context. Web never hosts Workflows,
+and a Worker never accepts HTTP traffic.
+
+> [!WARNING]
+> Do not replace the only Worker with `docker compose down/up`, and never use
+> `down -v` as an upgrade. Workflows pinned to the old release need that old
+> Worker until Temporal proves the version is drained.
+
+### Blue/green Temporal Worker upgrade
+
+The first install uses the blue slot. For the next release, configure the idle
+green slot in `.env`:
 
 ```bash
-docker compose down -v
-docker rmi ghcr.io/saturndec/waoowaoo:latest
-curl -O https://raw.githubusercontent.com/saturndec/waoowaoo/main/docker-compose.yml
-docker compose up -d
+TEMPORAL_WORKER_GREEN_IMAGE=<repository@sha256:64-hex-digest>
+TEMPORAL_WORKER_GREEN_BUILD_ID=<new-unique-build-id>
+TEMPORAL_WORKER_GREEN_REPLICAS=1
 ```
 
-> After starting, please **clear your browser cache** and log in again to avoid issues caused by stale cache.
+Download the rollout guard from the same release and promote the candidate. It
+rejects a selected Current slot or mutable image before starting any candidate
+container, waits for every task queue poller, calls Temporal
+`set-current-version`, and verifies that the previous Current Worker is still running:
 
-### Method 2: Clone & Docker Build (Full Control)
+```bash
+curl -o temporal-worker-rollout.sh \
+  https://raw.githubusercontent.com/saturndec/waoowaoo/<same-release-tag>/scripts/temporal/worker-rollout.sh
+chmod 0755 temporal-worker-rollout.sh
+sh ./temporal-worker-rollout.sh promote green
+```
+
+Only then point `APP_IMAGE` at the new immutable Web image. Keep the old blue
+Worker running. Check its drainage state with:
+
+```bash
+sh ./temporal-worker-rollout.sh status
+```
+
+After the old build reports `drainageStatus: drained`, set
+`TEMPORAL_WORKER_BLUE_REPLICAS=0` in `.env` and run:
+
+```bash
+sh ./temporal-worker-rollout.sh retire blue
+```
+
+Swap blue and green on the next release. `retire` rejects the Current Version,
+an undrained version, or a slot whose desired replica count is not persistently
+zero.
+
+### Method 2: Clone, Build, and Publish an Immutable Image
 
 ```bash
 git clone https://github.com/saturndec/waoowaoo.git
 cd waoowaoo
+cp .env.example .env
+# Build locally, push to a registry you control, and resolve the pushed digest.
+docker build -t <registry>/<repository>:<release-tag> .
+docker push <registry>/<repository>:<release-tag>
+
+# Set APP_IMAGE, TEMPORAL_WORKER_BLUE_IMAGE, and TEMPORAL_WORKER_GREEN_IMAGE to
+# the same <registry>/<repository>@sha256:<64-hex-digest>. Production Compose
+# only pulls that release image; it does not build Web or Worker from context.
+# Fill the remaining .env secrets as described above.
 docker compose up -d
 ```
 
 To update:
 ```bash
 git pull
-docker compose down && docker compose up -d --build
+# Follow the blue/green Worker procedure above. Never replace the only Worker
+# with docker compose down/up.
 ```
 
 ### Method 3: Local Development (For Developers)
@@ -76,25 +138,47 @@ cd waoowaoo
 
 # Copy environment config (must be done before npm install)
 cp .env.example .env
-# ⚠️ Edit .env to fill in your AI API Keys (NEXTAUTH_URL defaults to http://localhost:3000, no change needed)
+# ⚠️ Configure database, Redis, Temporal, external S3-compatible storage,
+# authentication, and encryption. MYSQL_PASSWORD must match both database URLs.
 
 npm install
 
-# Start infrastructure only
-docker compose up mysql redis minio -d
+# Push the Prisma schema
+npm run db:push
 
-# Run database migration
-npx prisma db push
-
-# Start development server
+# Start MySQL, Redis, the Temporal Server/namespace, Web, and a local explicitly
+# unversioned Worker. This does not start the production blue/green Workers.
 npm run dev
 ```
+
+To debug the official Cloud product surface locally, copy `.env.cloud.example` to
+`.env.cloud.local` and run `npm run dev:cloud`. It uses the same local open-source
+Temporal service and does not require a Temporal Cloud account, TLS, or an API key.
 
 ---
 
 Visit [http://localhost:13000](http://localhost:13000) (Method 1 & 2) or [http://localhost:3000](http://localhost:3000) (Method 3) to get started!
 
-> The database is initialized automatically on first launch — no extra configuration needed.
+> Methods 1 and 2 initialize the database on first container launch; the external storage configuration and pre-created bucket are still required.
+
+> [!WARNING]
+> When running the app directly, do not skip `npm run db:push`. It synchronizes the Prisma schema before the application and workers start.
+>
+> Pre-create the object-storage bucket and grant the configured credentials permission to check
+> the bucket and read, write, and delete objects. `S3_ENDPOINT` must be an HTTPS endpoint reachable
+> by external AI providers. Local development uses a development bucket too, so no ngrok,
+> cloudflared, local-file storage, or Docker MinIO is required. AWS S3, Cloudflare R2, Tencent COS,
+> and Alibaba OSS share the same `S3_*` configuration. GCS requires its XML API and HMAC credentials.
+> Azure Blob does not implement S3 and is not directly supported.
+>
+> Before the one-time B+ cutover, stop the old Web, Bull worker, and Outbox
+> dispatcher, back up the database, and run `npm run db:bplus-cutover-preflight`.
+> Proceed only when every reported blocker is zero, then review and execute
+> `npm run db:bplus-cutover-apply`. This is the only apply entry: it runs the
+> immutable base followed by the additive migration for a legacy database, or
+> only the additive migration when the base is already complete. The DDL is not
+> transactional; never replace it with `db:push --accept-data-loss`. A partial
+> base fails closed and must be restored from backup rather than rerun.
 
 > [!TIP]
 > **If you experience lag**: HTTP mode may limit browser connections. Install [Caddy](https://caddyserver.com/docs/install) for HTTPS:
@@ -117,7 +201,8 @@ After launching, go to **Settings** to configure your AI service API keys. A bui
 
 - **Framework**: Next.js 15 + React 19
 - **Database**: MySQL + Prisma ORM
-- **Queue**: Redis + BullMQ
+- **Durable orchestration**: Temporal Worker Deployments + MySQL persistence
+- **Ephemeral transport/cache**: Redis
 - **Styling**: Tailwind CSS v4
 - **Auth**: NextAuth.js
 

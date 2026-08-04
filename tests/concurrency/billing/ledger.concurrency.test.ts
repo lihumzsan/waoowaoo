@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { toChargeableCredits } from '@/lib/billing/credits'
 import { calcText } from '@/lib/billing/cost'
 import {
   confirmChargeWithRecord,
@@ -12,6 +13,13 @@ import { resetBillingState } from '../../helpers/db-reset'
 import { createTestProject, createTestUser, seedBalance } from '../../helpers/billing-fixtures'
 import { expectNoNegativeLedger } from '../../helpers/assertions'
 
+function requireFreezeId(result: Awaited<ReturnType<typeof freezeBalance>>): string {
+  if (result.status !== 'frozen' && result.status !== 'already_frozen') {
+    throw new Error(`EXPECTED_FREEZE_TO_SUCCEED:${result.status}`)
+  }
+  return result.freezeId
+}
+
 describe('billing/concurrency', () => {
   beforeEach(async () => {
     await resetBillingState()
@@ -24,8 +32,10 @@ describe('billing/concurrency', () => {
 
     const attempts = Array.from({ length: 40 }, (_, idx) =>
       freezeBalance(user.id, 1, { idempotencyKey: `concurrency_freeze_${idx}` }))
-    const freezeIds = await Promise.all(attempts)
-    const successCount = freezeIds.filter(Boolean).length
+    const freezeResults = await Promise.all(attempts)
+    const successCount = freezeResults.filter((result) => (
+      result.status === 'frozen' || result.status === 'already_frozen'
+    )).length
 
     const balance = await getBalance(user.id)
     expect(successCount).toBeLessThanOrEqual(10)
@@ -40,8 +50,8 @@ describe('billing/concurrency', () => {
 
     const attempts = Array.from({ length: 20 }, () =>
       freezeBalance(user.id, 2, { idempotencyKey: 'same_key_concurrency' }))
-    const freezeIds = await Promise.all(attempts)
-    const uniqueIds = new Set(freezeIds.filter(Boolean))
+    const freezeResults = await Promise.all(attempts)
+    const uniqueIds = new Set(freezeResults.map((result) => requireFreezeId(result)))
 
     expect(uniqueIds.size).toBe(1)
     const balance = await getBalance(user.id)
@@ -55,12 +65,11 @@ describe('billing/concurrency', () => {
     const project = await createTestProject(user.id)
     await seedBalance(user.id, 10)
 
-    const freezeId = await freezeBalance(user.id, 5, { idempotencyKey: 'race_key' })
-    expect(freezeId).toBeTruthy()
+    const freezeId = requireFreezeId(await freezeBalance(user.id, 5, { idempotencyKey: 'race_key' }))
 
     const [confirmResult, rollbackResult] = await Promise.allSettled([
       confirmChargeWithRecord(
-        freezeId!,
+        freezeId,
         {
           projectId: project.id,
           action: 'race_confirm',
@@ -71,14 +80,14 @@ describe('billing/concurrency', () => {
         },
         { chargedAmount: 3 },
       ),
-      rollbackFreeze(freezeId!),
+      rollbackFreeze(freezeId),
     ])
 
     expect(['fulfilled', 'rejected']).toContain(confirmResult.status)
     expect(['fulfilled', 'rejected']).toContain(rollbackResult.status)
     expect(confirmResult.status === 'fulfilled' || rollbackResult.status === 'fulfilled').toBe(true)
 
-    const freeze = await prisma.balanceFreeze.findUnique({ where: { id: freezeId! } })
+    const freeze = await prisma.balanceFreeze.findUnique({ where: { id: freezeId } })
     expect(['confirmed', 'rolled_back']).toContain(freeze?.status)
 
     const balance = await getBalance(user.id)
@@ -115,8 +124,8 @@ describe('billing/concurrency', () => {
     expect(results.some((item) => item.status === 'fulfilled')).toBe(true)
 
     const balance = await getBalance(user.id)
-    const expected = calcText('anthropic/claude-sonnet-4', 1000, 0)
-    expect(balance.totalSpent).toBeLessThanOrEqual(expected + 1e-8)
+    const expected = toChargeableCredits(calcText('anthropic/claude-sonnet-4', 1000, 0))
+    expect(balance.totalSpent).toBeLessThanOrEqual(expected)
     expect(await prisma.balanceFreeze.count()).toBe(1)
     expect(await prisma.balanceTransaction.count({ where: { type: 'consume' } })).toBeLessThanOrEqual(1)
     await expectNoNegativeLedger(user.id)

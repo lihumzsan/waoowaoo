@@ -6,7 +6,7 @@ import type {
   TaskTargetStateQuery,
 } from './hooks/useTaskTargetStateMap'
 
-type TerminalPhase = 'completed' | 'failed'
+type TerminalPhase = 'completed' | 'failed' | 'canceled'
 
 interface ApplyTaskTargetTerminalStateInput {
   readonly projectId: string
@@ -15,13 +15,13 @@ interface ApplyTaskTargetTerminalStateInput {
   readonly phase: TerminalPhase
   readonly taskId: string | null
   readonly taskType: string | null
+  readonly progressGroupId?: string | null
   readonly intent: TaskIntent
   readonly hasOutputAtStart: boolean | null
   readonly progress: number | null
   readonly stage: string | null
   readonly stageLabel: string | null
   readonly errorCode: string | null
-  readonly errorMessage: string | null
   readonly eventTs: string | null
 }
 
@@ -125,7 +125,7 @@ function shouldApplyTerminalState(params: {
   }
 
   if (
-    (params.state.phase === 'completed' || params.state.phase === 'failed') &&
+    (params.state.phase === 'completed' || params.state.phase === 'failed' || params.state.phase === 'canceled') &&
     isIncomingOlder(params.state.updatedAt, params.input.eventTs)
   ) {
     return false
@@ -135,12 +135,11 @@ function shouldApplyTerminalState(params: {
 }
 
 function terminalLastError(input: ApplyTaskTargetTerminalStateInput): TaskTargetState['lastError'] {
-  if (input.phase !== 'failed') return null
-  const message = input.errorMessage || input.errorCode
-  if (!message) return null
+  const isHandoffContractError = input.errorCode?.startsWith('CANVAS_TERMINAL_RESOURCE_') === true
+  if (input.phase !== 'failed' && !isHandoffContractError) return null
+  if (!input.errorCode) return null
   return {
-    code: input.errorCode || 'TASK_FAILED',
-    message,
+    code: input.errorCode,
   }
 }
 
@@ -162,8 +161,10 @@ function applyTerminalStateToData(
     return {
       ...state,
       phase: input.phase,
+      taskId: input.taskId,
       runningTaskId: null,
       runningTaskType: input.taskType || state.runningTaskType,
+      progressGroupId: input.progressGroupId ?? state.progressGroupId ?? null,
       intent: input.intent,
       hasOutputAtStart: input.hasOutputAtStart ?? state.hasOutputAtStart,
       progress: input.phase === 'completed' ? 100 : input.progress,

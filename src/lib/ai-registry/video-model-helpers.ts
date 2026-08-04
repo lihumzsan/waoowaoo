@@ -1,30 +1,20 @@
-import { parseModelKeyStrict } from './selection'
-import {
-  FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID,
-  FAL_KLING_O3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
-  FAL_KLING_O3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
-  FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
-  FAL_KLING_V3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
-  FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID,
-  FAL_SEEDANCE_2_VIDEO_MODEL_ID,
-} from '@/lib/ai-providers/fal/models'
-
-const FAL_ASSET_REFERENCE_MULTI_REFERENCE_MODEL_IDS = new Set<string>([
-  FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID,
-  FAL_SEEDANCE_2_VIDEO_MODEL_ID,
-  FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID,
-  FAL_KLING_O3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
-  FAL_KLING_O3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
-  FAL_KLING_V3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
-  FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
-])
-const FULL_PROVIDER_ASSET_REFERENCE_MULTI_REFERENCE_IDS = new Set<string>(['ark'])
-const MODEL_PROVIDER_ASSET_REFERENCE_MULTI_REFERENCE_IDS = new Set<string>(['fal'])
+import { resolveBuiltinCapabilitiesByModelKey } from './capabilities-catalog'
 
 export function supportsAssetReferenceMultiReferenceVideoModel(modelKey: string): boolean {
-  const parsedModel = parseModelKeyStrict(modelKey)
-  if (!parsedModel) return false
-  if (FULL_PROVIDER_ASSET_REFERENCE_MULTI_REFERENCE_IDS.has(parsedModel.provider)) return true
-  return MODEL_PROVIDER_ASSET_REFERENCE_MULTI_REFERENCE_IDS.has(parsedModel.provider)
-    && FAL_ASSET_REFERENCE_MULTI_REFERENCE_MODEL_IDS.has(parsedModel.modelId)
+  const capabilities = resolveBuiltinCapabilitiesByModelKey('video', modelKey)
+  return capabilities?.video?.assetReferenceMultiReference === true
+}
+
+export function supportsTextToVideoModel(modelKey: string): boolean {
+  const capabilities = resolveBuiltinCapabilitiesByModelKey('video', modelKey)
+  return capabilities?.video?.supportsTextToVideo === true
+}
+
+export function requireVideoModelMaxReferenceImages(modelKey: string): number {
+  const capabilities = resolveBuiltinCapabilitiesByModelKey('video', modelKey)
+  const limit = capabilities?.video?.maxReferenceImages
+  if (!Number.isInteger(limit) || !limit || limit <= 0) {
+    throw new Error(`VIDEO_MODEL_MAX_REFERENCE_IMAGES_REQUIRED:${modelKey}`)
+  }
+  return limit
 }

@@ -16,12 +16,47 @@ const eslintConfig = [
       "node_modules/**",
       ".agent/**",
       ".next/**",
+      ".next-golden/**",
+      ".next-security/**",
       ".next-verify/**",
+      ".stryker-tmp/**",
+      "artifacts/browser-security/**",
+      "artifacts/golden-journey/**",
       "out/**",
       "build/**",
       "coverage/**",
       "next-env.d.ts",
     ],
+  },
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    rules: {
+      "no-console": "error",
+      "no-restricted-globals": [
+        "error",
+        { name: "alert", message: "Use the global localized toast or an inline error view." },
+      ],
+      "no-restricted-properties": [
+        "error",
+        { object: "window", property: "alert", message: "Use the global localized toast or an inline error view." },
+        { object: "globalThis", property: "alert", message: "Use the global localized toast or an inline error view." },
+      ],
+    },
+  },
+  {
+    // 唯一 no-console 豁免面：
+    // - logging/core.ts、logging/file-writer.ts：stdout 权威日志流的最终写出点；
+    // - storage/init.ts：独立 bootstrap 进程，logger 就绪前运行；
+    // - scripts/**：运维/治理脚本整体豁免，脚本输出即产品。
+    files: [
+      "src/lib/logging/core.ts",
+      "src/lib/logging/file-writer.ts",
+      "src/lib/storage/init.ts",
+      "scripts/**",
+    ],
+    rules: {
+      "no-console": "off",
+    },
   },
   {
     files: ["src/**/*.{ts,tsx}"],

@@ -35,7 +35,7 @@
         "clickToRemove": "Click to remove {name}",
         "clickToAdd": "Click to add {name}"
     },
-    "screenplay": {
+    "bible": {
         "scene": "Scene {number}",
         "location": "Location:",
         "locationTime": "Time:",

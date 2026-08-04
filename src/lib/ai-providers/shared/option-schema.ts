@@ -5,7 +5,7 @@ import type {
   AiOptionValidator,
 } from '@/lib/ai-registry/types'
 
-export type MediaModality = 'image' | 'video' | 'music'
+export type MediaModality = 'image' | 'video' | 'music' | 'voice'
 
 export function enumValidator(values: readonly string[]): AiOptionValidator {
   const allowedValues = new Set(values)
@@ -28,6 +28,16 @@ export function integerRangeValidator(input: { min?: number; max?: number }): Ai
   }
 }
 
+export function numberRangeValidator(input: { min?: number; max?: number }): AiOptionValidator {
+  return (value) => {
+    if (value === undefined) return { ok: true }
+    if (typeof value !== 'number' || !Number.isFinite(value)) return { ok: false, reason: 'expected_finite_number' }
+    if (input.min !== undefined && value < input.min) return { ok: false, reason: `min=${input.min}` }
+    if (input.max !== undefined && value > input.max) return { ok: false, reason: `max=${input.max}` }
+    return { ok: true }
+  }
+}
+
 export function booleanValidator(): AiOptionValidator {
   return (value) => {
     if (value === undefined) return { ok: true }
@@ -44,6 +54,19 @@ export function nonEmptyStringValidator(): AiOptionValidator {
   }
 }
 
+export function stringArrayValidator(input?: { maxLength?: number }): AiOptionValidator {
+  return (value) => {
+    if (value === undefined) return { ok: true }
+    if (!Array.isArray(value) || value.some((item) => typeof item !== 'string' || !item.trim())) {
+      return { ok: false, reason: 'expected_non_empty_string_array' }
+    }
+    if (input?.maxLength !== undefined && value.length > input.maxLength) {
+      return { ok: false, reason: `max_length=${input.maxLength}` }
+    }
+    return { ok: true }
+  }
+}
+
 function passthroughValidator(): AiOptionValidationResult {
   return { ok: true }
 }
@@ -52,17 +75,20 @@ export function buildMediaOptionSchema(
   modality: MediaModality,
   override?: {
     allowedKeys?: readonly string[]
+    excludedKeys?: readonly string[]
     required?: readonly string[]
     requiresOneOf?: AiOptionSchema['requiresOneOf']
     conflicts?: AiOptionSchema['conflicts']
     validators?: Readonly<Record<string, AiOptionValidator>>
     objectValidators?: readonly AiOptionObjectValidator[]
+    normalize?: AiOptionSchema['normalize']
   },
 ): AiOptionSchema {
   const allowedKeys = new Set([
     ...Array.from(buildAllowedKeys(modality)),
     ...(override?.allowedKeys || []),
   ])
+  for (const key of override?.excludedKeys || []) allowedKeys.delete(key)
   const validators = Object.fromEntries(
     Array.from(allowedKeys).map((key) => [key, passthroughValidator]),
   ) as Record<string, AiOptionValidator>
@@ -76,6 +102,7 @@ export function buildMediaOptionSchema(
     conflicts: override?.conflicts,
     validators,
     objectValidators: override?.objectValidators,
+    normalize: override?.normalize,
   }
 }
 
@@ -102,7 +129,6 @@ function buildAllowedKeys(modality: MediaModality): ReadonlySet<string> {
       'modelKey',
       'prompt',
       'duration',
-      'fps',
       'resolution',
       'aspectRatio',
       'generateAudio',
@@ -118,15 +144,35 @@ function buildAllowedKeys(modality: MediaModality): ReadonlySet<string> {
       'watermark',
     ])
   }
+  if (modality === 'music') {
+    return new Set([
+      'provider',
+      'modelId',
+      'modelKey',
+      'negativePrompt',
+      'durationSeconds',
+      'vocalMode',
+      'genre',
+      'mood',
+      'bpm',
+      'outputFormat',
+    ])
+  }
+  if (modality === 'voice') {
+    return new Set([
+      'provider',
+      'modelId',
+      'modelKey',
+      'language',
+    ])
+  }
   return new Set([
     'provider',
     'modelId',
     'modelKey',
     'durationSeconds',
-    'vocalMode',
-    'genre',
-    'mood',
-    'bpm',
+    'loop',
+    'promptInfluence',
     'outputFormat',
   ])
 }

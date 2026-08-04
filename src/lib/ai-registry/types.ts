@@ -1,10 +1,21 @@
-import type OpenAI from 'openai'
 import type { InternalLLMStreamStepMeta } from '@/lib/llm-observe/internal-stream-context'
 import type { LLMStreamKind } from '@/lib/llm-observe/types'
+import type { ChatMessageContent } from '@/lib/ai-registry/message-content'
+import { isReasoningEffort, type ReasoningEffort } from '@/lib/ai-registry/reasoning-effort'
 
-export type AiModality = 'llm' | 'vision' | 'image' | 'video' | 'music'
+export type AiModality = 'llm' | 'vision' | 'image' | 'video' | 'music' | 'voice'
 export type AiExecutionMode = 'sync' | 'async' | 'stream' | 'batch'
 export type AiVariantSubKind = 'official' | 'user-template'
+export type AiLlmProtocol =
+  | 'openai-responses'
+  | 'openai-compatible-chat'
+  | 'openrouter-chat'
+  | 'google-generative-ai'
+
+/** Provider wire verified specifically for Codex custom model providers. */
+export type AiCodexRuntimeWireApi = 'responses'
+
+export type AiPublicReasoningMode = 'none' | 'native' | 'summary_auto'
 
 export type AiOptionValidationResult =
   | { ok: true }
@@ -20,6 +31,7 @@ export interface AiReadonlyUnknownObject {
 
 export type AiOptionValidator = (value: unknown) => AiOptionValidationResult
 export type AiOptionObjectValidator = (options: AiReadonlyUnknownObject) => AiOptionValidationResult
+export type AiOptionNormalizer = (options: AiReadonlyUnknownObject) => AiUnknownObject
 
 export type AiOptionSchema = {
   allowedKeys: ReadonlySet<string>
@@ -28,6 +40,7 @@ export type AiOptionSchema = {
   conflicts?: ReadonlyArray<{ keys: readonly string[]; message: string; allowSameValue?: boolean }>
   validators: { readonly [key: string]: AiOptionValidator }
   objectValidators?: readonly AiOptionObjectValidator[]
+  normalize?: AiOptionNormalizer
 }
 
 export type AiVariantDescriptor = {
@@ -67,16 +80,15 @@ export type AiResolvedLlmSelection = AiResolvedSelection
 
 export type AiLlmMessage = {
   role: 'user' | 'assistant' | 'system'
-  content: string
+  content: ChatMessageContent
 }
 
-export interface ChatCompletionOptions {
-  temperature?: number
+export interface AiLlmCallOptions {
   reasoning?: boolean
-  reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high'
-  maxRetries?: number
+  reasoningEffort?: ReasoningEffort
   projectId?: string
   action?: string
+  openRouterSessionId?: string
   streamStepId?: string
   streamStepAttempt?: number
   streamStepTitle?: string
@@ -85,7 +97,7 @@ export interface ChatCompletionOptions {
   __skipAutoStream?: boolean
 }
 
-export interface ChatCompletionStreamCallbacks {
+export interface AiLlmStreamCallbacks {
   onStage?: (stage: {
     stage: 'submit' | 'streaming' | 'fallback' | 'completed'
     provider?: string | null
@@ -102,23 +114,7 @@ export interface ChatCompletionStreamCallbacks {
   onError?: (error: unknown, step?: InternalLLMStreamStepMeta) => void
 }
 
-export type ChatMessage = { role: 'user' | 'assistant' | 'system'; content: string }
-
-export type AiRuntimeErrorCode =
-  | 'NETWORK_ERROR'
-  | 'RATE_LIMIT'
-  | 'EMPTY_RESPONSE'
-  | 'PARSE_ERROR'
-  | 'TIMEOUT'
-  | 'SENSITIVE_CONTENT'
-  | 'INTERNAL_ERROR'
-
-export type AiRuntimeError = Error & {
-  code: AiRuntimeErrorCode
-  retryable: boolean
-  provider?: string | null
-  cause?: unknown
-}
+export type ChatMessage = { role: 'user' | 'assistant' | 'system'; content: ChatMessageContent }
 
 export type AiStepMeta = {
   stepId: string
@@ -130,7 +126,7 @@ export type AiStepMeta = {
 
 export type AiTextMessages = Array<{
   role: 'user' | 'assistant' | 'system'
-  content: string
+  content: ChatMessageContent
 }>
 
 export type AiStepExecutionInput = {
@@ -140,21 +136,11 @@ export type AiStepExecutionInput = {
   projectId?: string
   action: string
   meta: AiStepMeta
-  temperature?: number
   reasoning?: boolean
-  reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high'
+  reasoningEffort?: ReasoningEffort
 }
 
-export type AiStepExecutionResult = {
-  text: string
-  reasoning: string
-  usage: {
-    promptTokens: number
-    completionTokens: number
-    totalTokens: number
-  }
-  completion: OpenAI.Chat.Completions.ChatCompletion
-}
+export type AiStepExecutionResult = AiLlmExecutionResult
 
 export type AiVisionStepExecutionInput = {
   userId: string
@@ -164,21 +150,11 @@ export type AiVisionStepExecutionInput = {
   projectId?: string
   action?: string
   meta?: AiStepMeta
-  temperature?: number
   reasoning?: boolean
-  reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high'
+  reasoningEffort?: ReasoningEffort
 }
 
-export type AiVisionStepExecutionResult = {
-  text: string
-  reasoning: string
-  usage: {
-    promptTokens: number
-    completionTokens: number
-    totalTokens: number
-  }
-  completion: OpenAI.Chat.Completions.ChatCompletion
-}
+export type AiVisionStepExecutionResult = AiLlmExecutionResult
 
 export type AiLlmProviderConfig = {
   id: string
@@ -193,27 +169,43 @@ export type AiLlmExecutionInput = {
   selection: AiResolvedLlmSelection
   providerConfig: AiLlmProviderConfig
   messages: AiLlmMessage[]
-  temperature: number
   reasoning: boolean
-  reasoningEffort: 'minimal' | 'low' | 'medium' | 'high'
-  maxRetries: number
+  reasoningEffort: ReasoningEffort
+  openRouterSessionId?: string
 }
 
 export type AiLlmUsage = {
   promptTokens: number
   completionTokens: number
+  totalTokens: number
+  cachedInputTokens?: number
+  cacheWriteTokens?: number
+  cacheHitRate?: number
+  providerCostCredits?: number
+}
+
+export type AiLlmTermination = {
+  readonly kind: 'normal' | 'token_limit' | 'safety' | 'tool_call' | 'unknown'
+  readonly rawReason: string | null
 }
 
 export type AiLlmExecutionResult = {
-  completion: OpenAI.Chat.Completions.ChatCompletion
-  logProvider: string
+  schemaVersion: 1
+  provider: string
+  modelId: string
   text: string
   reasoning: string
-  usage?: AiLlmUsage | null
-  successDetails?: AiUnknownObject
+  termination: AiLlmTermination
+  usage: AiLlmUsage
+  response: {
+    id?: string
+    modelId?: string
+    timestamp?: string
+  }
+  providerMetadata?: AiUnknownObject
 }
 
-export type UnifiedModelType = 'llm' | 'image' | 'video' | 'music'
+export type UnifiedModelType = 'llm' | 'image' | 'video' | 'music' | 'voice'
 export type CapabilityValue = string | number | boolean
 export type CapabilityOptionValue = CapabilityValue
 export type CapabilitySelections = Record<string, Record<string, CapabilityValue>>
@@ -240,7 +232,18 @@ export interface CapabilityFieldI18n {
 export type CapabilityFieldI18nMap = Record<string, CapabilityFieldI18n>
 
 export interface LLMCapabilities {
-  reasoningEffortOptions?: string[]
+  protocol: AiLlmProtocol
+  codexRuntimeWireApi?: AiCodexRuntimeWireApi
+  publicReasoningMode?: AiPublicReasoningMode
+  reasoningEffortOptions?: ReasoningEffort[]
+  /**
+   * Total input+output token window the model accepts. Any caller that must
+   * bound what it sends reads it from here; deriving a window from a model id,
+   * a provider name or a hardcoded constant is what this field exists to stop.
+   * Absent means undeclared, and consumers must fail closed rather than assume
+   * a default — an assumed window is either wasted context or a hard overflow.
+   */
+  contextWindow?: number
   fieldI18n?: CapabilityFieldI18nMap
 }
 
@@ -251,21 +254,43 @@ export interface ImageCapabilities {
 }
 
 export interface VideoCapabilities {
+  supportsTextToVideo?: boolean
   generationModeOptions?: string[]
   generateAudioOptions?: boolean[]
   durationOptions?: number[]
-  fpsOptions?: number[]
   resolutionOptions?: string[]
   firstlastframe?: boolean
   supportGenerateAudio?: boolean
+  assetReferenceMultiReference?: boolean
+  maxReferenceImages?: number
+  maxReferenceAudios?: number
   fieldI18n?: CapabilityFieldI18nMap
 }
 
 export interface MusicCapabilities {
   durationSecondsOptions?: number[]
+  durationSecondsRange?: {
+    min: number
+    max: number
+  }
   vocalModeOptions?: string[]
   outputFormatOptions?: string[]
   bpmOptions?: number[]
+  /**
+   * Whether and how many video Resource references this music model accepts as
+   * generation conditioning (video-to-soundtrack). Absent means unsupported.
+   */
+  maxReferenceVideos?: number
+  /**
+   * Provider wire limit for one generation prompt, in characters. Absent means
+   * the provider publishes no such limit.
+   */
+  promptMaxChars?: number
+  fieldI18n?: CapabilityFieldI18nMap
+}
+
+export interface VoiceCapabilities {
+  languageOptions?: string[]
   fieldI18n?: CapabilityFieldI18nMap
 }
 
@@ -274,6 +299,7 @@ export interface ModelCapabilities {
   image?: ImageCapabilities
   video?: VideoCapabilities
   music?: MusicCapabilities
+  voice?: VoiceCapabilities
 }
 
 const CAPABILITY_NAMESPACES = new Set<keyof ModelCapabilities>([
@@ -281,10 +307,15 @@ const CAPABILITY_NAMESPACES = new Set<keyof ModelCapabilities>([
   'image',
   'video',
   'music',
+  'voice',
 ])
 
 const LLM_ALLOWED_FIELDS = new Set<keyof LLMCapabilities>([
+  'protocol',
+  'codexRuntimeWireApi',
+  'publicReasoningMode',
   'reasoningEffortOptions',
+  'contextWindow',
   'fieldI18n',
 ])
 
@@ -295,21 +326,32 @@ const IMAGE_ALLOWED_FIELDS = new Set<keyof ImageCapabilities>([
 ])
 
 const VIDEO_ALLOWED_FIELDS = new Set<keyof VideoCapabilities>([
+  'supportsTextToVideo',
   'generationModeOptions',
   'generateAudioOptions',
   'durationOptions',
-  'fpsOptions',
   'resolutionOptions',
   'firstlastframe',
   'supportGenerateAudio',
+  'assetReferenceMultiReference',
+  'maxReferenceImages',
+  'maxReferenceAudios',
   'fieldI18n',
 ])
 
 const MUSIC_ALLOWED_FIELDS = new Set<keyof MusicCapabilities>([
   'durationSecondsOptions',
+  'durationSecondsRange',
   'vocalModeOptions',
   'outputFormatOptions',
   'bpmOptions',
+  'maxReferenceVideos',
+  'promptMaxChars',
+  'fieldI18n',
+])
+
+const VOICE_ALLOWED_FIELDS = new Set<keyof VoiceCapabilities>([
+  'languageOptions',
   'fieldI18n',
 ])
 
@@ -323,6 +365,10 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string' && item.trim().length > 0)
+}
+
+function isReasoningEffortArray(value: unknown): value is ReasoningEffort[] {
+  return Array.isArray(value) && value.length > 0 && value.every(isReasoningEffort)
 }
 
 function isNumberArray(value: unknown): value is number[] {
@@ -465,17 +511,67 @@ function validateNamespaceAllowedFields(
 
 function validateLLMCapabilities(issues: CapabilityValidationIssue[], raw: unknown) {
   if (!isRecord(raw)) return
+  const protocol = raw.protocol
+  const allowedProtocols: readonly AiLlmProtocol[] = [
+    'openai-responses',
+    'openai-compatible-chat',
+    'openrouter-chat',
+    'google-generative-ai',
+  ]
+  if (!allowedProtocols.includes(protocol as AiLlmProtocol)) {
+    issues.push(makeAllowedIssue('capabilities.llm.protocol', protocol, allowedProtocols))
+  }
+  if (
+    raw.codexRuntimeWireApi !== undefined
+    && raw.codexRuntimeWireApi !== 'responses'
+  ) {
+    issues.push(makeAllowedIssue(
+      'capabilities.llm.codexRuntimeWireApi',
+      raw.codexRuntimeWireApi,
+      ['responses'],
+    ))
+  }
+  const publicReasoningModes: readonly AiPublicReasoningMode[] = [
+    'none',
+    'native',
+    'summary_auto',
+  ]
+  if (
+    raw.publicReasoningMode !== undefined
+    && !publicReasoningModes.includes(raw.publicReasoningMode as AiPublicReasoningMode)
+  ) {
+    issues.push(makeAllowedIssue(
+      'capabilities.llm.publicReasoningMode',
+      raw.publicReasoningMode,
+      publicReasoningModes,
+    ))
+  }
   const options = raw.reasoningEffortOptions
-  if (options !== undefined && !isStringArray(options)) {
+  const normalizedOptions = isReasoningEffortArray(options) ? options : undefined
+  if (options !== undefined && !normalizedOptions) {
     issues.push({
       code: 'CAPABILITY_FIELD_INVALID',
       field: 'capabilities.llm.reasoningEffortOptions',
-      message: 'reasoningEffortOptions must be a non-empty string array',
+      message: 'reasoningEffortOptions must contain only canonical reasoning effort values',
+    })
+  }
+
+  const contextWindow = raw.contextWindow
+  if (
+    contextWindow !== undefined
+    && (typeof contextWindow !== 'number'
+      || !Number.isSafeInteger(contextWindow)
+      || contextWindow <= 0)
+  ) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.llm.contextWindow',
+      message: 'contextWindow must be a positive integer token count',
     })
   }
 
   validateFieldI18nMap(issues, 'llm', raw.fieldI18n, {
-    reasoningEffort: isStringArray(options) ? options : undefined,
+    reasoningEffort: normalizedOptions,
   })
 }
 
@@ -509,6 +605,14 @@ function validateImageCapabilities(issues: CapabilityValidationIssue[], raw: unk
 function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unknown) {
   if (!isRecord(raw)) return
 
+  if (raw.supportsTextToVideo !== undefined && typeof raw.supportsTextToVideo !== 'boolean') {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.video.supportsTextToVideo',
+      message: 'supportsTextToVideo must be boolean',
+    })
+  }
+
   const generationModeOptions = raw.generationModeOptions
   if (generationModeOptions !== undefined && !isStringArray(generationModeOptions)) {
     issues.push({
@@ -533,15 +637,6 @@ function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unk
       code: 'CAPABILITY_FIELD_INVALID',
       field: 'capabilities.video.durationOptions',
       message: 'durationOptions must be a finite number array',
-    })
-  }
-
-  const fpsOptions = raw.fpsOptions
-  if (fpsOptions !== undefined && !isNumberArray(fpsOptions)) {
-    issues.push({
-      code: 'CAPABILITY_FIELD_INVALID',
-      field: 'capabilities.video.fpsOptions',
-      message: 'fpsOptions must be a finite number array',
     })
   }
 
@@ -570,11 +665,40 @@ function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unk
     })
   }
 
+  if (raw.assetReferenceMultiReference !== undefined && typeof raw.assetReferenceMultiReference !== 'boolean') {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.video.assetReferenceMultiReference',
+      message: 'assetReferenceMultiReference must be boolean',
+    })
+  }
+
+  if (
+    raw.maxReferenceImages !== undefined
+    && (!Number.isInteger(raw.maxReferenceImages) || (raw.maxReferenceImages as number) <= 0)
+  ) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.video.maxReferenceImages',
+      message: 'maxReferenceImages must be a positive integer',
+    })
+  }
+
+  if (
+    raw.maxReferenceAudios !== undefined
+    && (!Number.isInteger(raw.maxReferenceAudios) || (raw.maxReferenceAudios as number) <= 0)
+  ) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.video.maxReferenceAudios',
+      message: 'maxReferenceAudios must be a positive integer',
+    })
+  }
+
   validateFieldI18nMap(issues, 'video', raw.fieldI18n, {
     generationMode: isStringArray(generationModeOptions) ? generationModeOptions : undefined,
     generateAudio: isBooleanArray(generateAudioOptions) ? generateAudioOptions : undefined,
     duration: isNumberArray(durationOptions) ? durationOptions : undefined,
-    fps: isNumberArray(fpsOptions) ? fpsOptions : undefined,
     resolution: isStringArray(resolutionOptions) ? resolutionOptions : undefined,
   })
 }
@@ -589,6 +713,24 @@ function validateMusicCapabilities(issues: CapabilityValidationIssue[], raw: unk
       field: 'capabilities.music.durationSecondsOptions',
       message: 'durationSecondsOptions must be a finite number array',
     })
+  }
+
+  const durationSecondsRange = raw.durationSecondsRange
+  if (durationSecondsRange !== undefined) {
+    const validRange = isRecord(durationSecondsRange)
+      && typeof durationSecondsRange.min === 'number'
+      && Number.isFinite(durationSecondsRange.min)
+      && durationSecondsRange.min > 0
+      && typeof durationSecondsRange.max === 'number'
+      && Number.isFinite(durationSecondsRange.max)
+      && durationSecondsRange.max >= durationSecondsRange.min
+    if (!validRange) {
+      issues.push({
+        code: 'CAPABILITY_FIELD_INVALID',
+        field: 'capabilities.music.durationSecondsRange',
+        message: 'durationSecondsRange must contain finite positive min/max values with max >= min',
+      })
+    }
   }
 
   const vocalModeOptions = raw.vocalModeOptions
@@ -618,11 +760,50 @@ function validateMusicCapabilities(issues: CapabilityValidationIssue[], raw: unk
     })
   }
 
+  if (
+    raw.maxReferenceVideos !== undefined
+    && (!Number.isInteger(raw.maxReferenceVideos) || (raw.maxReferenceVideos as number) <= 0)
+  ) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.music.maxReferenceVideos',
+      message: 'maxReferenceVideos must be a positive integer',
+    })
+  }
+
+  if (
+    raw.promptMaxChars !== undefined
+    && (!Number.isInteger(raw.promptMaxChars) || (raw.promptMaxChars as number) <= 0)
+  ) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.music.promptMaxChars',
+      message: 'promptMaxChars must be a positive integer',
+    })
+  }
+
   validateFieldI18nMap(issues, 'music', raw.fieldI18n, {
     durationSeconds: isNumberArray(durationSecondsOptions) ? durationSecondsOptions : undefined,
     vocalMode: isStringArray(vocalModeOptions) ? vocalModeOptions : undefined,
     outputFormat: isStringArray(outputFormatOptions) ? outputFormatOptions : undefined,
     bpm: isNumberArray(bpmOptions) ? bpmOptions : undefined,
+  })
+}
+
+function validateVoiceCapabilities(issues: CapabilityValidationIssue[], raw: unknown) {
+  if (!isRecord(raw)) return
+
+  const languageOptions = raw.languageOptions
+  if (languageOptions !== undefined && !isStringArray(languageOptions)) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.voice.languageOptions',
+      message: 'languageOptions must be a non-empty string array',
+    })
+  }
+
+  validateFieldI18nMap(issues, 'voice', raw.fieldI18n, {
+    language: isStringArray(languageOptions) ? languageOptions : undefined,
   })
 }
 
@@ -687,16 +868,19 @@ export function validateModelCapabilities(
   validateNamespaceShape(issues, 'image', (capabilities as ModelCapabilities).image)
   validateNamespaceShape(issues, 'video', (capabilities as ModelCapabilities).video)
   validateNamespaceShape(issues, 'music', (capabilities as ModelCapabilities).music)
+  validateNamespaceShape(issues, 'voice', (capabilities as ModelCapabilities).voice)
 
   validateNamespaceAllowedFields(issues, 'llm', (capabilities as ModelCapabilities).llm, LLM_ALLOWED_FIELDS)
   validateNamespaceAllowedFields(issues, 'image', (capabilities as ModelCapabilities).image, IMAGE_ALLOWED_FIELDS)
   validateNamespaceAllowedFields(issues, 'video', (capabilities as ModelCapabilities).video, VIDEO_ALLOWED_FIELDS)
   validateNamespaceAllowedFields(issues, 'music', (capabilities as ModelCapabilities).music, MUSIC_ALLOWED_FIELDS)
+  validateNamespaceAllowedFields(issues, 'voice', (capabilities as ModelCapabilities).voice, VOICE_ALLOWED_FIELDS)
 
   validateLLMCapabilities(issues, (capabilities as ModelCapabilities).llm)
   validateImageCapabilities(issues, (capabilities as ModelCapabilities).image)
   validateVideoCapabilities(issues, (capabilities as ModelCapabilities).video)
   validateMusicCapabilities(issues, (capabilities as ModelCapabilities).music)
+  validateVoiceCapabilities(issues, (capabilities as ModelCapabilities).voice)
 
   return issues
 }

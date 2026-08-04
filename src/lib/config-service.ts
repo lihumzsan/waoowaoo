@@ -7,7 +7,12 @@
  * cloud 优先级：平台模型/参数配置 + 项目画幅
  */
 
+import { describeUnknownError } from '@/lib/errors/normalize'
 import { prisma } from '@/lib/prisma'
+import {
+  capConcurrencyByPlan,
+  resolveSubscriptionConcurrencyCap,
+} from '@/lib/billing/subscription-concurrency'
 import {
   type CapabilitySelections,
   type CapabilityValue,
@@ -18,13 +23,15 @@ import {
 } from '@/lib/ai-registry/selection'
 import { findBuiltinCapabilities, resolveGenerationOptionsForModel } from '@/lib/ai-registry/capabilities-catalog'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
-import { getDeploymentConfig } from '@/lib/deployment/config'
+import { getDeploymentConfig, isPlatformProviderCredentialMode } from '@/lib/deployment/config'
 import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
 import { getPlatformCapabilityDefaults } from '@/lib/platform-runtime/presets'
 import {
   type WorkflowConcurrencyConfig,
   normalizeWorkflowConcurrencyConfig,
 } from '@/lib/workflow-concurrency'
+import { getDefaultWorkflowConcurrencyConfig } from '@/lib/workflow-concurrency-env'
+import { buildImageRuntimeGenerationOptions } from '@/lib/image-generation/runtime-options'
 
 export type ParsedModelKey = { provider: string, modelId: string }
 
@@ -107,11 +114,8 @@ export interface ProjectModelConfig {
   analysisModel: string | null
   characterModel: string | null
   locationModel: string | null
-  storyboardModel: string | null
   editModel: string | null
   videoModel: string | null
-  singleShotVideoModel: string | null
-  sequenceVideoModel: string | null
   musicModel: string | null
   videoRatio: string | null
   capabilityDefaults: CapabilitySelections
@@ -119,10 +123,10 @@ export interface ProjectModelConfig {
 }
 
 export interface UserModelConfig {
+  assistantModel: string | null
   analysisModel: string | null
   characterModel: string | null
   locationModel: string | null
-  storyboardModel: string | null
   editModel: string | null
   videoModel: string | null
   musicModel: string | null
@@ -132,6 +136,7 @@ export interface UserModelConfig {
 export async function getUserWorkflowConcurrencyConfig(
   userId: string,
 ): Promise<WorkflowConcurrencyConfig> {
+  const defaultConcurrency = getDefaultWorkflowConcurrencyConfig()
   const userPref = await prisma.userPreference.findUnique({
     where: { userId },
     select: {
@@ -141,11 +146,15 @@ export async function getUserWorkflowConcurrencyConfig(
     },
   })
 
-  return normalizeWorkflowConcurrencyConfig({
+  const requested = normalizeWorkflowConcurrencyConfig({
     analysis: userPref?.analysisConcurrency,
     image: userPref?.imageConcurrency,
     video: userPref?.videoConcurrency,
-  })
+  }, defaultConcurrency)
+
+  // A user's own setting can lower their concurrency but never raise it past
+  // what their plan allows.
+  return capConcurrencyByPlan(requested, await resolveSubscriptionConcurrencyCap(userId))
 }
 
 /**
@@ -156,7 +165,7 @@ export async function getProjectModelConfig(
   userId: string,
 ): Promise<ProjectModelConfig> {
   const deployment = getDeploymentConfig()
-  const platformDefaults = deployment.providerCredentialMode === 'platform-key'
+  const platformDefaults = isPlatformProviderCredentialMode(deployment)
     ? getPlatformDefaultModels()
     : null
   const projectDataPromise = prisma.project.findUnique({ where: { id: projectId } })
@@ -167,13 +176,10 @@ export async function getProjectModelConfig(
       analysisModel: platformDefaults.analysisModel,
       characterModel: platformDefaults.characterModel,
       locationModel: platformDefaults.locationModel,
-      storyboardModel: platformDefaults.storyboardModel,
       editModel: platformDefaults.editModel,
       videoModel: platformDefaults.videoModel,
-      singleShotVideoModel: platformDefaults.videoModel,
-      sequenceVideoModel: platformDefaults.videoModel,
       musicModel: platformDefaults.musicModel,
-      videoRatio: projectData?.videoRatio || '9:16',
+      videoRatio: projectData?.videoRatio ?? null,
       capabilityDefaults: getPlatformCapabilityDefaults(),
       capabilityOverrides: {},
     }
@@ -186,15 +192,12 @@ export async function getProjectModelConfig(
 
   return {
     analysisModel: extractModelKey(projectData?.analysisModel) || extractModelKey(userPref?.analysisModel) || null,
-    characterModel: extractModelKey(projectData?.characterModel) || null,
-    locationModel: extractModelKey(projectData?.locationModel) || null,
-    storyboardModel: extractModelKey(projectData?.storyboardModel) || null,
-    editModel: extractModelKey(projectData?.editModel) || null,
-    videoModel: extractModelKey(projectData?.videoModel) || null,
-    singleShotVideoModel: extractModelKey(projectData?.singleShotVideoModel) || extractModelKey(projectData?.videoModel) || null,
-    sequenceVideoModel: extractModelKey(projectData?.sequenceVideoModel) || null,
+    characterModel: extractModelKey(projectData?.characterModel) || extractModelKey(userPref?.characterModel) || null,
+    locationModel: extractModelKey(projectData?.locationModel) || extractModelKey(userPref?.locationModel) || null,
+    editModel: extractModelKey(projectData?.editModel) || extractModelKey(userPref?.editModel) || null,
+    videoModel: extractModelKey(projectData?.videoModel) || extractModelKey(userPref?.videoModel) || null,
     musicModel: extractModelKey(projectData?.musicModel) || extractModelKey(userPref?.musicModel) || null,
-    videoRatio: projectData?.videoRatio || '9:16',
+    videoRatio: projectData?.videoRatio ?? null,
     capabilityDefaults: parseCapabilitySelections(userPref?.capabilityDefaults),
     capabilityOverrides: parseCapabilitySelections(projectData?.capabilityOverrides),
   }
@@ -205,14 +208,14 @@ export async function getProjectModelConfig(
  */
 export async function getUserModelConfig(userId: string): Promise<UserModelConfig> {
   const deployment = getDeploymentConfig()
-  if (deployment.providerCredentialMode === 'platform-key') {
+  if (isPlatformProviderCredentialMode(deployment)) {
     const platformDefaults = getPlatformDefaultModels()
 
     return {
+      assistantModel: platformDefaults.assistantModel,
       analysisModel: platformDefaults.analysisModel,
       characterModel: platformDefaults.characterModel,
       locationModel: platformDefaults.locationModel,
-      storyboardModel: platformDefaults.storyboardModel,
       editModel: platformDefaults.editModel,
       videoModel: platformDefaults.videoModel,
       musicModel: platformDefaults.musicModel,
@@ -225,10 +228,10 @@ export async function getUserModelConfig(userId: string): Promise<UserModelConfi
   })
 
   return {
+    assistantModel: extractModelKey(userPref?.assistantModel) || null,
     analysisModel: extractModelKey(userPref?.analysisModel) || null,
     characterModel: extractModelKey(userPref?.characterModel) || null,
     locationModel: extractModelKey(userPref?.locationModel) || null,
-    storyboardModel: extractModelKey(userPref?.storyboardModel) || null,
     editModel: extractModelKey(userPref?.editModel) || null,
     videoModel: extractModelKey(userPref?.videoModel) || null,
     musicModel: extractModelKey(userPref?.musicModel) || null,
@@ -296,13 +299,11 @@ export function checkRequiredModels(
 
   const fieldNames: Record<string, string> = {
     analysisModel: 'AI分析模型',
+    assistantModel: 'Assistant 对话模型',
     characterModel: '角色图像模型',
     locationModel: '场景图像模型',
-    storyboardModel: '分镜图像模型',
     editModel: '修图/编辑模型',
     videoModel: '视频模型',
-    singleShotVideoModel: '单镜头视频模型',
-    sequenceVideoModel: '编排视频模型',
     musicModel: '音乐模型',
   }
 
@@ -329,15 +330,15 @@ export function getMissingConfigError(missingFields: string[]): string {
 /**
  * 为图片类任务统一构建 billingPayload（项目级，async）
  *
- * 生图和修图统一使用严格模式：用户必须已在项目设置中配置好 resolution。
- * 图片能力参数会同时注入到 billingPayload.generationOptions（计费用）
- * 和 task payload（worker 读取后传给 API 的 imageSize / quality 参数）。
+ * 生图和修图统一使用严格模式：调用方必须传入业务画幅，用户必须已在项目设置中配置好图片能力参数。
+ * 图片运行参数只注入到 billingPayload.generationOptions；计费和 worker 共用这一份参数。
  */
 export async function buildImageBillingPayload(input: {
   projectId: string
   userId: string
   imageModel: string | null
   basePayload: Record<string, unknown>
+  aspectRatio?: string | null
 }): Promise<Record<string, unknown>> {
   const { projectId, userId, imageModel, basePayload } = input
   if (!imageModel) return basePayload
@@ -351,14 +352,19 @@ export async function buildImageBillingPayload(input: {
       modelKey: imageModel,
     })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Image model capability not configured'
+    const message = describeUnknownError(err)
     throw Object.assign(new Error(message), { code: 'IMAGE_MODEL_CAPABILITY_NOT_CONFIGURED', message })
   }
+
+  const generationOptions = buildImageRuntimeGenerationOptions({
+    capabilityOptions,
+    aspectRatio: input.aspectRatio,
+  })
 
   return {
     ...basePayload,
     imageModel,
-    ...(Object.keys(capabilityOptions).length > 0 ? { generationOptions: capabilityOptions } : {}),
+    ...(Object.keys(generationOptions).length > 0 ? { generationOptions } : {}),
   }
 }
 
@@ -371,6 +377,7 @@ export function buildImageBillingPayloadFromUserConfig(input: {
   userModelConfig: UserModelConfig
   imageModel: string | null
   basePayload: Record<string, unknown>
+  aspectRatio?: string | null
 }): Record<string, unknown> {
   const { userModelConfig, imageModel, basePayload } = input
   if (!imageModel) return basePayload
@@ -383,14 +390,19 @@ export function buildImageBillingPayloadFromUserConfig(input: {
       capabilityDefaults: userModelConfig.capabilityDefaults,
     })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Image model capability not configured'
+    const message = describeUnknownError(err)
     throw Object.assign(new Error(message), { code: 'IMAGE_MODEL_CAPABILITY_NOT_CONFIGURED', message })
   }
+
+  const generationOptions = buildImageRuntimeGenerationOptions({
+    capabilityOptions,
+    aspectRatio: input.aspectRatio,
+  })
 
   return {
     ...basePayload,
     imageModel,
-    ...(Object.keys(capabilityOptions).length > 0 ? { generationOptions: capabilityOptions } : {}),
+    ...(Object.keys(generationOptions).length > 0 ? { generationOptions } : {}),
   }
 }
 ensureAiCatalogsRegistered()

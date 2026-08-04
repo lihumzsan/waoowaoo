@@ -1,5 +1,9 @@
 import type { ProviderAsyncTaskStatus } from '@/lib/ai-providers/shared/async-task-status'
 import { logInternal } from '@/lib/logging/semantic'
+import { withProviderProxyDispatcher } from '@/lib/http/outbound-proxy'
+import { GOOGLE_PROVIDER_PROXY_TARGET } from '@/lib/ai-providers/google/proxy-target'
+import { getErrorMessage } from '@/lib/ai-providers/shared/helpers'
+import { AppError } from '@/lib/errors/app-error'
 
 interface UnknownRecord {
   [key: string]: unknown
@@ -7,13 +11,6 @@ interface UnknownRecord {
 
 function asRecord(value: unknown): UnknownRecord | null {
   return value && typeof value === 'object' ? (value as UnknownRecord) : null
-}
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  const record = asRecord(error)
-  if (record && typeof record.message === 'string') return record.message
-  return String(error)
 }
 
 function getErrorStatus(error: unknown): number | undefined {
@@ -30,14 +27,17 @@ interface GeminiBatchClient {
 
 export async function queryGeminiBatchStatus(batchName: string, apiKey: string): Promise<ProviderAsyncTaskStatus> {
   if (!apiKey) {
-    throw new Error('请配置 Google AI API Key')
+    throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'google' })
   }
 
   try {
     const { GoogleGenAI } = await import('@google/genai')
     const ai = new GoogleGenAI({ apiKey })
     const batchClient = ai as unknown as GeminiBatchClient
-    const batchJob = await batchClient.batches.get({ name: batchName })
+    const batchJob = await withProviderProxyDispatcher(
+      GOOGLE_PROVIDER_PROXY_TARGET,
+      async () => await batchClient.batches.get({ name: batchName }),
+    )
     const batchRecord = asRecord(batchJob) || {}
 
     const state = typeof batchRecord.state === 'string' ? batchRecord.state : 'UNKNOWN'
@@ -69,28 +69,41 @@ export async function queryGeminiBatchStatus(batchName: string, apiKey: string):
         }
       }
 
-      return { status: 'failed', error: 'No image data in batch result' }
+      return { status: 'failed', failureDisposition: 'retryable', errorCode: 'EMPTY_RESPONSE', error: 'No image data in batch result' }
     }
 
-    if (state === 'JOB_STATE_FAILED' || state === 'JOB_STATE_CANCELLED' || state === 'JOB_STATE_EXPIRED') {
-      return { status: 'failed', error: `Gemini Batch failed: ${state}` }
+    if (
+      state === 'JOB_STATE_FAILED'
+      || state === 'JOB_STATE_CANCELLED'
+      || state === 'JOB_STATE_EXPIRED'
+      || state === 'JOB_STATE_PARTIALLY_SUCCEEDED'
+    ) {
+      return { status: 'failed', failureDisposition: 'retryable', errorCode: 'EXTERNAL_ERROR', error: `Gemini Batch failed: ${state}` }
     }
 
-    return { status: 'pending' }
+    if (
+      state === 'JOB_STATE_QUEUED'
+      || state === 'JOB_STATE_PENDING'
+      || state === 'JOB_STATE_RUNNING'
+      || state === 'JOB_STATE_CANCELLING'
+      || state === 'JOB_STATE_PAUSED'
+      || state === 'JOB_STATE_UPDATING'
+    ) return { status: 'pending' }
+    throw new Error(`GEMINI_BATCH_STATUS_UNKNOWN:${state}`)
   } catch (error: unknown) {
     const message = getErrorMessage(error)
     const status = getErrorStatus(error)
     logInternal('GeminiBatch', 'ERROR', 'Query error', { batchName, error: message, status })
-    if (status === 404 || message.includes('404') || message.includes('not found') || message.includes('NOT_FOUND')) {
-      return { status: 'failed', error: 'Batch task not found' }
+    if (status === 404) {
+      return { status: 'failed', failureDisposition: 'retryable', errorCode: 'NOT_FOUND', error: 'Batch task not found' }
     }
-    return { status: 'pending' }
+    throw error
   }
 }
 
 export async function queryGoogleVideoStatus(operationName: string, apiKey: string): Promise<ProviderAsyncTaskStatus> {
   if (!apiKey) {
-    throw new Error('请配置 Google AI API Key')
+    throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'google' })
   }
 
   const logPrefix = '[Veo Query]'
@@ -100,7 +113,10 @@ export async function queryGoogleVideoStatus(operationName: string, apiKey: stri
     const ai = new GoogleGenAI({ apiKey })
     const operation = new GenerateVideosOperation()
     operation.name = operationName
-    const op = await ai.operations.getVideosOperation({ operation })
+    const op = await withProviderProxyDispatcher(
+      GOOGLE_PROVIDER_PROXY_TARGET,
+      async () => await ai.operations.getVideosOperation({ operation }),
+    )
 
     logInternal('Veo', 'INFO', `${logPrefix} 原始响应`, {
       operationName,
@@ -123,13 +139,13 @@ export async function queryGoogleVideoStatus(operationName: string, apiKey: stri
         || (typeof errRecord?.statusMessage === 'string' && errRecord.statusMessage)
         || 'Veo 任务失败'
       logInternal('Veo', 'ERROR', `${logPrefix} 操作级错误`, { operationName, error: op.error })
-      return { status: 'failed', error: message }
+      return { status: 'failed', failureDisposition: 'retryable', errorCode: 'EXTERNAL_ERROR', error: message }
     }
 
     const response = op.response
     if (!response) {
       logInternal('Veo', 'ERROR', `${logPrefix} done=true 但 response 为空`, { operationName })
-      return { status: 'failed', error: 'Veo 任务完成但响应体为空' }
+      return { status: 'failed', failureDisposition: 'retryable', errorCode: 'EMPTY_RESPONSE', error: 'Veo 任务完成但响应体为空' }
     }
 
     const responseRecord = asRecord(response) || {}
@@ -147,6 +163,8 @@ export async function queryGoogleVideoStatus(operationName: string, apiKey: stri
       })
       return {
         status: 'failed',
+        failureDisposition: 'permanent',
+        errorCode: 'SENSITIVE_CONTENT',
         error: `Veo 视频被安全策略过滤 (${raiFilteredCount} 个视频被过滤, 原因: ${reasons})`,
       }
     }
@@ -168,7 +186,7 @@ export async function queryGoogleVideoStatus(operationName: string, apiKey: stri
         operationName,
         firstVideo: JSON.stringify(first, null, 2),
       })
-      return { status: 'failed', error: 'Veo 视频对象存在但缺少 URI' }
+      return { status: 'failed', failureDisposition: 'retryable', errorCode: 'EMPTY_RESPONSE', error: 'Veo 视频对象存在但缺少 URI' }
     }
 
     logInternal('Veo', 'ERROR', `${logPrefix} 无 generatedVideos`, {
@@ -178,10 +196,10 @@ export async function queryGoogleVideoStatus(operationName: string, apiKey: stri
       raiFilteredCount: raiFilteredCount ?? 'N/A',
       raiFilteredReasons: raiFilteredReasons ?? 'N/A',
     })
-    return { status: 'failed', error: 'Veo 任务完成但未返回视频 (generatedVideos 为空)' }
+    return { status: 'failed', failureDisposition: 'retryable', errorCode: 'EMPTY_RESPONSE', error: 'Veo 任务完成但未返回视频 (generatedVideos 为空)' }
   } catch (error: unknown) {
     const message = getErrorMessage(error)
     logInternal('Veo', 'ERROR', `${logPrefix} 查询异常`, { operationName, error: message })
-    return { status: 'failed', error: message }
+    throw error
   }
 }

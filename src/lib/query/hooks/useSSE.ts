@@ -1,267 +1,162 @@
 'use client'
 import { logError as _ulogError, logWarn as _ulogWarn } from '@/lib/logging/core'
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { queryKeys } from '../keys'
-import { TASK_EVENT_TYPE, TASK_SSE_EVENT_TYPE, TASK_TYPE, WORKSPACE_SSE_EVENT_TYPE, type SSEEvent } from '@/lib/task/types'
-import { applyTaskLifecycleToOverlay } from '../task-target-overlay'
-import { applyTaskTargetTerminalStateToCache } from '../task-target-state-cache'
-import { isTaskIntent, resolveTaskIntent } from '@/lib/task/intent'
-import { invalidateByTarget } from '../invalidation/invalidate-by-target'
 import {
-  syncWorkspaceResourceChanges,
-  WORKSPACE_RESOURCE_KIND,
-  type WorkspaceResourceChange,
-} from '../resource-change-sync'
+  TASK_SSE_EVENT_TYPE,
+  WORKSPACE_SSE_EVENT_TYPE,
+  type SSEEvent,
+} from '@/lib/sse/events'
+import {
+  applyWorkspaceSSEEvent,
+} from '../workspace-sse-event-sync'
+import { WorkspaceSSEEventSequence } from '../workspace-sse-event-sequence'
+import {
+  advanceWorkspaceSseCursor,
+  EMPTY_WORKSPACE_SSE_CURSOR,
+  isWorkspaceSseEvent,
+  parseWorkspaceSseCursor,
+  serializeWorkspaceSseCursor,
+  type WorkspaceSseCursor,
+} from '@/lib/sse/protocol'
+import { useToast } from '@/contexts/ToastContext'
+import { useTranslations } from 'next-intl'
 
 type UseSSEOptions = {
   projectId?: string | null
-  episodeId?: string | null
   enabled?: boolean
   onEvent?: (event: SSEEvent) => void
 }
 
-export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSEOptions) {
-  const queryClient = useQueryClient()
-  const sourceRef = useRef<EventSource | null>(null)
-  const targetStatesInvalidateTimerRef = useRef<number | null>(null)
-  const isGlobalAssetProject = projectId === 'global-asset-hub'
+function cursorStorageKey(projectId: string): string {
+  return `workspace-sse-cursor:v6:${projectId}`
+}
 
-  const url = useMemo(() => {
+function connectionIdStorageKey(projectId: string): string {
+  return `workspace-sse-connection:v1:${projectId}`
+}
+
+function readOrCreateConnectionId(projectId: string): string {
+  const storage = window.sessionStorage
+  const key = connectionIdStorageKey(projectId)
+  const existing = storage?.getItem(key)
+  if (existing) return existing
+  const connectionId = window.crypto.randomUUID()
+  storage?.setItem(key, connectionId)
+  return connectionId
+}
+
+function readStoredCursor(projectId: string): WorkspaceSseCursor {
+  if (typeof window === 'undefined') return { ...EMPTY_WORKSPACE_SSE_CURSOR }
+  const storage = window.sessionStorage
+  if (!storage) return { ...EMPTY_WORKSPACE_SSE_CURSOR }
+  try {
+    return parseWorkspaceSseCursor(storage.getItem(cursorStorageKey(projectId)))
+  } catch (error) {
+    _ulogError('[useSSE] invalid durable cursor', error)
+    storage.removeItem(cursorStorageKey(projectId))
+    return { ...EMPTY_WORKSPACE_SSE_CURSOR }
+  }
+}
+
+function persistCursor(projectId: string, cursor: WorkspaceSseCursor): void {
+  window.sessionStorage?.setItem(cursorStorageKey(projectId), serializeWorkspaceSseCursor(cursor))
+}
+
+export function useSSE({ projectId, enabled = true, onEvent }: UseSSEOptions) {
+  const queryClient = useQueryClient()
+  const tErrors = useTranslations('errors')
+  const { dismissToast, showToast } = useToast()
+  const sourceRef = useRef<EventSource | null>(null)
+  const reconnectToastRef = useRef<string | null>(null)
+  const reconnectAttemptRef = useRef(0)
+  const reconnectTimerRef = useRef<number | null>(null)
+  const stabilityTimerRef = useRef<number | null>(null)
+  const cursorRef = useRef<WorkspaceSseCursor>({ ...EMPTY_WORKSPACE_SSE_CURSOR })
+  const [snapshotResyncGeneration, setSnapshotResyncGeneration] = useState(0)
+  const [connectionState, setConnectionState] = useState<'connecting' | 'connected' | 'reconnecting'>('connecting')
+
+  const connection = useMemo(() => {
     if (!projectId) return null
-    const params = new URLSearchParams({ projectId })
-    if (episodeId) params.set('episodeId', episodeId)
-    return `/api/sse?${params}`
-  }, [projectId, episodeId])
+    const cursor = readStoredCursor(projectId)
+    const params = new URLSearchParams({
+      projectId,
+      connectionId: readOrCreateConnectionId(projectId),
+    })
+    if (cursor.taskEventId > 0) {
+      params.set('cursor', serializeWorkspaceSseCursor(cursor))
+    }
+    return { url: `/api/sse?${params}`, cursor, generation: snapshotResyncGeneration }
+  }, [projectId, snapshotResyncGeneration])
+  const eventSequence = useMemo(
+    () => new WorkspaceSSEEventSequence(connection?.cursor.taskEventId ?? 0),
+    [connection],
+  )
+
+  const applyEvent = useCallback((payload: SSEEvent) => {
+    if (!projectId) return
+    applyWorkspaceSSEEvent({
+      queryClient,
+      event: payload,
+      projectId,
+    })
+    onEvent?.(payload)
+  }, [onEvent, projectId, queryClient])
+
+  const handleParsedEvent = useCallback((payload: unknown, transportCursor?: string) => {
+    if (!isWorkspaceSseEvent(payload)) throw new Error('WORKSPACE_SSE_EVENT_INVALID')
+    const decision = eventSequence.process(payload, applyEvent)
+    if (decision === 'duplicate' || decision === 'invalid') return
+    const nextCursor = transportCursor
+      ? parseWorkspaceSseCursor(transportCursor)
+      : advanceWorkspaceSseCursor(cursorRef.current, payload)
+    cursorRef.current = nextCursor
+    if (projectId) {
+      persistCursor(projectId, nextCursor)
+    }
+  }, [applyEvent, eventSequence, projectId])
+
+  const requestSnapshotResync = useCallback(() => {
+    if (!projectId) return
+    window.sessionStorage?.removeItem(cursorStorageKey(projectId))
+    cursorRef.current = { ...EMPTY_WORKSPACE_SSE_CURSOR }
+    sourceRef.current?.close()
+    sourceRef.current = null
+    setSnapshotResyncGeneration((current) => current + 1)
+  }, [projectId])
 
   useEffect(() => {
-    if (!enabled || !url || !projectId) return
+    if (!enabled || !connection || !projectId) return
 
-    const source = new EventSource(url)
+    setConnectionState('connecting')
+    cursorRef.current = readStoredCursor(projectId)
+    const source = new EventSource(connection.url)
     sourceRef.current = source
+
+    const scheduleResync = (context: string) => {
+      setConnectionState('reconnecting')
+      if (!reconnectToastRef.current) {
+        reconnectToastRef.current = showToast(tErrors('sseDisconnected'), 'warning', 0)
+      }
+      const attempt = reconnectAttemptRef.current + 1
+      reconnectAttemptRef.current = attempt
+      const delayMs = Math.min(30_000, 1_000 * 2 ** Math.min(attempt - 1, 5))
+      _ulogWarn(`[useSSE] ${context}; scheduling resync`, { projectId, attempt, delayMs })
+      if (reconnectTimerRef.current !== null) window.clearTimeout(reconnectTimerRef.current)
+      reconnectTimerRef.current = window.setTimeout(() => {
+        reconnectTimerRef.current = null
+        requestSnapshotResync()
+      }, delayMs)
+    }
 
     const handleEvent = (event: MessageEvent) => {
       try {
-        const payload = JSON.parse(event.data || '{}')
-        if (!payload || !payload.type) return
-        onEvent?.(payload as SSEEvent)
-        const eventType = payload.type as string
-
-        // mutation.batch 事件：对每个 target 调用 invalidateByTarget
-        if (eventType === WORKSPACE_SSE_EVENT_TYPE.MUTATION_BATCH) {
-          const targets = Array.isArray(payload.targets) ? payload.targets as Array<{ targetType?: string; targetId?: string }> : []
-          const batchEpisodeId = typeof payload.episodeId === 'string' ? payload.episodeId : null
-          const resolvedEid = batchEpisodeId || episodeId || null
-          const seenTargetTypes = new Set<string>()
-          for (const target of targets) {
-            if (typeof target?.targetType === 'string') {
-              if (seenTargetTypes.has(target.targetType)) continue
-              seenTargetTypes.add(target.targetType)
-              invalidateByTarget({
-                queryClient,
-                projectId,
-                targetType: target.targetType,
-                episodeId: resolvedEid,
-                isGlobalAssetProject,
-              })
-            }
-          }
-          return
-        }
-
-        if (eventType === WORKSPACE_SSE_EVENT_TYPE.RESOURCE_CHANGED) {
-          const eventProjectId = typeof payload.projectId === 'string' ? payload.projectId : projectId
-          const eventEpisodeId = typeof payload.episodeId === 'string'
-            ? payload.episodeId
-            : episodeId ?? null
-          const rawResources: unknown[] = Array.isArray(payload.resources) ? payload.resources : []
-          const resources = rawResources
-            .filter((resource): resource is string => typeof resource === 'string')
-          const changes: WorkspaceResourceChange[] = []
-          for (const resource of resources) {
-            if (resource === WORKSPACE_RESOURCE_KIND.PROJECT_DATA) {
-              changes.push({ kind: WORKSPACE_RESOURCE_KIND.PROJECT_DATA, projectId: eventProjectId })
-              continue
-            }
-            if (!eventEpisodeId) continue
-            if (resource === WORKSPACE_RESOURCE_KIND.EDIT_SCREENPLAY) {
-              changes.push({
-                kind: WORKSPACE_RESOURCE_KIND.EDIT_SCREENPLAY,
-                projectId: eventProjectId,
-                episodeId: eventEpisodeId,
-              })
-              continue
-            }
-            if (resource === WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT) {
-              changes.push({
-                kind: WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT,
-                projectId: eventProjectId,
-                episodeId: eventEpisodeId,
-              })
-              continue
-            }
-            if (resource === WORKSPACE_RESOURCE_KIND.EPISODE_DATA) {
-              changes.push({
-                kind: WORKSPACE_RESOURCE_KIND.EPISODE_DATA,
-                projectId: eventProjectId,
-                episodeId: eventEpisodeId,
-              })
-              continue
-            }
-            if (resource === WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT) {
-              changes.push({
-                kind: WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT,
-                projectId: eventProjectId,
-                episodeId: eventEpisodeId,
-              })
-            }
-          }
-          void syncWorkspaceResourceChanges({ queryClient, changes })
-          return
-        }
-
-        const targetType = typeof payload.targetType === 'string'
-          ? payload.targetType
-          : typeof payload?.payload?.targetType === 'string'
-            ? payload.payload.targetType
-            : null
-        const targetId = typeof payload.targetId === 'string'
-          ? payload.targetId
-          : typeof payload?.payload?.targetId === 'string'
-            ? payload.payload.targetId
-            : null
-        const eventEpisodeId = typeof payload.episodeId === 'string'
-          ? payload.episodeId
-          : typeof payload?.payload?.episodeId === 'string'
-            ? payload.payload.episodeId
-            : null
-        const resolvedEpisodeId = eventEpisodeId || episodeId || null
-
-        const eventPayload = payload?.payload && typeof payload.payload === 'object'
-          ? (payload.payload as Record<string, unknown>)
-          : null
-        const rawLifecycleType =
-          eventType === TASK_SSE_EVENT_TYPE.LIFECYCLE
-            ? typeof eventPayload?.lifecycleType === 'string'
-              ? eventPayload.lifecycleType
-              : null
-            : null
-        const normalizedLifecycleType =
-          rawLifecycleType === TASK_EVENT_TYPE.PROGRESS
-            ? TASK_EVENT_TYPE.PROCESSING
-            : rawLifecycleType
-        const isLifecycleEvent = eventType === TASK_SSE_EVENT_TYPE.LIFECYCLE
-        const shouldInvalidateTasksList =
-          normalizedLifecycleType === TASK_EVENT_TYPE.CREATED ||
-          normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED ||
-          normalizedLifecycleType === TASK_EVENT_TYPE.FAILED ||
-          (normalizedLifecycleType === TASK_EVENT_TYPE.PROCESSING &&
-            typeof eventPayload?.progress !== 'number')
-        const shouldInvalidateTargetStates =
-          normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED ||
-          normalizedLifecycleType === TASK_EVENT_TYPE.FAILED
-
-        if (isLifecycleEvent && shouldInvalidateTasksList) {
-          queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all(projectId) })
-        }
-        if (isLifecycleEvent && shouldInvalidateTargetStates) {
-          if (targetStatesInvalidateTimerRef.current === null) {
-            targetStatesInvalidateTimerRef.current = window.setTimeout(() => {
-              queryClient.invalidateQueries({ queryKey: queryKeys.tasks.targetStatesAll(projectId), exact: false })
-              targetStatesInvalidateTimerRef.current = null
-            }, 800)
-          }
-        }
-
-        const payloadIntent = isTaskIntent(eventPayload?.intent)
-          ? eventPayload.intent
-          : resolveTaskIntent(typeof payload.taskType === 'string' ? payload.taskType : null)
-        const payloadUi =
-          eventPayload?.ui && typeof eventPayload.ui === 'object' && !Array.isArray(eventPayload.ui)
-            ? (eventPayload.ui as Record<string, unknown>)
-            : null
-        const hasOutputAtStart =
-          typeof payloadUi?.hasOutputAtStart === 'boolean'
-            ? payloadUi.hasOutputAtStart
-            : null
-        const payloadErrorCode =
-          typeof eventPayload?.errorCode === 'string' && eventPayload.errorCode.trim()
-            ? eventPayload.errorCode.trim()
-            : null
-        const payloadErrorMessage =
-          typeof eventPayload?.errorMessage === 'string' && eventPayload.errorMessage.trim()
-            ? eventPayload.errorMessage.trim()
-            : typeof eventPayload?.message === 'string' && eventPayload.message.trim()
-              ? eventPayload.message.trim()
-              : null
-
-        applyTaskLifecycleToOverlay(queryClient, {
-          projectId,
-          lifecycleType: normalizedLifecycleType,
-          targetType,
-          targetId,
-          taskId: typeof payload.taskId === 'string' ? payload.taskId : null,
-          taskType: typeof payload.taskType === 'string' ? payload.taskType : null,
-          intent: payloadIntent,
-          hasOutputAtStart,
-          progress: typeof eventPayload?.progress === 'number' ? Math.floor(eventPayload.progress) : null,
-          stage: typeof eventPayload?.stage === 'string' ? eventPayload.stage : null,
-          stageLabel: typeof eventPayload?.stageLabel === 'string' ? eventPayload.stageLabel : null,
-          eventTs: typeof payload.ts === 'string' ? payload.ts : null,
-        })
-
-        if (
-          normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED ||
-          normalizedLifecycleType === TASK_EVENT_TYPE.FAILED
-        ) {
-          applyTaskTargetTerminalStateToCache(queryClient, {
-            projectId,
-            targetType,
-            targetId,
-            phase: normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED ? 'completed' : 'failed',
-            taskId: typeof payload.taskId === 'string' ? payload.taskId : null,
-            taskType: typeof payload.taskType === 'string' ? payload.taskType : null,
-            intent: payloadIntent,
-            hasOutputAtStart,
-            progress: typeof eventPayload?.progress === 'number' ? Math.floor(eventPayload.progress) : null,
-            stage: typeof eventPayload?.stage === 'string' ? eventPayload.stage : null,
-            stageLabel: typeof eventPayload?.stageLabel === 'string' ? eventPayload.stageLabel : null,
-            errorCode: payloadErrorCode,
-            errorMessage: payloadErrorMessage,
-            eventTs: typeof payload.ts === 'string' ? payload.ts : null,
-          })
-        }
-
-        if (
-          normalizedLifecycleType === TASK_EVENT_TYPE.PROCESSING &&
-          payload.taskType === TASK_TYPE.EDIT_SCRIPT_GENERATE &&
-          resolvedEpisodeId
-        ) {
-          queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(projectId, resolvedEpisodeId) })
-        }
-
-        if (
-          normalizedLifecycleType === TASK_EVENT_TYPE.CREATED ||
-          normalizedLifecycleType === TASK_EVENT_TYPE.PROCESSING
-        ) {
-          return
-        }
-
-        if (
-          normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED ||
-          normalizedLifecycleType === TASK_EVENT_TYPE.FAILED
-        ) {
-          invalidateByTarget({
-            queryClient,
-            projectId,
-            targetType,
-            episodeId: resolvedEpisodeId,
-            isGlobalAssetProject,
-          })
-        }
+        handleParsedEvent(JSON.parse(event.data || '{}'), event.lastEventId || undefined)
       } catch (error) {
         _ulogError('[useSSE] failed to parse event', error)
+        // 立即重连会撞上 bootstrap 重发的同一条毒事件,形成自激循环;必须退避。
+        scheduleResync('event handling failed')
       }
     }
 
@@ -269,8 +164,9 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
     const namedEvents = [
       TASK_SSE_EVENT_TYPE.LIFECYCLE,
       TASK_SSE_EVENT_TYPE.STREAM,
-      WORKSPACE_SSE_EVENT_TYPE.MUTATION_BATCH,
       WORKSPACE_SSE_EVENT_TYPE.RESOURCE_CHANGED,
+      WORKSPACE_SSE_EVENT_TYPE.AGENT_SESSION_VIEW_CHANGED,
+      WORKSPACE_SSE_EVENT_TYPE.AGENT_TURN_STREAM,
     ] as const
     const listeners: Array<{ type: string; handler: EventListener }> = []
     for (const type of namedEvents) {
@@ -278,25 +174,55 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
       source.addEventListener(type, handler)
       listeners.push({ type, handler })
     }
+    source.onopen = () => {
+      setConnectionState('connected')
+      if (reconnectToastRef.current) {
+        dismissToast(reconnectToastRef.current)
+        reconnectToastRef.current = null
+        showToast(tErrors('sseRestored'), 'success', 3000)
+      }
+      // 不能在每个事件/每次 open 时立刻清零:毒事件循环里每一轮都会短暂"健康",
+      // 立刻清零会把退避锁死在 1s。只有连接稳定存活 60s 才认为恢复。
+      if (stabilityTimerRef.current !== null) window.clearTimeout(stabilityTimerRef.current)
+      stabilityTimerRef.current = window.setTimeout(() => {
+        stabilityTimerRef.current = null
+        reconnectAttemptRef.current = 0
+      }, 60_000)
+    }
     source.onerror = () => {
+      // EventSource 只对网络类中断自动重连;服务端返回非 2xx(部署重启的 502、
+      // bootstrap 5xx、401)时按规范进入 CLOSED 且永不重试——必须显式重建,
+      // 否则页面在下一次刷新前永久失联("必须刷新才显示"的传输层根因)。
       if (source.readyState !== EventSource.CLOSED) return
-      _ulogWarn('[useSSE] stream closed', { projectId, episodeId })
+      scheduleResync('stream closed')
     }
 
     return () => {
-      if (targetStatesInvalidateTimerRef.current !== null) {
-        window.clearTimeout(targetStatesInvalidateTimerRef.current)
-        targetStatesInvalidateTimerRef.current = null
-      }
       for (const listener of listeners) {
         source.removeEventListener(listener.type, listener.handler)
+      }
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current)
+        reconnectTimerRef.current = null
+      }
+      if (stabilityTimerRef.current !== null) {
+        window.clearTimeout(stabilityTimerRef.current)
+        stabilityTimerRef.current = null
       }
       source.close()
       sourceRef.current = null
     }
-  }, [enabled, url, projectId, episodeId, queryClient, isGlobalAssetProject, onEvent])
+  }, [connection, dismissToast, enabled, handleParsedEvent, projectId, requestSnapshotResync, showToast, tErrors])
+
+  useEffect(() => () => {
+    if (reconnectToastRef.current) {
+      dismissToast(reconnectToastRef.current)
+      reconnectToastRef.current = null
+    }
+  }, [dismissToast])
 
   return {
-    connected: !!sourceRef.current && sourceRef.current.readyState === EventSource.OPEN,
+    connected: connectionState === 'connected',
+    connectionState,
   }
 }

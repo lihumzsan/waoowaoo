@@ -3,8 +3,6 @@ import { queryKeys } from './keys'
 import { TASK_EVENT_TYPE } from '@/lib/task/types'
 import type { TaskIntent } from '@/lib/task/intent'
 
-export const TASK_TARGET_OVERLAY_TTL_MS = 30_000
-
 export type TaskTargetOverlayPhase = 'queued' | 'processing'
 
 export type TaskTargetOverlayState = {
@@ -13,6 +11,7 @@ export type TaskTargetOverlayState = {
   phase: TaskTargetOverlayPhase
   runningTaskId: string | null
   runningTaskType: string | null
+  progressGroupId?: string | null
   intent: TaskIntent
   hasOutputAtStart: boolean | null
   progress: number | null
@@ -20,7 +19,6 @@ export type TaskTargetOverlayState = {
   stageLabel: string | null
   updatedAt: string | null
   lastError: null
-  expiresAt: number
 }
 
 export type TaskTargetOverlayMap = Record<string, TaskTargetOverlayState>
@@ -35,24 +33,6 @@ function normalizeOptionalString(value: unknown): string | null {
   return trimmed || null
 }
 
-function buildOptimisticTaskId(targetType: string, targetId: string, now: number): string {
-  return `optimistic:${targetType}:${targetId}:${now.toString(36)}`
-}
-
-function isOptimisticTaskId(taskId: string | null): boolean {
-  return typeof taskId === 'string' && taskId.startsWith('optimistic:')
-}
-
-function pruneExpiredOverlay(prev: TaskTargetOverlayMap | undefined, now: number) {
-  const next: TaskTargetOverlayMap = { ...(prev || {}) }
-  for (const [overlayKey, value] of Object.entries(next)) {
-    if ((value?.expiresAt || 0) <= now) {
-      delete next[overlayKey]
-    }
-  }
-  return next
-}
-
 export function upsertTaskTargetOverlay(
   queryClient: QueryClient,
   params: {
@@ -62,6 +42,7 @@ export function upsertTaskTargetOverlay(
     phase?: TaskTargetOverlayPhase
     runningTaskId?: string | null
     runningTaskType?: string | null
+    progressGroupId?: string | null
     intent?: TaskIntent
     hasOutputAtStart?: boolean | null
     progress?: number | null
@@ -71,23 +52,26 @@ export function upsertTaskTargetOverlay(
   },
 ) {
   const now = Date.now()
+  const incomingTaskId = normalizeOptionalString(params.runningTaskId)
+  if (!incomingTaskId) return
   const key = toOverlayKey(params.targetType, params.targetId)
   queryClient.setQueryData<TaskTargetOverlayMap>(
     queryKeys.tasks.targetStateOverlay(params.projectId),
     (prev) => {
-      const next = pruneExpiredOverlay(prev, now)
+      const next: TaskTargetOverlayMap = { ...(prev || {}) }
       const existing = next[key]
-      const runningTaskId = normalizeOptionalString(params.runningTaskId)
-        || normalizeOptionalString(existing?.runningTaskId)
-        || buildOptimisticTaskId(params.targetType, params.targetId, now)
+      const runningTaskId = incomingTaskId
       const runningTaskType = normalizeOptionalString(params.runningTaskType)
         || normalizeOptionalString(existing?.runningTaskType)
+      const progressGroupId = normalizeOptionalString(params.progressGroupId)
+        || normalizeOptionalString(existing?.progressGroupId)
       next[key] = {
         targetType: params.targetType,
         targetId: params.targetId,
         phase: params.phase || 'queued',
         runningTaskId,
         runningTaskType,
+        progressGroupId,
         intent: params.intent || 'process',
         hasOutputAtStart: params.hasOutputAtStart ?? null,
         progress: params.progress ?? null,
@@ -95,7 +79,6 @@ export function upsertTaskTargetOverlay(
         stageLabel: params.stageLabel ?? null,
         updatedAt: params.updatedAt || new Date(now).toISOString(),
         lastError: null,
-        expiresAt: now + TASK_TARGET_OVERLAY_TTL_MS,
       }
       return next
     },
@@ -131,6 +114,7 @@ export function applyTaskLifecycleToOverlay(
     targetId: string | null
     taskId: string | null
     taskType: string | null
+    progressGroupId?: string | null
     intent: TaskIntent
     hasOutputAtStart: boolean | null
     progress: number | null
@@ -148,6 +132,7 @@ export function applyTaskLifecycleToOverlay(
       phase: 'queued',
       runningTaskId: params.taskId,
       runningTaskType: params.taskType,
+      progressGroupId: params.progressGroupId,
       intent: params.intent,
       hasOutputAtStart: params.hasOutputAtStart,
       progress: params.progress,
@@ -166,6 +151,7 @@ export function applyTaskLifecycleToOverlay(
       phase: 'processing',
       runningTaskId: params.taskId,
       runningTaskType: params.taskType,
+      progressGroupId: params.progressGroupId,
       intent: params.intent,
       hasOutputAtStart: params.hasOutputAtStart,
       progress: params.progress,
@@ -178,7 +164,8 @@ export function applyTaskLifecycleToOverlay(
 
   if (
     params.lifecycleType === TASK_EVENT_TYPE.COMPLETED ||
-    params.lifecycleType === TASK_EVENT_TYPE.FAILED
+    params.lifecycleType === TASK_EVENT_TYPE.FAILED ||
+    params.lifecycleType === TASK_EVENT_TYPE.CANCELED
   ) {
     const key = toOverlayKey(params.targetType, params.targetId)
     queryClient.setQueryData<TaskTargetOverlayMap>(
@@ -193,9 +180,8 @@ export function applyTaskLifecycleToOverlay(
           const currentTaskId = normalizeOptionalString(current.runningTaskId)
           const isEventTarget = overlayKey === key
           const matchesTerminalTask = Boolean(incomingTaskId && currentTaskId === incomingTaskId)
-          const matchesOptimisticEventTarget = Boolean(isEventTarget && currentTaskId && isOptimisticTaskId(currentTaskId))
           const matchesEventTargetWithoutTask = isEventTarget && !incomingTaskId
-          if (!matchesTerminalTask && !matchesOptimisticEventTarget && !matchesEventTargetWithoutTask) continue
+          if (!matchesTerminalTask && !matchesEventTargetWithoutTask) continue
 
           delete next[overlayKey]
           changed = true

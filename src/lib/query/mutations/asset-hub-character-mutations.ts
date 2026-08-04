@@ -1,20 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRef } from 'react'
-import {
-  clearTaskTargetOverlay,
-  upsertTaskTargetOverlay,
-} from '../task-target-overlay'
 import { queryKeys } from '../keys'
 import type { GlobalCharacter } from '../hooks/useGlobalAssets'
 import type { AssetSummary } from '@/lib/assets/contracts'
 import {
-  requestJsonWithError,
-  requestVoidWithError,
+  requestOperationMutationVoidWithError,
 } from './mutation-shared'
-import {
-  GLOBAL_ASSET_PROJECT_ID,
-  invalidateGlobalCharacters,
-} from './asset-hub-mutations-shared'
 
 interface SelectCharacterImageContext {
   previousQueries: Array<{
@@ -27,21 +18,6 @@ interface SelectCharacterImageContext {
   }>
   targetKey: string
   requestId: number
-}
-
-interface GenerateCharacterImageContext {
-  previousQueries: Array<{
-    queryKey: readonly unknown[]
-    data: GlobalCharacter[] | undefined
-  }>
-  previousUnifiedQueries: Array<{
-    queryKey: readonly unknown[]
-    data: AssetSummary[] | undefined
-  }>
-}
-
-type GenerateCharacterImageResponse = {
-  taskId?: string | null
 }
 
 interface DeleteCharacterContext {
@@ -94,7 +70,7 @@ function captureCharacterQuerySnapshots(queryClient: ReturnType<typeof useQueryC
 function captureUnifiedQuerySnapshots(queryClient: ReturnType<typeof useQueryClient>) {
   return queryClient
     .getQueriesData<AssetSummary[]>({
-      queryKey: queryKeys.assets.all('global'),
+      queryKey: queryKeys.assets.all(),
       exact: false,
     })
     .map(([queryKey, data]) => ({ queryKey, data }))
@@ -129,55 +105,6 @@ function applyUnifiedCharacterSelection(
   })
 }
 
-function applyCharacterGenerationRunning(
-  characters: GlobalCharacter[] | undefined,
-  characterId: string,
-  appearanceIndex: number,
-): GlobalCharacter[] | undefined {
-  if (!characters) return characters
-  return characters.map((character) => {
-    if (character.id !== characterId) return character
-    return {
-      ...character,
-      appearances: (character.appearances || []).map((appearance) => {
-        if (appearance.appearanceIndex !== appearanceIndex) return appearance
-        return {
-          ...appearance,
-          imageTaskRunning: true,
-        }
-      }),
-    }
-  })
-}
-
-function applyUnifiedCharacterGenerationRunning(
-  assets: AssetSummary[] | undefined,
-  characterId: string,
-  appearanceIndex: number,
-): AssetSummary[] | undefined {
-  if (!assets) return assets
-  return assets.map((asset) => {
-    if (asset.id !== characterId || asset.kind !== 'character') return asset
-    return {
-      ...asset,
-      taskState: {
-        isRunning: true,
-        lastError: null,
-      },
-      variants: asset.variants.map((variant) => {
-        if (variant.index !== appearanceIndex) return variant
-        return {
-          ...variant,
-          taskState: {
-            isRunning: true,
-            lastError: null,
-          },
-        }
-      }),
-    }
-  })
-}
-
 function restoreCharacterQuerySnapshots(
   queryClient: ReturnType<typeof useQueryClient>,
   snapshots: Array<{ queryKey: readonly unknown[]; data: GlobalCharacter[] | undefined }>,
@@ -196,162 +123,9 @@ function restoreUnifiedQuerySnapshots(
   })
 }
 
-export function useGenerateCharacterImage() {
-  const queryClient = useQueryClient()
-  const invalidateCharacters = () => invalidateGlobalCharacters(queryClient)
-
-  return useMutation({
-    mutationFn: async ({
-      characterId,
-      appearanceId,
-      appearanceIndex,
-      count,
-    }: {
-      characterId: string
-      appearanceId: string
-      appearanceIndex: number
-      count?: number
-    }) => {
-      return await requestJsonWithError<GenerateCharacterImageResponse>(`/api/assets/${characterId}/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scope: 'global',
-          kind: 'character',
-          appearanceId,
-          appearanceIndex,
-          count,
-        }),
-      }, 'Failed to generate image')
-    },
-    onMutate: async ({ characterId, appearanceId, appearanceIndex }): Promise<GenerateCharacterImageContext> => {
-      await queryClient.cancelQueries({
-        queryKey: queryKeys.globalAssets.characters(),
-        exact: false,
-      })
-      await queryClient.cancelQueries({
-        queryKey: queryKeys.assets.all('global'),
-        exact: false,
-      })
-      const previousQueries = captureCharacterQuerySnapshots(queryClient)
-      const previousUnifiedQueries = captureUnifiedQuerySnapshots(queryClient)
-
-      upsertTaskTargetOverlay(queryClient, {
-        projectId: GLOBAL_ASSET_PROJECT_ID,
-        targetType: 'GlobalCharacterAppearance',
-        targetId: appearanceId,
-        runningTaskType: 'asset_hub_image',
-        intent: 'generate',
-      })
-
-      queryClient.setQueriesData<GlobalCharacter[] | undefined>(
-        {
-          queryKey: queryKeys.globalAssets.characters(),
-          exact: false,
-        },
-        (previous) => applyCharacterGenerationRunning(
-          previous,
-          characterId,
-          appearanceIndex,
-        ),
-      )
-
-      queryClient.setQueriesData<AssetSummary[] | undefined>(
-        {
-          queryKey: queryKeys.assets.all('global'),
-          exact: false,
-        },
-        (previous) => applyUnifiedCharacterGenerationRunning(
-          previous,
-          characterId,
-          appearanceIndex,
-        ),
-      )
-
-      return {
-        previousQueries,
-        previousUnifiedQueries,
-      }
-    },
-    onSuccess: (data, { appearanceId }) => {
-      upsertTaskTargetOverlay(queryClient, {
-        projectId: GLOBAL_ASSET_PROJECT_ID,
-        targetType: 'GlobalCharacterAppearance',
-        targetId: appearanceId,
-        runningTaskId: data.taskId ?? null,
-        runningTaskType: 'asset_hub_image',
-        intent: 'generate',
-      })
-    },
-    onError: (_error, { appearanceId }, context) => {
-      clearTaskTargetOverlay(queryClient, {
-        projectId: GLOBAL_ASSET_PROJECT_ID,
-        targetType: 'GlobalCharacterAppearance',
-        targetId: appearanceId,
-      })
-      if (context) {
-        restoreCharacterQuerySnapshots(queryClient, context.previousQueries)
-        restoreUnifiedQuerySnapshots(queryClient, context.previousUnifiedQueries)
-      }
-    },
-    onSettled: invalidateCharacters,
-  })
-}
-
-export function useModifyCharacterImage() {
-  const queryClient = useQueryClient()
-  const invalidateCharacters = () => invalidateGlobalCharacters(queryClient)
-
-  return useMutation({
-    mutationFn: async ({
-      characterId,
-      appearanceIndex,
-      imageIndex,
-      modifyPrompt,
-      extraImageUrls,
-    }: {
-      characterId: string
-      appearanceIndex: number
-      imageIndex: number
-      modifyPrompt: string
-      extraImageUrls?: string[]
-    }) => {
-      return await requestJsonWithError(`/api/assets/${characterId}/modify-render`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scope: 'global',
-          kind: 'character',
-          appearanceIndex,
-          imageIndex,
-          modifyPrompt,
-          extraImageUrls,
-        }),
-      }, 'Failed to modify image')
-    },
-    onMutate: ({ characterId, appearanceIndex, imageIndex }) => {
-      upsertTaskTargetOverlay(queryClient, {
-        projectId: GLOBAL_ASSET_PROJECT_ID,
-        targetType: 'GlobalCharacterAppearance',
-        targetId: `${characterId}:${appearanceIndex}:${imageIndex}`,
-        intent: 'modify',
-      })
-    },
-    onError: (_error, { characterId, appearanceIndex, imageIndex }) => {
-      clearTaskTargetOverlay(queryClient, {
-        projectId: GLOBAL_ASSET_PROJECT_ID,
-        targetType: 'GlobalCharacterAppearance',
-        targetId: `${characterId}:${appearanceIndex}:${imageIndex}`,
-      })
-    },
-    onSettled: invalidateCharacters,
-  })
-}
-
 export function useSelectCharacterImage() {
   const queryClient = useQueryClient()
   const latestRequestIdByTargetRef = useRef<Record<string, number>>({})
-  const invalidateCharacters = () => invalidateGlobalCharacters(queryClient)
 
   return useMutation({
     mutationFn: async ({
@@ -365,7 +139,7 @@ export function useSelectCharacterImage() {
       imageIndex: number | null
       confirm?: boolean
     }) => {
-      return await requestJsonWithError(`/api/assets/${characterId}/select-render`, {
+      await requestOperationMutationVoidWithError(`/api/assets/${characterId}/select-render`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -375,7 +149,7 @@ export function useSelectCharacterImage() {
           imageIndex,
           confirm,
         }),
-      }, 'Failed to select image')
+      }, queryClient)
     },
     onMutate: async (variables): Promise<SelectCharacterImageContext> => {
       const targetKey = `${variables.characterId}:${variables.appearanceIndex}`
@@ -391,7 +165,7 @@ export function useSelectCharacterImage() {
         exact: false,
       })
       await queryClient.cancelQueries({
-        queryKey: queryKeys.assets.all('global'),
+        queryKey: queryKeys.assets.all(),
         exact: false,
       })
       const previousQueries = captureCharacterQuerySnapshots(queryClient)
@@ -412,7 +186,7 @@ export function useSelectCharacterImage() {
 
       queryClient.setQueriesData<AssetSummary[] | undefined>(
         {
-          queryKey: queryKeys.assets.all('global'),
+          queryKey: queryKeys.assets.all(),
           exact: false,
         },
         (previous) => applyUnifiedCharacterSelection(
@@ -437,21 +211,15 @@ export function useSelectCharacterImage() {
       restoreCharacterQuerySnapshots(queryClient, context.previousQueries)
       restoreUnifiedQuerySnapshots(queryClient, context.previousUnifiedQueries)
     },
-    onSettled: async (_data, _error, variables) => {
-      if (variables.confirm) {
-        await invalidateCharacters()
-      }
-    },
   })
 }
 
 export function useUndoCharacterImage() {
   const queryClient = useQueryClient()
-  const invalidateCharacters = () => invalidateGlobalCharacters(queryClient)
 
   return useMutation({
     mutationFn: async ({ characterId, appearanceIndex }: { characterId: string; appearanceIndex: number }) => {
-      return await requestJsonWithError(`/api/assets/${characterId}/revert-render`, {
+      await requestOperationMutationVoidWithError(`/api/assets/${characterId}/revert-render`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -459,15 +227,13 @@ export function useUndoCharacterImage() {
           kind: 'character',
           appearanceIndex,
         }),
-      }, 'Failed to undo image')
+      }, queryClient)
     },
-    onSuccess: invalidateCharacters,
   })
 }
 
 export function useUploadCharacterImage() {
   const queryClient = useQueryClient()
-  const invalidateCharacters = () => invalidateGlobalCharacters(queryClient)
 
   return useMutation({
     mutationFn: async ({
@@ -493,25 +259,23 @@ export function useUploadCharacterImage() {
         formData.append('imageIndex', imageIndex.toString())
       }
 
-      return await requestJsonWithError('/api/asset-hub/upload-image', {
+      await requestOperationMutationVoidWithError('/api/asset-hub/upload-image', {
         method: 'POST',
         body: formData,
-      }, 'Failed to upload image')
+      }, queryClient)
     },
-    onSuccess: invalidateCharacters,
   })
 }
 
 export function useDeleteCharacter() {
   const queryClient = useQueryClient()
-  const invalidateCharacters = () => invalidateGlobalCharacters(queryClient)
 
   return useMutation({
     mutationFn: async (characterId: string) => {
-      await requestVoidWithError(
+      await requestOperationMutationVoidWithError(
         `/api/asset-hub/characters/${characterId}`,
         { method: 'DELETE' },
-        'Failed to delete character',
+        queryClient,
       )
     },
     onMutate: async (characterId): Promise<DeleteCharacterContext> => {
@@ -520,7 +284,7 @@ export function useDeleteCharacter() {
         exact: false,
       })
       await queryClient.cancelQueries({
-        queryKey: queryKeys.assets.all('global'),
+        queryKey: queryKeys.assets.all(),
         exact: false,
       })
       const previousQueries = captureCharacterQuerySnapshots(queryClient)
@@ -536,7 +300,7 @@ export function useDeleteCharacter() {
 
       queryClient.setQueriesData<AssetSummary[] | undefined>(
         {
-          queryKey: queryKeys.assets.all('global'),
+          queryKey: queryKeys.assets.all(),
           exact: false,
         },
         (previous) => previous?.filter((asset) => asset.id !== characterId),
@@ -549,22 +313,19 @@ export function useDeleteCharacter() {
       restoreCharacterQuerySnapshots(queryClient, context.previousQueries)
       restoreUnifiedQuerySnapshots(queryClient, context.previousUnifiedQueries)
     },
-    onSettled: invalidateCharacters,
   })
 }
 
 export function useDeleteCharacterAppearance() {
   const queryClient = useQueryClient()
-  const invalidateCharacters = () => invalidateGlobalCharacters(queryClient)
 
   return useMutation({
     mutationFn: async ({ characterId, appearanceIndex }: { characterId: string; appearanceIndex: number }) => {
-      await requestVoidWithError(
+      await requestOperationMutationVoidWithError(
         `/api/asset-hub/appearances?characterId=${characterId}&appearanceIndex=${appearanceIndex}`,
         { method: 'DELETE' },
-        'Failed to delete appearance',
+        queryClient,
       )
     },
-    onSuccess: invalidateCharacters,
   })
 }

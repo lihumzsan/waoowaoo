@@ -1,0 +1,111 @@
+import { ApiError } from '@/lib/api-errors'
+import { createScopedLogger } from '@/lib/logging/core'
+import type { ProjectAgentToolError, ProjectAgentToolErrorCode } from '@/lib/operations/types'
+import { getErrorSpec } from '@/lib/errors/codes'
+import { normalizeAnyError } from '@/lib/errors/normalize'
+import { projectErrorForModel, projectModelErrorDetails } from '@/lib/errors/projection'
+import {
+  WorkspaceResourcePathError,
+  WorkspaceResourcePlacementError,
+} from '@/lib/workspace-resource/path'
+
+const logger = createScopedLogger({ module: 'assistant.tool' })
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+export function extractPrismaMissingColumn(error: unknown): string | null {
+  if (!isRecord(error)) return null
+  if (error.code !== 'P2022') return null
+  const meta = isRecord(error.meta) ? error.meta : null
+  const column = typeof meta?.column === 'string' ? meta.column.trim() : ''
+  return column || null
+}
+
+export function buildToolError(params: {
+  code: ProjectAgentToolErrorCode
+  message: string
+  operationId: string
+  details?: Record<string, unknown> | null
+  issues?: unknown
+}): ProjectAgentToolError {
+  return {
+    code: params.code,
+    message: params.message,
+    operationId: params.operationId,
+    details: params.details ?? null,
+    ...(params.issues !== undefined ? { issues: params.issues } : {}),
+  }
+}
+
+export function normalizeOperationExecutionToolError(params: {
+  error: unknown
+  operationId: string
+}): ProjectAgentToolError {
+  const toolError = buildOperationExecutionToolError(params)
+  // Single normalization entry for tool execution exceptions: log here once so
+  // failures returned to the model as tool-error payloads stay server-visible.
+  logger.error({
+    action: 'assistant.tool.execution_failed',
+    message: 'assistant tool execution failed; error normalized into tool payload',
+    operationId: params.operationId,
+    errorCode: params.error instanceof ApiError ? params.error.code : toolError.code,
+    error: params.error instanceof Error
+      ? { name: params.error.name, message: params.error.message, stack: params.error.stack }
+      : { message: toolError.message },
+  })
+  return toolError
+}
+
+function buildOperationExecutionToolError(params: {
+  error: unknown
+  operationId: string
+}): ProjectAgentToolError {
+  const workspaceError = params.error instanceof WorkspaceResourcePlacementError
+    ? {
+        code: params.error.code === 'WORKSPACE_RESOURCE_PARENT_FOLDER_NOT_FOUND'
+          ? 'INVALID_PARAMS' as const
+          : 'CONFLICT' as const,
+        details: {
+          field: 'outputPath',
+          reasonCode: params.error.code,
+          workspacePath: params.error.workspacePath,
+        },
+      }
+    : params.error instanceof WorkspaceResourcePathError
+      ? {
+          code: 'INVALID_PARAMS' as const,
+          details: {
+            field: 'outputPath',
+            reasonCode: params.error.code,
+          },
+        }
+      : null
+  const normalized = workspaceError ?? (params.error instanceof ApiError
+    ? {
+        code: params.error.code,
+        details: params.error.details ?? null,
+      }
+    : normalizeAnyError(params.error, {
+        context: 'worker',
+        fallbackCode: 'INTERNAL_ERROR',
+      }))
+  const safeDetails = projectModelErrorDetails(normalized.details)
+  const reasonCode = typeof safeDetails.reasonCode === 'string'
+    ? safeDetails.reasonCode
+    : typeof safeDetails.code === 'string'
+      ? safeDetails.code
+      : null
+  const failure = projectErrorForModel(normalized.code)
+  return buildToolError({
+    code: 'OPERATION_EXECUTION_FAILED',
+    message: getErrorSpec(failure.code).defaultMessage,
+    operationId: params.operationId,
+    details: {
+      failure,
+      ...safeDetails,
+      ...(reasonCode ? { reasonCode } : {}),
+    },
+  })
+}

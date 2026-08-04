@@ -1,6 +1,6 @@
 export type VideoReferenceImageRole = 'reference' | 'first_frame' | 'last_frame'
 
-export type VideoReferenceImageSource = 'storyboard' | 'asset' | 'upload' | 'generated'
+export type VideoReferenceImageSource = 'asset' | 'upload' | 'generated'
 
 export interface VideoReferenceImageInput {
   readonly url: string
@@ -70,6 +70,7 @@ export function resolveProviderVideoReferencePayload(input: {
   readonly imageUrl?: string
   readonly legacyReferenceImages?: readonly string[]
   readonly legacyLastFrameImageUrl?: string
+  readonly allowTextOnly?: boolean
 }): ProviderVideoReferencePayload {
   const unifiedReferences = normalizeVideoReferenceImages(input.referenceImages ?? [])
   const legacyReferences = normalizeVideoReferenceImages([
@@ -78,7 +79,10 @@ export function resolveProviderVideoReferencePayload(input: {
     ...(input.legacyReferenceImages ?? []).map((url, index) => ({ url, role: 'reference' as const, order: index + 3 })),
   ])
   const references = unifiedReferences.length > 0 ? unifiedReferences : legacyReferences
-  if (references.length === 0) throw new Error('VIDEO_REFERENCE_IMAGE_REQUIRED')
+  if (references.length === 0) {
+    if (input.allowTextOnly === true) return { imageUrl: '', options: {} }
+    throw new Error('VIDEO_REFERENCE_IMAGE_REQUIRED')
+  }
 
   const firstFrame = references.find((image) => image.role === 'first_frame')
   const lastFrame = references.find((image) => image.role === 'last_frame')

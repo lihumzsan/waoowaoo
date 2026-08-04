@@ -11,13 +11,12 @@ import type { DefaultModelField, DefaultModelsPayload, StoredModel, WorkflowConc
 import { DEFAULT_MODEL_FIELDS } from './api-config-types'
 import { getProviderKey, isRecord, readTrimmedString } from './api-config-shared'
 import { hasBuiltinPricingForModel } from './api-config-model-normalization'
-import { hasCustomPricingForType } from './api-config-custom-pricing'
 
-const DEFAULT_FIELD_TO_PRICING_API_TYPE: Readonly<Record<DefaultModelField, 'text' | 'image' | 'video' | 'music'>> = {
+const DEFAULT_FIELD_TO_PRICING_API_TYPE: Readonly<Record<DefaultModelField, PricingApiType>> = {
+  assistantModel: 'text',
   analysisModel: 'text',
   characterModel: 'image',
   locationModel: 'image',
-  storyboardModel: 'image',
   editModel: 'image',
   videoModel: 'video',
   musicModel: 'music',
@@ -28,13 +27,14 @@ const BILLABLE_MODEL_TYPE_TO_PRICING_API_TYPE: Readonly<Record<StoredModel['type
   image: 'image',
   video: 'video',
   music: 'music',
+  voice: 'voice',
 }
 
 const DEFAULT_FIELD_TO_MODEL_TYPE: Readonly<Record<DefaultModelField, StoredModel['type']>> = {
+  assistantModel: 'llm',
   analysisModel: 'llm',
   characterModel: 'image',
   locationModel: 'image',
-  storyboardModel: 'image',
   editModel: 'image',
   videoModel: 'video',
   musicModel: 'music',
@@ -141,7 +141,6 @@ export function validateDefaultModelPricing(defaultModels: DefaultModelsPayload)
     if (!parsed) continue
     if (OPTIONAL_PRICING_PROVIDER_KEYS.has(getProviderKey(parsed.provider))) continue
     const apiType = DEFAULT_FIELD_TO_PRICING_API_TYPE[field]
-    if (apiType === 'music') continue
 
     if (!hasBuiltinPricingForModel(apiType, parsed.provider, parsed.modelId)) {
       throw new ApiError('INVALID_PARAMS', {
@@ -157,8 +156,6 @@ export function validateDefaultModelPricing(defaultModels: DefaultModelsPayload)
 function isModelPricedForBilling(model: StoredModel): boolean {
   const apiType = BILLABLE_MODEL_TYPE_TO_PRICING_API_TYPE[model.type]
   if (!apiType) return true
-  if (apiType === 'music') return true
-  if (hasCustomPricingForType(model)) return true
   if (OPTIONAL_PRICING_PROVIDER_KEYS.has(getProviderKey(model.provider))) return true
   return hasBuiltinPricingForModel(apiType, model.provider, model.modelId)
 }
@@ -190,10 +187,6 @@ export function sanitizeDefaultModelsForBilling(defaultModels: DefaultModelsPayl
     }
 
     const apiType = DEFAULT_FIELD_TO_PRICING_API_TYPE[field]
-    if (apiType === 'music') {
-      sanitized[field] = parsed.modelKey
-      continue
-    }
     sanitized[field] = hasBuiltinPricingForModel(apiType, parsed.provider, parsed.modelId)
       ? parsed.modelKey
       : ''

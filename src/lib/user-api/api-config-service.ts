@@ -6,21 +6,22 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { encryptApiKey, decryptApiKey } from '@/lib/crypto-utils'
+import type { Prisma } from '@prisma/client'
+import { encryptApiKey } from '@/lib/crypto-utils'
 import { ApiError } from '@/lib/api-errors'
 import { buildApiConfigServerCatalog } from '@/lib/ai-registry/api-config-catalog'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { getBillingMode } from '@/lib/billing/mode'
 import { getDeploymentConfig, toPublicDeploymentConfig } from '@/lib/deployment/config'
 import { normalizeWorkflowConcurrencyConfig } from '@/lib/workflow-concurrency'
-import type { ApiConfigPutBody, DefaultModelsPayload, StoredModel } from './api-config-types'
-import { getProviderKey, isRecord } from './api-config-shared'
+import { getDefaultWorkflowConcurrencyConfig } from '@/lib/workflow-concurrency-env'
+import type { ApiConfigPutBody, DefaultModelsPayload } from './api-config-types'
+import { isRecord } from './api-config-shared'
 import { parseStoredProviders, normalizeProvidersInput } from './api-config-provider-normalization'
 import {
   normalizeModelList,
   parseStoredModels,
   validateBillableModelPricing,
-  validateCustomPricingCapabilityMappings,
   validateModelProviderConsistency,
   validateModelProviderTypeSupport,
 } from './api-config-model-normalization'
@@ -39,23 +40,28 @@ import {
   validateDefaultModelPricing,
 } from './api-config-defaults'
 import {
-  normalizeCapabilitySelectionsInput,
   parseStoredCapabilitySelections,
   sanitizeCapabilitySelectionsAgainstModels,
   serializeCapabilitySelections,
   validateCapabilitySelectionsAgainstModels,
 } from './api-config-capability-defaults'
+import {
+  capabilitySelectionCommandSchema,
+  capabilitySelectionCommandToSelections,
+} from '@/lib/ai-registry/capability-selection-command'
+import { assertUserProviderConfigurationAvailable } from './availability'
 
 export async function getUserApiConfig(userId: string) {
+  assertUserProviderConfigurationAvailable()
   const pref = await prisma.userPreference.findUnique({
     where: { userId },
     select: {
       customModels: true,
       customProviders: true,
+      assistantModel: true,
       analysisModel: true,
       characterModel: true,
       locationModel: true,
-      storyboardModel: true,
       editModel: true,
       videoModel: true,
       musicModel: true,
@@ -67,8 +73,11 @@ export async function getUserApiConfig(userId: string) {
   })
 
   const providers = parseStoredProviders(pref?.customProviders).map((provider) => ({
-    ...provider,
-    apiKey: provider.apiKey ? decryptApiKey(provider.apiKey) : '',
+    id: provider.id,
+    name: provider.name,
+    baseUrl: provider.baseUrl,
+    hidden: provider.hidden,
+    hasApiKey: Boolean(provider.apiKey),
   }))
 
   const billingMode = await getBillingMode()
@@ -79,10 +88,10 @@ export async function getUserApiConfig(userId: string) {
   const pricedModels = models.map((model) => withDisplayPricing(model, pricingDisplay))
 
   const rawDefaults: DefaultModelsPayload = {
+    assistantModel: pref?.assistantModel || '',
     analysisModel: pref?.analysisModel || '',
     characterModel: pref?.characterModel || '',
     locationModel: pref?.locationModel || '',
-    storyboardModel: pref?.storyboardModel || '',
     editModel: pref?.editModel || '',
     videoModel: pref?.videoModel || '',
     musicModel: pref?.musicModel || '',
@@ -99,7 +108,7 @@ export async function getUserApiConfig(userId: string) {
     analysis: pref?.analysisConcurrency,
     image: pref?.imageConcurrency,
     video: pref?.videoConcurrency,
-  })
+  }, getDefaultWorkflowConcurrencyConfig())
 
   return {
     models: pricedModels,
@@ -115,7 +124,12 @@ export async function getUserApiConfig(userId: string) {
   }
 }
 
-export async function putUserApiConfig(userId: string, body: unknown) {
+export async function putUserApiConfig(
+  userId: string,
+  body: unknown,
+  client: Pick<Prisma.TransactionClient, 'userPreference'> = prisma,
+) {
+  assertUserProviderConfigurationAvailable()
   if (!isRecord(body)) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'BODY_PARSE_FAILED',
@@ -127,30 +141,33 @@ export async function putUserApiConfig(userId: string, body: unknown) {
   const normalizedModelsInput = payload.models === undefined ? undefined : normalizeModelList(payload.models)
   const normalizedProviders = payload.providers === undefined ? undefined : normalizeProvidersInput(payload.providers)
   const normalizedDefaults = payload.defaultModels === undefined ? undefined : normalizeDefaultModelsInput(payload.defaultModels)
-  const normalizedCapabilityDefaults = payload.capabilityDefaults === undefined
+  const parsedCapabilityDefaults = payload.capabilityDefaults === undefined
     ? undefined
-    : normalizeCapabilitySelectionsInput(payload.capabilityDefaults)
+    : capabilitySelectionCommandSchema.safeParse(payload.capabilityDefaults)
+  if (parsedCapabilityDefaults && !parsedCapabilityDefaults.success) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'CAPABILITY_DEFAULTS_PARSE_FAILED',
+      field: 'capabilityDefaults',
+      issues: parsedCapabilityDefaults.error.issues,
+    })
+  }
+  const normalizedCapabilityDefaults = parsedCapabilityDefaults?.success
+    ? capabilitySelectionCommandToSelections(parsedCapabilityDefaults.data)
+    : undefined
   const normalizedWorkflowConcurrency = payload.workflowConcurrency === undefined
     ? undefined
     : normalizeWorkflowConcurrencyInput(payload.workflowConcurrency)
   const billingMode = await getBillingMode()
-  const deployment = getDeploymentConfig()
-  if (deployment.providerCredentialMode === 'platform-key') {
-    throw new ApiError('FORBIDDEN', {
-      code: 'API_CONFIG_MANAGED_BY_PLATFORM',
-    })
-  }
-
   const updateData: Record<string, unknown> = {}
-  const existingPref = await prisma.userPreference.findUnique({
+  const existingPref = await client.userPreference.findUnique({
     where: { userId },
     select: {
       customProviders: true,
       customModels: true,
+      assistantModel: true,
       analysisModel: true,
       characterModel: true,
       locationModel: true,
-      storyboardModel: true,
       editModel: true,
       videoModel: true,
       musicModel: true,
@@ -164,7 +181,6 @@ export async function putUserApiConfig(userId: string, body: unknown) {
   if (normalizedModels !== undefined) {
     validateModelProviderConsistency(normalizedModels, providerSourceForValidation)
     validateModelProviderTypeSupport(normalizedModels, providerSourceForValidation)
-    validateCustomPricingCapabilityMappings(normalizedModels)
     if (billingMode !== 'OFF') {
       validateBillableModelPricing(normalizedModels)
     }
@@ -208,6 +224,9 @@ export async function putUserApiConfig(userId: string, body: unknown) {
     if (billingMode !== 'OFF') {
       validateDefaultModelPricing(normalizedDefaults)
     }
+    if (normalizedDefaults.assistantModel !== undefined) {
+      updateData.assistantModel = normalizedDefaults.assistantModel || null
+    }
     if (normalizedDefaults.analysisModel !== undefined) {
       updateData.analysisModel = normalizedDefaults.analysisModel || null
     }
@@ -216,9 +235,6 @@ export async function putUserApiConfig(userId: string, body: unknown) {
     }
     if (normalizedDefaults.locationModel !== undefined) {
       updateData.locationModel = normalizedDefaults.locationModel || null
-    }
-    if (normalizedDefaults.storyboardModel !== undefined) {
-      updateData.storyboardModel = normalizedDefaults.storyboardModel || null
     }
     if (normalizedDefaults.editModel !== undefined) {
       updateData.editModel = normalizedDefaults.editModel || null
@@ -236,10 +252,10 @@ export async function putUserApiConfig(userId: string, body: unknown) {
       ? normalizedModels
       : sanitizeModelsForBilling(normalizedModels)
     const existingDefaults: DefaultModelsPayload = {
+      assistantModel: existingPref?.assistantModel || '',
       analysisModel: existingPref?.analysisModel || '',
       characterModel: existingPref?.characterModel || '',
       locationModel: existingPref?.locationModel || '',
-      storyboardModel: existingPref?.storyboardModel || '',
       editModel: existingPref?.editModel || '',
       videoModel: existingPref?.videoModel || '',
       musicModel: existingPref?.musicModel || '',
@@ -279,7 +295,7 @@ export async function putUserApiConfig(userId: string, body: unknown) {
     updateData.capabilityDefaults = serializeCapabilitySelections(cleanedCapabilityDefaults)
   }
 
-  await prisma.userPreference.upsert({
+  await client.userPreference.upsert({
     where: { userId },
     update: updateData,
     create: { userId, ...updateData },

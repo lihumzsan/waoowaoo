@@ -4,12 +4,9 @@
     "characters": "角色",
     "locations": "场景",
     "props": "道具",
-    "analyze": "分析资产",
-    "analyzing": "分析中...",
     "generateAll": "批量生成全部",
     "noCharacters": "暂无角色",
     "noLocations": "暂无场景",
-    "assetsTitle": "资产分析",
     "characterAssets": "角色资产",
     "locationAssets": "场景资产",
     "propAssets": "道具资产",
@@ -103,13 +100,6 @@
     "generating": "生成中",
     "regenerating": "重新生成中",
     "generatingPlaceholder": "待生成",
-    "spatialProfileStatus": {
-      "pending": "空间待分析",
-      "analyzing": "空间分析中",
-      "ready": "空间已就绪",
-      "failed": "空间分析失败",
-      "stale": "空间需重析"
-    },
     "selectTip": "选择并确认后，可对图片进行编辑和修改",
     "selectFirst": "请选择一张图片",
     "useThis": "选择此方案",
@@ -159,6 +149,7 @@
     "subDescPlaceholder": "只描述变化部分，例如：换装，脚蹬厚底战靴...",
     "subDescTip": "子形象只需描述变化部分（服装、状态等），面部和体型会自动继承主形象",
     "adding": "添加中...",
+    "processing": "处理中...",
     "insufficientBalanceDefault": "账户余额不足，请充值后继续使用",
     "addFailedGeneric": "添加失败",
     "appearancesCount": "个形象",
@@ -198,13 +189,6 @@
     "showPending": "待生成",
     "assetManagement": "资产管理",
     "assetCount": "共 {total} 个资产（{appearances} 角色形象 + {locations} 场景 + {props} 道具）",
-    "globalAnalyze": "全局分析",
-    "globalAnalyzing": "正在执行全局资产分析...",
-    "globalAnalyzingHint": "请勿刷新页面，分析完成后将自动显示结果",
-    "globalAnalyzingTip": "正在分析所有剧集内容，提取角色和场景...",
-    "globalAnalyzeHint": "分析所有剧集内容，提取角色和场景",
-    "globalAnalyzeSuccess": "全局分析完成：新增 {characters} 个角色，{locations} 个场景",
-    "globalAnalyzeFailed": "全局分析失败",
     "generateAll": "生成全部图片",
     "generateAllNoop": "所有资产都已有图片，无需生成",
     "generating": "生成中 ({current}/{total})",
@@ -236,22 +220,6 @@
     "upload": "上传",
     "unknownError": "未知错误"
   },
-  "video": {
-    "panelCard": {
-      "generating": "生成中...",
-      "editPrompt": "编辑提示词"
-    }
-  },
-  "smartImport": {
-    "preview": {
-      "saving": "保存中..."
-    }
-  },
-  "storyboard": {
-    "group": {
-      "generating": "生成中..."
-    }
-  },
   "errors": {
     "saveFailed": "保存失败，请重试",
     "failed": "失败，请重试",
@@ -260,9 +228,7 @@
     "createFailed": "创建失败"
   },
   "filterBar": {
-    "all": "全部",
-    "allEpisodes": "全部集数",
-    "episodeLabel": "第{number}集 · {name}"
+    "all": "全部"
   },
   "assetLibrary": {
     "button": "资产库",
@@ -286,7 +252,6 @@
     "characterPlaceholder": "描述你想要修改的内容，例如：把头发改成金色、添加眼镜、换成休闲装...",
     "locationPlaceholder": "描述你想要修改的内容，例如：添加更多树木、改成夜晚场景...",
     "propPlaceholder": "描述你想要修改的内容，例如：改成银色金属材质、刀柄增加雕纹、去掉宝石装饰...",
-    "storyboardPlaceholder": "描述你想要修改的内容，例如：改变背景颜色、调整人物表情...",
     "noAssetHint": "暂无资产，点击\"添加资产\"选择",
     "referenceImages": "参考图片",
     "referenceImagesHint": "(可选，支持粘贴)",

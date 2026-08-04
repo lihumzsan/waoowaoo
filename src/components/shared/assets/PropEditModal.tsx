@@ -3,59 +3,35 @@
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
-import { shouldShowError } from '@/lib/error-utils'
 import TaskStatusInline from '@/components/task/TaskStatusInline'
 import { resolveTaskPresentationState } from '@/lib/task/presentation'
-import {
-  useAiModifyProjectPropDescription,
-  useAiModifyPropDescription,
-  useAssetActions,
-} from '@/lib/query/hooks'
-import { AiModifyDescriptionField } from './AiModifyDescriptionField'
+import { useAssetActions } from '@/lib/query/hooks'
 
 export interface PropEditModalProps {
-  mode: 'asset-hub' | 'project'
   propId: string
   propName: string
   summary: string
   description: string
   variantId?: string
-  projectId?: string
   onClose: () => void
-  onRefresh?: () => void
 }
 
 export function PropEditModal({
-  mode,
   propId,
   propName,
   summary,
   description,
   variantId,
-  projectId,
   onClose,
-  onRefresh,
 }: PropEditModalProps) {
   const t = useTranslations('assets')
   const actions = useAssetActions({
-    scope: mode === 'asset-hub' ? 'global' : 'project',
-    projectId,
     kind: 'prop',
   })
   const [editingName, setEditingName] = useState(propName)
   const [editingSummary, setEditingSummary] = useState(summary)
   const [editingDescription, setEditingDescription] = useState(description)
-  const [aiModifyInstruction, setAiModifyInstruction] = useState('')
-  const [isAiModifying, setIsAiModifying] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const aiModifyingState = isAiModifying
-    ? resolveTaskPresentationState({
-      phase: 'processing',
-      intent: 'modify',
-      resource: 'image',
-      hasOutput: true,
-    })
-    : null
   const savingState = isSaving
     ? resolveTaskPresentationState({
       phase: 'processing',
@@ -64,14 +40,6 @@ export function PropEditModal({
       hasOutput: false,
     })
     : null
-  const aiModifyAssetHub = useAiModifyPropDescription()
-  const aiModifyProject = useAiModifyProjectPropDescription(projectId ?? '')
-
-  const getErrorMessage = (error: unknown, fallback: string) => {
-    if (error instanceof Error && error.message) return error.message
-    return fallback
-  }
-
   const persist = async () => {
     await actions.update(propId, {
       name: editingName.trim(),
@@ -82,42 +50,6 @@ export function PropEditModal({
         description: editingDescription.trim(),
       })
     }
-    onRefresh?.()
-  }
-
-  const handleAiModify = async () => {
-    if (!aiModifyInstruction.trim()) return false
-
-    try {
-      setIsAiModifying(true)
-      const data = mode === 'asset-hub'
-        ? await aiModifyAssetHub.mutateAsync({
-          propId,
-          variantId,
-          currentDescription: editingDescription,
-          modifyInstruction: aiModifyInstruction,
-        })
-        : await aiModifyProject.mutateAsync({
-          propId,
-          variantId,
-          currentDescription: editingDescription,
-          modifyInstruction: aiModifyInstruction,
-        })
-
-      if (data?.modifiedDescription) {
-        setEditingDescription(data.modifiedDescription)
-        setAiModifyInstruction('')
-        return true
-      }
-      return false
-    } catch (error: unknown) {
-      if (shouldShowError(error)) {
-        alert(`${t('modal.modifyFailed')}: ${getErrorMessage(error, t('errors.failed'))}`)
-      }
-      return false
-    } finally {
-      setIsAiModifying(false)
-    }
   }
 
   const handleSaveOnly = async () => {
@@ -125,18 +57,6 @@ export function PropEditModal({
     try {
       setIsSaving(true)
       await persist()
-      onClose()
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  const handleSaveAndGenerate = async () => {
-    if (!editingName.trim() || !editingSummary.trim() || !editingDescription.trim()) return
-    try {
-      setIsSaving(true)
-      await persist()
-      await actions.generate({ id: propId })
       onClose()
     } finally {
       setIsSaving(false)
@@ -184,20 +104,17 @@ export function PropEditModal({
             />
           </div>
 
-          <AiModifyDescriptionField
-            label={t('prop.description')}
-            description={editingDescription}
-            onDescriptionChange={setEditingDescription}
-            descriptionPlaceholder={t('prop.descriptionPlaceholder')}
-            aiInstruction={aiModifyInstruction}
-            onAiInstructionChange={setAiModifyInstruction}
-            aiInstructionPlaceholder={t('modal.modifyPlaceholderProp')}
-            onAiModify={handleAiModify}
-            isAiModifying={isAiModifying}
-            aiModifyingState={aiModifyingState}
-            actionLabel={t('modal.modifyDescription')}
-            cancelLabel={t('common.cancel')}
-          />
+          <div className="space-y-2">
+            <label className="glass-field-label block">
+              {t('prop.description')}
+            </label>
+            <textarea
+              value={editingDescription}
+              onChange={(event) => setEditingDescription(event.target.value)}
+              className="glass-textarea-base h-48 w-full px-3 py-2 resize-none"
+              placeholder={t('prop.descriptionPlaceholder')}
+            />
+          </div>
         </div>
 
         <div className="flex gap-3 justify-end p-4 border-t border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface-strong)] rounded-b-lg flex-shrink-0">
@@ -216,15 +133,8 @@ export function PropEditModal({
             {isSaving ? (
               <TaskStatusInline state={savingState} className="text-white [&>span]:text-white [&_svg]:text-white" />
             ) : (
-              t('modal.saveOnly')
+              t('modal.save')
             )}
-          </button>
-          <button
-            onClick={() => void handleSaveAndGenerate()}
-            disabled={isSaving || !editingName.trim() || !editingSummary.trim() || !editingDescription.trim()}
-            className="glass-btn-base glass-btn-primary px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {t('modal.saveAndGenerate')}
           </button>
         </div>
       </div>

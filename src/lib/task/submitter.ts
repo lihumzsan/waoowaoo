@@ -1,37 +1,32 @@
 import { createScopedLogger } from '@/lib/logging/core'
-import { addTaskJob } from './queues'
-import { publishTaskEvent } from './publisher'
-import {
-  createTask,
-  markTaskEnqueueFailed,
-  markTaskEnqueued,
-  markTaskFailed,
-  rollbackTaskBillingForTask,
-  updateTaskBillingInfo,
-} from './service'
-import { TASK_EVENT_TYPE, TASK_STATUS, TASK_TYPE, type TaskBillingInfo, type TaskType } from './types'
+import { type CreateTaskInput, type TaskBillingInfo, type TaskType } from './types'
 import {
   buildDefaultTaskBillingInfo,
   getBillingMode,
-  InsufficientBalanceError,
   isBillableTaskType,
-  prepareTaskBilling,
 } from '@/lib/billing'
 import { ApiError } from '@/lib/api-errors'
 import { getTaskFlowMeta } from '@/lib/llm-observe/stage-pipeline'
 import type { Locale } from '@/i18n/routing'
+import { buildTaskProgressGroupId, withTaskProgressGroupPayload } from './progress-group'
+import type { BillingReceiptView } from '@/lib/billing/task-billing-view'
+import { requiresBillableMediaApproval } from '@/lib/billing/media-approval-policy'
+import type { Prisma } from '@prisma/client'
 
 export function toObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   return value as Record<string, unknown>
 }
 
-export function isActiveTaskStatus(status: string | null | undefined) {
-  return status === TASK_STATUS.QUEUED || status === TASK_STATUS.PROCESSING
-}
-
-export function shouldAttachNewTaskToReusableRun(reusableRunTaskStatus: string | null | undefined) {
-  return !isActiveTaskStatus(reusableRunTaskStatus)
+export interface SubmitTaskResult {
+  [key: string]: unknown
+  success: boolean
+  async: boolean
+  taskId: string
+  taskType: TaskType
+  status: string
+  deduped: boolean
+  billingReceiptView?: BillingReceiptView | null
 }
 
 export function normalizeTaskPayload(type: TaskType, payload?: Record<string, unknown> | null) {
@@ -85,25 +80,33 @@ export function normalizeTaskPayload(type: TaskType, payload?: Record<string, un
   }
 }
 
-export async function submitTask(params: {
+export type SubmitTaskParams = {
   userId: string
   locale: Locale
   projectId: string
-  episodeId?: string | null
+  parentTaskId?: string | null
   type: TaskType
   targetType: string
   targetId: string
   payload?: Record<string, unknown> | null
   dedupeKey?: string | null
-  priority?: number
-  maxAttempts?: number
   billingInfo?: TaskBillingInfo | null
+  billingInfoSource?: 'auto' | 'planned'
   requestId?: string | null
   operationId?: string | null
   operationSource?: string | null
-  operationConfirmed?: boolean | null
+  operationExecutionId?: string | null
   operationRequestId?: string | null
-}) {
+  onTaskCreatedInTransaction?: (
+    tx: Prisma.TransactionClient,
+    task: { id: string },
+  ) => Promise<void>
+}
+
+export async function prepareTaskSubmissionInput(params: SubmitTaskParams): Promise<{
+  readonly input: CreateTaskInput
+  readonly billingMode: Awaited<ReturnType<typeof getBillingMode>>
+}> {
   const logger = createScopedLogger({
     module: 'task.submitter',
     action: 'task.submit',
@@ -112,44 +115,43 @@ export async function submitTask(params: {
     userId: params.userId,
   })
 
-  const normalizedPayloadBase = normalizeTaskPayload(params.type, params.payload || null)
+  const operationRequestId = params.operationRequestId || params.requestId || null
+  const progressGroupId = buildTaskProgressGroupId({
+    operationId: params.operationId || null,
+    operationRequestId,
+  })
+  const normalizedPayloadBase = withTaskProgressGroupPayload(
+    normalizeTaskPayload(params.type, params.payload || null),
+    progressGroupId,
+  )
   const normalizedPayloadMeta = toObject(normalizedPayloadBase.meta)
   const normalizedPayload = {
     ...normalizedPayloadBase,
     meta: {
       ...normalizedPayloadMeta,
       locale: params.locale,
+      trace: {
+        requestId: params.requestId || null,
+      },
     },
   }
   const computedBillingInfo = isBillableTaskType(params.type)
     ? buildDefaultTaskBillingInfo(params.type, normalizedPayload)
     : null
-  const resolvedBillingInfo = computedBillingInfo || params.billingInfo || null
+  const resolvedBillingInfo = params.billingInfoSource === 'planned'
+    ? params.billingInfo || computedBillingInfo || null
+    : computedBillingInfo || params.billingInfo || null
 
-  const { task, deduped } = await createTask({
-    userId: params.userId,
-    projectId: params.projectId,
-    episodeId: params.episodeId || null,
-    type: params.type,
-    targetType: params.targetType,
-    targetId: params.targetId,
-    payload: normalizedPayload,
-    dedupeKey: params.dedupeKey || null,
-    priority: params.priority,
-    maxAttempts: params.maxAttempts,
-    billingInfo: resolvedBillingInfo || null,
-    operationId: params.operationId || null,
-    operationSource: params.operationSource || null,
-    operationConfirmed: params.operationConfirmed ?? null,
-    operationRequestId: params.operationRequestId || params.requestId || null,
-  })
-  const runId: string | null = null
+  if (requiresBillableMediaApproval(resolvedBillingInfo)) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'BILLABLE_MEDIA_APPROVED_PLAN_SUBMITTER_REQUIRED',
+      message: `billable media Task must be created by the approved operation plan authority: ${params.type}`,
+    })
+  }
 
-  let preparedBillingInfo = (task.billingInfo || resolvedBillingInfo || null) as TaskBillingInfo | null
-  if (!deduped && isBillableTaskType(params.type) && preparedBillingInfo?.billable !== true) {
-    const billingMode = await getBillingMode()
+  const billingMode = await getBillingMode()
+  if (isBillableTaskType(params.type) && resolvedBillingInfo?.billable !== true) {
     if (billingMode === 'ENFORCE') {
-      await markTaskFailed(task.id, 'INVALID_PARAMS', `missing server-generated billingInfo for billable task type: ${params.type}`)
       throw new ApiError('INVALID_PARAMS', {
         message: `missing server-generated billingInfo for billable task type: ${params.type}`,
       })
@@ -157,7 +159,6 @@ export async function submitTask(params: {
     logger.warn({
       action: 'task.submit.billing_info_missing_non_enforce',
       message: `missing billingInfo ignored in ${billingMode} mode`,
-      taskId: task.id,
       details: {
         type: params.type,
         billingMode,
@@ -165,150 +166,22 @@ export async function submitTask(params: {
     })
   }
 
-  if (!deduped && preparedBillingInfo) {
-    try {
-      preparedBillingInfo = (await prepareTaskBilling({
-        id: task.id,
-        userId: params.userId,
-        projectId: params.projectId,
-        billingInfo: preparedBillingInfo,
-      })) as TaskBillingInfo | null
-      if (preparedBillingInfo) {
-        await updateTaskBillingInfo(task.id, preparedBillingInfo)
-      }
-    } catch (error) {
-      if (error instanceof InsufficientBalanceError) {
-        await markTaskFailed(task.id, 'INSUFFICIENT_BALANCE', error.message)
-        throw new ApiError('INSUFFICIENT_BALANCE', {
-          message: error.message,
-          required: error.required,
-          available: error.available,
-        })
-      }
-      await markTaskFailed(task.id, 'INTERNAL_ERROR', error instanceof Error ? error.message : String(error))
-      throw error
-    }
-  }
-
-  if (!deduped) {
-    await publishTaskEvent({
-      taskId: task.id,
-      projectId: params.projectId,
-      userId: params.userId,
-      type: TASK_EVENT_TYPE.CREATED,
-      taskType: params.type,
-      targetType: params.targetType,
-      targetId: params.targetId,
-      episodeId: params.episodeId || null,
-      payload: {
-        ...normalizedPayload,
-        billing: preparedBillingInfo || null,
-        trace: {
-          requestId: params.requestId || null,
-        },
-      },
-    })
-  }
-  logger.info({
-    action: 'task.submit.created',
-    message: 'task created',
-    taskId: task.id,
-    details: {
-      type: params.type,
-      targetType: params.targetType,
-      targetId: params.targetId,
-    },
-  })
-
-  if (!deduped) {
-    try {
-      await addTaskJob({
-        taskId: task.id,
-        type: params.type,
-        locale: params.locale,
-        projectId: params.projectId,
-        episodeId: params.episodeId || null,
-        targetType: params.targetType,
-        targetId: params.targetId,
-        payload: normalizedPayload,
-        billingInfo: preparedBillingInfo || null,
-        userId: params.userId,
-        trace: {
-          requestId: params.requestId || null,
-        },
-      }, {
-        priority: typeof task.priority === 'number' ? task.priority : 0,
-      })
-      await markTaskEnqueued(task.id)
-      logger.info({
-        action: 'task.submit.enqueued',
-        message: 'task enqueued',
-        taskId: task.id,
-      })
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error)
-      await markTaskEnqueueFailed(task.id, message || 'queue.add failed')
-      const rollbackResult = await rollbackTaskBillingForTask({
-        taskId: task.id,
-        billingInfo: preparedBillingInfo,
-      })
-      const compensationFailed = rollbackResult.attempted && !rollbackResult.rolledBack
-      const failedCode = compensationFailed ? 'BILLING_COMPENSATION_FAILED' : 'ENQUEUE_FAILED'
-      const failedMessage = compensationFailed
-        ? `${message || 'queue add failed'}; billing rollback failed`
-        : (message || 'queue add failed')
-      await markTaskFailed(task.id, failedCode, failedMessage)
-      await publishTaskEvent({
-        taskId: task.id,
-        projectId: params.projectId,
-        userId: params.userId,
-        type: TASK_EVENT_TYPE.FAILED,
-        taskType: params.type,
-        targetType: params.targetType,
-        targetId: params.targetId,
-        episodeId: params.episodeId || null,
-        payload: {
-          stage: 'enqueue_failed',
-          stageLabel: 'progress.stage.enqueueFailed',
-          message: failedMessage,
-          compensationFailed,
-          errorCode: failedCode,
-        },
-        persist: false,
-      })
-      logger.error({
-        action: 'task.submit.enqueue_failed',
-        message: failedMessage,
-        taskId: task.id,
-        errorCode: compensationFailed ? 'INTERNAL_ERROR' : 'EXTERNAL_ERROR',
-        retryable: false,
-        details: {
-          compensationFailed,
-        },
-        error:
-          error instanceof Error
-            ? {
-                name: error.name,
-                message: error.message,
-                stack: error.stack,
-              }
-              : {
-                message: String(error),
-              },
-      })
-      throw new ApiError(compensationFailed ? 'INTERNAL_ERROR' : 'EXTERNAL_ERROR', {
-        message: failedMessage,
-        taskId: task.id,
-      })
-    }
-  }
-
-  return {
-    success: true,
-    async: true,
-    taskId: task.id,
-    runId,
-    status: task.status,
-    deduped,
-  }
+  const taskInput = {
+    userId: params.userId,
+    projectId: params.projectId,
+    parentTaskId: params.parentTaskId || null,
+    type: params.type,
+    targetType: params.targetType,
+    targetId: params.targetId,
+    payload: normalizedPayload,
+    dedupeKey: params.dedupeKey || null,
+    billingInfo: resolvedBillingInfo || null,
+    operationId: params.operationId || null,
+    operationSource: params.operationSource || null,
+    approvalGrantId: null,
+    operationExecutionId: params.operationExecutionId ?? null,
+    operationPlanTaskId: null,
+    operationRequestId,
+  } satisfies CreateTaskInput
+  return { input: taskInput, billingMode }
 }

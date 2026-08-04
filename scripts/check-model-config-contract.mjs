@@ -1,29 +1,32 @@
 let prisma
 
 const STRICT = process.argv.includes('--strict')
-const MODEL_FIELDS = [
+const PROJECT_MODEL_FIELDS = [
   'analysisModel',
   'characterModel',
   'locationModel',
-  'storyboardModel',
   'editModel',
   'videoModel',
 ]
+const USER_MODEL_FIELDS = [
+  'assistantModel',
+  ...PROJECT_MODEL_FIELDS,
+]
 const MAX_SAMPLES = 200
-const CAPABILITY_NAMESPACES = new Set(['llm', 'image', 'video', 'music'])
-const MODEL_TYPES = new Set(['llm', 'image', 'video', 'music'])
+const CAPABILITY_NAMESPACES = new Set(['llm', 'image', 'video', 'music', 'voice'])
+const MODEL_TYPES = new Set(['llm', 'image', 'video', 'music', 'voice'])
 const CAPABILITY_NAMESPACE_ALLOWED_FIELDS = {
   llm: new Set(['reasoningEffortOptions', 'fieldI18n']),
   image: new Set(['resolutionOptions', 'qualityOptions', 'fieldI18n']),
   video: new Set([
     'durationOptions',
-    'fpsOptions',
     'resolutionOptions',
     'firstlastframe',
     'supportGenerateAudio',
     'fieldI18n',
   ]),
   music: new Set(['durationSecondsOptions', 'vocalModeOptions', 'outputFormatOptions', 'bpmOptions', 'fieldI18n']),
+  voice: new Set(['languageOptions', 'fieldI18n']),
 }
 
 const CAPABILITY_NAMESPACE_I18N_FIELDS = {
@@ -36,7 +39,6 @@ const CAPABILITY_NAMESPACE_I18N_FIELDS = {
   },
   video: {
     duration: 'durationOptions',
-    fps: 'fpsOptions',
     resolution: 'resolutionOptions',
   },
   music: {
@@ -45,6 +47,7 @@ const CAPABILITY_NAMESPACE_I18N_FIELDS = {
     outputFormat: 'outputFormatOptions',
     bpm: 'bpmOptions',
   },
+  voice: { language: 'languageOptions' },
 }
 
 function isRecord(value) {
@@ -184,7 +187,7 @@ function validateFieldI18nMap(issues, namespace, namespaceValue) {
 function validateCapabilities(modelType, capabilities) {
   const issues = []
   if (!MODEL_TYPES.has(modelType)) {
-    pushIssue(issues, 'type', 'type must be llm/image/video/music')
+    pushIssue(issues, 'type', 'type must be llm/image/video/music/voice')
     return issues
   }
   if (capabilities === undefined || capabilities === null) return issues
@@ -241,9 +244,6 @@ function validateCapabilities(modelType, capabilities) {
       if (video.durationOptions !== undefined && !isNumberArray(video.durationOptions)) {
         pushIssue(issues, 'capabilities.video.durationOptions', 'must be number array')
       }
-      if (video.fpsOptions !== undefined && !isNumberArray(video.fpsOptions)) {
-        pushIssue(issues, 'capabilities.video.fpsOptions', 'must be number array')
-      }
       if (video.resolutionOptions !== undefined && !isStringArray(video.resolutionOptions)) {
         pushIssue(issues, 'capabilities.video.resolutionOptions', 'must be string array')
       }
@@ -279,6 +279,19 @@ function validateCapabilities(modelType, capabilities) {
     }
   }
 
+  const voice = capabilities.voice
+  if (voice !== undefined) {
+    if (!isRecord(voice)) {
+      pushIssue(issues, 'capabilities.voice', 'voice capabilities must be an object')
+    } else {
+      validateAllowedFields(issues, 'voice', voice)
+      if (voice.languageOptions !== undefined && !isStringArray(voice.languageOptions)) {
+        pushIssue(issues, 'capabilities.voice.languageOptions', 'must be string array')
+      }
+      validateFieldI18nMap(issues, 'voice', voice)
+    }
+  }
+
   return issues
 }
 
@@ -311,10 +324,10 @@ async function main() {
     select: {
       id: true,
       customModels: true,
+      assistantModel: true,
       analysisModel: true,
       characterModel: true,
       locationModel: true,
-      storyboardModel: true,
       editModel: true,
       videoModel: true,
     },
@@ -322,7 +335,7 @@ async function main() {
 
   for (const pref of userPrefs) {
     summary.userPreference.total += 1
-    for (const field of MODEL_FIELDS) {
+    for (const field of USER_MODEL_FIELDS) {
       const rawValue = pref[field]
       if (!rawValue) continue
       if (!parseModelKeyStrict(rawValue)) {
@@ -408,7 +421,6 @@ async function main() {
       analysisModel: true,
       characterModel: true,
       locationModel: true,
-      storyboardModel: true,
       editModel: true,
       videoModel: true,
     },
@@ -416,7 +428,7 @@ async function main() {
 
   for (const project of projects) {
     summary.project.total += 1
-    for (const field of MODEL_FIELDS) {
+    for (const field of PROJECT_MODEL_FIELDS) {
       const rawValue = project[field]
       if (!rawValue) continue
       if (!parseModelKeyStrict(rawValue)) {

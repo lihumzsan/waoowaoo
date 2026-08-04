@@ -11,6 +11,10 @@ export interface ErrorFields {
 export interface LogContext {
   requestId?: string
   taskId?: string
+  taskAttempt?: number
+  threadId?: string
+  turnId?: string
+  operationId?: string
   projectId?: string
   userId?: string
   provider?: string
@@ -21,6 +25,7 @@ export interface LogContext {
 export interface SemanticContext extends LogContext {
   errorCode?: string
   retryable?: boolean
+  failureClass?: string
   durationMs?: number
 }
 
@@ -34,10 +39,15 @@ export interface LogEvent {
   message: string
   requestId?: string
   taskId?: string
+  taskAttempt?: number
+  threadId?: string
+  turnId?: string
+  operationId?: string
   projectId?: string
   userId?: string
   errorCode?: string
   retryable?: boolean
+  failureClass?: string
   durationMs?: number
   provider?: string
   details?: Record<string, unknown> | unknown[] | null

@@ -24,63 +24,12 @@
   }
 }
 
-@keyframes aurora {
-  0% {
-    transform: translate(0, 0) rotate(0deg);
-    opacity: 0.4;
-  }
-
-  50% {
-    transform: translate(-2%, 2%) rotate(2deg);
-    opacity: 0.6;
-  }
-
-  100% {
-    transform: translate(0, 0) rotate(0deg);
-    opacity: 0.4;
-  }
-}
-
-@keyframes blob {
-  0% {
-    transform: translate(0, 0) scale(1);
-  }
-
-  33% {
-    transform: translate(30px, -50px) scale(1.1);
-  }
-
-  66% {
-    transform: translate(-20px, 20px) scale(0.9);
-  }
-
-  100% {
-    transform: translate(0, 0) scale(1);
-  }
-}
-
 .animate-fadeInDown {
   animation: fadeInDown 0.8s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .animate-fadeIn {
   animation: fadeIn 0.15s ease-out;
-}
-
-.animate-aurora {
-  animation: aurora 20s infinite alternate linear;
-}
-
-.animate-blob {
-  animation: blob 10s infinite;
-}
-
-.animation-delay-2000 {
-  animation-delay: 2s;
-}
-
-.animation-delay-4000 {
-  animation-delay: 4s;
 }
 
 /* Slide in from right animation */
@@ -205,4 +154,298 @@
   opacity: 0.96;
   mix-blend-mode: screen;
   animation: workspaceNodeLightSweep 1.8s cubic-bezier(0.35, 0, 0.2, 1) infinite;
+}
+
+.workspace-node-running-breathing {
+  box-shadow:
+    0 18px 48px rgba(15, 23, 42, 0.08),
+    0 0 22px rgba(56, 189, 248, 0.14);
+  animation: workspaceNodeRunningBreath 2.8s ease-in-out infinite;
+}
+
+.workspace-node-running-breathing::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border: 1px solid rgba(125, 211, 252, 0.58);
+  border-radius: inherit;
+  box-shadow:
+    0 0 0 1px rgba(56, 189, 248, 0.1),
+    0 0 34px rgba(56, 189, 248, 0.22);
+  opacity: 0.58;
+  pointer-events: none;
+  animation: workspaceNodeRunningHalo 2.8s ease-in-out infinite;
+}
+
+@keyframes workspaceNodeRunningBreath {
+  0%,
+  100% {
+    box-shadow:
+      0 18px 48px rgba(15, 23, 42, 0.08),
+      0 0 18px rgba(56, 189, 248, 0.12);
+  }
+
+  50% {
+    box-shadow:
+      0 22px 58px rgba(15, 23, 42, 0.1),
+      0 0 42px rgba(56, 189, 248, 0.26);
+  }
+}
+
+@keyframes workspaceNodeRunningHalo {
+  0%,
+  100% {
+    opacity: 0.48;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.86;
+    transform: scale(1.006);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-node-running-breathing {
+    animation: none;
+  }
+
+  .workspace-node-running-breathing::after {
+    animation: none;
+    opacity: 0.62;
+  }
+}
+
+@keyframes workspaceNodeStreamSoftEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes workspaceNodeStreamSoftField {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.workspace-node-stream-soft-enter {
+  animation: workspaceNodeStreamSoftEnter 240ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.workspace-node-stream-soft-detail {
+  animation: workspaceNodeStreamSoftEnter 240ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.workspace-node-stream-soft-detail [data-stream-field="true"] {
+  animation: workspaceNodeStreamSoftField 240ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.workspace-node-stream-soft-detail [data-stream-field="true"]:nth-child(2) {
+  animation-delay: 40ms;
+}
+
+.workspace-node-stream-soft-detail [data-stream-field="true"]:nth-child(3) {
+  animation-delay: 80ms;
+}
+
+.workspace-node-stream-soft-detail [data-stream-field="true"]:nth-child(4) {
+  animation-delay: 120ms;
+}
+
+.workspace-canvas-layout-animated .react-flow__node:not(.dragging) {
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.workspace-canvas-node-shell {
+  transition:
+    background-color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.workspace-canvas-node-content {
+  transition:
+    opacity 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.workspace-canvas-soft-reveal {
+  animation: workspaceCanvasGlideReveal 240ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.workspace-canvas-motion-presence {
+  display: grid;
+  grid-template-rows: 1fr;
+  overflow: hidden;
+  animation: none;
+  opacity: 1;
+  transform: none;
+  will-change: auto;
+}
+
+.workspace-canvas-motion-presence[data-workspace-canvas-motion-active="true"] {
+  will-change: grid-template-rows, opacity, transform;
+}
+
+.workspace-canvas-motion-presence-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace-canvas-motion-presence[data-motion-state="entered"][data-workspace-canvas-motion-active="true"] {
+  animation: workspaceCanvasGlideReveal 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.workspace-canvas-motion-presence[data-motion-state="exiting"][data-workspace-canvas-motion-active="true"] {
+  pointer-events: none;
+  animation: workspaceCanvasGlideHide 130ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-canvas-layout-animated .react-flow__node:not(.dragging),
+  .workspace-canvas-node-shell,
+  .workspace-canvas-node-content {
+    transition: none;
+  }
+
+  .workspace-node-stream-soft-enter,
+  .workspace-node-stream-soft-detail,
+  .workspace-node-stream-soft-detail [data-stream-field="true"],
+  .workspace-canvas-soft-reveal,
+  .workspace-canvas-motion-presence {
+    animation: none;
+  }
+}
+
+@keyframes workspaceCanvasGlideReveal {
+  from {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes workspaceCanvasGlideHide {
+  from {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  to {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+
+/* —— 系统加载 Logo:液态浮动(主体轻浮摆动 + 圆点独立弹跳) —— */
+.brand-loading-mark .logo-shape__art,
+.brand-loading-mark .logo-shape__dot {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.brand-loading-mark .logo-shape__art {
+  animation: brandLoadingBob 2.8s ease-in-out infinite;
+}
+
+.brand-loading-mark .logo-shape__dot {
+  animation: brandLoadingDot 1.5s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+
+@keyframes brandLoadingBob {
+  0%,
+  100% {
+    transform: translateY(2px) rotate(-1.5deg);
+  }
+
+  50% {
+    transform: translateY(-4px) rotate(1.5deg);
+  }
+}
+
+@keyframes brandLoadingDot {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  45% {
+    transform: translateY(-9px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-loading-mark .logo-shape__art,
+  .brand-loading-mark .logo-shape__dot {
+    animation: none;
+  }
+}
+
+/* Assistant 执行态动效:思考中标题扫光 + 运行中 Subagent 卡片扫光。
+   仅表达"正在进行",不承担任何状态解释。 */
+.assistant-shimmer-text {
+  background-image: linear-gradient(
+    90deg,
+    var(--glass-text-tertiary) 0%,
+    var(--glass-text-tertiary) 38%,
+    var(--glass-text-primary) 50%,
+    var(--glass-text-tertiary) 62%,
+    var(--glass-text-tertiary) 100%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: assistant-shimmer-move 1.9s linear infinite;
+}
+
+@keyframes assistant-shimmer-move {
+  0% { background-position: 190% 0; }
+  100% { background-position: -90% 0; }
+}
+
+.assistant-run-sweep::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent 20%, rgba(13, 13, 13, 0.055) 50%, transparent 80%);
+  animation: assistant-run-sweep-move 2.1s ease-in-out infinite;
+}
+
+@keyframes assistant-run-sweep-move {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-shimmer-text {
+    animation: none;
+    background-image: none;
+    color: var(--glass-text-primary);
+  }
+
+  .assistant-run-sweep::after {
+    animation: none;
+    background: none;
+  }
 }

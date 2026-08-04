@@ -37,6 +37,7 @@ export function ApiConfigTabContainer() {
     capabilityDefaults,
     loading,
     saveStatus,
+    saveError,
     flushConfig,
     updateProviderHidden,
     updateProviderApiKey,
@@ -55,6 +56,12 @@ export function ApiConfigTabContainer() {
 
   const t = useTranslations('apiConfig')
   const tc = useTranslations('common')
+  const saveFailedLabel =
+    saveError?.code === 'PROVIDER_NOT_SUPPORTED' && saveError.providerId
+      ? t('saveFailedProviderUnsupported', {
+          provider: getProviderDisplayName(saveError.providerId, locale),
+        })
+      : t('saveFailed')
 
   const savingState =
     saveStatus === 'saving'
@@ -102,7 +109,7 @@ export function ApiConfigTabContainer() {
         savingState={savingState}
         savingLabel={t('saving')}
         savedLabel={t('saved')}
-        saveFailedLabel={t('saveFailed')}
+        saveFailedLabel={saveFailedLabel}
       />
 
       <div className="flex-1 overflow-y-auto">

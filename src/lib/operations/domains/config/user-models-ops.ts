@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
-import { getDeploymentConfig } from '@/lib/deployment/config'
+import { getDeploymentConfig, isPlatformProviderCredentialMode } from '@/lib/deployment/config'
 import { getPlatformModels } from '@/lib/platform-models/catalog'
 import {
   type CapabilityValue,
@@ -14,8 +14,6 @@ import { findBuiltinCapabilities } from '@/lib/ai-registry/capabilities-catalog'
 import { findBuiltinPricingCatalogEntry } from '@/lib/ai-registry/pricing-catalog'
 import { type VideoPricingTier } from '@/lib/ai-registry/video-capabilities'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
-import { CODEX_PROVIDER_KEY } from '@/lib/ai-registry/codex-defaults'
-import { getProviderKey } from '@/lib/user-api/api-config-shared'
 
 type StoredModelType = UnifiedModelType | string
 
@@ -49,7 +47,9 @@ interface UserModelsPayload {
   music: UserModelOption[]
 }
 
-function isUnifiedModelType(type: unknown): type is UnifiedModelType {
+type SelectableUserModelType = Exclude<UnifiedModelType, 'voice'>
+
+function isSelectableUserModelType(type: unknown): type is SelectableUserModelType {
   return (
     type === 'llm'
     || type === 'image'
@@ -148,20 +148,13 @@ function hasStoredProviderApiKey(provider: StoredProvider): boolean {
   return typeof provider.apiKey === 'string' && provider.apiKey.trim().length > 0
 }
 
-function isStoredProviderRuntimeReady(provider: StoredProvider): boolean {
-  const providerId = typeof provider.id === 'string' ? provider.id.trim() : ''
-  if (!providerId) return false
-  if (getProviderKey(providerId) === CODEX_PROVIDER_KEY) return true
-  return hasStoredProviderApiKey(provider)
-}
-
 async function resolveModelSource(userId: string): Promise<{
   deploymentMode: 'platform-key' | 'user-key'
   models: StoredModel[]
   providers: StoredProvider[]
 }> {
   const deployment = getDeploymentConfig()
-  if (deployment.providerCredentialMode === 'platform-key') {
+  if (isPlatformProviderCredentialMode(deployment)) {
     return {
       deploymentMode: 'platform-key',
       models: getPlatformModels(),
@@ -201,16 +194,15 @@ export function createUserModelsOperations(): ProjectAgentOperationRegistryDraft
       execute: async (ctx) => {
         const modelSource = await resolveModelSource(ctx.userId)
         const providerNameMap = new Map<string, string>()
-        const runtimeReadyProviderKeys = new Set<string>()
+        const providerIdsWithApiKey = new Set<string>()
         modelSource.providers.forEach((provider) => {
           const providerId = typeof provider?.id === 'string' ? provider.id.trim() : ''
           if (!providerId) return
-          const providerKey = getProviderKey(providerId)
 
           if (provider?.name && typeof provider.name === 'string') {
-            providerNameMap.set(providerKey, provider.name)
+            providerNameMap.set(providerId, provider.name)
           }
-          if (isStoredProviderRuntimeReady(provider)) runtimeReadyProviderKeys.add(providerKey)
+          if (hasStoredProviderApiKey(provider)) providerIdsWithApiKey.add(providerId)
         })
 
         const grouped: UserModelsPayload = {
@@ -221,7 +213,7 @@ export function createUserModelsOperations(): ProjectAgentOperationRegistryDraft
         }
 
         for (const model of modelSource.models) {
-          if (!isUnifiedModelType(model.type)) continue
+          if (!isSelectableUserModelType(model.type)) continue
 
           const modelType = model.type
           const modelKey = toModelKey(model)
@@ -229,14 +221,13 @@ export function createUserModelsOperations(): ProjectAgentOperationRegistryDraft
 
           const provider = toProvider(model)
           if (!provider) continue
-          const providerKey = getProviderKey(provider)
-          if (modelSource.deploymentMode !== 'platform-key' && !runtimeReadyProviderKeys.has(providerKey)) continue
+          if (modelSource.deploymentMode !== 'platform-key' && !providerIdsWithApiKey.has(provider)) continue
           const modelId = toModelId(model)
           const option: UserModelOption = {
             value: modelKey,
             label: toDisplayLabel(model, modelId || modelKey),
             provider,
-            providerName: providerNameMap.get(providerKey),
+            providerName: provider ? providerNameMap.get(provider) : undefined,
           }
 
           if (provider && modelId) {
@@ -247,8 +238,8 @@ export function createUserModelsOperations(): ProjectAgentOperationRegistryDraft
 
             if (modelType === 'video') {
               const pricingEntry = findBuiltinPricingCatalogEntry('video', provider, modelId)
-              if (pricingEntry?.pricing.mode === 'capability' && Array.isArray(pricingEntry.pricing.tiers)) {
-                option.videoPricingTiers = cloneVideoPricingTiers(pricingEntry.pricing.tiers)
+              if (pricingEntry?.retail.mode === 'capability' && Array.isArray(pricingEntry.retail.tiers)) {
+                option.videoPricingTiers = cloneVideoPricingTiers(pricingEntry.retail.tiers)
               }
             }
           }

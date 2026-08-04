@@ -23,10 +23,10 @@ import { ProviderCard } from '../api-config'
 import { AppIcon } from '@/components/ui/icons'
 
 interface DefaultModels {
+  assistantModel?: string
   analysisModel?: string
   characterModel?: string
   locationModel?: string
-  storyboardModel?: string
   editModel?: string
   videoModel?: string
   musicModel?: string

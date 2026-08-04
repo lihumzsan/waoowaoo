@@ -6,9 +6,12 @@ import {
   integerRangeValidator,
   nonEmptyStringValidator,
 } from '@/lib/ai-providers/shared/option-schema'
+import { googleConnectionTester } from './connection-test'
 import { executeGoogleImageGeneration } from './image'
-import { createGoogleSdkLanguageModel } from './language-model'
-import { runGoogleLlmCompletion, runGoogleLlmStream, runGoogleVisionCompletion } from './llm'
+import {
+  createGoogleSdkLanguageModel,
+  validateGoogleLanguageModelResult,
+} from './language-model'
 import { executeGoogleMusicGeneration } from './music'
 import { executeGoogleVideoGeneration } from './video'
 
@@ -54,19 +57,9 @@ export const googleAdapter: AiProviderAdapter = {
     describe: (selection) => describeGoogleMediaVariant('music', selection),
     execute: executeGoogleMusicGeneration,
   },
-  completeLlm: (input) => runGoogleLlmCompletion({
-    apiKey: input.providerConfig.apiKey,
-    baseUrl: input.providerConfig.baseUrl,
-    modelId: input.selection.modelId,
-    messages: input.messages,
-    temperature: input.temperature,
-    reasoning: input.reasoning,
-    reasoningEffort: input.reasoningEffort,
-    logProvider: 'google',
-  }),
   languageModel: {
     create: createGoogleSdkLanguageModel,
+    validateResult: validateGoogleLanguageModelResult,
   },
-  streamLlm: runGoogleLlmStream,
-  completeVision: runGoogleVisionCompletion,
+  connectionTest: googleConnectionTester,
 }

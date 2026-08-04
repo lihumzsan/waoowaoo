@@ -1,5 +1,10 @@
+import type { VideoGenerationRequest } from '@openrouter/sdk/models'
+import { ResponseValidationError } from '@openrouter/sdk/models/errors'
 import { createScopedLogger } from '@/lib/logging/core'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
+import { AppError } from '@/lib/errors/app-error'
+import type { UnifiedErrorCode } from '@/lib/errors/codes'
+import { FetchStatusError } from '@/lib/retry'
 import type {
   AiProviderVideoExecutionContext,
   GenerateResult,
@@ -10,77 +15,36 @@ import {
   OPENROUTER_SEEDANCE_2_FAST_VIDEO_MODEL_ID,
   OPENROUTER_VIDEO_MODEL_IDS,
 } from './models'
+import {
+  createOpenRouterVideoClient,
+  serializeErrorForLog,
+} from './video-transport'
+import {
+  isOpenRouterSensitiveRejection,
+  throwNormalizedOpenRouterSdkError,
+} from './error-normalization'
 
 type OpenRouterVideoOptions = NonNullable<AiProviderVideoExecutionContext['options']>
 
-type OpenRouterFrameType = 'first_frame' | 'last_frame'
-
-type OpenRouterFrameImage = {
-  type: 'image_url'
-  image_url: { url: string }
-  frame_type: OpenRouterFrameType
-}
-
-type OpenRouterInputReference = {
-  type: 'image_url'
-  image_url: { url: string }
-}
-
-type OpenRouterVideoRequest = {
-  model: string
-  prompt: string
-  duration?: number
-  resolution?: string
-  aspect_ratio?: string
-  generate_audio?: boolean
-  frame_images?: OpenRouterFrameImage[]
-  input_references?: OpenRouterInputReference[]
-}
-
-type OpenRouterSubmitResponse = {
-  id?: unknown
-  status?: unknown
-  polling_url?: unknown
-}
-
-type OpenRouterStatusResponse = {
-  id?: unknown
-  status?: unknown
-  unsigned_urls?: unknown
-  error?: unknown
-  message?: unknown
-}
+type OpenRouterVideoRequest = VideoGenerationRequest
 
 export type OpenRouterVideoPollResult = {
   status: 'pending' | 'completed' | 'failed'
+  failureDisposition?: 'retryable' | 'permanent'
   videoUrl?: string
   resultUrl?: string
   downloadHeaders?: Record<string, string>
   error?: string
+  errorCode?: UnifiedErrorCode
 }
 
-const OPENROUTER_VIDEO_ENDPOINT_PATH = '/videos'
+const OPENROUTER_VIDEO_SUBMIT_TIMEOUT_MS = 5 * 60_000
+const OPENROUTER_VIDEO_STATUS_TIMEOUT_MS = 60_000
+const OPENROUTER_VIDEO_ERROR_FIELD_LIMIT = 1_000
 const OPENROUTER_SEEDANCE_2_DURATIONS = new Set([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
 const OPENROUTER_SEEDANCE_2_RESOLUTIONS = new Set(['480p', '720p', '1080p'])
 const OPENROUTER_SEEDANCE_2_FAST_RESOLUTIONS = new Set(['480p', '720p'])
 const OPENROUTER_SEEDANCE_2_ASPECT_RATIOS = new Set<string>(OPENROUTER_SEEDANCE_2_ASPECT_RATIO_OPTIONS)
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null
-}
-
-async function readJson(response: Response): Promise<unknown> {
-  const text = await response.text()
-  if (!text.trim()) return null
-  return JSON.parse(text) as unknown
-}
-
-async function readErrorText(response: Response): Promise<string> {
-  const text = await response.text()
-  return text.trim() || response.statusText || 'empty response'
-}
 
 function requireOpenRouterBaseUrl(baseUrl: string | undefined, context: string): string {
   const normalized = typeof baseUrl === 'string' ? baseUrl.trim().replace(/\/+$/, '') : ''
@@ -90,44 +54,13 @@ function requireOpenRouterBaseUrl(baseUrl: string | undefined, context: string):
   return normalized
 }
 
-function buildOpenRouterUrl(baseUrl: string, path: string): string {
-  const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, '')
-  return `${normalizedBaseUrl}${path.startsWith('/') ? path : `/${path}`}`
-}
-
 function normalizeMaybeRelativeUrl(value: string, baseUrl: string): string {
   const parsed = new URL(value, baseUrl)
   return parsed.toString()
 }
 
-function readProviderError(data: unknown): string | null {
-  const record = asRecord(data)
-  if (!record) return null
-
-  const error = record.error
-  if (typeof error === 'string' && error.trim()) return error.trim()
-
-  const errorRecord = asRecord(error)
-  if (typeof errorRecord?.message === 'string' && errorRecord.message.trim()) {
-    return errorRecord.message.trim()
-  }
-
-  const message = record.message
-  if (typeof message === 'string' && message.trim()) return message.trim()
-
-  return null
-}
-
-function readSubmitId(data: unknown): string {
-  const response = data as OpenRouterSubmitResponse | null
-  const id = typeof response?.id === 'string' ? response.id.trim() : ''
-  if (!id) throw new Error('OPENROUTER_VIDEO_SUBMIT_ID_MISSING')
-  return id
-}
-
-function readCompletedVideoUrl(data: unknown, baseUrl: string): string | null {
-  const response = data as OpenRouterStatusResponse | null
-  const urls = Array.isArray(response?.unsigned_urls) ? response.unsigned_urls : []
+function readCompletedVideoUrl(unsignedUrls: readonly string[] | undefined, baseUrl: string): string | null {
+  const urls = Array.isArray(unsignedUrls) ? unsignedUrls : []
   const firstUrl = urls.find((url): url is string => typeof url === 'string' && url.trim().length > 0)
   if (!firstUrl) return null
   return normalizeMaybeRelativeUrl(firstUrl.trim(), baseUrl)
@@ -174,6 +107,7 @@ function assertAllowedOpenRouterVideoOptions(options: OpenRouterVideoOptions) {
     'generateAudio',
     'lastFrameImageUrl',
     'referenceImages',
+    'referenceAudios',
   ])
 
   for (const [key, value] of Object.entries(options)) {
@@ -213,9 +147,13 @@ function buildSharedVideoRequest(input: {
     model: input.modelId,
     prompt,
     ...(typeof input.options.duration === 'number' ? { duration: input.options.duration } : {}),
-    ...(input.options.resolution ? { resolution: input.options.resolution } : {}),
-    ...(input.options.aspectRatio ? { aspect_ratio: input.options.aspectRatio } : {}),
-    ...(typeof input.options.generateAudio === 'boolean' ? { generate_audio: input.options.generateAudio } : {}),
+    ...(input.options.resolution
+      ? { resolution: input.options.resolution as NonNullable<VideoGenerationRequest['resolution']> }
+      : {}),
+    ...(input.options.aspectRatio
+      ? { aspectRatio: input.options.aspectRatio as NonNullable<VideoGenerationRequest['aspectRatio']> }
+      : {}),
+    ...(typeof input.options.generateAudio === 'boolean' ? { generateAudio: input.options.generateAudio } : {}),
   }
 }
 
@@ -232,6 +170,14 @@ function buildOpenRouterSeedance2Payload(input: {
     imageUrl: input.imageUrl,
     referenceImages: input.options.referenceImages,
   })
+  const referenceAudios = Array.from(new Set(filterStringUrls(input.options.referenceAudios)))
+
+  if (referenceAudios.length > 3) {
+    throw new Error('OPENROUTER_VIDEO_OPTION_VALUE_UNSUPPORTED: referenceAudios>3')
+  }
+  if (referenceAudios.length > 0 && references.length === 0) {
+    throw new Error('OPENROUTER_VIDEO_REFERENCE_AUDIO_REQUIRES_IMAGE')
+  }
 
   if (input.options.lastFrameImageUrl) {
     const firstFrameUrl = references[0]
@@ -241,22 +187,31 @@ function buildOpenRouterSeedance2Payload(input: {
     if (filterStringUrls(input.options.referenceImages).length > 0) {
       throw new Error('OPENROUTER_VIDEO_OPTION_UNSUPPORTED: referenceImages_with_lastFrameImageUrl')
     }
+    if (referenceAudios.length > 0) {
+      throw new Error('OPENROUTER_VIDEO_OPTION_UNSUPPORTED: referenceAudios_with_lastFrameImageUrl')
+    }
     return {
       ...shared,
-      frame_images: [
-        { type: 'image_url', frame_type: 'first_frame', image_url: { url: firstFrameUrl } },
-        { type: 'image_url', frame_type: 'last_frame', image_url: { url: input.options.lastFrameImageUrl.trim() } },
+      frameImages: [
+        { type: 'image_url', frameType: 'first_frame', imageUrl: { url: firstFrameUrl } },
+        { type: 'image_url', frameType: 'last_frame', imageUrl: { url: input.options.lastFrameImageUrl.trim() } },
       ],
     }
   }
 
-  if (references.length > 1) {
+  if (references.length > 1 || referenceAudios.length > 0) {
     return {
       ...shared,
-      input_references: references.map((url) => ({
-        type: 'image_url',
-        image_url: { url },
-      })),
+      inputReferences: [
+        ...references.map((url) => ({
+          type: 'image_url' as const,
+          imageUrl: { url },
+        })),
+        ...referenceAudios.map((url) => ({
+          type: 'audio_url' as const,
+          audioUrl: { url },
+        })),
+      ],
     }
   }
 
@@ -265,13 +220,121 @@ function buildOpenRouterSeedance2Payload(input: {
     if (!firstFrameUrl) throw new Error('OPENROUTER_VIDEO_REFERENCE_IMAGE_REQUIRED')
     return {
       ...shared,
-      frame_images: [
-        { type: 'image_url', frame_type: 'first_frame', image_url: { url: firstFrameUrl } },
+      frameImages: [
+        { type: 'image_url', frameType: 'first_frame', imageUrl: { url: firstFrameUrl } },
       ],
     }
   }
 
   return shared
+}
+
+type OpenRouterVideoSubmitRejection = {
+  readonly code: number | null
+  readonly errorType: string | null
+  readonly message: string
+}
+
+function asUnknownRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function readLimitedString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim()
+  return normalized ? normalized.slice(0, OPENROUTER_VIDEO_ERROR_FIELD_LIMIT) : null
+}
+
+function readProviderHttpCode(value: unknown): number | null {
+  const code = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && /^\d{3}$/.test(value.trim())
+      ? Number.parseInt(value.trim(), 10)
+      : NaN
+  return Number.isInteger(code) && code >= 400 && code <= 599 ? code : null
+}
+
+function readRawRequestId(value: unknown): string | null {
+  const record = asUnknownRecord(value)
+  return readLimitedString(record?.id)
+}
+
+function readRawAcceptedRequestId(value: unknown): string | null {
+  const record = asUnknownRecord(value)
+  const requestId = readRawRequestId(record)
+  const pollingUrl = readLimitedString(record?.polling_url)
+  const status = readLimitedString(record?.status)
+  return requestId
+    && pollingUrl
+    && status
+    && ['pending', 'in_progress', 'completed', 'failed', 'cancelled', 'expired'].includes(status)
+    ? requestId
+    : null
+}
+
+function readRawSubmitRejection(value: unknown): OpenRouterVideoSubmitRejection | null {
+  const record = asUnknownRecord(value)
+  if (!record || readRawRequestId(record)) return null
+  if (typeof record.error === 'string') {
+    const message = readLimitedString(record.error)
+    return message ? { code: null, errorType: null, message } : null
+  }
+
+  const error = asUnknownRecord(record.error)
+  if (!error) return null
+  const message = readLimitedString(error.message)
+  if (!message) return null
+  const metadata = asUnknownRecord(error.metadata)
+  return {
+    code: readProviderHttpCode(error.code) ?? readProviderHttpCode(error.status),
+    errorType: readLimitedString(metadata?.error_type) ?? readLimitedString(error.error_type),
+    message,
+  }
+}
+
+function formatSubmitRejection(rejection: OpenRouterVideoSubmitRejection): string {
+  const identity = [
+    rejection.code === null ? null : `code=${String(rejection.code)}`,
+    rejection.errorType ? `type=${rejection.errorType}` : null,
+  ].filter((value): value is string => value !== null).join(', ')
+  return identity
+    ? `OpenRouter video submission rejected (${identity}): ${rejection.message}`
+    : `OpenRouter video submission rejected: ${rejection.message}`
+}
+
+function normalizeOpenRouterVideoSubmitValidationError(error: ResponseValidationError): string {
+  const acceptedRequestId = readRawAcceptedRequestId(error.rawValue)
+  if (acceptedRequestId) return acceptedRequestId
+
+  const rejection = readRawSubmitRejection(error.rawValue)
+  if (!rejection) {
+    throw new Error('OPENROUTER_VIDEO_SUBMIT_RESPONSE_INVALID_WITHOUT_ACCEPTANCE_ID_OR_ERROR', {
+      cause: error,
+    })
+  }
+
+  const message = formatSubmitRejection(rejection)
+  if (isOpenRouterSensitiveRejection(rejection.errorType)) {
+    throw new AppError(
+      'SENSITIVE_CONTENT',
+      'OpenRouter rejected an input reference under its content or real-person safety policy',
+      {
+        provider: 'openrouter',
+        details: rejection.errorType ? { providerErrorType: rejection.errorType } : null,
+        cause: error,
+      },
+    )
+  }
+  if (rejection.code !== null) {
+    throw new FetchStatusError(rejection.code, message)
+  }
+  throw new AppError('PROVIDER_SUBMISSION_REJECTED', message, {
+    provider: 'openrouter',
+    details: rejection.errorType ? { providerErrorType: rejection.errorType } : null,
+    cause: error,
+  })
 }
 
 export async function submitOpenRouterVideoTask(input: {
@@ -280,25 +343,28 @@ export async function submitOpenRouterVideoTask(input: {
   payload: OpenRouterVideoRequest
 }): Promise<string> {
   if (!input.apiKey) {
-    throw new Error('请配置 OpenRouter API Key')
+    throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'openrouter' })
   }
 
-  const response = await fetch(buildOpenRouterUrl(input.baseUrl, OPENROUTER_VIDEO_ENDPOINT_PATH), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${input.apiKey}`,
-    },
-    body: JSON.stringify(input.payload),
-    cache: 'no-store',
-  })
-
-  if (!response.ok) {
-    const errorText = await readErrorText(response)
-    throw new Error(`OPENROUTER_VIDEO_SUBMIT_FAILED (${response.status}): ${errorText}`)
+  let requestId: string
+  try {
+    const response = await createOpenRouterVideoClient({
+      ...input,
+      timeoutMs: OPENROUTER_VIDEO_SUBMIT_TIMEOUT_MS,
+    }).videoGeneration.generate(
+      { videoGenerationRequest: input.payload },
+      { retries: { strategy: 'none' }, cache: 'no-store' },
+    )
+    requestId = response.id.trim()
+  } catch (error) {
+    if (error instanceof ResponseValidationError) {
+      requestId = normalizeOpenRouterVideoSubmitValidationError(error)
+    } else {
+      throwNormalizedOpenRouterSdkError(error)
+    }
   }
-
-  return readSubmitId(await readJson(response))
+  if (!requestId) throw new Error('OPENROUTER_VIDEO_SUBMIT_ID_MISSING')
+  return requestId
 }
 
 export async function queryOpenRouterVideoStatus(input: {
@@ -307,39 +373,33 @@ export async function queryOpenRouterVideoStatus(input: {
   requestId: string
 }): Promise<OpenRouterVideoPollResult> {
   if (!input.apiKey) {
-    throw new Error('请配置 OpenRouter API Key')
+    throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'openrouter' })
   }
 
-  const response = await fetch(
-    buildOpenRouterUrl(input.baseUrl, `${OPENROUTER_VIDEO_ENDPOINT_PATH}/${encodeURIComponent(input.requestId)}`),
-    {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${input.apiKey}`,
-      },
-      cache: 'no-store',
-    },
-  )
-  const data = response.ok ? await readJson(response) : null
-  if (!response.ok) {
-    const errorText = await readErrorText(response)
-    return {
-      status: 'failed',
-      error: `OPENROUTER_VIDEO_STATUS_FAILED (${response.status}): ${errorText}`,
-    }
+  let response: Awaited<ReturnType<ReturnType<typeof createOpenRouterVideoClient>['videoGeneration']['getGeneration']>>
+  try {
+    response = await createOpenRouterVideoClient({
+      ...input,
+      timeoutMs: OPENROUTER_VIDEO_STATUS_TIMEOUT_MS,
+    }).videoGeneration.getGeneration(
+      { jobId: input.requestId },
+      { retries: { strategy: 'none' }, cache: 'no-store' },
+    )
+  } catch (error) {
+    throwNormalizedOpenRouterSdkError(error)
   }
-
-  const statusResponse = data as OpenRouterStatusResponse | null
-  const status = typeof statusResponse?.status === 'string' ? statusResponse.status : ''
+  const status = response.status
   if (status === 'pending' || status === 'in_progress') {
     return { status: 'pending' }
   }
 
   if (status === 'completed') {
-    const videoUrl = readCompletedVideoUrl(data, input.baseUrl)
+    const videoUrl = readCompletedVideoUrl(response.unsignedUrls, input.baseUrl)
     if (!videoUrl) {
       return {
         status: 'failed',
+        failureDisposition: 'retryable',
+        errorCode: 'EMPTY_RESPONSE',
         error: 'OPENROUTER_VIDEO_COMPLETED_WITHOUT_URL',
       }
     }
@@ -356,16 +416,16 @@ export async function queryOpenRouterVideoStatus(input: {
   }
 
   if (status === 'failed' || status === 'cancelled' || status === 'canceled' || status === 'expired') {
+    const message = response.error?.trim() || `OpenRouter video generation ${status}`
     return {
       status: 'failed',
-      error: readProviderError(data) || `OpenRouter video generation ${status}`,
+      failureDisposition: 'retryable',
+      errorCode: 'EXTERNAL_ERROR',
+      error: message,
     }
   }
 
-  return {
-    status: 'failed',
-    error: `OPENROUTER_VIDEO_STATUS_UNKNOWN: ${status || 'missing'}`,
-  }
+  throw new Error(`OPENROUTER_VIDEO_STATUS_UNKNOWN:${status}`)
 }
 
 export async function executeOpenRouterVideoGeneration(input: AiProviderVideoExecutionContext): Promise<GenerateResult> {
@@ -389,14 +449,46 @@ export async function executeOpenRouterVideoGeneration(input: AiProviderVideoExe
   })
 
   const logger = createScopedLogger({ module: 'worker.openrouter-video', action: 'openrouter_video_generate' })
-  logger.info({ message: 'OpenRouter video generation request', details: { modelId } })
-
-  const requestId = await submitOpenRouterVideoTask({
-    baseUrl: normalizedBaseUrl,
-    apiKey,
-    payload,
+  const submitStartedAt = Date.now()
+  const referenceSummary = summarizeReferenceCounts(payload)
+  logger.info({
+    message: 'OpenRouter video generation request',
+    details: {
+      modelId,
+      submitTimeoutMs: OPENROUTER_VIDEO_SUBMIT_TIMEOUT_MS,
+      ...referenceSummary,
+    },
   })
-  logger.info({ message: 'OpenRouter video task submitted', details: { requestId } })
+
+  let requestId: string
+  try {
+    requestId = await submitOpenRouterVideoTask({
+      baseUrl: normalizedBaseUrl,
+      apiKey,
+      payload,
+    })
+  } catch (error) {
+    logger.error({
+      action: 'openrouter_video_submit_failed',
+      message: 'OpenRouter video task submission failed',
+      durationMs: Date.now() - submitStartedAt,
+      details: {
+        modelId,
+        submitTimeoutMs: OPENROUTER_VIDEO_SUBMIT_TIMEOUT_MS,
+        ...referenceSummary,
+      },
+      error: serializeErrorForLog(error),
+    })
+    throw error
+  }
+  logger.info({
+    message: 'OpenRouter video task submitted',
+    durationMs: Date.now() - submitStartedAt,
+    details: {
+      requestId,
+      submitTimeoutMs: OPENROUTER_VIDEO_SUBMIT_TIMEOUT_MS,
+    },
+  })
 
   return {
     success: true,
@@ -404,5 +496,18 @@ export async function executeOpenRouterVideoGeneration(input: AiProviderVideoExe
     requestId,
     endpoint: 'videos',
     externalId: `OPENROUTER:VIDEO:${requestId}`,
+  }
+}
+
+function summarizeReferenceCounts(payload: OpenRouterVideoRequest): {
+  frameImageCount: number
+  inputImageReferenceCount: number
+  inputAudioReferenceCount: number
+} {
+  const inputReferences = payload.inputReferences ?? []
+  return {
+    frameImageCount: payload.frameImages?.length ?? 0,
+    inputImageReferenceCount: inputReferences.filter((reference) => reference.type === 'image_url').length,
+    inputAudioReferenceCount: inputReferences.filter((reference) => reference.type === 'audio_url').length,
   }
 }

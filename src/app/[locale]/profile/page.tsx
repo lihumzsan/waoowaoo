@@ -1,60 +1,59 @@
 'use client'
-import { FormEvent, useEffect, useState } from 'react'
-import { useSession, signOut } from 'next-auth/react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { signOut, useSession } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import Navbar from '@/components/Navbar'
+import AccountSecurityTab from './components/AccountSecurityTab'
 import ApiConfigTab from './components/ApiConfigTab'
-import { AppIcon, type AppIconName } from '@/components/ui/icons'
+import ProfileSidebar, { type ProfileSectionItem } from './components/ProfileSidebar'
+import ProfileOverviewSection, { type ProfileBalanceSummary } from './components/ProfileOverviewSection'
+import ProfileBillingSection from './components/ProfileBillingSection'
+import { type ProfileTransactionItem } from './components/ProfileTransactionsTable'
+import { BrandPageLoading } from '@/components/ui/BrandLoading'
+import { AppIcon } from '@/components/ui/icons'
 import { useRouter } from '@/i18n/navigation'
 import { readProfileSectionParam, type ProfileSection } from '@/lib/profile/sections'
 import { apiFetch } from '@/lib/api-fetch'
+import { readClientApiError } from '@/lib/errors/client'
+import { useToast } from '@/contexts/ToastContext'
+import {
+  isPublicDeploymentFeatures,
+  type PublicDeploymentFeatures,
+} from '@/lib/deployment/public-client'
 
 type DeploymentPayload = {
-  deployment?: {
-    isCloud?: boolean
-    usesPlatformProviderKeys?: boolean
-  }
+  features?: PublicDeploymentFeatures
   billingMode?: string
 }
 
-type BalancePayload = {
-  success?: boolean
-  currency?: string
-  balance?: number
-  frozenAmount?: number
-  totalSpent?: number
-}
-
-type TransactionItem = {
-  id: string
-  type: string
-  amount: number
-  balanceAfter: number
-  description?: string | null
-  action?: string | null
-  createdAt: string
-}
-
 type TransactionsPayload = {
-  transactions?: TransactionItem[]
-}
-
-function formatAmount(value: number | undefined, currency: string | undefined): string {
-  const amount = typeof value === 'number' && Number.isFinite(value) ? value : 0
-  return `${amount.toFixed(2)} ${currency || 'CREDITS'}`
+  transactions?: ProfileTransactionItem[]
 }
 
 function isDeploymentPayload(value: unknown): value is DeploymentPayload {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
-function isBalancePayload(value: unknown): value is BalancePayload {
+function isBalancePayload(value: unknown): value is ProfileBalanceSummary {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
 function isTransactionsPayload(value: unknown): value is TransactionsPayload {
   return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function getDefaultProfileSection(features: PublicDeploymentFeatures): ProfileSection {
+  if (features.showBilling) return 'overview'
+  if (features.showAccountSecurity) return 'security'
+  if (features.showApiConfig) return 'apiConfig'
+  return 'overview'
+}
+
+function isProfileSectionEnabled(section: ProfileSection, features: PublicDeploymentFeatures): boolean {
+  if (section === 'security') return features.showAccountSecurity
+  if (section === 'apiConfig') return features.showApiConfig
+  return features.showBilling
 }
 
 export default function ProfilePage() {
@@ -63,28 +62,40 @@ export default function ProfilePage() {
   const searchParams = useSearchParams()
   const t = useTranslations('profile')
   const tc = useTranslations('common')
+  const { showError } = useToast()
   if (!searchParams) {
     throw new Error('ProfilePage requires searchParams')
   }
 
   const urlSection = readProfileSectionParam(searchParams.get('section'))
 
-  const [activeSection, setActiveSection] = useState<ProfileSection>(urlSection)
-  const [isCloud, setIsCloud] = useState<boolean | null>(null)
-  const [balance, setBalance] = useState<BalancePayload | null>(null)
-  const [transactions, setTransactions] = useState<TransactionItem[]>([])
-  const [inviteCode, setInviteCode] = useState('')
-  const [redeemStatus, setRedeemStatus] = useState<string | null>(null)
-  const [redeeming, setRedeeming] = useState(false)
+  const [deploymentFeatures, setDeploymentFeatures] = useState<PublicDeploymentFeatures | null>(null)
+  const [deploymentLoadFailed, setDeploymentLoadFailed] = useState(false)
+  const [balance, setBalance] = useState<ProfileBalanceSummary | null>(null)
+  const [transactions, setTransactions] = useState<ProfileTransactionItem[]>([])
+  const [paymentNotice, setPaymentNotice] = useState<string | null>(null)
+  const isSigningOutRef = useRef(false)
+  const activeSection = deploymentFeatures
+    && !isProfileSectionEnabled(urlSection, deploymentFeatures)
+    ? getDefaultProfileSection(deploymentFeatures)
+    : urlSection
+
+  const handleSignOut = useCallback(async () => {
+    isSigningOutRef.current = true
+    try {
+      await signOut({ redirect: false, callbackUrl: '/' })
+      router.replace({ pathname: '/' })
+      router.refresh()
+    } catch (error) {
+      isSigningOutRef.current = false
+      throw error
+    }
+  }, [router])
 
   useEffect(() => {
-    if (status === 'loading') return
+    if (status === 'loading' || isSigningOutRef.current) return
     if (!session) { router.push({ pathname: '/auth/signin' }); return }
   }, [router, session, status])
-
-  useEffect(() => {
-    setActiveSection(urlSection)
-  }, [urlSection])
 
   useEffect(() => {
     if (!session) return
@@ -93,12 +104,15 @@ export default function ProfilePage() {
     const loadDeployment = async () => {
       const response = await apiFetch('/api/deployment')
       if (!response.ok) {
-        if (!canceled) setIsCloud(false)
+        if (!canceled) setDeploymentLoadFailed(true)
         return
       }
       const payload: unknown = await response.json()
-      if (!canceled && isDeploymentPayload(payload)) {
-        setIsCloud(payload.deployment?.isCloud === true)
+      if (!canceled && isDeploymentPayload(payload) && isPublicDeploymentFeatures(payload.features)) {
+        setDeploymentFeatures(payload.features)
+        setDeploymentLoadFailed(false)
+      } else if (!canceled) {
+        setDeploymentLoadFailed(true)
       }
     }
 
@@ -109,61 +123,85 @@ export default function ProfilePage() {
   }, [session])
 
   useEffect(() => {
-    if (isCloud !== true || activeSection !== 'apiConfig') return
-    setActiveSection('billing')
+    if (!deploymentFeatures) return
+    if (isProfileSectionEnabled(urlSection, deploymentFeatures)) return
+
+    const nextSection = getDefaultProfileSection(deploymentFeatures)
     router.replace(
-      { pathname: '/profile', query: { section: 'billing' } },
+      { pathname: '/profile', query: { section: nextSection } },
       { scroll: false },
     )
-  }, [activeSection, isCloud, router])
+  }, [deploymentFeatures, router, urlSection])
 
-  const loadBalance = async () => {
-    const response = await apiFetch('/api/user/balance')
-    if (!response.ok) return
-    const payload: unknown = await response.json()
-    if (isBalancePayload(payload)) setBalance(payload)
-  }
-
-  const loadTransactions = async () => {
-    const response = await apiFetch('/api/user/transactions?pageSize=20')
-    if (!response.ok) return
-    const payload: unknown = await response.json()
-    if (isTransactionsPayload(payload) && Array.isArray(payload.transactions)) {
-      setTransactions(payload.transactions)
+  const loadBalance = useCallback(async () => {
+    try {
+      const response = await apiFetch('/api/user/balance')
+      if (!response.ok) throw await readClientApiError(response)
+      const payload: unknown = await response.json()
+      if (!isBalancePayload(payload)) throw new Error('BALANCE_RESPONSE_INVALID')
+      setBalance(payload)
+    } catch (error) {
+      showError(error, t('balanceLoadFailed'))
     }
-  }
+  }, [showError, t])
+
+  const loadTransactions = useCallback(async () => {
+    try {
+      const response = await apiFetch('/api/user/transactions?pageSize=20')
+      if (!response.ok) throw await readClientApiError(response)
+      const payload: unknown = await response.json()
+      if (!isTransactionsPayload(payload) || !Array.isArray(payload.transactions)) {
+        throw new Error('TRANSACTIONS_RESPONSE_INVALID')
+      }
+      setTransactions(payload.transactions)
+    } catch (error) {
+      showError(error, t('transactionsLoadFailed'))
+    }
+  }, [showError, t])
 
   useEffect(() => {
-    if (!session || !isCloud) return
+    if (!session || deploymentFeatures?.showBilling !== true) return
     void loadBalance()
     void loadTransactions()
-  }, [session, isCloud])
+  }, [session, deploymentFeatures, loadBalance, loadTransactions])
+
+  useEffect(() => {
+    const paymentStatus = searchParams.get('payment')
+    if (paymentStatus === 'success') {
+      setPaymentNotice(t('recharge.successNotice'))
+    } else if (paymentStatus === 'cancel') {
+      setPaymentNotice(t('recharge.cancelNotice'))
+    }
+  }, [searchParams, t])
+
+  if (deploymentLoadFailed) {
+    throw new Error('PROFILE_DEPLOYMENT_FEATURES_UNAVAILABLE')
+  }
 
   if (status === 'loading' || !session) {
-    return (
-      <div className="glass-page flex min-h-screen items-center justify-center">
-        <div className="text-[var(--glass-text-secondary)]">{tc('loading')}</div>
-      </div>
-    )
+    return <BrandPageLoading />
   }
 
   const noBillingText = t('openSourceNoBilling')
-  const balanceText = isCloud === true ? formatAmount(balance?.balance, balance?.currency) : noBillingText
-  const sectionItems: Array<{
-    section: ProfileSection
-    icon: AppIconName
-    label: string
-  }> = isCloud === true
-    ? [
-      { section: 'billing', icon: 'receipt', label: t('billingRecords') },
-    ]
-    : [
-      { section: 'apiConfig', icon: 'settingsHexAlt', label: t('apiConfig') },
-      { section: 'billing', icon: 'receipt', label: t('billingRecords') },
-    ]
+  const showBilling = deploymentFeatures?.showBilling === true
+  const showRecharge = deploymentFeatures?.showRecharge === true
+  const showInviteCode = deploymentFeatures?.showInviteCode === true
+  const sectionItems: ProfileSectionItem[] = [
+    ...(deploymentFeatures?.showBilling === true
+      ? [{ section: 'overview' as const, icon: 'user' as const, label: t('accountOverview') }]
+      : []),
+    ...(deploymentFeatures?.showAccountSecurity === true
+      ? [{ section: 'security' as const, icon: 'lock' as const, label: t('accountSecurity.title') }]
+      : []),
+    ...(deploymentFeatures?.showApiConfig === true
+      ? [{ section: 'apiConfig' as const, icon: 'settingsHexAlt' as const, label: t('apiConfig') }]
+      : []),
+    ...(deploymentFeatures?.showBilling === true
+      ? [{ section: 'billing' as const, icon: 'receipt' as const, label: t('accountTransactions') }]
+      : []),
+  ]
 
   const handleSectionChange = (section: ProfileSection) => {
-    setActiveSection(section)
     router.replace(
       { pathname: '/profile', query: { section } },
       { scroll: false },
@@ -174,176 +212,72 @@ export default function ProfilePage() {
     <div className="glass-page min-h-screen">
       <Navbar />
 
-      <main className="max-w-[1400px] mx-auto px-6 py-8">
-        <div className="flex gap-6 h-[calc(100vh-140px)]">
+      <main className="mx-auto max-w-[1240px] px-6 pb-14 pt-2">
+        {/* 大标题页头 */}
+        <header className="mb-6">
+          <h1 className="text-3xl font-bold tracking-tight text-[var(--glass-text-primary)]">
+            {t('pageTitle')}
+          </h1>
+        </header>
 
-          {/* 左侧侧边栏 */}
-          <div className="w-64 flex-shrink-0">
-            <div className="glass-surface-elevated h-full flex flex-col p-5">
+        <div className="flex items-start gap-6">
+          <ProfileSidebar
+            userName={session.user?.name || t('user')}
+            userEmail={session.user?.email ?? null}
+            sectionItems={sectionItems}
+            activeSection={activeSection}
+            onSectionChange={handleSectionChange}
+            onSignOut={() => { void handleSignOut() }}
+          />
 
-              {/* 用户信息 */}
-              <div className="mb-6">
-                <div className="mb-4">
-                  <h2 className="font-semibold text-[var(--glass-text-primary)]">{session.user?.name || t('user')}</h2>
-                  <p className="text-xs text-[var(--glass-text-tertiary)]">{t('personalAccount')}</p>
-                </div>
-
-                {/* 余额卡片 */}
-                <div className="glass-surface-soft rounded-2xl border border-[var(--glass-stroke-base)] p-4">
-                  <div className="text-xs font-medium text-[var(--glass-text-secondary)]">{t('availableBalance')}</div>
-                  <div className="mt-2 text-base font-semibold text-[var(--glass-text-primary)]">{balanceText}</div>
-                  {isCloud === true ? (
-                    <div className="mt-2 space-y-1 text-xs text-[var(--glass-text-tertiary)]">
-                      <div>{t('frozen')}: {formatAmount(balance?.frozenAmount, balance?.currency)}</div>
-                      <div>{t('totalSpent')}: {formatAmount(balance?.totalSpent, balance?.currency)}</div>
-                    </div>
-                  ) : null}
-                </div>
+          <div className="min-w-0 flex-1">
+            {deploymentFeatures === null ? (
+              <div className="glass-surface-elevated flex min-h-64 items-center justify-center text-sm text-[var(--glass-text-secondary)]">
+                {tc('loading')}
               </div>
-
-              {/* 导航菜单 */}
-              <nav className="flex-1 space-y-2">
-                {sectionItems.map(item => (
-                  <button
-                    key={item.section}
-                    type="button"
-                    data-active={activeSection === item.section}
-                    onClick={() => handleSectionChange(item.section)}
-                    className="glass-selection-control w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left"
-                  >
-                    <AppIcon name={item.icon} className="w-5 h-5" />
-                    <span className="font-medium">{item.label}</span>
-                  </button>
-                ))}
-              </nav>
-              {/* 退出登录 */}
-              <button
-                onClick={() => signOut({ callbackUrl: '/' })}
-                className="glass-btn-base glass-btn-tone-danger mt-auto flex items-center gap-2 px-4 py-3 text-sm rounded-xl transition-all cursor-pointer"
-              >
-                <AppIcon name="logout" className="w-4 h-4" />
-                {t('logout')}
-              </button>
-            </div>
-          </div>
-
-          {/* 右侧内容区 */}
-          <div className="flex-1 min-w-0">
-            <div className="glass-surface-elevated h-full flex flex-col">
-
-              {isCloud === null ? (
-                <div className="flex h-full items-center justify-center text-sm text-[var(--glass-text-secondary)]">
-                  {tc('loading')}
-                </div>
-              ) : activeSection === 'apiConfig' && isCloud !== true ? (
+            ) : activeSection === 'security' ? (
+              <div className="glass-surface-elevated overflow-hidden">
+                <AccountSecurityTab
+                  enablePasswordAuth={deploymentFeatures.enablePasswordAuth}
+                  showGoogleOAuth={deploymentFeatures.showGoogleOAuth}
+                />
+              </div>
+            ) : activeSection === 'apiConfig' && deploymentFeatures.showApiConfig ? (
+              <div className="glass-surface-elevated overflow-hidden">
                 <ApiConfigTab />
-              ) : isCloud === true ? (
-                <div className="flex h-full min-h-0 flex-col gap-4 overflow-auto p-6">
-                  <section className="glass-surface-soft rounded-2xl border border-[var(--glass-stroke-base)] p-5">
-                    <div className="mb-4 flex items-center justify-between gap-4">
-                      <div>
-                        <h2 className="text-lg font-semibold text-[var(--glass-text-primary)]">{t('inviteCode.title')}</h2>
-                        <p className="mt-1 text-sm text-[var(--glass-text-secondary)]">{t('inviteCode.description')}</p>
-                      </div>
-                    </div>
-                    <form
-                      className="flex flex-col gap-3 sm:flex-row"
-                      onSubmit={(event: FormEvent<HTMLFormElement>) => {
-                        event.preventDefault()
-                        if (!inviteCode.trim()) return
-                        setRedeeming(true)
-                        setRedeemStatus(null)
-                        void apiFetch('/api/user/invite-codes/redeem', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ code: inviteCode }),
-                        })
-                          .then(async (response) => {
-                            if (!response.ok) {
-                              throw new Error(t('inviteCode.redeemFailed'))
-                            }
-                            setInviteCode('')
-                            setRedeemStatus(t('inviteCode.redeemSuccess'))
-                            await loadBalance()
-                            await loadTransactions()
-                          })
-                          .catch((error: unknown) => {
-                            setRedeemStatus(error instanceof Error ? error.message : t('inviteCode.redeemFailed'))
-                          })
-                          .finally(() => setRedeeming(false))
-                      }}
-                    >
-                      <input
-                        className="glass-input flex-1 rounded-xl px-4 py-3 text-sm"
-                        value={inviteCode}
-                        onChange={(event) => setInviteCode(event.target.value)}
-                        placeholder={t('inviteCode.placeholder')}
-                      />
-                      <button
-                        type="submit"
-                        disabled={redeeming || !inviteCode.trim()}
-                        className="glass-btn-primary rounded-xl px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {redeeming ? t('inviteCode.redeeming') : t('inviteCode.redeem')}
-                      </button>
-                    </form>
-                    {redeemStatus ? (
-                      <p className="mt-3 text-sm text-[var(--glass-text-secondary)]">{redeemStatus}</p>
-                    ) : null}
-                  </section>
-
-                  <section className="glass-surface-soft min-h-0 flex-1 rounded-2xl border border-[var(--glass-stroke-base)] p-5">
-                    <div className="mb-4 flex items-center justify-between gap-4">
-                      <h2 className="text-lg font-semibold text-[var(--glass-text-primary)]">{t('accountTransactions')}</h2>
-                      <button
-                        type="button"
-                        className="glass-btn-secondary rounded-xl px-4 py-2 text-sm"
-                        onClick={() => {
-                          void loadBalance()
-                          void loadTransactions()
-                        }}
-                      >
-                        {t('refresh')}
-                      </button>
-                    </div>
-                    {transactions.length === 0 ? (
-                      <div className="flex min-h-48 items-center justify-center text-sm text-[var(--glass-text-secondary)]">{t('noTransactions')}</div>
-                    ) : (
-                      <div className="overflow-hidden rounded-xl border border-[var(--glass-stroke-base)]">
-                        <table className="w-full text-left text-sm">
-                          <thead className="bg-[var(--glass-bg-muted)] text-[var(--glass-text-secondary)]">
-                            <tr>
-                              <th className="px-4 py-3">{t('transactionType')}</th>
-                              <th className="px-4 py-3">{t('amount')}</th>
-                              <th className="px-4 py-3">{t('balance')}</th>
-                              <th className="px-4 py-3">{t('createdAt')}</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {transactions.map((item) => (
-                              <tr key={item.id} className="border-t border-[var(--glass-stroke-base)]">
-                                <td className="px-4 py-3 text-[var(--glass-text-primary)]">{t(item.type === 'consume' ? 'consume' : 'recharge')}</td>
-                                <td className="px-4 py-3 text-[var(--glass-text-primary)]">{item.amount.toFixed(2)}</td>
-                                <td className="px-4 py-3 text-[var(--glass-text-secondary)]">{item.balanceAfter.toFixed(2)}</td>
-                                <td className="px-4 py-3 text-[var(--glass-text-tertiary)]">{new Date(item.createdAt).toLocaleString()}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </section>
-                </div>
-              ) : (
-                <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-                  <AppIcon name="receipt" className="mb-4 h-12 w-12 text-[var(--glass-text-tertiary)]" />
-                  <p className="text-base font-semibold text-[var(--glass-text-primary)]">{noBillingText}</p>
-                </div>
-              )}
-            </div>
+              </div>
+            ) : activeSection === 'overview' && showBilling ? (
+              <ProfileOverviewSection
+                balance={balance}
+                transactions={transactions}
+                showUpgrade={showRecharge}
+                showInviteCode={showInviteCode}
+                paymentNotice={paymentNotice}
+                onCreditsChanged={async () => {
+                  await loadBalance()
+                  await loadTransactions()
+                }}
+                onViewAllTransactions={() => handleSectionChange('billing')}
+              />
+            ) : activeSection === 'billing' && showBilling ? (
+              <ProfileBillingSection
+                transactions={transactions}
+                currency={balance?.currency}
+                onRefresh={() => {
+                  void loadBalance()
+                  void loadTransactions()
+                }}
+              />
+            ) : (
+              <div className="glass-surface-elevated flex min-h-64 flex-col items-center justify-center px-6 py-16 text-center">
+                <AppIcon name="receipt" className="mb-4 h-12 w-12 text-[var(--glass-text-tertiary)]" />
+                <p className="text-base font-semibold text-[var(--glass-text-primary)]">{noBillingText}</p>
+              </div>
+            )}
           </div>
         </div>
-      </main >
-    </div >
+      </main>
+
+    </div>
   )
 }

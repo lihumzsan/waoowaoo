@@ -1,4 +1,5 @@
 import type { AsyncTaskProviderRegistration, ParsedAsyncExternalId } from '@/lib/ai-providers/async-task-types'
+import { normalizeAsyncPollResult } from '@/lib/ai-providers/async-task-types'
 import { querySeedanceVideoStatus } from './poll'
 
 function parseArkExternalId(externalId: string): ParsedAsyncExternalId {
@@ -21,15 +22,17 @@ export const arkAsyncTaskProvider: AsyncTaskProviderRegistration = {
   parseExternalId: parseArkExternalId,
   formatExternalId: (input) => `ARK:${input.type}:${input.requestId}`,
   poll: async ({ parsed, context }) => {
-    const { apiKey } = await context.getProviderConfig(context.userId, 'ark')
-    const result = await querySeedanceVideoStatus(parsed.requestId, apiKey)
-    return {
+    const { apiKey, baseUrl } = await context.getProviderConfig(context.userId, 'ark')
+    if (!baseUrl) throw new Error('PROVIDER_BASE_URL_MISSING: ark (video-poll)')
+    const result = await querySeedanceVideoStatus(parsed.requestId, { apiKey, baseUrl })
+    return normalizeAsyncPollResult({
       status: result.status,
+      failureDisposition: result.failureDisposition,
+      ...(result.status === 'failed' ? { errorCode: result.errorCode } : {}),
       videoUrl: result.videoUrl,
       resultUrl: result.videoUrl,
       ...(typeof result.actualVideoTokens === 'number' ? { actualVideoTokens: result.actualVideoTokens } : {}),
       error: result.error,
-    }
+    })
   },
 }
-

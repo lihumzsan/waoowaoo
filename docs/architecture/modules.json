@@ -1,0 +1,280 @@
+{
+  "modules": [
+    {
+      "id": "codex-runtime-rollout",
+      "document": "docs/architecture/modules/codex-runtime-rollout.md",
+      "title": "Codex Creative Runtime",
+      "sourcePaths": [
+        "src/lib/codex-runtime",
+        "src/lib/codex-model-gateway",
+        "src/lib/assistant-runtime",
+        "src/lib/codex-workspace",
+        "src/lib/wao-mcp",
+        "src/app/api/internal/codex-runtime",
+        "src/app/api/projects/[projectId]/assistant",
+        "scripts/codex-runtime-smoke.ts",
+        "Dockerfile.codex-runtime",
+        "docker/codex-runtime",
+        ".env.example",
+        ".env.cloud.example",
+        "prisma/migrations/20260802220000_codex_runtime_cutover"
+      ]
+    },
+    {
+      "id": "durable-execution",
+      "document": "docs/architecture/modules/durable-execution.md",
+      "title": "Temporal 持久执行边界",
+      "sourcePaths": [
+        "src/lib/temporal",
+        "src/lib/agent-turn",
+        "src/lib/task/provider-invocation.ts",
+        "src/lib/task/execution-checkpoint.ts",
+        "src/lib/task/terminal",
+        "src/lib/operations/durable-dispatch.ts",
+        "src/lib/operations/durable-execution.ts",
+        "src/lib/assistant-runtime/task-follow-up-http.ts",
+        "src/app/api/internal/codex-runtime/follow-up",
+        "scripts/temporal",
+        "tests/integration/temporal"
+      ]
+    },
+    {
+      "id": "billing-approval",
+      "document": "docs/architecture/modules/billing-approval.md",
+      "title": "计费与审批",
+      "sourcePaths": [
+        "src/lib/billing",
+        "src/lib/payments",
+        "src/app/api/payments",
+        "src/app/api/user/transactions",
+        "src/app/api/operation-approval-grants",
+        "src/app/api/projects/[projectId]/operations",
+        "src/lib/operations",
+        "src/lib/task/approved-plan-submitter.ts",
+        "src/lib/task/transactional-create.ts",
+        "src/lib/task/submitter.ts",
+        "src/lib/ai-registry/pricing-catalog.ts",
+        "src/lib/ai-registry/pricing-retail.ts",
+        "src/lib/ai-registry/pricing-coverage.ts",
+        "src/lib/ai-providers/shared/seedance-pricing.ts",
+        "scripts/check-pricing-catalog.ts",
+        "tests/integration/billing"
+      ]
+    },
+    {
+      "id": "canvas-node",
+      "document": "docs/architecture/modules/canvas-node.md",
+      "title": "Canvas 文件夹投影与卡片",
+      "sourcePaths": [
+        "src/features/project-workspace",
+        "src/lib/project-canvas",
+        "src/lib/query",
+        "src/app/[locale]/workspace/[projectId]",
+        "src/app/api/projects/[projectId]/canvas-layout",
+        "src/lib/operations/canvas-action-catalog.ts",
+        "messages/en/workspace.json",
+        "messages/zh/workspace.json",
+        "messages/en/project-workflow.json",
+        "messages/zh/project-workflow.json",
+        "src/styles/animations.css",
+        "tests/helpers/workspace-canvas.ts"
+      ]
+    },
+    {
+      "id": "workspace-resource",
+      "document": "docs/architecture/modules/workspace-resource.md",
+      "title": "Workspace Resource 树",
+      "sourcePaths": [
+        "src/lib/workspace-resource",
+        "src/lib/codex-workspace",
+        "src/lib/adapters/operation-error-normalizer.ts",
+        "src/lib/errors/projection.ts",
+        "src/lib/operations/domains/workspace-resource",
+        "src/lib/operations/api-only/media-upload-api-ops.ts",
+        "src/app/api/projects/[projectId]/resources",
+        "src/app/api/projects/[projectId]/upload-media",
+        "src/app/api/projects/[projectId]/uploaded-media",
+        "src/lib/task/execution/handlers/workspace-resource-audio.ts",
+        "src/lib/task/execution/handlers/workspace-resource-image.ts",
+        "src/lib/task/execution/handlers/workspace-resource-video.ts",
+        "src/lib/task/execution/handlers/workspace-resource-video-merge.ts",
+        "src/lib/task/execution/handlers/workspace-resource-voice.ts",
+        "src/lib/voice/voice-resource-service.ts",
+        "src/lib/video-compose/video-merge-ffmpeg.ts",
+        "src/types/project.ts",
+        "scripts/media-mapping.ts",
+        "scripts/media-restore-dry-run.ts",
+        "scripts/media-safety-backup.ts",
+        "src/lib/home",
+        "prisma/schema.prisma",
+        "prisma/migrations"
+      ]
+    },
+    {
+      "id": "audio-production",
+      "document": "docs/architecture/modules/audio-production.md",
+      "title": "独立音乐、音色与混音",
+      "sourcePaths": [
+        "src/lib/creative-skills/skills/music-direction",
+        "src/lib/ai-providers/fal/music.ts",
+        "src/lib/ai-providers/fal/voice.ts",
+        "src/lib/ai-providers/google/music.ts",
+        "src/lib/ai-providers/mureka",
+        "src/lib/task/execution/artifacts/audio.ts",
+        "src/lib/task/execution/handlers/workspace-resource-audio.ts",
+        "src/lib/task/execution/handlers/workspace-resource-voice.ts",
+        "src/lib/voice/voice-resource-service.ts",
+        "src/lib/operations/domains/voice"
+      ]
+    },
+    {
+      "id": "async-task-lifecycle",
+      "document": "docs/architecture/modules/async-task-lifecycle.md",
+      "title": "Temporal 异步 Task 生命周期",
+      "sourcePaths": [
+        "src/lib/task",
+        "src/lib/temporal/activities/task.ts",
+        "src/lib/temporal/workflows/task.ts",
+        "src/lib/temporal/workflows/user-task-scheduler.ts",
+        "src/app/api/tasks",
+        "tests/integration/task"
+      ]
+    },
+    {
+      "id": "assistant-run-lifecycle",
+      "document": "docs/architecture/modules/assistant-run-lifecycle.md",
+      "title": "Assistant Thread、Turn 与交互生命周期",
+      "sourcePaths": [
+        "src/lib/assistant-runtime",
+        "src/lib/codex-runtime/runtime-session-manager.ts",
+        "src/lib/agent-turn",
+        "src/lib/project-agent",
+        "src/lib/sse",
+        "src/lib/adapters/api/execute-project-agent-operation.ts",
+        "src/lib/adapters/operation-error-normalizer.ts",
+        "src/app/api/projects/[projectId]/assistant",
+        "src/app/api/sse",
+        "src/features/project-workspace/components/workspace-assistant",
+        "messages/en/assistantAgent.json",
+        "messages/zh/assistantAgent.json",
+        "messages/en/progress.json",
+        "messages/zh/progress.json"
+      ]
+    },
+    {
+      "id": "creative-skills",
+      "document": "docs/architecture/modules/creative-skills.md",
+      "title": "Creative Skills 与原生 Subagent",
+      "sourcePaths": [
+        "src/lib/creative-skills"
+      ]
+    },
+    {
+      "id": "provider-gateway",
+      "document": "docs/architecture/modules/provider-gateway.md",
+      "title": "Provider Gateway",
+      "sourcePaths": [
+        "src/lib/ai-exec",
+        "src/lib/ai-providers",
+        "src/lib/ai-registry",
+        "src/lib/config-service",
+        "src/lib/platform-runtime",
+        "src/lib/user-api/runtime-config.ts",
+        "src/lib/llm-observe",
+        "src/lib/media",
+        "scripts/check-outbound-image-runtime-sample.ts",
+        "scripts/check-outbound-image-success-rate.ts"
+      ]
+    },
+    {
+      "id": "ai-prompt-output-contract",
+      "document": "docs/architecture/modules/ai-prompt-output-contract.md",
+      "title": "Agent 指令、Skill 与输出契约",
+      "sourcePaths": [
+        "src/lib/assistant-runtime",
+        "src/lib/codex-runtime/runtime-adapter.ts",
+        "src/lib/codex-runtime/app-server-client.ts",
+        "src/lib/creative-skills",
+        "src/lib/wao-mcp/contracts.ts",
+        "src/lib/operations/project-agent.ts",
+        "messages/en/errors.json",
+        "messages/zh/errors.json"
+      ]
+    },
+    {
+      "id": "web-search",
+      "document": "docs/architecture/modules/web-search.md",
+      "title": "Codex 原生 Web Search",
+      "sourcePaths": [
+        "src/lib/assistant-runtime/event-projector.ts",
+        "src/lib/assistant-runtime/view-contract.ts",
+        "src/lib/codex-runtime/app-server-client.ts",
+        "src/lib/codex-model-gateway/standalone-search.ts",
+        "src/lib/media/outbound-fetch.ts",
+        "src/features/project-workspace/components/workspace-assistant"
+      ]
+    },
+    {
+      "id": "product-shell",
+      "document": "docs/architecture/modules/product-shell.md",
+      "title": "产品外壳、身份与本地化",
+      "sourcePaths": [
+        "src/app",
+        "src/components",
+        "src/lib/api-auth.ts",
+        "src/lib/auth",
+        "src/lib/deployment",
+        "src/lib/errors",
+        "src/lib/home",
+        "src/lib/profile",
+        "src/lib/projects",
+        "messages",
+        "package.json",
+        "package-lock.json",
+        "Dockerfile",
+        "docker-entrypoint.sh",
+        "docker-compose.yml",
+        "next.config.ts"
+      ]
+    },
+    {
+      "id": "asset-scope-ownership",
+      "document": "docs/architecture/modules/asset-scope-ownership.md",
+      "title": "Asset Hub Scope 与媒体所有权",
+      "sourcePaths": [
+        "src/lib/assets",
+        "src/lib/asset-generation",
+        "src/app/api/assets",
+        "src/app/api/asset-hub",
+        "src/app/[locale]/workspace/asset-hub",
+        "src/components/shared/assets",
+        "src/lib/media/storage-access-policy.ts",
+        "src/lib/media/outbound-owned-media.ts",
+        "src/lib/media/outbound-fetch.ts"
+      ]
+    },
+    {
+      "id": "logging-observability",
+      "document": "docs/architecture/modules/logging-observability.md",
+      "title": "日志与可观测性",
+      "sourcePaths": [
+        "src/lib/logging",
+        "src/lib/llm-observe",
+        "src/app/api/logs"
+      ]
+    },
+    {
+      "id": "test-governance",
+      "document": "docs/architecture/modules/test-governance.md",
+      "title": "测试治理",
+      "sourcePaths": [
+        "tests",
+        "scripts/architecture-impact.mjs",
+        "scripts/architecture-impact-lib.mjs",
+        "scripts/check-conformance.mjs",
+        "vitest.config.ts",
+        "playwright.config.ts"
+      ]
+    }
+  ]
+}

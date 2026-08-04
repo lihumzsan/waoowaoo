@@ -4,28 +4,57 @@
  * 首页 - 创作中心
  * 用户登录后的主入口页面：快速创作 + 最近项目
  */
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef, type ClipboardEvent } from 'react'
 import { useSession } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 import Navbar from '@/components/Navbar'
+import { BrandPageLoading } from '@/components/ui/BrandLoading'
 import { AppIcon, IconGradientDefs } from '@/components/ui/icons'
 import StoryInputComposer from '@/components/story-input/StoryInputComposer'
 import TypewriterHero from '@/components/home/TypewriterHero'
+import HomeVideoRatioSelect from '@/components/home/HomeVideoRatioSelect'
+import {
+  PendingMediaFileChips,
+  TextAttachmentChips,
+  type PendingMediaFileChip,
+} from '@/components/project-assistant/AttachmentChips'
+import { useAttachmentFilePicker } from '@/components/project-assistant/useAttachmentFilePicker'
 import { Link, useRouter } from '@/i18n/navigation'
 import { apiFetch } from '@/lib/api-fetch'
-import {
-  createHomeProjectLaunch,
-  writeHomeAssistantAutoStartMessage,
-} from '@/lib/home/create-project-launch'
+import { submitHomeQuickStartLaunch } from '@/lib/home/quick-start-submit'
 import { formatDefaultProjectTimestamp } from '@/lib/projects/default-name'
 import { HOME_QUICK_START_MIN_ROWS } from '@/lib/ui/textarea-height'
+import {
+  PROJECT_ASSISTANT_TEXT_ATTACHMENT_ACCEPT,
+  PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES,
+  type ProjectAssistantTextAttachment,
+} from '@/lib/project-agent/text-attachments'
+import {
+  uploadProjectAssistantTextAttachment,
+  validateProjectAssistantTextAttachmentFile,
+} from '@/lib/project-agent/text-attachments/client'
+import {
+  PROJECT_ASSISTANT_MEDIA_ATTACHMENT_ACCEPT,
+  PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES,
+} from '@/lib/project-agent/media-attachments'
+import {
+  isProjectAssistantMediaFile,
+  validateProjectAssistantMediaAttachmentFile,
+} from '@/lib/project-agent/media-attachments/client'
+import type { ProjectVideoRatio } from '@/lib/projects/video-ratio'
+import { readClientApiError } from '@/lib/errors/client'
+import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
+import { useToast } from '@/contexts/ToastContext'
+
+interface PendingHomeMediaFile extends PendingMediaFileChip {
+  readonly file: File
+}
 
 interface ProjectStats {
-  episodes: number
+  resources: number
+  folders: number
   images: number
   videos: number
-  panels: number
-  firstEpisodePreview: string | null
 }
 
 interface Project {
@@ -43,13 +72,29 @@ export default function HomePage() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const t = useTranslations('home')
-  const tc = useTranslations('common')
+  const ta = useTranslations('assistantAgent')
+  const resolveClientError = useClientErrorMessage()
+  const { showError } = useToast()
 
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [inputValue, setInputValue] = useState('')
+  const [videoRatio, setVideoRatio] = useState<ProjectVideoRatio>('16:9')
+  const [attachments, setAttachments] = useState<ProjectAssistantTextAttachment[]>([])
+  const [pendingMediaFiles, setPendingMediaFiles] = useState<PendingHomeMediaFile[]>([])
+  const [attachUploading, setAttachUploading] = useState(false)
+  const [attachError, setAttachError] = useState<string | null>(null)
   const [createLoading, setCreateLoading] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
+
+  // Object URLs power the local image previews; revoke them on unmount.
+  const pendingMediaFilesRef = useRef(pendingMediaFiles)
+  pendingMediaFilesRef.current = pendingMediaFiles
+  useEffect(() => () => {
+    for (const pending of pendingMediaFilesRef.current) {
+      if (pending.previewUrl) URL.revokeObjectURL(pending.previewUrl)
+    }
+  }, [])
 
   // 鉴权
   useEffect(() => {
@@ -68,16 +113,15 @@ export default function HomePage() {
         pageSize: RECENT_COUNT.toString(),
       })
       const response = await apiFetch(`/api/projects?${params}`)
-      if (response.ok) {
-        const data = await response.json()
-        setProjects(data.projects)
-      }
-    } catch {
-      // 静默处理
+      if (!response.ok) throw await readClientApiError(response)
+      const data = await response.json()
+      setProjects(data.projects)
+    } catch (error) {
+      showError(error, t('projectsLoadFailed'))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [showError, t])
 
   useEffect(() => {
     if (session) {
@@ -87,33 +131,129 @@ export default function HomePage() {
 
   // 创建项目并跳转
   const handleCreate = async () => {
-    if (!inputValue.trim() || createLoading) return
-    setCreateError(null)
-    setCreateLoading(true)
-    try {
-      const storyText = inputValue.trim()
-      const result = await createHomeProjectLaunch({
-        apiFetch,
-        projectName: t('defaultProjectName', {
-          timestamp: formatDefaultProjectTimestamp(new Date()),
-        }),
-        storyText,
-        episodeName: `${tc('episode')} 1`,
-      })
-
-      writeHomeAssistantAutoStartMessage({
-        projectId: result.projectId,
-        episodeId: result.episodeId,
-        message: storyText,
-      })
-      router.push(result.target)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : t('createFailed')
-      setCreateError(message)
-    } finally {
-      setCreateLoading(false)
-    }
+    await submitHomeQuickStartLaunch({
+      inputValue,
+      videoRatio,
+      attachments,
+      mediaFiles: pendingMediaFiles.map((pending) => pending.file),
+      isSubmitting: createLoading,
+      apiFetch,
+      projectName: t('defaultProjectName', {
+        timestamp: formatDefaultProjectTimestamp(new Date()),
+      }),
+      setSubmitting: setCreateLoading,
+      setError: setCreateError,
+      navigate: (target) => {
+        router.push(target)
+      },
+      resolveErrorMessage: (error) => resolveClientError(error, t('createFailed')),
+    })
   }
+
+  const handleAttachmentUploaded = useCallback((attachment: ProjectAssistantTextAttachment) => {
+    setAttachments((current) => {
+      if (current.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES) return current
+      return [...current, attachment]
+    })
+    if (createError) {
+      setCreateError(null)
+    }
+  }, [createError])
+
+  const handleRemoveAttachment = useCallback((attachmentId: string) => {
+    setAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId))
+  }, [])
+
+  const addPendingMediaFiles = useCallback((files: readonly File[]) => {
+    const validationCode = files
+      .map(validateProjectAssistantMediaAttachmentFile)
+      .find((code) => code !== null)
+    if (validationCode) {
+      setAttachError(resolveClientError(new Error(validationCode), ta('attachments.mediaUploadFailed')))
+      return
+    }
+    if (files.length + pendingMediaFiles.length > PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES) {
+      setAttachError(resolveClientError(new Error('PROJECT_ASSISTANT_MEDIA_ATTACHMENTS_TOO_MANY'), ta('attachments.mediaUploadFailed')))
+      return
+    }
+    setPendingMediaFiles((current) => {
+      const room = PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES - current.length
+      if (room <= 0) return current
+      const added = files.slice(0, room).map((file) => {
+        const isImage = file.type.toLowerCase().startsWith('image/')
+          || /\.(png|jpe?g|webp)$/i.test(file.name)
+        return {
+          id: crypto.randomUUID(),
+          file,
+          fileName: file.name || 'upload',
+          isImage,
+          previewUrl: isImage ? URL.createObjectURL(file) : null,
+        } satisfies PendingHomeMediaFile
+      })
+      return [...current, ...added]
+    })
+    if (createError) {
+      setCreateError(null)
+    }
+  }, [createError, pendingMediaFiles.length, resolveClientError, ta])
+
+  const handleRemovePendingMediaFile = useCallback((id: string) => {
+    setPendingMediaFiles((current) => {
+      const removed = current.find((pending) => pending.id === id)
+      if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl)
+      return current.filter((pending) => pending.id !== id)
+    })
+  }, [])
+
+  const handleComposerPaste = useCallback((event: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (createLoading) return
+    const files = Array.from(event.clipboardData?.files ?? []).filter(isProjectAssistantMediaFile)
+    if (files.length === 0) return
+    event.preventDefault()
+    addPendingMediaFiles(files)
+  }, [addPendingMediaFiles, createLoading])
+
+  // Picker files route by kind: media stays local until the project exists,
+  // text files parse immediately through the text-attachment endpoint.
+  const handlePickedFiles = useCallback(async (files: readonly File[]) => {
+    setAttachError(null)
+    const mediaFiles = files.filter(isProjectAssistantMediaFile)
+    if (mediaFiles.length > 0) addPendingMediaFiles(mediaFiles)
+    const textFiles = files.filter((file) => !isProjectAssistantMediaFile(file))
+    if (textFiles.length === 0) return
+    const validationCode = textFiles
+      .map(validateProjectAssistantTextAttachmentFile)
+      .find((code) => code !== null)
+    if (validationCode) {
+      setAttachError(resolveClientError(new Error(validationCode), ta('attachments.mediaUploadFailed')))
+      return
+    }
+    if (textFiles.length + attachments.length > PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES) {
+      setAttachError(resolveClientError(new Error('PROJECT_ASSISTANT_TEXT_ATTACHMENTS_TOO_MANY'), ta('attachments.mediaUploadFailed')))
+      return
+    }
+    setAttachUploading(true)
+    try {
+      for (const file of textFiles) {
+        const attachment = await uploadProjectAssistantTextAttachment({ file })
+        handleAttachmentUploaded(attachment)
+      }
+    } catch (error) {
+      setAttachError(resolveClientError(error, ta('attachments.mediaUploadFailed')))
+    } finally {
+      setAttachUploading(false)
+    }
+  }, [addPendingMediaFiles, attachments.length, handleAttachmentUploaded, resolveClientError, ta])
+
+  const attachmentPicker = useAttachmentFilePicker({
+    accept: `${PROJECT_ASSISTANT_TEXT_ATTACHMENT_ACCEPT},${PROJECT_ASSISTANT_MEDIA_ATTACHMENT_ACCEPT}`,
+    disabled: createLoading,
+    onFiles: (files) => { void handlePickedFiles(files) },
+  })
+
+  const createDisabled = (
+    !inputValue.trim() && attachments.length === 0 && pendingMediaFiles.length === 0
+  ) || createLoading
 
   // 时间格式化
   const formatTimeAgo = (dateString: string): string => {
@@ -128,15 +268,11 @@ export default function HomePage() {
   }
 
   if (status === 'loading' || !session) {
-    return (
-      <div className="glass-page min-h-screen flex items-center justify-center">
-        <div className="text-[var(--glass-text-secondary)]">{tc('loading')}</div>
-      </div>
-    )
+    return <BrandPageLoading />
   }
 
   return (
-    <div className="glass-page min-h-screen">
+    <div className="glass-page min-h-screen" style={{ backgroundColor: '#fcfcfd' }}>
       <Navbar />
 
       {/* 自定义呼吸动画 */}
@@ -288,7 +424,7 @@ export default function HomePage() {
             <div
               className="absolute -inset-10 rounded-[48px] pointer-events-none"
               style={{
-                background: 'radial-gradient(ellipse 80% 60% at 30% 40%, rgba(6, 182, 212, 0.4), transparent 70%)',
+                background: 'radial-gradient(ellipse 80% 60% at 30% 40%, rgba(47, 123, 255, 0.30), transparent 70%)',
                 animation: 'breathe-drift-1 8s ease-in-out infinite',
                 filter: 'blur(30px)',
               }}
@@ -296,7 +432,7 @@ export default function HomePage() {
             <div
               className="absolute -inset-10 rounded-[48px] pointer-events-none"
               style={{
-                background: 'radial-gradient(ellipse 70% 80% at 70% 60%, rgba(139, 92, 246, 0.35), transparent 70%)',
+                background: 'radial-gradient(ellipse 70% 80% at 70% 60%, rgba(56, 189, 248, 0.24), transparent 70%)',
                 animation: 'breathe-drift-2 10s ease-in-out infinite',
                 filter: 'blur(35px)',
               }}
@@ -304,7 +440,7 @@ export default function HomePage() {
             <div
               className="absolute -inset-12 rounded-[56px] pointer-events-none"
               style={{
-                background: 'radial-gradient(ellipse 60% 50% at 50% 50%, rgba(59, 130, 246, 0.3), transparent 70%)',
+                background: 'radial-gradient(ellipse 60% 50% at 50% 50%, rgba(244, 114, 182, 0.18), transparent 70%)',
                 animation: 'breathe-drift-3 12s ease-in-out infinite',
                 filter: 'blur(40px)',
               }}
@@ -318,23 +454,84 @@ export default function HomePage() {
                   setCreateError(null)
                 }
               }}
+              onSubmit={handleCreate}
+              onPaste={handleComposerPaste}
               placeholder={t('inputPlaceholder')}
               minRows={HOME_QUICK_START_MIN_ROWS}
-              textareaClassName="px-0 pt-0 pb-3 align-top"
+              containerClassName="relative mx-auto w-full max-w-[792px] rounded-[28px] border border-[rgba(15,17,23,0.08)] bg-white/85 shadow-[0_2px_4px_rgba(15,17,23,0.03),0_8px_20px_-6px_rgba(15,17,23,0.07),0_32px_64px_-20px_rgba(15,17,23,0.16)] backdrop-blur-[20px] transition-all duration-300 focus-within:border-[rgba(47,123,255,0.38)] focus-within:shadow-[0_2px_4px_rgba(15,17,23,0.04),0_12px_28px_-8px_rgba(47,123,255,0.20),0_40px_80px_-24px_rgba(15,17,23,0.20)]"
+              textareaShellClassName=""
+              textareaClassName="min-h-[112px] px-7 pb-3 pt-7 text-[17px] leading-7 align-top"
+              controlsClassName="flex items-center px-4 pb-4"
+              actionsClassName="flex w-full items-center justify-between"
+              footerClassName="px-7 pb-5"
               primaryAction={(
                 <button
+                  type="button"
+                  aria-label={t('startCreation')}
+                  title={t('startCreation')}
                   onClick={() => void handleCreate()}
-                  disabled={!inputValue.trim() || createLoading}
-                  className="glass-btn-base glass-btn-primary h-10 flex-shrink-0 px-5 text-sm disabled:opacity-50"
+                  disabled={createDisabled}
+                  className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition"
+                  style={{
+                    background: createDisabled
+                      ? 'rgba(88,92,128,0.14)'
+                      : 'linear-gradient(140deg, var(--glass-accent-from) 0%, var(--glass-accent-to) 100%)',
+                    color: createDisabled ? 'rgba(88,92,128,0.72)' : '#fff',
+                    boxShadow: createDisabled ? 'none' : '0 6px 16px -4px var(--glass-accent-shadow-strong)',
+                  }}
                 >
-                  {createLoading ? tc('loading') : t('startCreation')}
-                  <AppIcon name="arrowRight" className="w-4 h-4" />
+                  <AppIcon name="arrowRight" className={`h-[18px] w-[18px] ${createLoading ? 'animate-pulse' : ''}`} />
                 </button>
               )}
-              footer={createError ? (
-                <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600">
-                  {createError}
-                </p>
+              secondaryActions={(
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    aria-label={ta('attachments.openUpload')}
+                    title={ta('attachments.openUpload')}
+                    disabled={createLoading || attachUploading || (
+                      attachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES
+                      && pendingMediaFiles.length >= PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES
+                    )}
+                    onClick={attachmentPicker.open}
+                    className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-[rgba(15,17,23,0.55)] transition hover:bg-black/[0.05] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <AppIcon name="plus" className="h-[18px] w-[18px]" />
+                  </button>
+                  <HomeVideoRatioSelect
+                    value={videoRatio}
+                    disabled={createLoading}
+                    onChange={(nextRatio) => {
+                      setVideoRatio(nextRatio)
+                      if (createError) setCreateError(null)
+                    }}
+                  />
+                </div>
+              )}
+              footer={attachments.length > 0 || pendingMediaFiles.length > 0 || attachUploading || attachError || createError ? (
+                <div className="space-y-3">
+                  <TextAttachmentChips attachments={attachments} onRemove={createLoading ? undefined : handleRemoveAttachment} />
+                  <PendingMediaFileChips
+                    files={pendingMediaFiles}
+                    onRemove={createLoading ? undefined : handleRemovePendingMediaFile}
+                  />
+                  {attachUploading ? (
+                    <div className="inline-flex items-center gap-2 rounded-lg border border-[var(--glass-stroke-base)] bg-white/90 px-2.5 py-1.5 text-xs leading-none text-[var(--glass-text-secondary)] shadow-sm">
+                      <AppIcon name="loader" className="h-3.5 w-3.5 animate-spin text-[var(--glass-tone-info-fg)]" aria-hidden="true" />
+                      {ta('attachments.mediaUploading')}
+                    </div>
+                  ) : null}
+                  {attachError ? (
+                    <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600">
+                      {attachError}
+                    </p>
+                  ) : null}
+                  {createError ? (
+                    <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600">
+                      {createError}
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
             />
           </div>
@@ -383,23 +580,23 @@ export default function HomePage() {
                   <h3 className="text-sm font-bold text-[var(--glass-text-primary)] mb-2 group-hover:text-[var(--glass-tone-info-fg)] transition-colors line-clamp-1">
                     {project.name}
                   </h3>
-                  {(project.description || project.stats?.firstEpisodePreview) && (
+                  {project.description && (
                     <div className="flex items-start gap-2 mb-3">
                       <AppIcon name="fileText" className="w-3.5 h-3.5 text-[var(--glass-text-tertiary)] mt-0.5 flex-shrink-0" />
                       <p className="text-xs text-[var(--glass-text-secondary)] line-clamp-2 leading-relaxed">
-                        {project.description || project.stats?.firstEpisodePreview}
+                        {project.description}
                       </p>
                     </div>
                   )}
-                  {project.stats && (project.stats.episodes > 0 || project.stats.images > 0 || project.stats.videos > 0) && (
+                  {project.stats && project.stats.resources > 0 && (
                     <div className="flex items-center gap-2 mb-3">
                       <IconGradientDefs className="w-0 h-0 absolute" aria-hidden="true" />
                       <AppIcon name="statsBarGradient" className="w-4 h-4 flex-shrink-0" />
                       <div className="flex items-center gap-3 text-sm font-semibold bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">
-                        {project.stats.episodes > 0 && (
+                        {project.stats.folders > 0 && (
                           <span className="flex items-center gap-1">
-                            <AppIcon name="statsEpisodeGradient" className="w-3.5 h-3.5" />
-                            {project.stats.episodes}
+                            <AppIcon name="folder" className="w-3.5 h-3.5" />
+                            {project.stats.folders}
                           </span>
                         )}
                         {project.stats.images > 0 && (
@@ -427,6 +624,7 @@ export default function HomePage() {
           </div>
         )}
       </section>
+      {attachmentPicker.input}
     </div>
   )
 }

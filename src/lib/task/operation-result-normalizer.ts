@@ -1,5 +1,6 @@
 import { TASK_STATUS, TASK_TYPE } from './types'
 import type { OperationResultStatus, RecentOperationMedia, RecentOperationMediaType, RecentOperationResult } from './operation-result-types'
+import { projectErrorForModel } from '@/lib/errors/projection'
 
 export interface OperationResultTaskRow {
   id: string
@@ -7,14 +8,13 @@ export interface OperationResultTaskRow {
   status: string
   targetType: string
   targetId: string
-  episodeId: string | null
   payload: unknown
   result: unknown
   errorCode: string | null
-  errorMessage: string | null
   operationId: string | null
   operationSource: string | null
-  operationConfirmed: boolean | null
+  approvalGrantId: string | null
+  operationExecutionId: string | null
   queuedAt: Date
   finishedAt: Date | null
   updatedAt: Date
@@ -34,11 +34,6 @@ function readString(source: Record<string, unknown> | null, key: string): string
 function readNumber(source: Record<string, unknown> | null, key: string): number | null {
   const value = source?.[key]
   return typeof value === 'number' && Number.isFinite(value) ? value : null
-}
-
-function readBoolean(source: Record<string, unknown> | null, key: string): boolean | null {
-  const value = source?.[key]
-  return typeof value === 'boolean' ? value : null
 }
 
 function normalizeStatus(status: string): OperationResultStatus {
@@ -65,11 +60,12 @@ function readSafeUrl(result: Record<string, unknown> | null, keys: string[]): st
 }
 
 function inferMediaType(taskType: string, result: Record<string, unknown> | null): RecentOperationMediaType | null {
-  if (taskType === TASK_TYPE.MUSIC_GENERATE || taskType === TASK_TYPE.BGM_SCORE_GENERATE) return 'music'
+  if (taskType === TASK_TYPE.WORKSPACE_RESOURCE_AUDIO) return 'music'
+  if (taskType === TASK_TYPE.WORKSPACE_RESOURCE_VOICE) return 'audio'
+  if (taskType === TASK_TYPE.WORKSPACE_RESOURCE_IMAGE) return 'image'
   if (
-    taskType === TASK_TYPE.VIDEO_PANEL
-    || taskType === TASK_TYPE.VIDEO_GROUP
-    || taskType === TASK_TYPE.FINAL_VIDEO_RENDER
+    taskType === TASK_TYPE.WORKSPACE_RESOURCE_VIDEO
+    || taskType === TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE
   ) return 'video'
   if (readString(result, 'audioUrl')) return 'audio'
   if (readString(result, 'videoUrl')) return 'video'
@@ -122,10 +118,6 @@ function readProvider(model: string | null, result: Record<string, unknown> | nu
   return readString(result, 'provider') || (model?.includes('::') ? model.split('::')[0] || null : null)
 }
 
-function readMutationBatchId(payload: Record<string, unknown> | null, result: Record<string, unknown> | null): string | null {
-  return readString(result, 'mutationBatchId') || readString(payload, 'mutationBatchId')
-}
-
 export function normalizeTaskOperationResult(task: OperationResultTaskRow): RecentOperationResult | null {
   const operationId = task.operationId?.trim() || null
   if (!operationId) return null
@@ -133,33 +125,25 @@ export function normalizeTaskOperationResult(task: OperationResultTaskRow): Rece
   const payload = isRecord(task.payload) ? task.payload : null
   const result = isRecord(task.result) ? task.result : null
   const model = readModel(payload, result)
-  const errorMessage = task.errorMessage?.trim() || readString(result, 'errorMessage')
   const errorCode = task.errorCode?.trim() || readString(result, 'errorCode')
-  const mutationBatchId = readMutationBatchId(payload, result)
 
   return {
     operationId,
     taskId: task.id,
-    runId: readString(payload, 'runId'),
     taskType: task.type,
     status: normalizeStatus(task.status),
     source: task.operationSource,
-    confirmed: task.operationConfirmed,
+    approvalGrantId: task.approvalGrantId,
+    operationExecutionId: task.operationExecutionId,
     targetType: task.targetType,
     targetId: task.targetId,
-    episodeId: task.episodeId,
     provider: readProvider(model, result),
     model,
     media: buildMedia(task.type, result),
-    error: errorMessage
-      ? {
-          ...(errorCode ? { code: errorCode } : {}),
-          message: errorMessage,
-          ...(readBoolean(result, 'retryable') !== null ? { retryable: readBoolean(result, 'retryable') } : {}),
-        }
+    error: task.status === TASK_STATUS.FAILED
+      ? projectErrorForModel(errorCode)
       : null,
     submittedAt: task.queuedAt.toISOString(),
     completedAt: task.finishedAt?.toISOString() ?? null,
-    ...(mutationBatchId ? { mutationBatchId, canUndo: true } : {}),
   }
 }

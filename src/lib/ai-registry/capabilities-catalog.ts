@@ -35,6 +35,11 @@ export interface BuiltinCapabilityCatalogEntry {
   provider: string
   modelId: string
   capabilities?: ModelCapabilities
+  providerRoute?: {
+    logicalCapabilityId: string
+    priority: number
+    failoverPolicy: 'pre_accept_only'
+  }
 }
 
 interface CapabilityCatalogCache {
@@ -77,6 +82,27 @@ function normalizeCapabilityEntry(raw: unknown, filePath: string, index: number)
     )
   }
 
+  const providerRouteRaw = Reflect.get(raw, 'providerRoute')
+  let providerRoute: BuiltinCapabilityCatalogEntry['providerRoute']
+  if (providerRouteRaw !== undefined) {
+    if (!isPlainObject(providerRouteRaw)) {
+      throw new Error(`CAPABILITY_CATALOG_INVALID: ${filePath}#${index} providerRoute must be object`)
+    }
+    const logicalCapabilityId = readTrimmedString(Reflect.get(providerRouteRaw, 'logicalCapabilityId'))
+    const priority = Reflect.get(providerRouteRaw, 'priority')
+    const failoverPolicy = Reflect.get(providerRouteRaw, 'failoverPolicy')
+    if (
+      !logicalCapabilityId
+      || typeof priority !== 'number'
+      || !Number.isSafeInteger(priority)
+      || priority < 0
+      || failoverPolicy !== 'pre_accept_only'
+    ) {
+      throw new Error(`CAPABILITY_CATALOG_INVALID: ${filePath}#${index} providerRoute invalid`)
+    }
+    providerRoute = { logicalCapabilityId, priority, failoverPolicy }
+  }
+
   return {
     modelType: modelTypeRaw,
     provider,
@@ -84,6 +110,7 @@ function normalizeCapabilityEntry(raw: unknown, filePath: string, index: number)
     ...(capabilitiesRaw && isPlainObject(capabilitiesRaw)
       ? { capabilities: capabilitiesRaw as ModelCapabilities }
       : {}),
+    ...(providerRoute ? { providerRoute } : {}),
   }
 }
 
@@ -126,6 +153,7 @@ export function listBuiltinCapabilityCatalog(): BuiltinCapabilityCatalogEntry[] 
   return loadCapabilityCatalog().entries.map((entry) => ({
     ...entry,
     capabilities: cloneCapabilities(entry.capabilities),
+    ...(entry.providerRoute ? { providerRoute: { ...entry.providerRoute } } : {}),
   }))
 }
 
@@ -144,6 +172,7 @@ export function findBuiltinCapabilityCatalogEntry(
     return {
       ...exactMatch,
       capabilities: cloneCapabilities(exactMatch.capabilities),
+      ...(exactMatch.providerRoute ? { providerRoute: { ...exactMatch.providerRoute } } : {}),
     }
   }
 
@@ -154,6 +183,7 @@ export function findBuiltinCapabilityCatalogEntry(
     return {
       ...fallback,
       capabilities: cloneCapabilities(fallback.capabilities),
+      ...(fallback.providerRoute ? { providerRoute: { ...fallback.providerRoute } } : {}),
     }
   }
 

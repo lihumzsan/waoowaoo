@@ -5,22 +5,32 @@ import type {
 } from '@/lib/ai-providers/async-task-types'
 import { arkAdapter } from '@/lib/ai-providers/ark/adapter'
 import { arkAsyncTaskProvider } from '@/lib/ai-providers/ark/async-task'
-import { arkSeedance2VideoTokenPricingContract } from '@/lib/ai-providers/ark/video-token-pricing'
-import { codexAdapter } from '@/lib/ai-providers/codex/adapter'
 import { falAdapter } from '@/lib/ai-providers/fal/adapter'
 import { falAsyncTaskProvider } from '@/lib/ai-providers/fal/async-task'
 import { googleAdapter } from '@/lib/ai-providers/google/adapter'
 import { geminiBatchAsyncTaskProvider, googleVideoAsyncTaskProvider } from '@/lib/ai-providers/google/async-task'
+import { murekaAdapter } from '@/lib/ai-providers/mureka/adapter'
+import { murekaAsyncTaskProvider } from '@/lib/ai-providers/mureka/async-task'
 import { openRouterAdapter } from '@/lib/ai-providers/openrouter/adapter'
 import { openRouterAsyncTaskProvider } from '@/lib/ai-providers/openrouter/async-task'
 import type { AiProviderAdapter, AiProviderLanguageModelContext } from '@/lib/ai-providers/runtime-types'
-import type { VideoTokenPricingContract } from '@/lib/ai-providers/shared/video-token-pricing'
+import type {
+  AiProviderLanguageModelRequestContext,
+  AiProviderLanguageModelValidationContext,
+} from '@/lib/ai-providers/runtime-types'
+import type { AiLlmExecutionResult, AiLlmMessage } from '@/lib/ai-registry/types'
+import type { ModelMessage } from 'ai'
+import { flattenChatMessageContent } from '@/lib/ai-registry/message-content'
+import {
+  resolveRegisteredLlmProtocol,
+  resolveRegisteredPublicReasoningMode,
+} from '@/lib/ai-registry/llm-protocol'
 
 const runtimeProviderRegistry = new AiRegistry<AiProviderAdapter>([
   arkAdapter,
-  codexAdapter,
   falAdapter,
   googleAdapter,
+  murekaAdapter,
   openRouterAdapter,
 ])
 
@@ -29,11 +39,8 @@ const asyncTaskProviderRegistry: AsyncTaskProviderRegistration[] = [
   arkAsyncTaskProvider,
   geminiBatchAsyncTaskProvider,
   googleVideoAsyncTaskProvider,
+  murekaAsyncTaskProvider,
   openRouterAsyncTaskProvider,
-]
-
-const videoTokenPricingContracts: VideoTokenPricingContract[] = [
-  arkSeedance2VideoTokenPricingContract,
 ]
 
 export function resolveAsyncTaskProviderByExternalId(externalId: string): AsyncTaskProviderRegistration {
@@ -41,7 +48,7 @@ export function resolveAsyncTaskProviderByExternalId(externalId: string): AsyncT
   if (!registration) {
     throw new Error(
       `无法识别的 externalId 格式: "${externalId}". ` +
-      `支持的格式: FAL:TYPE:endpoint:requestId, ARK:TYPE:requestId, GEMINI:BATCH:batchName, GOOGLE:VIDEO:operationName, OPENROUTER:VIDEO:requestId`,
+      `支持的格式: FAL:TYPE:endpoint:requestId, ARK:TYPE:requestId, GEMINI:BATCH:batchName, GOOGLE:VIDEO:operationName, OPENROUTER:VIDEO:requestId, MUREKA:MUSIC:endpoint:taskId`,
     )
   }
   return registration
@@ -55,18 +62,53 @@ export function resolveAsyncTaskProviderByCode(providerCode: AsyncExternalIdProv
   return registration
 }
 
-export function resolveVideoTokenPricingContract(model: string): VideoTokenPricingContract | null {
-  return videoTokenPricingContracts.find((contract) => contract.supportsModel(model)) ?? null
-}
-
 export function resolveAiProviderAdapter(providerId: string): AiProviderAdapter {
   return runtimeProviderRegistry.getAdapterByProviderId(providerId)
 }
 
-export function createRegisteredLanguageModel(input: AiProviderLanguageModelContext) {
+export function tryResolveAiProviderAdapter(providerId: string): AiProviderAdapter | null {
+  return runtimeProviderRegistry.tryGetAdapterByProviderId(providerId)
+}
+
+export function createRegisteredLanguageModel(input: AiProviderLanguageModelRequestContext) {
   const languageModelProvider = resolveAiProviderAdapter(input.selection.provider).languageModel
   if (!languageModelProvider) {
     throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${input.selection.provider}:languageModel`)
   }
-  return languageModelProvider.create(input)
+  const context: AiProviderLanguageModelContext = {
+    ...input,
+    protocol: resolveRegisteredLlmProtocol(input.selection.modelKey),
+    publicReasoningMode: resolveRegisteredPublicReasoningMode(input.selection.modelKey),
+  }
+  return languageModelProvider.create(context)
+}
+
+function defaultTextModelMessages(messages: AiLlmMessage[]): ModelMessage[] {
+  return messages.map((message) => ({
+    role: message.role,
+    content: flattenChatMessageContent(message.content),
+  }))
+}
+
+export function prepareRegisteredTextModelMessages(
+  providerId: string,
+  messages: AiLlmMessage[],
+): ModelMessage[] {
+  const languageModelProvider = resolveAiProviderAdapter(providerId).languageModel
+  if (!languageModelProvider) {
+    throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${providerId}:languageModel`)
+  }
+  return languageModelProvider.prepareTextMessages?.(messages) ?? defaultTextModelMessages(messages)
+}
+
+export function validateRegisteredLanguageModelResult(
+  providerId: string,
+  result: AiLlmExecutionResult,
+  context: AiProviderLanguageModelValidationContext,
+): void {
+  const languageModelProvider = resolveAiProviderAdapter(providerId).languageModel
+  if (!languageModelProvider) {
+    throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${providerId}:languageModel`)
+  }
+  languageModelProvider.validateResult?.(result, context)
 }

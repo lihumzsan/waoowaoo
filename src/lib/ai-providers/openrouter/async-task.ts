@@ -1,4 +1,5 @@
 import type { AsyncTaskProviderRegistration, ParsedAsyncExternalId } from '@/lib/ai-providers/async-task-types'
+import { normalizeAsyncPollResult } from '@/lib/ai-providers/async-task-types'
 import { queryOpenRouterVideoStatus } from './video'
 
 function parseOpenRouterExternalId(externalId: string): ParsedAsyncExternalId {
@@ -30,12 +31,14 @@ export const openRouterAsyncTaskProvider: AsyncTaskProviderRegistration = {
       apiKey,
       requestId: parsed.requestId,
     })
-    return {
+    return normalizeAsyncPollResult({
       status: result.status,
+      failureDisposition: result.failureDisposition,
+      ...(result.status === 'failed' ? { errorCode: result.errorCode } : {}),
       videoUrl: result.videoUrl,
       resultUrl: result.resultUrl,
       downloadHeaders: result.downloadHeaders,
       error: result.error,
-    }
+    })
   },
 }

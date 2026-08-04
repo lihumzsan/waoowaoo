@@ -1,11 +1,12 @@
+import { isMediaStorageKey } from '@/lib/media/storage-key'
+
 const LOCAL_ORIGIN = 'http://localhost'
 const NEXT_IMAGE_PATH = '/_next/image'
-const COS_SIGN_PATH = '/api/storage/sign'
+const STORAGE_SIGN_PATH = '/api/storage/sign'
 const MAX_NEXT_UNWRAP_DEPTH = 5
-const STORAGE_KEY_PREFIXES = ['images/', 'video/'] as const
 
 function isStorageKey(value: string): boolean {
-  return STORAGE_KEY_PREFIXES.some((prefix) => value.startsWith(prefix))
+  return isMediaStorageKey(value)
 }
 
 function tryParseUrl(value: string): URL | null {
@@ -55,7 +56,7 @@ export function toDisplayImageUrl(input: string | null | undefined): string | nu
 
   const unwrapped = unwrapNextImageUrl(raw)
   if (isStorageKey(unwrapped)) {
-    return `${COS_SIGN_PATH}?key=${encodeURIComponent(unwrapped)}`
+    return `${STORAGE_SIGN_PATH}?key=${encodeURIComponent(unwrapped)}`
   }
 
   return unwrapped
@@ -68,11 +69,11 @@ export function resolveOriginalImageUrl(input: string | null | undefined): strin
 
   const unwrapped = unwrapNextImageUrl(raw)
   if (isStorageKey(unwrapped)) {
-    return `${COS_SIGN_PATH}?key=${encodeURIComponent(unwrapped)}`
+    return `${STORAGE_SIGN_PATH}?key=${encodeURIComponent(unwrapped)}`
   }
 
   const parsed = tryParseUrl(unwrapped)
-  if (parsed?.pathname === COS_SIGN_PATH) {
+  if (parsed?.pathname === STORAGE_SIGN_PATH) {
     const key = parsed.searchParams.get('key')
     if (key) {
       let decodedKey = key
@@ -81,7 +82,7 @@ export function resolveOriginalImageUrl(input: string | null | undefined): strin
       } catch {
         decodedKey = key
       }
-      return `${COS_SIGN_PATH}?key=${encodeURIComponent(decodedKey)}`
+      return `${STORAGE_SIGN_PATH}?key=${encodeURIComponent(decodedKey)}`
     }
   }
 

@@ -3,12 +3,13 @@ import type {
   FormatAsyncExternalIdInput,
   ParsedAsyncExternalId,
 } from '@/lib/ai-providers/async-task-types'
-import { queryFalStatus } from './queue'
+import { normalizeAsyncPollResult } from '@/lib/ai-providers/async-task-types'
+import { cancelFalTask, queryFalStatus } from './queue'
 
 function parseFalExternalId(externalId: string): ParsedAsyncExternalId {
   const parts = externalId.split(':')
   const type = parts[1]
-  if (type === 'VIDEO' || type === 'IMAGE') {
+  if (type === 'VIDEO' || type === 'IMAGE' || type === 'MUSIC' || type === 'VOICE') {
     if (parts.length < 4) {
       throw new Error(`无效 FAL externalId: "${externalId}"，应为 FAL:TYPE:endpoint:requestId`)
     }
@@ -24,7 +25,7 @@ function parseFalExternalId(externalId: string): ParsedAsyncExternalId {
       requestId,
     }
   }
-  throw new Error(`无效 FAL externalId: "${externalId}"，TYPE 仅支持 VIDEO/IMAGE`)
+  throw new Error(`无效 FAL externalId: "${externalId}"，TYPE 仅支持 VIDEO/IMAGE/MUSIC/VOICE`)
 }
 
 function formatFalExternalId(input: FormatAsyncExternalIdInput): string {
@@ -43,13 +44,35 @@ export const falAsyncTaskProvider: AsyncTaskProviderRegistration = {
     if (!parsed.endpoint) throw new Error('FAL_ENDPOINT_MISSING')
     const { apiKey } = await context.getProviderConfig(context.userId, 'fal')
     const result = await queryFalStatus(parsed.endpoint, parsed.requestId, apiKey)
-    return {
-      status: result.completed ? (result.failed ? 'failed' : 'completed') : 'pending',
+    if (result.failed) {
+      if (!result.errorCode || !result.failureDisposition) {
+        throw new Error('FAL_FAILED_STATUS_CLASSIFICATION_REQUIRED')
+      }
+      return normalizeAsyncPollResult({
+        status: 'failed',
+        errorCode: result.errorCode,
+        failureDisposition: result.failureDisposition,
+        resultUrl: result.resultUrl,
+        imageUrl: result.resultUrl,
+        videoUrl: result.resultUrl,
+        error: result.error,
+      })
+    }
+    const pending = !result.failed && !result.completed
+    return normalizeAsyncPollResult({
+      status: result.completed ? 'completed' : 'pending',
+      // FAL 官方队列区分 IN_QUEUE（排队）与 IN_PROGRESS（生成中）；分别计入
+      // 排队预算与生成预算（async-wait 的双计时协议）。
+      ...(pending ? { pendingPhase: result.status === 'IN_QUEUE' ? 'queued' as const : 'running' as const } : {}),
       resultUrl: result.resultUrl,
       imageUrl: result.resultUrl,
       videoUrl: result.resultUrl,
       error: result.error,
-    }
+    })
+  },
+  cancel: async ({ parsed, context }) => {
+    if (!parsed.endpoint) throw new Error('FAL_ENDPOINT_MISSING')
+    const { apiKey } = await context.getProviderConfig(context.userId, 'fal')
+    await cancelFalTask(parsed.endpoint, parsed.requestId, apiKey)
   },
 }
-

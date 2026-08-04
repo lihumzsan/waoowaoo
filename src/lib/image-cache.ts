@@ -1,6 +1,7 @@
 import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core'
 import { toFetchableUrl } from '@/lib/storage'
 import { LRUCache } from 'lru-cache'
+import { MAX_IMAGE_BYTES, readResponseBufferWithLimit } from '@/lib/http/body-limits'
 /**
  * 🔥 图片下载缓存系统
  * 
@@ -118,8 +119,8 @@ async function downloadImageAsBase64(imageUrl: string, logPrefix: string): Promi
             throw new Error(`HTTP ${response.status}: ${response.statusText}`)
         }
 
-        const buffer = await response.arrayBuffer()
-        const base64 = Buffer.from(buffer).toString('base64')
+        const buffer = await readResponseBufferWithLimit(response, MAX_IMAGE_BYTES, 'cached image')
+        const base64 = buffer.toString('base64')
         const contentType = response.headers.get('content-type') || 'image/png'
 
         const duration = Date.now() - startTime
@@ -158,7 +159,7 @@ export async function preloadImagesParallel(
 ): Promise<string[]> {
     const { logPrefix = '[批量预加载]' } = options
 
-    // 去重（支持 http URL 和本地相对路径 /api/files/...）
+    // 去重（支持 HTTP(S) URL 和应用内相对 API 路径）
     const uniqueUrls = [...new Set(imageUrls.filter(url => url && (url.startsWith('http') || url.startsWith('/'))))]
 
     if (uniqueUrls.length === 0) {

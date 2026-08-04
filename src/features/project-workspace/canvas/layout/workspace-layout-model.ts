@@ -1,15 +1,6 @@
 import type { WorkspaceCanvasFlowEdge, WorkspaceCanvasFlowNode, WorkspaceCanvasNodeKind } from '../node-canvas-types'
 
-export type WorkspaceCanvasLayoutLane =
-  | 'story'
-  | 'editPipeline'
-  | 'editScript'
-  | 'assets'
-  | 'spaceConsistency'
-  | 'shots'
-  | 'videoPlan'
-  | 'bgm'
-  | 'final'
+export type WorkspaceCanvasLayoutLane = 'resource'
 
 export type WorkspaceCanvasAnchorMode = 'none' | 'fixed' | 'manual'
 
@@ -75,56 +66,12 @@ function estimatedNodeSize(node: WorkspaceCanvasFlowNode): WorkspaceCanvasLayout
 }
 
 export function resolveWorkspaceCanvasLayoutLane(kind: WorkspaceCanvasNodeKind): WorkspaceCanvasLayoutLane {
-  switch (kind) {
-    case 'analysis':
-    case 'scriptClip':
-    case 'editScreenplay':
-    case 'editStylePreview':
-    case 'editStyleBible':
-    case 'editDirectorDecoupage':
-      return 'story'
-    case 'editPipelineStep':
-      return 'editPipeline'
-    case 'editScript':
-      return 'editScript'
-    case 'editRequiredAsset':
-    case 'imageAsset':
-      return 'assets'
-    case 'spaceConsistency':
-    case 'editCinematographyShotPlan':
-      return 'spaceConsistency'
-    case 'shot':
-      return 'shots'
-    case 'videoPlan':
-    case 'videoClip':
-      return 'videoPlan'
-    case 'bgmScore':
-      return 'bgm'
-    case 'finalTimeline':
-      return 'final'
-  }
+  void kind
+  return 'resource'
 }
 
-function resolveWorkspaceCanvasGroupId(node: WorkspaceCanvasFlowNode, lane: WorkspaceCanvasLayoutLane): string {
-  switch (lane) {
-    case 'story':
-    case 'editPipeline':
-    case 'editScript':
-    case 'spaceConsistency':
-    case 'bgm':
-    case 'final':
-      return lane
-    case 'assets':
-      return node.data.editAssetDetails?.editScriptId
-        ? `assets:${node.data.editAssetDetails.editScriptId}`
-        : `assets:${node.data.targetType}`
-    case 'shots':
-      return node.data.storyboardId ? `shots:${node.data.storyboardId}` : 'shots'
-    case 'videoPlan':
-      return node.data.videoPlanDetails?.editScriptId
-        ? `videoPlan:${node.data.videoPlanDetails.editScriptId}`
-        : 'videoPlan'
-  }
+function resolveWorkspaceCanvasGroupId(node: WorkspaceCanvasFlowNode): string {
+  return node.data.targetId
 }
 
 function resolveAnchorMode(
@@ -176,7 +123,7 @@ export function buildWorkspaceCanvasLayoutModel(
       targetType: node.data.targetType,
       targetId: node.data.targetId,
       lane,
-      groupId: resolveWorkspaceCanvasGroupId(node, lane),
+      groupId: resolveWorkspaceCanvasGroupId(node),
       order,
       estimatedSize: estimatedNodeSize(node),
       measuredSize,

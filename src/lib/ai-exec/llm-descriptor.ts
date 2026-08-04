@@ -14,7 +14,6 @@ export function describeLlmVariantBase(input: {
     modelKey: input.selection.modelKey,
     providerId: input.selection.provider,
     modelId: input.selection.modelId,
-    selection: input.selection,
   })
   return {
     modelKey: input.selection.modelKey,
@@ -29,7 +28,7 @@ export function describeLlmVariantBase(input: {
     },
     execution: { mode: input.executionMode },
     capabilities: contracts.capabilities,
-    optionSchema: buildLlmOptionSchema(),
+    optionSchema: buildLlmOptionSchema(contracts.capabilities.llm?.reasoningEffortOptions),
     ...(contracts.inputContracts ? { inputContracts: contracts.inputContracts } : {}),
   }
 }

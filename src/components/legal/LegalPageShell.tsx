@@ -1,5 +1,6 @@
 import Navbar from '@/components/Navbar'
 import PublicFooter from '@/components/PublicFooter'
+import { readPublicDeploymentFeatures } from '@/lib/deployment/server-features'
 
 export interface LegalPageSection {
   title: string
@@ -21,9 +22,11 @@ export default function LegalPageShell({
   updatedAt,
   sections,
 }: LegalPageShellProps) {
+  const deploymentFeatures = readPublicDeploymentFeatures()
+
   return (
     <div className="glass-page min-h-screen">
-      <Navbar />
+      <Navbar initialDeploymentFeatures={deploymentFeatures} />
       <main className="mx-auto w-full max-w-5xl px-4 pb-16 pt-12 sm:px-6 lg:px-8">
         <section className="mb-10 space-y-4">
           <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--glass-tone-info-fg)]">
@@ -54,7 +57,7 @@ export default function LegalPageShell({
           ))}
         </div>
       </main>
-      <PublicFooter />
+      <PublicFooter initialDeploymentFeatures={deploymentFeatures} />
     </div>
   )
 }

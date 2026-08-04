@@ -14,28 +14,26 @@ export interface RecentOperationMedia {
 }
 
 export interface RecentOperationError {
-  code?: string | null
-  message: string
-  retryable?: boolean | null
+  code: string
+  category: string
+  retryable: boolean
+  action: 'ask_user' | 'inform_user' | 'revise_input' | 'stop' | 'wait'
 }
 
 export interface RecentOperationResult {
   operationId: string
   taskId: string
-  runId?: string | null
   taskType: string
   status: OperationResultStatus
   source?: string | null
-  confirmed?: boolean | null
+  approvalGrantId?: string | null
+  operationExecutionId?: string | null
   targetType: string
   targetId: string
-  episodeId?: string | null
   provider?: string | null
   model?: string | null
   media?: RecentOperationMedia | null
   error?: RecentOperationError | null
   submittedAt: string
   completedAt?: string | null
-  mutationBatchId?: string | null
-  canUndo?: boolean
 }

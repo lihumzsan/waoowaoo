@@ -1,12 +1,11 @@
 import type { ReactNode } from 'react'
 import type { CustomModel, Provider } from '../types'
-import { CODEX_PROVIDER_KEY } from '@/lib/ai-registry/codex-defaults'
 
 export interface ProviderCardDefaultModels {
+  assistantModel?: string
   analysisModel?: string
   characterModel?: string
   locationModel?: string
-  storyboardModel?: string
   editModel?: string
   videoModel?: string
   musicModel?: string
@@ -34,11 +33,6 @@ export interface ProviderCardProps {
 export interface ModelFormState {
   name: string
   modelId: string
-  enableCustomPricing?: boolean
-  priceInput?: string
-  priceOutput?: string
-  basePrice?: string
-  optionPricesJson?: string
 }
 
 export type ProviderCardModelType = 'llm' | 'image' | 'video' | 'music'
@@ -55,5 +49,5 @@ export type ProviderCardTranslator = (
  * UI 层（是否显示"测试连接"按钮）和 逻辑层（保存时是否自动测试）共享此列表
  */
 export const VERIFIABLE_PROVIDER_KEYS = new Set([
-  'ark', 'google', 'openrouter', 'fal', CODEX_PROVIDER_KEY,
+  'ark', 'google', 'openrouter', 'fal',
 ])

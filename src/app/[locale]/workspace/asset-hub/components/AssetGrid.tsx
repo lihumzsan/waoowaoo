@@ -21,7 +21,6 @@ interface AssetGridProps {
     isDownloading?: boolean
     selectedFolderId: string | null
     onImageClick?: (url: string) => void
-    onImageEdit?: (type: 'character' | 'location' | 'prop', id: string, name: string, imageIndex: number, appearanceIndex?: number) => void
     onCharacterEdit?: (character: unknown, appearance: unknown) => void
     onLocationEdit?: (location: unknown, imageIndex: number) => void
     onPropEdit?: (prop: unknown, imageIndex: number) => void
@@ -141,7 +140,6 @@ export function AssetGrid({
     isDownloading,
     selectedFolderId: _selectedFolderId,
     onImageClick,
-    onImageEdit,
     onCharacterEdit,
     onLocationEdit,
     onPropEdit,
@@ -374,7 +372,6 @@ export function AssetGrid({
                                         key={character.id}
                                         character={character}
                                         onImageClick={onImageClick}
-                                        onImageEdit={onImageEdit}
                                         onEdit={onCharacterEdit}
                                     />
                                 ))}
@@ -396,7 +393,6 @@ export function AssetGrid({
                                         key={location.id}
                                         location={location}
                                         onImageClick={onImageClick}
-                                        onImageEdit={onImageEdit}
                                         onEdit={onLocationEdit}
                                     />
                                 ))}
@@ -418,7 +414,6 @@ export function AssetGrid({
                                         location={prop}
                                         assetType="prop"
                                         onImageClick={onImageClick}
-                                        onImageEdit={onImageEdit}
                                         onEdit={onPropEdit}
                                     />
                                 ))}

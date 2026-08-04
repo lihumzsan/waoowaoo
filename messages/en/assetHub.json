@@ -19,6 +19,9 @@
   "downloading": "Packing...",
   "downloadSuccess": "Download Complete",
   "downloadFailed": "Download Failed",
+  "folderCreateFailed": "Failed to create folder",
+  "folderUpdateFailed": "Failed to update folder",
+  "folderDeleteFailed": "Failed to delete folder",
   "downloadEmpty": "No image assets to download",
   "filteredEmptyHint": "Click \"New Asset\" to add assets",
   "filteredEmpty": {

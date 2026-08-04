@@ -1,15 +1,18 @@
 export const WORKSPACE_ASSISTANT_PANEL_WIDTH_PX = 500
 export const WORKSPACE_ASSISTANT_PANEL_MIN_WIDTH_PX = 380
 export const WORKSPACE_ASSISTANT_PANEL_MAX_WIDTH_PX = 760
-export const WORKSPACE_ASSISTANT_RAIL_WIDTH_PX = 64
-export const WORKSPACE_ASSISTANT_TOP_OFFSET = '10rem'
+
+/**
+ * 面板把当前宽度写到 root 的这个 CSS 变量上;
+ * 画布页 dock(Navbar dockAnchor="assistant-panel")用它贴住面板左缘并跟随拖宽。
+ */
+export const WORKSPACE_ASSISTANT_PANEL_WIDTH_CSS_VAR = '--workspace-assistant-panel-width'
 
 export interface WorkspaceAssistantPanelLayoutState {
   occupiedWidthPx: number
   panelWidthPx: number
-  railWidthPx: number
   translateXPx: number
-  state: 'collapsed' | 'expanded'
+  state: 'expanded'
 }
 
 export function clampWorkspaceAssistantPanelWidth(widthPx: number): number {
@@ -20,15 +23,13 @@ export function clampWorkspaceAssistantPanelWidth(widthPx: number): number {
 }
 
 export function buildWorkspaceAssistantPanelLayout(
-  isCollapsed: boolean,
   expandedWidthPx: number = WORKSPACE_ASSISTANT_PANEL_WIDTH_PX,
 ): WorkspaceAssistantPanelLayoutState {
   const panelWidthPx = clampWorkspaceAssistantPanelWidth(expandedWidthPx)
   return {
     occupiedWidthPx: 0,
-    panelWidthPx: isCollapsed ? WORKSPACE_ASSISTANT_RAIL_WIDTH_PX : panelWidthPx,
-    railWidthPx: WORKSPACE_ASSISTANT_RAIL_WIDTH_PX,
+    panelWidthPx,
     translateXPx: 0,
-    state: isCollapsed ? 'collapsed' : 'expanded',
+    state: 'expanded',
   }
 }

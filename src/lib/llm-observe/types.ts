@@ -12,8 +12,6 @@ export type LLMStreamChunk = {
 export type LLMObserveMeta = {
   route?: string | null
   provider?: string | null
-  episodeId?: string | null
-  clipId?: string | null
 }
 
 export type LLMObservePayload = {

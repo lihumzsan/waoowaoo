@@ -1,4 +1,8 @@
 import type { AiOptionSchema, AiOptionValidationResult, AiOptionValidator } from '@/lib/ai-registry/types'
+import {
+  REASONING_EFFORT_VALUES,
+  type ReasoningEffort,
+} from '@/lib/ai-registry/reasoning-effort'
 
 function ok(): AiOptionValidationResult {
   return { ok: true }
@@ -37,16 +41,6 @@ function integerRangeValidator(input: { min?: number; max?: number }): AiOptionV
   }
 }
 
-function numberRangeValidator(input: { min?: number; max?: number }): AiOptionValidator {
-  return (value) => {
-    if (value === undefined) return ok()
-    if (typeof value !== 'number' || !Number.isFinite(value)) return fail('expected_number')
-    if (input.min !== undefined && value < input.min) return fail(`min=${input.min}`)
-    if (input.max !== undefined && value > input.max) return fail(`max=${input.max}`)
-    return ok()
-  }
-}
-
 function enumValidator(values: readonly string[]): AiOptionValidator {
   const allowed = new Set(values)
   return (value) => {
@@ -57,10 +51,8 @@ function enumValidator(values: readonly string[]): AiOptionValidator {
 }
 
 const LLM_ALLOWED_KEYS = [
-  'temperature',
   'reasoning',
   'reasoningEffort',
-  'maxRetries',
   'projectId',
   'action',
   'streamStepId',
@@ -71,16 +63,16 @@ const LLM_ALLOWED_KEYS = [
   '__skipAutoStream',
  ] as const
 
-export function buildLlmOptionSchema(): AiOptionSchema {
+export function buildLlmOptionSchema(
+  reasoningEffortOptions: readonly ReasoningEffort[] = REASONING_EFFORT_VALUES,
+): AiOptionSchema {
   const allowedKeys = new Set<string>(LLM_ALLOWED_KEYS)
   const validators = Object.fromEntries(
     Array.from(allowedKeys).map((key) => [key, passthroughValidator]),
   ) as Record<string, AiOptionValidator>
 
-  validators.temperature = numberRangeValidator({ min: 0, max: 2 })
   validators.reasoning = booleanValidator()
-  validators.reasoningEffort = enumValidator(['minimal', 'low', 'medium', 'high'])
-  validators.maxRetries = integerRangeValidator({ min: 0, max: 10 })
+  validators.reasoningEffort = enumValidator(reasoningEffortOptions)
 
   validators.projectId = nonEmptyStringValidator()
   validators.action = nonEmptyStringValidator()

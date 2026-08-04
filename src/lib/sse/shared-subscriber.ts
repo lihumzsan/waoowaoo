@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import { logError as _ulogError } from '@/lib/logging/core'
 import type Redis from 'ioredis'
 import { createSubscriber } from '@/lib/redis'
@@ -19,7 +20,7 @@ class SharedSubscriber {
         try {
           handler(message)
         } catch (error: unknown) {
-          const message = error instanceof Error ? error.message : String(error)
+          const message = describeUnknownError(error)
           _ulogError(`[SSE:shared] listener error channel=${channel} error=${message}`)
         }
       }

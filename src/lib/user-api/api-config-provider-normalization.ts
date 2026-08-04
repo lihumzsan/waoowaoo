@@ -1,15 +1,27 @@
 import { ApiError } from '@/lib/api-errors'
+import { isApiConfigCatalogProviderId } from '@/lib/ai-registry/api-config-catalog'
 import type { StoredProvider } from './api-config-types'
 import { getProviderKey, isRecord, readTrimmedString } from './api-config-shared'
 
-const SUPPORTED_PROVIDER_KEYS = new Set(['ark', 'codex', 'openrouter', 'fal', 'google'])
-
 function assertSupportedProvider(providerId: string, field: string) {
-  if (SUPPORTED_PROVIDER_KEYS.has(getProviderKey(providerId))) return
+  if (isApiConfigCatalogProviderId(providerId)) return
   throw new ApiError('INVALID_PARAMS', {
     code: 'PROVIDER_NOT_SUPPORTED',
     field,
   })
+}
+
+function normalizeProviderBaseUrl(value: string, field: string): string {
+  try {
+    const parsed = new URL(value)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error('PROTOCOL_INVALID')
+    return parsed.toString().replace(/\/$/, '')
+  } catch {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'PROVIDER_BASE_URL_INVALID',
+      field,
+    })
+  }
 }
 
 export function resolveProviderByIdOrKey(providers: StoredProvider[], providerId: string): StoredProvider | null {
@@ -71,7 +83,10 @@ export function normalizeProvidersInput(rawProviders: unknown): StoredProvider[]
       })
     }
 
-    const baseUrl = readTrimmedString(item.baseUrl) || undefined
+    const rawBaseUrl = readTrimmedString(item.baseUrl)
+    const baseUrl = rawBaseUrl
+      ? normalizeProviderBaseUrl(rawBaseUrl, `providers[${index}].baseUrl`)
+      : undefined
 
     normalized.push({
       id,

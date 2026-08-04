@@ -17,76 +17,51 @@ export const TASK_EVENT_TYPE = {
   PROGRESS: 'task.progress',
   COMPLETED: 'task.completed',
   FAILED: 'task.failed',
+  CANCELED: 'task.canceled',
 } as const
 
 export type TaskEventType = (typeof TASK_EVENT_TYPE)[keyof typeof TASK_EVENT_TYPE]
 
-export const TASK_SSE_EVENT_TYPE = {
-  LIFECYCLE: 'task.lifecycle',
-  STREAM: 'task.stream',
-} as const
-
-export const WORKSPACE_SSE_EVENT_TYPE = {
-  MUTATION_BATCH: 'mutation.batch',
-  RESOURCE_CHANGED: 'resource.changed',
-} as const
-
-export type TaskSSEEventType = (typeof TASK_SSE_EVENT_TYPE)[keyof typeof TASK_SSE_EVENT_TYPE]
-export type WorkspaceSSEEventType = (typeof WORKSPACE_SSE_EVENT_TYPE)[keyof typeof WORKSPACE_SSE_EVENT_TYPE]
-
 export const TASK_LIFECYCLE_EVENT_TYPES = [
   TASK_EVENT_TYPE.CREATED,
   TASK_EVENT_TYPE.PROCESSING,
+  TASK_EVENT_TYPE.PROGRESS,
   TASK_EVENT_TYPE.COMPLETED,
   TASK_EVENT_TYPE.FAILED,
+  TASK_EVENT_TYPE.CANCELED,
 ] as const
 
 export type TaskLifecycleEventType = (typeof TASK_LIFECYCLE_EVENT_TYPES)[number]
 
+export const TASK_TERMINAL_EVENT_TYPES = [
+  TASK_EVENT_TYPE.COMPLETED,
+  TASK_EVENT_TYPE.FAILED,
+  TASK_EVENT_TYPE.CANCELED,
+] as const
+
+export type TaskTerminalEventType = (typeof TASK_TERMINAL_EVENT_TYPES)[number]
+
+export function isTaskTerminalEventType(value: string | null | undefined): value is TaskTerminalEventType {
+  return value === TASK_EVENT_TYPE.COMPLETED
+    || value === TASK_EVENT_TYPE.FAILED
+    || value === TASK_EVENT_TYPE.CANCELED
+}
+
 export const TASK_TYPE = {
-  IMAGE_PANEL: 'image_panel',
-  EDIT_STYLE_PREVIEW_IMAGE: 'edit_style_preview_image',
-  EDIT_SCRIPT_STORYBOARD_PREPARE: 'edit_script_storyboard_prepare',
-  EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN: 'edit_script_storyboard_camera_plan',
-  IMAGE_CHARACTER: 'image_character',
-  IMAGE_LOCATION: 'image_location',
-  MUSIC_GENERATE: 'music_generate',
-  BGM_SCORE_GENERATE: 'bgm_score_generate',
-  FINAL_VIDEO_RENDER: 'final_video_render',
-  VIDEO_PANEL: 'video_panel',
-  VIDEO_GROUP: 'video_group',
-  REGENERATE_STORYBOARD_TEXT: 'regenerate_storyboard_text',
-  INSERT_PANEL: 'insert_panel',
-  PANEL_VARIANT: 'panel_variant',
-  MODIFY_ASSET_IMAGE: 'modify_asset_image',
-  REGENERATE_GROUP: 'regenerate_group',
-  ASSET_HUB_IMAGE: 'asset_hub_image',
-  ASSET_HUB_MODIFY: 'asset_hub_modify',
-  ANALYZE_NOVEL: 'analyze_novel',
-  CLIPS_BUILD: 'clips_build',
-  SCREENPLAY_CONVERT: 'screenplay_convert',
-  ANALYZE_GLOBAL: 'analyze_global',
-  EDIT_SCRIPT_GENERATE: 'edit_script_generate',
-  AI_MODIFY_APPEARANCE: 'ai_modify_appearance',
-  AI_MODIFY_LOCATION: 'ai_modify_location',
-  AI_MODIFY_PROP: 'ai_modify_prop',
-  AI_MODIFY_SHOT_PROMPT: 'ai_modify_shot_prompt',
-  ANALYZE_SHOT_VARIANTS: 'analyze_shot_variants',
-  AI_CREATE_CHARACTER: 'ai_create_character',
-  AI_CREATE_LOCATION: 'ai_create_location',
-  REFERENCE_TO_CHARACTER: 'reference_to_character',
-  EPISODE_SPLIT_LLM: 'episode_split_llm',
-  ASSET_HUB_AI_DESIGN_CHARACTER: 'asset_hub_ai_design_character',
-  ASSET_HUB_AI_DESIGN_LOCATION: 'asset_hub_ai_design_location',
-  ASSET_HUB_AI_MODIFY_CHARACTER: 'asset_hub_ai_modify_character',
-  ASSET_HUB_AI_MODIFY_LOCATION: 'asset_hub_ai_modify_location',
-  ASSET_HUB_AI_MODIFY_PROP: 'asset_hub_ai_modify_prop',
-  ASSET_HUB_REFERENCE_TO_CHARACTER: 'asset_hub_reference_to_character',
+  WORKSPACE_RESOURCE_IMAGE: 'workspace_resource_image',
+  WORKSPACE_RESOURCE_AUDIO: 'workspace_resource_audio',
+  WORKSPACE_RESOURCE_VOICE: 'workspace_resource_voice',
+  WORKSPACE_RESOURCE_VIDEO: 'workspace_resource_video',
+  WORKSPACE_RESOURCE_VIDEO_MERGE: 'workspace_resource_video_merge',
 } as const
 
 export type TaskType = (typeof TASK_TYPE)[keyof typeof TASK_TYPE]
 
-export type QueueType = 'image' | 'video' | 'music' | 'text'
+const TASK_TYPE_VALUES: ReadonlySet<string> = new Set(Object.values(TASK_TYPE))
+
+export function isTaskType(value: unknown): value is TaskType {
+  return typeof value === 'string' && TASK_TYPE_VALUES.has(value)
+}
 
 export type BillingMode = 'OFF' | 'SHADOW' | 'ENFORCE'
 
@@ -100,10 +75,10 @@ export type TaskBillingInfo =
     billable: true
     source: 'task'
     taskType: TaskType
-    apiType: 'text' | 'image' | 'video' | 'music'
+    apiType: 'text' | 'image' | 'video' | 'music' | 'voice'
     model: string
     quantity: number
-    unit: 'token' | 'image' | 'video' | 'second' | 'call'
+    unit: 'token' | 'image' | 'video' | 'second' | 'call' | 'character'
     maxFrozenCost: number
     pricingVersion?: string
     action: string
@@ -115,83 +90,52 @@ export type TaskBillingInfo =
     chargedCost?: number
   }
 
-export type TaskJobData = {
+export type TaskExecutionData = {
   taskId: string
+  parentTaskId?: string | null
   type: TaskType
   locale: Locale
   projectId: string
-  episodeId?: string | null
   targetType: string
   targetId: string
   payload?: Record<string, unknown> | null
   billingInfo?: TaskBillingInfo | null
   userId: string
+  operationId?: string | null
+  operationSource?: string | null
+  approvalGrantId?: string | null
+  operationExecutionId?: string | null
+  operationPlanTaskId?: string | null
+  operationRequestId?: string | null
   trace?: {
     requestId?: string | null
   } | null
 }
 
-export type TaskSSEEvent = {
-  id: string
-  type: TaskSSEEventType
-  taskId: string
-  projectId: string
-  userId: string
-  ts: string
-  taskType?: string | null
-  targetType?: string | null
-  targetId?: string | null
-  episodeId?: string | null
-  payload?: (Record<string, unknown> & {
-    lifecycleType?: TaskLifecycleEventType
-  }) | null
-}
-
-export type MutationBatchSSEEvent = {
-  id: string
-  type: typeof WORKSPACE_SSE_EVENT_TYPE.MUTATION_BATCH
-  mutationBatchId: string
-  projectId: string
-  userId: string
-  ts: string
-  operationId: string | null
-  episodeId: string | null
-  targets: Array<{ targetType: string; targetId: string }>
-}
-
 export type WorkspaceResourceName =
-  | 'editScreenplay'
-  | 'editScript'
-  | 'episodeData'
+  | 'globalAssets'
   | 'projectData'
-  | 'projectContext'
+  | 'workspaceResources'
 
-export type ResourceChangedSSEEvent = {
-  id: string
-  type: typeof WORKSPACE_SSE_EVENT_TYPE.RESOURCE_CHANGED
+export type WorkspaceResourceRef = {
+  kind: WorkspaceResourceName
   projectId: string
-  userId: string
-  ts: string
-  episodeId: string | null
-  resources: WorkspaceResourceName[]
 }
-
-export type SSEEvent = TaskSSEEvent | MutationBatchSSEEvent | ResourceChangedSSEEvent
 
 export type CreateTaskInput = {
   userId: string
   projectId: string
-  episodeId?: string | null
+  parentTaskId?: string | null
   type: TaskType
   targetType: string
   targetId: string
   payload?: Record<string, unknown> | null
   dedupeKey?: string | null
-  priority?: number
-  maxAttempts?: number
   billingInfo?: TaskBillingInfo | null
   operationId?: string | null
   operationSource?: string | null
-  operationConfirmed?: boolean | null
+  approvalGrantId?: string | null
+  operationExecutionId?: string | null
+  operationPlanTaskId?: string | null
   operationRequestId?: string | null
 }

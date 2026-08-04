@@ -8,6 +8,23 @@ export interface ProjectDraftInput {
   description?: string | null
 }
 
+export type ProjectUpdateInput = {
+  readonly command:
+    | {
+        readonly kind: 'name'
+        readonly name: string
+      }
+    | {
+        readonly kind: 'description'
+        readonly description: string | null
+      }
+    | {
+        readonly kind: 'details'
+        readonly name: string
+        readonly description: string | null
+      }
+}
+
 export interface NormalizedProjectDraft {
   name: string
   description: string | null

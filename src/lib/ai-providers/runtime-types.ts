@@ -1,12 +1,14 @@
-import type { LanguageModel } from 'ai'
+import type { LanguageModel, ModelMessage } from 'ai'
 import type {
-  AiLlmExecutionInput,
   AiLlmExecutionResult,
+  AiLlmMessage,
+  AiLlmProtocol,
+  AiPublicReasoningMode,
   AiResolvedSelection,
   AiVariantDescriptor,
   AiLlmProviderConfig,
 } from '@/lib/ai-registry/types'
-import type { ProviderChatCompletionOptions, ProviderChatCompletionStreamCallbacks } from '@/lib/ai-providers/shared/llm-support'
+import type { ReasoningEffort } from '@/lib/ai-registry/reasoning-effort'
 
 export type GenerateResult = {
   success: boolean
@@ -25,36 +27,6 @@ export type GenerateResult = {
   externalId?: string
 }
 
-export type AiProviderLlmResult = Pick<
-  AiLlmExecutionResult,
-  'completion' | 'logProvider' | 'text' | 'reasoning' | 'usage' | 'successDetails'
->
-
-export type AiProviderLlmStreamContext = {
-  userId: string
-  selection: {
-    provider: string
-    modelId: string
-    modelKey: string
-    variantData?: { [key: string]: unknown }
-  }
-  providerConfig: AiLlmProviderConfig
-  messages: { role: 'user' | 'assistant' | 'system'; content: string }[]
-  options: ProviderChatCompletionOptions
-  callbacks?: ProviderChatCompletionStreamCallbacks
-}
-
-export type AiProviderVisionExecutionContext = {
-  userId: string
-  providerKey: string
-  selection: AiLlmExecutionInput['selection']
-  providerConfig: AiLlmExecutionInput['providerConfig']
-  textPrompt: string
-  imageUrls: string[]
-  temperature: number
-  reasoning: boolean
-}
-
 export type AiProviderLanguageModelContext = {
   providerKey: string
   selection: {
@@ -63,7 +35,23 @@ export type AiProviderLanguageModelContext = {
     modelKey: string
   }
   providerConfig: AiLlmProviderConfig
+  protocol: AiLlmProtocol
+  publicReasoningMode: AiPublicReasoningMode
+  executionMode: 'sync' | 'stream' | 'vision'
+  reasoning: boolean
+  reasoningEffort: ReasoningEffort
+  messages?: AiLlmMessage[]
+  openRouterSessionId?: string
 }
+
+export type AiProviderLanguageModelRequestContext = Omit<
+  AiProviderLanguageModelContext,
+  'protocol' | 'publicReasoningMode'
+>
+export type AiProviderLanguageModelValidationContext = Pick<
+  AiProviderLanguageModelContext,
+  'executionMode'
+>
 
 export type AiProviderImageExecutionContext = {
   userId: string
@@ -100,12 +88,12 @@ export type AiProviderVideoExecutionContext = {
   options?: {
     prompt?: string
     duration?: number
-    fps?: number
     resolution?: string
     aspectRatio?: string
     generateAudio?: boolean
     lastFrameImageUrl?: string
     referenceImages?: string[]
+    referenceAudios?: string[]
     [key: string]: unknown
   }
 }
@@ -119,29 +107,108 @@ export type AiProviderMusicExecutionContext = {
   }
   prompt: string
   options?: {
+    negativePrompt?: string
     durationSeconds?: number
     vocalMode?: 'instrumental' | 'vocal'
     genre?: string
     mood?: string
     bpm?: number
     outputFormat?: 'mp3' | 'wav'
+    referenceVideoUrl?: string
+    referenceVideoDurationMs?: number
+    /** Score only this window of the reference video (music_direction cue). */
+    scoreWindowStartMs?: number
+    scoreWindowEndMs?: number
     [key: string]: unknown
   }
 }
 
-export type AiProviderMediaModalityAdapter<M extends 'image' | 'video' | 'music'> = {
+export type AiProviderVoiceExecutionContext = {
+  userId: string
+  selection: AiResolvedSelection & {
+    provider: string
+    modelId: string
+    modelKey: string
+  }
+  description: string
+  text: string
+  options?: {
+    language?: string
+    [key: string]: unknown
+  }
+}
+
+export type AiProviderMediaModalityAdapter<M extends 'image' | 'video' | 'music' | 'voice'> = {
   describe: (selection: AiResolvedSelection) => AiVariantDescriptor
   execute: (
     input: M extends 'image'
       ? AiProviderImageExecutionContext
       : M extends 'video'
         ? AiProviderVideoExecutionContext
-        : AiProviderMusicExecutionContext,
+        : M extends 'music'
+          ? AiProviderMusicExecutionContext
+          : AiProviderVoiceExecutionContext,
   ) => Promise<GenerateResult>
 }
 
 export type AiProviderLanguageModelAdapter = {
   create: (input: AiProviderLanguageModelContext) => LanguageModel
+  prepareTextMessages?: (messages: AiLlmMessage[]) => ModelMessage[]
+  validateResult?: (
+    result: AiLlmExecutionResult,
+    context: AiProviderLanguageModelValidationContext,
+  ) => void
+}
+
+export type AiProviderLlmSessionContext = {
+  kind: 'llm' | 'vision'
+  userId: string
+  projectId?: string
+  action?: string
+  modelKey: string
+  explicitSessionId?: string
+}
+
+export type AiProviderConnectionTestStepName = 'models' | 'textGen' | 'imageGen' | 'credits'
+
+export type AiProviderConnectionTestMessageKey =
+  | 'connectionTest.authInvalid'
+  | 'connectionTest.emptyResponse'
+  | 'connectionTest.modelsOk'
+  | 'connectionTest.networkError'
+  | 'connectionTest.providerError'
+  | 'connectionTest.rateLimited'
+  | 'connectionTest.skippedModelsFailure'
+  | 'connectionTest.skippedSpend'
+  | 'connectionTest.textGenerationOk'
+  | 'connectionTest.timeout'
+
+export type AiProviderConnectionTestStep = {
+  name: AiProviderConnectionTestStepName
+  status: 'pass' | 'fail' | 'skip'
+  messageKey: AiProviderConnectionTestMessageKey
+  model?: string
+}
+
+export type AiProviderConnectionTestReport = {
+  success: boolean
+  steps: AiProviderConnectionTestStep[]
+}
+
+export type AiProviderLlmConnectionInput = {
+  apiKey: string
+  baseUrl?: string
+  model?: string
+}
+
+export type AiProviderLlmConnectionResult = {
+  model?: string
+  answer?: string
+}
+
+export type AiProviderConnectionTester = {
+  testLlm?: (input: AiProviderLlmConnectionInput) => Promise<AiProviderLlmConnectionResult>
+  diagnose: (input: { apiKey: string; baseUrl?: string; llmModel?: string }) => Promise<AiProviderConnectionTestReport>
 }
 
 export interface AiProviderAdapter {
@@ -149,8 +216,8 @@ export interface AiProviderAdapter {
   image?: AiProviderMediaModalityAdapter<'image'>
   video?: AiProviderMediaModalityAdapter<'video'>
   music?: AiProviderMediaModalityAdapter<'music'>
+  voice?: AiProviderMediaModalityAdapter<'voice'>
   languageModel?: AiProviderLanguageModelAdapter
-  completeLlm?: (input: AiLlmExecutionInput) => Promise<AiProviderLlmResult>
-  streamLlm?: (input: AiProviderLlmStreamContext) => Promise<AiProviderLlmResult>
-  completeVision?: (input: AiProviderVisionExecutionContext) => Promise<AiProviderLlmResult>
+  resolveLlmSessionId?: (input: AiProviderLlmSessionContext) => string | undefined
+  connectionTest?: AiProviderConnectionTester
 }

@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { AppIcon } from '@/components/ui/icons'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { getProviderKey, isPresetComingSoonModel, type CustomModel } from '../types'
-import { CODEX_PROVIDER_KEY } from '@/lib/ai-registry/codex-defaults'
 import type { UseProviderCardStateResult } from './hooks/useProviderCardState'
 import type {
   ProviderCardModelType,
@@ -67,8 +66,7 @@ const MODEL_TYPES: readonly ProviderCardVisibleType[] = ['llm', 'image', 'video'
 
 export function getAddableModelTypesForProvider(providerId: string): ProviderCardModelType[] {
   const providerKey = getProviderKey(providerId)
-  if (providerKey === CODEX_PROVIDER_KEY) return ['llm', 'image']
-  if (providerKey === 'openrouter') return ['llm', 'video']
+  if (providerKey === 'openrouter') return ['llm', 'image', 'video']
   if (providerKey === 'fal') return ['image', 'video']
   if (providerKey === 'google') return ['llm', 'image', 'video', 'music']
   if (providerKey === 'ark') return ['llm', 'image', 'video']
@@ -124,7 +122,6 @@ export function ProviderAdvancedFields({
   state,
 }: ProviderAdvancedFieldsProps) {
   const providerKey = getProviderKey(provider.id)
-  const hasProviderConnection = providerKey === CODEX_PROVIDER_KEY || !!provider.hasApiKey
   const addableModelTypes = new Set<ProviderCardModelType>(getAddableModelTypesForProvider(provider.id))
   const visibleTypes = useMemo(
     () => getVisibleModelTypesForProvider(provider.id, state.groupedModels),
@@ -266,7 +263,7 @@ export function ProviderAdvancedFields({
                 onToggleModel={onToggleModel}
                 onDeleteModel={onDeleteModel}
                 onUpdateModel={onUpdateModel}
-                hasApiKey={hasProviderConnection}
+                hasApiKey={!!provider.hasApiKey}
               />
             ))}
           </div>

@@ -4,12 +4,9 @@
     "characters": "Characters",
     "locations": "Locations",
     "props": "Props",
-    "analyze": "Analyze Assets",
-    "analyzing": "Analyzing...",
     "generateAll": "Generate All",
     "noCharacters": "No characters",
     "noLocations": "No locations",
-    "assetsTitle": "Asset Analysis",
     "characterAssets": "Character Assets",
     "locationAssets": "Location Assets",
     "propAssets": "Prop Assets",
@@ -103,13 +100,6 @@
     "generating": "Generating",
     "regenerating": "Regenerating",
     "generatingPlaceholder": "Waiting",
-    "spatialProfileStatus": {
-      "pending": "Spatial Pending",
-      "analyzing": "Analyzing Space",
-      "ready": "Spatial Ready",
-      "failed": "Spatial Failed",
-      "stale": "Spatial Stale"
-    },
     "selectTip": "Once selected and confirmed, you can edit and modify the image",
     "selectFirst": "Please select an image first",
     "useThis": "Use this option",
@@ -159,6 +149,7 @@
     "subDescPlaceholder": "Describe only the changes...",
     "subDescTip": "Only describe changes (clothes, state), face/body inherits from primary",
     "adding": "Adding...",
+    "processing": "Processing...",
     "insufficientBalanceDefault": "Insufficient balance, please top up to continue",
     "addFailedGeneric": "Add Failed",
     "appearancesCount": "Appearances",
@@ -198,13 +189,6 @@
     "showPending": "Pending",
     "assetManagement": "Asset Management",
     "assetCount": "{total} assets ({appearances} character appearances + {locations} locations + {props} props)",
-    "globalAnalyze": "Global Analysis",
-    "globalAnalyzing": "Performing global asset analysis...",
-    "globalAnalyzingHint": "Please don't refresh. Results will appear automatically when complete",
-    "globalAnalyzingTip": "Analyzing all episodes, extracting characters and locations...",
-    "globalAnalyzeHint": "Analyze all episodes to extract characters and locations",
-    "globalAnalyzeSuccess": "Global analysis complete: {characters} new characters, {locations} new locations",
-    "globalAnalyzeFailed": "Global analysis failed",
     "generateAll": "Generate All Images",
     "generateAllNoop": "All assets already have images, nothing to generate",
     "generating": "Generating ({current}/{total})",
@@ -236,22 +220,6 @@
     "upload": "Upload",
     "unknownError": "Unknown error"
   },
-  "video": {
-    "panelCard": {
-      "generating": "Generating...",
-      "editPrompt": "Edit Prompt"
-    }
-  },
-  "smartImport": {
-    "preview": {
-      "saving": "Saving..."
-    }
-  },
-  "storyboard": {
-    "group": {
-      "generating": "Generating..."
-    }
-  },
   "errors": {
     "saveFailed": "Save Failed, please retry",
     "failed": "failed, please retry",
@@ -260,9 +228,7 @@
     "createFailed": "Creation failed"
   },
   "filterBar": {
-    "all": "All",
-    "allEpisodes": "All Episodes",
-    "episodeLabel": "Ep.{number} · {name}"
+    "all": "All"
   },
   "assetLibrary": {
     "button": "Asset Library",
@@ -286,7 +252,6 @@
     "characterPlaceholder": "Describe what you want to change, e.g.: Change hair to blonde, add glasses, change to casual clothes...",
     "locationPlaceholder": "Describe what you want to change, e.g.: Add more trees, change to night scene...",
     "propPlaceholder": "Describe what you want to change, e.g.: change to brushed silver metal, add carved patterns to the handle, remove gem decoration...",
-    "storyboardPlaceholder": "Describe what you want to change, e.g.: Change background color, adjust character expression...",
     "noAssetHint": "No assets, click \"Add Asset\" to select",
     "referenceImages": "Reference Images",
     "referenceImagesHint": "(optional, paste supported)",

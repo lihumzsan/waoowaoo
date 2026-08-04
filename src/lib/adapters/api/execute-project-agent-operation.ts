@@ -1,106 +1,182 @@
 import type { NextRequest } from 'next/server'
 import { ApiError } from '@/lib/api-errors'
 import { createProjectAgentOperationRegistryForApi } from '@/lib/operations/registry'
-import { publishWorkspaceResourceChangedEventsFromWriteResult } from '@/lib/workspace-resource/resource-change-events'
+import {
+  invokeProjectAgentOperation,
+  prepareProjectAgentOperationInput,
+} from '@/lib/operations/invocation'
+import {
+  buildDirectOperationInvocationIdentity,
+  executeApprovedTaskOperationViaTemporal,
+  executeDirectTaskOperationViaTemporal,
+} from '@/lib/operations/durable-dispatch'
+import { isBillablePlannedOperation } from '@/lib/operations/types'
+import {
+  extractPrismaMissingColumn,
+} from '@/lib/adapters/operation-error-normalizer'
+import { normalizeAnyError } from '@/lib/errors/normalize'
+import {
+  OPERATION_MUTATION_RESPONSE_PROTOCOL,
+  type OperationMutationResponse,
+} from '@/lib/operations/mutation-receipt'
+import { WORKSPACE_RESOURCE_IMPACT } from '@/lib/workspace-resource/resource-impact'
+import { readOperationRequestId } from '@/lib/operations/api-request-identity'
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function toMessage(error: unknown): string {
-  if (error instanceof Error) return error.message?.trim() || 'OPERATION_FAILED'
-  if (typeof error === 'string') return error.trim() || 'OPERATION_FAILED'
-  try {
-    const serialized = JSON.stringify(error)
-    if (typeof serialized === 'string' && serialized.trim()) return serialized.trim()
-    return 'OPERATION_FAILED'
-  } catch {
-    return 'OPERATION_FAILED'
-  }
-}
-
-function extractPrismaMissingColumn(error: unknown): string | null {
-  if (!isRecord(error)) return null
-  if (error.code !== 'P2022') return null
-  const meta = isRecord(error.meta) ? error.meta : null
-  const column = typeof meta?.column === 'string' ? meta.column.trim() : ''
-  return column || null
-}
-
-function inferApiErrorCodeFromMessage(message: string): 'NOT_FOUND' | 'INVALID_PARAMS' | 'FORBIDDEN' | 'UNAUTHORIZED' | 'CONFLICT' | null {
-  const lower = message.toLowerCase()
-  if (lower.includes('unauthorized') || lower.includes('need login') || lower.includes('not authenticated')) return 'UNAUTHORIZED'
-  if (lower.includes('forbidden') || lower.includes('permission denied')) return 'FORBIDDEN'
-  if (lower.includes('not found') || lower.includes('不存在') || lower.includes('missing record') || lower.includes('not_found')) return 'NOT_FOUND'
-  if (lower.includes('conflict') || lower.includes('already exists') || lower.includes('duplicate')) return 'CONFLICT'
-  if (lower.includes('invalid') || lower.includes('missing') || lower.includes('required') || lower.includes('bad request')) return 'INVALID_PARAMS'
-  return null
-}
-
-export async function executeProjectAgentOperationFromApi(params: {
+interface ExecuteProjectAgentOperationFromApiParams {
   request: NextRequest
   operationId: string
   projectId: string
   userId: string
   context?: {
     locale?: string | null
-    episodeId?: string | null
     selectedScopeRef?: string | null
-    selectedPanelId?: string | null
-    selectedClipId?: string | null
     selectedAssetId?: string | null
   }
   input: unknown
   source?: string
-}) {
+  responseContract?: 'operation_mutation_response_v1'
+  requireIdempotencyKey?: boolean
+}
+
+export async function executeProjectAgentOperationFromApi(
+  params: ExecuteProjectAgentOperationFromApiParams & {
+    responseContract: 'operation_mutation_response_v1'
+  },
+): Promise<OperationMutationResponse>
+export async function executeProjectAgentOperationFromApi(
+  params: ExecuteProjectAgentOperationFromApiParams & {
+    responseContract?: undefined
+  },
+): Promise<unknown>
+export async function executeProjectAgentOperationFromApi(
+  params: ExecuteProjectAgentOperationFromApiParams,
+): Promise<unknown> {
+  const apiRequestId = readOperationRequestId(params.request, {
+    required: Boolean(params.requireIdempotencyKey),
+    operationId: params.operationId,
+  })
   const registry = createProjectAgentOperationRegistryForApi()
   const operation = registry[params.operationId]
-  if (!operation) {
-    throw new ApiError('NOT_FOUND', {
-      message: `operation not found: ${params.operationId}`,
+  const requiresMutationResponse = Boolean(
+    operation?.effects.writes
+    && operation.effects.workspaceResourceImpact !== WORKSPACE_RESOURCE_IMPACT.NONE,
+  )
+  const requestedMutationResponse =
+    params.responseContract === OPERATION_MUTATION_RESPONSE_PROTOCOL
+  if (
+    operation
+    && requiresMutationResponse !== requestedMutationResponse
+  ) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: requiresMutationResponse
+        ? 'OPERATION_MUTATION_RESPONSE_CONTRACT_REQUIRED'
+        : 'OPERATION_MUTATION_RESPONSE_CONTRACT_FORBIDDEN',
+      operationId: params.operationId,
     })
   }
-
-  const parsed = operation.inputSchema.safeParse(params.input)
-  if (!parsed.success) {
-    throw new ApiError('INVALID_PARAMS', {
-      message: 'INVALID_PARAMS',
-      issues: parsed.error.issues,
-    })
+  const operationContext = {
+    request: params.request,
+    requestId: apiRequestId,
+    userId: params.userId,
+    projectId: params.projectId,
+    context: {
+      ...(params.context?.locale ? { locale: params.context.locale } : {}),
+      ...(params.context?.selectedScopeRef ? { selectedScopeRef: params.context.selectedScopeRef } : {}),
+      ...(params.context?.selectedAssetId ? { selectedAssetId: params.context.selectedAssetId } : {}),
+    },
+    source: params.source || 'project-ui',
+    writer: null,
+    toolCallId: null,
+    activityId: null,
   }
 
   try {
-    const result = await operation.execute({
-      request: params.request,
-      userId: params.userId,
-      projectId: params.projectId,
-      context: {
-        ...(params.context?.locale ? { locale: params.context.locale } : {}),
-        ...(params.context?.episodeId ? { episodeId: params.context.episodeId } : {}),
-        ...(params.context?.selectedScopeRef ? { selectedScopeRef: params.context.selectedScopeRef } : {}),
-        ...(params.context?.selectedPanelId ? { selectedPanelId: params.context.selectedPanelId } : {}),
-        ...(params.context?.selectedClipId ? { selectedClipId: params.context.selectedClipId } : {}),
-        ...(params.context?.selectedAssetId ? { selectedAssetId: params.context.selectedAssetId } : {}),
-      },
-      source: params.source || 'project-ui',
-      writer: null,
-      toolCallId: null,
-    }, parsed.data)
-    const outputParsed = operation.outputSchema.safeParse(result)
-    if (!outputParsed.success) {
-      throw new ApiError('EXTERNAL_ERROR', {
-        code: 'OPERATION_OUTPUT_INVALID',
-        message: `operation output schema mismatch: ${params.operationId}`,
-        issues: outputParsed.error.issues,
+    if (operation && isBillablePlannedOperation(operation)) {
+      const prepared = prepareProjectAgentOperationInput({
+        channel: 'api',
+        operation,
+        context: operationContext.context,
+        input: params.input,
       })
+      if (!prepared.invocation) {
+        throw new ApiError('INVALID_PARAMS', {
+          code: 'OPERATION_APPROVAL_GRANT_REQUIRED',
+          operationId: operation.id,
+          message: 'approve the immutable operation plan before execution',
+        })
+      }
+      const result = await executeApprovedTaskOperationViaTemporal({
+        registry,
+        operationId: operation.id,
+        userId: params.userId,
+        projectId: params.projectId,
+        source: operationContext.source,
+        invocation: prepared.invocation,
+        context: operationContext.context,
+        origin: { kind: 'api' },
+      })
+      return result.data
     }
-    await publishWorkspaceResourceChangedEventsFromWriteResult({
-      result: outputParsed.data,
-      fallbackProjectId: params.projectId,
-      userId: params.userId,
-      fallbackEpisodeId: params.context?.episodeId ?? null,
+    if (
+      operation?.assistantWriteAuthority?.kind
+        === 'temporal_operation_execution'
+    ) {
+      const stableSourceId = apiRequestId
+      if (!stableSourceId) {
+        throw new ApiError('INVALID_PARAMS', {
+          code: 'OPERATION_IDEMPOTENCY_KEY_REQUIRED',
+          header: 'Idempotency-Key',
+          operationId: params.operationId,
+        })
+      }
+      const identity = buildDirectOperationInvocationIdentity({
+        channel: 'api',
+        projectId: params.projectId,
+        operationId: params.operationId,
+        stableSourceId,
+      })
+      const result = await executeDirectTaskOperationViaTemporal({
+        registry,
+        channel: 'api',
+        operationId: params.operationId,
+        userId: params.userId,
+        projectId: params.projectId,
+        source: operationContext.source,
+        context: operationContext.context,
+        input: params.input,
+        ...identity,
+        origin: { kind: 'api' },
+      })
+      return result.data
+    }
+    const result = await invokeProjectAgentOperation({
+      registry,
+      channel: 'api',
+      operationId: params.operationId,
+      context: operationContext,
+      input: params.input,
     })
-    return outputParsed.data
+    if (result.kind !== 'executed') {
+      throw new Error(`API_OPERATION_APPROVAL_RESULT_INVALID:${params.operationId}`)
+    }
+    if (requestedMutationResponse) {
+      if (!result.mutationReceipt || result.mutationReceipt.changedRefs.length === 0) {
+        throw new Error(
+          `OPERATION_MUTATION_RESPONSE_RECEIPT_REQUIRED:${params.operationId}`,
+        )
+      }
+      return {
+        protocol: OPERATION_MUTATION_RESPONSE_PROTOCOL,
+        data: result.data,
+        mutationReceipt: result.mutationReceipt,
+      } satisfies OperationMutationResponse
+    }
+    if (result.mutationReceipt?.changedRefs.length) {
+      throw new Error(
+        `OPERATION_MUTATION_RESPONSE_CONTRACT_REQUIRED:${params.operationId}`,
+      )
+    }
+    return result.data
   } catch (error) {
     if (error instanceof ApiError) throw error
     const missingColumn = extractPrismaMissingColumn(error)
@@ -108,17 +184,14 @@ export async function executeProjectAgentOperationFromApi(params: {
       throw new ApiError('EXTERNAL_ERROR', {
         code: 'DATABASE_SCHEMA_MISMATCH',
         field: missingColumn,
-        message: `database schema mismatch: missing column ${missingColumn}; run the latest Prisma migration before starting the app`,
       })
     }
-    const message = toMessage(error)
-    const inferred = inferApiErrorCodeFromMessage(message)
-    if (inferred) {
-      throw new ApiError(inferred, { message })
-    }
-    throw new ApiError('EXTERNAL_ERROR', {
+    const normalized = normalizeAnyError(error, {
+      context: 'api',
+      fallbackCode: 'EXTERNAL_ERROR',
+    })
+    throw new ApiError(normalized.code, {
       code: 'OPERATION_EXECUTION_FAILED',
-      message,
     })
   }
 }

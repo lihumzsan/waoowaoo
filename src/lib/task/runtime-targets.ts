@@ -1,6 +1,6 @@
-import { TASK_TYPE, type TaskType } from './types'
+import type { TaskType } from './types'
 
-export type TaskRuntimePhase = 'idle' | 'queued' | 'processing' | 'completed' | 'failed'
+export type TaskRuntimePhase = 'idle' | 'queued' | 'processing' | 'completed' | 'failed' | 'canceled'
 
 export type TaskRuntimeTarget = {
   readonly targetType: string
@@ -9,12 +9,19 @@ export type TaskRuntimeTarget = {
 }
 
 export type TaskRuntimeStateLike = {
+  readonly taskId?: string | null
+  readonly targetType?: string | null
+  readonly targetId?: string | null
   readonly phase: TaskRuntimePhase | string | null | undefined
   readonly runningTaskId?: string | null
   readonly runningTaskType?: string | null
+  readonly progressGroupId?: string | null
+  readonly progress?: number | null
+  readonly stage?: string | null
+  readonly stageLabel?: string | null
+  readonly updatedAt?: string | null
   readonly lastError?: {
     readonly code?: string | null
-    readonly message?: string | null
   } | null
 }
 
@@ -41,6 +48,8 @@ export function isTaskRuntimeStateRunning(
   state: TaskRuntimeStateLike | null | undefined,
 ): boolean {
   return isTaskRuntimeRunningPhase(state?.phase)
+    && typeof state?.runningTaskId === 'string'
+    && state.runningTaskId.trim().length > 0
 }
 
 export function taskRuntimeStateMapSignature(
@@ -52,8 +61,8 @@ export function taskRuntimeStateMapSignature(
       state.phase ?? '',
       state.runningTaskId ?? '',
       state.runningTaskType ?? '',
+      state.progressGroupId ?? '',
       state.lastError?.code ?? '',
-      state.lastError?.message ?? '',
     ].join(':'))
     .sort()
     .join('|')
@@ -74,70 +83,7 @@ function target(
 }
 
 export const TASK_RUNTIME_TARGETS = {
-  projectEpisodeEditScriptGeneration(episodeId: string | null | undefined) {
-    return target('ProjectEpisode', episodeId, [TASK_TYPE.EDIT_SCRIPT_GENERATE])
-  },
-  projectEditStylePreviewImage(stylePreviewId: string | null | undefined) {
-    return target('ProjectEditStylePreview', stylePreviewId, [TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE])
-  },
-  projectEpisodeFinalRender(episodeId: string | null | undefined) {
-    return target('ProjectEpisode', episodeId, [TASK_TYPE.FINAL_VIDEO_RENDER])
-  },
-  projectEpisodeBgmScore(episodeId: string | null | undefined) {
-    return target('ProjectEpisode', episodeId, [TASK_TYPE.BGM_SCORE_GENERATE])
-  },
-  projectPanelImage(panelId: string | null | undefined) {
-    return target('ProjectPanel', panelId, [TASK_TYPE.IMAGE_PANEL])
-  },
-  projectPanelImageOperations(panelId: string | null | undefined) {
-    return target('ProjectPanel', panelId, [
-      TASK_TYPE.IMAGE_PANEL,
-      TASK_TYPE.PANEL_VARIANT,
-      TASK_TYPE.MODIFY_ASSET_IMAGE,
-    ])
-  },
-  projectEditAssetImage(
-    targetType: 'CharacterAppearance' | 'LocationImage' | null | undefined,
-    targetId: string | null | undefined,
-  ) {
-    if (targetType === 'CharacterAppearance') {
-      return target('CharacterAppearance', targetId, [
-        TASK_TYPE.IMAGE_CHARACTER,
-        TASK_TYPE.MODIFY_ASSET_IMAGE,
-      ])
-    }
-    if (targetType === 'LocationImage') {
-      return target('LocationImage', targetId, [
-        TASK_TYPE.IMAGE_LOCATION,
-        TASK_TYPE.MODIFY_ASSET_IMAGE,
-      ])
-    }
-    return null
-  },
-  projectPanelVideo(panelId: string | null | undefined) {
-    return target('ProjectPanel', panelId, [TASK_TYPE.VIDEO_PANEL])
-  },
-  projectVideoGroup(groupId: string | null | undefined) {
-    return target('ProjectVideoGroup', groupId, [TASK_TYPE.VIDEO_GROUP])
-  },
-  projectStoryboardText(storyboardId: string | null | undefined) {
-    return target('ProjectStoryboard', storyboardId, [
-      TASK_TYPE.REGENERATE_STORYBOARD_TEXT,
-      TASK_TYPE.INSERT_PANEL,
-    ])
-  },
-  projectEpisodeStoryboardText(episodeId: string | null | undefined) {
-    return target('ProjectEpisode', episodeId, [
-      TASK_TYPE.REGENERATE_STORYBOARD_TEXT,
-      TASK_TYPE.INSERT_PANEL,
-    ])
-  },
-  projectStoryboardConsistency(storyboardId: string | null | undefined) {
-    return target('ProjectStoryboard', storyboardId, [
-      TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
-    ])
-  },
-  projectEditScriptStoryboardPrepare(editScriptId: string | null | undefined) {
-    return target('ProjectEditScript', editScriptId, [TASK_TYPE.EDIT_SCRIPT_STORYBOARD_PREPARE])
+  workspaceResource(resourceId: string | null | undefined, types: readonly TaskType[]) {
+    return target('WorkspaceResource', resourceId, types)
   },
 } as const
