@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import type { Prisma } from '@prisma/client'
 import { createScopedLogger } from '@/lib/logging/core'
-import { calcTextWithCache } from './cost'
+import { calcTextToolCalls, calcTextWithCache } from './cost'
 import { toChargeableCredits } from './credits'
 import { planPoolDebit, usableCredits } from './credit-pools'
 import { BUILTIN_PRICING_VERSION } from '@/lib/ai-registry/pricing-resolution'
@@ -63,8 +63,10 @@ function parseMetadata(raw: string | null): Record<string, unknown> {
  *
  * Each row is priced at the catalog's retail rate for its own model and token
  * counts — including the cache discount, because the recorded usage carries
- * how many input tokens were cache hits. Fractions accumulate across the day
- * and are rounded up once at the end.
+ * how many input tokens were cache hits. Rows also carry how many server-side
+ * tool calls the model made, which some providers bill per call on top of
+ * tokens; a model without such a rate contributes nothing there. Fractions
+ * accumulate across the day and are rounded up once at the end.
  */
 export function priceUsageRows(
   rows: ReadonlyArray<{ model: string; metadata: string | null }>,
@@ -75,8 +77,10 @@ export function priceUsageRows(
     const inputTokens = readTokenCount(metadata, 'actualInputTokens')
     const outputTokens = readTokenCount(metadata, 'actualOutputTokens')
     const cachedInputTokens = readTokenCount(metadata, 'actualCachedInputTokens')
-    if (inputTokens === 0 && outputTokens === 0) continue
+    const toolCalls = readTokenCount(metadata, 'actualToolCalls')
+    if (inputTokens === 0 && outputTokens === 0 && toolCalls === 0) continue
     exact += calcTextWithCache(row.model, inputTokens, outputTokens, { cachedInputTokens })
+    exact += calcTextToolCalls(row.model, toolCalls)
   }
   return { credits: toChargeableCredits(exact), exactCredits: exact }
 }

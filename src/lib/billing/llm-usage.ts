@@ -6,12 +6,14 @@ import { recordUsageFact } from './reporting'
 
 export const llmUsageFactSchema = z
   .object({
-    phase: z.enum(['agent_model', 'context_compaction']),
+    phase: z.enum(['agent_model', 'context_compaction', 'web_search']),
     modelKey: z.string().trim().min(1).max(191),
     inputTokens: z.number().int().nonnegative(),
     outputTokens: z.number().int().nonnegative(),
     cachedInputTokens: z.number().int().nonnegative(),
     requestCount: z.number().int().nonnegative(),
+    /** Server-side tool calls the provider bills per call on top of tokens. */
+    toolCalls: z.number().int().nonnegative().default(0),
   })
   .strict()
 
@@ -63,7 +65,7 @@ export async function recordLlmUsageFact(
 ): Promise<void> {
   const usage = llmUsageFactSchema.parse(params.usage)
   const quantity = usage.inputTokens + usage.outputTokens
-  if (quantity === 0 && usage.requestCount === 0) return
+  if (quantity === 0 && usage.requestCount === 0 && usage.toolCalls === 0) return
   await recordUsageFact(tx, {
     usageId: params.usageId,
     projectId: params.projectId,
@@ -80,6 +82,7 @@ export async function recordLlmUsageFact(
       actualInputTokens: usage.inputTokens,
       actualOutputTokens: usage.outputTokens,
       actualCachedInputTokens: usage.cachedInputTokens,
+      actualToolCalls: usage.toolCalls,
       ...params.metadata,
     },
   })

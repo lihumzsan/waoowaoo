@@ -926,6 +926,9 @@ export class AssistantRuntimeEventProjector {
             outputTokens: this.latestUsage.outputTokens,
             cachedInputTokens: this.latestUsage.cachedInputTokens,
             requestCount: this.usageSnapshots.size,
+            // The assistant model itself has no per-call server tool charge;
+            // hosted Web Search accounts for its own calls in its own fact.
+            toolCalls: 0,
           }
         : null,
     }

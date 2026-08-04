@@ -125,6 +125,7 @@ describe('billing/service integration', () => {
       outputTokens: 30,
       cachedInputTokens: 20,
       requestCount: 1,
+      toolCalls: 0,
     }
 
     const record = async (outputTokens = usage.outputTokens) => {
