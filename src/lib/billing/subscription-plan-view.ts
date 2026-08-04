@@ -1,8 +1,7 @@
 import { CREDIT_UNIT_CNY } from './credits'
 import {
-  estimateCreditCapacity,
+  estimateVideoMinutes,
   resolveCreditCapacityReference,
-  type CreditCapacityEstimate,
   type CreditCapacityReference,
 } from './subscription-capacity'
 import {
@@ -47,14 +46,14 @@ export interface SubscriptionPlanView {
   readonly monthlyCredits: number
   readonly featured: boolean
   readonly firstMonthPromoCny: number | null
-  /** What a month's grant covers, if spent entirely on one kind of work. */
-  readonly monthlyCapacity: CreditCapacityEstimate
+  /** Minutes of reference footage a month's grant covers, to one decimal. */
+  readonly monthlyVideoMinutes: number
   readonly intervals: readonly SubscriptionIntervalView[]
 }
 
 export interface SubscriptionCatalogView {
   readonly creditUnitCny: number
-  /** What one image and one clip cost, so the page can explain its own maths. */
+  /** The per-second rate behind the claim, so the page can show its maths. */
   readonly capacityReference: CreditCapacityReference
   readonly plans: readonly SubscriptionPlanView[]
 }
@@ -71,7 +70,7 @@ export function buildSubscriptionPlanViews(): SubscriptionCatalogView {
       monthlyCredits: plan.monthlyCredits,
       featured: plan.featured,
       firstMonthPromoCny: plan.firstMonthPromoCny,
-      monthlyCapacity: estimateCreditCapacity(plan.monthlyCredits, capacityReference),
+      monthlyVideoMinutes: estimateVideoMinutes(plan.monthlyCredits, capacityReference),
       intervals: (['month', 'year'] as const).map((interval) => {
         const periodPriceCny = subscriptionPeriodPriceCny(plan, interval)
         const months = interval === 'year' ? MONTHS_PER_YEAR : 1

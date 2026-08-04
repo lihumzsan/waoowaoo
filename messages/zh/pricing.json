@@ -32,10 +32,8 @@
     "creditsPerMonth": "每月发放 {credits} credits",
     "oneOffTitle": "只想买额度？直接充值",
     "yearlySaveHint": "省 2 个月",
-    "capacityTitle": "每月大概够做多少",
-    "capacityImages": "{count} 张图片",
-    "capacityVideos": "{count} 条视频",
-    "capacityFootnote": "按 1 credit = ¥{unit} 计算：GPT Image 2 单图 {imageCredits} credits，Seedance 2.0 {duration} 秒 {resolution} 视频 {videoCredits} credits。实际扣费按所选模型与参数确定。",
+    "capacityTitle": "每月大约可生成",
+    "capacityFootnote": "以 Seedance 2.0 {resolution} 计算，每秒 {perSecond} credits。图片、语音、音乐与对话共用同一份额度，实际扣费按所选模型与参数确定。",
     "oneOffHint": "充值额度永久有效，不随套餐周期清零。",
     "faqTitle": "常见问题",
     "wechatDialogTitle": "微信扫码支付",
@@ -59,6 +57,7 @@
     "planExtendCta": "追加购买",
     "currentPlanTitle": "当前套餐 · {plan}",
     "currentPlanDetail": "有效期至 {date}（剩余 {days} 天）· 可用额度 {credits}",
-    "currentPlanStacks": "再次购买会在现有有效期上叠加，剩余时长不会作废。"
+    "currentPlanStacks": "再次购买会在现有有效期上叠加，剩余时长不会作废。",
+    "capacityMinutes": "{minutes} 分钟成片"
   }
 }

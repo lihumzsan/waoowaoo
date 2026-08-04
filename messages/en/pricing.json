@@ -32,10 +32,8 @@
     "creditsPerMonth": "{credits} credits granted monthly",
     "oneOffTitle": "Just want credits? Top up instead",
     "yearlySaveHint": "2 months free",
-    "capacityTitle": "Roughly what a month covers",
-    "capacityImages": "{count} images",
-    "capacityVideos": "{count} videos",
-    "capacityFootnote": "At 1 credit = ¥{unit}: one GPT Image 2 image is {imageCredits} credits, a {duration}s {resolution} Seedance 2.0 clip is {videoCredits} credits. Actual charges depend on the model and settings you pick.",
+    "capacityTitle": "Roughly per month",
+    "capacityFootnote": "Based on Seedance 2.0 at {resolution}, {perSecond} credits per second. Images, speech, music and chat draw on the same credits; what you are charged depends on the model and settings you pick.",
     "oneOffHint": "Topped-up credits never expire and are not cleared by a plan period.",
     "faqTitle": "FAQ",
     "wechatDialogTitle": "Pay with WeChat",
@@ -59,6 +57,7 @@
     "planExtendCta": "Extend",
     "currentPlanTitle": "Your plan · {plan}",
     "currentPlanDetail": "Runs to {date} ({days} days left) · {credits} credits available",
-    "currentPlanStacks": "Buying again adds to the term you already have — nothing left over is lost."
+    "currentPlanStacks": "Buying again adds to the term you already have — nothing left over is lost.",
+    "capacityMinutes": "{minutes} minutes of footage"
   }
 }
