@@ -19,13 +19,14 @@
 - **WR-07 — 所有生产能力强制 Placement。** 每个 `producesResources` Operation 必须在穷尽 registry 声明输出 kind/media/schema，并要求 `outputPath`。Plan 阶段验证父目录、路径、schema 和冲突；缺 placement 不报价、不提交，也不静默落收件箱。
 - **WR-08 — 执行前冻结精确输入。** Operation 以用户提供的 `workspacePath` 解析当前 Resource，再冻结 `resourceId + contentVersion + role + position` 到同一个 PlanSnapshot；计费审批消费该快照。执行、重试和 Lineage 都只消费冻结版本，不能在 Task 开始后重新按路径读取。
 - **WR-09 — 一个异步终态 writer。** 生成 Operation 的 commit 事务预留 pending Resource 与 Task。Task terminal success 在同一事务物化版本、Lineage、Resource 状态、Task 终态和通知；失败/取消只结算未物化 Resource。replay 返回同一事实，不能生成第二 Resource 或重复计费。
-- **WR-10 — 批量生产是数据，不是 N 个 Agent 调用。** `submit_production_manifest` 一次冻结最多 registry 允许的显式条目、一个总报价和一个 Approval Grant，再由 Temporal 扇出 Task。成员有稳定 `itemId/resourceId`；部分失败只由 `rerun_failed_production_items` 重跑失败成员，成功成员不重提。FollowUpBatch 在全部终态后至多一次唤醒 Assistant。
+- **WR-10 — 批量生产是版本化文件，不是 N 个 Agent 调用。** `submit_production_manifest` 只接受 `manifestPath`，读取 ready 文本 Resource 并冻结 `resourceId + contentVersion + workspacePath + sha256 + manifestId`；一次冻结最多 Registry 允许的显式条目、一个总报价和一个 Approval Grant，再由 Temporal 扇出 Task。成员有稳定 `itemId/resourceId`；部分失败只由 `rerun_failed_production_items` 重跑失败成员，成功成员不重提。FollowUpBatch 在全部终态后至多一次唤醒 Assistant。
 - **WR-11 — 移动、删除和恢复只有一套语义。** 文件移动只改自身路径；文件夹移动原子改写完整子树路径。产品/API 的移动、软删除与恢复必须以 canonical `resourceId` 定位目标并在 Project 锁内解析当前路径，禁止拿旧 View 的 path 删除后来占用同一路径的另一 Resource；Runtime 文件删除仍由 checkpoint baseline 把受保护 identity 交给同一 Catalog writer。活跃 Task 涉及的 Resource 不可移动或删除；pending Resource 不可删除。软删除文件夹原子删除子树。恢复默认回原路径，冲突时必须显式给新路径，禁止静默改名。永久删除是独立、需审批的系统能力。
 - **WR-12 — Canvas 不拥有 Resource。** Canvas 按当前文件夹以 `scope=subtree` 加载子树并由自身预算 policy 决定展开/收起，使用稳定 `resourceId` 作为卡片身份，目录决定导航与分组，布局只保存视图位置。拖动卡片不移动文件；改路径必须调用 Resource move 或由 Runtime `mv` 后 checkpoint。
 - **WR-13 — 大项目按目录读取。** Agent 通过普通 `rg/read/bash` 探索用户树；Canvas 和 API 用 cursor 分页与 bounded summary，不读取全部正文——文本/结构化的列表摘要只来自版本行物化的 `contentPreview`，列表路径零对象存储读取。完整正文只经单资源读取入口（`readWorkspaceResource` 与其唯一 HTTP route）按需加载。Runtime Bundle 上限与 Canvas 5,000 项视图上限必须明确失败，不能恢复 200 条静默截断。
 - **WR-14 — Agent/Subagent 写入边界显式。** 主 Agent 是全局一致性文件的唯一 writer；并行 Subagent 只能写被分配的互斥目录。两个 writer 争用同路径由 `(projectId, activePath)` 与 checkpoint baseline fail closed，不靠最后写入覆盖。
 - **WR-15 — MCP 边界同步同一工作区。** Wao MCP Operation 开始前必须在 Session Manager 的唯一 persistence queue 中 capture Runtime，使本 Turn 新建目录和文本进入 Catalog；Operation 结束后只在 Runtime 自 preflight 后未变化时把最新 Catalog 投影（包括 pending `.resource` 和 Task 系统视图）刷新回 Runtime。任一同步失败都不得开始新的付费执行或伪装成功；Catalog、Task 与幂等执行身份仍是恢复权威。
-- **WR-16 — 媒体创建按模态编译一次。** `create_image`、`create_audio`、`create_video`、`generate_voice` 与 Production Manifest 的公开 schema 只暴露各自稳定的产品字段，严格拒绝跨模态 schema、自由 `generationOptions`、输出格式与 model/provider。Planner 在任何 Plan、报价、Resource 或 Task 副作用前解析正式模型与配置、校验精确引用、编译 canonical option 并冻结到 Task payload；公开引用上限必须能被共享 Task envelope 无损表示，Worker 只能消费这份冻结结果。角色、场景与道具图片由 Asset Format Policy 追加唯一固定提示词并强制 4:3，普通图片与视频继续冻结项目画幅。
+- **WR-16 — 创作内容不在服务端编译。** 专业 Production Manifest 必须包含完整最终 Prompt 与显式创作参数；资产 item 同时声明匹配的 `assetKind/schemaId` 和实际 `aspectRatio: 4:3`，视频声明画幅与时长，音乐声明时长与 vocal mode。Planner 在任何 Plan、报价、Resource 或 Task 副作用前按模态严格校验、选择正式模型、解析精确引用并冻结 Prompt/参数；禁止依据 `schemaId` 追加 Prompt、猜资产类型或覆盖比例。直接 `create_image/audio/video` 只保留 API/Canvas 通道和项目画幅，不进入主 Agent MCP。
+- **WR-17 — Runtime 能力文件只读且可重建。** `system/project.json.productionCapabilities` 由当前 Project 模型配置与生产 AI Registry 派生，只向 Agent提供视频画幅、允许时长、引用上限及音乐时长/提示词预算；它不是 Agent 可写配置、Task 快照或第二份能力权威。缺模型、画幅或必需能力时对应值为 null，专业子 Agent必须停止而非猜测；Manifest planner 在提交时仍以当前配置重新校验并冻结真实执行参数。
 
 ## 权威所有权与入口
 
@@ -43,7 +44,7 @@
 唯一业务入口：
 
 1. WorkspaceResource persistence：folder、user file、move、soft delete、restore、batch checkpoint、reserve、materialize。
-2. Resource-producing Operation registry：create image/audio/video/voice、upload/import、merge、Production Manifest。
+2. Resource-producing Operation registry：API/Canvas create image/audio/video、voice、upload/import、merge，以及主 Agent唯一新媒体入口 Production Manifest。
 3. Task terminal materializer：异步成功、失败和取消。
 4. Runtime projector/capture：Catalog ↔ 临时普通目录。
 
@@ -51,7 +52,7 @@ Route、UI、MCP 和未来 CLI 都只能调用这些入口，不能直接写 Wor
 
 ## 正常、失败与恢复
 
-1. Runtime 启动从 Catalog 读取完整 active tree，从对象存储读取当前版本，生成显式 `directories + files` Bundle；`system/**` 同时投影只读项目说明与 Skills。
+1. Runtime 启动从 Catalog 读取完整 active tree，从对象存储读取当前版本，生成显式 `directories + files` Bundle；`system/**` 只投影只读项目说明，不投影 Wao Skill。
 2. Codex 在容器内自由使用 read/write/rg/bash，Wao MCP 负责付费和系统能力。
 3. Turn checkpoint 捕获全部文件与空目录，验证系统投影未变、Resource identity 未伪造、父目录完整，再以 baseline CAS 原子写回。Turn 内调用 Wao MCP 时复用同一个 capture writer 做 preflight，并在调用后以 quiescent baseline refresh，不另建 Catalog writer。
 4. checkpoint 冲突时不提交任何 Resource 变化；Runtime 保留工作副本并向 Turn 显示明确错误。下次启动永远从 Catalog 重新 materialize。
@@ -73,7 +74,7 @@ Route、UI、MCP 和未来 CLI 都只能调用这些入口，不能直接写 Wor
 
 ## 历史回归
 
-- WorkspaceResource 媒体入口首次真实创作时仍沿用面向内部调用方的通用 `modelKey + generationOptions` 形状：Agent 可传入不属于当前模态的字段，模型默认值、引用上限和音乐格式又延迟到 Worker 才解释；资产图片因此以 `generic.image + 项目 16:9` 生成，音乐还会在 Provider fence 前以通用内部错误失败。旧 Registry conformance 只验证“会生产 Resource”，没有枚举公开输入边界。当前五个媒体入口按模态严格注册，统一 planner 在副作用前完成模型、能力、引用与 option 编译；资产 schema 由服务端唯一追加固定 4:3 格式，Worker 不再重新规划。
+- WorkspaceResource 媒体入口首次真实创作时仍沿用面向内部调用方的通用 `modelKey + generationOptions` 形状：Agent 可传入不属于当前模态的字段，模型默认值、引用上限和音乐格式又延迟到 Worker 才解释；资产图片因此以 `generic.image + 项目 16:9` 生成，音乐还会在 Provider fence 前以通用内部错误失败。旧 Registry conformance 只验证“会生产 Resource”，没有枚举公开输入边界。第一轮修复改由服务端根据 asset schema 拼接固定 4:3 创作 Prompt，虽然纠正了比例，却形成第二个创作 writer。当前专业制作只由固定 Skill 子 Agent 写完整 Manifest Prompt 与显式参数，统一 planner 在副作用前严格校验模型能力、引用、资产类型与 4:3 参数并原样冻结，不再追加或改写创作内容。
 
 - `delete_resource` 首版接受 `workspacePath`，目录树只有 Agent checkpoint 调用时尚未暴露问题；新增 Canvas 删除入口后，旧 View 与并发移动之间可能让同一路径的新 Resource 被误删，说明 path 是可变位置而不是删除 identity。当前 Operation、Canvas Action View、确认 request identity 与持久化 writer 全部传 canonical `resourceId`，在 Project 锁内一次解析当前子树；path 只用于精确确认文案和恢复目的地，不再决定删除目标。
 

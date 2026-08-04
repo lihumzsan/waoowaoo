@@ -4,48 +4,54 @@
 
 ## 设计理念
 
-Creative Skill 是 Codex Runtime 可发现、可按需读取的专业知识，不是第二套 Agent、Task 或结构化输出流水线。主 Agent 可以自己读取 Skill，也可以把目录边界明确的工作交给 Codex 原生 Subagent；两者共享同一个 Project 工作区，最终结果都只是普通 WorkspaceResource。
+Codex app-server 是唯一 Agent Runtime。Wao 不维护第二套 Creative Worker 循环，但专业创作也不依赖主 Agent的上下文或 Skill 语义猜测：服务端 Registry 把每个 `workerKind` 确定性绑定到一个 Codex custom agent 和固定 Skill 集，Runtime 启动时把这些 Skill 正文只注入对应子 Agent 的 `developer_instructions`。
 
-系统不再拥有 `Creative Worker`、`delegate_creative_work`、output kind registry 或 Worker 专用模型循环。媒体、计费和长期任务仍只能通过 Wao MCP 的正式能力执行。
+主 Agent不安装、不投影、不读取 Wao Creative Skill；它只理解工作区、用户目标和 Wao MCP，负责为固定专业子 Agent划定输入与互斥输出路径，并按路径提交后者写好的 Production Manifest。
 
 ## 不变量
 
-- **CS-01 — 一个 Skill identity。** `CREATIVE_SKILL_REGISTRY` 是 Wao Skill id、标题、摘要、版本和磁盘目录的唯一声明；加载器只解析 registry 中的 `SKILL.md`，禁止按 Operation 名或任意路径猜测。
-- **CS-02 — Skill 只提供知识。** Skill 不拥有项目状态、工具权限、Task、Resource、计费、审批或输出采用权；内容不能创建第二业务入口。
-- **CS-03 — 按需读取。** 主 Agent 的 developer instructions 只注入 Skill 目录摘要，不预载全部正文。需要专业判断时由 Codex 读取对应 `SKILL.md`，避免长期占用主上下文。
-- **CS-04 — 原生 Subagent。** 并行专业工作只使用 Codex 原生协作协议和 UI 事件，不创建 Wao 自研 Worker。Subagent 必须先获得互斥目录边界；共享全局连续性文件只有主 Agent可写。
-- **CS-05 — 普通文件交付。** 剧本、方向、资产表、连续性、分集与镜头计划都写入用户工作区的普通文件/目录；没有 Story Canon、Episode、Chapter 或 Skill output 的系统实体。
-- **CS-06 — 语言由用户决定。** Skill 可以使用最适合模型的知识语言，但用户可见文本和工作区交付遵循当前 locale 或用户明确要求。
-- **CS-07 — 版本钉死。** 每份生产 `SKILL.md` 必须是可被 Codex 原生解析的包（含唯一 name/description frontmatter）。每个 Turn 开始前 `skills/list` 必须无错误并包含 Registry 全集，否则 Turn fail closed；初始清单只做 conformance，不作为逐 Turn 聊天卡。只有真实 `skills/changed` 才投影变更，禁止静默换成内置提示词或旧 Worker。
+- **CS-01 — Skill identity 单一。** `CREATIVE_SKILL_REGISTRY` 是 Skill id、版本和磁盘正文的唯一声明；加载器只读取 Registry 中的 `SKILL.md`。
+- **CS-02 — Worker 路由确定。** `CREATIVE_WORKER_REGISTRY` 是 `workerKind → agentType → 固定 Skill IDs → 交付契约` 的唯一声明。Skill description 只供解释，不能参与正确性、隐式路由或 fallback。
+- **CS-03 — 主 Agent零 Skill。** Wao Skill 不进入 Project 文件树、`$CODEX_HOME/skills`、主 Agent developer instructions 或主 Agent Tool schema；钉死 Codex 版本自带的 native Skills 也由生成的 `config.toml` 全部禁用。每 Turn 不做 Skill inventory admission；Runtime smoke 发现任何 enabled Skill 都失败。
+- **CS-04 — 子 Agent固定注入。** 每个 custom agent 只收到 `creative-core + 一个专业 Skill` 的完整正文；不得发现或加载其他 Wao Skill。子 Agent的 Wao MCP 必须禁用，因此不能直接花费、审批、创建 Task 或执行媒体生产。
+- **CS-05 — 专业内容单 writer。** 被选定的专业子 Agent独占其交付文件。主 Agent只检查文件存在、路径和提交前置条件，不复制、续写或改写专业内容。并行子 Agent必须写互斥路径；长篇共享连续性由 `wao_long_form` 单写。
+- **CS-06 — 普通文件交付。** 剧本、方向、连续性、最终提示词和 Production Manifest 都是普通 WorkspaceResource。没有 Skill output、Creative Worker Task、Episode、Chapter 或 Canon 系统实体。
+- **CS-07 — Manifest 是执行连接件。** 资产、视频、音乐子 Agent把完整最终 Prompt 与显式生成参数写入 JSON Manifest；主 Agent只有 `submit_production_manifest({manifestPath})` 这一条新媒体生产入口。视频/音乐角色必须同时读取 `system/project.json` 中对应的非空 `productionCapabilities`，不从示例或模型名猜能力。服务端只校验、冻结和执行，不补写创作内容。
+- **CS-08 — 原生生命周期。** 创建、等待、中断和完成只消费 Codex 原生 Subagent item/event，并投影到现有 UI；禁止恢复旧 Worker 卡片或第二状态机。
+- **CS-09 — 语言由用户决定。** Skill 可以使用适合模型的知识语言，但用户可见文本和工作区交付遵循当前 locale 或用户明确要求。
+
+## 固定角色
+
+| workerKind | agentType | 固定 Skill 集 | 交付 |
+| --- | --- | --- | --- |
+| story | `wao_story` | creative-core + story-development | 剧本文件 |
+| long_form | `wao_long_form` | creative-core + long-form-production | 连续性与长篇生产索引 |
+| direction | `wao_direction` | creative-core + creative-direction | Creative Direction |
+| assets | `wao_assets` | creative-core + asset-development | 资产设计与资产 Production Manifest |
+| video | `wao_video` | creative-core + video-direction | 视频 Production Manifest |
+| music | `wao_music` | creative-core + music-direction | 音乐 Production Manifest |
 
 ## 权威入口
 
 | 事实或动作 | 唯一入口 |
 | --- | --- |
-| Skill identity 与版本 | `src/lib/creative-skills/registry.ts` |
-| Skill 文件解析 | `src/lib/creative-skills/loader.ts` |
-| Runtime 发现 | `RuntimeAdapter.listSkills` / Codex `skills/list` |
-| Skill 使用与协作事件 | Codex app-server 原生 item/event；`src/lib/assistant-runtime/event-projector.ts` |
-| 创作结果 | WorkspaceResource Catalog 与 Codex workspace checkpoint |
-
-## 并行写入规则
-
-主 Agent 可把独立集、独立镜头组或独立研究目录分派给 Subagent；每个 Subagent 只能写被指派目录。全局设定、共享资产索引、连续性总表和 Production Manifest 由主 Agent 单写。两个协作者不能同时修改同一路径；冲突由 WorkspaceResource checkpoint 的基线校验原地拒绝。
+| Skill identity 与正文 | `src/lib/creative-skills/registry.ts`、`loader.ts` |
+| Worker identity、路由与 custom agent 配置 | `src/lib/creative-skills/agent-profiles.ts` |
+| Runtime 配置物化 | `src/lib/assistant-runtime/runtime-persistence.ts` |
+| 主 Agent路由边界 | `src/lib/assistant-runtime/runtime-access.ts` |
+| 专业交付 | WorkspaceResource checkpoint |
+| 媒体提交 | `submit_production_manifest({manifestPath})` |
+| Subagent 生命周期 | Codex app-server item/event → `event-projector.ts` |
 
 ## 验证
 
-- Codex runtime smoke 必须真实验证 `skills/list` 与 Skill 变更刷新。
-- Runtime 事件投影必须显示 Subagent Active、Done、失败和详情，不以文本猜状态。
-- 结构扫描必须证明旧 Worker、`delegate_creative_work`、Worker output registry 和专用 Task 已删除。
-
-## 修改检查表
-
-- 新 Skill 是否只增加 registry 声明和一份知识文件？
-- 是否把 Skill 错当成工具权限、持久状态或强制工作流？
-- 并行任务是否有互斥目录，且全局连续性只有一个 writer？
-- UI 是否消费 Codex 原生 Skill/Subagent 事件，而不是恢复旧 Worker 卡片？
+- Runtime smoke 必须证明主 Agent的 `skills/list` 没有任何 enabled Skill，并证明每个固定 custom agent 文件只嵌入 Registry 声明的 Skill 且禁用 Wao MCP。
+- Registry conformance 必须证明直接 image/audio/video Operation 不进入 MCP，Manifest 仍是唯一 MCP 新媒体入口。
+- Manifest schema 必须拒绝资产 kind/schema 不匹配、资产非 4:3、重复 item/path/reference position 和缺失最终 Prompt。
 
 ## 历史回归
 
-- 原生 Runtime smoke 曾只创建 synthetic Skill，未物化正式 Registry，因此七份无 frontmatter 的生产 Skill 全部解析失败仍被测试放过；初始 `skills/list` 还被每 Turn 当成聊天消息重复展示。当前 smoke 与 Turn 准入都穷尽真实 Registry，初始 inventory 只校验不渲染。
-- Session Manager 曾把 Subagent child Thread 的 Turn 事件误判成 parent identity 漂移并强制恢复整个 Runtime。当前 parent slot 只消费已映射 Product Thread，Subagent Active/Done/失败继续由 parent collab item 进入产品 View。
+- 首版 Codex 接管把全部七份 Skill 投影进 `system/skills`，再安装到主 Agent的 `$CODEX_HOME/skills`，并允许主 Agent“自己读取或委派”。这让 Skill 选择变成 best-effort 语义猜测，也让主上下文重新承担全部专业方法；每 Turn inventory 校验只证明文件加载，不证明选对。当前版本删除投影、安装和 Turn admission，改为固定 worker Registry 在 custom agent 创建前直接注入精确正文。
+- 服务端 Asset Format Policy 曾依据 `schemaId` 猜资产类型、拼接创作 Prompt 并覆盖 4:3。它与 Agent形成第二个创作 writer，且让测试无法区分 Skill 效果。当前资产专业子 Agent写完整 Prompt 和显式 4:3 参数；服务端只做严格验证与冻结。
+- Codex custom agent 首次接管时只注入 Skill 正文，却没有恢复旧 Worker 的 `productionContext`，视频与音乐角色仍被要求遵守一份不存在的能力输入，只能从示例猜时长和引用上限。当前 Project Runtime 把已配置模型 Registry 的能力派生为只读 `system/project.json.productionCapabilities`；主 Agent必须把该固定路径列为视频/音乐角色输入，执行层仍按提交时当前配置重新严格校验。
+- Session Manager 曾把 Subagent child Thread 的 Turn 事件误判成 parent identity 漂移并恢复整个 Runtime。当前 parent slot 只消费已映射 Product Thread，Subagent 生命周期继续由原生协作事件进入产品 View。
