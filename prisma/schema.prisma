@@ -297,7 +297,6 @@ model User {
   projectAssistantThreadArchives  ProjectAssistantThreadArchive[]
   projectAssistantMessageCommands ProjectAssistantMessageCommand[]
   mutationBatches                 MutationBatch[]
-  inviteRedemptions               InviteRedemption[]
   workspaceResources              WorkspaceResource[]
 
   @@map("user")
@@ -416,39 +415,6 @@ model SubscriptionGrant {
   @@unique([subscriptionId, periodIndex])
   @@index([expiresAt])
   @@map("subscription_grants")
-}
-
-model InviteCode {
-  id             String             @id @default(uuid())
-  codeHash       String             @unique @db.VarChar(128)
-  amount         Int
-  maxRedemptions Int?
-  redeemedCount  Int                @default(0)
-  expiresAt      DateTime?
-  disabledAt     DateTime?
-  description    String?            @db.Text
-  createdBy      String?            @db.VarChar(128)
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @default(now()) @updatedAt
-  redemptions    InviteRedemption[]
-
-  @@index([expiresAt])
-  @@index([disabledAt])
-  @@map("invite_codes")
-}
-
-model InviteRedemption {
-  id           String     @id @default(uuid())
-  inviteCodeId String
-  userId       String
-  amount       Int
-  createdAt    DateTime   @default(now())
-  inviteCode   InviteCode @relation(fields: [inviteCodeId], references: [id], onDelete: Cascade)
-  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([inviteCodeId, userId])
-  @@index([userId])
-  @@map("invite_redemptions")
 }
 
 model BalanceFreeze {
