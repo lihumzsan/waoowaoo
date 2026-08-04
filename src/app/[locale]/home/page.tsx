@@ -593,24 +593,18 @@ export default function HomePage() {
                       <IconGradientDefs className="w-0 h-0 absolute" aria-hidden="true" />
                       <AppIcon name="statsBarGradient" className="w-4 h-4 flex-shrink-0" />
                       <div className="flex items-center gap-3 text-sm font-semibold bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">
-                        {project.stats.folders > 0 && (
-                          <span className="flex items-center gap-1">
-                            <AppIcon name="folder" className="w-3.5 h-3.5" />
-                            {project.stats.folders}
-                          </span>
-                        )}
-                        {project.stats.images > 0 && (
-                          <span className="flex items-center gap-1">
-                            <AppIcon name="statsImageGradient" className="w-3.5 h-3.5" />
-                            {project.stats.images}
-                          </span>
-                        )}
-                        {project.stats.videos > 0 && (
-                          <span className="flex items-center gap-1">
-                            <AppIcon name="statsVideoGradient" className="w-3.5 h-3.5" />
-                            {project.stats.videos}
-                          </span>
-                        )}
+                        <span className="flex items-center gap-1">
+                          <AppIcon name="folder" className="w-3.5 h-3.5 text-[var(--glass-tone-info-fg)]" />
+                          {project.stats.folders}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <AppIcon name="statsImageGradient" className="w-3.5 h-3.5" />
+                          {project.stats.images}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <AppIcon name="statsVideoGradient" className="w-3.5 h-3.5" />
+                          {project.stats.videos}
+                        </span>
                       </div>
                     </div>
                   )}
