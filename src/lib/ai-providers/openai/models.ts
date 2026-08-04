@@ -18,16 +18,16 @@ import { usdToCredits } from '@/lib/ai-registry/pricing-currency'
 /**
  * Platform-level role, not a user selection.
  *
- * `gpt-5-search-api` looks like the obvious choice by name and is half the
- * price, but OpenAI rejects it on the Responses API (`model_not_found`), and
- * the hosted web_search tool with its `open_page` actions only exists there.
- * This model is the one actually verified to run the tool and report those
- * actions.
+ * `gpt-5-search-api` looks right by name and is cheaper on paper, but OpenAI
+ * rejects it on the Responses API, and the hosted web_search tool with its
+ * `open_page` actions only exists there. This model is verified to run the tool
+ * and report those actions, and is both the newest balanced generation and an
+ * order of magnitude cheaper than the 5.4 line it replaces here.
  */
-export const OPENAI_WEB_SEARCH_MODEL_ID = 'gpt-5.4'
+export const OPENAI_WEB_SEARCH_MODEL_ID = 'gpt-5.6-luna'
 
-const INPUT_USD_PER_MILLION_TOKENS = 2.5
-const OUTPUT_USD_PER_MILLION_TOKENS = 15
+const INPUT_USD_PER_MILLION_TOKENS = 0.2
+const OUTPUT_USD_PER_MILLION_TOKENS = 1.2
 
 /**
  * The hosted web_search tool is billed per call ($10.00 / 1k calls) on top of
