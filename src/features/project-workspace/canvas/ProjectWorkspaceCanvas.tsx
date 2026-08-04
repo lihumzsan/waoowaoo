@@ -22,6 +22,7 @@ import { useProjectData, useWorkspaceResources } from '@/lib/query/hooks'
 import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
 import {
   WORKSPACE_RESOURCE_ROOT_FOLDER_KEY,
+  isWorkspaceResourceSubtreePath,
   type WorkspaceResourceAncestorView,
   type WorkspaceResourceView,
 } from '@/lib/workspace-resource/contracts'
@@ -664,18 +665,44 @@ function ProjectWorkspaceFolderCanvas({
     }
     return map
   }, [projectedNodes])
-  const jumpToFolder = useCallback((folderResourceId: string): boolean => {
-    const internalNode = reactFlow.getInternalNode(workspaceNodeId.folder(folderResourceId))
-    if (!internalNode) return false
+  // 顶层节点的 Catalog 路径:目录跳转按"目标文件夹子树 ∩ 画布顶层节点"求并集范围,
+  // 因此没有直接文件的中间目录也能跳到其后代分组所在的区域。
+  const canvasTopLevelEntries = useMemo(() => projectedNodes.flatMap((node) => {
+    if (node.parentId) return []
+    const workspacePath = node.data.kind === 'folder'
+      ? node.data.folder.workspacePath
+      : node.data.resourceDetails.resource.workspacePath
+    return [{ nodeId: node.id, workspacePath, width: node.data.width, height: node.data.height }]
+  }), [projectedNodes])
+  const canvasSubtreePaths = useMemo(
+    () => canvasTopLevelEntries.map((entry) => entry.workspacePath),
+    [canvasTopLevelEntries],
+  )
+  const jumpToFolder = useCallback((target: WorkspaceResourceView): boolean => {
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    for (const entry of canvasTopLevelEntries) {
+      if (!isWorkspaceResourceSubtreePath(entry.workspacePath, target.workspacePath)) continue
+      const internalNode = reactFlow.getInternalNode(entry.nodeId)
+      if (!internalNode) continue
+      const { x, y } = internalNode.internals.positionAbsolute
+      const width = internalNode.measured.width ?? entry.width
+      const height = internalNode.measured.height ?? entry.height
+      minX = Math.min(minX, x)
+      minY = Math.min(minY, y)
+      maxX = Math.max(maxX, x + width)
+      maxY = Math.max(maxY, y + height)
+    }
+    if (!Number.isFinite(minX)) return false
     notifyCanvasUserInteraction()
-    void reactFlow.fitBounds({
-      x: internalNode.internals.positionAbsolute.x,
-      y: internalNode.internals.positionAbsolute.y,
-      width: internalNode.measured.width ?? internalNode.width ?? 320,
-      height: internalNode.measured.height ?? internalNode.height ?? 174,
-    }, { duration: 380, padding: 0.2 })
+    void reactFlow.fitBounds(
+      { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
+      { duration: 380, padding: 0.15 },
+    )
     return true
-  }, [notifyCanvasUserInteraction, reactFlow])
+  }, [canvasTopLevelEntries, notifyCanvasUserInteraction, reactFlow])
   const handleGoBack = useCallback(() => {
     if (folder.folderKey === WORKSPACE_RESOURCE_ROOT_FOLDER_KEY) return
     const parent = folder.ancestors.at(-1)
@@ -754,6 +781,7 @@ function ProjectWorkspaceFolderCanvas({
               canGoBack={folder.folderKey !== WORKSPACE_RESOURCE_ROOT_FOLDER_KEY}
               onBack={handleGoBack}
               folderDisplays={folderDisplays}
+              canvasSubtreePaths={canvasSubtreePaths}
               onJumpToFolder={jumpToFolder}
               search={search}
               backLabel={t('folderNavigation.back')}

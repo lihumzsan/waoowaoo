@@ -4,7 +4,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { useWorkspaceResources } from '@/lib/query/hooks'
-import type { WorkspaceResourceView } from '@/lib/workspace-resource/contracts'
+import {
+  isWorkspaceResourceSubtreePath,
+  type WorkspaceResourceView,
+} from '@/lib/workspace-resource/contracts'
 import { useWorkspaceProvider } from '../../WorkspaceProvider'
 import {
   buildWorkspaceCanvasFolderTree,
@@ -19,6 +22,7 @@ function DirectoryTreeRow({
   node,
   depth,
   folderDisplays,
+  canvasSubtreePaths,
   countLabel,
   jumpTitle,
   enterTitle,
@@ -28,6 +32,7 @@ function DirectoryTreeRow({
   readonly node: WorkspaceCanvasFolderTreeNode
   readonly depth: number
   readonly folderDisplays: ReadonlyMap<string, 'card' | 'section'>
+  readonly canvasSubtreePaths: readonly string[]
   readonly countLabel: (count: number) => string
   readonly jumpTitle: string
   readonly enterTitle: string
@@ -39,15 +44,18 @@ function DirectoryTreeRow({
   const childFolders = node.folders.filter((child) => child.folder !== null)
   if (!folderResource) return null
   const display = folderDisplays.get(folderResource.resourceId) ?? null
-  // 展开分组的内容本来就摊在画布上,行为只有"跳转";收起卡与不在当前画布上的
-  // 文件夹才提供"进入"。
-  const canEnter = display !== 'section'
+  // 可跳转 = 该文件夹子树与当前画布顶层节点有交集(中间目录也算,跳到后代分组
+  // 的并集范围);展开内容无需"进入",收起卡与画布外的文件夹才提供进入。
+  const jumpable = canvasSubtreePaths.some(
+    (path) => isWorkspaceResourceSubtreePath(path, folderResource.workspacePath),
+  )
+  const canEnter = display === 'card' || !jumpable
   return (
     <div>
       <div
         className="group flex w-full cursor-pointer items-center gap-1 rounded-lg py-1.5 pr-1.5 text-xs text-[var(--glass-text-secondary)] hover:bg-slate-100"
         style={{ paddingLeft: 4 + depth * 14 }}
-        title={display !== null ? jumpTitle : enterTitle}
+        title={jumpable ? jumpTitle : enterTitle}
         onClick={() => onRowActivate(folderResource)}
       >
         <button
@@ -71,7 +79,7 @@ function DirectoryTreeRow({
           {countLabel(countWorkspaceFolderFiles(node))}
         </span>
         <span className="hidden shrink-0 items-center gap-0.5 group-hover:flex">
-          {display !== null ? (
+          {jumpable ? (
             <span className="rounded-md p-1 text-[var(--glass-text-tertiary)]" title={jumpTitle}>
               <AppIcon name="crosshair" className="h-3.5 w-3.5" />
             </span>
@@ -98,6 +106,7 @@ function DirectoryTreeRow({
               node={child}
               depth={depth + 1}
               folderDisplays={folderDisplays}
+              canvasSubtreePaths={canvasSubtreePaths}
               countLabel={countLabel}
               jumpTitle={jumpTitle}
               enterTitle={enterTitle}
@@ -122,7 +131,8 @@ function DirectoryTreeRow({
 export function CanvasFolderNavigation(props: {
   readonly canGoBack: boolean
   readonly folderDisplays: ReadonlyMap<string, 'card' | 'section'>
-  readonly onJumpToFolder: (folderResourceId: string) => boolean
+  readonly canvasSubtreePaths: readonly string[]
+  readonly onJumpToFolder: (folder: WorkspaceResourceView) => boolean
   readonly search: string
   readonly searchPlaceholder: string
   readonly backLabel: string
@@ -180,8 +190,8 @@ export function CanvasFolderNavigation(props: {
     props.onSearchResult(resource)
   }
   const activateRow = (resource: WorkspaceResourceView) => {
-    // 跳转优先:面板保持打开,方便连续跳转;跳不了(不在当前画布)才进入。
-    if (props.onJumpToFolder(resource.resourceId)) return
+    // 跳转优先:面板保持打开,方便连续跳转;跳不了(子树不在当前画布)才进入。
+    if (props.onJumpToFolder(resource)) return
     enterFolder(resource)
   }
 
@@ -338,6 +348,7 @@ export function CanvasFolderNavigation(props: {
                 node={child}
                 depth={0}
                 folderDisplays={props.folderDisplays}
+                canvasSubtreePaths={props.canvasSubtreePaths}
                 countLabel={(count) => t('sectionCount', { count })}
                 jumpTitle={t('jumpToFolder')}
                 enterTitle={t('openFolder')}

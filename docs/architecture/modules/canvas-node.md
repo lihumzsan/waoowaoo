@@ -39,7 +39,7 @@ Canvas 是 WorkspaceResource 文件树的空间化投影，不是第二套文件
 ## 权威入口
 
 - 节点 registry：`src/features/project-workspace/canvas/registry/workspace-canvas-node-registry.ts`。
-- folder/root scope、返回与搜索定位：`ProjectWorkspaceCanvas.tsx`、`controls/CanvasFolderNavigation.tsx`（返回按钮 + 默认折叠的目录树面板 + 搜索，无面包屑）。目录树消费 root `scope=subtree` 列表投影，是画布索引而非第二导航：行激活优先按当前画布上该文件夹节点（展开分组或收起卡）`fitBounds` 跳转；仅收起卡或不在当前画布上的文件夹提供"进入"，进入与搜索结果走同一导航 callback，不维护第二份目录结构。root identity 只来自 `WORKSPACE_RESOURCE_ROOT_FOLDER_KEY`。
+- folder/root scope、返回与搜索定位：`ProjectWorkspaceCanvas.tsx`、`controls/CanvasFolderNavigation.tsx`（返回按钮 + 默认折叠的目录树面板 + 搜索，无面包屑）。目录树消费 root `scope=subtree` 列表投影，是画布索引而非第二导航：行激活按"目标文件夹子树 ∩ 当前画布顶层节点"的并集范围 `fitBounds` 跳转（无直接文件的中间目录跳到其后代分组区域）；仅收起卡或子树完全不在当前画布上的文件夹提供"进入"，进入与搜索结果走同一导航 callback，不维护第二份目录结构。root identity 只来自 `WORKSPACE_RESOURCE_ROOT_FOLDER_KEY`。
 - 子树展开/收起唯一裁判：`projection/workspace-canvas-expansion-policy.ts`（预算常量、树构建与确定性收起规则）；renderer 只消费 `folder.display`。
 - children/subtree/search Query：`src/lib/query/hooks/useWorkspaceResources.ts` 与 `src/lib/workspace-resource/view-service.ts`（`scope=children|subtree`）；tree/search 返回 bounded summary，单资源读取才允许返回完整内容。
 - 媒体 presentation 契约：`src/features/project-workspace/canvas/node-presentation-profiles.ts`（每媒体族 shell 声明与唯一尺寸 resolver）。
