@@ -5,6 +5,7 @@ import { BillingOperationError } from '@/lib/billing/errors'
 import { toMoneyNumber } from '@/lib/billing/money'
 import { createStripeClient } from './stripe-client'
 import { SUBSCRIPTION_CHECKOUT_KIND } from './stripe-subscription-checkout'
+import { WECHAT_RECHARGE_KIND } from './stripe-wechat-intent'
 import {
   endSubscriptionFromStripe,
   recordInvoicePaymentFailure,
@@ -197,6 +198,65 @@ function readPositiveMetadataNumber(metadata: Record<string, string>, key: strin
     throw new Error(`STRIPE_CHECKOUT_METADATA_${key.toUpperCase()}_INVALID`)
   }
   return value
+}
+
+/**
+ * Credit a WeChat Pay top-up.
+ *
+ * The QR flow has no Checkout session, so the PaymentIntent itself carries the
+ * facts a session would have carried. Everything downstream stays the same:
+ * the ledger row is keyed on the payment intent, which is what refunds already
+ * look up, so a WeChat refund reverses exactly like a card one.
+ */
+async function creditWechatPaymentIntent(
+  eventId: string,
+  intent: Stripe.PaymentIntent,
+): Promise<StripeWebhookHandleResult> {
+  const metadata = intent.metadata ?? {}
+  if (metadata.waoowaoo_kind !== WECHAT_RECHARGE_KIND) {
+    return {
+      received: true,
+      action: 'ignored',
+      eventType: 'payment_intent',
+      objectId: intent.id,
+      reason: 'unmanaged_payment_intent',
+    }
+  }
+
+  const userId = readString(metadata.user_id)
+  if (!userId) throw new Error('STRIPE_CHECKOUT_METADATA_USER_ID_REQUIRED')
+  const credits = readPositiveMetadataNumber(metadata, 'credits')
+  const paymentAmount = readPositiveMetadataNumber(metadata, 'payment_amount')
+  const paymentCurrency = readString(metadata.payment_currency)?.toLowerCase()
+  if (!paymentCurrency) throw new Error('STRIPE_CHECKOUT_METADATA_PAYMENT_CURRENCY_REQUIRED')
+  const paymentAmountMinor = Math.round(paymentAmount * 100)
+
+  await prisma.$transaction(async (tx) => {
+    await addBalanceWithTransaction(tx, userId, credits, {
+      type: 'recharge',
+      reason: 'stripe wechat pay recharge',
+      externalOrderId: intent.id,
+      idempotencyKey: `stripe:payment_intent:${intent.id}`,
+      relatedId: intent.id,
+      billingMeta: {
+        provider: 'stripe',
+        eventId,
+        paymentIntentId: intent.id,
+        paymentMethod: 'wechat_pay',
+        credits,
+        paymentAmountMinor,
+        paymentCurrency,
+      },
+    })
+  })
+
+  return {
+    received: true,
+    action: 'credited',
+    eventType: 'payment_intent',
+    objectId: intent.id,
+    credits,
+  }
 }
 
 async function creditCheckoutSession(eventId: string, session: StripeCheckoutSessionLike): Promise<StripeWebhookHandleResult> {
@@ -426,6 +486,11 @@ export async function handleStripeWebhook(rawBody: string, signatureHeader: stri
       ...result,
       eventType: event.type,
     }
+  }
+
+  if (event.type === 'payment_intent.succeeded') {
+    const result = await creditWechatPaymentIntent(eventId, event.data.object)
+    return { ...result, eventType: event.type }
   }
 
   if (event.type === 'invoice.paid') {

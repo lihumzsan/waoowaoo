@@ -49,6 +49,34 @@ function checkoutEvent(input: {
   })
 }
 
+function paymentIntentEvent(input: {
+  paymentIntentId: string
+  userId?: string
+  credits?: string
+  kind?: string
+}) {
+  const credits = input.credits || '100'
+  return JSON.stringify({
+    id: `evt_${input.paymentIntentId}`,
+    type: 'payment_intent.succeeded',
+    data: {
+      object: {
+        id: input.paymentIntentId,
+        amount: Number(credits) * 10,
+        currency: 'cny',
+        metadata: {
+          waoowaoo_kind: input.kind ?? 'credit_recharge_wechat',
+          user_id: input.userId,
+          credits,
+          credit_value_currency: 'CNY',
+          payment_amount: (Number(credits) / 10).toFixed(2),
+          payment_currency: 'cny',
+        },
+      },
+    },
+  })
+}
+
 function refundEvent(input: {
   type?: 'refund.created' | 'refund.updated' | 'refund.failed'
   refundId: string
@@ -275,6 +303,42 @@ describe('billing/stripe recharge integration', () => {
     expect(await prisma.balanceTransaction.count({
       where: { userId: user.id, externalOrderId: 'stripe:dispute:du_partial' },
     })).toBe(2)
+  })
+
+  it('credits a WeChat Pay top-up from its payment intent, and only once', async () => {
+    const user = await createTestUser()
+    const timestamp = currentStripeTimestamp()
+    const payload = paymentIntentEvent({ paymentIntentId: 'pi_wechat_ok', userId: user.id, credits: '250' })
+    const signature = signPayload(payload, timestamp)
+
+    const first = await handleStripeWebhook(payload, signature)
+    expect(first).toMatchObject({ action: 'credited', credits: 250, objectId: 'pi_wechat_ok' })
+    await handleStripeWebhook(payload, signature)
+
+    expect((await getBalance(user.id)).balance).toBe(250)
+    expect(await prisma.balanceTransaction.count({
+      where: { userId: user.id, type: 'recharge', idempotencyKey: 'stripe:payment_intent:pi_wechat_ok' },
+    })).toBe(1)
+  })
+
+  it('ignores the payment intent a card checkout also emits, so it cannot double credit', async () => {
+    const user = await createTestUser()
+    const timestamp = currentStripeTimestamp()
+    // A card Checkout produces both a session event and a payment intent
+    // event. Only the session credits; the intent must be left alone.
+    const checkout = checkoutEvent({ sessionId: 'cs_card', userId: user.id, credits: '100' })
+    await handleStripeWebhook(checkout, signPayload(checkout, timestamp))
+
+    const intent = paymentIntentEvent({
+      paymentIntentId: 'pi_cs_card',
+      userId: user.id,
+      credits: '100',
+      kind: 'credit_recharge',
+    })
+    const result = await handleStripeWebhook(intent, signPayload(intent, timestamp))
+
+    expect(result).toMatchObject({ action: 'ignored', reason: 'unmanaged_payment_intent' })
+    expect((await getBalance(user.id)).balance).toBe(100)
   })
 
   it('fails closed when a refund cannot be tied to the canonical payment intent', async () => {

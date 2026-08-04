@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Link } from '@/i18n/navigation'
 import { AppIcon } from '@/components/ui/icons'
@@ -13,6 +13,7 @@ import {
   useRecharge,
   useSubscriptionCheckout,
 } from './shared'
+import { useWechatRecharge, WechatQrDialog } from './wechat-recharge'
 
 function cx(...v: readonly (string | false | null | undefined)[]) {
   return v.filter(Boolean).join(' ')
@@ -203,6 +204,11 @@ export default function PricingGlassPageClient({ content }: { readonly content: 
   const t = useTranslations('pricing.glass')
   const recharge = useRecharge()
   const subscription = useSubscriptionCheckout()
+  const wechat = useWechatRecharge(recharge.config, useCallback(() => {
+    // Credits landed. A reload is the simplest way to make every balance the
+    // page shows agree with the ledger again.
+    window.location.reload()
+  }, []))
   const [interval, setInterval] = useState<SubscriptionInterval>('month')
 
   return (
@@ -254,8 +260,9 @@ export default function PricingGlassPageClient({ content }: { readonly content: 
             <p className="text-[12px] text-[var(--glass-text-tertiary)]">{t('oneOffHint')}</p>
           </div>
           <div className="mt-4">
-            <CustomRecharge recharge={recharge} />
+            <CustomRecharge recharge={recharge} wechat={wechat} />
           </div>
+          <RechargeStatus status={wechat.status} />
         </section>
 
         <section className="mt-14">
@@ -298,6 +305,7 @@ export default function PricingGlassPageClient({ content }: { readonly content: 
           </div>
         </section>
       </main>
+      <WechatQrDialog payment={wechat.payment} onClose={wechat.dismiss} />
     </div>
   )
 }

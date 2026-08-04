@@ -90,6 +90,7 @@
     "@openrouter/ai-sdk-provider": "^2.10.0",
     "@openrouter/sdk": "^0.13.65",
     "@prisma/client": "^6.19.3",
+    "@stripe/stripe-js": "^9.12.1",
     "@tanstack/react-query": "^5.90.20",
     "@tanstack/react-virtual": "^3.13.24",
     "@temporalio/activity": "1.21.1",

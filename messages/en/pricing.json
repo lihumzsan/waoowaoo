@@ -86,6 +86,13 @@
     "capacityVideos": "{count} videos",
     "capacityFootnote": "At 1 credit = ¥{unit}: one GPT Image 2 image is {imageCredits} credits, a {duration}s {resolution} Seedance 2.0 clip is {videoCredits} credits. Actual charges depend on the model and settings you pick.",
     "oneOffHint": "Topped-up credits never expire and are not cleared by a billing period.",
-    "faqTitle": "FAQ"
+    "faqTitle": "FAQ",
+    "wechatDialogTitle": "Pay with WeChat",
+    "wechatDialogHint": "{credits} credits are added as soon as the payment clears",
+    "wechatQrAlt": "WeChat Pay QR code",
+    "wechatWaiting": "Waiting for payment — scan the code with WeChat",
+    "payWithWechat": "WeChat Pay",
+    "payWithCard": "Card",
+    "wechatUnavailable": "WeChat Pay is not enabled yet"
   }
 }

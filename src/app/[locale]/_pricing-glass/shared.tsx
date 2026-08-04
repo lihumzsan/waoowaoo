@@ -13,13 +13,16 @@ import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
 
 export interface RechargeConfig {
   enabled: boolean
+  /** Present only when the in-page WeChat QR flow can run. */
+  publishableKey: string | null
+  wechatEnabled: boolean
   creditValueCurrency: string
   paymentCurrency: string
   minCredits: number
   maxCredits: number
 }
 
-interface RechargeState {
+export interface RechargeState {
   config: RechargeConfig | null
   loading: boolean
   busy: boolean
@@ -187,11 +190,22 @@ export function RechargeStatus({ status }: { status: RechargeState['status'] | S
 /* Custom-amount recharge field                                       */
 /* ----------------------------------------------------------------- */
 
-export function CustomRecharge({ recharge, className }: { recharge: RechargeState; className?: string }) {
+export function CustomRecharge({
+  recharge,
+  wechat,
+  className,
+}: {
+  recharge: RechargeState
+  /** Omitted when WeChat is not configured; the option is then not offered. */
+  wechat?: { available: boolean; busy: boolean; start: (credits: number) => void }
+  className?: string
+}) {
   const t = useTranslations('pricing.glass')
   const [value, setValue] = useState('')
   const credits = Number(value)
   const est = recharge.estimate(credits)
+  const amountEntered = value.trim().length > 0
+  const anyBusy = recharge.busy || Boolean(wechat?.busy)
   return (
     <div className={className}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -208,13 +222,23 @@ export function CustomRecharge({ recharge, className }: { recharge: RechargeStat
             max={recharge.config?.maxCredits}
           />
         </label>
+        {wechat?.available ? (
+          <button
+            type="button"
+            disabled={anyBusy || !amountEntered}
+            onClick={() => wechat.start(credits)}
+            className="glass-btn-base glass-btn-secondary h-12 px-5 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {wechat.busy ? t('checkoutBusy') : t('payWithWechat')}
+          </button>
+        ) : null}
         <button
           type="button"
-          disabled={recharge.busy || !value.trim()}
+          disabled={anyBusy || !amountEntered}
           onClick={() => recharge.checkout(credits)}
           className="glass-btn-base glass-btn-primary h-12 px-6 text-sm disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {recharge.busy ? t('checkoutBusy') : t('checkoutNow')}
+          {recharge.busy ? t('checkoutBusy') : wechat?.available ? t('payWithCard') : t('checkoutNow')}
         </button>
       </div>
       <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[var(--glass-text-tertiary)]">

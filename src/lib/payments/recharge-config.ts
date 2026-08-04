@@ -7,6 +7,13 @@ export const STRIPE_PAYMENT_CURRENCY = 'CNY' as const
 
 export interface RechargeConfig {
   enabled: boolean
+  /**
+   * Browser-safe Stripe key, present only when WeChat's in-page QR flow can
+   * run. Absent means the client must not offer WeChat — it would have no way
+   * to confirm the PaymentIntent.
+   */
+  publishableKey: string | null
+  wechatEnabled: boolean
   creditValueCurrency: typeof CREDIT_VALUE_CURRENCY
   paymentCurrency: typeof STRIPE_PAYMENT_CURRENCY
   minCredits: number
@@ -33,9 +40,16 @@ function readRequiredPositiveInteger(name: string): number {
   return value
 }
 
+function readOptionalKey(name: string): string | null {
+  const raw = process.env[name]
+  return typeof raw === 'string' && raw.trim() !== '' ? raw.trim() : null
+}
+
 function disabledRechargeConfig(): RechargeConfig {
   return {
     enabled: false,
+    publishableKey: null,
+    wechatEnabled: false,
     creditValueCurrency: CREDIT_VALUE_CURRENCY,
     paymentCurrency: STRIPE_PAYMENT_CURRENCY,
     minCredits: 0,
@@ -52,8 +66,14 @@ export function getRechargeConfig(): RechargeConfig {
     throw new Error('PAYMENT_MAX_CREDITS_LESS_THAN_MIN')
   }
 
+  // WeChat's in-page QR needs Stripe.js in the browser, which needs a
+  // publishable key. Without one the option is simply not offered rather than
+  // failing when the user clicks it.
+  const publishableKey = readOptionalKey('STRIPE_PUBLISHABLE_KEY')
   return {
     enabled: true,
+    publishableKey,
+    wechatEnabled: publishableKey !== null,
     creditValueCurrency: CREDIT_VALUE_CURRENCY,
     paymentCurrency: STRIPE_PAYMENT_CURRENCY,
     minCredits,

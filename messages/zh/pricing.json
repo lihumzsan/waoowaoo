@@ -86,6 +86,13 @@
     "capacityVideos": "{count} 条视频",
     "capacityFootnote": "按 1 credit = ¥{unit} 计算：GPT Image 2 单图 {imageCredits} credits，Seedance 2.0 {duration} 秒 {resolution} 视频 {videoCredits} credits。实际扣费按所选模型与参数确定。",
     "oneOffHint": "充值额度永久有效，不随订阅周期清零。",
-    "faqTitle": "常见问题"
+    "faqTitle": "常见问题",
+    "wechatDialogTitle": "微信扫码支付",
+    "wechatDialogHint": "支付成功后 {credits} credits 将自动入账",
+    "wechatQrAlt": "微信支付二维码",
+    "wechatWaiting": "等待支付…请使用微信扫描上方二维码",
+    "payWithWechat": "微信支付",
+    "payWithCard": "银行卡支付",
+    "wechatUnavailable": "微信支付暂未开通"
   }
 }
