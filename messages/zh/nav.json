@@ -15,7 +15,9 @@
     "totalSpent": "累计消费",
     "creditsUnit": "额度",
     "lowBalance": "余额偏低，约还能生成 {clips} 条标准视频",
-    "emptyBalance": "余额已用尽，请充值或订阅后继续"
+    "emptyBalance": "余额已用尽，请充值或订阅后继续",
+    "planExpiringSoon": "套餐还剩 {days} 天到期，到期后额度清零",
+    "planExpired": "套餐已到期，额度已清零"
   },
   "downloadLogs": "下载日志",
   "authEntry": "登录 / 注册",

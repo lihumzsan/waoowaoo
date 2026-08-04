@@ -111,6 +111,15 @@ export default function NavbarAccountMenu({
           <div className="glass-num mt-1.5 text-xl font-bold tracking-tight text-[var(--glass-text-primary)]">
             {formatCreditAmount(balance.balance, creditsUnit)}
           </div>
+          {/* A bought term simply stops when it runs out, so the reminder has
+              to arrive before it does. */}
+          {balance.plan?.expiringSoon ? (
+            <div className="mt-1.5 text-[11px] font-medium text-[var(--glass-warning,#f5a524)]">
+              {balance.plan.daysLeft > 0
+                ? t('account.planExpiringSoon', { days: balance.plan.daysLeft })
+                : t('account.planExpired')}
+            </div>
+          ) : null}
           {balance.health === 'ok' ? null : (
             <div
               className={`mt-1.5 text-[11px] font-medium ${

@@ -6,6 +6,7 @@ import { toMoneyNumber } from '@/lib/billing/money'
 import { PLAN_PURCHASE_KIND } from './stripe-plan-purchase'
 import { WECHAT_PLAN_KIND, WECHAT_RECHARGE_KIND } from './stripe-wechat-intent'
 import { applyPlanPurchase } from '@/lib/billing/plan-term-service'
+import { resolveReceiptUrl } from './stripe-receipt'
 import {
   isSubscriptionInterval,
   isSubscriptionPlanId,
@@ -214,7 +215,13 @@ async function creditWechatPaymentIntent(
     if (!userId) throw new Error('STRIPE_CHECKOUT_METADATA_USER_ID_REQUIRED')
     if (!planId || !isSubscriptionPlanId(planId)) throw new Error('STRIPE_PLAN_METADATA_PLAN_ID_INVALID')
     if (!interval || !isSubscriptionInterval(interval)) throw new Error('STRIPE_PLAN_METADATA_INTERVAL_INVALID')
-    const applied = await applyPlanPurchase({ userId, planId, interval, purchaseId: intent.id })
+    const applied = await applyPlanPurchase({
+      userId,
+      planId,
+      interval,
+      purchaseId: intent.id,
+      receiptUrl: await resolveReceiptUrl(intent.id),
+    })
     return {
       received: true,
       action: applied.status === 'applied' ? 'credited' : 'ignored',
@@ -242,6 +249,7 @@ async function creditWechatPaymentIntent(
   const paymentCurrency = readString(metadata.payment_currency)?.toLowerCase()
   if (!paymentCurrency) throw new Error('STRIPE_CHECKOUT_METADATA_PAYMENT_CURRENCY_REQUIRED')
   const paymentAmountMinor = Math.round(paymentAmount * 100)
+  const receiptUrl = await resolveReceiptUrl(intent.id)
 
   await prisma.$transaction(async (tx) => {
     await addBalanceWithTransaction(tx, userId, credits, {
@@ -255,6 +263,7 @@ async function creditWechatPaymentIntent(
         eventId,
         paymentIntentId: intent.id,
         paymentMethod: 'wechat_pay',
+        ...(receiptUrl ? { receiptUrl } : {}),
         credits,
         paymentAmountMinor,
         paymentCurrency,
@@ -302,6 +311,7 @@ async function creditCheckoutSession(eventId: string, session: StripeCheckoutSes
   const paymentCurrency = readString(session.metadata.payment_currency)?.toLowerCase()
   if (!paymentCurrency) throw new Error('STRIPE_CHECKOUT_METADATA_PAYMENT_CURRENCY_REQUIRED')
   const paymentAmountMinor = Math.round(paymentAmount * 100)
+  const receiptUrl = await resolveReceiptUrl(paymentIntentId)
 
   await prisma.$transaction(async (tx) => {
     await addBalanceWithTransaction(tx, userId, credits, {
@@ -315,6 +325,7 @@ async function creditCheckoutSession(eventId: string, session: StripeCheckoutSes
         eventId,
         checkoutSessionId: session.id,
         paymentIntentId,
+        ...(receiptUrl ? { receiptUrl } : {}),
         credits,
         paymentAmountMinor,
         paymentCurrency,
@@ -500,6 +511,7 @@ export async function handleStripeWebhook(rawBody: string, signatureHeader: stri
         planId,
         interval,
         purchaseId: session.id,
+        receiptUrl: session.paymentIntentId ? await resolveReceiptUrl(session.paymentIntentId) : null,
       })
       return {
         received: true,

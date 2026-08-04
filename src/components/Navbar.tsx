@@ -21,6 +21,7 @@ import NavbarAccountMenu, { NavbarUserAvatar } from './navbar/NavbarAccountMenu'
 import {
   buildNavbarSettingsMenuItems,
   isNavbarBalancePayload,
+  readNavbarPlan,
   shouldCloseNavbarSettingsMenu,
   type NavbarUserBalance,
 } from './navbar/account-menu-model'
@@ -154,6 +155,7 @@ export default function Navbar({
             totalSpent: payload.totalSpent,
             health: payload.health,
             referenceClipsRemaining: payload.referenceClipsRemaining,
+            plan: readNavbarPlan((payload as { subscription?: unknown }).subscription),
           })
         }
       })

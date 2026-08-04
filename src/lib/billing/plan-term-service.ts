@@ -30,6 +30,8 @@ export interface ApplyPlanPurchaseInput {
   readonly interval: SubscriptionInterval
   /** Checkout session id — the identity that makes replaying the webhook safe. */
   readonly purchaseId: string
+  /** Stripe-hosted receipt, when one could be resolved. */
+  readonly receiptUrl?: string | null
 }
 
 export type ApplyPlanPurchaseResult =
@@ -103,6 +105,7 @@ export async function applyPlanPurchaseInTransaction(
         monthlyCredits: plan.monthlyCredits,
         termStartsAt: startsAt.toISOString(),
         termEndsAt: endsAt.toISOString(),
+        ...(input.receiptUrl ? { receiptUrl: input.receiptUrl } : {}),
       }),
     },
   })

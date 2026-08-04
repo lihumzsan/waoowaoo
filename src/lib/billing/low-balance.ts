@@ -31,3 +31,21 @@ export function referenceClipsRemaining(availableCredits: number): number {
   if (perClip <= 0) return 0
   return Math.floor(Math.max(0, availableCredits) / perClip)
 }
+
+/** Days before a plan term ends that the user starts being reminded. */
+export const PLAN_EXPIRY_REMINDER_DAYS = 7
+
+/**
+ * How long a plan term still has to run.
+ *
+ * A term that was bought rather than auto-renewed simply stops, so the warning
+ * has to arrive before it does — otherwise the first sign is work failing.
+ */
+export function daysUntilPlanEnds(currentPeriodEnd: Date, now: Date = new Date()): number {
+  const remainingMs = currentPeriodEnd.getTime() - now.getTime()
+  return Math.max(0, Math.ceil(remainingMs / (24 * 60 * 60 * 1000)))
+}
+
+export function isPlanExpiringSoon(currentPeriodEnd: Date, now: Date = new Date()): boolean {
+  return daysUntilPlanEnds(currentPeriodEnd, now) <= PLAN_EXPIRY_REMINDER_DAYS
+}

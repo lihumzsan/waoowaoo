@@ -38,6 +38,18 @@ function formatCreditDelta(value: number): string {
   return `${sign}${formatCredits(value)}`
 }
 
+/**
+ * Link to Stripe's own receipt rather than rendering one.
+ *
+ * The receipt is issued by the party that took the money, which is both more
+ * trustworthy and always current. Rows recorded before receipts were captured
+ * simply have no link.
+ */
+function readReceiptUrl(meta: Record<string, unknown> | null | undefined): string | null {
+  const url = meta?.receiptUrl
+  return typeof url === 'string' && url.startsWith('https://') ? url : null
+}
+
 export default function ProfileTransactionsTable({
   items,
   currency,
@@ -67,6 +79,21 @@ export default function ProfileTransactionsTable({
   }
 
   // 计费明细:次要信息,窄视口下隐藏,宽视口最多 3 枚 chip,其余折叠为计数。
+  const renderReceiptLink = (item: ProfileTransactionItem) => {
+    const url = readReceiptUrl(item.billingMeta)
+    if (!url) return null
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-0.5 inline-block text-[11px] text-[var(--glass-tone-info-fg)] hover:underline"
+      >
+        {t('viewReceipt')}
+      </a>
+    )
+  }
+
   const renderBillingDetail = (item: ProfileTransactionItem) => {
     const parts = buildProfileBillingDetailParts(item.billingMeta)
     if (parts.length === 0) return <span className="text-[var(--glass-text-tertiary)]">-</span>
@@ -122,6 +149,7 @@ export default function ProfileTransactionsTable({
                   {t(getProfileTransactionActionTranslationKey(item.type, item.action))}
                 </div>
                 {renderTransactionScope(item)}
+                {renderReceiptLink(item)}
               </td>
               <td className="hidden align-middle xl:table-cell">{renderBillingDetail(item)}</td>
               <td className="text-right align-middle">

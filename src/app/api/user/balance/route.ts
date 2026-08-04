@@ -3,6 +3,8 @@ import { getBalance } from '@/lib/billing'
 import { BILLING_CURRENCY } from '@/lib/billing/currency'
 import { ensureCurrentPeriodGranted, getSubscriptionSnapshot } from '@/lib/billing/subscription-service'
 import {
+    daysUntilPlanEnds,
+    isPlanExpiringSoon,
     LOW_BALANCE_THRESHOLD_CREDITS,
     referenceClipsRemaining,
     resolveBalanceHealth,
@@ -47,6 +49,8 @@ export const GET = apiHandler(async () => {
                 interval: subscription.interval,
                 status: subscription.status,
                 currentPeriodEnd: subscription.currentPeriodEnd.toISOString(),
+                daysLeft: daysUntilPlanEnds(subscription.currentPeriodEnd),
+                expiringSoon: isPlanExpiringSoon(subscription.currentPeriodEnd),
             }
             : null,
     })

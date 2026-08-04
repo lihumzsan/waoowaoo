@@ -31,6 +31,15 @@ export interface NavbarUserBalance {
   health: BalanceHealth
   /** Standard clips the balance still covers, for concrete warning copy. */
   referenceClipsRemaining: number
+  /** Present only while a plan term is running. */
+  plan: NavbarPlanSummary | null
+}
+
+export interface NavbarPlanSummary {
+  planId: string
+  daysLeft: number
+  /** Server-decided: close enough to the end that the user should be told. */
+  expiringSoon: boolean
 }
 
 export function isNavbarBalancePayload(value: unknown): value is { success: boolean } & NavbarUserBalance {
@@ -44,6 +53,19 @@ export function isNavbarBalancePayload(value: unknown): value is { success: bool
     isBalanceHealth(record.health) &&
     typeof record.referenceClipsRemaining === 'number'
   )
+}
+
+export function readNavbarPlan(value: unknown): NavbarPlanSummary | null {
+  if (!value || typeof value !== 'object') return null
+  const record = value as Record<string, unknown>
+  if (
+    typeof record.planId !== 'string'
+    || typeof record.daysLeft !== 'number'
+    || typeof record.expiringSoon !== 'boolean'
+  ) {
+    return null
+  }
+  return { planId: record.planId, daysLeft: record.daysLeft, expiringSoon: record.expiringSoon }
 }
 
 function isBalanceHealth(value: unknown): value is BalanceHealth {
