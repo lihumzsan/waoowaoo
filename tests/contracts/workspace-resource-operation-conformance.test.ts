@@ -5,6 +5,7 @@ import { requireWorkspaceResourceSchema } from '@/lib/workspace-resource/schema-
 import { parseWorkspaceResourceGenerationTaskPayload } from '@/lib/workspace-resource/generation-contract'
 import { readCanvasActionCatalogView } from '@/lib/operations/canvas-action-catalog'
 import { buildWorkspaceCanvasCreateOperationInput } from '@/features/project-workspace/canvas/create/canvas-create-input'
+import { productionManifestSchema } from '@/lib/workspace-resource/production-manifest'
 
 describe('WorkspaceResource Operation registry conformance', () => {
   it('aligns every declared producer with the canonical Resource schema registry', () => {
@@ -44,23 +45,21 @@ describe('WorkspaceResource Operation registry conformance', () => {
       outputMediaTypes: ['image', 'audio', 'video'],
       placement: 'required',
     })
+    expect(manifest?.inputSchema.safeParse({
+      manifestPath: 'production/video-manifest.json',
+    }).success).toBe(true)
+    expect(manifest?.inputSchema.safeParse({
+      manifestId: 'inline-manifest-is-forbidden',
+      items: [],
+    }).success).toBe(false)
   })
 
-  it('publishes the canonical .resource placement suffix for every MCP media producer', () => {
+  it('keeps direct media creation out of MCP while preserving API/Canvas creation', () => {
     const registry = createProjectAgentOperationRegistryForApi()
-    for (const operationId of [
-      'register_uploaded_media',
-      'create_image',
-      'create_audio',
-      'create_video',
-      'generate_voice',
-      'merge_videos',
-      'submit_production_manifest',
-    ]) {
+    for (const operationId of ['create_image', 'create_audio', 'create_video']) {
       const operation = registry[operationId]
       if (!operation) throw new Error(`Required media operation missing: ${operationId}`)
-      expect(JSON.stringify(operation.toolInputSchema), operationId)
-        .toContain('"pattern":"\\\\.resource$"')
+      expect(operation.channels, operationId).toEqual({ tool: false, api: true, mcp: false })
     }
   })
 
@@ -76,8 +75,13 @@ describe('WorkspaceResource Operation registry conformance', () => {
       durationSeconds: 15,
     }))
 
-    expect(manifest.inputSchema.safeParse({ manifestId: 'feature-film', items }).success).toBe(true)
-    expect(manifest.inputSchema.safeParse({
+    expect(productionManifestSchema.safeParse({
+      schemaVersion: 1,
+      manifestId: 'feature-film',
+      items: items.map((item) => ({ ...item, aspectRatio: '16:9' })),
+    }).success).toBe(true)
+    expect(productionManifestSchema.safeParse({
+      schemaVersion: 1,
       manifestId: 'feature-film-overflow',
       items: [...items, {
         itemId: `shot-${OPERATION_EXECUTION_MAX_TASKS}`,
@@ -86,7 +90,32 @@ describe('WorkspaceResource Operation registry conformance', () => {
         outputPath: `shots/${OPERATION_EXECUTION_MAX_TASKS}.resource`,
         prompt: `Shot ${OPERATION_EXECUTION_MAX_TASKS}`,
         durationSeconds: 15,
+      }].map((item) => ({ ...item, aspectRatio: '16:9' })),
+    }).success).toBe(false)
+  })
+
+  it('requires complete explicit asset identity and 4:3 execution parameters', () => {
+    const base = {
+      schemaVersion: 1 as const,
+      manifestId: 'assets-v1',
+      items: [{
+        itemId: 'character-one',
+        mediaType: 'image' as const,
+        schemaId: 'project.character_image' as const,
+        assetKind: 'character' as const,
+        outputPath: 'assets/character-one.resource',
+        aspectRatio: '4:3',
+        prompt: 'Complete final character asset prompt including the required presentation.',
       }],
+    }
+    expect(productionManifestSchema.safeParse(base).success).toBe(true)
+    expect(productionManifestSchema.safeParse({
+      ...base,
+      items: [{ ...base.items[0], aspectRatio: '16:9' }],
+    }).success).toBe(false)
+    expect(productionManifestSchema.safeParse({
+      ...base,
+      items: [{ ...base.items[0], assetKind: 'location' }],
     }).success).toBe(false)
   })
 
@@ -113,7 +142,7 @@ describe('WorkspaceResource Operation registry conformance', () => {
         schemaId: 'project.character_image',
         prompt: 'An original character wearing a navy utility coat.',
       },
-    }).success).toBe(true)
+    }).success).toBe(false)
     expect(audio.inputSchema.safeParse({
       request: {
         kind: 'new',

@@ -88,13 +88,13 @@ description: Design continuous instrumental scoring, dynamics, silence, and dial
 - 不写精确 BPM 数字和变速表。用状态语言表达速度纪律，例如"整段保持单一稳定脉冲，不加速、不减速、不重新起拍"。情绪强度交给音符细分、配器密度、音区与和声张力。
 - 一个 cue 一条情绪弧线：用 2 到 4 个粗粒度阶段描述本段曲线（如"克制 → 增强 → 抽离"），不写精确到秒的时刻表。
 - 一个 cue 一个主题动机，段内变奏，明确禁止中途另起新主题。
-- 字符预算由执行层按当前音乐模型注入（`productionContext.music.promptMaxCharacters`），并由代码确定性计数强制；超限会被拒绝，不存在"大约"。优先级为：速度纪律与主题唯一性 > 情绪弧线 > 配器与空间 > 其他细节；写不下的内容宁可舍弃细节也不牺牲前两项。
+- 字符预算只读取 `system/project.json` 中的 `productionCapabilities.music.promptMaxCharacters`，并由代码确定性计数强制；该能力为空时停止交付 Manifest，不得猜测。超限会被拒绝，不存在"大约"。优先级为：速度纪律与主题唯一性 > 情绪弧线 > 配器与空间 > 其他细节；写不下的内容宁可舍弃细节也不牺牲前两项。
 - cue 内部的短暂降档与呼吸照常用文字设计，但生成模型只有倾向性响应；跨段的"完全无音乐"由 cue 边界结构性保证，不再依赖模型自觉。
 
 ## 自检
 
 - 每个 cue 的 `generationPrompt` 是否已内化该段全部可执行决策与叙事前后文，不依赖其他字段被再次阅读？决定不配乐时是否显式输出空 `cues: []` 并说明理由？
-- cue 切分是否只发生在约 6 秒以上的静音间隔处，每段时长与指令字符数是否都在注入的 `productionContext.music` 预算内？
+- cue 切分是否只发生在约 6 秒以上的静音间隔处，每段时长与指令字符数是否都在 `system/project.json` 的 `productionCapabilities.music` 预算内？
 - 是否使用真实时间线时长，并且没有声称分析未提供的画面或音轨？
 - 注入完整 Creative Direction 时，是否把所有与音乐有关的政策具体转译为音乐气质、声场、节奏密度和配器，而不是忽略、照抄或强行塞进配乐？
 - 是否先完成叙事诊断，再决定配乐立场、存在与留白？
@@ -104,6 +104,31 @@ description: Design continuous instrumental scoring, dynamics, silence, and dial
 - 是否排除了人声、歌词、环境录音、拟音和字面同步音效？
 - 是否避免了无依据的英雄化、浪漫化、凯旋终止、预告片撞击、稳定循环和重复高潮？
 
+## 写入 Production Manifest
+
+- 每个 cue 对应一个 `mediaType: "audio"` item；`prompt` 必须是该 cue 完整最终 `generationPrompt`，主 Agent与服务端不会再补写。
+- 显式填写 `durationSeconds`、`vocalMode`，以及确实需要的 `genre`、`mood`、`bpm`。当前 BGM 默认 `schemaId` 为 `project.bgm_audio`。
+- Manifest 是严格 JSON 文件，最小结构如下：
+
+```json
+{
+  "schemaVersion": 1,
+  "manifestId": "music-v1",
+  "items": [
+    {
+      "itemId": "cue-001",
+      "mediaType": "audio",
+      "schemaId": "project.bgm_audio",
+      "outputPath": "audio/cue-001.resource",
+      "durationSeconds": 60,
+      "vocalMode": "instrumental",
+      "prompt": "Complete final English generation prompt",
+      "references": []
+    }
+  ]
+}
+```
+
 ## 边界
 
-本 Skill 提供音乐创作方法。帧率、采样率、时间范围、允许枚举、精确理论字段、自动化 Schema 和最终生成参数由调用方与确定性执行层定义。
+本 Skill 提供音乐创作方法、最终生成提示词和 Manifest 中显式的时长与音乐参数。模型选择、能力校验、媒体提交、计费、Task 与终态由确定性执行层负责。

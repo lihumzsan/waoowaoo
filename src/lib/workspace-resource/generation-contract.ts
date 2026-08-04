@@ -55,10 +55,19 @@ const frozenResourceSchema = z.object({
   }
 })
 
+const productionManifestSourceSchema = z.object({
+  resourceId: z.string().trim().min(1).max(32),
+  contentVersion: z.number().int().positive(),
+  workspacePath: z.string().trim().min(1).max(512),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/u),
+  manifestId: z.string().trim().min(1).max(191),
+}).strict()
+
 export const workspaceResourceGenerationTaskPayloadSchema = z.object({
   lifecycleProjection: workspaceResourceLifecycleProjectionSchema,
   protocol: z.literal('workspace_resource_generation_v1'),
   resource: frozenResourceSchema,
+  productionManifestSource: productionManifestSourceSchema.optional(),
   imageModel: z.string().trim().min(1).optional(),
   videoModel: z.string().trim().min(1).optional(),
   musicModel: z.string().trim().min(1).optional(),
@@ -110,6 +119,7 @@ export function parseWorkspaceResourceGenerationTaskPayload(
     lifecycleProjection: parsed.lifecycleProjection,
     protocol: parsed.protocol,
     resource: parsed.resource,
+    productionManifestSource: parsed.productionManifestSource,
     imageModel: parsed.imageModel,
     videoModel: parsed.videoModel,
     musicModel: parsed.musicModel,
@@ -141,6 +151,7 @@ export function parseWorkspaceResourceGenerationRetrySource(
     lifecycleProjection: parsed.lifecycleProjection,
     protocol: parsed.protocol,
     resource: parsed.resource,
+    productionManifestSource: parsed.productionManifestSource,
     imageModel: parsed.imageModel,
     videoModel: parsed.videoModel,
     musicModel: parsed.musicModel,

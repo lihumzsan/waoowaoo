@@ -27,6 +27,7 @@ Codex app-server 拥有单个 Agent 进程内的 Thread/Turn 与原生交互；W
 - **ARL-16 — SSE 重连替换旧连接而不扩容。** 浏览器标签页为每个 Project 持有稳定的 session connection identity；服务端另发本次连接的唯一 owner token。相同 identity 重连原子接管现有 user/project/global 租约，不增加 cardinality；旧 owner 之后不能 renew 或 release 新连接。不同标签页仍受既有三层上限约束，进程重启、页面刷新和 EventSource 重建不得依赖等待 TTL 才恢复。
 - **ARL-17 — Runtime 错误与继续动作都由持久事实裁决。** Projector 只按钉死 Codex 协议读取 `error` notification 与最终 `turn/completed.error`，将最终失败一次性写为稳定 error code 和受限诊断 message；UI 不解析流内容、日志或 Provider 文案猜测原因。尚可重试的 attempt 不是 Product Turn 终态。已进入 Runtime 且非用户取消的失败/中断只能以新 source identity 创建一个新 Product Turn，指令 Agent 先核对 WorkspaceResource、Task 与 Plan 后继续未完成部分；只有从未进入 Runtime 的消息才允许忠实重发原 source。
 - **ARL-18 — MCP 输出与长期 Task 展示分权。** Projector 只把 MCP `structuredContent` 作为业务输出；transport envelope、文本副本和 tool completion 不能把 `async=true` 的提交解释成媒体成功。聊天保留本 Turn 的工具调用与明确错误，但不永久渲染项目 Task 批次状态条；pending/running/terminal Resource 与当前 Task 状态只由 Canvas 正式 View 展示。Operation 标题来自 i18n registry，未知内部 tool name 不直接回显给用户。
+- **ARL-19 — 聊天附件只物化一次，不旁路专业生产。** 聊天媒体在 `register_uploaded_media` 前只属于消息作用域；注册后唯一变成 ready WorkspaceResource 指针。主 Agent只能把该项目相对路径与用途交给固定专业子 Agent，由子 Agent在 Production Manifest 中声明精确 `resourceId + contentVersion + channel + position`；主 Agent不得把附件直接拼进媒体创建调用或代写专业引用选择。
 
 ## 状态所有权
 

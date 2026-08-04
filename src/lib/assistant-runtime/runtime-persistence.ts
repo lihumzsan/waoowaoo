@@ -22,6 +22,7 @@ import { prisma } from '@/lib/prisma'
 import { publishWorkspaceResourceChanges } from '@/lib/workspace-resource/resource-change-publisher'
 import { captureCodexStateBundle, restoreCodexStateBundle, saveCodexStateBundle } from './codex-state-store'
 import { markAssistantRuntimeProjectTurnsInterrupted } from './persistence'
+import { materializeCreativeRuntimeConfiguration } from '@/lib/creative-skills'
 
 const MATERIALIZATION_PREFIX = 'wao-codex-runtime-'
 const BASELINE_FILE_NAME = 'workspace-baseline.bundle.json'
@@ -153,22 +154,6 @@ async function synchronizeRuntimeWorkspace(
   }
 }
 
-async function materializeNativeSkills(
-  codexHomeDirectory: string,
-  runtimeBundle: WorkspaceBundleV1,
-): Promise<void> {
-  const prefix = 'system/skills/'
-  for (const file of runtimeBundle.files.filter((entry) => entry.path.startsWith(prefix))) {
-    const relative = file.path.slice(prefix.length)
-    if (!/^[A-Za-z0-9_-]+\/SKILL\.md$/u.test(relative)) {
-      throw new Error(`ASSISTANT_RUNTIME_SKILL_PATH_INVALID:${file.path}`)
-    }
-    const target = path.join(codexHomeDirectory, 'skills', ...relative.split('/'))
-    await mkdir(path.dirname(target), { recursive: true, mode: 0o700 })
-    await writeFile(target, file.content, { mode: 0o600 })
-  }
-}
-
 async function checkpointRuntimeThreadBinding(input: {
   readonly scope: RuntimeSessionScope
   readonly productThreadId: string
@@ -226,7 +211,7 @@ export class AssistantRuntimePersistence implements RuntimeSessionPersistence {
       })
       await materializeWorkspaceBundle(workspace, projection.runtimeBundle)
       await restoreCodexStateBundle({ scope, codexHomeDirectory: codexHome })
-      await materializeNativeSkills(codexHome, projection.runtimeBundle)
+      await materializeCreativeRuntimeConfiguration(codexHome)
       const directoryIdentities = await readDirectoryIdentities(
         workspace,
         projection.runtimeBundle.directories,

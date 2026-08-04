@@ -7,7 +7,7 @@ description: Scope reusable production assets and define stable visible designs 
 
 ## 作用
 
-从精确 `screenplay` Resource、用户要求、参考素材，以及项目已采纳时由服务端完整注入的 Creative Direction 中筛选值得制作的可复用角色、场景、道具，并记录每个资产稳定、可见的身份与结构。正式 `asset_manifest` 是生产资产范围的唯一事实；本 Skill 不编写最终媒体 Prompt、不直接生成图片或写入项目。正式 `asset_manifest` 只强制一个精确 screenplay Resource；Creative Direction 仍然可选。
+从精确剧本、用户要求、参考素材和已采纳的 Creative Direction 中筛选值得制作的可复用角色、场景、道具，完成稳定可见设计，并把每张资产的唯一最终图片 Prompt 与显式生成参数写入被指派的 Production Manifest。这个专业子 Agent 是资产创作内容的唯一 writer；它不调用媒体生产、计费或 Task 工具。
 
 ## 资产筛选
 
@@ -16,16 +16,16 @@ description: Scope reusable production assets and define stable visible designs 
 - 没有任何实体通过全部门槛时返回空 `assets` 并在 `overview` 解释原因；不得为了让清单非空而虚构或升级多余资产。
 - 同一实体的机位、景别、构图、光线或短暂动作变化不能成为新资产。只有独立且持久的视觉身份才拆分。
 - 同一叙事地点中视觉结构明显不同、各自真实承载画面动作且后续需要独立参考的空间必须拆分，例如山顶与坠落后的崖底；仅转场一闪而过、没有动作落点或无需独立视觉连续性的空间不拆分。
-- 同一个 Creative Task 完成筛选和稳定身份设计；不输出独立 extraction Resource、候选台账、最终 Prompt 或第二套资产状态。
+- 同一个专业任务完成筛选、稳定身份设计与最终 Prompt；不输出第二套候选状态或让主 Agent 再拼接 Prompt。
 - `canonicalName + kind` 表达稳定创作身份；不得发明系统 ID、使用数组位置或新增含糊的 `other` 类型。实际身份由输出 WorkspaceResource 路径与 resourceId 拥有。
 
 ## 风格消费边界
 
-- `creativeDirection` 非空时使用完整已采纳方向，自行判断哪些政策影响资产筛选与稳定身份设计。它可以指导服装、配色、材质和空间美术选择，但不得把画幅、版式、背景格式、镜头语言、滤镜、光影效果或 Provider 参数写进 `stableDescription`。它为空时，按已提供事实设计资产身份，不得临时发明项目级方向。
-- `stableDescription` 是唯一逐项资产设计正文，只写资产本身可见且可复用的身份、外观、材质和结构。禁止出现“最终 Prompt”、画幅、左右布局、资产板、多视图、纯色背景、模型参数或生成命令。
+- Creative Direction 非空时使用完整已采纳方向，自行判断哪些政策影响资产筛选、身份设计和最终呈现。`stableDescription` 仍只记录资产自身可见且可复用的身份、外观、材质和结构；画幅、版式、背景和生成要求只进入最终 Prompt 与 Manifest 参数，不污染身份事实。
+- 最终 Prompt 必须自行合并稳定设计、项目视觉风格和本 Skill 的资产图版式。主 Agent与服务端都不会追加、改写或补全创作指令。
 - `stableDescription` 使用与用户内容一致的语言：中文内容写中文，英文内容写英文。
 - 角色稳定身份描述不混入艺术风格、滤镜、光影、背景或构图。
-- 场景基础描述保存真实空间结构、材质与物理光源条件，不写由服务端统一合成的戏剧化风格或资产图格式。
+- 场景基础描述保存真实空间结构、材质与物理光源条件；最终 Prompt 再合成项目风格与场景资产图格式。
 - 视频使用跨媒体总体风格，不应继承资产图专用灯光或材质处理。
 - 用户或项目风格高于参考图画风。参考图用于身份与结构，不能覆盖明确指定的美术风格；忽略原图偶然色调、光线、模糊、噪点和瑕疵。
 
@@ -83,10 +83,39 @@ description: Scope reusable production assets and define stable visible designs 
 - 结果适合白底居中、主体完整清楚的独立道具资产图。
 - 参考图可提供轮廓、结构、材质、纹样与配色，但不能引入参考图中的偶然背景或人物。
 
+## 最终资产图与 Production Manifest
+
+- 每个资产图片 item 必须写完整最终 Prompt；执行层会逐字冻结，不能依赖其他字段、主 Agent 或服务端再次补写。
+- 角色：一张 4:3 横向图，左右等分；左侧同一角色脸部特写，右侧同一角色无遮挡全身；纯白背景；不得出现其他人物、道具或环境。
+- 场景：一张 4:3 横向图，正前方完整展示整个空间，不拆多视图；不得出现人物、松散家具或独立道具；场景固定结构可保留。
+- 道具：一张 4:3 横向图，只出现一个居中、完整、方向明确、无遮挡的道具；纯白背景；不得出现人物、其他道具或环境。
+- `aspectRatio` 必须显式写成 `"4:3"`。这是实际生成参数，不允许只在 Prompt 里提到比例。
+- `assetKind` 与 `schemaId` 必须严格对应：`character → project.character_image`、`location → project.location_image`、`prop → project.prop_image`。
+- Manifest 必须是严格 JSON 文件，最小结构如下；`references` 只使用主 Agent分配的精确 ready Resource 身份与版本：
+
+```json
+{
+  "schemaVersion": 1,
+  "manifestId": "assets-v1",
+  "items": [
+    {
+      "itemId": "character-xu-wu",
+      "mediaType": "image",
+      "schemaId": "project.character_image",
+      "assetKind": "character",
+      "outputPath": "assets/characters/xu-wu.resource",
+      "aspectRatio": "4:3",
+      "prompt": "完整、可直接交给图片模型的最终提示词",
+      "references": []
+    }
+  ]
+}
+```
+
 ## 自检
 
 - 正式 Asset Manifest 是否只包含从输入剧本判断值得复用的生产资产？注入完整 Creative Direction 时，是否使用了所有相关政策且没有把无关领域变成资产事实？
-- 是否只输出资产自身的稳定可见设计，没有画幅、版式、背景格式、多视图要求、Provider 参数或最终 Prompt？
+- 是否同时保留纯净的稳定设计，并把完整最终 Prompt、正确版式和显式 `4:3` 参数写入 Manifest，而没有依赖服务端补写？
 - 角色是否稳定、完整、年代一致、鞋履明确，肤色/发色/瞳色等身份锚点是否写清，并排除了动作、背景、不确定词和抽象气质？
 - 非人类角色是否按真实形态处理而非套用人类模板？
 - 场景是否忠实、结构完整、层次清楚、锚点稳定，并留有无标记的落位空间？
@@ -94,4 +123,4 @@ description: Scope reusable production assets and define stable visible designs 
 
 ## 边界
 
-本 Skill 只负责资产筛选与稳定可见设计，结果可写为普通资产清单文件。项目级呈现政策由 `creative-direction` Skill 负责；最终图片 Prompt、画幅、版式、背景和 Provider 参数在实际媒体 Operation 中按服务端 Asset Format Policy 编译。
+本 Skill 负责资产筛选、稳定可见设计、最终资产图片 Prompt 和对应 Manifest 参数。项目级呈现政策来自已提供的 Creative Direction；媒体执行、模型选择、能力校验、计费、审批、Task 与终态由主 Agent提交 Manifest 后的系统服务负责。

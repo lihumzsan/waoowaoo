@@ -6,7 +6,6 @@ import { prisma } from '@/lib/prisma'
 import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
 import type { OperationPlan } from './planning'
 import { parseWorkspaceResourceGenerationTaskPayload } from '@/lib/workspace-resource/generation-contract'
-import { resolveAssetImageKindForSchemaId } from '@/lib/asset-generation/asset-image-format'
 import { TASK_TYPE } from '@/lib/task/types'
 
 export const PROJECT_VIDEO_RATIO_METADATA_KEY = 'projectVideoRatio'
@@ -51,18 +50,20 @@ export function requireProjectVideoRatio(value: string | null | undefined): Proj
 function containsProjectImageOrVideoTask(plan: OperationPlan): boolean {
   return plan.tasks.some((task) => {
     if (!task.billingInfo.billable) return false
-    if (task.billingInfo.apiType === 'video') return true
-    if (task.billingInfo.apiType !== 'image') return false
-    if (task.taskType !== TASK_TYPE.WORKSPACE_RESOURCE_IMAGE) return true
+    if (task.billingInfo.apiType !== 'image' && task.billingInfo.apiType !== 'video') return false
+    if (
+      task.taskType !== TASK_TYPE.WORKSPACE_RESOURCE_IMAGE
+      && task.taskType !== TASK_TYPE.WORKSPACE_RESOURCE_VIDEO
+    ) return true
     const payload = parseWorkspaceResourceGenerationTaskPayload(task.payload)
-    return resolveAssetImageKindForSchemaId(payload.resource.schemaId) === null
+    return payload.productionManifestSource === undefined
   })
 }
 
 /**
- * Freezes the current project frame fact into every generic image/video plan.
- * Character/location/prop assets use the server-owned 4:3 asset format policy
- * and therefore do not depend on the project's moving-image frame.
+ * Freezes the current project frame fact into direct Canvas/API image and video plans.
+ * Professional production manifests declare and freeze their own explicit aspect ratios,
+ * so their execution never depends on a later project-ratio read.
  * This is the single planning boundary shared by Agent and API callers, so no
  * task, approval, retry, or replay can reuse a plan after the fact changes.
  */
