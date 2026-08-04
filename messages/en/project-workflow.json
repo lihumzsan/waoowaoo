@@ -132,7 +132,8 @@
         "deleteFolder": "Delete folder {path}",
         "sectionCount": "{count} items",
         "directory": "Directory",
-        "directoryEmpty": "No folders yet"
+        "directoryEmpty": "No folders yet",
+        "jumpToFolder": "Jump to canvas position"
       },
       "nodes": {
         "resourceCard": {

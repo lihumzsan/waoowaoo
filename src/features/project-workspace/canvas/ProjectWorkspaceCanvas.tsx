@@ -656,6 +656,26 @@ function ProjectWorkspaceFolderCanvas({
     const node = flowNodes.find((candidate) => candidate.data.targetId === card.resource.resourceId)
     return node ? selectionForNode(node) : null
   }, [flowNodes, selectionForNode])
+  // 目录面板消费:当前画布上有节点的文件夹(展开分组或收起卡)及其形态。
+  const folderDisplays = useMemo(() => {
+    const map = new Map<string, 'card' | 'section'>()
+    for (const node of projectedNodes) {
+      if (node.data.kind === 'folder') map.set(node.data.folder.resourceId, node.data.folder.display)
+    }
+    return map
+  }, [projectedNodes])
+  const jumpToFolder = useCallback((folderResourceId: string): boolean => {
+    const internalNode = reactFlow.getInternalNode(workspaceNodeId.folder(folderResourceId))
+    if (!internalNode) return false
+    notifyCanvasUserInteraction()
+    void reactFlow.fitBounds({
+      x: internalNode.internals.positionAbsolute.x,
+      y: internalNode.internals.positionAbsolute.y,
+      width: internalNode.measured.width ?? internalNode.width ?? 320,
+      height: internalNode.measured.height ?? internalNode.height ?? 174,
+    }, { duration: 380, padding: 0.2 })
+    return true
+  }, [notifyCanvasUserInteraction, reactFlow])
   const handleGoBack = useCallback(() => {
     if (folder.folderKey === WORKSPACE_RESOURCE_ROOT_FOLDER_KEY) return
     const parent = folder.ancestors.at(-1)
@@ -733,6 +753,8 @@ function ProjectWorkspaceFolderCanvas({
             <CanvasFolderNavigation
               canGoBack={folder.folderKey !== WORKSPACE_RESOURCE_ROOT_FOLDER_KEY}
               onBack={handleGoBack}
+              folderDisplays={folderDisplays}
+              onJumpToFolder={jumpToFolder}
               search={search}
               backLabel={t('folderNavigation.back')}
               searchPlaceholder={t('folderNavigation.searchPlaceholder')}
