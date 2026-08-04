@@ -30,6 +30,10 @@ const COMMON_REQUIRED_KEYS = [
   'PAYMENT_PUBLIC_BASE_URL',
   'STRIPE_SECRET_KEY',
   'STRIPE_WEBHOOK_SECRET',
+  // Browser-side Stripe.js key. Without it the in-page WeChat QR cannot be
+  // confirmed and the payment method silently disappears from the page, so a
+  // cloud deployment must fail the check rather than ship missing it.
+  'STRIPE_PUBLISHABLE_KEY',
 ]
 
 const PRODUCTION_REQUIRED_KEYS = [
