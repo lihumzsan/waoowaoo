@@ -1,5 +1,4 @@
 import type { RuntimeJsonObject } from '@/lib/codex-runtime/runtime-adapter'
-import { HUMAN_VISUAL_SAFETY_POLICY } from '@/lib/ai-prompts'
 import type {
   RuntimeSessionScope,
   RuntimeSessionThreadConfiguration,
@@ -71,7 +70,6 @@ function runtimeInstructions(): string {
     'For a complete video longer than 15 seconds, establish one matching Creative Direction and only the reusable reference assets the final video will actually consume before submitting video generation.',
     'For a complete video longer than 60 seconds, explicitly evaluate music direction; an intentional empty cue list is a valid no-music decision.',
     'When a speaking character must keep the same voice across shots, create and bind one stable character voice before the dependent video prompts; do not turn a single isolated line into a mandatory voice workflow.',
-    HUMAN_VISUAL_SAFETY_POLICY,
   ].join('\n')
 }
 

@@ -25,6 +25,7 @@ Codex app-server 是唯一通用 Agent Runtime。主 Agent只接收产品边界�
 - **APO-07 — 参数分权。** 专业子 Agent拥有完整创作 Prompt 与叙事相关参数（资产 4:3、视频画幅/时长、音乐时长/模式）；系统拥有模型选择、Provider 路由、能力校验、计费、审批、Task 和终态。视频/音乐子 Agent只读取 `system/project.json.productionCapabilities` 的当前只读能力事实，能力为空时不得猜测或交付可执行 Manifest。
 - **APO-08 — 缺能力显式失败。** 缺 custom agent、无效 Manifest、未知 event、缺 MCP capability 或版本不兼容必须原地失败；禁止 fallback 到主 Agent创作、直接媒体 MCP 或服务端 Prompt 编译。
 - **APO-09 — 用户可见内容本地化。** Wao UI 文案来自 i18n；Agent 输出遵循 Turn locale 或用户明确语言。
+- **APO-10 — 不用 Prompt 伪造媒体能力边界。** 主 Agent instructions 与固定专业 Skill 不注入真人、公众人物、人物相似度或照片写实风格禁令。视频与音乐能力只读取 `system/project.json.productionCapabilities` 的声明式事实，执行时的 Provider 审核拒绝只通过统一 typed failure 返回，不得再投影成常驻 Agent 政策。
 
 ## 权威入口
 
@@ -39,3 +40,7 @@ Codex app-server 是唯一通用 Agent Runtime。主 Agent只接收产品边界�
 ## 验证
 
 钉死的 Codex app-server smoke 覆盖 initialize、thread start/resume、Turn 和 parent Skill 零暴露；生产 Registry conformance 穷尽 custom agent 与 MCP Operation；Manifest schema 使用独立的声明式约束验证字段分权。
+
+## 历史回归
+
+- 旧视频模型不接收真人时，`HUMAN_VISUAL_SAFETY_POLICY` 曾作为唯一正文注入主 Agent，避免分散到 Creative Skill。后续正文虽缩窄为只禁可识别真人、公众人物和真人相似物，仍把已过期的 Provider 能力限制固化成常驻 Agent 政策。当前模型已支持真人与真实风格，政策文件、导出和主 Agent注入已一并删除；Creative Skill 中不存在同义副本，Provider 自有拒绝继续由 adapter 的 typed failure 表达。

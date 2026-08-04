@@ -19,6 +19,7 @@ Codex app-server 是唯一 Agent Runtime。Wao 不维护第二套 Creative Worke
 - **CS-07 — Manifest 是执行连接件。** 资产、视频、音乐子 Agent把完整最终 Prompt 与显式生成参数写入 JSON Manifest；主 Agent只有 `submit_production_manifest({manifestPath})` 这一条新媒体生产入口。视频/音乐角色必须同时读取 `system/project.json` 中对应的非空 `productionCapabilities`，不从示例或模型名猜能力。服务端只校验、冻结和执行，不补写创作内容。
 - **CS-08 — 原生生命周期。** 创建、等待、中断和完成只消费 Codex 原生 Subagent item/event，并投影到现有 UI；禁止恢复旧 Worker 卡片或第二状态机。
 - **CS-09 — 语言由用户决定。** Skill 可以使用适合模型的知识语言，但用户可见文本和工作区交付遵循当前 locale 或用户明确要求。
+- **CS-10 — 真人与写实风格是正常创作能力。** Wao Creative Skill 可以为真人参考、真实人物和照片写实风格设计资产与视频，不注入额外的真人、公众人物或相似度禁令。Provider 若拒绝具体输入，仍由 Provider adapter 的 typed failure 如实投影，不得把拒绝文案复制回 Skill 形成第二套能力政策。
 
 ## 固定角色
 
@@ -55,3 +56,4 @@ Codex app-server 是唯一 Agent Runtime。Wao 不维护第二套 Creative Worke
 - 服务端 Asset Format Policy 曾依据 `schemaId` 猜资产类型、拼接创作 Prompt 并覆盖 4:3。它与 Agent形成第二个创作 writer，且让测试无法区分 Skill 效果。当前资产专业子 Agent写完整 Prompt 和显式 4:3 参数；服务端只做严格验证与冻结。
 - Codex custom agent 首次接管时只注入 Skill 正文，却没有恢复旧 Worker 的 `productionContext`，视频与音乐角色仍被要求遵守一份不存在的能力输入，只能从示例猜时长和引用上限。当前 Project Runtime 把已配置模型 Registry 的能力派生为只读 `system/project.json.productionCapabilities`；主 Agent必须把该固定路径列为视频/音乐角色输入，执行层仍按提交时当前配置重新严格校验。
 - Session Manager 曾把 Subagent child Thread 的 Turn 事件误判成 parent identity 漂移并恢复整个 Runtime。当前 parent slot 只消费已映射 Product Thread，Subagent 生命周期继续由原生协作事件进入产品 View。
+- 旧视频模型不接收真人时，系统曾用 `HUMAN_VISUAL_SAFETY_POLICY` 在主 Agent统一禁止可识别真人、公众人物和真人相似物；正文虽然后来缩窄到允许虚构写实人物，仍会提前拦截真人参考。当前视频模型已支持真实风格和真人输入，该共享政策及主 Agent注入点已删除；正式 Creative Skill 原本没有复制该禁令，因此无需版本化另一份替代文案。Provider 自有审核仍只通过 typed failure 表达，不再反向定义 Skill 能力。
