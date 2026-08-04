@@ -78,6 +78,13 @@ export const PRIMARY_AGENT_DISABLED_NATIVE_SKILL_IDS = [
   'skill-installer',
 ] as const
 
+export const PRIMARY_AGENT_GLOBAL_INSTRUCTIONS = `# Wao orchestration
+
+- The primary Wao Agent may autonomously spawn and coordinate Subagents whenever delegation materially improves exploration, planning, or execution. The user does not need to ask for Subagents explicitly.
+- For professional creative work, the primary Agent must use the fixed native custom Subagent routing supplied by Wao developer instructions and must give every worker exact input paths and exclusive output paths. Spawn every fixed custom agent with \`fork_turns="none"\`; full-history forks cannot select a custom \`agent_type\`.
+- Fixed Wao professional workers execute their assigned bounded deliverable directly. They must not spawn or delegate to additional agents.
+- Keep delegation bounded: do not create redundant workers, and never let two agents write the same file or directory.`
+
 function tomlString(value: string): string {
   return JSON.stringify(value)
 }
@@ -94,6 +101,7 @@ ${resource.content.trim()}
     `You are the fixed Wao professional worker ${worker.agentType}.`,
     'Your role and Skill set were selected deterministically by the Wao worker registry. Do not discover, load, or apply any other Wao Skill.',
     'Work only on the exact files or directories assigned by the parent Agent. Do not modify system/** or .resource pointer contents.',
+    'Use assigned project-relative output paths exactly as written. Never expand them to absolute host or Runtime paths.',
     'The wao MCP server is disabled for this worker. Never submit paid production, billing, Task, approval, or Resource operations.',
     'You are the sole author of the professional deliverable for this assignment. The parent Agent may submit your file but must not copy, rewrite, or complete its professional contents.',
     worker.deliveryContract,
@@ -113,6 +121,7 @@ export async function materializeCreativeRuntimeConfiguration(codexHomeDirectory
       'sandbox_mode = "workspace-write"',
       '',
       '[mcp_servers.wao]',
+      'url = "http://127.0.0.1:1/disabled-wao-mcp"',
       'enabled = false',
       '',
     ].join('\n')
@@ -126,9 +135,24 @@ export async function materializeCreativeRuntimeConfiguration(codexHomeDirectory
     'enabled = false',
     '',
   ])
-  await writeFile(path.join(codexHomeDirectory, 'config.toml'), `${disabledSkills.join('\n')}\n`, {
-    mode: 0o600,
-  })
+  await Promise.all([
+    writeFile(
+      path.join(codexHomeDirectory, 'AGENTS.md'),
+      `${PRIMARY_AGENT_GLOBAL_INSTRUCTIONS.trim()}\n`,
+      { mode: 0o600 },
+    ),
+    writeFile(
+      path.join(codexHomeDirectory, 'config.toml'),
+      [
+        '[agents]',
+        'enabled = true',
+        '',
+        disabledSkills.join('\n'),
+        '',
+      ].join('\n'),
+      { mode: 0o600 },
+    ),
+  ])
 }
 
 export function creativeWorkerRoutingInstructions(): readonly string[] {

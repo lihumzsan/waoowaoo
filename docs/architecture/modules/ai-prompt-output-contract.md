@@ -8,7 +8,7 @@ Codex app-server 是唯一通用 Agent Runtime。主 Agent只接收产品边界�
 
 ## 指令层级
 
-主 Agent：Codex 内置基础指令 → Wao `developerInstructions` → Wao MCP schema → Turn locale/context → 用户消息。
+主 Agent：Codex 内置基础指令 → Runtime 全局 `AGENTS.md` 自主委派授权 → Wao `developerInstructions` → Wao MCP schema → Turn locale/context → 用户消息。
 
 专业子 Agent：Codex 内置基础指令 → 固定 custom agent `developer_instructions`（worker 边界 + 精确 Skill 正文 + 交付契约）→ 主 Agent分派的输入/输出路径。专业子 Agent不拥有 Wao MCP。
 
@@ -26,6 +26,7 @@ Codex app-server 是唯一通用 Agent Runtime。主 Agent只接收产品边界�
 - **APO-08 — 缺能力显式失败。** 缺 custom agent、无效 Manifest、未知 event、缺 MCP capability 或版本不兼容必须原地失败；禁止 fallback 到主 Agent创作、直接媒体 MCP 或服务端 Prompt 编译。
 - **APO-09 — 用户可见内容本地化。** Wao UI 文案来自 i18n；Agent 输出遵循 Turn locale 或用户明确语言。
 - **APO-10 — 不用 Prompt 伪造媒体能力边界。** 主 Agent instructions 与固定专业 Skill 不注入真人、公众人物、人物相似度或照片写实风格禁令。视频与音乐能力只读取 `system/project.json.productionCapabilities` 的声明式事实，执行时的 Provider 审核拒绝只通过统一 typed failure 返回，不得再投影成常驻 Agent 政策。
+- **APO-11 — 自主委派使用 Codex 原生指令面。** Wao 在隔离 Codex home 的全局 `AGENTS.md` 明确允许主 Agent自主选择固定 Subagent；不得依赖用户说出实现术语、伪造 user item 或用全局 Ultra 推理等级换取委派权限。固定 Worker 的角色、Skill 和写入范围继续由 custom agent developer instructions 决定。
 
 ## 权威入口
 
@@ -44,3 +45,4 @@ Codex app-server 是唯一通用 Agent Runtime。主 Agent只接收产品边界�
 ## 历史回归
 
 - 旧视频模型不接收真人时，`HUMAN_VISUAL_SAFETY_POLICY` 曾作为唯一正文注入主 Agent，避免分散到 Creative Skill。后续正文虽缩窄为只禁可识别真人、公众人物和真人相似物，仍把已过期的 Provider 能力限制固化成常驻 Agent 政策。当前模型已支持真人与真实风格，政策文件、导出和主 Agent注入已一并删除；Creative Skill 中不存在同义副本，Provider 自有拒绝继续由 adapter 的 typed failure 表达。
+- Codex 固定专业 Worker 首版把“必须委派”写进 Wao developer instructions，却没有落到 Codex 默认多代理策略认可的用户、`AGENTS.md` 或 Skill 指令面。真实普通创作请求因此处于“主 Agent不能写、Subagent 又不能自动启动”的死锁。当前唯一自主委派授权由 Runtime 全局 `AGENTS.md` 提供，Worker Registry 仍是角色选择与专业内容的唯一权威。

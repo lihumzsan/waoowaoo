@@ -7,6 +7,7 @@ export {
   CREATIVE_WORKER_REGISTRY,
   CREATIVE_WORKERS,
   PRIMARY_AGENT_DISABLED_NATIVE_SKILL_IDS,
+  PRIMARY_AGENT_GLOBAL_INSTRUCTIONS,
   creativeWorkerRoutingInstructions,
   materializeCreativeRuntimeConfiguration,
 } from './agent-profiles'

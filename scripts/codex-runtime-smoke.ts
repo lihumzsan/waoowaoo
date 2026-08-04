@@ -28,6 +28,7 @@ import { inspectCapturedCodexState } from '@/lib/assistant-runtime/runtime-persi
 import {
   CREATIVE_SKILL_IDS,
   CREATIVE_WORKERS,
+  PRIMARY_AGENT_GLOBAL_INSTRUCTIONS,
   materializeCreativeRuntimeConfiguration,
 } from '@/lib/creative-skills'
 import {
@@ -345,10 +346,19 @@ async function runAppServerSmoke(params: {
   const codexHome = path.join(params.rootDir, 'codex-home')
   await mkdir(codexHome, { recursive: true, mode: 0o700 })
   await materializeCreativeRuntimeConfiguration(codexHome)
+  const primaryInstructions = await readFile(path.join(codexHome, 'AGENTS.md'), 'utf8')
+  assert.equal(primaryInstructions.trim(), PRIMARY_AGENT_GLOBAL_INSTRUCTIONS.trim())
+  assert.match(primaryInstructions, /may autonomously spawn and coordinate Subagents/)
+  assert.match(primaryInstructions, /fork_turns="none"/)
+  const primaryConfig = await readFile(path.join(codexHome, 'config.toml'), 'utf8')
+  assert.match(primaryConfig, /\[agents\]\nenabled = true/)
   for (const worker of CREATIVE_WORKERS) {
     const profile = await readFile(path.join(codexHome, 'agents', `${worker.agentType}.toml`), 'utf8')
     assert.ok(profile.includes(`name = "${worker.agentType}"`))
-    assert.ok(profile.includes('[mcp_servers.wao]\nenabled = false'))
+    assert.ok(profile.includes('Never expand them to absolute host or Runtime paths.'))
+    assert.ok(profile.includes(
+      '[mcp_servers.wao]\nurl = "http://127.0.0.1:1/disabled-wao-mcp"\nenabled = false',
+    ))
     for (const skillId of worker.skillIds) {
       assert.ok(profile.includes(`<wao_skill id=\\"${skillId}\\"`))
     }

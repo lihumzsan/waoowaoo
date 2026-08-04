@@ -5,4 +5,4 @@
  * no longer be resumed safely. Product messages remain authoritative and seed
  * the replacement native Thread; ordinary process restarts keep this value.
  */
-export const ASSISTANT_RUNTIME_REVISION = 'codex-0.146.0-fixed-creative-workers-v1' as const
+export const ASSISTANT_RUNTIME_REVISION = 'codex-0.146.0-autonomous-creative-workers-v2' as const
