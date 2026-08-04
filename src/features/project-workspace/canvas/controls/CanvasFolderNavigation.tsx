@@ -43,20 +43,25 @@ function DirectoryTreeRow({
   const folderResource = node.folder
   const childFolders = node.folders.filter((child) => child.folder !== null)
   if (!folderResource) return null
+  const fileCount = countWorkspaceFolderFiles(node)
+  // 空文件夹可以显示,但没有任何激活动作:不跳转、不进入,点击无效。
+  const inert = fileCount === 0
   const display = folderDisplays.get(folderResource.resourceId) ?? null
   // 可跳转 = 该文件夹子树与当前画布顶层节点有交集(中间目录也算,跳到后代分组
   // 的并集范围);展开内容无需"进入",收起卡与画布外的文件夹才提供进入。
-  const jumpable = canvasSubtreePaths.some(
+  const jumpable = !inert && canvasSubtreePaths.some(
     (path) => isWorkspaceResourceSubtreePath(path, folderResource.workspacePath),
   )
-  const canEnter = display === 'card' || !jumpable
+  const canEnter = !inert && (display === 'card' || !jumpable)
   return (
     <div>
       <div
-        className="group flex w-full cursor-pointer items-center gap-1 rounded-lg py-1.5 pr-1.5 text-xs text-[var(--glass-text-secondary)] hover:bg-slate-100"
+        className={`group flex w-full items-center gap-1 rounded-lg py-1.5 pr-1.5 text-xs text-[var(--glass-text-secondary)] ${
+          inert ? 'cursor-default opacity-55' : 'cursor-pointer hover:bg-slate-100'
+        }`}
         style={{ paddingLeft: 4 + depth * 14 }}
-        title={jumpable ? jumpTitle : enterTitle}
-        onClick={() => onRowActivate(folderResource)}
+        title={inert ? undefined : jumpable ? jumpTitle : enterTitle}
+        onClick={inert ? undefined : () => onRowActivate(folderResource)}
       >
         <button
           type="button"
@@ -75,8 +80,8 @@ function DirectoryTreeRow({
         <span className="min-w-0 flex-1 truncate font-medium text-[var(--glass-text-primary)]">
           {folderResource.name}
         </span>
-        <span className="shrink-0 rounded-full bg-slate-100 px-1.5 text-[10px] text-[var(--glass-text-tertiary)] group-hover:hidden">
-          {countLabel(countWorkspaceFolderFiles(node))}
+        <span className={`shrink-0 rounded-full bg-slate-100 px-1.5 text-[10px] text-[var(--glass-text-tertiary)] ${inert ? '' : 'group-hover:hidden'}`}>
+          {countLabel(fileCount)}
         </span>
         <span className="hidden shrink-0 items-center gap-0.5 group-hover:flex">
           {jumpable ? (
@@ -184,6 +189,21 @@ export function CanvasFolderNavigation(props: {
   )
   const rootFolders = tree.folders.filter((child) => child.folder !== null)
   const treeReady = !treeQuery.isLoading && !treeQuery.isError && !treeHasNextPage
+  // 搜索结果里的空文件夹同样只展示不激活——系统不存在进入空文件夹的入口。
+  const folderFileCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    const walk = (candidate: WorkspaceCanvasFolderTreeNode) => {
+      for (const child of candidate.folders) {
+        if (!child.folder) continue
+        counts.set(child.folder.resourceId, countWorkspaceFolderFiles(child))
+        walk(child)
+      }
+    }
+    walk(tree)
+    return counts
+  }, [tree])
+  const searchResultInert = (resource: WorkspaceResourceView): boolean =>
+    resource.resourceKind === 'folder' && (folderFileCounts.get(resource.resourceId) ?? 0) === 0
 
   const enterFolder = (resource: WorkspaceResourceView) => {
     setOpen(false)
@@ -296,8 +316,10 @@ export function CanvasFolderNavigation(props: {
                 <li key={resource.resourceId}>
                   <button
                     type="button"
-                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-slate-50"
-                    onClick={() => enterFolder(resource)}
+                    className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left ${
+                      searchResultInert(resource) ? 'cursor-default opacity-55' : 'hover:bg-slate-50'
+                    }`}
+                    onClick={searchResultInert(resource) ? undefined : () => enterFolder(resource)}
                   >
                     <AppIcon
                       name={resource.resourceKind === 'folder' ? 'folder' : 'fileText'}
