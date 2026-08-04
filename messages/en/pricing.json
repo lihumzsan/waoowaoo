@@ -69,6 +69,16 @@
     "unitValue": "1 credit = ¥0.1",
     "paymentTitle": "Top-up and payment",
     "compareTitle": "Plan comparison",
-    "merchantMoreLink": "More merchant details"
+    "merchantMoreLink": "More merchant details",
+    "billingMonthly": "Monthly",
+    "billingYearly": "Yearly",
+    "yearlySaveBadge": "Save ¥{amount}",
+    "perMonth": "/ mo",
+    "billedYearly": "¥{amount} billed yearly",
+    "subscribe": "Subscribe",
+    "subscribeBusy": "Redirecting…",
+    "firstMonthPromo": "First month ¥{amount}",
+    "creditsPerMonth": "{credits} per month",
+    "oneOffTitle": "Or top up as you go"
   }
 }

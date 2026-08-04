@@ -122,7 +122,56 @@ export function useRecharge(): RechargeState {
   return { config, loading, busy, status, checkout, estimate }
 }
 
-export function RechargeStatus({ status }: { status: RechargeState['status'] }) {
+/* ----------------------------------------------------------------- */
+/* Subscription hook — starts a recurring Stripe Checkout              */
+/* ----------------------------------------------------------------- */
+
+export interface SubscriptionCheckoutState {
+  busy: boolean
+  status: { kind: 'error' | 'info'; text: string } | null
+  start: (planId: string, interval: 'month' | 'year') => void
+}
+
+/**
+ * Subscribing is a different Stripe mode from topping up, so it is a different
+ * request. Sharing the recharge hook would have meant one call site deciding
+ * between a one-off payment and a recurring one from a flag.
+ */
+export function useSubscriptionCheckout(): SubscriptionCheckoutState {
+  const t = useTranslations('pricing.glass')
+  const resolveClientError = useClientErrorMessage()
+  const [busy, setBusy] = useState(false)
+  const [status, setStatus] = useState<SubscriptionCheckoutState['status']>(null)
+
+  const start = useCallback(
+    (planId: string, interval: 'month' | 'year') => {
+      setBusy(true)
+      setStatus(null)
+      void apiFetch('/api/payments/stripe/subscription/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planId, interval }),
+      })
+        .then(async (r) => {
+          const payload: unknown = await r.json().catch(() => null)
+          if (!r.ok) throw createClientApiError(payload, r.status)
+          if (!isRecord(payload) || typeof payload.url !== 'string') {
+            throw new Error('CHECKOUT_RESPONSE_INVALID')
+          }
+          window.location.assign(payload.url)
+        })
+        .catch((e: unknown) => {
+          setStatus({ kind: 'error', text: resolveClientError(e, t('checkoutCreateFailedFallback')) })
+          setBusy(false)
+        })
+    },
+    [resolveClientError, t],
+  )
+
+  return { busy, status, start }
+}
+
+export function RechargeStatus({ status }: { status: RechargeState['status'] | SubscriptionCheckoutState['status'] }) {
   if (!status) return null
   return (
     <p

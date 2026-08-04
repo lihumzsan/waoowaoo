@@ -69,6 +69,16 @@
     "unitValue": "1 credit = ¥0.1",
     "paymentTitle": "充值与支付",
     "compareTitle": "套餐对比",
-    "merchantMoreLink": "查看更多商户信息"
+    "merchantMoreLink": "查看更多商户信息",
+    "billingMonthly": "按月付费",
+    "billingYearly": "按年付费",
+    "yearlySaveBadge": "省 ¥{amount}",
+    "perMonth": "/ 月",
+    "billedYearly": "按年支付 ¥{amount}",
+    "subscribe": "订阅",
+    "subscribeBusy": "正在跳转…",
+    "firstMonthPromo": "首月 ¥{amount}",
+    "creditsPerMonth": "每月 {credits}",
+    "oneOffTitle": "或按需一次性充值"
   }
 }

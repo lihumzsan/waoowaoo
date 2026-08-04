@@ -4,6 +4,7 @@ import { locales, type Locale } from '@/i18n/routing'
 import {
   getSubscriptionPlan,
   isSubscriptionPlanId,
+  type SubscriptionPlanId,
 } from '@/lib/billing/subscription-plans'
 
 export const OFFICIAL_CONTENT_DIR_ENV = 'OFFICIAL_CONTENT_DIR'
@@ -22,6 +23,7 @@ export interface OfficialLegalPageContent {
 }
 
 export interface OfficialPricingPlan {
+  id: SubscriptionPlanId
   label: string
   name: string
   price: string
@@ -219,6 +221,7 @@ export function readOfficialPricingPage(locale: Locale): OfficialPricingPageCont
     }
     const plan = getSubscriptionPlan(planKey)
     return {
+      id: plan.id,
       label: readRequiredString(planValue, 'label', `${schema}.plans.${planKey}`),
       name: readRequiredString(planValue, 'name', `${schema}.plans.${planKey}`),
       price: `¥${plan.monthlyPriceCny.toLocaleString('en-US')}`,
