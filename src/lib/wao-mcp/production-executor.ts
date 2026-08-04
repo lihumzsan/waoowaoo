@@ -88,6 +88,7 @@ function requireIdentityPart(value: string, label: string): string {
 function normalizeTrustedContext(
   context: WaoMcpTrustedCallContext,
   signal: AbortSignal,
+  reportProgress?: (message: string) => void,
 ): {
   turnId: string
   callId: string
@@ -115,6 +116,7 @@ function normalizeTrustedContext(
       request: null,
       requestId: requireIdentityPart(context.requestId, 'requestId'),
       signal,
+      reportProgress: reportProgress ?? null,
       userId,
       projectId,
       context: {
@@ -438,11 +440,12 @@ async function executeOperation(params: {
   input: Readonly<Record<string, unknown>>
   context: WaoMcpTrustedCallContext
   signal: AbortSignal
+  reportProgress: (message: string) => void
   elicit: (request: WaoMcpElicitationRequest) => Promise<WaoMcpElicitationResult>
   assertAuthorized: () => Promise<void>
 }): Promise<WaoMcpOperationExecutorResult> {
   params.signal.throwIfAborted()
-  const trusted = normalizeTrustedContext(params.context, params.signal)
+  const trusted = normalizeTrustedContext(params.context, params.signal, params.reportProgress)
   let executionInput = params.input
 
   if (isBillablePlannedOperation(params.operation)) {
@@ -662,6 +665,7 @@ export function createProductionWaoMcpOperationExecutor(params?: {
           input: call.input,
           context: call.context,
           signal: call.signal,
+          reportProgress: call.reportProgress,
           elicit: call.elicit,
           assertAuthorized: async () => {
             await params?.lifecycle?.assertAuthorized(call.context)

@@ -34,6 +34,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
+function readProgressToken(meta: unknown): string | number | null {
+  const token = isRecord(meta) ? meta.progressToken : undefined
+  return typeof token === 'string' || typeof token === 'number' ? token : null
+}
+
 function toJsonObject(value: unknown): JsonObject {
   const serialized = JSON.stringify(value)
   if (serialized === undefined) throw new Error('WAO_MCP_ERROR_RESULT_NOT_JSON')
@@ -114,6 +119,21 @@ export function createWaoMcpServer(
         )
       }
 
+      // MCP only permits progress for a request that asked for it, and the
+      // token is what routes a notification back to that call. No token means
+      // the client wants none, so nothing is sent.
+      const progressToken = readProgressToken(request.params._meta)
+      const reportProgress = (message: string): void => {
+        const text = message.trim()
+        if (progressToken === null || !text) return
+        // Progress is decoration: a transport hiccup here must never surface as
+        // a tool failure, so delivery failures are dropped on purpose.
+        void extra.sendNotification({
+          method: 'notifications/progress',
+          params: { progressToken, progress: 0, message: text.slice(0, 500) },
+        }).catch(() => undefined)
+      }
+
       try {
         const context = await params.contextResolver.resolve({
           operationId: entry.operationId,
@@ -133,6 +153,7 @@ export function createWaoMcpServer(
             input: request.params.arguments ?? {},
             context,
             signal: extra.signal,
+            reportProgress,
             elicit: async (elicitation) => {
               // Keep the server request related to this tools/call request.
               // Streamable HTTP routes related requests over the active POST

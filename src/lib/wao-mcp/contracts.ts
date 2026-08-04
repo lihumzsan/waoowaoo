@@ -51,6 +51,12 @@ export interface WaoMcpOperationExecutor {
     readonly input: Readonly<Record<string, unknown>>
     readonly context: WaoMcpTrustedCallContext
     readonly signal: AbortSignal
+    /**
+     * Best-effort live progress for the caller's UI. Delivery is not
+     * guaranteed and carries no business meaning; a dropped message changes
+     * nothing about the result.
+     */
+    readonly reportProgress: (message: string) => void
     /** Runtime transport for user interaction; execution independently verifies Wao's browser-authenticated decision. */
     readonly elicit: (
       request: WaoMcpElicitationRequest,

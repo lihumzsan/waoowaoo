@@ -48,6 +48,14 @@ export interface ProjectAgentOperationContext {
    */
   source: string
   writer?: UIMessageStreamWriter<UIMessage> | null
+  /**
+   * Live progress for a long-running Operation, surfaced to the user while the
+   * call is still in flight. It is presentation only and best-effort: an
+   * Operation's result must never depend on a message being delivered, and a
+   * consumer must never derive completion, failure or any business fact from
+   * one. Absent when the invocation channel has nowhere to put it.
+   */
+  reportProgress?: ((message: string) => void) | null
   toolCallId?: string | null
   /** Host-owned Activity identity for nested execution projection only. */
   activityId?: string | null
