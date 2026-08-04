@@ -66,7 +66,7 @@ export function WorkspaceAssistantComposer({
 
   return (
     <div>
-      <div className="flex flex-col rounded-[28px] border border-[rgba(15,17,23,0.08)] bg-white/85 px-5 pb-3.5 pt-4 shadow-[0_2px_4px_rgba(15,17,23,0.03),0_8px_20px_-6px_rgba(15,17,23,0.07),0_32px_64px_-20px_rgba(15,17,23,0.16)] backdrop-blur-[20px] transition-all duration-300 focus-within:border-[rgba(47,123,255,0.38)] focus-within:bg-white/95 focus-within:shadow-[0_2px_4px_rgba(15,17,23,0.04),0_12px_28px_-8px_rgba(47,123,255,0.20),0_40px_80px_-24px_rgba(15,17,23,0.20)]">
+      <div className="flex flex-col rounded-[28px] border border-[rgba(15,17,23,0.08)] bg-white/85 px-5 pb-3.5 pt-4 shadow-[0_2px_4px_rgba(15,17,23,0.03),0_8px_20px_-6px_rgba(15,17,23,0.07),0_32px_64px_-20px_rgba(15,17,23,0.16)] backdrop-blur-[20px] transition-all duration-300 focus-within:border-[rgba(15,17,23,0.12)] focus-within:bg-white/95 focus-within:shadow-[0_2px_4px_rgba(15,17,23,0.04),0_12px_28px_-8px_rgba(15,17,23,0.10),0_40px_80px_-24px_rgba(15,17,23,0.20)]">
         {selection ? (
           <div className="mb-2 flex items-center gap-2 rounded-xl bg-slate-50 px-2.5 py-2 ring-1 ring-slate-200">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white text-[var(--glass-text-tertiary)] ring-1 ring-slate-200">
