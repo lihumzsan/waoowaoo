@@ -2,11 +2,7 @@ import { z } from 'zod'
 import { Prisma } from '@prisma/client'
 import { ApiError } from '@/lib/api-errors'
 import { getDeploymentConfig, isPlatformProviderCredentialMode, toPublicDeploymentConfig } from '@/lib/deployment/config'
-import {
-  assertPlatformUserModelKey,
-  getPlatformDefaultModels,
-  resolvePlatformUserModelPreferences,
-} from '@/lib/platform-models/catalog'
+import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 
@@ -31,87 +27,15 @@ const ALLOWED_FIELDS: ReadonlyArray<string> = [
   'assistantBillingConfirmationRequired',
 ]
 
-const PLATFORM_IMAGE_MODEL_FIELDS = [
+const PLATFORM_MODEL_FIELDS = new Set([
+  'assistantModel',
+  'analysisModel',
   'characterModel',
   'locationModel',
   'editModel',
-] as const
-
-function requirePlatformModelValue(
-  body: Record<string, unknown>,
-  field: string,
-): string {
-  const value = body[field]
-  if (typeof value !== 'string' || !value.trim()) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'PLATFORM_USER_MODEL_REQUIRED',
-      field,
-    })
-  }
-  return value.trim()
-}
-
-function assertPlatformModelUpdate(body: Record<string, unknown>): void {
-  const forbiddenField = ['analysisModel', 'musicModel']
-    .find((field) => Object.prototype.hasOwnProperty.call(body, field))
-  if (forbiddenField) {
-    throw new ApiError('FORBIDDEN', {
-      code: 'PLATFORM_MODEL_NOT_USER_SELECTABLE',
-      field: forbiddenField,
-    })
-  }
-
-  if (Object.prototype.hasOwnProperty.call(body, 'assistantModel')) {
-    const modelKey = requirePlatformModelValue(body, 'assistantModel')
-    try {
-      assertPlatformUserModelKey('llm', modelKey)
-    } catch {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'PLATFORM_USER_MODEL_NOT_ALLOWED',
-        field: 'assistantModel',
-      })
-    }
-  }
-
-  const writesImageModel = PLATFORM_IMAGE_MODEL_FIELDS.some((field) => (
-    Object.prototype.hasOwnProperty.call(body, field)
-  ))
-  if (writesImageModel) {
-    if (!PLATFORM_IMAGE_MODEL_FIELDS.every((field) => Object.prototype.hasOwnProperty.call(body, field))) {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'PLATFORM_IMAGE_MODEL_UPDATE_INCOMPLETE',
-        field: 'characterModel',
-      })
-    }
-    const modelKeys = PLATFORM_IMAGE_MODEL_FIELDS.map((field) => requirePlatformModelValue(body, field))
-    if (new Set(modelKeys).size !== 1) {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'PLATFORM_IMAGE_MODELS_MUST_MATCH',
-        field: 'characterModel',
-      })
-    }
-    try {
-      assertPlatformUserModelKey('image', modelKeys[0] ?? '')
-    } catch {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'PLATFORM_USER_MODEL_NOT_ALLOWED',
-        field: 'characterModel',
-      })
-    }
-  }
-
-  if (Object.prototype.hasOwnProperty.call(body, 'videoModel')) {
-    const modelKey = requirePlatformModelValue(body, 'videoModel')
-    try {
-      assertPlatformUserModelKey('video', modelKey)
-    } catch {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'PLATFORM_USER_MODEL_NOT_ALLOWED',
-        field: 'videoModel',
-      })
-    }
-  }
-}
+  'videoModel',
+  'musicModel',
+])
 
 const modelKeyPreferenceSchema = z.string().trim().min(1).nullable()
   .describe('Exact provider::modelId key from list_user_models, or null to clear the preference.')
@@ -171,11 +95,10 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
 
         if (isPlatformProviderCredentialMode(deployment)) {
           const runtimeDefaults = getPlatformDefaultModels()
-          const userModels = resolvePlatformUserModelPreferences(preference)
           return {
             preference: {
               ...preference,
-              ...userModels,
+              ...runtimeDefaults,
             },
             deployment: toPublicDeploymentConfig(deployment),
             runtimeDefaults,
@@ -214,7 +137,13 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
         await lockUserPreferenceOwner(transaction, ctx.userId)
         const body: Record<string, unknown> = input
         if (isPlatformProviderCredentialMode(deployment)) {
-          assertPlatformModelUpdate(body)
+          const attemptedModelField = Object.keys(body).find((field) => PLATFORM_MODEL_FIELDS.has(field))
+          if (attemptedModelField) {
+            throw new ApiError('FORBIDDEN', {
+              code: 'PLATFORM_MODELS_MANAGED_BY_PLATFORM',
+              field: attemptedModelField,
+            })
+          }
         }
 
         const updateData: Record<string, unknown> = {}
@@ -240,7 +169,7 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
           return {
             preference: {
               ...preference,
-              ...resolvePlatformUserModelPreferences(preference),
+              ...getPlatformDefaultModels(),
             },
           }
         }

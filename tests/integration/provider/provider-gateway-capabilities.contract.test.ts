@@ -53,10 +53,9 @@ import {
 import { resolveProviderRouteSet } from '@/lib/ai-registry/provider-route-set'
 import { listBuiltinPricingCatalog } from '@/lib/ai-registry/pricing-catalog'
 import {
+  getPlatformDefaultModelCatalog,
   getPlatformModels,
-  getPlatformUserSelectableModels,
 } from '@/lib/platform-models/catalog'
-import { PLATFORM_USER_MODEL_KEYS } from '@/lib/ai-registry/platform-models'
 
 const ORIGINAL_REASONING_ENV = {
   PROVIDER_CREDENTIAL_MODE: process.env.PROVIDER_CREDENTIAL_MODE,
@@ -178,14 +177,9 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
     }
   })
 
-  it('publishes only priced and capable models through the platform choice policy', () => {
-    const choices = getPlatformUserSelectableModels()
-    expect(choices.map((model) => model.modelKey)).toEqual([
-      ...PLATFORM_USER_MODEL_KEYS.llm,
-      ...PLATFORM_USER_MODEL_KEYS.image,
-      ...PLATFORM_USER_MODEL_KEYS.video,
-    ])
-    for (const model of choices) {
+  it('publishes only priced and capable platform defaults', () => {
+    const defaults = getPlatformDefaultModelCatalog()
+    for (const model of defaults) {
       if (model.type === 'llm') {
         expect(resolveRegisteredLlmProtocol(model.modelKey)).toBe('openrouter-chat')
       }

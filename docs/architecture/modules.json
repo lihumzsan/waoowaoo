@@ -183,6 +183,8 @@
         "src/lib/operations/domains/config/user-preference-ops.ts",
         "src/lib/platform-models",
         "src/lib/platform-runtime",
+        ".env.example",
+        ".env.cloud.example",
         "src/lib/user-api/runtime-config.ts",
         "src/lib/llm-observe",
         "src/lib/media",

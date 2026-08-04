@@ -1,12 +1,10 @@
 import type { CapabilitySelections, CapabilityValue } from '@/lib/ai-registry/types'
-import {
-  getPlatformDefaultModels,
-  getPlatformUserSelectableModels,
-} from '@/lib/platform-models/catalog'
+import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
 import type { SystemModelPurpose } from '@/lib/model-access/system-model-resolver'
 import { PLATFORM_VOICE_DESIGN_MODEL_KEY } from '@/lib/ai-registry/voice-design-contract'
 import { findBuiltinCapabilities } from '@/lib/ai-registry/capabilities-catalog'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
+import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
 
 export type PlatformRuntimePurpose = SystemModelPurpose
 
@@ -132,21 +130,20 @@ export function getPlatformCapabilityDefaults(): CapabilitySelections {
   const videoOptions = getPlatformVideoGenerationOptions()
   const musicOptions = getPlatformMusicGenerationOptions()
 
-  for (const model of getPlatformUserSelectableModels()) {
-    if (model.type === 'image') {
-      const capabilities = findBuiltinCapabilities('image', model.provider, model.modelId)?.image
-      const compatibleImageOptions: Record<string, CapabilityValue> = {
-        ...(imageOptions.resolution !== undefined ? { resolution: imageOptions.resolution } : {}),
-        ...(imageOptions.quality !== undefined && capabilities?.qualityOptions?.length
-          ? { quality: imageOptions.quality }
-          : {}),
-      }
-      assignCapabilityDefault(defaults, model.modelKey, compatibleImageOptions)
+  for (const purpose of ['character-image', 'location-image', 'edit-image'] as const) {
+    const plan = getPlatformRuntimePlan(purpose)
+    const parsed = parseModelKeyStrict(plan.modelKey)
+    if (!parsed) throw new Error(`PLATFORM_DEFAULT_MODEL_KEY_INVALID: ${plan.modelKey}`)
+    const capabilities = findBuiltinCapabilities('image', parsed.provider, parsed.modelId)?.image
+    const compatibleImageOptions: Record<string, CapabilityValue> = {
+      ...(imageOptions.resolution !== undefined ? { resolution: imageOptions.resolution } : {}),
+      ...(imageOptions.quality !== undefined && capabilities?.qualityOptions?.length
+        ? { quality: imageOptions.quality }
+        : {}),
     }
-    if (model.type === 'video') {
-      assignCapabilityDefault(defaults, model.modelKey, videoOptions)
-    }
+    assignCapabilityDefault(defaults, plan.modelKey, compatibleImageOptions)
   }
+  assignCapabilityDefault(defaults, getPlatformRuntimePlan('video').modelKey, videoOptions)
   assignCapabilityDefault(defaults, getPlatformRuntimePlan('music').modelKey, musicOptions)
 
   return defaults

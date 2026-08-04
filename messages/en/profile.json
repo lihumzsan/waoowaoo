@@ -13,27 +13,6 @@
   "frozen": "Frozen",
   "totalSpent": "Total Spent",
   "apiConfig": "API Configuration",
-  "modelPreferences": {
-    "title": "Model Selection",
-    "description": "Choose the default language, image, and video models for creative work. Providers and credentials are managed by the platform.",
-    "providerManaged": "Selections apply to new conversations and generation tasks. Submitted long-running tasks keep the model frozen at submission time.",
-    "loadFailed": "Failed to load model settings",
-    "saveFailed": "Failed to save model settings",
-    "saved": "Model settings saved",
-    "retry": "Retry",
-    "llm": {
-      "title": "Language Model",
-      "description": "Used for Agent conversation, planning, and creative reasoning"
-    },
-    "image": {
-      "title": "Image Model",
-      "description": "Used consistently for characters, locations, and image editing"
-    },
-    "video": {
-      "title": "Video Model",
-      "description": "Used for shot video generation"
-    }
-  },
   "rechargeRecords": "Credit Grant Records",
   "billingRecords": "Credit Usage Records",
   "logout": "Logout",

@@ -9,7 +9,7 @@
 ## 不变量
 
 - **PS-01 — 当前语言拥有当前界面。** 导航、可访问名称、错误提示和确认入口必须使用当前 locale；目标 locale 只有在用户选中后才拥有切换确认内容和后续导航。
-- **PS-02 — 部署能力单一来源。** cloud/self-hosted 的可见能力只从 `src/lib/deployment/features.ts` 派生并经公开 deployment contract 消费，页面不得根据 edition 名称或环境变量另行猜测。隐藏页面不等于关闭能力：用户 Provider 配置是否可用必须由 `providerCredentialMode` 同时裁决 UI、API、Operation channel 和 runtime；`platform-key` 下用户 Provider/API Key 的读取、写入和连接诊断全部拒绝。`usePlatformProviderConfig` 同时允许个人中心显示平台官方模型选择，但该页面只消费服务端 allowlist 的产品名称，不显示或修改 Provider 与 credential，也不得复用自托管 API 配置页。
+- **PS-02 — 部署能力单一来源。** cloud/self-hosted 的可见能力只从 `src/lib/deployment/features.ts` 派生并经公开 deployment contract 消费，页面不得根据 edition 名称或环境变量另行猜测。隐藏页面不等于关闭能力：用户 Provider 配置是否可用必须由 `providerCredentialMode` 同时裁决 UI、API、Operation channel 和 runtime；`platform-key` 下用户 Provider/API Key 与模型偏好的读取、写入和连接诊断全部拒绝。Cloud 不公开模型选择页面或对应 deployment feature，固定模型只由 Provider Gateway 的平台默认契约投影。
 - **PS-03 — 会话与业务身份分离。** 浏览器重载、退出和重新登录不得改变用户的持久 identity；受保护页面和 route 必须分别通过真实会话与资源 owner 校验。
 - **PS-04 — locale 导航唯一入口。** 本地化页面导航必须使用 `@/i18n/navigation`，切换语言必须保留当前产品 pathname 和持久实体 identity。
 - **PS-05 — 外部辅助能力不是真相来源。** GitHub 更新等外部辅助响应不能改变鉴权、项目或部署能力事实；真实公网可用性保留为外部盲区。
@@ -34,7 +34,6 @@
 
 - locale 路由与导航：`src/i18n/**`、`src/components/LanguageSwitcher.tsx`、`@/i18n/navigation`。
 - 顶层会话和能力投影：`src/components/Navbar.tsx`、`src/app/[locale]/profile/page.tsx`。
-- Cloud 官方模型选择投影：`src/app/[locale]/profile/components/PlatformModelPreferencesTab.tsx`；模型集合与写入裁决仍属于 Provider Gateway 的 platform policy/Operation。
 - 部署能力：`src/lib/deployment/config.ts`、`src/lib/deployment/features.ts`、`/api/deployment`；用户 Provider 配置后端能力统一由 `src/lib/user-api/availability.ts` 裁决。
 - 注册/登录和资源 owner：`src/lib/auth/account-onboarding.ts`、`src/lib/auth/password-auth.ts`、`src/lib/auth/phone-verification.ts`、`src/lib/auth/image-captcha.ts`、`src/lib/auth/sms-destinations.ts`、`src/lib/auth/tencent-sms.ts`、生产 auth routes、NextAuth session 与项目鉴权 service。
 - API session、管理员权限和错误边界：`src/lib/api-auth.ts`、`src/lib/auth/admin.ts`、`src/lib/api-errors.ts`。
@@ -71,7 +70,7 @@
 - 代理信任改为显式配置后，真实权限 Journey 在无可信代理的本地部署连续创建多个测试用户时触发了共享注册桶：原先每分钟 3 次的阈值会把同一 NAT/未知来源下的正常注册误判成攻击。注册桶调整为每分钟 10 次，仍由 Redis 原子滑窗限制批量滥用；登录继续保持更严格阈值，无法确认客户端来源时仍不信任来路 header，也不回退为无限制。
 - 安全部署加固曾把正式公网 cloud 的管理员、Bull Board认证、HTTPS和正数代理跳数要求无条件加入开发 preflight，导致正常开发环境无法启动。Bull控制面现已物理删除；当前保留一个 fail-closed校验器，由package script显式选择development或production profile，并额外冻结Temporal Worker build identity。
 - Cloud API 配置页面虽由 deployment feature 隐藏，共享的读取、写入和连接诊断 route 仍只校验登录，主 Agent registry 也继续暴露读写配置 Tool；正常生成因为 `platform-key` 忽略用户持久配置而未被改写，但隐藏 UI 并未关闭后端能力。当前 `providerCredentialMode` 同时派生 API 配置可见性和后端 availability，Cloud 在数据库或外部连接前统一拒绝，Agent 配置 Operation 改为 API-only；Self-hosted 的个人设置 writer 保持不变。
-- Cloud 增加模型选择时不能重新开放自托管 API 配置页：二者分别代表“选择平台已经批准的产品模型”和“修改 Provider/URL/API Key”。当前个人中心只在 `usePlatformProviderConfig` 下显示三个官方 selector，数据来自服务端 allowlist；Provider 配置仍由原 availability 在数据库与外部请求前拒绝，页面不显示 Provider 名称。
+- Cloud 曾为“平台批准模型”增加独立的 `usePlatformProviderConfig` feature、个人中心页面和三个 selector；虽然没有开放 Provider/API Key，它仍让 UI 与 `UserPreference` 成为平台模型的第二 writer。产品改为固定默认模型后，当前删除该 feature、页面和翻译，Cloud Profile 不再暴露模型 identity；服务端同时拒绝模型偏好写入，避免仅隐藏 UI 后留下旁路。
 - 首页增加比例选择后曾用多个 HTTP 事务依次创建 Project、PATCH 比例并初始化旧层级，任一后续失败都会留下半初始化 Project。当前首页 payload 只调用 `create_project` 并在成功后启动 Assistant Turn；旧层级 API 已删除，不存在 fallback。
 - 手机号认证接入前，密码注册通过 `/api/auth/register → auth_register_user` 创建 `User + UserBalance`，Google adapter 又独立复制同一初始化事务；页面同时保留 signin/signup 两套入口，deployment feature 只控制 Google 按钮和 provider，继续新增手机号会形成第三个 writer，并可能让 Cloud 隐藏密码 UI 后仍保留 credentials callback、注册 API 与密码设置 API。当前删除独立 signup、register route、注册 Operation 与旧结果协议，Google、手机号和 self-hosted 密码共同复用一个 onboarding writer；Cloud feature 同时裁决页面、NextAuth provider、短信发送 route 与密码设置 route。腾讯云明确拒绝时按 challenge identity 补偿，网络结果不明时保留短期 challenge，避免已送达验证码被本地误删。初始 SDK 接入曾假设模板同时接收验证码和有效分钟数，真实已审核模板只声明 `{1}` 验证码，导致参数数量不一致时发送必然被拒；当前发送契约只传一个验证码参数，5 分钟有效期仍由 Redis challenge TTL 唯一裁决，不从短信文案解释状态。真实运营商到达率与目标生产反向代理组合仍是外部盲区。
 - 国际/港澳台模板生效前，手机号规范化接受任意语法合法的 E.164，腾讯云 adapter 却始终发送同一个国内模板和国内签名；UI 因“号码格式有效”暗示已支持境外目的地，真实境外调用只能被 Provider 拒绝。根因是从号码语法猜测业务 capability，没有目的地 registry，也没有把模板 scope 与 Sender ID policy 纳入唯一发送裁决。第一版 registry 又把需要额外 Sender/品牌审核的目的地作为潜在实例保留，并用环境配置投影可发送子集；虽然 UI 能隐藏缺配置地区，系统仍同时维护“产品支持范围”和“未来可能审核范围”两套语义。当前 registry 只声明现有模板可直接承载且不需要额外目的地审核的地区，删除专属 Sender 环境配置、deployment 子集投影和 UI 注释；`tencent-sms.ts` 只按 registry 唯一选择国内/国际模板与签名，绕过 UI 的未启用目的地仍明确失败。腾讯云套餐/按量计费状态和各运营商真实送达仍是外部盲区。

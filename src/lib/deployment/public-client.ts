@@ -17,7 +17,6 @@ const DEPLOYMENT_FEATURE_KEYS: Array<keyof PublicDeploymentFeatures> = [
   'showDownloadLogs',
   'showUpdateCheck',
   'requireInviteCodeOnSignup',
-  'usePlatformProviderConfig',
 ]
 
 function isRecord(value: unknown): value is Record<string, unknown> {

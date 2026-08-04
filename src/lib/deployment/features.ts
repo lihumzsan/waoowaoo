@@ -1,5 +1,5 @@
 import type { DeploymentConfig } from './config'
-import { isPlatformProviderCredentialMode, isUserProviderCredentialMode } from './config'
+import { isUserProviderCredentialMode } from './config'
 
 export interface DeploymentFeatures {
   showOfficialPublicPages: boolean
@@ -17,10 +17,9 @@ export interface DeploymentFeatures {
   showDownloadLogs: boolean
   showUpdateCheck: boolean
   requireInviteCodeOnSignup: boolean
-  usePlatformProviderConfig: boolean
 }
 
-type EditionDeploymentFeatures = Omit<DeploymentFeatures, 'showApiConfig' | 'usePlatformProviderConfig'>
+type EditionDeploymentFeatures = Omit<DeploymentFeatures, 'showApiConfig'>
 
 const SELF_HOSTED_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   showOfficialPublicPages: false,
@@ -67,7 +66,6 @@ export function getDeploymentFeatures(config: DeploymentConfig): DeploymentFeatu
   return {
     ...base,
     showApiConfig: isUserProviderCredentialMode(config),
-    usePlatformProviderConfig: isPlatformProviderCredentialMode(config),
   }
 }
 

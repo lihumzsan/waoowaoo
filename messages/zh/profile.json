@@ -13,27 +13,6 @@
   "frozen": "冻结",
   "totalSpent": "已消费",
   "apiConfig": "API 配置",
-  "modelPreferences": {
-    "title": "模型选择",
-    "description": "选择创作时默认使用的大语言、图像和视频模型。模型供应商与密钥由平台统一管理。",
-    "providerManaged": "选择会应用到之后的新对话与生成任务；已提交的长期任务继续使用提交时冻结的模型。",
-    "loadFailed": "模型设置加载失败",
-    "saveFailed": "模型设置保存失败",
-    "saved": "模型设置已保存",
-    "retry": "重试",
-    "llm": {
-      "title": "大语言模型",
-      "description": "用于 Agent 对话、规划与创作推理"
-    },
-    "image": {
-      "title": "图像模型",
-      "description": "统一用于角色、场景和图片编辑"
-    },
-    "video": {
-      "title": "视频模型",
-      "description": "用于镜头视频生成"
-    }
-  },
   "rechargeRecords": "额度入账记录",
   "billingRecords": "额度扣减记录",
   "logout": "退出登录",

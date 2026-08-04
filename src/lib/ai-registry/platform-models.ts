@@ -8,19 +8,6 @@ import {
 } from '@/lib/ai-providers/google/models'
 import { MUREKA_PLATFORM_MODEL_PRESETS } from '@/lib/ai-providers/mureka/models'
 import {
-  OPENROUTER_BANANA_2_IMAGE_MODEL_ID,
-  OPENROUTER_BANANA_2_LITE_IMAGE_MODEL_ID,
-  OPENROUTER_BANANA_PRO_IMAGE_MODEL_ID,
-  OPENROUTER_CLAUDE_FABLE_5_MODEL_ID,
-  OPENROUTER_CLAUDE_OPUS_5_MODEL_ID,
-  OPENROUTER_CLAUDE_SONNET_5_MODEL_ID,
-  OPENROUTER_GEMINI_3_1_PRO_MODEL_ID,
-  OPENROUTER_GEMINI_3_5_FLASH_LITE_MODEL_ID,
-  OPENROUTER_GEMINI_3_6_FLASH_MODEL_ID,
-  OPENROUTER_GPT_5_6_LUNA_MODEL_ID,
-  OPENROUTER_GPT_5_6_SOL_MODEL_ID,
-  OPENROUTER_GPT_5_6_TERRA_MODEL_ID,
-  OPENROUTER_GPT_IMAGE_2_MODEL_ID,
   OPENROUTER_PLATFORM_DEFAULT_ANALYSIS_MODEL_KEY,
   OPENROUTER_PLATFORM_DEFAULT_ASSISTANT_MODEL_KEY,
   OPENROUTER_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
@@ -29,39 +16,12 @@ import {
 import {
   TOONFLOW_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
   TOONFLOW_PLATFORM_MODEL_PRESETS,
-  TOONFLOW_SEEDANCE_2_FAST_MODEL_ID,
-  TOONFLOW_SEEDANCE_2_MODEL_ID,
 } from '@/lib/ai-providers/toonflow/models'
 import type { DefaultModelsPayload } from '@/lib/user-api/api-config-types'
 import type { PlatformModelPreset } from '@/lib/platform-models/types'
 
 export type PlatformDefaultModelField = keyof Required<DefaultModelsPayload>
-export type PlatformUserModelCategory = 'llm' | 'image' | 'video'
 export const PLATFORM_DEFAULT_ASSISTANT_MODEL_KEY = OPENROUTER_PLATFORM_DEFAULT_ASSISTANT_MODEL_KEY
-
-export const PLATFORM_USER_MODEL_KEYS = {
-  llm: [
-    `openrouter::${OPENROUTER_GEMINI_3_6_FLASH_MODEL_ID}`,
-    `openrouter::${OPENROUTER_GEMINI_3_5_FLASH_LITE_MODEL_ID}`,
-    `openrouter::${OPENROUTER_GEMINI_3_1_PRO_MODEL_ID}`,
-    `openrouter::${OPENROUTER_CLAUDE_SONNET_5_MODEL_ID}`,
-    `openrouter::${OPENROUTER_CLAUDE_FABLE_5_MODEL_ID}`,
-    `openrouter::${OPENROUTER_CLAUDE_OPUS_5_MODEL_ID}`,
-    `openrouter::${OPENROUTER_GPT_5_6_LUNA_MODEL_ID}`,
-    `openrouter::${OPENROUTER_GPT_5_6_TERRA_MODEL_ID}`,
-    `openrouter::${OPENROUTER_GPT_5_6_SOL_MODEL_ID}`,
-  ],
-  image: [
-    `openrouter::${OPENROUTER_GPT_IMAGE_2_MODEL_ID}`,
-    `openrouter::${OPENROUTER_BANANA_PRO_IMAGE_MODEL_ID}`,
-    `openrouter::${OPENROUTER_BANANA_2_IMAGE_MODEL_ID}`,
-    `openrouter::${OPENROUTER_BANANA_2_LITE_IMAGE_MODEL_ID}`,
-  ],
-  video: [
-    `toonflow::${TOONFLOW_SEEDANCE_2_MODEL_ID}`,
-    `toonflow::${TOONFLOW_SEEDANCE_2_FAST_MODEL_ID}`,
-  ],
-} as const satisfies Record<PlatformUserModelCategory, readonly string[]>
 
 export const PLATFORM_MODEL_INPUTS: readonly PlatformModelPreset[] = [
   ...GOOGLE_PLATFORM_MODEL_PRESETS,
