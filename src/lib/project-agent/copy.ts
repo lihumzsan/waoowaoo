@@ -20,6 +20,7 @@ const PROJECT_AGENT_OPERATION_TITLE_COPY: Record<string, ProjectAgentOperationTi
   restore_resource: { zh: '恢复项目资源', en: 'Restore project resource' },
   generate_voice: { zh: '设计角色音色', en: 'Design voice' },
   bind_voice: { zh: '绑定角色音色', en: 'Bind voice' },
+  web_search: { zh: '联网检索', en: 'Web research' },
   list_projects: { zh: '查看项目', en: 'List projects' },
   create_project: { zh: '创建项目', en: 'Create project' },
   get_project_basic: { zh: '读取项目基本信息', en: 'Read project basics' },
