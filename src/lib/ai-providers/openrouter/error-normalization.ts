@@ -18,6 +18,9 @@ import type { UnifiedErrorCode } from '@/lib/errors/codes'
 
 const ERROR_FIELD_LIMIT = 1_000
 
+export const OPENROUTER_CONTENT_POLICY_REJECTION_MESSAGE =
+  'OpenRouter rejected the request under its content policy'
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -157,7 +160,7 @@ export function throwNormalizedOpenRouterSdkError(error: unknown): never {
     throw new AppError(
       normalized.sensitive ? 'SENSITIVE_CONTENT' : 'PROVIDER_SUBMISSION_REJECTED',
       normalized.sensitive
-        ? 'OpenRouter rejected an input reference under its content or real-person safety policy'
+        ? OPENROUTER_CONTENT_POLICY_REJECTION_MESSAGE
         : normalized.message,
       {
         provider: 'openrouter',

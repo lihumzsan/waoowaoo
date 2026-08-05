@@ -14,7 +14,7 @@
   "GENERATION_FAILED": "生成失败，请重试",
   "GENERATION_TIMEOUT": "生成超时，请重试",
   "GENERATION_QUEUE_TIMEOUT": "生成请求在供应商队列中排队超时，请稍后重新提交。",
-  "SENSITIVE_CONTENT": "请求可能触发了内容安全或权利保护规则。请移除露骨内容、真人冒用或受保护角色描述后重试。",
+  "SENSITIVE_CONTENT": "外部服务依据其内容政策拒绝了本次请求。请调整请求后重试。",
   "INVALID_PARAMS": "参数错误",
   "PAYLOAD_TOO_LARGE": "上传内容过大，请选择更小的文件后重试。",
   "UPLOAD_FILE_EMPTY": "所选文件为空，请选择其他文件。",

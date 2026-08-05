@@ -21,6 +21,7 @@ import {
 } from './video-transport'
 import {
   isOpenRouterSensitiveRejection,
+  OPENROUTER_CONTENT_POLICY_REJECTION_MESSAGE,
   throwNormalizedOpenRouterSdkError,
 } from './error-normalization'
 
@@ -319,7 +320,7 @@ function normalizeOpenRouterVideoSubmitValidationError(error: ResponseValidation
   if (isOpenRouterSensitiveRejection(rejection.errorType)) {
     throw new AppError(
       'SENSITIVE_CONTENT',
-      'OpenRouter rejected an input reference under its content or real-person safety policy',
+      OPENROUTER_CONTENT_POLICY_REJECTION_MESSAGE,
       {
         provider: 'openrouter',
         details: rejection.errorType ? { providerErrorType: rejection.errorType } : null,

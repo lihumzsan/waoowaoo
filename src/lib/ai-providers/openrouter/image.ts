@@ -26,6 +26,7 @@ import { OPENROUTER_IMAGE_MODEL_IDS } from './models'
 import { ProviderPreAcceptRejectedError } from '@/lib/ai-exec/submission-error'
 import {
   classifyOpenRouterMachineErrorCode,
+  OPENROUTER_CONTENT_POLICY_REJECTION_MESSAGE,
   throwNormalizedOpenRouterSdkError,
 } from './error-normalization'
 
@@ -146,7 +147,7 @@ async function projectStreamingImage(
         throw new AppError(
           errorCode,
           errorCode === 'SENSITIVE_CONTENT'
-            ? 'OpenRouter rejected the image under its content or real-person safety policy'
+            ? OPENROUTER_CONTENT_POLICY_REJECTION_MESSAGE
             : event.error.message,
           {
             provider: 'openrouter',
