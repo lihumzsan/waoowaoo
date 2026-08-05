@@ -26,8 +26,10 @@ function DirectoryTreeRow({
   countLabel,
   jumpTitle,
   enterTitle,
+  fileLocateTitle,
   onRowActivate,
   onEnter,
+  onFileActivate,
 }: {
   readonly node: WorkspaceCanvasFolderTreeNode
   readonly depth: number
@@ -36,14 +38,17 @@ function DirectoryTreeRow({
   readonly countLabel: (count: number) => string
   readonly jumpTitle: string
   readonly enterTitle: string
+  readonly fileLocateTitle: string
   readonly onRowActivate: (folder: WorkspaceResourceView) => void
   readonly onEnter: (folder: WorkspaceResourceView) => void
+  readonly onFileActivate: (resource: WorkspaceResourceView) => void
 }) {
   const [expanded, setExpanded] = useState(depth === 0)
   const folderResource = node.folder
   const childFolders = node.folders.filter((child) => child.folder !== null)
   if (!folderResource) return null
   const fileCount = countWorkspaceFolderFiles(node)
+  const hasChildren = childFolders.length > 0 || node.resources.length > 0
   // 空文件夹可以显示,但没有任何激活动作:不跳转、不进入,点击无效。
   const inert = fileCount === 0
   const display = folderDisplays.get(folderResource.resourceId) ?? null
@@ -65,7 +70,7 @@ function DirectoryTreeRow({
       >
         <button
           type="button"
-          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded text-[var(--glass-text-tertiary)] hover:bg-[var(--glass-selection-hover-bg)] ${childFolders.length > 0 ? '' : 'invisible'}`}
+          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded text-[var(--glass-text-tertiary)] hover:bg-[var(--glass-selection-hover-bg)] ${hasChildren ? '' : 'invisible'}`}
           onClick={(event) => {
             event.stopPropagation()
             setExpanded((value) => !value)
@@ -105,33 +110,89 @@ function DirectoryTreeRow({
         </span>
       </div>
       {expanded
-        ? childFolders.map((child) => (
-            <DirectoryTreeRow
-              key={child.folder?.resourceId}
-              node={child}
-              depth={depth + 1}
-              folderDisplays={folderDisplays}
-              canvasSubtreePaths={canvasSubtreePaths}
-              countLabel={countLabel}
-              jumpTitle={jumpTitle}
-              enterTitle={enterTitle}
-              onRowActivate={onRowActivate}
-              onEnter={onEnter}
-            />
-          ))
+        ? (
+            <>
+              {childFolders.map((child) => (
+                <DirectoryTreeRow
+                  key={child.folder?.resourceId}
+                  node={child}
+                  depth={depth + 1}
+                  folderDisplays={folderDisplays}
+                  canvasSubtreePaths={canvasSubtreePaths}
+                  countLabel={countLabel}
+                  jumpTitle={jumpTitle}
+                  enterTitle={enterTitle}
+                  fileLocateTitle={fileLocateTitle}
+                  onRowActivate={onRowActivate}
+                  onEnter={onEnter}
+                  onFileActivate={onFileActivate}
+                />
+              ))}
+              {node.resources.map((resource) => (
+                <DirectoryFileRow
+                  key={resource.resourceId}
+                  resource={resource}
+                  depth={depth + 1}
+                  locateTitle={fileLocateTitle}
+                  onActivate={onFileActivate}
+                />
+              ))}
+            </>
+          )
         : null}
     </div>
   )
 }
 
+function resourceIconName(resource: WorkspaceResourceView): 'audioWave' | 'fileText' | 'image' | 'video' {
+  if (resource.mediaType === 'image') return 'image'
+  if (resource.mediaType === 'audio') return 'audioWave'
+  if (resource.mediaType === 'video') return 'video'
+  return 'fileText'
+}
+
+function DirectoryFileRow({
+  resource,
+  depth,
+  locateTitle,
+  onActivate,
+}: {
+  readonly resource: WorkspaceResourceView
+  readonly depth: number
+  readonly locateTitle: string
+  readonly onActivate: (resource: WorkspaceResourceView) => void
+}) {
+  return (
+    <button
+      type="button"
+      className="group flex w-full items-center gap-1 rounded-lg py-1.5 pr-1.5 text-left text-xs text-[var(--glass-text-secondary)] hover:bg-[var(--glass-selection-hover-bg)]"
+      style={{ paddingLeft: 4 + depth * 14 }}
+      title={locateTitle}
+      onClick={() => onActivate(resource)}
+    >
+      <span className="h-4 w-4 shrink-0" aria-hidden="true" />
+      <AppIcon
+        name={resourceIconName(resource)}
+        className="h-3.5 w-3.5 shrink-0 text-[var(--glass-text-tertiary)]"
+      />
+      <span className="min-w-0 flex-1 truncate font-medium text-[var(--glass-text-primary)]">
+        {resource.name}
+      </span>
+      <AppIcon
+        name="crosshair"
+        className="h-3.5 w-3.5 shrink-0 text-[var(--glass-tone-info-fg)] opacity-0 transition-opacity group-hover:opacity-100"
+        aria-hidden="true"
+      />
+    </button>
+  )
+}
+
 /**
  * Collapsed-by-default canvas navigation. The expanded panel holds the project
- * directory tree (subtree listing, folders only) plus the cross-project
- * search. A tree row is an index entry: activating it jumps the viewport to
- * the folder's group on the current canvas; entering a folder canvas is only
- * offered where the content is not already spread out (collapsed cards and
- * folders that have no node on this canvas), and it reuses the same
- * navigation callback as search results.
+ * directory tree (folders plus their direct files) plus the cross-project
+ * search. Folder rows jump to the matching canvas group when it is projected;
+ * file rows and search results share the canonical Resource navigation entry,
+ * which locates the exact file node by resourceId.
  */
 export function CanvasFolderNavigation(props: {
   readonly canGoBack: boolean
@@ -188,6 +249,7 @@ export function CanvasFolderNavigation(props: {
     [treeResources],
   )
   const rootFolders = tree.folders.filter((child) => child.folder !== null)
+  const rootFiles = tree.resources
   const treeReady = !treeQuery.isLoading && !treeQuery.isError && !treeHasNextPage
   // 搜索结果里的空文件夹同样只展示不激活——系统不存在进入空文件夹的入口。
   const folderFileCounts = useMemo(() => {
@@ -299,7 +361,7 @@ export function CanvasFolderNavigation(props: {
                     onClick={searchResultInert(resource) ? undefined : () => enterFolder(resource)}
                   >
                     <AppIcon
-                      name={resource.resourceKind === 'folder' ? 'folder' : 'fileText'}
+                      name={resource.resourceKind === 'folder' ? 'folder' : resourceIconName(resource)}
                       className="h-4 w-4 shrink-0 text-[var(--glass-text-tertiary)]"
                     />
                     <span className="min-w-0 flex-1">
@@ -338,23 +400,36 @@ export function CanvasFolderNavigation(props: {
             </div>
           ) : !treeReady ? (
             <p className="px-2 py-2 text-xs text-[var(--glass-text-tertiary)]">{props.loadingLabel}</p>
-          ) : rootFolders.length === 0 ? (
+          ) : rootFolders.length === 0 && rootFiles.length === 0 ? (
             <p className="px-2 py-2 text-xs text-[var(--glass-text-tertiary)]">{t('directoryEmpty')}</p>
           ) : (
-            rootFolders.map((child) => (
-              <DirectoryTreeRow
-                key={child.folder?.resourceId}
-                node={child}
-                depth={0}
-                folderDisplays={props.folderDisplays}
-                canvasSubtreePaths={props.canvasSubtreePaths}
-                countLabel={(count) => t('sectionCount', { count })}
-                jumpTitle={t('jumpToFolder')}
-                enterTitle={t('openFolder')}
-                onRowActivate={activateRow}
-                onEnter={enterFolder}
-              />
-            ))
+            <>
+              {rootFolders.map((child) => (
+                <DirectoryTreeRow
+                  key={child.folder?.resourceId}
+                  node={child}
+                  depth={0}
+                  folderDisplays={props.folderDisplays}
+                  canvasSubtreePaths={props.canvasSubtreePaths}
+                  countLabel={(count) => t('sectionCount', { count })}
+                  jumpTitle={t('jumpToFolder')}
+                  enterTitle={t('openFolder')}
+                  fileLocateTitle={t('locateFile')}
+                  onRowActivate={activateRow}
+                  onEnter={enterFolder}
+                  onFileActivate={enterFolder}
+                />
+              ))}
+              {rootFiles.map((resource) => (
+                <DirectoryFileRow
+                  key={resource.resourceId}
+                  resource={resource}
+                  depth={0}
+                  locateTitle={t('locateFile')}
+                  onActivate={enterFolder}
+                />
+              ))}
+            </>
           )}
         </div>
       )}

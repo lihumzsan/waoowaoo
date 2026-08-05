@@ -488,6 +488,19 @@ function ProjectWorkspaceFolderCanvas({
       previewUrl: summary.kind === 'media' ? summary.url : null,
     }
   }, [])
+  const locateProjectedResource = useCallback((resourceId: string): boolean => {
+    if (!reactFlowReady) return false
+    const node = flowNodes.find((candidate) => (
+      candidate.data.kind === 'resourceCard' && candidate.data.targetId === resourceId
+    ))
+    if (!node) return false
+    canvasRef.current?.focus()
+    const nextSelection = selectionForNode(node)
+    if (nextSelection) onSelectionChange(nextSelection)
+    notifyCanvasUserInteraction()
+    void reactFlow.fitView({ nodes: [node], padding: 0.35, maxZoom: 1, duration: 180 })
+    return true
+  }, [flowNodes, notifyCanvasUserInteraction, onSelectionChange, reactFlow, reactFlowReady, selectionForNode])
   const openProjectedFolder = useCallback((target: WorkspaceCanvasFolderOpenTarget) => {
     const parent: WorkspaceResourceAncestorView[] = folder.folderKey === WORKSPACE_RESOURCE_ROOT_FOLDER_KEY
       ? []
@@ -595,14 +608,9 @@ function ProjectWorkspaceFolderCanvas({
     onSelectionChange(null)
   }, [folderQuery.isLoading, onSelectionChange, selectedNode, selection])
   useEffect(() => {
-    if (!pendingLocateResourceId || !reactFlowReady) return
-    const node = flowNodes.find((candidate) => candidate.data.targetId === pendingLocateResourceId)
-    if (!node) return
-    const nextSelection = selectionForNode(node)
-    if (nextSelection) onSelectionChange(nextSelection)
-    void reactFlow.fitView({ nodes: [node], padding: 0.35, maxZoom: 1, duration: 180 })
+    if (!pendingLocateResourceId || !locateProjectedResource(pendingLocateResourceId)) return
     onLocateConsumed()
-  }, [flowNodes, onLocateConsumed, onSelectionChange, pendingLocateResourceId, reactFlow, reactFlowReady, selectionForNode])
+  }, [locateProjectedResource, onLocateConsumed, pendingLocateResourceId])
 
   const requestAssistantDraft = useCallback((text: string | null) => {
     onAssistantDraftRequest({ requestId: crypto.randomUUID(), text, focus: true })
@@ -720,9 +728,13 @@ function ProjectWorkspaceFolderCanvas({
   }, [folder.ancestors, folder.folderKey, onNavigate, rootName])
   const handleSearchResult = useCallback((resource: WorkspaceResourceView) => {
     setSearch('')
-    if (resource.resourceKind === 'folder') onNavigate(folderFromResource(resource))
-    else onNavigate(parentFolderFromResource(resource, rootName), resource.resourceId)
-  }, [onNavigate, rootName])
+    if (resource.resourceKind === 'folder') {
+      onNavigate(folderFromResource(resource))
+      return
+    }
+    if (locateProjectedResource(resource.resourceId)) return
+    onNavigate(parentFolderFromResource(resource, rootName), resource.resourceId)
+  }, [locateProjectedResource, onNavigate, rootName])
 
   const loading = folderQuery.isLoading || layoutLoading
   const failed = folderQuery.isError || Boolean(layoutLoadError)
