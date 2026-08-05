@@ -415,7 +415,9 @@ export class AssistantRuntimeEventProjector {
         this.consumeProgress(params, 'mcp', 'message')
         return
       case 'turn/diff/updated':
-        this.consumeTurnDiff(params)
+        // Runtime diffs are internal execution telemetry. File-change items already
+        // describe the user-relevant action, so never project raw patches into the
+        // persistent assistant message view.
         return
       case 'thread/compacted':
         this.upsertAndPublishDataPart('runtime-compaction', {
@@ -514,17 +516,6 @@ export class AssistantRuntimeEventProjector {
       type: 'data-assistant-runtime-progress',
       id: `${itemId}:progress`,
       data: { itemId, kind, message },
-    })
-    this.queueMessageSnapshot(false)
-  }
-
-  private consumeTurnDiff(params: RuntimeJsonObject): void {
-    const diff = typeof params.diff === 'string' ? params.diff : ''
-    if (!diff) return
-    this.upsertAndPublishDataPart('runtime-turn-diff', {
-      type: 'data-assistant-runtime-progress',
-      id: 'runtime-turn-diff',
-      data: { itemId: 'turn-diff', kind: 'diff', message: diff.slice(-12_000) },
     })
     this.queueMessageSnapshot(false)
   }

@@ -116,8 +116,7 @@
     "progress": {
       "shell": "Shell output",
       "file": "File changes",
-      "mcp": "Production capability progress",
-      "diff": "Turn diff"
+      "mcp": "Production capability progress"
     },
     "native": {
       "shell": "Shell command",
