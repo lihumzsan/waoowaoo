@@ -30,6 +30,7 @@ import {
   isWorkspaceSubtreePath,
   parentWorkspacePath,
   validateWorkspaceResourceFolderPath,
+  workspaceResourceDisplayName,
   workspacePathAncestors,
 } from './path'
 import { resolveActiveWorkspaceResourceByPath } from './persistence'
@@ -211,7 +212,15 @@ function projectAncestors(
   return workspacePathAncestors(workspacePath).map((ancestorPath) => {
     const folder = folderByPath.get(ancestorPath)
     if (!folder) throw new Error(`WORKSPACE_RESOURCE_ANCESTOR_FOLDER_MISSING:${ancestorPath}`)
-    return { resourceId: folder.id, name: folder.name, workspacePath: folder.workspacePath }
+    return {
+      resourceId: folder.id,
+      name: workspaceResourceDisplayName({
+        workspacePath: folder.workspacePath,
+        resourceId: folder.id,
+        resourceKind: 'folder',
+      }),
+      workspacePath: folder.workspacePath,
+    }
   })
 }
 
@@ -289,7 +298,10 @@ async function loadViews(
         resourceKind: 'file',
         mediaType,
         schemaId: source.schemaId,
-        name: source.name,
+        name: workspaceResourceDisplayName({
+          workspacePath: source.workspacePath,
+          resourceId: source.id,
+        }),
         previewUrl: previewUrl(inputVersion),
       },
     ])
@@ -301,7 +313,10 @@ async function loadViews(
     const member: WorkspaceResourceAlternativeMemberView = {
       resourceId: sibling.id,
       workspacePath: sibling.workspacePath,
-      name: sibling.name,
+      name: workspaceResourceDisplayName({
+        workspacePath: sibling.workspacePath,
+        resourceId: sibling.id,
+      }),
       schemaId: sibling.schemaId,
       mediaType: requireMediaType(sibling.mediaType),
       status: requireStatus(sibling.status),
@@ -366,7 +381,11 @@ async function loadViews(
       ancestors,
       mediaType,
       schemaId: row.schemaId,
-      name: row.name,
+      name: workspaceResourceDisplayName({
+        workspacePath: row.workspacePath,
+        resourceId: row.id,
+        resourceKind,
+      }),
       status: requireStatus(row.status),
       contentVersion: resourceKind === 'folder' ? 0 : row.currentVersion,
       current,

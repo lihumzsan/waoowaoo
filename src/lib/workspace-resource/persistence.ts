@@ -179,6 +179,7 @@ export async function resolveGeneratedWorkspaceResourcePlacement(
     readonly resourceId: string
     readonly mediaType: Exclude<WorkspaceResourceMediaType, 'text'>
     readonly schemaId: string
+    readonly alternativeIndex?: number | null
   },
 ): Promise<string> {
   await requireOwnedProject(client, input.projectId, input.userId)
@@ -210,8 +211,8 @@ export async function resolveGeneratedWorkspaceResourcePlacement(
   const workspacePath = buildGeneratedWorkspaceResourcePath({
     parentPath: parent?.workspacePath ?? null,
     name: input.name,
-    resourceId: input.resourceId,
     mediaType: input.mediaType,
+    alternativeIndex: input.alternativeIndex,
   })
   const occupied = await client.workspaceResource.findFirst({
     where: { projectId: input.projectId, activePath: workspacePath },
@@ -261,7 +262,6 @@ export async function resolveSavedWorkspaceDocumentPlacement(
   const workspacePath = buildSavedWorkspaceDocumentPath({
     parentPath: parent?.workspacePath ?? null,
     name: input.name,
-    resourceId: input.resourceId,
     contentKind: input.contentKind,
   })
   const occupied = await client.workspaceResource.findFirst({

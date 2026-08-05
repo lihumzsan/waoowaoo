@@ -31,6 +31,17 @@ export class WorkspaceResourcePlacementError extends Error {
   }
 }
 
+export function assertUniqueWorkspaceResourcePaths(workspacePaths: readonly string[]): void {
+  const seen = new Set<string>()
+  for (const rawPath of workspacePaths) {
+    const workspacePath = validateWorkspaceResourceFilePath(rawPath)
+    if (seen.has(workspacePath)) {
+      throw new WorkspaceResourcePlacementError('WORKSPACE_RESOURCE_PATH_CONFLICT', workspacePath)
+    }
+    seen.add(workspacePath)
+  }
+}
+
 function validateRelativePath(rawPath: string): string {
   if (!isCanonicalWorkspaceResourcePath(rawPath)) {
     throw new WorkspaceResourcePathError('WORKSPACE_RESOURCE_PATH_INVALID', `Invalid resource path: ${rawPath}`)
@@ -86,6 +97,32 @@ export function resourceNameFromPath(
   return name
 }
 
+function legacyResourceIdSuffix(resourceId: string): string | null {
+  const suffix = resourceId.replace(/[^a-zA-Z0-9_-]/gu, '').slice(-12)
+  return suffix || null
+}
+
+/**
+ * Historical generated paths ended in the owning Resource ID. Strip only that
+ * exact self-derived suffix at presentation boundaries; arbitrary user names remain
+ * untouched and canonical identity stays in resourceId.
+ */
+export function workspaceResourceDisplayName(input: {
+  readonly workspacePath: string
+  readonly resourceId: string
+  readonly resourceKind?: WorkspaceResourceKind
+}): string {
+  const resourceKind = input.resourceKind ?? 'file'
+  const name = resourceNameFromPath(input.workspacePath, resourceKind)
+  if (resourceKind === 'folder') return name
+  const suffix = legacyResourceIdSuffix(input.resourceId)
+  if (!suffix) return name
+  const marker = `-${suffix}`
+  return name.endsWith(marker) && name.length > marker.length
+    ? name.slice(0, -marker.length)
+    : name
+}
+
 function safeGeneratedResourceStem(rawName: string, mediaType: Exclude<WorkspaceResourceMediaType, 'text'>): string {
   const withoutExtension = rawName.replace(
     /\.(?:png|jpe?g|webp|gif|mp3|wav|ogg|m4a|aac|mp4|mov|webm|mkv)$/iu,
@@ -122,29 +159,34 @@ function safeDocumentStem(rawName: string): string {
 export function buildGeneratedWorkspaceResourcePath(input: {
   readonly parentPath: string | null
   readonly name: string
-  readonly resourceId: string
   readonly mediaType: Exclude<WorkspaceResourceMediaType, 'text'>
+  readonly alternativeIndex?: number | null
 }): string {
   const parentPath = input.parentPath === null
     ? null
     : validateWorkspaceResourceFolderPath(input.parentPath)
-  const resourceSuffix = input.resourceId.replace(/[^a-zA-Z0-9_-]/gu, '').slice(-12)
-  if (!resourceSuffix) throw new WorkspaceResourcePathError('WORKSPACE_RESOURCE_ID_INVALID', input.resourceId)
-  const fileName = `${safeGeneratedResourceStem(input.name, input.mediaType)}-${resourceSuffix}`
+  const alternativeIndex = input.alternativeIndex ?? null
+  if (alternativeIndex !== null && (!Number.isSafeInteger(alternativeIndex) || alternativeIndex < 0)) {
+    throw new WorkspaceResourcePathError(
+      'WORKSPACE_RESOURCE_ALTERNATIVE_INDEX_INVALID',
+      String(alternativeIndex),
+    )
+  }
+  const alternativeSuffix = alternativeIndex === null
+    ? ''
+    : `-${String(alternativeIndex + 1).padStart(2, '0')}`
+  const fileName = `${safeGeneratedResourceStem(input.name, input.mediaType)}${alternativeSuffix}`
   return validateWorkspaceResourceFilePath(parentPath ? `${parentPath}/${fileName}` : fileName)
 }
 
 export function buildSavedWorkspaceDocumentPath(input: {
   readonly parentPath: string | null
   readonly name: string
-  readonly resourceId: string
   readonly contentKind: 'text' | 'structured'
 }): string {
   const parentPath = input.parentPath === null ? null : validateWorkspaceResourceFolderPath(input.parentPath)
-  const resourceSuffix = input.resourceId.replace(/[^a-zA-Z0-9_-]/gu, '').slice(-12)
-  if (!resourceSuffix) throw new WorkspaceResourcePathError('WORKSPACE_RESOURCE_ID_INVALID', input.resourceId)
   const extension = input.contentKind === 'structured' ? '.json' : '.md'
-  const fileName = `${safeDocumentStem(input.name)}-${resourceSuffix}${extension}`
+  const fileName = `${safeDocumentStem(input.name)}${extension}`
   return requireOutputPathForMediaType(parentPath ? `${parentPath}/${fileName}` : fileName, 'text')
 }
 

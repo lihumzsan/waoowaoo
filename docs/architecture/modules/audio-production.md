@@ -16,7 +16,7 @@ JSON 专业结果，并把同一 items 直接提交给 `create_audio`。系统�
   outputKind 的 JSON；没有强制文件、第二份 Markdown、Worker output 或 BGM plan 实体。“不配乐”是同一
   schema 的显式空分支，不能提交为生产任务。
 - **AP-02 — 每次生成显式提交。** `create_audio` items 必须给出名称、模态公共参数和精确输入引用；
-  Placement 由服务端根据 parent Resource id 派生；
+  Placement 由服务端根据项目相对目标文件夹路径与用户可见名称派生；
   候选数量上限由 registry 声明。成功只生成对应 Resource，不自动触发混音或视频。
 - **AP-03 — Provider 能力只约束单次执行。** 时长、格式和输入上限由 capability registry 唯一声明；
   不得据此自动拆分作品或创建系统层级实体。

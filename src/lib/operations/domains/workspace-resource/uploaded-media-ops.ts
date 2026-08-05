@@ -48,7 +48,7 @@ export function createWorkspaceResourceUploadedMediaOperations(): ProjectAgentOp
       id: 'register_uploaded_media',
       summary: 'Materialize one verified chat-uploaded image/audio as a ready Resource with server-owned placement.',
       intent: 'act',
-      toolContractRevision: 'register_uploaded_media/v4',
+      toolContractRevision: 'register_uploaded_media/v5',
       channels: { tool: true, api: true, mcp: true },
       effects: {
         writes: true,

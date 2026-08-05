@@ -33,8 +33,10 @@ Episode、Chapter、Scene、Shot、Canon 都是用户目录与文件内容，不
   不根据目录差异写回数据库。
 - **WR-07 — Agent 只用项目相对路径寻址，Placement 仍由服务端拥有。** Agent 通过路径读取、建目录、
   移动和选择目标文件夹；生产工具只接收 `folderPath + 用户可见名称`。服务端把路径精确解析为当前
-  Catalog 事实，以稳定 `resourceId` 派生最终文件路径，并在 Plan 前验证文件夹、schema 与冲突。
-  Agent 不传 outputPath、内部 Resource ID 或媒体后缀协议；Runtime 路径永远不是项目路径。
+  Catalog 事实，派生用户可理解的最终文件路径，并在 Plan 前验证文件夹、schema 与冲突；稳定
+  `resourceId` 只承担身份，绝不拼入用户路径或名称。同名候选只使用可读、可排序的序号，其他路径
+  冲突必须显式失败。Agent 不传 outputPath、内部 Resource ID 或媒体后缀协议；Runtime 路径永远
+  不是项目路径。
 - **WR-08 — 执行前冻结精确输入。** 调用方只提交 `resourceId + contentVersion + role + position`；
   服务端验证 Project 所有权并补充当时路径供显示与审计。执行、重试和 Lineage 都只消费冻结版本，
   不能在 Task 开始后重新按路径读取。
@@ -98,6 +100,9 @@ Episode、Chapter、Scene、Shot、Canon 都是用户目录与文件内容，不
   任一层字段、路径或同步状态漂移都会在真实生产中表现为参数失败或“资源仍在同步”，此前修复只补
   单个校验点所以换形式复发 → 删除整条文件/指针协议，公开输入只保留批量 items、目标文件夹路径、
   名称与版本引用，服务端一次完成精确路径解析、placement、预检、报价和提交（WR-06/07/08/10/15）。
+- 路径优先切换虽把内部 `resourceId` 从 Agent 输入移除，服务端仍把 ID 后缀拼进最终 Catalog 路径，
+  View 又从该路径生成名称，内部身份因而继续泄漏给用户 → 上一版只收紧了输入边界，没有分开身份与
+  位置语义 → `resourceId` 只承担身份，Placement 生成可读路径，同名冲突在 Plan 前显式拒绝（WR-01/07）。
 - 删除文件/指针协议时仍保留 Runtime 内的 `system/project.json` 并把它和 Catalog 路径混为一谈；
   边界只能稳定拒绝并显示参数失败 → 上一版只删除 writer，没删除竞争命名空间 → Runtime 永远只是
   scratch，生产上下文直接注入，`get_resource(path)` 只解析 Catalog 的项目相对路径（WR-07/17）。

@@ -2,7 +2,10 @@ import { z } from 'zod'
 import { VOICE_DESIGN_LANGUAGE_OPTIONS } from '@/lib/ai-registry/voice-design-contract'
 import { parseWorkspaceResourceGenerationTaskPayload } from '@/lib/workspace-resource/generation-contract'
 import { buildWorkspaceResourceId } from '@/lib/workspace-resource/identity'
-import { resourceNameFromPath } from '@/lib/workspace-resource/path'
+import {
+  assertUniqueWorkspaceResourcePaths,
+  workspaceResourceDisplayName,
+} from '@/lib/workspace-resource/path'
 import {
   reserveWorkspaceResourceInTransaction,
   resolveGeneratedWorkspaceResourcePlacement,
@@ -144,6 +147,7 @@ async function planNewVoice(
       resourceId,
       mediaType: 'audio',
       schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
+      alternativeIndex: request.count > 1 ? memberIndex : null,
     })
     return {
       resourceId,
@@ -152,6 +156,7 @@ async function planNewVoice(
       taskPlanId: `generate_voice:${resourceId}`,
     }
   }))
+  assertUniqueWorkspaceResourcePaths(resources.map((resource) => resource.workspacePath))
   const tasks = resources.map((resource) => {
     const inputHash = stableArgsFingerprint({
       description: request.description,
@@ -165,7 +170,10 @@ async function planNewVoice(
         resourceId: resource.resourceId,
         mediaType: 'audio',
         schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
-        name: resourceNameFromPath(resource.workspacePath),
+        name: workspaceResourceDisplayName({
+          workspacePath: resource.workspacePath,
+          resourceId: resource.resourceId,
+        }),
       }]),
       protocol: 'workspace_resource_generation_v1' as const,
       resource: {
@@ -256,7 +264,19 @@ async function planRetryVoice(
     }
   }))
   const tasks = resources.map((resource): PlannedTask => {
-    const payload = parseWorkspaceResourceGenerationTaskPayload(resource.sourceTask.payload)
+    const sourcePayload = parseWorkspaceResourceGenerationTaskPayload(resource.sourceTask.payload)
+    const payload = parseWorkspaceResourceGenerationTaskPayload({
+      ...sourcePayload,
+      lifecycleProjection: buildWorkspaceResourceLifecycleProjection([{
+        resourceId: resource.resourceId,
+        mediaType: 'audio',
+        schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
+        name: workspaceResourceDisplayName({
+          workspacePath: resource.workspacePath,
+          resourceId: resource.resourceId,
+        }),
+      }]),
+    })
     return createPlannedTask({
       id: resource.taskPlanId,
       taskType: TASK_TYPE.WORKSPACE_RESOURCE_VOICE,
@@ -401,7 +421,7 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
         },
       },
       confirmation: { kind: 'billable_media', required: true },
-      planContractRevision: 'voice-generation/v7',
+      planContractRevision: 'voice-generation/v8',
       inputSchema: generateVoiceInputSchema,
       outputSchema: generateVoiceOutputSchema,
       plan: async (ctx, input) => input.request.kind === 'retry'

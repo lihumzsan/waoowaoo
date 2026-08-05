@@ -9,6 +9,7 @@ import {
 } from '@/lib/workspace-resource/persistence'
 import { WORKSPACE_RESOURCE_SCHEMA } from '@/lib/workspace-resource/schema-registry'
 import { buildWorkspaceResourceLifecycleProjection } from '@/lib/workspace-resource/task-runtime-envelope'
+import { workspaceResourceDisplayName } from '@/lib/workspace-resource/path'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { resolveOperationLocale } from '@/lib/operations/environment-input'
 import { refineTaskSubmitOperationOutputSchema, taskSubmitOperationOutputSchemaBase } from '@/lib/operations/output-schemas'
@@ -70,7 +71,7 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
       confirmation: { kind: 'none', required: false },
       assistantWriteAuthority: {
         kind: 'temporal_operation_execution',
-        contractRevision: 'merge_videos/v3',
+        contractRevision: 'merge_videos/v4',
         followUpPolicy: 'after_all_terminal',
       },
       inputSchema: mergeVideosInputSchema,
@@ -108,7 +109,7 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
             resourceId,
             mediaType: 'video',
             schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
-            name: input.name,
+            name: workspaceResourceDisplayName({ workspacePath: outputPath, resourceId }),
           }]),
           resource: {
             resourceId,

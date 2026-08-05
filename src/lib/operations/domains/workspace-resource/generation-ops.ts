@@ -37,7 +37,10 @@ import {
   type GenerationItem,
 } from '@/lib/workspace-resource/generation-request'
 import { buildWorkspaceResourceId } from '@/lib/workspace-resource/identity'
-import { resourceNameFromPath } from '@/lib/workspace-resource/path'
+import {
+  assertUniqueWorkspaceResourcePaths,
+  workspaceResourceDisplayName,
+} from '@/lib/workspace-resource/path'
 import {
   materializeWorkspaceResourceInTransaction,
   reserveWorkspaceResourceInTransaction,
@@ -81,7 +84,7 @@ import { AppError } from '@/lib/errors/app-error'
 import { describeUnknownError } from '@/lib/errors/normalize'
 
 const MAX_BATCH_ITEMS = OPERATION_EXECUTION_MAX_TASKS
-const MEDIA_GENERATION_PLAN_CONTRACT_REVISION = 'workspace-resource-generation-batch/v4'
+const MEDIA_GENERATION_PLAN_CONTRACT_REVISION = 'workspace-resource-generation-batch/v5'
 
 const workspaceResourceJsonValueSchema: z.ZodType<WorkspaceResourceJsonValue> = z.lazy(() => z.union([
   z.string(),
@@ -693,6 +696,7 @@ async function buildPlannedItem(input: {
     resourceId,
     mediaType,
     schemaId,
+    alternativeIndex: input.alternatives ? input.memberIndex : null,
   })
   const assetKind = item.mediaType === 'image' ? item.assetKind : null
   const modelKey = await modelForMedia(input.ctx, mediaType, assetKind)
@@ -739,7 +743,7 @@ async function buildPlannedItem(input: {
       resourceId,
       mediaType,
       schemaId,
-      name: resourceNameFromPath(workspacePath),
+      name: workspaceResourceDisplayName({ workspacePath, resourceId }),
     }]),
     protocol: 'workspace_resource_generation_v1',
     resource: resourcePayload,
@@ -877,6 +881,7 @@ async function planNewMedia(
       projectVideoRatio,
     }))
   )))
+  assertUniqueWorkspaceResourcePaths(built.map((entry) => entry.resource.workspacePath))
   assertBudget(built.map((entry) => entry.task), request.maxBudgetCredits)
   return buildPlan({
     ctx,
@@ -940,7 +945,10 @@ async function loadFailedTasks(
         resourceId: resource.id,
         mediaType,
         schemaId: resource.schemaId,
-        name: resourceNameFromPath(resource.workspacePath),
+        name: workspaceResourceDisplayName({
+          workspacePath: resource.workspacePath,
+          resourceId: resource.id,
+        }),
       }]),
       protocol: 'workspace_resource_generation_v1',
       resource: {
@@ -1173,7 +1181,7 @@ export function createWorkspaceResourceGenerationOperations(): ProjectAgentOpera
       summary: 'Explicitly save one text or structured document as a canonical project Resource. Runtime scratch and in-turn professional results are never saved implicitly.',
       intent: 'act',
       channels: { tool: true, api: true, mcp: true },
-      toolContractRevision: 'save_project_document/v2',
+      toolContractRevision: 'save_project_document/v3',
       effects: {
         writes: true,
         workspaceResourceImpact: 'workspace_resources',
