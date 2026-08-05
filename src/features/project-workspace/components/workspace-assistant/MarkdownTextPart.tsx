@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { TextMessagePartProps } from '@assistant-ui/react'
 import type { Components } from 'react-markdown'
+import { readSourceDomain, WebSourceFavicon } from './WebSourceFavicon'
 import { useWorkspaceAssistantTextPlayback } from './WorkspaceAssistantTextPlayback'
 import {
   projectWorkspacePathFromHref,
@@ -68,14 +69,20 @@ function WorkspaceMarkdownLink(props: { readonly href?: string; readonly childre
   const workspaceLink = useWorkspaceAssistantWorkspaceLink()
   const href = props.href?.trim() ?? ''
   if (isExternalWebHref(href)) {
+    // Cited sources read as a run of blue underlines when a paragraph carries
+    // several of them. A compact chip carrying the site's own icon keeps the
+    // sentence readable and makes the source recognisable before it is clicked.
+    const domain = readSourceDomain(href)
     return (
       <a
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="break-words text-[var(--glass-accent-from)] underline underline-offset-2 [overflow-wrap:anywhere]"
+        title={href}
+        className="mx-0.5 inline-flex max-w-[16rem] items-baseline gap-1 rounded-md bg-black/[0.045] px-1.5 py-px align-baseline text-[0.9em] leading-[1.5] text-[var(--glass-text-secondary)] no-underline transition-colors hover:bg-black/[0.08] hover:text-[var(--glass-text-primary)]"
       >
-        {props.children}
+        <WebSourceFavicon domain={domain} className="h-3 w-3 self-center" />
+        <span className="truncate">{props.children}</span>
       </a>
     )
   }

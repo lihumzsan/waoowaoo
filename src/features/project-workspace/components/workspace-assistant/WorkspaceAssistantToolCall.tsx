@@ -13,6 +13,7 @@ import {
   type ReactNode,
 } from 'react'
 import { AppIcon } from '@/components/ui/icons'
+import { WebSourceFavicon } from './WebSourceFavicon'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 import type { AssistantRuntimeSessionTurnView } from '@/lib/assistant-runtime/view-contract'
@@ -420,8 +421,8 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={source.previewImageUrl} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover bg-slate-100" />
               ) : (
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-slate-400 ring-1 ring-slate-200">
-                  <AppIcon name="globe" className="h-4 w-4" />
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white ring-1 ring-slate-200">
+                  <WebSourceFavicon domain={source.domain} className="h-5 w-5" />
                 </span>
               )}
               <span className="min-w-0">
