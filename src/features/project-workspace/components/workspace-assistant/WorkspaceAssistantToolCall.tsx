@@ -17,6 +17,11 @@ import { WebSourceFavicon } from './WebSourceFavicon'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 import { resolveUnifiedErrorCode, type UnifiedErrorCode } from '@/lib/errors/codes'
+import {
+  parseCreativeRuntimeSkillReadToolName,
+  resolveCreativeRuntimeSkillReadCommand,
+  type CreativeRuntimeSkillId,
+} from '@/lib/creative-skills/runtime-skill-read'
 import { useWorkspaceAssistantRunningSurface } from './WorkspaceAssistantReasoning'
 import {
   isWorkspaceAssistantRuntimeInterruptedToolPart,
@@ -81,6 +86,16 @@ function resolveNativeToolTitle(toolName: string, t: AssistantAgentTranslator): 
     case 'view_image': return t('runtime.native.viewImage')
     default: return null
   }
+}
+
+function resolveRuntimeSkillRead(
+  toolName: string,
+  args: unknown,
+): CreativeRuntimeSkillId | null {
+  const projectedSkillId = parseCreativeRuntimeSkillReadToolName(toolName)
+  if (projectedSkillId) return projectedSkillId
+  if (toolName !== 'shell' || !isRecord(args)) return null
+  return resolveCreativeRuntimeSkillReadCommand(args.command)
 }
 
 type WebSearchSource = {
@@ -252,11 +267,16 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
   const context = useContext(WorkspaceAssistantToolCallContext)
   const repeatedEntry = context.repeatedByToolCallId.get(props.toolCallId)
   const groupView = repeatedEntry?.view ?? null
+  const runtimeSkillId = resolveRuntimeSkillRead(props.toolName, props.args)
   const operationId = props.toolName.startsWith('wao.')
     ? props.toolName.slice('wao.'.length)
     : props.toolName
-  const operationTitle = resolveNativeToolTitle(props.toolName, t)
-    ?? localizeProjectAgentOperationTitle(operationId, locale)
+  const operationTitle = runtimeSkillId
+    ? t('runtime.native.skillRead', {
+        skill: t(`runtime.native.skillNames.${runtimeSkillId}`),
+      })
+    : resolveNativeToolTitle(props.toolName, t)
+      ?? localizeProjectAgentOperationTitle(operationId, locale)
   const toolStatus = props.status.type
   const runningSeconds = useRunningSeconds(toolStatus === 'running')
   useWorkspaceAssistantRunningSurface(
@@ -287,11 +307,9 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
     ? tErrors(failureCode)
     : t('toolCall.failedDetail')
   const iconName = failed || interrupted ? 'alert' : 'settingsHex'
-  const displayTitle = groupView
-    ? props.toolName === 'web_search'
-      ? operationTitle
-      : t('toolCall.groupTitle', { title: operationTitle, count: groupView.total })
-    : operationTitle
+  const displayTitle = !groupView || runtimeSkillId || props.toolName === 'web_search'
+    ? operationTitle
+    : t('toolCall.groupTitle', { title: operationTitle, count: groupView.total })
   const mixedGroup = groupView && ([
     groupView.success,
     groupView.submitted,

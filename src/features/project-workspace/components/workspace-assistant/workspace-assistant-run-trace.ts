@@ -1,4 +1,8 @@
 import { getToolName, isToolUIPart, type UIMessage } from 'ai'
+import {
+  creativeRuntimeSkillReadToolName,
+  resolveCreativeRuntimeSkillReadCommand,
+} from '@/lib/creative-skills/runtime-skill-read'
 
 export const WORKSPACE_ASSISTANT_HIDDEN_TRACE_TOOL_NAMES = [
   'update_plan',
@@ -33,6 +37,7 @@ type MessagePartRecord = {
   readonly toolCallId?: unknown
   readonly toolName?: unknown
   readonly input?: unknown
+  readonly command?: unknown
   readonly result?: unknown
   readonly output?: unknown
   readonly errorText?: unknown
@@ -79,6 +84,20 @@ function readPart(value: unknown): MessagePartRecord | null {
 
 function readNonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value : null
+}
+
+/**
+ * Historical messages stored Skill file reads as shell calls. Normalize only
+ * their presentation identity; the persisted execution and call id stay intact.
+ */
+function presentationToolName(value: UIMessage['parts'][number]): string | null {
+  if (!isToolUIPart(value)) return null
+  const toolName = getToolName(value)
+  if (toolName !== 'shell') return toolName
+  const part = readPart(value)
+  const input = readPart(part?.input)
+  const skillId = resolveCreativeRuntimeSkillReadCommand(input?.command)
+  return skillId ? creativeRuntimeSkillReadToolName(skillId) : toolName
 }
 
 function isSubmittedToolResult(result: unknown): boolean {
@@ -160,7 +179,8 @@ export function resolveWorkspaceAssistantRepeatedToolCallGroups(
         continue
       }
       if (!isToolUIPart(part) || !part.toolCallId) continue
-      const toolName = getToolName(part)
+      const toolName = presentationToolName(part)
+      if (!toolName) continue
       const toolCallIds = callsByToolName.get(toolName) ?? []
       toolCallIds.push(part.toolCallId)
       callsByToolName.set(toolName, toolCallIds)
@@ -186,7 +206,7 @@ export function resolveWorkspaceAssistantToolCallGroupView(
       partByToolCallId.set(partValue.toolCallId, {
         type: 'tool-call',
         toolCallId: partValue.toolCallId,
-        toolName: getToolName(partValue),
+        toolName: presentationToolName(partValue) ?? getToolName(partValue),
         status: {
           type: state === 'output-available' || state === 'output-error'
             ? 'complete'

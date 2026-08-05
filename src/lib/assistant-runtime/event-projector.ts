@@ -8,6 +8,10 @@ import type {
   RuntimeSkillsListEntry,
 } from '@/lib/codex-runtime/runtime-adapter'
 import { buildAgentTurnAssistantMessageId } from '@/lib/agent-turn/stream-publisher'
+import {
+  creativeRuntimeSkillReadToolName,
+  resolveCreativeRuntimeSkillReadCommand,
+} from '@/lib/creative-skills/runtime-skill-read'
 import type {
   AssistantRuntimeEventSink,
   AssistantRuntimeInteractionView,
@@ -158,8 +162,10 @@ function toolNameForItem(item: RuntimeJsonObject): string | null {
     }
     case 'dynamicToolCall':
       return readString(item, 'tool') ?? 'dynamic_tool'
-    case 'commandExecution':
-      return 'shell'
+    case 'commandExecution': {
+      const skillId = resolveCreativeRuntimeSkillReadCommand(item.command)
+      return skillId ? creativeRuntimeSkillReadToolName(skillId) : 'shell'
+    }
     case 'fileChange':
       return 'file_change'
     case 'webSearch':
@@ -177,8 +183,12 @@ function toolInputForItem(item: RuntimeJsonObject): RuntimeJsonValue {
     case 'mcpToolCall':
     case 'dynamicToolCall':
       return item.arguments ?? {}
-    case 'commandExecution':
-      return { command: item.command ?? null, cwd: item.cwd ?? null }
+    case 'commandExecution': {
+      const skillId = resolveCreativeRuntimeSkillReadCommand(item.command)
+      return skillId
+        ? { skillId, command: item.command ?? null, cwd: item.cwd ?? null }
+        : { command: item.command ?? null, cwd: item.cwd ?? null }
+    }
     case 'fileChange':
       return { changes: item.changes ?? [] }
     case 'webSearch':
