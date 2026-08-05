@@ -29,59 +29,30 @@ const STREAMED_TEXT_EXCLUDED_TAGS = new Set([
   'table', 'thead', 'tbody', 'tfoot', 'tr',
   'ul', 'ol', 'dl',
 ])
-/**
- * How many trailing characters carry the fade. Long enough to read as a soft
- * edge rather than a blinking cursor, short enough that the text stays legible
- * while it arrives.
- */
-const STREAM_TAIL_LENGTH = 14
-const STREAM_TAIL_MIN_OPACITY = 0.12
-const STREAM_TAIL_MAX_BLUR_PX = 2.4
-
-function splitStreamedTextChildren(node: StreamedHastNode, spans: StreamedHastNode[]): void {
+function animateStreamedTextChildren(node: StreamedHastNode): void {
   if (!node.children || STREAMED_TEXT_EXCLUDED_TAGS.has(node.tagName ?? '')) return
   node.children = node.children.flatMap((child) => {
     if (child.type === 'text' && child.value) {
-      return Array.from(child.value).map<StreamedHastNode>((character) => {
-        const span: StreamedHastNode = {
-          type: 'element',
-          tagName: 'span',
-          properties: { className: ['assistant-stream-tail'] },
-          children: [{ type: 'text', value: character }],
-        }
-        spans.push(span)
-        return span
-      })
+      return Array.from(child.value).map<StreamedHastNode>((character) => ({
+        type: 'element',
+        tagName: 'span',
+        properties: { className: ['assistant-stream-in'] },
+        children: [{ type: 'text', value: character }],
+      }))
     }
-    splitStreamedTextChildren(child, spans)
+    animateStreamedTextChildren(child)
     return [child]
   })
 }
 
 /**
- * Ramps the newest characters instead of popping each one in.
- *
- * Per-character fade-in made every glyph its own visual event, which reads as
- * stuttering. The ramp is applied from the end of the document rather than per
- * text node, so it follows the actual writing edge across markdown structure,
- * and characters leaving the ramp transition back to full clarity on their own.
+ * Each character fades in once as it arrives, then it is ordinary text. The
+ * animation belongs to the character's appearance, not to its distance from
+ * the end — a ramp measured from the tail keeps re-dimming settled text as the
+ * window slides, which reads as the whole paragraph floating.
  */
 function rehypeAnimateWorkspaceAssistantStreamedText() {
-  return (tree: StreamedHastNode) => {
-    const spans: StreamedHastNode[] = []
-    splitStreamedTextChildren(tree, spans)
-    const tail = spans.slice(-STREAM_TAIL_LENGTH)
-    tail.forEach((span, index) => {
-      // 0 at the oldest end of the ramp, 1 at the writing edge.
-      const depth = (tail.length - index) / tail.length
-      const opacity = 1 - (1 - STREAM_TAIL_MIN_OPACITY) * depth * depth
-      const blur = STREAM_TAIL_MAX_BLUR_PX * depth * depth
-      span.properties = {
-        ...span.properties,
-        style: `--assistant-stream-tail-opacity:${opacity.toFixed(3)};--assistant-stream-tail-blur:${blur.toFixed(2)}px`,
-      }
-    })
-  }
+  return (tree: StreamedHastNode) => animateStreamedTextChildren(tree)
 }
 
 function isExternalWebHref(href: string): boolean {

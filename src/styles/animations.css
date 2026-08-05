@@ -451,27 +451,27 @@
 }
 
 /**
- * 流式正文的尾部渐变。
+ * 流式正文里新出现字符的淡入。
  *
- * 逐字符硬出现会让阅读节奏被打断:每个字都是一次独立的视觉事件。这里改成
- * 内容感知的尾部阶梯 —— 最新的若干字符按距离末尾的远近获得递减的不透明度和
- * 递减的模糊,越靠近光标越淡,形成一条流动的软边。
- *
- * 关键在 transition:当新字符到达、旧字符退出尾部区间时,它的自定义属性回到
- * 默认值并平滑过渡到完全清晰,而不是瞬间跳变。纯 CSS mask 做不到这一点 ——
- * mask 按几何位置淡化,流式结束后末行右侧会永久发灰。
+ * 一次性动画,不是持续状态。上一版把它做成按位置维持的半透明窗口 —— 末尾若干
+ * 字符始终按距离末尾计算透明度,窗口随文本滑动,于是整条尾巴一直发虚,读起来
+ * 像整段文字在浮动。字只需要在出现的那一刻淡入,之后就是普通文字。
  */
-.assistant-stream-tail {
-  opacity: var(--assistant-stream-tail-opacity, 1);
-  filter: blur(var(--assistant-stream-tail-blur, 0px));
-  transition: opacity 260ms cubic-bezier(0.22, 0.61, 0.36, 1),
-    filter 260ms cubic-bezier(0.22, 0.61, 0.36, 1);
+.assistant-stream-in {
+  animation: assistant-stream-in 320ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@keyframes assistant-stream-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .assistant-stream-tail {
-    opacity: 1;
-    filter: none;
-    transition: none;
+  .assistant-stream-in {
+    animation: none;
   }
 }
