@@ -15,6 +15,7 @@ export interface DeploymentFeatures {
   enablePasswordAuth: boolean
   showDownloadLogs: boolean
   showUpdateCheck: boolean
+  showBetaBadge: boolean
 }
 
 type EditionDeploymentFeatures = Omit<DeploymentFeatures, 'showApiConfig'>
@@ -32,6 +33,7 @@ const SELF_HOSTED_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   enablePasswordAuth: true,
   showDownloadLogs: false,
   showUpdateCheck: true,
+  showBetaBadge: false,
 }
 
 const CLOUD_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
@@ -47,6 +49,7 @@ const CLOUD_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   enablePasswordAuth: false,
   showDownloadLogs: false,
   showUpdateCheck: false,
+  showBetaBadge: true,
 }
 
 function cloneEditionDeploymentFeatures(features: EditionDeploymentFeatures): EditionDeploymentFeatures {

@@ -9,6 +9,7 @@ import {
   createWechatRechargeIntent,
 } from '@/lib/payments/stripe-wechat-intent'
 import { isPaymentConfigurationError, readPaymentConfigurationErrorCode } from '@/lib/payments/config-errors'
+import { isPaidBetaPaymentUnavailableError } from '@/lib/paid-beta/campaign'
 
 /**
  * Either a credit top-up or a plan term — both are one-off WeChat payments and
@@ -78,6 +79,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
       }
     }
   } catch (error) {
+    if (isPaidBetaPaymentUnavailableError(error)) {
+      throw new ApiError('PAID_BETA_SOLD_OUT')
+    }
     if (isPaymentConfigurationError(error)) {
       const code = readPaymentConfigurationErrorCode(error)
       throw new ApiError('MISSING_CONFIG', { code, message: code })

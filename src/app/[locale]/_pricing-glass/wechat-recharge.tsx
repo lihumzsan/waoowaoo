@@ -8,6 +8,7 @@ import { apiFetch } from '@/lib/api-fetch'
 import { createClientApiError } from '@/lib/errors/client'
 import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
 import type { RechargeConfig } from './shared'
+import PaidBetaGroupAccess from '@/components/paid-beta/PaidBetaGroupAccess'
 
 /**
  * WeChat Pay without leaving the page.
@@ -224,27 +225,31 @@ export function useWechatRecharge(
 
 export function WechatQrDialog({
   payment,
+  settled,
   onClose,
 }: {
   readonly payment: WechatQrPayment | null
+  readonly settled: WechatQrPayment | null
   readonly onClose: () => void
 }) {
   const t = useTranslations('pricing.glass')
   return (
     <GlassModalShell
-      open={payment !== null}
+      open={payment !== null || settled !== null}
       onClose={onClose}
       size="sm"
-      title={t('wechatDialogTitle')}
+      title={settled ? undefined : t('wechatDialogTitle')}
       description={
-        payment
+        payment && !settled
           ? payment.purpose === 'plan'
             ? t('wechatDialogPlanHint')
             : t('wechatDialogHint', { credits: (payment.credits ?? 0).toLocaleString('en-US') })
           : undefined
       }
     >
-      {payment ? (
+      {settled ? (
+        <PaidBetaGroupAccess onDone={onClose} />
+      ) : payment ? (
         <div className="flex flex-col items-center gap-4 py-2">
           {/* A data: URI produced by Stripe. next/image would only add a
               proxy round-trip to bytes we already hold, and cannot optimise

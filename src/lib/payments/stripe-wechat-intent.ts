@@ -7,6 +7,13 @@ import {
 } from '@/lib/billing/subscription-plans'
 import { quoteRecharge, STRIPE_PAYMENT_CURRENCY, type RechargeQuote } from './recharge-config'
 import { createStripeClient } from './stripe-client'
+import { admitPaidBetaPayment } from './paid-beta-admission'
+import {
+  attachPaidBetaProviderObject,
+  failPaidBetaPaymentAttempt,
+  PAID_BETA_ATTEMPT_METADATA_KEY,
+  PAID_BETA_SEAT_METADATA_KEY,
+} from '@/lib/paid-beta/campaign'
 
 /**
  * WeChat Pay top-up, paid without leaving the site.
@@ -49,7 +56,11 @@ export interface WechatRechargeIntentResult {
   readonly quote: RechargeQuote
 }
 
-function buildIntentMetadata(quote: RechargeQuote, userId: string): Stripe.MetadataParam {
+function buildIntentMetadata(
+  quote: RechargeQuote,
+  userId: string,
+  attempt: { readonly attemptId: string; readonly seatId: string },
+): Stripe.MetadataParam {
   return {
     // The webhook credits a balance from these values, so they carry the same
     // facts a Checkout session would: who, how many credits, and what was paid.
@@ -59,6 +70,8 @@ function buildIntentMetadata(quote: RechargeQuote, userId: string): Stripe.Metad
     credit_value_currency: quote.creditValueCurrency,
     payment_amount: quote.paymentAmount.toFixed(2),
     payment_currency: quote.paymentCurrency.toLowerCase(),
+    [PAID_BETA_ATTEMPT_METADATA_KEY]: attempt.attemptId,
+    [PAID_BETA_SEAT_METADATA_KEY]: attempt.seatId,
   }
 }
 
@@ -66,22 +79,35 @@ export async function createWechatRechargeIntent(
   input: CreateWechatRechargeIntentInput,
 ): Promise<WechatRechargeIntentResult> {
   const quote = quoteRecharge(input.credits)
-
-  const intent = await createStripeClient().paymentIntents.create({
-    amount: quote.paymentUnitAmount,
-    currency: STRIPE_PAYMENT_CURRENCY.toLowerCase(),
-    // Named explicitly rather than left to automatic selection: this endpoint
-    // exists to produce a WeChat QR code, and silently falling back to another
-    // method would leave the browser confirming a payment it cannot render.
-    payment_method_types: ['wechat_pay'],
-    metadata: buildIntentMetadata(quote, input.userId),
+  const attempt = await admitPaidBetaPayment({
+    userId: input.userId,
+    providerKind: 'stripe_wechat',
   })
 
-  if (!intent.client_secret) throw new Error('STRIPE_PAYMENT_INTENT_MISSING_CLIENT_SECRET')
-  return {
-    paymentIntentId: intent.id,
-    clientSecret: intent.client_secret,
-    quote,
+  try {
+    const intent = await createStripeClient().paymentIntents.create({
+      amount: quote.paymentUnitAmount,
+      currency: STRIPE_PAYMENT_CURRENCY.toLowerCase(),
+      // Named explicitly rather than left to automatic selection: this endpoint
+      // exists to produce a WeChat QR code, and silently falling back to another
+      // method would leave the browser confirming a payment it cannot render.
+      payment_method_types: ['wechat_pay'],
+      metadata: buildIntentMetadata(quote, input.userId, attempt),
+    }, { idempotencyKey: `paid-beta:${attempt.attemptId}` })
+
+    if (!intent.client_secret) throw new Error('STRIPE_PAYMENT_INTENT_MISSING_CLIENT_SECRET')
+    await attachPaidBetaProviderObject({
+      attemptId: attempt.attemptId,
+      providerObjectId: intent.id,
+    })
+    return {
+      paymentIntentId: intent.id,
+      clientSecret: intent.client_secret,
+      quote,
+    }
+  } catch (error) {
+    await failPaidBetaPaymentAttempt(attempt.attemptId)
+    throw error
   }
 }
 
@@ -107,27 +133,43 @@ export async function createWechatPlanIntent(
     throw new Error('PAYMENT_AMOUNT_INVALID')
   }
 
-  const intent = await createStripeClient().paymentIntents.create({
-    amount: minorAmount,
-    currency: STRIPE_PAYMENT_CURRENCY.toLowerCase(),
-    payment_method_types: ['wechat_pay'],
-    metadata: {
-      waoowaoo_kind: WECHAT_PLAN_KIND,
-      user_id: input.userId,
-      plan_id: plan.id,
-      plan_interval: input.interval,
-      monthly_credits: String(plan.monthlyCredits),
-      payment_amount: amountCny.toFixed(2),
-      payment_currency: STRIPE_PAYMENT_CURRENCY.toLowerCase(),
-    },
+  const attempt = await admitPaidBetaPayment({
+    userId: input.userId,
+    providerKind: 'stripe_wechat',
   })
 
-  if (!intent.client_secret) throw new Error('STRIPE_PAYMENT_INTENT_MISSING_CLIENT_SECRET')
-  return {
-    paymentIntentId: intent.id,
-    clientSecret: intent.client_secret,
-    planId: plan.id,
-    interval: input.interval,
-    amountCny,
+  try {
+    const intent = await createStripeClient().paymentIntents.create({
+      amount: minorAmount,
+      currency: STRIPE_PAYMENT_CURRENCY.toLowerCase(),
+      payment_method_types: ['wechat_pay'],
+      metadata: {
+        waoowaoo_kind: WECHAT_PLAN_KIND,
+        user_id: input.userId,
+        plan_id: plan.id,
+        plan_interval: input.interval,
+        monthly_credits: String(plan.monthlyCredits),
+        payment_amount: amountCny.toFixed(2),
+        payment_currency: STRIPE_PAYMENT_CURRENCY.toLowerCase(),
+        [PAID_BETA_ATTEMPT_METADATA_KEY]: attempt.attemptId,
+        [PAID_BETA_SEAT_METADATA_KEY]: attempt.seatId,
+      },
+    }, { idempotencyKey: `paid-beta:${attempt.attemptId}` })
+
+    if (!intent.client_secret) throw new Error('STRIPE_PAYMENT_INTENT_MISSING_CLIENT_SECRET')
+    await attachPaidBetaProviderObject({
+      attemptId: attempt.attemptId,
+      providerObjectId: intent.id,
+    })
+    return {
+      paymentIntentId: intent.id,
+      clientSecret: intent.client_secret,
+      planId: plan.id,
+      interval: input.interval,
+      amountCny,
+    }
+  } catch (error) {
+    await failPaidBetaPaymentAttempt(attempt.attemptId)
+    throw error
   }
 }

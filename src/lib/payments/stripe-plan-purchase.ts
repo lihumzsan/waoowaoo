@@ -9,15 +9,20 @@ import {
 } from '@/lib/billing/subscription-plans'
 import { STRIPE_PAYMENT_CURRENCY } from './recharge-config'
 import { createStripeClient } from './stripe-client'
+import { admitPaidBetaPayment } from './paid-beta-admission'
+import {
+  attachPaidBetaProviderObject,
+  failPaidBetaPaymentAttempt,
+  PAID_BETA_ATTEMPT_METADATA_KEY,
+  PAID_BETA_SEAT_METADATA_KEY,
+} from '@/lib/paid-beta/campaign'
 
 /**
  * Buying a plan term.
  *
- * Plans are sold outright rather than subscribed to. WeChat Pay cannot back an
- * automatically renewing charge on Stripe, and Stripe Checkout hides it
- * entirely in subscription mode — so a subscription would be unbuyable for
- * most of these users. A one-off payment accepts every method the account has
- * enabled, WeChat included.
+ * Plans are sold outright rather than subscribed to. WeChat Pay is handled by
+ * the dedicated QR flow; this Stripe Checkout entry is intentionally card-only
+ * so its provider behavior matches the payment-method choice shown in our UI.
  *
  * What the payment buys is unchanged: a monthly term grants one month of
  * credits, a yearly term grants twelve, released month by month and expiring
@@ -95,6 +100,10 @@ export async function createPlanPurchaseSession(
   // amount charged. It never changes how many credits the term grants.
   const promoCny = input.interval === 'month' ? plan.firstMonthPromoCny : null
   const chargedCny = promoCny ?? priceCny
+  const attempt = await admitPaidBetaPayment({
+    userId: input.userId,
+    providerKind: 'stripe_checkout',
+  })
 
   const metadata: Stripe.MetadataParam = {
     waoowaoo_kind: PLAN_PURCHASE_KIND,
@@ -106,38 +115,49 @@ export async function createPlanPurchaseSession(
     list_price_cny: priceCny.toFixed(2),
     payment_amount: chargedCny.toFixed(2),
     payment_currency: currency,
+    [PAID_BETA_ATTEMPT_METADATA_KEY]: attempt.attemptId,
+    [PAID_BETA_SEAT_METADATA_KEY]: attempt.seatId,
   }
 
-  const session = await createStripeClient().checkout.sessions.create({
-    // A one-off payment, so every method the account has enabled is offered —
-    // including WeChat Pay, which subscription mode would have hidden.
-    mode: 'payment',
-    success_url: `${origin}/${input.locale}/profile?section=billing&plan=success&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${origin}/${input.locale}/profile?section=billing&plan=cancel`,
-    client_reference_id: input.userId,
-    ...(input.email ? { customer_email: input.email } : {}),
-    line_items: [{
-      quantity: 1,
-      price_data: {
-        currency,
-        unit_amount: toMinorUnits(chargedCny),
-        product_data: {
-          name: text.name,
-          description: text.description,
+  try {
+    const session = await createStripeClient().checkout.sessions.create({
+      mode: 'payment',
+      payment_method_types: ['card'],
+      success_url: `${origin}/${input.locale}/profile?section=billing&plan=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/${input.locale}/profile?section=billing&plan=cancel`,
+      expires_at: Math.floor(attempt.expiresAt.getTime() / 1000),
+      client_reference_id: input.userId,
+      ...(input.email ? { customer_email: input.email } : {}),
+      line_items: [{
+        quantity: 1,
+        price_data: {
+          currency,
+          unit_amount: toMinorUnits(chargedCny),
+          product_data: {
+            name: text.name,
+            description: text.description,
+          },
         },
-      },
-    }],
-    metadata,
-    payment_intent_data: { metadata },
-  })
+      }],
+      metadata,
+      payment_intent_data: { metadata },
+    }, { idempotencyKey: `paid-beta:${attempt.attemptId}` })
 
-  if (!session.url) throw new Error('STRIPE_CHECKOUT_RESPONSE_MISSING_URL')
-  return {
-    id: session.id,
-    url: session.url,
-    planId: plan.id,
-    interval: input.interval,
-    priceCny: chargedCny,
-    monthlyCredits: plan.monthlyCredits,
+    if (!session.url) throw new Error('STRIPE_CHECKOUT_RESPONSE_MISSING_URL')
+    await attachPaidBetaProviderObject({
+      attemptId: attempt.attemptId,
+      providerObjectId: session.id,
+    })
+    return {
+      id: session.id,
+      url: session.url,
+      planId: plan.id,
+      interval: input.interval,
+      priceCny: chargedCny,
+      monthlyCredits: plan.monthlyCredits,
+    }
+  } catch (error) {
+    await failPaidBetaPaymentAttempt(attempt.attemptId)
+    throw error
   }
 }

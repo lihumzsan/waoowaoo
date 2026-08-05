@@ -286,6 +286,8 @@ model User {
   balance       UserBalance?
   subscription  Subscription?
   preferences   UserPreference?
+  paidBetaSeats PaidBetaSeat[]
+  announcementReceipts AnnouncementReceipt[]
 
   // 资产中心
   globalAssetFolders              GlobalAssetFolder[]
@@ -415,6 +417,81 @@ model SubscriptionGrant {
   @@unique([subscriptionId, periodIndex])
   @@index([expiresAt])
   @@map("subscription_grants")
+}
+
+/// One bounded paid-beta wave. The row is the only capacity and lifecycle
+/// owner; payment routes consume its View instead of carrying their own flags.
+model PaidBetaCampaign {
+  id                    String         @id @db.VarChar(64)
+  status                String         @db.VarChar(16)
+  capacity              Int
+  startsAt              DateTime
+  endsAt                DateTime?
+  legacyPaymentCutoffAt DateTime
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @default(now()) @updatedAt
+  seats                 PaidBetaSeat[]
+
+  @@index([status, startsAt, endsAt])
+  @@map("paid_beta_campaigns")
+}
+
+/// A person occupying one seat in one paid-beta wave. `campaignId + userId`
+/// is the canonical participant identity, so repeat purchases never consume a
+/// second seat.
+model PaidBetaSeat {
+  id         String           @id @default(uuid())
+  campaignId String           @db.VarChar(64)
+  userId     String
+  status     String           @db.VarChar(16)
+  paidAt     DateTime?
+  releasedAt DateTime?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @default(now()) @updatedAt
+  campaign   PaidBetaCampaign @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attempts   PaidBetaPaymentAttempt[]
+
+  @@unique([campaignId, userId])
+  @@index([campaignId, status, createdAt])
+  @@index([userId, status])
+  @@map("paid_beta_seats")
+}
+
+/// A provider-side attempt that belongs to a reserved seat. The provider
+/// object identity lets card redirects and webhook replays converge on the
+/// same local fact without interpreting URLs or UI state.
+model PaidBetaPaymentAttempt {
+  id               String       @id @default(uuid())
+  seatId           String
+  providerKind     String       @db.VarChar(32)
+  providerObjectId String?      @unique @db.VarChar(191)
+  status           String       @db.VarChar(16)
+  expiresAt        DateTime
+  paidAt           DateTime?
+  terminalAt       DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @default(now()) @updatedAt
+  seat             PaidBetaSeat @relation(fields: [seatId], references: [id], onDelete: Cascade)
+
+  @@index([seatId, status, expiresAt])
+  @@index([status, expiresAt])
+  @@map("paid_beta_payment_attempts")
+}
+
+/// A versioned per-user acknowledgement. New announcement versions remain
+/// independently deliverable without localStorage or device-specific state.
+model AnnouncementReceipt {
+  id             String   @id @default(uuid())
+  userId         String
+  announcementId String   @db.VarChar(96)
+  version        Int
+  acknowledgedAt DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, announcementId, version])
+  @@index([userId, acknowledgedAt])
+  @@map("announcement_receipts")
 }
 
 model BalanceFreeze {

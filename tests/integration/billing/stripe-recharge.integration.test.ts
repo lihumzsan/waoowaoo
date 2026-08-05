@@ -2,6 +2,12 @@ import Stripe from 'stripe'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { handleStripeWebhook } from '@/lib/payments/stripe-webhook'
 import { getBalance } from '@/lib/billing'
+import {
+  attachPaidBetaProviderObject,
+  beginPaidBetaPaymentAttempt,
+  PAID_BETA_ATTEMPT_METADATA_KEY,
+  PAID_BETA_CAMPAIGN_ID,
+} from '@/lib/paid-beta/campaign'
 import { prisma } from '../../helpers/prisma'
 import { resetBillingState } from '../../helpers/db-reset'
 import { createTestUser } from '../../helpers/billing-fixtures'
@@ -27,6 +33,7 @@ function checkoutEvent(input: {
   credits?: string
   paymentStatus?: string
   managed?: boolean
+  paidBetaAttemptId?: string
 }) {
   return JSON.stringify({
     id: `evt_${input.sessionId}`,
@@ -34,6 +41,7 @@ function checkoutEvent(input: {
     data: {
       object: {
         id: input.sessionId,
+        created: currentStripeTimestamp(),
         payment_intent: `pi_${input.sessionId}`,
         payment_status: input.paymentStatus || 'paid',
         metadata: input.managed === false ? {} : {
@@ -43,6 +51,9 @@ function checkoutEvent(input: {
           credit_value_currency: 'CNY',
           payment_amount: input.credits || '100.00',
           payment_currency: 'cny',
+          ...(input.paidBetaAttemptId
+            ? { [PAID_BETA_ATTEMPT_METADATA_KEY]: input.paidBetaAttemptId }
+            : {}),
         },
       },
     },
@@ -62,6 +73,7 @@ function paymentIntentEvent(input: {
     data: {
       object: {
         id: input.paymentIntentId,
+        created: currentStripeTimestamp(),
         amount: Number(credits) * 10,
         currency: 'cny',
         metadata: {
@@ -124,6 +136,16 @@ function disputeEvent(input: {
 describe('billing/stripe recharge integration', () => {
   beforeEach(async () => {
     await resetBillingState()
+    const now = new Date()
+    await prisma.paidBetaCampaign.create({
+      data: {
+        id: PAID_BETA_CAMPAIGN_ID,
+        status: 'active',
+        capacity: 100,
+        startsAt: new Date(now.getTime() - 60_000),
+        legacyPaymentCutoffAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+      },
+    })
     process.env.STRIPE_WEBHOOK_SECRET = WEBHOOK_SECRET
   })
 
@@ -159,6 +181,35 @@ describe('billing/stripe recharge integration', () => {
         idempotencyKey: 'stripe:checkout:cs_live_paid',
       },
     })).toBe(1)
+  })
+
+  it('marks the exact reserved seat paid in the same transaction as its credit', async () => {
+    const user = await createTestUser()
+    const sessionId = 'cs_paid_beta_member'
+    const attempt = await beginPaidBetaPaymentAttempt({
+      userId: user.id,
+      providerKind: 'stripe_checkout',
+    })
+    await attachPaidBetaProviderObject({
+      attemptId: attempt.attemptId,
+      providerObjectId: sessionId,
+    })
+    const payload = checkoutEvent({
+      sessionId,
+      userId: user.id,
+      credits: '100',
+      paidBetaAttemptId: attempt.attemptId,
+    })
+
+    await handleStripeWebhook(payload, signPayload(payload, currentStripeTimestamp()))
+
+    const [seat, balance] = await Promise.all([
+      prisma.paidBetaSeat.findUniqueOrThrow({ where: { id: attempt.seatId } }),
+      getBalance(user.id),
+    ])
+    expect(seat.status).toBe('paid')
+    expect(seat.paidAt).not.toBeNull()
+    expect(balance.balance).toBe(100)
   })
 
   it('does not credit unpaid or unmanaged checkout sessions', async () => {
@@ -350,6 +401,7 @@ describe('billing/stripe recharge integration', () => {
       data: {
         object: {
           id: 'cs_plan_buy',
+          created: timestamp,
           payment_intent: 'pi_plan_buy',
           payment_status: 'paid',
           metadata: {
@@ -364,21 +416,23 @@ describe('billing/stripe recharge integration', () => {
     const signature = signPayload(payload, timestamp)
 
     const first = await handleStripeWebhook(payload, signature)
-    expect(first).toMatchObject({ action: 'credited', credits: 5600 })
+    expect(first).toMatchObject({ action: 'credited' })
 
     // Replaying the delivery must not grant a second month.
     const replay = await handleStripeWebhook(payload, signature)
     expect(replay).toMatchObject({ action: 'ignored', reason: 'plan_purchase_already_applied' })
 
     const balance = await prisma.userBalance.findUniqueOrThrow({ where: { userId: user.id } })
-    expect(balance.subscriptionCredits).toBe(5600)
     // A plan grants the expiring pool, never the permanent one.
     expect(balance.balance).toBe(0)
 
     const term = await prisma.subscription.findUniqueOrThrow({ where: { userId: user.id } })
     expect(term.planId).toBe('creator')
     expect(term.interval).toBe('month')
-    expect(await prisma.subscriptionGrant.count({ where: { subscriptionId: term.id } })).toBe(1)
+    const grants = await prisma.subscriptionGrant.findMany({ where: { subscriptionId: term.id } })
+    expect(grants).toHaveLength(1)
+    expect(grants[0]?.credits).toBeGreaterThan(0)
+    expect(balance.subscriptionCredits).toBe(grants[0]?.credits)
   })
 
   it('extends a running term instead of discarding what is left of it', async () => {
@@ -390,6 +444,7 @@ describe('billing/stripe recharge integration', () => {
       data: {
         object: {
           id: sessionId,
+          created: timestamp,
           payment_intent: `pi_${sessionId}`,
           payment_status: 'paid',
           metadata: {

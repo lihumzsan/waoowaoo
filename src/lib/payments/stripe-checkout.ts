@@ -1,6 +1,13 @@
 import type Stripe from 'stripe'
 import { quoteRecharge, type RechargeQuote } from './recharge-config'
 import { createStripeClient } from './stripe-client'
+import { admitPaidBetaPayment } from './paid-beta-admission'
+import {
+  attachPaidBetaProviderObject,
+  failPaidBetaPaymentAttempt,
+  PAID_BETA_ATTEMPT_METADATA_KEY,
+  PAID_BETA_SEAT_METADATA_KEY,
+} from '@/lib/paid-beta/campaign'
 
 export interface CreateStripeCheckoutSessionInput {
   userId: string
@@ -24,7 +31,11 @@ function normalizeOrigin(origin: string): string {
   return trimmed
 }
 
-function buildCheckoutMetadata(quote: RechargeQuote, userId: string): Stripe.MetadataParam {
+function buildCheckoutMetadata(
+  quote: RechargeQuote,
+  userId: string,
+  attempt: { readonly attemptId: string; readonly seatId: string },
+): Stripe.MetadataParam {
   return {
     waoowaoo_kind: 'credit_recharge',
     user_id: userId,
@@ -32,6 +43,8 @@ function buildCheckoutMetadata(quote: RechargeQuote, userId: string): Stripe.Met
     credit_value_currency: quote.creditValueCurrency,
     payment_amount: quote.paymentAmount.toFixed(2),
     payment_currency: quote.paymentCurrency.toLowerCase(),
+    [PAID_BETA_ATTEMPT_METADATA_KEY]: attempt.attemptId,
+    [PAID_BETA_SEAT_METADATA_KEY]: attempt.seatId,
   }
 }
 
@@ -54,32 +67,47 @@ export async function createStripeCheckoutSession(input: CreateStripeCheckoutSes
   const successUrl = `${origin}/${input.locale}/profile?section=billing&payment=success&session_id={CHECKOUT_SESSION_ID}`
   const cancelUrl = `${origin}/${input.locale}/profile?section=billing&payment=cancel`
   const productText = getCheckoutProductText(input.locale, quote)
-  const metadata = buildCheckoutMetadata(quote, input.userId)
-
-  const session = await createStripeClient().checkout.sessions.create({
-    mode: 'payment',
-    success_url: successUrl,
-    cancel_url: cancelUrl,
-    client_reference_id: input.userId,
-    ...(input.email ? { customer_email: input.email } : {}),
-    line_items: [{
-      quantity: 1,
-      price_data: {
-        currency: quote.paymentCurrency.toLowerCase(),
-        unit_amount: quote.paymentUnitAmount,
-        product_data: {
-          name: productText.name,
-          description: productText.description,
-        },
-      },
-    }],
-    metadata,
-    payment_intent_data: { metadata },
+  const attempt = await admitPaidBetaPayment({
+    userId: input.userId,
+    providerKind: 'stripe_checkout',
   })
-  if (!session.url) throw new Error('STRIPE_CHECKOUT_RESPONSE_MISSING_URL')
-  return {
-    id: session.id,
-    url: session.url,
-    quote,
+  const metadata = buildCheckoutMetadata(quote, input.userId, attempt)
+
+  try {
+    const session = await createStripeClient().checkout.sessions.create({
+      mode: 'payment',
+      payment_method_types: ['card'],
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      expires_at: Math.floor(attempt.expiresAt.getTime() / 1000),
+      client_reference_id: input.userId,
+      ...(input.email ? { customer_email: input.email } : {}),
+      line_items: [{
+        quantity: 1,
+        price_data: {
+          currency: quote.paymentCurrency.toLowerCase(),
+          unit_amount: quote.paymentUnitAmount,
+          product_data: {
+            name: productText.name,
+            description: productText.description,
+          },
+        },
+      }],
+      metadata,
+      payment_intent_data: { metadata },
+    }, { idempotencyKey: `paid-beta:${attempt.attemptId}` })
+    if (!session.url) throw new Error('STRIPE_CHECKOUT_RESPONSE_MISSING_URL')
+    await attachPaidBetaProviderObject({
+      attemptId: attempt.attemptId,
+      providerObjectId: session.id,
+    })
+    return {
+      id: session.id,
+      url: session.url,
+      quote,
+    }
+  } catch (error) {
+    await failPaidBetaPaymentAttempt(attempt.attemptId)
+    throw error
   }
 }

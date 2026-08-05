@@ -4,6 +4,7 @@ import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { createStripeCheckoutSession } from '@/lib/payments/stripe-checkout'
 import { isPaymentConfigurationError, readPaymentConfigurationErrorCode } from '@/lib/payments/config-errors'
+import { isPaidBetaPaymentUnavailableError } from '@/lib/paid-beta/campaign'
 
 const checkoutSchema = z.object({
   credits: z.number().positive(),
@@ -57,6 +58,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
       credits: parsed.data.credits,
     })
   } catch (error) {
+    if (isPaidBetaPaymentUnavailableError(error)) {
+      throw new ApiError('PAID_BETA_SOLD_OUT')
+    }
     if (isPaymentConfigurationError(error)) {
       const code = readPaymentConfigurationErrorCode(error)
       throw new ApiError('MISSING_CONFIG', { code, message: code })

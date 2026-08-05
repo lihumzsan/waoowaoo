@@ -17,6 +17,7 @@ import {
 } from './shared'
 import { useWechatRecharge, WechatQrDialog } from './wechat-recharge'
 import { PlanPaymentDialog } from './plan-payment-dialog'
+import type { PaidBetaCampaignView } from '@/lib/paid-beta/campaign'
 
 function cx(...v: readonly (string | false | null | undefined)[]) {
   return v.filter(Boolean).join(' ')
@@ -116,6 +117,7 @@ function PlanCard({
   busy,
   onSubscribe,
   owned,
+  paymentOpen,
 }: {
   readonly plan: GlassPlan
   readonly interval: SubscriptionInterval
@@ -123,6 +125,7 @@ function PlanCard({
   readonly onSubscribe: () => void
   /** True when this is the plan the signed-in visitor already holds. */
   readonly owned: boolean
+  readonly paymentOpen: boolean
 }) {
   const t = useTranslations('pricing.glass')
   const priced = plan.intervals[interval]
@@ -184,14 +187,14 @@ function PlanCard({
 
       <button
         type="button"
-        disabled={busy}
+        disabled={busy || !paymentOpen}
         onClick={onSubscribe}
         className={cx(
           'glass-btn-base mt-4 h-10 w-full rounded-xl text-[13px] font-medium disabled:cursor-not-allowed disabled:opacity-50',
           featured ? 'glass-btn-primary' : 'glass-btn-secondary',
         )}
       >
-        {busy ? t('subscribeBusy') : owned ? t('planExtendCta') : t('subscribe')}
+        {!paymentOpen ? t('paidBetaSoldOutCta') : busy ? t('subscribeBusy') : owned ? t('planExtendCta') : t('subscribe')}
       </button>
 
       <p className="glass-num mt-3 text-center text-[12px] text-[var(--glass-text-secondary)]">
@@ -254,8 +257,15 @@ function CurrentPlanBanner({
   )
 }
 
-export default function PricingGlassPageClient({ content }: { readonly content: GlassPricingContent }) {
+export default function PricingGlassPageClient({
+  content,
+  paidBetaCampaign,
+}: {
+  readonly content: GlassPricingContent
+  readonly paidBetaCampaign: PaidBetaCampaignView
+}) {
   const t = useTranslations('pricing.glass')
+  const beta = useTranslations('paidBeta')
   const recharge = useRecharge()
   const purchase = usePlanPurchase()
   // Nothing to do the moment credits land: the dialog shows its success state
@@ -278,6 +288,34 @@ export default function PricingGlassPageClient({ content }: { readonly content: 
           <p className="mt-3 max-w-2xl text-[15px] leading-7 text-[var(--glass-text-secondary)]">
             {content.subtitle}
           </p>
+          <section className="glass-surface-soft mt-6 w-full max-w-3xl rounded-3xl border border-[var(--glass-accent-from)]/25 px-5 py-4 text-left shadow-[0_16px_45px_-35px_rgba(47,123,255,0.9)] sm:px-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--glass-accent-from)]">
+                  {beta('eyebrow')}
+                </p>
+                <h2 className="mt-1 text-[17px] font-semibold text-[var(--glass-text-primary)]">
+                  {beta('headline')}
+                </h2>
+                <p className="mt-1 text-[13px] leading-6 text-[var(--glass-text-secondary)]">
+                  {beta('benefit')}
+                </p>
+              </div>
+              <div className="shrink-0 rounded-2xl bg-[var(--glass-tone-info-bg)] px-4 py-3 text-center">
+                <p className="glass-num text-[22px] font-bold text-[var(--glass-tone-info-fg)]">
+                  {paidBetaCampaign.paymentOpen ? paidBetaCampaign.remaining : 0}
+                </p>
+                <p className="mt-0.5 text-[11px] font-medium text-[var(--glass-tone-info-fg)]">
+                  {paidBetaCampaign.paymentOpen
+                    ? beta('remaining', { count: paidBetaCampaign.remaining })
+                    : beta('soldOut')}
+                </p>
+              </div>
+            </div>
+            {!paidBetaCampaign.paymentOpen ? (
+              <p className="mt-3 text-[12px] text-[var(--glass-text-tertiary)]">{beta('soldOutHint')}</p>
+            ) : null}
+          </section>
           <div className="mt-7">
             <IntervalSwitch value={interval} onChange={setInterval} />
           </div>
@@ -294,6 +332,7 @@ export default function PricingGlassPageClient({ content }: { readonly content: 
               busy={purchase.busy}
               onSubscribe={() => setPayingFor(plan)}
               owned={currentPlan?.planId === plan.id}
+              paymentOpen={paidBetaCampaign.paymentOpen}
             />
           ))}
         </div>
@@ -327,6 +366,7 @@ export default function PricingGlassPageClient({ content }: { readonly content: 
           <div className="mt-4">
             <CustomRecharge
               recharge={recharge}
+              paymentOpen={paidBetaCampaign.paymentOpen}
               wechat={{
                 available: wechat.available,
                 busy: wechat.busy,
@@ -395,6 +435,7 @@ export default function PricingGlassPageClient({ content }: { readonly content: 
       {/* The top-up box has its own QR dialog; the plan dialog renders its own. */}
       <WechatQrDialog
         payment={payingFor ? null : wechat.payment}
+        settled={payingFor ? null : wechat.settled}
         onClose={wechat.dismiss}
       />
     </div>

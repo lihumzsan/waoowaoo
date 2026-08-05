@@ -17,6 +17,7 @@ import { readProfileSectionParam, type ProfileSection } from '@/lib/profile/sect
 import { apiFetch } from '@/lib/api-fetch'
 import { readClientApiError } from '@/lib/errors/client'
 import { useToast } from '@/contexts/ToastContext'
+import PaidBetaCheckoutSuccessDialog from '@/components/paid-beta/PaidBetaCheckoutSuccessDialog'
 import {
   isPublicDeploymentFeatures,
   type PublicDeploymentFeatures,
@@ -79,6 +80,9 @@ export default function ProfilePage() {
     && !isProfileSectionEnabled(urlSection, deploymentFeatures)
     ? getDefaultProfileSection(deploymentFeatures)
     : urlSection
+  const checkoutSucceeded = searchParams.get('payment') === 'success'
+    || searchParams.get('plan') === 'success'
+  const checkoutSessionId = checkoutSucceeded ? searchParams.get('session_id') : null
 
   const handleSignOut = useCallback(async () => {
     isSigningOutRef.current = true
@@ -170,6 +174,10 @@ export default function ProfilePage() {
     if (paymentStatus === 'success') {
       setPaymentNotice(t('recharge.successNotice'))
     } else if (paymentStatus === 'cancel') {
+      setPaymentNotice(t('recharge.cancelNotice'))
+    } else if (searchParams.get('plan') === 'success') {
+      setPaymentNotice(t('recharge.planSuccessNotice'))
+    } else if (searchParams.get('plan') === 'cancel') {
       setPaymentNotice(t('recharge.cancelNotice'))
     }
   }, [searchParams, t])
@@ -271,6 +279,16 @@ export default function ProfilePage() {
           </div>
         </div>
       </main>
+
+      <PaidBetaCheckoutSuccessDialog
+        providerObjectId={checkoutSessionId}
+        onClose={() => {
+          router.replace(
+            { pathname: '/profile', query: { section: activeSection } },
+            { scroll: false },
+          )
+        }}
+      />
 
     </div>
   )

@@ -261,6 +261,13 @@ export const ERROR_CATALOG = {
     userMessageKey: 'errors.INSUFFICIENT_BALANCE',
     defaultMessage: 'Insufficient balance',
   },
+  PAID_BETA_SOLD_OUT: defineErrorSpec(
+    'PAID_BETA_SOLD_OUT',
+    409,
+    false,
+    ERROR_CATEGORY.BILLING,
+    'This paid-beta wave is full',
+  ),
   SENSITIVE_CONTENT: {
     httpStatus: 422,
     retryable: false,

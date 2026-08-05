@@ -27,6 +27,7 @@
     "perMonth": "/ 月",
     "billedYearly": "一次性支付 ¥{amount}",
     "subscribe": "购买此套餐",
+    "paidBetaSoldOutCta": "本期公测席位已满",
     "subscribeBusy": "正在跳转…",
     "firstMonthPromo": "首次购买仅 ¥{amount}",
     "creditsPerMonth": "每月发放 {credits} credits",

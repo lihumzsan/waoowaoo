@@ -27,6 +27,7 @@
     "perMonth": "/ mo",
     "billedYearly": "¥{amount} paid once",
     "subscribe": "Buy this plan",
+    "paidBetaSoldOutCta": "This beta wave is full",
     "subscribeBusy": "Redirecting…",
     "firstMonthPromo": "First purchase ¥{amount}",
     "creditsPerMonth": "{credits} credits granted monthly",

@@ -27,7 +27,15 @@ async function resetTaskExecutionState() {
   await prisma.task.deleteMany()
 }
 
+async function resetPaidBetaAndAnnouncementState() {
+  await prisma.paidBetaPaymentAttempt.deleteMany()
+  await prisma.paidBetaSeat.deleteMany()
+  await prisma.paidBetaCampaign.deleteMany()
+  await prisma.announcementReceipt.deleteMany()
+}
+
 export async function resetBillingState() {
+  await resetPaidBetaAndAnnouncementState()
   await prisma.balanceTransaction.deleteMany()
   await prisma.balanceFreeze.deleteMany()
   await prisma.usageCost.deleteMany()
@@ -61,6 +69,7 @@ export async function resetAssetHubState() {
 }
 
 export async function resetSystemState() {
+  await resetPaidBetaAndAnnouncementState()
   await resetTaskState()
   await resetAssetHubState()
   await prisma.usageCost.deleteMany()

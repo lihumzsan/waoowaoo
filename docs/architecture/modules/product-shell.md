@@ -29,6 +29,7 @@
   `useClientErrorMessage` 与全局 `ToastContext` 把稳定 code 投影为当前 locale 文案、下一步动作
   和 request/task reference。页面不得展示 `error.message`、响应 `message`、stack、Provider 原文
   或裸错误码，也不得另建局部 toast/alert；401、离线与 SSE 重连必须产生明确可恢复反馈。
+- **PS-15 — 站内公告按 registry identity 与版本投放。** 公告的 placement、surface、有效期、优先级和 copy key 只由 `src/lib/announcements/registry.ts` 声明；`AnnouncementReceipt(userId,announcementId,version)` 是跨设备已读唯一事实。页面只挂载通用 Host 并消费服务端 Pending View，不得用 localStorage、DOM、文案或组件私有布尔值建立第二套已读状态。新版公告必须递增 version，旧 receipt 不得静默吞掉新版本。
 
 ## 权威入口
 
@@ -43,6 +44,7 @@
 - Assistant命令错误边界：`src/app/api/projects/[projectId]/assistant/command-http.ts`与`messages/{en,zh}/errors.json`。
 - 部署启动边界：`docker-compose.yml`、`Dockerfile`、`docker-entrypoint.sh`、`scripts/check-cloud-env.mjs`、`scripts/temporal/**`、`src/lib/temporal/**`、`src/lib/storage/{s3-config,bootstrap,init}.ts` 与 `next.config.ts`。
 - 首页 Project 构造：`create_project` Operation；比例初始值和后续项目配置共同复用 Project 配置的唯一事实 writer。
+- 站内公告：`src/lib/announcements/registry.ts`、`service.ts`、`/api/announcements` 与 `InAppAnnouncementHost`；已读只由 acknowledgement route 写入。
 
 ## 验证
 

@@ -30,6 +30,7 @@
 - **BA-16 — 每期发放只有一个幂等写入者。** `SubscriptionGrant(subscriptionId, periodIndex)` 是发放身份；年付一次付款按月分 12 期发放，重投 webhook、重放 Activity 与并发 sweep 只发放一次。发放替换（而非累加）订阅池，上期余额在同一事务作废并落流水。升级即时把本期补足到新档，降级只记录新档、下期生效，已发放额度不回收。套餐只能从我们在 checkout 写入的 metadata 读取，禁止从 Stripe price id 或金额反推。
 - **BA-17 — LLM 后付、按日聚合、事前只做门禁。** 模型价格只有跑完才知道，因此不进入 `plan → quote → freeze` 链路。用量按调用如实写入 `UsageCost`，按「用户 × 自然日」聚合为一次扣费，只结算已完整过去的日期，小数在全天累计后统一向上取整一次；幂等键为 `llm-daily:<UTC 日期>`。事前只检查「是否还有可用额度」这一条下限，不得伪造预估报价来拒绝工作。供应商回报的成本只作为成本观测事实进入 metadata，永远不得成为扣费金额。
 - **BA-18 — 确定性媒体 preflight 全部先于 Plan。** 模型选择、所选 Provider 本地凭证与 endpoint 配置存在性、项目能力默认/覆盖、全部声明 route 的 option 兼容性、公共参数映射、引用模态与数量、首尾帧组合、Placement 后缀、资产格式和输出数量都必须在创建 PlanSnapshot、报价、pending Resource 或 Task 前完成；任何可由正式 registry 或本地配置判定的错误都返回结构化可纠正字段，不得让 Worker 或 Provider fence 成为第一位发现者。
+- **BA-19 — 限额付费活动只有一个席位裁判。** `PaidBetaCampaign` 拥有活动状态与容量，`PaidBetaSeat(campaignId,userId)` 是去重参与 identity，所有套餐、充值与支付方式在创建 Stripe 对象前必须经过同一个 admission service。Provider attempt 必须先绑定 seat，再由 Stripe webhook 在与账本相同的事务内写 `paid`；UI、回跳参数、Stripe.js 状态和轮询都不能占位或授予群入口。释放未付款席位必须先由 Stripe 证明对应 Checkout/PaymentIntent 已过期或取消，禁止仅凭本地 timer 回收后接受晚到付款。migration 与应用发布之间旧实例创建的无 attempt provider 对象只可在 campaign 声明的有限 handoff 截止时间内结算，截止后缺失 identity 必须原地失败。
 
 ## 权威入口
 
@@ -50,6 +51,7 @@
 | Task/Batch 原子提交 | `src/lib/task/approved-plan-submitter.ts`、`transactional-create.ts`、Wao MCP production executor |
 | 余额与交易 | `src/lib/billing/ledger.ts` / `service.ts` |
 | 用户 View | billing reporting + profile/assistant UI |
+| 首期付费公测容量、支付 attempt 与群入口 | `src/lib/paid-beta/campaign.ts`；Stripe webhook 是唯一 paid writer |
 
 ## 失败与恢复
 

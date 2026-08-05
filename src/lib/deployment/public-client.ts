@@ -15,6 +15,7 @@ const DEPLOYMENT_FEATURE_KEYS: Array<keyof PublicDeploymentFeatures> = [
   'enablePasswordAuth',
   'showDownloadLogs',
   'showUpdateCheck',
+  'showBetaBadge',
 ]
 
 function isRecord(value: unknown): value is Record<string, unknown> {

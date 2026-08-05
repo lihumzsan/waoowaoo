@@ -193,11 +193,13 @@ export function RechargeStatus({ status }: { status: RechargeState['status'] | S
 export function CustomRecharge({
   recharge,
   wechat,
+  paymentOpen,
   className,
 }: {
   recharge: RechargeState
   /** Omitted when WeChat is not configured; the option is then not offered. */
   wechat?: { available: boolean; busy: boolean; start: (credits: number) => void }
+  paymentOpen: boolean
   className?: string
 }) {
   const t = useTranslations('pricing.glass')
@@ -220,25 +222,32 @@ export function CustomRecharge({
             className="glass-input-base px-4 py-3 text-sm"
             min={recharge.config?.minCredits}
             max={recharge.config?.maxCredits}
+            disabled={!paymentOpen}
           />
         </label>
         {wechat?.available ? (
           <button
             type="button"
-            disabled={anyBusy || !amountEntered}
+            disabled={!paymentOpen || anyBusy || !amountEntered}
             onClick={() => wechat.start(credits)}
             className="glass-btn-base glass-btn-secondary h-12 px-5 text-sm disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {wechat.busy ? t('checkoutBusy') : t('payWithWechat')}
+            {!paymentOpen ? t('paidBetaSoldOutCta') : wechat.busy ? t('checkoutBusy') : t('payWithWechat')}
           </button>
         ) : null}
         <button
           type="button"
-          disabled={anyBusy || !amountEntered}
+          disabled={!paymentOpen || anyBusy || !amountEntered}
           onClick={() => recharge.checkout(credits)}
           className="glass-btn-base glass-btn-primary h-12 px-6 text-sm disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {recharge.busy ? t('checkoutBusy') : wechat?.available ? t('payWithCard') : t('checkoutNow')}
+          {!paymentOpen
+            ? t('paidBetaSoldOutCta')
+            : recharge.busy
+              ? t('checkoutBusy')
+              : wechat?.available
+                ? t('payWithCard')
+                : t('checkoutNow')}
         </button>
       </div>
       <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[var(--glass-text-tertiary)]">

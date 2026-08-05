@@ -73,6 +73,7 @@ export default function Navbar({
   const logoUid = `navbar-logo-${useId().replace(/:/g, '')}`
   const [deploymentFeatures, setDeploymentFeatures] = useState<PublicDeploymentFeatures | null>(initialDeploymentFeatures)
   const showUpdateCheck = deploymentFeatures?.showUpdateCheck === true
+  const showBetaBadge = deploymentFeatures?.showBetaBadge === true
   const { currentVersion, update, shouldPulse, showModal, openModal, dismissCurrentUpdate, checkNow } = useGithubReleaseUpdate({
     enabled: showUpdateCheck,
   })
@@ -234,14 +235,24 @@ export default function Navbar({
               href={session ? buildAuthenticatedHomeTarget() : { pathname: '/' }}
               target={session ? '_blank' : undefined}
               rel={session ? 'noopener noreferrer' : undefined}
-              className="group flex h-[52px] w-[52px] items-center justify-center"
+              className="group flex h-[52px] items-center gap-2"
             >
               <BrandLogoShape
                 uid={logoUid}
-                size={52}
+                size={48}
                 title={tc('appName')}
-                className="h-[52px] w-[52px] transition-transform group-hover:scale-105"
+                className="h-12 w-12 transition-transform group-hover:scale-105"
               />
+              <span className="flex flex-col items-start leading-none">
+                <span className="text-[15px] font-bold tracking-[-0.02em] text-[var(--glass-text-primary)]">
+                  {tc('appName')}
+                </span>
+                {showBetaBadge ? (
+                  <span className="mt-1 rounded-full border border-[var(--glass-accent-from)]/30 bg-[var(--glass-tone-info-bg)] px-1.5 py-0.5 text-[8px] font-bold tracking-[0.18em] text-[var(--glass-tone-info-fg)]">
+                    {tc('betaBadge')}
+                  </span>
+                ) : null}
+              </span>
             </Link>
             {showUpdateCheck && update ? (
               <button

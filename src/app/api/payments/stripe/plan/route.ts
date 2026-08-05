@@ -7,6 +7,7 @@ import { getDeploymentFeatures } from '@/lib/deployment/features'
 import { resolveCheckoutLocale, resolveCheckoutPublicOrigin } from '@/lib/payments/checkout-request'
 import { createPlanPurchaseSession } from '@/lib/payments/stripe-plan-purchase'
 import { isPaymentConfigurationError, readPaymentConfigurationErrorCode } from '@/lib/payments/config-errors'
+import { isPaidBetaPaymentUnavailableError } from '@/lib/paid-beta/campaign'
 
 const planPurchaseSchema = z.object({
   planId: z.enum(['starter', 'creator', 'pro', 'studio', 'flagship']),
@@ -53,6 +54,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
       interval: parsed.data.interval,
     })
   } catch (error) {
+    if (isPaidBetaPaymentUnavailableError(error)) {
+      throw new ApiError('PAID_BETA_SOLD_OUT')
+    }
     if (isPaymentConfigurationError(error)) {
       const code = readPaymentConfigurationErrorCode(error)
       throw new ApiError('MISSING_CONFIG', { code, message: code })

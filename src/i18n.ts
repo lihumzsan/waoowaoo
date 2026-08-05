@@ -46,6 +46,8 @@ export default getRequestConfig(async ({ requestLocale }) => {
         assistantAgent,
         legal,
         pricing,
+        paidBeta,
+        announcements,
         contact
     ] = await Promise.all([
         import(`../messages/${locale}/common.json`),
@@ -77,6 +79,8 @@ export default getRequestConfig(async ({ requestLocale }) => {
         import(`../messages/${locale}/assistantAgent.json`),
         import(`../messages/${locale}/legal.json`),
         import(`../messages/${locale}/pricing.json`),
+        import(`../messages/${locale}/paidBeta.json`),
+        import(`../messages/${locale}/announcements.json`),
         import(`../messages/${locale}/contact.json`)
     ]);
 
@@ -112,6 +116,8 @@ export default getRequestConfig(async ({ requestLocale }) => {
             assistantAgent: assistantAgent.default,
             legal: legal.default,
             pricing: pricing.default,
+            paidBeta: paidBeta.default,
+            announcements: announcements.default,
             contact: contact.default
         }
     };

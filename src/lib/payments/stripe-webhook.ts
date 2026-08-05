@@ -5,12 +5,17 @@ import { BillingOperationError } from '@/lib/billing/errors'
 import { toMoneyNumber } from '@/lib/billing/money'
 import { PLAN_PURCHASE_KIND } from './stripe-plan-purchase'
 import { WECHAT_PLAN_KIND, WECHAT_RECHARGE_KIND } from './stripe-wechat-intent'
-import { applyPlanPurchase } from '@/lib/billing/plan-term-service'
+import { applyPlanPurchaseInTransaction } from '@/lib/billing/plan-term-service'
 import { resolveReceiptUrl } from './stripe-receipt'
 import {
   isSubscriptionInterval,
   isSubscriptionPlanId,
 } from '@/lib/billing/subscription-plans'
+import {
+  expirePaidBetaPaymentAttempt,
+  PAID_BETA_ATTEMPT_METADATA_KEY,
+  settlePaidBetaPaymentInTransaction,
+} from '@/lib/paid-beta/campaign'
 
 const STRIPE_SIGNATURE_TOLERANCE_SECONDS = 300
 
@@ -28,6 +33,7 @@ export interface StripeWebhookHandleResult {
 
 interface StripeCheckoutSessionLike {
   id: string
+  createdAt: Date
   paymentIntentId: string | null
   paymentStatus: string | null
   metadata: Record<string, string>
@@ -139,6 +145,7 @@ function readCheckoutSession(value: Stripe.Checkout.Session): StripeCheckoutSess
   }
   return {
     id,
+    createdAt: new Date(value.created * 1000),
     paymentIntentId,
     paymentStatus: readString(value.payment_status),
     metadata: value.metadata ?? {},
@@ -215,12 +222,21 @@ async function creditWechatPaymentIntent(
     if (!userId) throw new Error('STRIPE_CHECKOUT_METADATA_USER_ID_REQUIRED')
     if (!planId || !isSubscriptionPlanId(planId)) throw new Error('STRIPE_PLAN_METADATA_PLAN_ID_INVALID')
     if (!interval || !isSubscriptionInterval(interval)) throw new Error('STRIPE_PLAN_METADATA_INTERVAL_INVALID')
-    const applied = await applyPlanPurchase({
-      userId,
-      planId,
-      interval,
-      purchaseId: intent.id,
-      receiptUrl: await resolveReceiptUrl(intent.id),
+    const receiptUrl = await resolveReceiptUrl(intent.id)
+    const applied = await prisma.$transaction(async (tx) => {
+      await settlePaidBetaPaymentInTransaction(tx, {
+        userId,
+        providerObjectId: intent.id,
+        providerCreatedAt: new Date(intent.created * 1000),
+        attemptId: readString(metadata[PAID_BETA_ATTEMPT_METADATA_KEY]),
+      })
+      return applyPlanPurchaseInTransaction(tx, {
+        userId,
+        planId,
+        interval,
+        purchaseId: intent.id,
+        receiptUrl,
+      })
     })
     return {
       received: true,
@@ -252,6 +268,12 @@ async function creditWechatPaymentIntent(
   const receiptUrl = await resolveReceiptUrl(intent.id)
 
   await prisma.$transaction(async (tx) => {
+    await settlePaidBetaPaymentInTransaction(tx, {
+      userId,
+      providerObjectId: intent.id,
+      providerCreatedAt: new Date(intent.created * 1000),
+      attemptId: readString(metadata[PAID_BETA_ATTEMPT_METADATA_KEY]),
+    })
     await addBalanceWithTransaction(tx, userId, credits, {
       type: 'recharge',
       reason: 'stripe wechat pay recharge',
@@ -314,6 +336,12 @@ async function creditCheckoutSession(eventId: string, session: StripeCheckoutSes
   const receiptUrl = await resolveReceiptUrl(paymentIntentId)
 
   await prisma.$transaction(async (tx) => {
+    await settlePaidBetaPaymentInTransaction(tx, {
+      userId,
+      providerObjectId: session.id,
+      providerCreatedAt: session.createdAt,
+      attemptId: readString(session.metadata[PAID_BETA_ATTEMPT_METADATA_KEY]),
+    })
     await addBalanceWithTransaction(tx, userId, credits, {
       type: 'recharge',
       reason: 'stripe checkout recharge',
@@ -482,6 +510,32 @@ export async function handleStripeWebhook(rawBody: string, signatureHeader: stri
   const eventType = readString(event.type)
   if (!eventId || !eventType) throw new Error('STRIPE_EVENT_MISSING_REQUIRED_FIELDS')
 
+  if (event.type === 'checkout.session.expired' || event.type === 'checkout.session.async_payment_failed') {
+    const session = readCheckoutSession(event.data.object)
+    const attemptId = readString(session.metadata[PAID_BETA_ATTEMPT_METADATA_KEY])
+    if (attemptId) await expirePaidBetaPaymentAttempt(attemptId)
+    return {
+      received: true,
+      action: 'ignored',
+      eventType: event.type,
+      sessionId: session.id,
+      reason: attemptId ? 'paid_beta_attempt_expired' : `pre_campaign_${event.type}`,
+    }
+  }
+
+  if (event.type === 'payment_intent.canceled') {
+    const intent = event.data.object
+    const attemptId = readString(intent.metadata?.[PAID_BETA_ATTEMPT_METADATA_KEY])
+    if (attemptId) await expirePaidBetaPaymentAttempt(attemptId)
+    return {
+      received: true,
+      action: 'ignored',
+      eventType: event.type,
+      objectId: intent.id,
+      reason: attemptId ? 'paid_beta_attempt_canceled' : 'pre_campaign_payment_canceled',
+    }
+  }
+
   if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
     const session = readCheckoutSession(event.data.object)
     // A plan purchase grants credits to the subscription pool instead of the
@@ -506,12 +560,21 @@ export async function handleStripeWebhook(rawBody: string, signatureHeader: stri
       if (!interval || !isSubscriptionInterval(interval)) {
         throw new Error('STRIPE_PLAN_METADATA_INTERVAL_INVALID')
       }
-      const applied = await applyPlanPurchase({
-        userId,
-        planId,
-        interval,
-        purchaseId: session.id,
-        receiptUrl: session.paymentIntentId ? await resolveReceiptUrl(session.paymentIntentId) : null,
+      const receiptUrl = session.paymentIntentId ? await resolveReceiptUrl(session.paymentIntentId) : null
+      const applied = await prisma.$transaction(async (tx) => {
+        await settlePaidBetaPaymentInTransaction(tx, {
+          userId,
+          providerObjectId: session.id,
+          providerCreatedAt: session.createdAt,
+          attemptId: readString(session.metadata[PAID_BETA_ATTEMPT_METADATA_KEY]),
+        })
+        return applyPlanPurchaseInTransaction(tx, {
+          userId,
+          planId,
+          interval,
+          purchaseId: session.id,
+          receiptUrl,
+        })
       })
       return {
         received: true,
@@ -532,17 +595,6 @@ export async function handleStripeWebhook(rawBody: string, signatureHeader: stri
   if (event.type === 'payment_intent.succeeded') {
     const result = await creditWechatPaymentIntent(eventId, event.data.object)
     return { ...result, eventType: event.type }
-  }
-
-  if (event.type === 'checkout.session.async_payment_failed' || event.type === 'checkout.session.expired') {
-    const session = readCheckoutSession(event.data.object)
-    return {
-      received: true,
-      action: 'ignored',
-      eventType: event.type,
-      sessionId: session.id,
-      reason: event.type,
-    }
   }
 
   if (event.type === 'refund.created') {
