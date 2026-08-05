@@ -134,6 +134,11 @@ export function useWorkspaceAssistantTextPlayback(params: {
   }
 }
 
+/** Mirrors the markdown renderer's tail ramp so both surfaces stream alike. */
+const STREAM_TAIL_LENGTH = 14
+const STREAM_TAIL_MIN_OPACITY = 0.12
+const STREAM_TAIL_MAX_BLUR_PX = 2.4
+
 export function WorkspaceAssistantAnimatedPlainText(props: {
   readonly text: string
   readonly running: boolean
@@ -147,16 +152,28 @@ export function WorkspaceAssistantAnimatedPlainText(props: {
 
   if (!playback.animating) return playback.text
 
+  // Only the writing edge is decorated; everything before it is plain text, so
+  // a long reply does not carry thousands of styled spans.
+  const tailStart = Math.max(0, graphemes.length - STREAM_TAIL_LENGTH)
+  const tailLength = graphemes.length - tailStart
   return (
     <>
-      {graphemes.map((grapheme, index) => (
-        <span
-          key={index}
-          className="animate-in fade-in duration-150 motion-reduce:animate-none"
-        >
-          {grapheme}
-        </span>
-      ))}
+      {graphemes.slice(0, tailStart).join('')}
+      {graphemes.slice(tailStart).map((grapheme, index) => {
+        const depth = (tailLength - index) / tailLength
+        return (
+          <span
+            key={tailStart + index}
+            className="assistant-stream-tail"
+            style={{
+              ['--assistant-stream-tail-opacity' as string]: (1 - (1 - STREAM_TAIL_MIN_OPACITY) * depth * depth).toFixed(3),
+              ['--assistant-stream-tail-blur' as string]: `${(STREAM_TAIL_MAX_BLUR_PX * depth * depth).toFixed(2)}px`,
+            }}
+          >
+            {grapheme}
+          </span>
+        )
+      })}
     </>
   )
 }
