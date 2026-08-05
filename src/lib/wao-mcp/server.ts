@@ -134,14 +134,19 @@ export function createWaoMcpServer(
         message: 'wao mcp tool call received',
         details: { operationId: entry.operationId, progressRequested: progressToken !== null },
       })
+      // MCP requires the progress value to increase with every notification, and
+      // a compliant client drops the ones that do not. A fixed value therefore
+      // sends nothing at all — the notifications leave and are discarded.
+      let progressSequence = 0
       const reportProgress = (message: string): void => {
         const text = message.trim()
         if (progressToken === null || !text) return
+        progressSequence += 1
         // Progress is decoration: a transport hiccup here must never surface as
         // a tool failure, so delivery failures are dropped on purpose.
         void extra.sendNotification({
           method: 'notifications/progress',
-          params: { progressToken, progress: 0, message: text.slice(0, 500) },
+          params: { progressToken, progress: progressSequence, message: text.slice(0, 500) },
         }).catch(() => undefined)
       }
 
