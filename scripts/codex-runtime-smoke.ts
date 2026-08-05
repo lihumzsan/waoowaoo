@@ -28,7 +28,6 @@ import {
 } from '@/lib/assistant-runtime/runtime-access'
 import {
   CREATIVE_RUNTIME_SKILLS,
-  PRIMARY_AGENT_GLOBAL_INSTRUCTIONS,
 } from '@/lib/creative-skills'
 import {
   ASSISTANT_RUNTIME_APPROVAL_METHODS,
@@ -146,7 +145,7 @@ async function startRuntimeRequestCapture(): Promise<RuntimeRequestCapture> {
 function assertRuntimeContractRequest(request: RuntimeJsonObject): void {
   const serialized = JSON.stringify(request)
   assert.ok(
-    serialized.includes('The native Web Search tool delegates to a hosted research specialist'),
+    serialized.includes('The native Web Search tool returns a synthesized, cited report'),
     'The live model request did not contain the current native Web Search instruction.',
   )
   assert.ok(
@@ -162,8 +161,8 @@ function assertRuntimeContractRequest(request: RuntimeJsonObject): void {
     'The live model request installed the deleted Wao MCP search tool.',
   )
   assert.ok(
-    serialized.includes('Codex agents are disabled'),
-    'The live model request did not contain the primary-only execution boundary.',
+    ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS.includes('# Professional Wao Skills'),
+    'The live model request did not load the canonical project Agent prompt.',
   )
   for (const runtimeSkill of CREATIVE_RUNTIME_SKILLS) {
     const professionalSkillId = runtimeSkill.skillIds[1]
@@ -455,9 +454,8 @@ async function runAppServerSmoke(params: {
   const codexHome = materialization.hostCodexHomeDirectory
   const cwd = materialization.hostWorkspaceDirectory
   const primaryInstructions = await readFile(path.join(codexHome, 'AGENTS.md'), 'utf8')
-  assert.equal(primaryInstructions.trim(), PRIMARY_AGENT_GLOBAL_INSTRUCTIONS.trim())
-  assert.match(primaryInstructions, /Codex agents are disabled/)
-  assert.match(primaryInstructions, /read exactly one matching Wao domain Skill/)
+  assert.match(primaryInstructions, /developer instructions are the authoritative project policy/u)
+  assert.doesNotMatch(primaryInstructions, /Subagent|child agent|delegate/iu)
   const primaryConfig = await readFile(path.join(codexHome, 'config.toml'), 'utf8')
   assert.match(primaryConfig, /\[agents\]\nenabled = false/)
   assert.ok(!primaryConfig.includes('hooks = true'))

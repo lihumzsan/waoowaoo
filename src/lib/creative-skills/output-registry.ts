@@ -12,7 +12,7 @@ import {
 import type {
   CreativeOutputKind,
   CreativeSkillId,
-  CreativeWorkerKind,
+  CreativeDomainKind,
 } from './types'
 
 const textList = (maxItems: number, maxLength: number) => z.array(
@@ -34,12 +34,12 @@ export const screenplayOutputSchema = z.object({
   openQuestions: textList(64, 2_000),
 }).strict()
 
-const professionalDeliverableSchema = z.discriminatedUnion('workerKind', [
-  z.object({ workerKind: z.literal('story'), outputKind: z.literal('screenplay') }).strict(),
-  z.object({ workerKind: z.literal('direction'), outputKind: z.literal('creative_direction') }).strict(),
-  z.object({ workerKind: z.literal('assets'), outputKind: z.literal('asset_generation_batch') }).strict(),
-  z.object({ workerKind: z.literal('video'), outputKind: z.literal('video_generation_batch') }).strict(),
-  z.object({ workerKind: z.literal('music'), outputKind: z.literal('audio_generation_batch') }).strict(),
+const professionalDeliverableSchema = z.discriminatedUnion('domainKind', [
+  z.object({ domainKind: z.literal('story'), outputKind: z.literal('screenplay') }).strict(),
+  z.object({ domainKind: z.literal('direction'), outputKind: z.literal('creative_direction') }).strict(),
+  z.object({ domainKind: z.literal('assets'), outputKind: z.literal('asset_generation_batch') }).strict(),
+  z.object({ domainKind: z.literal('video'), outputKind: z.literal('video_generation_batch') }).strict(),
+  z.object({ domainKind: z.literal('music'), outputKind: z.literal('audio_generation_batch') }).strict(),
 ])
 
 export const longFormPlanOutputSchema = z.object({
@@ -97,18 +97,18 @@ export const creativeOutputSchema = z.discriminatedUnion('outputKind', [
 
 export type CreativeOutput = z.infer<typeof creativeOutputSchema>
 
-export const CREATIVE_WORKER_OUTPUT_KIND = {
+export const CREATIVE_DOMAIN_OUTPUT_KIND = {
   story: 'screenplay',
   long_form: 'long_form_plan',
   direction: 'creative_direction',
   assets: 'asset_generation_batch',
   video: 'video_generation_batch',
   music: 'audio_generation_batch',
-} as const satisfies Record<CreativeWorkerKind, CreativeOutputKind>
+} as const satisfies Record<CreativeDomainKind, CreativeOutputKind>
 
 type CreativeOutputDefinition = {
   readonly outputKind: CreativeOutputKind
-  readonly workerKind: CreativeWorkerKind
+  readonly domainKind: CreativeDomainKind
   readonly professionalSkillId: Exclude<CreativeSkillId, 'creative-core'>
   readonly savedDocumentSchemaId: WorkspaceResourceSchemaId
   readonly mediaOperationId: 'create_image' | 'create_audio' | 'create_video' | null
@@ -124,7 +124,7 @@ function defineOutput(
 export const CREATIVE_OUTPUT_REGISTRY: Readonly<Record<CreativeOutputKind, CreativeOutputDefinition>> = {
   screenplay: defineOutput({
     outputKind: 'screenplay',
-    workerKind: 'story',
+    domainKind: 'story',
     professionalSkillId: 'story-development',
     savedDocumentSchemaId: WORKSPACE_RESOURCE_SCHEMA.SCREENPLAY,
     mediaOperationId: null,
@@ -132,7 +132,7 @@ export const CREATIVE_OUTPUT_REGISTRY: Readonly<Record<CreativeOutputKind, Creat
   }),
   long_form_plan: defineOutput({
     outputKind: 'long_form_plan',
-    workerKind: 'long_form',
+    domainKind: 'long_form',
     professionalSkillId: 'long-form-production',
     savedDocumentSchemaId: WORKSPACE_RESOURCE_SCHEMA.LONG_FORM_PLAN,
     mediaOperationId: null,
@@ -140,7 +140,7 @@ export const CREATIVE_OUTPUT_REGISTRY: Readonly<Record<CreativeOutputKind, Creat
   }),
   creative_direction: defineOutput({
     outputKind: 'creative_direction',
-    workerKind: 'direction',
+    domainKind: 'direction',
     professionalSkillId: 'creative-direction',
     savedDocumentSchemaId: WORKSPACE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
     mediaOperationId: null,
@@ -148,7 +148,7 @@ export const CREATIVE_OUTPUT_REGISTRY: Readonly<Record<CreativeOutputKind, Creat
   }),
   asset_generation_batch: defineOutput({
     outputKind: 'asset_generation_batch',
-    workerKind: 'assets',
+    domainKind: 'assets',
     professionalSkillId: 'asset-development',
     savedDocumentSchemaId: WORKSPACE_RESOURCE_SCHEMA.ASSET_GENERATION_BATCH,
     mediaOperationId: 'create_image',
@@ -156,7 +156,7 @@ export const CREATIVE_OUTPUT_REGISTRY: Readonly<Record<CreativeOutputKind, Creat
   }),
   video_generation_batch: defineOutput({
     outputKind: 'video_generation_batch',
-    workerKind: 'video',
+    domainKind: 'video',
     professionalSkillId: 'video-direction',
     savedDocumentSchemaId: WORKSPACE_RESOURCE_SCHEMA.VIDEO_GENERATION_BATCH,
     mediaOperationId: 'create_video',
@@ -164,7 +164,7 @@ export const CREATIVE_OUTPUT_REGISTRY: Readonly<Record<CreativeOutputKind, Creat
   }),
   audio_generation_batch: defineOutput({
     outputKind: 'audio_generation_batch',
-    workerKind: 'music',
+    domainKind: 'music',
     professionalSkillId: 'music-direction',
     savedDocumentSchemaId: WORKSPACE_RESOURCE_SCHEMA.AUDIO_GENERATION_BATCH,
     mediaOperationId: 'create_audio',

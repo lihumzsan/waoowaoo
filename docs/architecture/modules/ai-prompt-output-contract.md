@@ -5,8 +5,8 @@
 ## 为什么是这样
 
 Codex app-server 是唯一 Agent Runtime。主 Agent 接收产品边界、当前 locale、实时项目生产上下文和
-业务 MCP；专业方法通过 registry 生成的原生 Wao Skill 按需读取。专业创作不再跨 parent/child
-上下文交接，Codex agents 默认关闭。
+业务 MCP；专业方法通过 registry 生成的原生 Wao Skill 按需读取。每个专业结果只使用它对应的
+Skill，同一用户目标可顺序产生多个不同领域结果。专业创作不跨线程交接，Codex agents 默认关闭。
 
 **指令层级**——主 Agent：内置基础指令 → Runtime 全局主 Agent 约束 → Wao 开发者指令与固定领域
 映射 → 系统构造的当前项目生产上下文 → 原生 Skill inventory → MCP schema → Turn locale/context →
@@ -37,13 +37,15 @@ Codex app-server 是唯一 Agent Runtime。主 Agent 接收产品边界、当前
 - **APO-10 — 不用 Prompt 伪造媒体能力边界。** 指令与 Skill 不注入真人、公众人物、相似度或写实
   风格禁令。能力只读取系统注入的声明式 View，Provider 拒绝只通过统一 typed failure 返回，不得再
   投影成常驻 Agent 政策。
-- **APO-11 — 不存在委派旁路。** Runtime 必须关闭 agents，主 Agent 固定指令也禁止委派。专业结果
+- **APO-11 — 不存在委派旁路。** Runtime 必须关闭 agents。专业结果
   的创建、修正和提交都留在同一 Turn；不得通过 child event、hook、UI 或提高推理等级恢复第二 writer。
 
 ## 权威入口
 
 - Runtime 协议：`src/lib/codex-runtime/**`
-- 主 Agent 指令与会话：`src/lib/assistant-runtime/**`（事件投影：`event-projector.ts`）
+- 主 Agent 提示词：`src/lib/ai-prompts/templates/project-agent/system/project-agent-system.txt`；加载与
+  会话：`src/lib/ai-prompts/project-agent-system.ts`、`src/lib/assistant-runtime/**`（事件投影：
+  `event-projector.ts`）
 - Skill 组装与全部 outputKind 契约：`src/lib/creative-skills/**`
 - 媒体批量输入契约：`src/lib/workspace-resource/generation-request.ts`
 - 项目生产上下文 resolver 与 Turn 注入：`src/lib/project-production-context.ts`、

@@ -10,7 +10,7 @@ export const CREATIVE_SKILL_IDS = [
 
 export type CreativeSkillId = (typeof CREATIVE_SKILL_IDS)[number]
 
-export const CREATIVE_WORKER_KINDS = [
+export const CREATIVE_DOMAIN_KINDS = [
   'story',
   'long_form',
   'direction',
@@ -19,7 +19,7 @@ export const CREATIVE_WORKER_KINDS = [
   'music',
 ] as const
 
-export type CreativeWorkerKind = (typeof CREATIVE_WORKER_KINDS)[number]
+export type CreativeDomainKind = (typeof CREATIVE_DOMAIN_KINDS)[number]
 
 export const CREATIVE_OUTPUT_KINDS = [
   'screenplay',

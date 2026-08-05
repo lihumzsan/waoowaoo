@@ -4,10 +4,11 @@
 
 ## 为什么是这样
 
-Codex app-server 是唯一 Agent Runtime，专业创作也由同一个主 Agent 完成。Wao 不维护 Creative
-Worker 循环，也不把专业结论跨线程交接。服务端 registry 仍然穷尽定义每个专业领域对应的 Skill、
+Codex app-server 是唯一 Agent Runtime，专业创作也由同一个主 Agent 完成。Wao 不维护第二套专业
+Agent 循环，也不把专业结论跨线程交接。服务端 registry 仍然穷尽定义每个专业领域对应的 Skill、
 outputKind 与 strict schema；Runtime 物化时把“核心方法 + 一个领域方法 + 该领域 schema”组装成一个
-原生 Skill，主 Agent 按用户意图一次读取一个。
+原生 Skill。主 Agent 为每个专业结果读取它唯一对应的 Skill；同一目标包含多个专业结果时按结果顺序
+读取多个 Skill，而不是把不同领域混入同一个结果。
 
 这样保留专业经验和机器契约的确定边界，同时删除 custom agent、项目上下文 hook、child Turn、重启
 排空和第二套 UI 生命周期。Skill 选择由主 Agent 在现有上下文中完成，不另建服务端关键词路由或
@@ -17,7 +18,7 @@ fallback。
 
 - **CS-01 — Skill identity 单一。** registry 是 Skill id、版本和磁盘正文的唯一声明；加载器只读取
   registry 中声明的文件。
-- **CS-02 — 专业映射穷尽。** registry 穷尽 `workerKind → 一个专业 Skill → 固定 outputKind → strict
+- **CS-02 — 专业映射穷尽。** registry 穷尽 `domainKind → 一个专业 Skill → 固定 outputKind → strict
   JSON schema → 媒体 Operation 或可选保存 schemaId`。调用方不得另建同义路由、私有 schema 或根据
   文件存在猜能力。
 - **CS-03 — 主 Agent 只拥有 Wao 领域 Skill。** Runtime 只向主 Agent 暴露 registry 声明的领域

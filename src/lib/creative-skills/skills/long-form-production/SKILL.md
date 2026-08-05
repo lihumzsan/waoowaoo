@@ -55,7 +55,7 @@ description: Organize long-form creative work into resumable production units an
 - 入口/出口和共享连续性是否一致？
 - 同一角色、地点、道具和声音是否引用同一路径身份？
 - 各专业结果是否严格使用各自固定 outputKind，共享连续性是否只由本长篇计划维护？
-- `productionUnits.deliverables` 是否为每个专业输出指定唯一 workerKind/outputKind？
+- `productionUnits.deliverables` 是否为每个专业输出指定唯一 domainKind/outputKind？
 - 失败续跑是否只包含失败项？
 
 ## 边界

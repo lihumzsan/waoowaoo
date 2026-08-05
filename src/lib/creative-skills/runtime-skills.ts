@@ -2,17 +2,17 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { readCreativeSkillResource } from './loader'
 import {
-  CREATIVE_WORKER_OUTPUT_KIND,
+  CREATIVE_DOMAIN_OUTPUT_KIND,
   creativeOutputJsonSchema,
   readCreativeOutputDefinition,
 } from './output-registry'
 import { getCreativeSkillDefinition } from './registry'
-import type { CreativeOutputKind, CreativeSkillId, CreativeWorkerKind } from './types'
+import type { CreativeDomainKind, CreativeOutputKind, CreativeSkillId } from './types'
 
 type ProfessionalSkillId = Exclude<CreativeSkillId, 'creative-core'>
 
 export type CreativeRuntimeSkillDefinition = {
-  readonly kind: CreativeWorkerKind
+  readonly kind: CreativeDomainKind
   readonly title: string
   readonly description: string
   readonly skillIds: readonly ['creative-core', ProfessionalSkillId]
@@ -25,12 +25,12 @@ function defineRuntimeSkill(
 ): CreativeRuntimeSkillDefinition {
   return {
     ...definition,
-    outputKind: CREATIVE_WORKER_OUTPUT_KIND[definition.kind],
+    outputKind: CREATIVE_DOMAIN_OUTPUT_KIND[definition.kind],
   }
 }
 
 export const CREATIVE_RUNTIME_SKILL_REGISTRY: Readonly<
-  Record<CreativeWorkerKind, CreativeRuntimeSkillDefinition>
+  Record<CreativeDomainKind, CreativeRuntimeSkillDefinition>
 > = {
   story: defineRuntimeSkill({
     kind: 'story',
@@ -90,13 +90,9 @@ export const PRIMARY_AGENT_DISABLED_NATIVE_SKILL_IDS = [
   'skill-installer',
 ] as const
 
-export const PRIMARY_AGENT_GLOBAL_INSTRUCTIONS = `# Wao orchestration
+const PRIMARY_AGENT_RUNTIME_BOOTSTRAP = `# Wao runtime
 
-- Codex agents are disabled. Complete the current request in the primary Agent; never spawn, delegate to, wait for, or coordinate another Agent.
-- Before professional creative work, read exactly one matching Wao domain Skill from the native Skill inventory. Its embedded core method, domain method, outputKind, and strict schema are one complete contract; do not combine multiple Wao domain Skills unless the user explicitly requests multiple professional deliverables.
-- The primary Agent is the sole writer of each professional result. Construct one strict object internally, then use that same object for the requested response, explicit document save, or media submission. Do not create a parallel rewrite or ask another writer to repair it.
-- For asset_generation_batch, video_generation_batch, or audio_generation_batch with actual items, pass those exact items to create_image, create_video, or create_audio. If validation rejects a field, correct the same in-turn object before resubmitting.
-- Runtime scratch is never a project Resource. Save a document only when the user explicitly requests persistence.`
+The developer instructions are the authoritative project policy. Native Wao Skills provide the professional method and strict output schema for each matching result. Runtime scratch is never a project Resource.`
 
 function tomlString(value: string): string {
   return JSON.stringify(value)
@@ -112,7 +108,7 @@ function withoutFrontmatter(content: string): string {
 async function buildRuntimeSkill(skill: CreativeRuntimeSkillDefinition): Promise<string> {
   const outputDefinition = readCreativeOutputDefinition(skill.outputKind)
   if (
-    outputDefinition.workerKind !== skill.kind
+    outputDefinition.domainKind !== skill.kind
     || outputDefinition.professionalSkillId !== skill.skillIds[1]
   ) {
     throw new Error(`CREATIVE_RUNTIME_SKILL_OUTPUT_REGISTRY_MISMATCH:${skill.kind}`)
@@ -138,7 +134,7 @@ async function buildRuntimeSkill(skill: CreativeRuntimeSkillDefinition): Promise
     `# ${skill.title}`,
     '',
     'Use this Skill only when the current request matches this professional domain.',
-    'You are the primary Wao Agent and the sole author of this professional result. Do not delegate, spawn another Agent, or look for another Wao Skill.',
+    'You are the primary Wao Agent and the sole author of this professional result. This Skill owns only its declared domain and outputKind; complete this result from its contract instead of importing another domain method into it.',
     `Construct exactly one object with outputKind=${JSON.stringify(skill.outputKind)} during this Turn. The object is the single professional result: use it directly in the response, pass its exact media items to the matching Wao Operation, or save it only when the user explicitly requests persistence.`,
     'Never invent project paths or Resource identities. Use only canonical Resource ids and versions supplied by Wao tools or current context. Runtime scratch has no delivery meaning.',
     skill.executionFacts,
@@ -176,7 +172,7 @@ export async function materializeCreativeRuntimeConfiguration(codexHomeDirectory
   await Promise.all([
     writeFile(
       path.join(codexHomeDirectory, 'AGENTS.md'),
-      `${PRIMARY_AGENT_GLOBAL_INSTRUCTIONS.trim()}\n`,
+      `${PRIMARY_AGENT_RUNTIME_BOOTSTRAP.trim()}\n`,
       { mode: 0o600 },
     ),
     writeFile(
