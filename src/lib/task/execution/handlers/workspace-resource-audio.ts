@@ -3,7 +3,7 @@ import {
   parseWorkspaceResourceGenerationTaskPayload,
   type WorkspaceResourceGenerationTaskPayload,
 } from '@/lib/workspace-resource/generation-contract'
-import { resolveOwnedVideoHttpsForGeneration } from '@/lib/media/outbound-video'
+import { resolveOwnedVideoUrlForGeneration } from '@/lib/media/outbound-video'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { resolveWorkspaceResourceInputMedia } from '@/lib/workspace-resource/input-media'
 import { uploadObject } from '@/lib/storage'
@@ -45,7 +45,7 @@ async function loadMusicVideoReference(
     throw new Error(`WORKSPACE_RESOURCE_INPUT_NOT_FOUND:${reference.resourceId}`)
   }
   return {
-    url: await resolveOwnedVideoHttpsForGeneration(resource.storageKey, context.data.userId),
+    url: await resolveOwnedVideoUrlForGeneration(resource.storageKey, context.data.userId),
     durationMs: resource.durationMs,
   }
 }

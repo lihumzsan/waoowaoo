@@ -7,7 +7,7 @@ const SUPPORTED_PROVIDER_VIDEO_MIME_TYPES = new Set([
   'video/quicktime',
 ])
 
-export async function resolveOwnedVideoHttpsForGeneration(
+export async function resolveOwnedVideoUrlForGeneration(
   input: string,
   userId: string,
 ): Promise<string> {

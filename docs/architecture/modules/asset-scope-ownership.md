@@ -16,7 +16,7 @@ Asset Hub 是用户级可复用角色、场景和道具库；Project 内的任�
 - **ASO-06 — 媒体关系拥有访问权，不拥有物理回收权。** publicId、storageKey、签名 URL 和对象存在都不是授权；读取由 MediaObject active owner relation 证明。删除 Hub/Workspace 关系不能直接删除共享对象，物理 GC 只能在穷尽 relation registry 后执行。`/m/` 响应缓存只允许 `private, max-age, immutable`（MediaObject 字节不可变），禁止 `public`/`s-maxage` 让共享或 CDN 缓存成为第二分发面；授权检查仍在每次未命中请求上执行。
 - **ASO-07 — 外部下载受 SSRF 边界。** 自有媒体先完成 owner 投影，再由统一 outbound fetch 逐跳验证 DNS/socket/redirect；内部 hostname 或签名 URL 不能成为私网 allowlist。
 - **ASO-08 — 顶层删除唯一。** Hub 角色、场景、道具删除统一经 `delete_asset → removeAsset`；variant 使用精确 parent/variant identity。Project Resource 删除走 WorkspaceResource 契约，不走 Asset Hub service。
-- **ASO-09 — 存储配置唯一。** 所有部署只使用 `src/lib/storage` 的 S3-compatible provider 与 `S3_*`；桶预建，endpoint 为 HTTPS，不回退本地目录或运行时建桶。
+- **ASO-09 — 存储配置唯一。** 所有部署只使用 `src/lib/storage` 的 S3-compatible provider 与 `S3_*`；endpoint 可为 HTTP 或 HTTPS，bucket 由 `storage:init` 创建或复用，不回退本地目录。
 - **ASO-10 — Project 删除先关闭执行。** 删除 Project 前在同一事务确认没有非终态 Task、active Turn 或待恢复 interaction；数据库 cascade 不能替代外部执行取消。
 
 ## 权威入口

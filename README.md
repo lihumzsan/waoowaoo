@@ -51,7 +51,7 @@ cp .env.example .env
 
 # 编辑 .env：为所有空白密钥生成独立随机值，并让 MYSQL_PASSWORD、
 # DATABASE_URL 与 COMPOSE_DATABASE_URL 中的密码保持一致（URL 中需编码特殊字符）。
-# 另外填写一个预先创建、可通过公网 HTTPS 访问的 S3-compatible 存储桶。
+# 本机开发默认使用 Docker MinIO；无需外部对象存储。
 # TEMPORAL_WORKER_BLUE_IMAGE 和 TEMPORAL_WORKER_GREEN_IMAGE 都必须填写完整的
 # repository@sha256:<64位digest>；首次安装可以先让两个 slot 指向同一镜像。
 # APP_IMAGE 必须指向同一个digest，不能保留 .env.example 中的全零占位值。
@@ -139,7 +139,7 @@ cd waoowaoo
 
 # 复制环境变量配置文件（必须在 npm install 之前完成）
 cp .env.example .env
-# ⚠️ 编辑 .env，填写数据库、Redis、Temporal、外部 S3-compatible 存储、认证与加密配置
+# ⚠️ 编辑 .env，填写数据库、Redis、Temporal、MinIO、认证与加密配置
 # MYSQL_PASSWORD 必须与两个数据库 URL 中的密码一致
 
 npm install
@@ -159,11 +159,9 @@ npm run dev
 > [!WARNING]
 > 跳过 `npm run db:push` 会导致数据库表结构缺失；请务必在启动应用与 worker 前运行。
 >
-> 对象存储桶必须预先创建，并允许当前凭据执行 bucket 检查以及对象读、写、删操作。
-> `S3_ENDPOINT` 必须是外部 AI Provider 可访问的 HTTPS endpoint；本地开发同样使用开发桶，
-> 不需要 ngrok、cloudflared、本地文件存储或 Docker MinIO。AWS S3、Cloudflare R2、
-> 腾讯云 COS 与阿里云 OSS 只需切换同一组 `S3_*` 配置；GCS 需使用 XML API + HMAC 凭据。
-> Azure Blob 不是 S3 协议，本版本不直接支持。
+> `npm run dev` 会启动本机 Docker 的 MySQL、Redis、Temporal 和 MinIO，并创建 `.env` 中的
+> `S3_BUCKET`。默认 endpoint 是 `http://127.0.0.1:19000`，控制台是
+> `http://127.0.0.1:19001`。也可改为任意兼容 S3 的 HTTP 或 HTTPS endpoint。
 >
 > 从旧 BullMQ/Outbox/Run/Wait 架构升级到 B+ 前，必须先停止旧 Web、Bull worker
 > 和 Outbox dispatcher，完成数据库备份，再运行

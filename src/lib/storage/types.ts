@@ -40,6 +40,7 @@ export interface ObjectStreamResult {
 export interface StorageProvider {
   readonly kind: 's3'
   verifyReady(): Promise<void>
+  ensureBucket(): Promise<'created' | 'existing'>
   uploadObject(params: UploadObjectParams): Promise<UploadObjectResult>
   deleteObject(key: string): Promise<void>
   deleteObjects(keys: string[]): Promise<DeleteObjectsResult>

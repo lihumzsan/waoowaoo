@@ -3,8 +3,8 @@ import { loadS3StorageConfig } from '@/lib/storage/s3-config'
 
 async function main() {
   const config = loadS3StorageConfig()
-  await ensureStorageReady()
-  console.log(`[storage:init] verified S3-compatible bucket "${config.bucket}" at ${config.endpoint}`)
+  const result = await ensureStorageReady()
+  console.log(`[storage:init] ${result} S3-compatible bucket "${config.bucket}" at ${config.endpoint}`)
 }
 
 void main().catch((error: unknown) => {
@@ -15,8 +15,8 @@ void main().catch((error: unknown) => {
       return null
     }
   })()
-  console.error('[storage:init] failed to verify required S3-compatible storage', {
-    operation: 'HeadBucket',
+  console.error('[storage:init] failed to initialize S3-compatible storage', {
+    operation: 'HeadBucket/CreateBucket',
     endpoint: config?.endpoint ?? '<invalid>',
     bucket: config?.bucket ?? '<invalid>',
     region: config?.region ?? '<invalid>',

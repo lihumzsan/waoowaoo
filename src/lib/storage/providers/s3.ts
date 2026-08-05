@@ -1,4 +1,5 @@
 import {
+  CreateBucketCommand,
   DeleteObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
@@ -74,10 +75,29 @@ function normalizeSignedUrl(url: string): string {
   } catch {
     throw new Error('S3_SIGNED_URL_INVALID')
   }
-  if (parsed.protocol !== 'https:') {
-    throw new Error('S3_SIGNED_URL_HTTPS_REQUIRED')
-  }
   return parsed.toString()
+}
+
+type BucketErrorShape = {
+  readonly name?: string
+  readonly code?: string
+  readonly Code?: string
+  readonly $metadata?: {
+    readonly httpStatusCode?: number
+  }
+}
+
+function hasBucketErrorCode(error: unknown, codes: readonly string[]): boolean {
+  if (!(error instanceof Error)) return false
+  const shaped = error as BucketErrorShape
+  const code = shaped.code ?? shaped.Code ?? shaped.name
+  return !!code && codes.includes(code)
+}
+
+function isMissingBucketError(error: unknown): boolean {
+  if (hasBucketErrorCode(error, ['NotFound', 'NoSuchBucket'])) return true
+  const shaped = error as BucketErrorShape
+  return shaped.$metadata?.httpStatusCode === 404
 }
 
 function normalizeSignedUrlExpiry(rawExpiry: number): number {
@@ -100,6 +120,26 @@ export class S3StorageProvider implements StorageProvider {
 
   async verifyReady(): Promise<void> {
     await this.client.send(new HeadBucketCommand({ Bucket: this.config.bucket }))
+  }
+
+  async ensureBucket(): Promise<'created' | 'existing'> {
+    try {
+      await this.verifyReady()
+      return 'existing'
+    } catch (error) {
+      if (!isMissingBucketError(error)) throw error
+    }
+
+    try {
+      await this.client.send(new CreateBucketCommand({ Bucket: this.config.bucket }))
+      return 'created'
+    } catch (error) {
+      if (!hasBucketErrorCode(error, ['BucketAlreadyOwnedByYou', 'BucketAlreadyExists'])) {
+        throw error
+      }
+      await this.verifyReady()
+      return 'existing'
+    }
   }
 
   async uploadObject(params: UploadObjectParams): Promise<UploadObjectResult> {
@@ -220,7 +260,7 @@ export class S3StorageProvider implements StorageProvider {
     if (parsed.origin === endpoint.origin && path.startsWith(pathStylePrefix)) {
       return normalizeKey(path.slice(pathStylePrefix.length))
     }
-    if (parsed.protocol === 'https:' && parsed.host === `${this.config.bucket}.${endpoint.host}`) {
+    if (parsed.protocol === endpoint.protocol && parsed.host === `${this.config.bucket}.${endpoint.host}`) {
       return path ? normalizeKey(path) : null
     }
     return null

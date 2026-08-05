@@ -47,7 +47,7 @@ export type OwnedMediaForGeneration = {
  * The only background-task projection path for private provider-bound media.
  * It resolves canonical storage identity, applies the same relation owner
  * policy as authenticated media routes, validates object metadata, and issues
- * a bounded HTTPS URL without a browser route, cookie, or internal credential.
+ * a bounded signed URL without a browser route, cookie, or internal credential.
  */
 export async function resolveOwnedMediaForGeneration(
   input: string,
@@ -135,13 +135,6 @@ export async function resolveOwnedMediaForGeneration(
       code: 'OWNED_MEDIA_SIGNED_URL_INVALID',
       mediaInput: normalizedInput,
       message: `${options.label} signed URL is invalid`,
-    })
-  }
-  if (parsedUrl.protocol !== 'https:') {
-    throw new OwnedMediaOutboundError({
-      code: 'OWNED_MEDIA_SIGNED_URL_INVALID',
-      mediaInput: normalizedInput,
-      message: `${options.label} signed URL must use HTTPS`,
     })
   }
   return {

@@ -30,7 +30,7 @@ function normalizeAudioMimeType(mimeType: string): string {
   return mimeType
 }
 
-export async function resolveOwnedAudioHttpsForGeneration(
+export async function resolveOwnedAudioUrlForGeneration(
   input: string,
   userId: string,
 ): Promise<string> {

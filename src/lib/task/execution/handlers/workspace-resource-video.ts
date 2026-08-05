@@ -2,8 +2,8 @@ import {
   parseWorkspaceResourceGenerationTaskPayload,
   type WorkspaceResourceGenerationTaskPayload,
 } from '@/lib/workspace-resource/generation-contract'
-import { resolveOwnedAudioHttpsForGeneration } from '@/lib/media/outbound-audio'
-import { resolveOwnedImageHttpsForGeneration } from '@/lib/media/outbound-image'
+import { resolveOwnedAudioUrlForGeneration } from '@/lib/media/outbound-audio'
+import { resolveOwnedImageUrlForGeneration } from '@/lib/media/outbound-image'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { resolveWorkspaceResourceInputMedia } from '@/lib/workspace-resource/input-media'
 import { reportTaskProgress } from '../progress'
@@ -47,7 +47,7 @@ async function loadVideoImageReferences(
       ? reference.role
       : 'reference'
     return {
-      url: await resolveOwnedImageHttpsForGeneration(
+      url: await resolveOwnedImageUrlForGeneration(
         resource.storageKey,
         context.data.userId,
       ),
@@ -77,7 +77,7 @@ export async function loadVideoAudioReferences(
     expectedMediaType: 'audio',
   })
   return await Promise.all(resources.map(async (resource) => {
-    return await resolveOwnedAudioHttpsForGeneration(resource.storageKey, userId)
+    return await resolveOwnedAudioUrlForGeneration(resource.storageKey, userId)
   }))
 }
 

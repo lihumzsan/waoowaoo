@@ -45,7 +45,7 @@ cp .env.example .env
 
 # Edit .env: generate a distinct random value for every blank secret. Keep
 # MYSQL_PASSWORD in sync with DATABASE_URL and COMPOSE_DATABASE_URL (URL-encode special characters).
-# Also configure a pre-created S3-compatible bucket reachable over public HTTPS.
+# Local development uses the bundled Docker MinIO; no external object storage is required.
 # TEMPORAL_WORKER_BLUE_IMAGE and TEMPORAL_WORKER_GREEN_IMAGE must both be full
 # repository@sha256:<64-hex-digest> references. They may initially use the same image.
 # APP_IMAGE must use that same digest; do not retain the all-zero placeholder.
@@ -159,7 +159,7 @@ Temporal service and does not require a Temporal Cloud account, TLS, or an API k
 
 Visit [http://localhost:13000](http://localhost:13000) (Method 1 & 2) or [http://localhost:3000](http://localhost:3000) (Method 3) to get started!
 
-> Methods 1 and 2 initialize the database on first container launch; the external storage configuration and pre-created bucket are still required.
+> Methods 1 and 2 initialize the database and the local MinIO bucket on first container launch.
 
 > [!WARNING]
 > When running the app directly, do not skip `npm run db:push`. It synchronizes the Prisma schema before the application and workers start.

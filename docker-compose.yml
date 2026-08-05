@@ -12,7 +12,7 @@ x-app-environment: &app-environment
   REDIS_USERNAME: ""
   REDIS_PASSWORD: "${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}"
   REDIS_TLS: ""
-  S3_ENDPOINT: "${S3_ENDPOINT:?Set the public HTTPS S3-compatible endpoint in .env}"
+  S3_ENDPOINT: "${COMPOSE_S3_ENDPOINT:-http://minio:9000}"
   S3_REGION: "${S3_REGION:-us-east-1}"
   S3_BUCKET: "${S3_BUCKET:?Set S3_BUCKET in .env}"
   S3_ACCESS_KEY_ID: "${S3_ACCESS_KEY_ID:?Set S3_ACCESS_KEY_ID in .env}"
@@ -55,6 +55,8 @@ x-app-service: &app-service
       condition: service_completed_successfully
     redis:
       condition: service_healthy
+    minio:
+      condition: service_healthy
     temporal-create-namespace:
       condition: service_completed_successfully
 
@@ -70,6 +72,8 @@ x-temporal-worker-service: &temporal-worker-service
     app-schema:
       condition: service_completed_successfully
     redis:
+      condition: service_healthy
+    minio:
       condition: service_healthy
     temporal-create-namespace:
       condition: service_completed_successfully
@@ -143,6 +147,35 @@ services:
       timeout: 5s
       retries: 30
       start_period: 5s
+
+  minio:
+    image: minio/minio:RELEASE.2025-02-28T09-55-16Z
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      MINIO_ROOT_USER: "${S3_ACCESS_KEY_ID:?Set S3_ACCESS_KEY_ID in .env}"
+      MINIO_ROOT_PASSWORD: "${S3_SECRET_ACCESS_KEY:?Set S3_SECRET_ACCESS_KEY in .env}"
+    command: server /data --console-address ":9001"
+    ports:
+      - "${INFRA_BIND_ADDRESS:-127.0.0.1}:${MINIO_API_HOST_PORT:-19000}:9000"
+      - "${INFRA_BIND_ADDRESS:-127.0.0.1}:${MINIO_CONSOLE_HOST_PORT:-19001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  minio-ready:
+    image: busybox:1.37
+    restart: "no"
+    logging: *default-logging
+    depends_on:
+      minio:
+        condition: service_healthy
+    command: ["sh", "-ec", "true"]
 
   # One explicit application-schema writer prevents Web and Worker races.
   # This is retained for the current self-hosted release contract; production
@@ -478,6 +511,7 @@ services:
 volumes:
   mysql_data:
   redis_data:
+  minio_data:
   temporal_config:
 
 networks:

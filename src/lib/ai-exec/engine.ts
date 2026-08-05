@@ -31,9 +31,6 @@ import { ProviderPermanentFailureError, ProviderTerminalFailureError } from '@/l
 import { resolveReasoningEffort } from '@/lib/ai-exec/reasoning-effort'
 import {
   createMediaProviderRequestIdentity,
-  assertImageMediaReferencesUseHttps,
-  assertMusicMediaReferencesUseHttps,
-  assertVideoMediaReferencesUseHttps,
 } from '@/lib/ai-exec/media-references'
 import {
   executeTaskDurableInvocation,
@@ -161,17 +158,6 @@ export async function executeMediaGeneration(
   invocation?: TaskProviderInvocation,
   wait?: AsyncProviderWaitCallbacks,
 ): Promise<GenerateResult> {
-  if (input.modality === 'image') {
-    assertImageMediaReferencesUseHttps(input.options)
-  } else if (input.modality === 'video') {
-    assertVideoMediaReferencesUseHttps({
-      imageUrl: input.imageUrl,
-      options: input.options,
-    })
-  } else if (input.modality === 'music') {
-    assertMusicMediaReferencesUseHttps(input.options)
-  }
-
   const selection = await resolveModelSelection(input.userId, input.modelKey, input.modality)
   logMediaModelSelectionResolved({
     modality: input.modality,

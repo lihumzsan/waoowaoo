@@ -228,6 +228,7 @@
         "src/lib/home",
         "src/lib/profile",
         "src/lib/projects",
+        "src/lib/storage",
         "messages",
         "package.json",
         "package-lock.json",

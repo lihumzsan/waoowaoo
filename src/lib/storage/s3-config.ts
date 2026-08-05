@@ -16,7 +16,7 @@ export type S3StorageConfig = {
   }
 }
 
-function parseHttpsEndpoint(rawEndpoint: string): string {
+function parseS3Endpoint(rawEndpoint: string): string {
   let endpoint: URL
   try {
     endpoint = new URL(rawEndpoint)
@@ -24,20 +24,10 @@ function parseHttpsEndpoint(rawEndpoint: string): string {
     throw new StorageConfigError('S3_ENDPOINT must be a valid absolute URL')
   }
 
-  if (endpoint.protocol !== 'https:') {
-    throw new StorageConfigError('S3_ENDPOINT must use HTTPS')
+  if (endpoint.protocol !== 'http:' && endpoint.protocol !== 'https:') {
+    throw new StorageConfigError('S3_ENDPOINT must use HTTP or HTTPS')
   }
-  if (endpoint.username || endpoint.password) {
-    throw new StorageConfigError('S3_ENDPOINT must not contain credentials')
-  }
-  if (endpoint.search || endpoint.hash) {
-    throw new StorageConfigError('S3_ENDPOINT must not contain query parameters or a fragment')
-  }
-  if (endpoint.pathname !== '/' && endpoint.pathname !== '') {
-    throw new StorageConfigError('S3_ENDPOINT must not contain a path')
-  }
-
-  return endpoint.origin
+  return endpoint.toString().replace(/\/$/, '')
 }
 
 function parseBooleanEnv(name: string, defaultValue: boolean): boolean {
@@ -51,7 +41,7 @@ function parseBooleanEnv(name: string, defaultValue: boolean): boolean {
 export function loadS3StorageConfig(): S3StorageConfig {
   const sessionToken = process.env.S3_SESSION_TOKEN?.trim()
   return {
-    endpoint: parseHttpsEndpoint(requireEnv('S3_ENDPOINT')),
+    endpoint: parseS3Endpoint(requireEnv('S3_ENDPOINT')),
     region: process.env.S3_REGION?.trim() || DEFAULT_S3_REGION,
     bucket: requireEnv('S3_BUCKET'),
     forcePathStyle: parseBooleanEnv('S3_FORCE_PATH_STYLE', false),

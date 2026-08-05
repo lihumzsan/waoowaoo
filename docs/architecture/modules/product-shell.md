@@ -23,7 +23,7 @@
   Temporal，正式Worker发布约束不因此降级。
 - **PS-10 — 首页初始化只有一个 Project 构造。** 首页已展示并保存的画面比例随 `create_project` 同一请求写入 Project；成功后用户输入作为首个 Assistant Turn 进入项目。浏览器不得再拼接 config、Episode 或其他初始化 route。其他合法入口可保留 `videoRatio=null`，真正需要媒体执行时由 Agent 通过原生 request_user_input 明确询问。
 - **PS-11 — 认证入口与账号初始化唯一。** 产品只有一个登录/注册页面；受信身份已存在时登录，不存在时在同一次认证动作中创建 `User` 与 `UserBalance`。所有认证方式必须复用 `src/lib/auth/account-onboarding.ts` 这一账号初始化 writer。Cloud 只注册手机号与 Google provider，密码 provider、独立注册 route、密码设置 API 必须同时关闭；self-hosted 只注册用户名密码 provider。个人资料可见性不能等同于密码能力：Cloud 仍须允许已登录用户修改非身份显示名称并主动绑定 Google，密码写入则必须继续由 `enablePasswordAuth` 独立失败关闭。手机号 canonical identity 是归一化 E.164，并由 `Account(provider="phone", providerAccountId)` 唯一键持久化；修改 `User.name` 不得改写这一登录 identity。`sms-destinations.ts` 是已启用短信目的地 identity、国内/国际通道与 Sender ID policy 的穷尽 registry；国家/地区选择只帮助构造并验证 canonical E.164，不得成为第二持久 identity。registry 只能声明现有审核能力可直接发送、且不需要额外目的地 Sender/品牌注册的地区；需要新增审核的目的地不得作为潜在实例、隐藏配置或运行时开关预埋。登录页直接穷尽消费该 registry，绕过 UI 的未启用目的地必须在发送前原地失败。腾讯云国内短信必须使用国内模板与签名，国际/港澳台短信必须使用国际模板且不得携带国内签名或 Sender ID。短信验证码只在 Redis 中保存带 TTL 的 HMAC，发送、失败补偿、尝试计数与一次性消费由 `phone-verification.ts` 唯一裁决；发送短信前的图形挑战由 `image-captcha.ts` 生成、绑定可信客户端来源并一次性消费，Redis 或挑战状态不可判定时失败关闭。页面倒计时不承担安全或终态正确性。
-- **PS-12 — 对象存储是必需外部基础设施。** Cloud、self-hosted 与本地开发共用一个预建 S3-compatible bucket；`S3_ENDPOINT` 必须是公网 HTTPS，启动必须在应用/worker 前严格解析配置并完成 HeadBucket。Compose 只编排 MySQL、Redis 与应用，不捆绑 MinIO；启动不得创建桶、回退本地目录、启用 tunnel 或按 deployment edition 选择第二存储协议。供应商切换只改部署级 `S3_*`，不得进入 AI Provider 配置。
+- **PS-12 — 对象存储只有一个 S3 入口。** Cloud、self-hosted 与本地开发都经同一组 `S3_*` 配置和 `S3StorageProvider` 访问对象存储；endpoint 可以是 HTTP 或 HTTPS，不要求公网或 Provider 可达。Compose 默认编排本机 MinIO；`storage:init` 是唯一 bucket bootstrap 入口，会创建缺失 bucket 后再供应用与 Worker 使用。供应商切换只改部署级 `S3_*`，不得进入 AI Provider 配置。
 - **PS-13 — 错误identity与本地化copy分离。** HTTP/API只返回稳定typed error code及必要的非敏感identity；当前locale的i18n catalog是用户文案唯一owner。route、Temporal failure、Provider message、Error.cause和英文开发文案不得直接成为用户copy；未知内部错误对外收敛为稳定code，原cause只进入服务端诊断。
 - **PS-14 — 客户端错误只有一个解释入口。** 浏览器只经 `ClientApiError`、
   `useClientErrorMessage` 与全局 `ToastContext` 把稳定 code 投影为当前 locale 文案、下一步动作
@@ -51,7 +51,7 @@
 - `tests/unit/auth/phone-number.test.ts` 使用真实电话号码元数据验证中国大陆输入变体与生产目的地 registry 只能投影为一个 E.164 canonical identity，歧义、无效和未启用目的地原地拒绝。
 - 匿名 route 必须显式枚举；手机号图形挑战与短信发送是显式公开认证 route，其他认证与用户 API 仍必须显式鉴权。
 - `tests/unit/auth/rate-limit-client-ip.test.ts` 反证伪造 X-Forwarded-For 绕过；`docker compose config` 与 cloud env preflight 分别验证自托管、cloud 启动契约。
-- 对象存储启动契约以 `docker compose config --quiet` 和实际目标环境的 `npm run storage:init` 复验；没有真实目标桶时只能验证配置解析，不能宣称 Provider 已可下载签名对象。
+- 对象存储启动契约以 `docker compose config --quiet`、本机 MinIO 与 `npm run storage:init` 复验；生成的签名 URL 协议与地址原样由配置决定。
 - Temporal正式部署配置必须反证`local`/可变build identity、关闭Versioning与非PINNED默认行为均不能启动；Compose配置还必须证明bootstrap自包含、Web/Worker独立容器和blue/green slot。真实候选提升与旧Workflow排空仍需目标环境复验。
 - i18n、deployment capability、首页 Project 创建和 Assistant 原生比例询问通过人工产品复验，不再复制成脚本 Journey。
 
@@ -64,8 +64,9 @@
 - Asset ownership Journey 在删除攻击者项目后立即退出，发现删除 handler 启动当前页 refetch 却不等待它完成；下一次导航把成功删除后的刷新记录成网络错误。留在当前页的删除动作现在等待自己的唯一刷新后继完成。
 - 权限 Journey 曾发现外部用户读取 Project 返回 403 后，页面仍把空领域集合当作合法零状态并继续初始化；当前 Project 页面只在权威读取成功后启动 Runtime，不从空列表推断权限。
 - 大量旧测试没有经过真实英文页面、Navbar 和产品切换确认，因而从未观察到这个组合错误。
+- 2026-08 本地开发阶段取消“外部 HTTPS S3”前提，重新引入 Docker MinIO，并删除 S3 endpoint、签名 URL 与媒体任务提交的 HTTPS gate。该版本只保留 S3 所需的地址解析和必填配置错误；未来如需恢复公网/Provider 可达性，必须在独立分叉版本重新评估，不能把旧 gate 直接带回。
 - 早期内部 LLM HTTP 代理删除后，固定 `INTERNAL_TASK_TOKEN + x-user-id` 身份旁路仍残留在通用 auth helper，且普通用户可下载全局日志；路由级项目鉴权与 UI 隐藏没有覆盖这两个非项目入口。当前删除内部 token 协议、代理 handler 与 callback，用户 API 只接受 session id，日志 route 复用管理员裁决，5xx 响应不再回传内部错误详情。最小 browser security 只验证普通会话边界；运维身份的独立部署验证仍是未覆盖盲区。
-- 自托管 Compose 曾把 MySQL、Redis、MinIO、NextAuth、Cron、API 加密和 Bull Board 凭据写死，并把数据库、存储和队列面板绑定全部网卡；旧健康检查只证明服务可达，反而固化了公开弱凭据。第一轮只把 MinIO 密钥改为显式配置，仍让本地文件、内网 MinIO 与公网对象存储成为三种部署/Provider 组合。当前 Compose 只编排 MySQL、Redis 和应用，所有环境必须显式配置同一外部 HTTPS S3-compatible bucket；storage startup 只验证预建桶，不创建基础设施或回退。既有 local/MinIO 数据必须由部署者在升级前迁移，本次没有执行数据复制；真实目标云的权限、域名和 Provider 可达性仍需在目标环境复验。
+- 自托管 Compose 曾把 MySQL、Redis、MinIO、NextAuth、Cron、API 加密和 Bull Board 凭据写死，并把数据库、存储和队列面板绑定全部网卡；旧健康检查只证明服务可达，反而固化了公开弱凭据。第一轮只把 MinIO 密钥改为显式配置，仍让本地文件、内网 MinIO 与公网对象存储成为三种部署/Provider 组合。当前 Compose 将 MySQL、Redis、Temporal 与 MinIO 均绑定到本机；应用与 Worker 只通过同一组 `S3_*` 配置访问对象。`storage:init` 负责创建或复用 bucket；本次不执行历史对象迁移。
 - 清理 Remotion 依赖时曾用仓库检索判定其传递依赖可一并删除，却遗漏 worker 与运维脚本对未声明 `dotenv` 的直接导入；Remotion 移除后，Cloud 启动器虽已注入完整环境，worker 仍在队列连接前因 `dotenv/config` 无法解析而崩溃。根因是运行入口同时依赖权威启动器和偶然存在的第二环境加载器。当前应用与 worker 只消费 package script 或 `run-with-env.mjs` 注入的环境，独立脚本通过显式 `tsx --env-file` 启动，不再依赖传递包；类型检查不能独立证明运行时 side-effect import 可解析，依赖清理仍须核对生产入口的直接导入。
 - 代理信任改为显式配置后，真实权限 Journey 在无可信代理的本地部署连续创建多个测试用户时触发了共享注册桶：原先每分钟 3 次的阈值会把同一 NAT/未知来源下的正常注册误判成攻击。注册桶调整为每分钟 10 次，仍由 Redis 原子滑窗限制批量滥用；登录继续保持更严格阈值，无法确认客户端来源时仍不信任来路 header，也不回退为无限制。
 - 安全部署加固曾把正式公网 cloud 的管理员、Bull Board认证、HTTPS和正数代理跳数要求无条件加入开发 preflight，导致正常开发环境无法启动。Bull控制面现已物理删除；当前保留一个 fail-closed校验器，由package script显式选择development或production profile，并额外冻结Temporal Worker build identity。

@@ -371,7 +371,7 @@ export async function normalizeToBase64ForGeneration(input: string): Promise<str
  * ownership decision used by the authenticated media routes. This avoids using
  * a browser session or a second internal-auth protocol for background work.
  */
-export async function resolveOwnedImageHttpsForGeneration(
+export async function resolveOwnedImageUrlForGeneration(
   input: string,
   userId: string,
 ): Promise<string> {
@@ -409,7 +409,7 @@ function isOwnedStorageInputCandidate(input: string): boolean {
 
 async function normalizeReferenceForGeneration(input: string, ownerUserId?: string): Promise<string> {
   if (ownerUserId && isOwnedStorageInputCandidate(input)) {
-    return await resolveOwnedImageHttpsForGeneration(input, ownerUserId)
+    return await resolveOwnedImageUrlForGeneration(input, ownerUserId)
   }
   return await normalizeToBase64ForGeneration(input)
 }

@@ -10,7 +10,7 @@
     "postinstall": "prisma generate",
     "prepare": "husky",
     "dev": "npm run dev:infra && npm run storage:init && concurrently --kill-others \"npm run dev:next\" \"npm run dev:temporal-worker\"",
-    "dev:infra": "docker compose up -d mysql redis temporal-create-namespace",
+    "dev:infra": "docker compose up -d minio-ready mysql redis temporal-create-namespace",
     "dev:cloud": "npm run env:cloud:check:dev && npm run dev:infra && npm run storage:init:cloud && concurrently --kill-others \"npm run dev:next:cloud\" \"npm run dev:temporal-worker:cloud\"",
     "dev:next": "cross-env NODE_OPTIONS=\"--no-deprecation\" next dev --turbopack -H 0.0.0.0",
     "dev:next:cloud": "node scripts/run-with-env.mjs .env .env.cloud.local -- node_modules/next/dist/bin/next dev --turbopack -H 0.0.0.0",
