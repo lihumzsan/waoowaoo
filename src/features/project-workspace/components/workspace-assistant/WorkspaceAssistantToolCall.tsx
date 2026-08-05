@@ -140,37 +140,29 @@ type WebSearchSource = {
   readonly previewImageUrl: string | null
 }
 
-/**
- * Reads the cited sources out of a completed research result.
- *
- * The Operation's output is wrapped by the MCP success envelope, and its
- * citations are `sources` — the contract guarantees the array is non-empty, so
- * an empty render here means the shape moved, not that the research found
- * nothing. Preview images are matched back to their own source page; a source
- * without one simply renders without a thumbnail.
- */
+/** Reads native standalone-search results from the completed Codex item. */
 function resolveWebSearchSources(result: unknown): WebSearchSource[] {
-  const envelope = isRecord(result) ? result : null
-  const data = isRecord(envelope?.data) ? envelope.data : envelope
-  if (!Array.isArray(data?.sources)) return []
+  const output = isRecord(result) ? result : null
+  if (!Array.isArray(output?.results)) return []
   const previewBySourceUrl = new Map<string, string>()
-  if (Array.isArray(data.images)) {
-    for (const entry of data.images) {
-      if (!isRecord(entry)) continue
-      const sourceUrl = readPublicWebUrl(entry.sourceUrl)
-      const imageUrl = readPublicWebUrl(entry.thumbnailUrl) ?? readPublicWebUrl(entry.imageUrl)
-      if (sourceUrl && imageUrl && !previewBySourceUrl.has(sourceUrl)) {
-        previewBySourceUrl.set(sourceUrl, imageUrl)
-      }
+  for (const entry of output.results) {
+    if (!isRecord(entry) || entry.type !== 'image_result') continue
+    const sourceUrl = readPublicWebUrl(entry.source_url)
+    const imageUrl = readPublicWebUrl(entry.image_url)
+    if (sourceUrl && imageUrl && !previewBySourceUrl.has(sourceUrl)) {
+      previewBySourceUrl.set(sourceUrl, imageUrl)
     }
   }
   const byUrl = new Map<string, WebSearchSource>()
-  for (const entry of data.sources) {
+  for (const entry of output.results) {
     if (!isRecord(entry)) continue
-    const url = readPublicWebUrl(entry.url)
+    const url = entry.type === 'image_result'
+      ? readPublicWebUrl(entry.source_url)
+      : readPublicWebUrl(entry.url)
     if (!url || byUrl.has(url)) continue
     try {
-      const domain = new URL(url).hostname.replace(/^www\./, '')
+      const domain = readText(entry.source_domain)
+        ?? new URL(url).hostname.replace(/^www\./, '')
       byUrl.set(url, {
         url,
         title: readText(entry.title) ?? domain,
@@ -180,6 +172,21 @@ function resolveWebSearchSources(result: unknown): WebSearchSource[] {
     } catch {}
   }
   return [...byUrl.values()].slice(0, 6)
+}
+
+function resolveWebSearchQuery(args: unknown): string | null {
+  if (!isRecord(args)) return null
+  const direct = readText(args.query)
+  if (direct) return direct
+  const action = isRecord(args.action) ? args.action : null
+  const actionQuery = readText(action?.query)
+  if (actionQuery) return actionQuery
+  if (!Array.isArray(action?.queries)) return null
+  const queries = action.queries.flatMap((query) => {
+    const value = readText(query)
+    return value ? [value] : []
+  })
+  return queries.length > 0 ? queries.join(' · ') : null
 }
 
 export function WorkspaceAssistantRepeatedToolCallGroupProvider({
@@ -362,12 +369,11 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
   const webSearchSources = operationId === 'web_search'
     ? resolveWebSearchSources(props.result)
     : []
-  // Codex creates one webSearch item per call carrying the model's own query,
-  // so a run of three searches is three rows that each say what they are for.
-  // That per-item query is the live signal; there is no progress channel here
-  // and none is needed.
-  const webSearchQuery = operationId === 'web_search' && displayState === 'running'
-    ? readText(isRecord(props.args) ? props.args.query : null)
+  // Codex 0.146 starts standalone Web Search with an empty query/action and
+  // fills both only on item/completed. Keep the completed brief visible beside
+  // its native result pages; the running row must not invent unavailable data.
+  const webSearchQuery = operationId === 'web_search'
+    ? resolveWebSearchQuery(props.args)
     : null
 
   return (
@@ -382,7 +388,12 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
       {webSearchQuery ? (
         <div className="ml-5 mt-1 flex min-w-0 items-center gap-1.5 text-xs leading-4">
           <AppIcon name="search" className="h-3 w-3 shrink-0 opacity-70" aria-hidden="true" />
-          <span className="min-w-0 truncate text-[var(--glass-text-secondary)]">{webSearchQuery}</span>
+          <span
+            className="min-w-0 line-clamp-2 break-words text-[var(--glass-text-secondary)]"
+            title={webSearchQuery}
+          >
+            {webSearchQuery}
+          </span>
         </div>
       ) : null}
       {webSearchSources.length > 0 ? (
