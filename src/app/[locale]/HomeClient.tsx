@@ -72,31 +72,13 @@ export default function HomeClient({ initialDeploymentFeatures }: HomeClientProp
                 {a('sub')}
               </p>
 
-              {/* 落地逻辑:三步说明整件事有多简单,放在 CTA 之前先消除门槛顾虑 */}
-              <ol className="mt-7 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-sm text-[var(--glass-text-tertiary)]">
-                {[a('steps.one'), a('steps.two'), a('steps.three')].map((step, index) => (
-                  <li key={step} className="flex items-center gap-3">
-                    {index > 0 ? (
-                      <span aria-hidden="true" className="opacity-40">
-                        →
-                      </span>
-                    ) : null}
-                    <span className="rounded-full border border-[var(--glass-border)] px-3.5 py-1.5">
-                      {step}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-
-              <div className="mt-8 flex flex-col items-center gap-3">
+              <div className="mt-8">
                 <Link
                   href={{ pathname: '/auth/signin' }}
                   className="glass-btn-base glass-btn-primary rounded-xl px-9 py-4 text-lg font-semibold"
                 >
                   {a('ctaPrimary')}
                 </Link>
-                {/* 门槛承诺:只说需要什么能力,不承诺交付时间或成片质量 */}
-                <p className="text-sm text-[var(--glass-text-tertiary)]">{a('ctaNote')}</p>
               </div>
             </div>
           </div>

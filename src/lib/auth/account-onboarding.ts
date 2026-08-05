@@ -1,10 +1,6 @@
 import type { Prisma } from '@prisma/client'
-import { ApiError } from '@/lib/api-errors'
-import { getDeploymentConfig } from '@/lib/deployment/config'
-import { getDeploymentFeatures } from '@/lib/deployment/features'
 import { addBalanceWithTransaction } from '@/lib/billing/ledger'
 import { resolveSignupGrantCredits } from '@/lib/billing/signup-grant'
-import { toMoneyNumber } from '@/lib/billing/money'
 
 export interface AuthAccountIdentityInput {
   type: 'credentials' | 'oauth'

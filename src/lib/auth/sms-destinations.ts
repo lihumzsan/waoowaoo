@@ -20,14 +20,12 @@ export interface SmsDestination {
   id: SmsDestinationId
   countryCode: CountryCode
   callingCode: string
-  flag: string
   exampleNationalNumber: string
   channel: SmsChannel
   senderIdPolicy: SmsSenderIdPolicy
 }
 
 interface SmsDestinationDefinition {
-  flag: string
   exampleNationalNumber: string
   channel: SmsChannel
   senderIdPolicy: SmsSenderIdPolicy
@@ -35,49 +33,41 @@ interface SmsDestinationDefinition {
 
 const SMS_DESTINATION_DEFINITIONS: Record<SmsDestinationId, SmsDestinationDefinition> = {
   CN: {
-    flag: '🇨🇳',
     exampleNationalNumber: '138 0013 8000',
     channel: 'domestic',
     senderIdPolicy: 'not-applicable',
   },
   HK: {
-    flag: '🇭🇰',
     exampleNationalNumber: '5123 4567',
     channel: 'international',
     senderIdPolicy: 'public-default',
   },
   MO: {
-    flag: '🇲🇴',
     exampleNationalNumber: '6612 3456',
     channel: 'international',
     senderIdPolicy: 'public-default',
   },
   TW: {
-    flag: '🇹🇼',
     exampleNationalNumber: '0912 345 678',
     channel: 'international',
     senderIdPolicy: 'public-default',
   },
   JP: {
-    flag: '🇯🇵',
     exampleNationalNumber: '090 1234 5678',
     channel: 'international',
     senderIdPolicy: 'public-default',
   },
   KR: {
-    flag: '🇰🇷',
     exampleNationalNumber: '010 1234 5678',
     channel: 'international',
     senderIdPolicy: 'public-default',
   },
   MY: {
-    flag: '🇲🇾',
     exampleNationalNumber: '012 345 6789',
     channel: 'international',
     senderIdPolicy: 'public-default',
   },
   GB: {
-    flag: '🇬🇧',
     exampleNationalNumber: '07400 123456',
     channel: 'international',
     senderIdPolicy: 'public-default',

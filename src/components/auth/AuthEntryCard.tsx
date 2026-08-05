@@ -15,6 +15,7 @@ import {
 } from '@/lib/auth/phone-auth-contract'
 import { normalizePhoneNumberForDestination } from '@/lib/auth/phone-number'
 import {
+  getSmsDestination,
   isSmsDestinationId,
   SMS_DESTINATIONS,
   type SmsDestinationId,
@@ -283,54 +284,56 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
     }
   }
   const hasPrimaryAuth = features.enablePhoneAuth || features.enablePasswordAuth
+  const selectedDestination = getSmsDestination(destinationId)
 
   return (
     <div className="glass-page min-h-screen">
       <Navbar />
-      <main className="flex items-center justify-center px-4 py-10 sm:py-14">
-        <section className="w-full max-w-[460px] rounded-[2rem] border border-black/8 bg-white px-6 py-8 text-black shadow-[0_24px_80px_rgba(15,23,42,0.12)] sm:px-10 sm:py-10">
-          <header className="mb-8 text-center">
-            <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+      <main className="flex min-h-[calc(100vh-4rem)] items-start justify-center px-4 py-8 sm:items-center sm:py-12">
+        <section className="w-full max-w-[420px] rounded-[1.75rem] border border-white/80 bg-white/90 px-5 py-7 text-black shadow-[0_24px_72px_rgba(15,23,42,0.10)] backdrop-blur-xl sm:px-8 sm:py-8">
+          <header className="mb-7 text-center">
+            <h1 className="text-[1.75rem] font-bold tracking-[-0.025em] sm:text-[2rem]">
               {t('title')}
             </h1>
-            <p className="mt-3 text-sm leading-6 text-slate-500">
+            <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-slate-500">
               {t('subtitle')}
             </p>
           </header>
 
           {features.enablePhoneAuth ? (
-            <form onSubmit={handlePhoneSubmit} className="space-y-5">
-              <div className="grid gap-3 sm:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-                <div>
-                  <label htmlFor="phoneDestination" className="mb-2 block text-sm font-semibold text-slate-900">
-                    {t('phoneDestination')}
-                  </label>
-                  <select
-                    id="phoneDestination"
-                    name="phoneDestination"
-                    value={destinationId}
-                    disabled={pendingAction !== null}
-                    onChange={(event) => {
-                      if (!isSmsDestinationId(event.target.value)) return
-                      setDestinationId(event.target.value)
-                      setPhoneNumber('')
-                      setVerificationCode('')
-                      setError('')
-                      setNotice('')
-                    }}
-                    className="h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-black outline-none transition focus:border-slate-700 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {SMS_DESTINATIONS.map((destination) => (
-                      <option key={destination.id} value={destination.id}>
-                        {`${destination.flag} ${t(`phoneDestinations.${destination.id}`)} (+${destination.callingCode})`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="phoneNumber" className="mb-2 block text-sm font-semibold text-slate-900">
-                    {t('phoneNumber')}
-                  </label>
+            <form onSubmit={handlePhoneSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="phoneNumber" className="mb-2 block text-[13px] font-medium text-slate-700">
+                  {t('phoneNumber')}
+                </label>
+                <div className="flex h-12 overflow-hidden rounded-xl border border-slate-300 bg-white transition focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100">
+                  <div className="relative flex w-[76px] shrink-0 items-center justify-center border-r border-slate-200 bg-slate-50/80">
+                    <span aria-hidden="true" className="text-sm font-medium text-slate-700">
+                      +{selectedDestination.callingCode}
+                    </span>
+                    <select
+                      id="phoneDestination"
+                      name="phoneDestination"
+                      aria-label={t('phoneDestination')}
+                      value={destinationId}
+                      disabled={pendingAction !== null}
+                      onChange={(event) => {
+                        if (!isSmsDestinationId(event.target.value)) return
+                        setDestinationId(event.target.value)
+                        setPhoneNumber('')
+                        setVerificationCode('')
+                        setError('')
+                        setNotice('')
+                      }}
+                      className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+                    >
+                      {SMS_DESTINATIONS.map((destination) => (
+                        <option key={destination.id} value={destination.id}>
+                          +{destination.callingCode}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <input
                     id="phoneNumber"
                     name="phoneNumber"
@@ -340,13 +343,13 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
                     value={phoneNumber}
                     onChange={(event) => setPhoneNumber(event.target.value)}
                     required
-                    className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-base text-black outline-none transition focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
+                    className="min-w-0 flex-1 border-0 bg-transparent px-4 text-base text-black outline-none"
                   />
                 </div>
               </div>
 
               <div>
-                <label htmlFor="verificationCode" className="mb-2 block text-sm font-semibold text-slate-900">
+                <label htmlFor="verificationCode" className="mb-2 block text-[13px] font-medium text-slate-700">
                   {t('verificationCode')}
                 </label>
                 <div className="flex gap-3">
@@ -360,14 +363,14 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
                     value={verificationCode}
                     onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
                     required
-                    className="h-12 min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-4 text-base tracking-[0.2em] text-black outline-none transition placeholder:tracking-normal placeholder:text-slate-400 focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
+                    className="h-12 min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-4 text-base tracking-[0.2em] text-black outline-none transition placeholder:tracking-normal placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
                     placeholder={t('verificationCodePlaceholder')}
                   />
                   <button
                     type="button"
                     disabled={pendingAction !== null || resendSeconds > 0}
                     onClick={handleOpenCaptchaDialog}
-                    className="h-12 shrink-0 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-black shadow-sm transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="h-12 shrink-0 rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-800 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {pendingAction === 'send-code'
                       ? t('sendingCode')
@@ -381,7 +384,7 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
               <button
                 type="submit"
                 disabled={pendingAction !== null}
-                className="h-12 w-full rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 px-4 font-semibold text-white shadow-[0_12px_28px_rgba(37,99,235,0.24)] transition hover:from-blue-700 hover:to-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-12 w-full rounded-xl bg-blue-600 px-4 font-semibold text-white shadow-[0_10px_24px_rgba(37,99,235,0.20)] transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {pendingAction === 'submit' ? t('continuing') : t('continue')}
               </button>
@@ -389,9 +392,9 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
           ) : null}
 
           {features.enablePasswordAuth ? (
-            <form onSubmit={handlePasswordSubmit} className="space-y-5">
+            <form onSubmit={handlePasswordSubmit} className="space-y-4">
               <div>
-                <label htmlFor="username" className="mb-2 block text-sm font-semibold text-slate-900">
+                <label htmlFor="username" className="mb-2 block text-[13px] font-medium text-slate-700">
                   {t('username')}
                 </label>
                 <input
@@ -402,13 +405,13 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
                   value={username}
                   onChange={(event) => setUsername(event.target.value)}
                   required
-                  className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-base text-black outline-none transition placeholder:text-slate-400 focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
+                  className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-base text-black outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
                   placeholder={t('usernamePlaceholder')}
                 />
               </div>
 
               <div>
-                <label htmlFor="password" className="mb-2 block text-sm font-semibold text-slate-900">
+                <label htmlFor="password" className="mb-2 block text-[13px] font-medium text-slate-700">
                   {t('password')}
                 </label>
                 <PasswordInput
@@ -421,14 +424,14 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
                   placeholder={t('passwordPlaceholder')}
                   showLabel={t('showPassword')}
                   hideLabel={t('hidePassword')}
-                  inputClassName="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 pr-12 text-base text-black outline-none transition placeholder:text-slate-400 focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
+                  inputClassName="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 pr-12 text-base text-black outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={pendingAction !== null}
-                className="h-12 w-full rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 px-4 font-semibold text-white shadow-[0_12px_28px_rgba(37,99,235,0.24)] transition hover:from-blue-700 hover:to-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-12 w-full rounded-xl bg-blue-600 px-4 font-semibold text-white shadow-[0_10px_24px_rgba(37,99,235,0.20)] transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {pendingAction === 'submit' ? t('continuing') : t('continue')}
               </button>
@@ -449,7 +452,7 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
           {features.showGoogleOAuth ? (
             <>
               {hasPrimaryAuth ? (
-                <div className="my-6 flex items-center gap-3">
+                <div className="my-5 flex items-center gap-3">
                   <div className="h-px flex-1 bg-slate-200" />
                   <span className="text-xs text-slate-400">{t('or')}</span>
                   <div className="h-px flex-1 bg-slate-200" />
@@ -463,10 +466,10 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
             </>
           ) : null}
 
-          <p className="mt-6 text-center text-xs leading-5 text-slate-500">
+          <p className="mt-5 text-center text-xs leading-5 text-slate-500">
             {t('autoCreateHint')}
           </p>
-          <div className="mt-6 text-center">
+          <div className="mt-5 text-center">
             <Link
               href={{ pathname: '/' }}
               className="text-sm text-slate-500 transition hover:text-black"

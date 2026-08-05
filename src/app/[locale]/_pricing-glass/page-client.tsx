@@ -89,23 +89,30 @@ function IntervalSwitch({
 function PlanCapacity({ plan }: { readonly plan: GlassPlan }) {
   const t = useTranslations('pricing.glass')
   return (
-    <div className="mt-4 rounded-xl border border-[var(--glass-stroke-base)] px-3 py-3">
-      <p className="text-[11px] font-medium tracking-wide text-[var(--glass-text-tertiary)]">
-        {t('capacityTitle')}
-      </p>
-      <div className="mt-2 flex flex-col gap-1.5">
-        <span className="flex items-center gap-2 text-[13px] text-[var(--glass-text-primary)]">
-          <AppIcon name="video" className="h-3.5 w-3.5 shrink-0 text-[var(--glass-text-tertiary)]" aria-hidden="true" />
+    <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-[var(--glass-bg-muted)] px-3.5 py-4">
+      <div className="min-w-0">
+        <AppIcon
+          name="video"
+          className="h-4 w-4 text-[var(--glass-accent-from)]"
+          aria-hidden="true"
+        />
+        <p className="mt-3 text-[12px] leading-5 text-[var(--glass-text-primary)]">
           <span className="glass-num font-semibold">
             {t('capacityVideos', { count: formatCny(plan.monthlyVideos) })}
           </span>
-        </span>
-        <span className="flex items-center gap-2 text-[13px] text-[var(--glass-text-primary)]">
-          <AppIcon name="image" className="h-3.5 w-3.5 shrink-0 text-[var(--glass-text-tertiary)]" aria-hidden="true" />
+        </p>
+      </div>
+      <div className="min-w-0">
+        <AppIcon
+          name="image"
+          className="h-4 w-4 text-[var(--glass-accent-from)]"
+          aria-hidden="true"
+        />
+        <p className="mt-3 text-[12px] leading-5 text-[var(--glass-text-primary)]">
           <span className="glass-num font-semibold">
             {t('capacityImages', { count: formatCny(plan.monthlyImages) })}
           </span>
-        </span>
+        </p>
       </div>
     </div>
   )
@@ -133,35 +140,34 @@ function PlanCard({
 
   return (
     <article
-      className="glass-surface relative flex flex-col p-5"
+      className="glass-surface relative flex h-full flex-col border border-[var(--glass-stroke-base)] p-5 transition-[border-color,box-shadow,transform]"
       style={{
         borderRadius: 'var(--glass-radius-lg)',
         ...(owned
-          ? { boxShadow: '0 0 0 1.5px var(--glass-tone-success-fg), 0 8px 30px -12px rgba(0,0,0,0.25)' }
+          ? { boxShadow: '0 0 0 1.5px var(--glass-accent-from), 0 18px 44px -30px var(--glass-accent-shadow-strong)' }
           : featured
-            ? { boxShadow: '0 0 0 1.5px var(--glass-accent-from), 0 8px 30px -12px rgba(0,0,0,0.25)' }
-            : {}),
+            ? { boxShadow: '0 0 0 1px var(--glass-accent-from), 0 18px 44px -30px var(--glass-accent-shadow-strong)' }
+            : { boxShadow: '0 16px 42px -36px rgba(15, 23, 42, 0.45)' }),
       }}
     >
-      {owned ? (
-        <span className="absolute -top-2.5 left-5 rounded-full bg-[var(--glass-tone-success-fg)] px-2.5 py-0.5 text-[10px] font-semibold tracking-wide text-white">
-          {t('currentPlanBadge')}
-        </span>
-      ) : featured ? (
-        <span className="absolute -top-2.5 left-5 rounded-full bg-[var(--glass-accent-from)] px-2.5 py-0.5 text-[10px] font-semibold tracking-wide text-white">
-          {t('featuredBadge')}
-        </span>
-      ) : null}
-
-      <h2 className="text-[15px] font-semibold text-[var(--glass-text-primary)]">{plan.label}</h2>
+      <div className="flex min-h-7 items-start justify-between gap-2">
+        <h2 className="text-[17px] font-semibold tracking-tight text-[var(--glass-text-primary)]">
+          {plan.label}
+        </h2>
+        {owned || featured ? (
+          <span className="shrink-0 rounded-full bg-[var(--glass-tone-info-bg)] px-2.5 py-1 text-[10px] font-semibold leading-none text-[var(--glass-accent-from)] shadow-[var(--glass-tone-shadow)]">
+            {owned ? t('currentPlanBadge') : t('featuredBadge')}
+          </span>
+        ) : null}
+      </div>
       <p className="mt-1 min-h-[2.5rem] text-[12px] leading-5 text-[var(--glass-text-tertiary)]">
         {plan.tagline}
       </p>
 
       {/* Fixed heights on the price rows keep all five cards aligned even
           though only some of them carry a promo or a yearly total. */}
-      <div className="mt-3 flex items-baseline gap-1">
-        <span className="glass-num text-[1.75rem] font-semibold leading-none tracking-tight text-[var(--glass-text-primary)]">
+      <div className="mt-5 flex items-baseline gap-1.5">
+        <span className="glass-num text-[2rem] font-semibold leading-none tracking-[-0.035em] text-[var(--glass-text-primary)]">
           ¥{formatCny(interval === 'year' ? priced.monthlyEquivalentCny : priced.periodPriceCny)}
         </span>
         <span className="text-[12px] text-[var(--glass-text-tertiary)]">{t('perMonth')}</span>
@@ -185,32 +191,29 @@ function PlanCard({
         ) : null}
       </div>
 
-      <button
-        type="button"
-        disabled={busy || !paymentOpen}
-        onClick={onSubscribe}
-        className={cx(
-          'glass-btn-base mt-4 h-10 w-full rounded-xl text-[13px] font-medium disabled:cursor-not-allowed disabled:opacity-50',
-          featured ? 'glass-btn-primary' : 'glass-btn-secondary',
-        )}
-      >
-        {!paymentOpen ? t('paidBetaSoldOutCta') : busy ? t('subscribeBusy') : owned ? t('planExtendCta') : t('subscribe')}
-      </button>
-
-      <p className="glass-num mt-3 text-center text-[12px] text-[var(--glass-text-secondary)]">
+      <p className="glass-num mt-5 text-[13px] font-semibold text-[var(--glass-text-primary)]">
         {t('creditsPerMonth', { credits: formatCny(plan.creditsAmount) })}
       </p>
 
       <PlanCapacity plan={plan} />
 
-      <ul className="mt-4 flex flex-1 flex-col gap-1.5 text-[12px] leading-5 text-[var(--glass-text-secondary)]">
+      <ul className="mt-5 flex flex-1 flex-col gap-2 text-[12px] leading-5 text-[var(--glass-text-secondary)]">
         {plan.details.map((d) => (
-          <li key={d} className="flex items-start gap-1.5">
-            <Tick className="mt-1 h-3 w-3 shrink-0 text-[var(--glass-tone-success-fg)]" />
+          <li key={d} className="flex items-start gap-2">
+            <Tick className="mt-1 h-3 w-3 shrink-0 text-[var(--glass-accent-from)]" />
             {d}
           </li>
         ))}
       </ul>
+
+      <button
+        type="button"
+        disabled={busy || !paymentOpen}
+        onClick={onSubscribe}
+        className="glass-btn-base glass-btn-primary mt-6 h-11 w-full rounded-xl text-[13px] font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {!paymentOpen ? t('paidBetaSoldOutCta') : busy ? t('subscribeBusy') : owned ? t('planExtendCta') : t('subscribe')}
+      </button>
     </article>
   )
 }

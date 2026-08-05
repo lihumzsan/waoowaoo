@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { signIn, useSession } from 'next-auth/react'
 import { useLocale, useTranslations } from 'next-intl'
-import { AppIcon } from '@/components/ui/icons'
+import { AppIcon, GoogleLogoIcon } from '@/components/ui/icons'
 import { apiFetch } from '@/lib/api-fetch'
 import { createClientApiError } from '@/lib/errors/client'
 import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
@@ -301,7 +301,7 @@ export default function AccountSecurityTab({
           {showGoogleOAuth ? (
             <div className="rounded-xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)] p-4">
               <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--glass-text-primary)]">
-                <AppIcon name="chrome" className="h-4 w-4" />
+                <GoogleLogoIcon className="h-4 w-4" aria-hidden="true" />
                 {t('google')}
               </div>
               <p className="text-sm text-[var(--glass-text-secondary)]">
