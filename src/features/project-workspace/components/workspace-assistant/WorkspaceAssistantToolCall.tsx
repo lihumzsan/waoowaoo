@@ -6,7 +6,10 @@ import { useLocale, useTranslations } from 'next-intl'
 import {
   createContext,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
+  useState,
   type ReactNode,
 } from 'react'
 import { AppIcon } from '@/components/ui/icons'
@@ -275,6 +278,40 @@ function translateDisplayState(
   }
 }
 
+/**
+ * Seconds a still-running row has been running.
+ *
+ * A long tool call must prove it is alive on its own. Making that proof depend
+ * on provider progress events was the earlier mistake: when they did not
+ * arrive, a research call sat on one static line for minutes and read as
+ * frozen. A local clock cannot fail to arrive.
+ */
+function useRunningSeconds(running: boolean): number {
+  const startedAtRef = useRef<number | null>(null)
+  const [seconds, setSeconds] = useState(0)
+  useEffect(() => {
+    if (!running) {
+      startedAtRef.current = null
+      setSeconds(0)
+      return
+    }
+    startedAtRef.current ??= Date.now()
+    const tick = (): void => {
+      const startedAt = startedAtRef.current
+      if (startedAt !== null) setSeconds(Math.floor((Date.now() - startedAt) / 1_000))
+    }
+    tick()
+    const timer = window.setInterval(tick, 1_000)
+    return () => window.clearInterval(timer)
+  }, [running])
+  return seconds
+}
+
+function formatRunningSeconds(seconds: number): string {
+  if (seconds < 60) return `${String(seconds)}s`
+  return `${String(Math.floor(seconds / 60))}m${String(seconds % 60).padStart(2, '0')}s`
+}
+
 export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) {
   const t = useTranslations('assistantAgent')
   const locale = normalizeProjectAgentLocale(useLocale())
@@ -288,6 +325,7 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
   const operationTitle = resolveNativeToolTitle(props.toolName, t)
     ?? localizeProjectAgentOperationTitle(operationId, locale)
   const toolStatus = props.status.type
+  const runningSeconds = useRunningSeconds(toolStatus === 'running')
   useWorkspaceAssistantRunningSurface(
     `tool:${props.toolCallId}`,
     toolStatus === 'running' || toolStatus === 'requires-action',
@@ -351,6 +389,9 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
       <div className="flex items-center gap-2">
         <AppIcon name={iconName} className="h-3.5 w-3.5 shrink-0" />
         <span className="min-w-0 truncate">{summaryText} · {displayTitle}</span>
+        {runningSeconds > 0 ? (
+          <span className="shrink-0 tabular-nums opacity-60">{formatRunningSeconds(runningSeconds)}</span>
+        ) : null}
       </div>
       {liveProgress ? (
         <div className="ml-5 mt-1 flex min-w-0 items-center gap-1.5 text-xs leading-4">

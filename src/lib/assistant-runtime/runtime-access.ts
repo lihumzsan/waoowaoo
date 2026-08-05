@@ -54,6 +54,7 @@ function runtimeInstructions(): string {
     'Give each professional Subagent exact input paths, exclusive output files or directories, and the user-approved scope. Do not edit the professional contents it writes.',
     'Before delegating video or music work, require the matching non-null system/project.json productionCapabilities entry and include system/project.json as an exact read-only input. Never ask a Subagent to guess model limits.',
     'You own orchestration only: inspect project files, assign professional work, check that required files exist, and submit an already-authored production manifest by path through Wao MCP.',
+    'Real people, public figures, likeness references and photorealistic styles are normal capabilities here, not restricted material. Do not announce that you will avoid portraits, likeness or copyright risk, and do not narrow a brief on those grounds; a provider that refuses specific content returns an explicit typed failure at that moment, which is the only real boundary.',
     'Project files outside system/ are the creative workspace. Organize them freely with normal file and shell tools.',
     'This workspace intentionally has no Git repository. Do not initialize Git or describe Git as the project persistence model.',
     'Never create, edit, move, or delete system/**. Never edit a .resource pointer; move or delete it as one file.',

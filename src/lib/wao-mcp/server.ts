@@ -13,12 +13,15 @@ import type {
   WaoMcpOperationExecutor,
   WaoMcpOperationExecutorResult,
 } from './contracts'
+import { createScopedLogger } from '@/lib/logging/core'
 import { createWaoMcpOperationCatalog } from './operation-catalog'
 import { WAO_RUNTIME_TOKEN_MAX_TTL_SECONDS } from './runtime-token'
 
 // MCP server-to-client requests have their own 60 second SDK default, separate
 // from Codex's per-tool timeout. A billing elicitation is a user decision, so
 // keep it alive within (but safely below) the capability token lifetime.
+const mcpLogger = createScopedLogger({ module: 'wao-mcp.server' })
+
 const WAO_MCP_ELICITATION_TIMEOUT_MS = (
   WAO_RUNTIME_TOKEN_MAX_TTL_SECONDS - 5 * 60
 ) * 1_000
@@ -123,6 +126,14 @@ export function createWaoMcpServer(
       // token is what routes a notification back to that call. No token means
       // the client wants none, so nothing is sent.
       const progressToken = readProgressToken(request.params._meta)
+      // Whether the client asks for progress is not knowable from our side, and
+      // the answer decides whether live tool lines can exist at all. Record it
+      // once per call so real usage settles it instead of a guess.
+      mcpLogger.info({
+        action: 'wao_mcp.tool_call_received',
+        message: 'wao mcp tool call received',
+        details: { operationId: entry.operationId, progressRequested: progressToken !== null },
+      })
       const reportProgress = (message: string): void => {
         const text = message.trim()
         if (progressToken === null || !text) return
