@@ -87,6 +87,7 @@ export default function InAppAnnouncementHost({
       size="sm"
       title={current ? t(current.titleKey) : undefined}
       showCloseButton={false}
+      showDividers={false}
       closeOnBackdrop={false}
       closeOnEsc={false}
     >

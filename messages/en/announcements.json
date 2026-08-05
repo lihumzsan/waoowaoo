@@ -1,7 +1,7 @@
 {
   "canvasBetaWelcome": {
-    "title": "A quick heads-up: this is still Beta 👀",
-    "body": "We're still polishing things. You may run into slower loading, an occasional failed generation, or a page that takes a moment to catch up. Wait a bit or refresh before trying again; if it still looks wrong, send us a screenshot and we'll take a look.",
-    "action": "Got it, keep creating"
+    "title": "Welcome to waoowaoo Beta ✨",
+    "body": "We're exploring a new way to create: an Agent that becomes your directing partner, understands your ideas, shapes each scene, and helps turn inspiration into something real. This is still evolving, and you may encounter a few rough edges along the way—but we'll keep polishing every one of them. Thank you for being among the first to explore the future of Agent-powered directing with us.",
+    "action": "Let's explore"
   }
 }

@@ -17,7 +17,7 @@ export interface AnnouncementDefinition {
 const ANNOUNCEMENT_REGISTRY: readonly AnnouncementDefinition[] = [
   {
     id: 'canvas-beta-welcome',
-    version: 2,
+    version: 3,
     placement: 'workspace_canvas',
     surface: 'modal',
     titleKey: 'canvasBetaWelcome.title',
