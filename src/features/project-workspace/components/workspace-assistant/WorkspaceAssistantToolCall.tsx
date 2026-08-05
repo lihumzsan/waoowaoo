@@ -16,6 +16,7 @@ import { AppIcon } from '@/components/ui/icons'
 import { WebSourceFavicon } from './WebSourceFavicon'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
+import { resolveUnifiedErrorCode, type UnifiedErrorCode } from '@/lib/errors/codes'
 import type { AssistantRuntimeSessionTurnView } from '@/lib/assistant-runtime/view-contract'
 import { useWorkspaceAssistantRunningSurface } from './WorkspaceAssistantReasoning'
 import {
@@ -80,6 +81,16 @@ function readPublicWebUrl(value: unknown): string | null {
   } catch {
     return null
   }
+}
+
+/** Read only the canonical error projection carried by a failed tool result. */
+function resolveToolFailureCode(result: unknown): UnifiedErrorCode | null {
+  if (!isRecord(result) || result.ok !== false) return null
+  const error = isRecord(result.error) ? result.error : null
+  const details = isRecord(error?.details) ? error.details : null
+  const failure = isRecord(details?.failure) ? details.failure : null
+  return resolveUnifiedErrorCode(failure?.code)
+    ?? resolveUnifiedErrorCode(error?.code)
 }
 
 function resolveNativeToolTitle(toolName: string, t: AssistantAgentTranslator): string | null {
@@ -310,6 +321,7 @@ function formatRunningSeconds(seconds: number): string {
 
 export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) {
   const t = useTranslations('assistantAgent')
+  const tErrors = useTranslations('errors')
   const locale = normalizeProjectAgentLocale(useLocale())
   const context = useContext(WorkspaceAssistantToolCallContext)
   const repeatedEntry = context.repeatedByToolCallId.get(props.toolCallId)
@@ -352,6 +364,10 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
     ? resolveSubagentSummary(props.args, props.result, t)
     : null
   const summaryText = nativeSummary ?? translateDisplayState(displayState, t)
+  const failureCode = groupView ? null : resolveToolFailureCode(props.result)
+  const failureDetail = failureCode && tErrors.has(failureCode)
+    ? tErrors(failureCode)
+    : t('toolCall.failedDetail')
   const iconName = failed || interrupted ? 'alert' : 'settingsHex'
   const displayTitle = groupView
     ? props.toolName === 'web_search'
@@ -430,7 +446,7 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
       ) : null}
       {failed ? (
         <div className="ml-5 mt-1 rounded-lg bg-[var(--glass-tone-surface)] shadow-[var(--glass-tone-shadow)] px-2 py-1 text-xs leading-4">
-          {t('toolCall.failedDetail')}
+          {failureDetail}
         </div>
       ) : null}
     </div>

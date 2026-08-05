@@ -86,6 +86,65 @@ describe('Codex runtime terminal error projection', () => {
     })
   })
 
+  it('classifies the pinned provider billing fact without parsing its message', () => {
+    expect(normalizeAssistantRuntimeFailure({
+      message: 'provider-specific billing copy',
+      codexErrorInfo: 'usageLimitExceeded',
+      additionalDetails: null,
+    }, { providerCredentialMode: 'user-key' })).toEqual({
+      errorCode: 'PROVIDER_BILLING_REQUIRED',
+      errorMessage: 'provider-specific billing copy',
+    })
+  })
+
+  it('attributes provider billing to the platform when the platform owns the key', () => {
+    expect(normalizeAssistantRuntimeFailure({
+      message: 'provider-specific billing copy',
+      codexErrorInfo: 'usageLimitExceeded',
+      additionalDetails: null,
+    }, { providerCredentialMode: 'platform-key' })).toEqual({
+      errorCode: 'PLATFORM_PROVIDER_BILLING_REQUIRED',
+      errorMessage: 'provider-specific billing copy',
+    })
+  })
+
+  it('attributes a normalized Provider outage to the platform key owner', () => {
+    expect(normalizeAssistantRuntimeFailure({
+      message: 'slow_down',
+      codexErrorInfo: 'serverOverloaded',
+      additionalDetails: null,
+    }, { providerCredentialMode: 'platform-key' })).toEqual({
+      errorCode: 'PLATFORM_PROVIDER_UNAVAILABLE',
+      errorMessage: 'slow_down',
+    })
+  })
+
+  it('normalizes an upstream HTTP status carried by a structured Codex error', () => {
+    expect(normalizeAssistantRuntimeFailure({
+      message: 'upstream request failed',
+      codexErrorInfo: {
+        responseTooManyFailedAttempts: { httpStatusCode: 402 },
+      },
+      additionalDetails: null,
+    }, { providerCredentialMode: 'platform-key' })).toEqual({
+      errorCode: 'PLATFORM_PROVIDER_BILLING_REQUIRED',
+      errorMessage: 'upstream request failed',
+    })
+  })
+
+  it('normalizes provider authentication from the structured upstream status', () => {
+    expect(normalizeAssistantRuntimeFailure({
+      message: 'provider request rejected',
+      codexErrorInfo: {
+        httpConnectionFailed: { httpStatusCode: 401 },
+      },
+      additionalDetails: null,
+    }, { providerCredentialMode: 'platform-key' })).toEqual({
+      errorCode: 'PLATFORM_PROVIDER_AUTH_INVALID',
+      errorMessage: 'provider request rejected',
+    })
+  })
+
   it('keeps retry notifications non-terminal and persists the final typed failure', async () => {
     const projector = new AssistantRuntimeEventProjector({
       identity: {

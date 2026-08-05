@@ -1,5 +1,6 @@
 import { readRequestBufferWithLimit } from '@/lib/http/body-limits'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
+import { createScopedLogger } from '@/lib/logging/core'
 import {
   CODEX_MODEL_GATEWAY_ASSISTANT_ID,
   CodexModelGatewayError,
@@ -7,8 +8,11 @@ import {
 } from './contracts'
 import { resolveCodexModelGatewayUpstream } from './selection'
 import { requireCodexModelGatewayActiveTurn } from './active-turn-guard'
+import { projectCodexProviderResponse } from './error-projection'
 
 const CODEX_MODEL_REQUEST_MAX_BYTES = 16 * 1024 * 1024
+
+const gatewayLogger = createScopedLogger({ module: 'codex-gateway.model' })
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -114,24 +118,19 @@ async function readAndValidateBody(params: {
   return Buffer.from(JSON.stringify(parsed), 'utf8')
 }
 
-function projectProviderResponse(response: Response): Response {
-  const headers = new Headers()
-  const contentType = response.headers.get('content-type')?.trim()
-  const retryAfter = response.headers.get('retry-after')?.trim()
-  if (contentType) headers.set('Content-Type', contentType)
-  if (retryAfter) headers.set('Retry-After', retryAfter)
-  headers.set('Cache-Control', 'no-store')
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  })
+function readProviderRequestId(response: Response): string | null {
+  for (const name of ['x-request-id', 'x-oai-request-id', 'cf-ray']) {
+    const value = response.headers.get(name)?.trim()
+    if (value && value.length <= 256) return value
+  }
+  return null
 }
 
 /**
- * One transparent Responses API POST. Usage events stay in the provider body
- * and are consumed by Codex/app-server; this bridge never creates a second
- * usage or billing writer.
+ * One Responses API POST. Successful streams stay transparent; failures are
+ * normalized once into Codex's official error vocabulary. Usage events remain
+ * in the Provider body and this bridge never creates a second usage, billing,
+ * or terminal writer.
  */
 export async function proxyCodexResponsesRequest(params: {
   readonly request: Request
@@ -151,7 +150,7 @@ export async function proxyCodexResponsesRequest(params: {
     projectId: params.scope.projectId,
     assistantId: CODEX_MODEL_GATEWAY_ASSISTANT_ID,
   }
-  await requireCodexModelGatewayActiveTurn(scope, params.scope.nonce)
+  const activeTurn = await requireCodexModelGatewayActiveTurn(scope, params.scope.nonce)
   const upstream = await resolveCodexModelGatewayUpstream(scope)
   const body = await readAndValidateBody({
     request: params.request,
@@ -179,7 +178,34 @@ export async function proxyCodexResponsesRequest(params: {
     })
   } catch {
     params.request.signal.throwIfAborted()
-    throw new CodexModelGatewayError('PROVIDER_REQUEST_FAILED', 502)
+    gatewayLogger.warn({
+      action: 'codex_gateway.provider_request_failed',
+      message: 'Codex model Provider request failed before receiving a response',
+      projectId: scope.projectId,
+      userId: scope.userId,
+      details: {
+        turnId: activeTurn.turnId,
+        modelKey: upstream.modelKey,
+      },
+    })
+    throw new CodexModelGatewayError('PROVIDER_REQUEST_FAILED', 500)
   }
-  return projectProviderResponse(response)
+  const projection = await projectCodexProviderResponse(response)
+  if (projection.failureKind) {
+    gatewayLogger.warn({
+      action: 'codex_gateway.provider_response_failed',
+      message: 'Codex model Provider returned a non-success response',
+      projectId: scope.projectId,
+      userId: scope.userId,
+      details: {
+        turnId: activeTurn.turnId,
+        modelKey: upstream.modelKey,
+        providerStatus: projection.providerStatus,
+        providerCode: projection.providerCode,
+        providerRequestId: readProviderRequestId(response),
+        failureKind: projection.failureKind,
+      },
+    })
+  }
+  return projection.response
 }

@@ -148,7 +148,12 @@ function resolveUserAction(code: UnifiedErrorCode): UserErrorAction {
 }
 
 function resolveModelAction(code: UnifiedErrorCode): ModelErrorAction {
-  if (code === 'TASK_NOT_READY') return 'wait'
+  if (
+    code === 'TASK_NOT_READY'
+    || code === 'PLATFORM_PROVIDER_AUTH_INVALID'
+    || code === 'PLATFORM_PROVIDER_BILLING_REQUIRED'
+    || code === 'PLATFORM_PROVIDER_UNAVAILABLE'
+  ) return 'wait'
   if (
     code === 'INSUFFICIENT_BALANCE'
     || code === 'MODEL_NOT_CONFIGURED'

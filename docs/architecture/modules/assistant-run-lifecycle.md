@@ -95,5 +95,7 @@ View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 pl
   刷新可长期显示截断尾段 → 用重建猜测代替持久前缀 → durable prefix 与 seq 同存，严格续号
   （ARL-11）。
 - 旧链路已建立稳定错误码与本地化边界，但 Runtime 切换后的终态持久化又固定写一个通用失败码并丢弃
-  详情，socket 中断、配额、鉴权重新坍缩成同一个"服务器错误" → 同一可见性不变量换 writer 复发 →
-  projector 是终态错误的唯一解释者，映射到共享 error registry。
+  详情；第一次补救只枚举 Codex error enum，没有用真实 Provider 402 验证协议边界，`UnexpectedStatus`
+  仍被官方 Runtime 降成 `other` → 同一可见性不变量换 writer 后又漏掉真实入口 → 模型网关把 Provider
+  非成功响应投影到官方 Codex 已支持的结构化错误类别，projector 再作为终态错误的唯一解释者映射到共享
+  error registry，禁止维护 Runtime fork 或从错误文案反推状态。

@@ -34,6 +34,7 @@
     "architecture:impact": "node scripts/architecture-impact.mjs",
     "architecture:durable-budget": "node scripts/check-durable-kernel-budget.mjs",
     "runtime:codex:smoke": "tsx scripts/codex-runtime-smoke.ts",
+    "runtime:codex:gateway-error-smoke": "tsx scripts/codex-gateway-error-smoke.ts",
     "check:media-normalization": "tsx scripts/check-media-normalization.ts",
     "check:capability-catalog": "node scripts/check-capability-catalog.mjs",
     "check:pricing-catalog": "tsx --tsconfig tsconfig.runtime-scripts.json scripts/check-pricing-catalog.ts",

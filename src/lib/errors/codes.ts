@@ -156,6 +156,13 @@ export const ERROR_CATALOG = {
     userMessageKey: 'errors.PROVIDER_AUTH_INVALID',
     defaultMessage: 'Provider credentials are missing or invalid',
   },
+  PLATFORM_PROVIDER_AUTH_INVALID: defineErrorSpec(
+    'PLATFORM_PROVIDER_AUTH_INVALID',
+    503,
+    true,
+    ERROR_CATEGORY.PROVIDER,
+    'Platform model service credentials require attention',
+  ),
   PROVIDER_BILLING_REQUIRED: {
     httpStatus: 402,
     retryable: false,
@@ -163,6 +170,20 @@ export const ERROR_CATALOG = {
     userMessageKey: 'errors.PROVIDER_BILLING_REQUIRED',
     defaultMessage: 'Provider account billing requires attention',
   },
+  PLATFORM_PROVIDER_BILLING_REQUIRED: defineErrorSpec(
+    'PLATFORM_PROVIDER_BILLING_REQUIRED',
+    503,
+    true,
+    ERROR_CATEGORY.PROVIDER,
+    'Platform model service billing is temporarily unavailable',
+  ),
+  PLATFORM_PROVIDER_UNAVAILABLE: defineErrorSpec(
+    'PLATFORM_PROVIDER_UNAVAILABLE',
+    503,
+    true,
+    ERROR_CATEGORY.PROVIDER,
+    'Platform model service is temporarily unavailable',
+  ),
   QUOTA_EXCEEDED: {
     httpStatus: 429,
     retryable: true,

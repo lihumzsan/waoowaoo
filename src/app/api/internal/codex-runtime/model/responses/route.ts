@@ -50,6 +50,16 @@ export async function POST(request: Request): Promise<Response> {
     return await proxyCodexResponsesRequest({ request, scope })
   } catch (error) {
     if (error instanceof CodexModelGatewayError) {
+      if (
+        error.code === 'ASSISTANT_MODEL_NOT_CONFIGURED'
+        || error.code === 'ASSISTANT_MODEL_UNSUPPORTED'
+        || error.code === 'PROVIDER_RESPONSES_UNSUPPORTED'
+        || error.code === 'PROVIDER_CONFIG_UNAVAILABLE'
+        || error.code === 'PROVIDER_BASE_URL_INVALID'
+        || error.code === 'PROVIDER_REQUEST_FAILED'
+      ) {
+        return errorResponse(503, 'slow_down')
+      }
       return errorResponse(error.httpStatus, error.code)
     }
     if (request.signal.aborted) {
