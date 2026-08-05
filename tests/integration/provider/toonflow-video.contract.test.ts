@@ -253,4 +253,40 @@ describe('provider contract - Toonflow video', () => {
       { taskICode: 'cgt-task-456' },
     ])
   })
+
+  it('projects a post-accept copyright failure to a safe canonical rights error', async () => {
+    const providerFailReason =
+      'The request failed because the output video may be related to copyright restrictions.'
+    server!.defineScenario({
+      method: 'POST',
+      path: '/toonflow/video/getVideoStatus',
+      mode: 'fatal_error',
+      submitResponse: {
+        status: 200,
+        body: {
+          code: 200,
+          data: {
+            id: 'cgt-task-rights-789',
+            status: 'failed',
+            failReason: providerFailReason,
+          },
+        },
+      },
+    })
+
+    const result = await queryToonflowVideoStatus({
+      baseUrl: `${server!.baseUrl}/toonflow`,
+      apiKey: 'toonflow-video-key',
+      taskCode: 'cgt-task-rights-789',
+    })
+
+    expect(result).toEqual({
+      status: 'failed',
+      failureDisposition: 'permanent',
+      errorCode: 'CONTENT_RIGHTS_RESTRICTION',
+      error: 'CONTENT_RIGHTS_RESTRICTION',
+    })
+    expect(JSON.stringify(result)).not.toContain(providerFailReason)
+    expect(server!.getRequests('POST', '/toonflow/video/getVideoStatus')).toHaveLength(1)
+  })
 })

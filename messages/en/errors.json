@@ -15,6 +15,7 @@
   "GENERATION_TIMEOUT": "Generation timed out. Please retry",
   "GENERATION_QUEUE_TIMEOUT": "Generation waited in the provider queue for too long. Please submit it again later.",
   "SENSITIVE_CONTENT": "The external provider rejected this request under its content policy. Revise the request and try again.",
+  "CONTENT_RIGHTS_RESTRICTION": "The provider could not complete this generation because the result may involve copyrighted or otherwise protected material. Revise the concept or references, then try again.",
   "INVALID_PARAMS": "Invalid parameters",
   "PAYLOAD_TOO_LARGE": "The upload is too large. Choose a smaller file and try again.",
   "UPLOAD_FILE_EMPTY": "The selected file is empty. Choose another file.",

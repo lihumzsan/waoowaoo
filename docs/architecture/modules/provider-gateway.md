@@ -101,5 +101,9 @@ Provider 差异只停留在 `ai-providers` 的实现、`ai-exec` 的统一执行
   平台余额不足 → 用自然语言猜业务语义 → adapter 在协议边界产出 canonical code（PG-19）。
   该不变量随后换形式复发过一次：adapter 已抛 typed 错误，fence 却在用它判断 disposition 后重新
   包装成通用 code → 现在 typed code 与 disposition 写入同一 checkpoint，replay 重建同一错误。
+- Toonflow 视频任务已被 Provider 接受后返回 `failed + failReason`，adapter 却丢弃原因并统一抛成
+  `PROVIDER_SUBMISSION_REJECTED`，既谎报发生阶段又遮住版权限制等真实永久失败 → adapter 直接消费
+  结构化 `failReason`，映射稳定 typed code；未知的已接受失败保持 `GENERATION_FAILED`，绝不伪装成
+  提交拒绝或自动重提（PG-04/06/19）。
 - LLM adapter 曾把完整响应体、随后又把完整响应头写进例行 INFO 日志 → 把无界 Provider 元数据
   复制进日志，第一轮修复只覆盖 body → 只记录 URL、状态、session identity 与显式允许的诊断字段。

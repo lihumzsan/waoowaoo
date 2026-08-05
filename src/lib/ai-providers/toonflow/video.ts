@@ -12,6 +12,8 @@ import {
   fetchWithRetry,
 } from '@/lib/retry'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
+import { getErrorSpec, type UnifiedErrorCode } from '@/lib/errors/codes'
+import { createScopedLogger } from '@/lib/logging/core'
 import {
   TOONFLOW_SEEDANCE_2_FAST_MODEL_ID,
   TOONFLOW_SEEDANCE_2_FAST_WIRE_MODEL,
@@ -21,6 +23,13 @@ import {
 
 const TOONFLOW_SUBMIT_TIMEOUT_MS = 5 * 60_000
 const TOONFLOW_STATUS_TIMEOUT_MS = 60_000
+const TOONFLOW_RIGHTS_RESTRICTION_REASON =
+  'The request failed because the output video may be related to copyright restrictions.'
+
+const toonflowLogger = createScopedLogger({
+  module: 'ai-provider.toonflow',
+  provider: 'toonflow',
+})
 
 type ToonflowReference =
   | {
@@ -53,8 +62,8 @@ type ToonflowVideoPollResult =
   | { status: 'completed'; videoUrl: string }
   | {
     status: 'failed'
-    failureDisposition: 'permanent'
-    errorCode: 'PROVIDER_SUBMISSION_REJECTED'
+    failureDisposition: 'retryable' | 'permanent'
+    errorCode: UnifiedErrorCode
     error: string
   }
 
@@ -74,6 +83,13 @@ function readNumericCode(value: unknown): number | null {
     return Number.parseInt(value.trim(), 10)
   }
   return null
+}
+
+function classifyToonflowTerminalFailure(reason: string): UnifiedErrorCode {
+  if (reason === TOONFLOW_RIGHTS_RESTRICTION_REASON) {
+    return 'CONTENT_RIGHTS_RESTRICTION'
+  }
+  return 'GENERATION_FAILED'
 }
 
 function buildToonflowUrl(baseUrl: string | undefined, path: string): string {
@@ -343,11 +359,25 @@ export async function queryToonflowVideoStatus(input: {
     }
   }
   if (status === 'failed') {
+    const providerFailReason = readString(data?.failReason)
+    const errorCode = classifyToonflowTerminalFailure(providerFailReason)
+    const retryable = getErrorSpec(errorCode).retryable
+    toonflowLogger.error({
+      action: 'toonflow.video.generation_failed',
+      message: 'Toonflow accepted video generation ended in failed state',
+      errorCode,
+      retryable,
+      details: {
+        taskCode: input.taskCode,
+        providerFailReason: providerFailReason.slice(0, 512) || null,
+        providerFailReasonTruncated: providerFailReason.length > 512,
+      },
+    })
     return {
       status: 'failed',
-      failureDisposition: 'permanent',
-      errorCode: 'PROVIDER_SUBMISSION_REJECTED',
-      error: `TOONFLOW_VIDEO_TASK_FAILED:${input.taskCode}`,
+      failureDisposition: retryable ? 'retryable' : 'permanent',
+      errorCode,
+      error: errorCode,
     }
   }
   throw new Error(`TOONFLOW_VIDEO_STATUS_UNKNOWN:${status || '<missing>'}`)

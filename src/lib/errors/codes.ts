@@ -275,6 +275,13 @@ export const ERROR_CATALOG = {
     userMessageKey: 'errors.SENSITIVE_CONTENT',
     defaultMessage: 'Sensitive content detected',
   },
+  CONTENT_RIGHTS_RESTRICTION: defineErrorSpec(
+    'CONTENT_RIGHTS_RESTRICTION',
+    422,
+    false,
+    ERROR_CATEGORY.CONTENT,
+    'Generated content may involve copyrighted or otherwise protected material',
+  ),
   GENERATION_TIMEOUT: {
     httpStatus: 504,
     retryable: true,
