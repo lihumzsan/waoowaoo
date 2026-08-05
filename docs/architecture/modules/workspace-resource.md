@@ -37,9 +37,10 @@ Episode、Chapter、Scene、Shot、Canon 都是用户目录与文件内容，不
   `resourceId` 只承担身份，绝不拼入用户路径或名称。同名候选只使用可读、可排序的序号，其他路径
   冲突必须显式失败。Agent 不传 outputPath、内部 Resource ID 或媒体后缀协议；Runtime 路径永远
   不是项目路径。
-- **WR-08 — 执行前冻结精确输入。** 调用方只提交 `resourceId + contentVersion + role + position`；
-  服务端验证 Project 所有权并补充当时路径供显示与审计。执行、重试和 Lineage 都只消费冻结版本，
-  不能在 Task 开始后重新按路径读取。
+- **WR-08 — 执行前冻结精确输入。** 调用方只提交有序的
+  `resourceId + contentVersion + role + channel` 引用；数组顺序是公开输入的唯一顺序事实，服务端据此
+  生成内部冻结位置、验证 Project 所有权并补充当时路径供显示与审计。执行、重试和 Lineage 都只
+  消费冻结版本，不能在 Task 开始后重新按路径读取。
 - **WR-09 — 一个异步终态 writer。** 生成 Operation 的 commit 事务预留 pending Resource 与 Task；
   Task 终态在同一事务物化版本、Lineage、Resource 状态、Task 终态与通知。replay 返回同一事实，
   不能生成第二 Resource 或重复计费。
@@ -95,7 +96,10 @@ Episode、Chapter、Scene、Shot、Canon 都是用户目录与文件内容，不
   媒体指针只以 identity/路径/存在性/类型参与。
 - 专业 Skill 各自手写字段示例，执行层又是另一份 strict 权威，真实 worker 写出的字段被拒；错误
   投影还剥掉了字段级 issue，模型转而猜路径反复重试 → 同一契约两份表示 → 三种媒体直接复用同一
-  Output Registry schema，失败返回有界字段 corrections。
+  Output Registry schema，失败返回有界字段 corrections。后来公开引用又同时要求数组顺序和手写
+  `position`，且 corrections 仍读取 null 规范化前的父级 union issue，真实字段错误再次被藏住 →
+  上一版只限制了错误输出大小，没有删除重复顺序事实，也没有规定投影发生在规范化之后 → 公开引用
+  只保留数组顺序，服务端生成冻结位置，corrections 只消费最终规范化输入的叶子 issue（WR-08）。
 - 文件型 Manifest、Agent outputPath、必须 mkdir、`.resource` 媒体指针与 MCP 前后同步串成多级协议；
   任一层字段、路径或同步状态漂移都会在真实生产中表现为参数失败或“资源仍在同步”，此前修复只补
   单个校验点所以换形式复发 → 删除整条文件/指针协议，公开输入只保留批量 items、目标文件夹路径、

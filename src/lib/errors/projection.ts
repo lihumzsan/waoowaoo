@@ -42,14 +42,18 @@ const PUBLIC_DETAIL_KEYS = new Set([
   'available',
   'code',
   'field',
+  'inputMode',
+  'limit',
   'maxBytes',
   'maxChars',
   'maxFiles',
+  'mediaType',
   'required',
   'reasonCode',
   'retryAfter',
   'retryAfterSeconds',
   'workspacePath',
+  'value',
 ])
 
 function isPublicDetailValue(value: unknown): boolean {
@@ -98,12 +102,30 @@ function projectModelCorrection(value: unknown): Record<string, unknown> | null 
   if (typeof source.targetPath === 'string' && source.targetPath.length <= 256) {
     projected.targetPath = source.targetPath
   }
+  if (typeof source.issueCode === 'string' && source.issueCode.length <= 64) {
+    projected.issueCode = source.issueCode
+  }
+  if (typeof source.reason === 'string' && source.reason.length <= 512) {
+    projected.reason = source.reason
+  }
   if (
     Array.isArray(source.allowedKeys)
     && source.allowedKeys.length <= 50
     && source.allowedKeys.every((key) => typeof key === 'string' && key.length <= 128)
   ) {
     projected.allowedKeys = source.allowedKeys
+  }
+  if (
+    Array.isArray(source.allowedValues)
+    && source.allowedValues.length <= 20
+    && source.allowedValues.every((item) => (
+      item === null
+      || typeof item === 'string' && item.length <= 128
+      || typeof item === 'number' && Number.isFinite(item)
+      || typeof item === 'boolean'
+    ))
+  ) {
+    projected.allowedValues = source.allowedValues
   }
   return projected
 }

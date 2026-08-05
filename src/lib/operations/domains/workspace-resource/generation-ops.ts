@@ -83,7 +83,7 @@ import { AppError } from '@/lib/errors/app-error'
 import { describeUnknownError } from '@/lib/errors/normalize'
 
 const MAX_BATCH_ITEMS = OPERATION_EXECUTION_MAX_TASKS
-const MEDIA_GENERATION_PLAN_CONTRACT_REVISION = 'workspace-resource-generation-batch/v5'
+const MEDIA_GENERATION_PLAN_CONTRACT_REVISION = 'workspace-resource-generation-batch/v6'
 
 const workspaceResourceJsonValueSchema: z.ZodType<WorkspaceResourceJsonValue> = z.lazy(() => z.union([
   z.string(),
@@ -246,7 +246,9 @@ function providerPositions(
   references: readonly z.infer<typeof generationReferenceSchema>[],
   channel: 'image' | 'audio' | 'video',
 ): number[] {
-  return references.filter((reference) => reference.channel === channel).map((reference) => reference.position)
+  return references.flatMap((reference, position) => (
+    reference.channel === channel ? [position] : []
+  ))
 }
 
 function providerPlaceholderUrls(count: number, mediaType: 'image' | 'audio' | 'video'): string[] {
@@ -596,7 +598,9 @@ async function preflightFrozenRetry(input: {
   const audioPositions = new Set(input.source.resource.audioInputPositions)
   const videoPositions = new Set(input.source.resource.videoInputPositions)
   const references: Array<z.infer<typeof generationReferenceSchema>> = input.source.resource.inputs.map((reference) => ({
-    ...reference,
+    resourceId: reference.resourceId,
+    contentVersion: reference.contentVersion,
+    role: reference.role,
     channel: imagePositions.has(reference.position)
       ? 'image'
       : audioPositions.has(reference.position)
@@ -678,11 +682,11 @@ async function freezeReferences(
   const frozen = await resolveWorkspaceResourceInputs(prisma, {
     userId: ctx.userId,
     projectId: ctx.projectId,
-    references: references.map((reference) => ({
+    references: references.map((reference, position) => ({
       resourceId: reference.resourceId,
       contentVersion: reference.contentVersion,
       role: reference.role,
-      position: reference.position,
+      position,
     })),
   })
   const resources = frozen.length === 0 ? [] : await prisma.workspaceResource.findMany({
@@ -1222,7 +1226,7 @@ export function createWorkspaceResourceGenerationOperations(): ProjectAgentOpera
       summary: 'Explicitly save one text or structured document as a canonical project Resource. Runtime scratch and in-turn professional results are never saved implicitly.',
       intent: 'act',
       channels: { tool: true, api: true, mcp: true },
-      toolContractRevision: 'save_project_document/v3',
+      toolContractRevision: 'save_project_document/v4',
       effects: {
         writes: true,
         workspaceResourceImpact: 'workspace_resources',
@@ -1291,11 +1295,11 @@ export function createWorkspaceResourceGenerationOperations(): ProjectAgentOpera
         const references = await resolveWorkspaceResourceInputs(tx, {
           userId: ctx.userId,
           projectId: ctx.projectId,
-          references: (input.references ?? []).map((reference) => ({
+          references: (input.references ?? []).map((reference, position) => ({
             resourceId: reference.resourceId,
             contentVersion: reference.contentVersion,
             role: reference.role,
-            position: reference.position,
+            position,
           })),
         })
         const reserved = await reserveWorkspaceResourceInTransaction(tx, {

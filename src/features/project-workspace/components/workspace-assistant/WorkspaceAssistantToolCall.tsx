@@ -78,6 +78,87 @@ function resolveToolFailureCode(result: unknown): UnifiedErrorCode | null {
     ?? resolveUnifiedErrorCode(error?.code)
 }
 
+type ToolFailureCorrection = {
+  readonly action: 'add_required_field' | 'fix_invalid_value' | 'move_unknown_field' | 'remove_unknown_field'
+  readonly field: string
+  readonly issueCode: string | null
+  readonly target: string | null
+  readonly allowedValues: readonly string[]
+}
+
+const TOOL_FAILURE_CORRECTION_ACTIONS = new Set<ToolFailureCorrection['action']>([
+  'add_required_field',
+  'fix_invalid_value',
+  'move_unknown_field',
+  'remove_unknown_field',
+])
+
+function resolveToolFailureCorrection(result: unknown): ToolFailureCorrection | null {
+  if (!isRecord(result) || result.ok !== false) return null
+  const error = isRecord(result.error) ? result.error : null
+  const details = isRecord(error?.details) ? error.details : null
+  const first = Array.isArray(details?.corrections) && isRecord(details.corrections[0])
+    ? details.corrections[0]
+    : null
+  const field = readText(first?.fieldPath)
+  const action = readText(first?.action)
+  if (!field || !action || !TOOL_FAILURE_CORRECTION_ACTIONS.has(action as ToolFailureCorrection['action'])) return null
+  const allowedValues = Array.isArray(first?.allowedValues)
+    ? first.allowedValues.flatMap((value) => (
+        value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+          ? [String(value)]
+          : []
+      ))
+    : []
+  return {
+    action: action as ToolFailureCorrection['action'],
+    field,
+    issueCode: readText(first?.issueCode),
+    target: readText(first?.targetPath),
+    allowedValues,
+  }
+}
+
+function translateToolFailureCorrection(
+  correction: ToolFailureCorrection,
+  t: AssistantAgentTranslator,
+): string {
+  if (correction.action === 'add_required_field') {
+    return t('toolCall.validationMissing', { field: correction.field })
+  }
+  if (correction.action === 'move_unknown_field' && correction.target) {
+    return t('toolCall.validationMove', { field: correction.field, target: correction.target })
+  }
+  if (correction.action === 'remove_unknown_field') {
+    return t('toolCall.validationUnsupported', { field: correction.field })
+  }
+  if (correction.allowedValues.length > 0) {
+    return t('toolCall.validationAllowedValues', {
+      field: correction.field,
+      values: correction.allowedValues.join(', '),
+    })
+  }
+  if (correction.issueCode === 'invalid_type') {
+    return t('toolCall.validationInvalidType', { field: correction.field })
+  }
+  if (correction.issueCode === 'too_small') {
+    return t('toolCall.validationTooSmall', { field: correction.field })
+  }
+  if (correction.issueCode === 'too_big') {
+    return t('toolCall.validationTooBig', { field: correction.field })
+  }
+  return t('toolCall.validationInvalid', { field: correction.field })
+}
+
+function resolveToolFailureReason(result: unknown): { field: string | null; reasonCode: string } | null {
+  if (!isRecord(result) || result.ok !== false) return null
+  const error = isRecord(result.error) ? result.error : null
+  const details = isRecord(error?.details) ? error.details : null
+  const reasonCode = readText(details?.reasonCode)
+  if (!reasonCode) return null
+  return { field: readText(details?.field), reasonCode }
+}
+
 function resolveNativeToolTitle(toolName: string, t: AssistantAgentTranslator): string | null {
   switch (toolName) {
     case 'shell': return t('runtime.native.shell')
@@ -303,9 +384,24 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
   const interrupted = groupView ? groupView.interrupted > 0 : displayState === 'interrupted'
   const summaryText = translateDisplayState(displayState, t)
   const failureCode = groupView ? null : resolveToolFailureCode(props.result)
-  const failureDetail = failureCode && tErrors.has(failureCode)
+  const failureCorrection = groupView ? null : resolveToolFailureCorrection(props.result)
+  const failureReason = groupView ? null : resolveToolFailureReason(props.result)
+  let failureDetail = failureCode && tErrors.has(failureCode)
     ? tErrors(failureCode)
     : t('toolCall.failedDetail')
+  if (failureReason) {
+    failureDetail = tErrors.has(failureReason.reasonCode as UnifiedErrorCode)
+      ? tErrors(failureReason.reasonCode as UnifiedErrorCode)
+      : failureReason.field
+        ? t('toolCall.reasonFieldDetail', {
+            field: failureReason.field,
+            reasonCode: failureReason.reasonCode,
+          })
+        : t('toolCall.reasonDetail', { reasonCode: failureReason.reasonCode })
+  }
+  if (failureCorrection) {
+    failureDetail = translateToolFailureCorrection(failureCorrection, t)
+  }
   const iconName = failed || interrupted ? 'alert' : 'settingsHex'
   const displayTitle = !groupView || runtimeSkillId || props.toolName === 'web_search'
     ? operationTitle

@@ -43,12 +43,16 @@ describe('WorkspaceResource Operation registry conformance', () => {
       expect(published, operationId).not.toContain('parentFolderId')
       expect(published, operationId).not.toContain('outputPath')
       expect(published, operationId).not.toContain('modelKey')
+      expect(published, operationId).not.toContain('"position"')
       if (operationId === 'create_image') expect(published).not.toContain('project.style')
       expect(published, operationId).not.toContain('generationOptions')
       if (operationId === 'create_image' || operationId === 'create_video') {
         expect(published, operationId).not.toContain('aspectRatio')
       }
     }
+    const saveDocument = registry.save_project_document
+    if (!saveDocument) throw new Error('save_project_document missing')
+    expect(JSON.stringify(saveDocument.toolInputSchema)).not.toContain('"position"')
     const getResource = registry.get_resource
     if (!getResource) throw new Error('Required Resource read operation missing')
     const getResourceInput = JSON.stringify(getResource.toolInputSchema)
@@ -99,7 +103,7 @@ describe('WorkspaceResource Operation registry conformance', () => {
 
   it('requires complete reusable-asset identity while the server owns framing', () => {
     const batch = {
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
       outputKind: 'asset_generation_batch' as const,
       batchId: 'assets-v1',
       decision: 'produce' as const,
@@ -126,7 +130,7 @@ describe('WorkspaceResource Operation registry conformance', () => {
     }).success).toBe(false)
   })
 
-  it('rejects cross-modality schemas, duplicate positions, paths, and duplicate retry identities', () => {
+  it('rejects cross-modality schemas, internal reference positions, paths, and duplicate retry identities', () => {
     const registry = createProjectAgentOperationRegistryForApi()
     const image = registry.create_image
     const video = registry.create_video
@@ -139,11 +143,16 @@ describe('WorkspaceResource Operation registry conformance', () => {
     expect(video.inputSchema.safeParse({
       request: { kind: 'new', items: [{
         itemId: 'shot', name: 'Shot', mediaType: 'video', schemaId: 'project.video_segment',
-        prompt: 'A shot.', durationSeconds: 15, outputPath: 'forbidden',
+        prompt: 'A shot.', durationSeconds: 15,
         references: [
           { resourceId: 'res_a', contentVersion: 1, role: 'reference_image', position: 0, channel: 'image' },
-          { resourceId: 'res_b', contentVersion: 1, role: 'reference_image', position: 0, channel: 'image' },
         ],
+      }] },
+    }).success).toBe(false)
+    expect(video.inputSchema.safeParse({
+      request: { kind: 'new', items: [{
+        itemId: 'shot', name: 'Shot', mediaType: 'video', schemaId: 'project.video_segment',
+        prompt: 'A shot.', durationSeconds: 15, outputPath: 'forbidden',
       }] },
     }).success).toBe(false)
     expect(image.inputSchema.safeParse({ request: { kind: 'retry', resourceIds: ['res_a', 'res_a'] } }).success).toBe(false)
@@ -166,13 +175,26 @@ describe('WorkspaceResource Operation registry conformance', () => {
         kind: 'new',
         items: [{
           ...item,
-          references: [{
-            resourceId: 'res_video',
-            contentVersion: 1,
-            role: 'reference_video',
-            position: 0,
-            channel: 'video',
-          }],
+          references: [
+            {
+              resourceId: 'res_image',
+              contentVersion: 1,
+              role: 'reference_image',
+              channel: 'image',
+            },
+            {
+              resourceId: 'res_audio',
+              contentVersion: 1,
+              role: 'reference_audio',
+              channel: 'audio',
+            },
+            {
+              resourceId: 'res_video',
+              contentVersion: 1,
+              role: 'reference_video',
+              channel: 'video',
+            },
+          ],
         }],
       },
     }).success).toBe(true)
@@ -185,7 +207,6 @@ describe('WorkspaceResource Operation registry conformance', () => {
             resourceId: 'res_image',
             contentVersion: 1,
             role: 'reference',
-            position: 0,
             channel: 'image',
           }],
         }],
@@ -194,11 +215,10 @@ describe('WorkspaceResource Operation registry conformance', () => {
   })
 
   it('keeps the public 16-image reference boundary representable in the frozen Task envelope', () => {
-    const references = Array.from({ length: 16 }, (_, position) => ({
-      resourceId: `res_${String(position)}`,
+    const references = Array.from({ length: 16 }, (_, index) => ({
+      resourceId: `res_${String(index)}`,
       contentVersion: 1,
       role: 'reference',
-      position,
       channel: 'image' as const,
     }))
     const image = createProjectAgentOperationRegistryForApi().create_image
@@ -213,14 +233,14 @@ describe('WorkspaceResource Operation registry conformance', () => {
       resource: {
         resourceId: 'res_output', workspacePath: 'Derived-res_output', mediaType: 'image', schemaId: 'generic.image',
         inputHash: 'a'.repeat(64), prompt: 'Use every reference.', modelKey: 'openrouter::openai/gpt-image-2',
-        inputs: references.map((reference) => ({
+        inputs: references.map((reference, position) => ({
           resourceId: reference.resourceId,
           contentVersion: reference.contentVersion,
           role: reference.role,
-          position: reference.position,
-          workspacePath: `ref-${String(reference.position)}`,
+          position,
+          workspacePath: `ref-${String(position)}`,
         })),
-        imageInputPositions: references.map((reference) => reference.position), audioInputPositions: [], videoInputPositions: [],
+        imageInputPositions: references.map((_, position) => position), audioInputPositions: [], videoInputPositions: [],
         toolCallId: null, sourceTurnId: null,
       },
       imageModel: 'openrouter::openai/gpt-image-2', count: 1, generationOptions: {},

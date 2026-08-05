@@ -63,7 +63,7 @@ description: Direct screenplay-based video generation with explicit state contin
 - `text_to_video` 不传媒体参考；`first_frame` 恰好传一张 `role=first_frame` 图片；`first_last_frame` 恰好传一张 `role=first_frame` 和一张 `role=last_frame` 图片；`reference` 使用 `role=reference_image`、`reference_audio`、`reference_video`，并遵守注入的各通道数量与总文件数上限。
 - 帧模式与参考模式互斥。普通参考图永远不是首帧；只有创意明确要求画面从该图开始运动时才使用 `first_frame`。末帧不能单独存在。
 - 图片、声音和视频各自按传入顺序独立编号。中文提示词使用 `@图片N` / `@音频N` / `@视频N`，英文使用 `@Image N` / `@Audio N` / `@Video N`；不要混写双重编号。
-- `[参考]` 中每个引用用一句话声明唯一主要用途，例如角色身份、场景结构、关键道具、锁定音色或参考运动。每个 item 的 `references` 只列当前 Segment 实际使用的 ready Resource，精确复制 `resourceId`、`contentVersion`、`role`、`position` 与 `channel`，并与 Prompt 中各媒体的顺序一致。路径不是 Resource 身份，不得提交。
+- `[参考]` 中每个引用用一句话声明唯一主要用途，例如角色身份、场景结构、关键道具、锁定音色或参考运动。每个 item 的 `references` 只列当前 Segment 实际使用的 ready Resource，精确复制 `resourceId`、`contentVersion`、`role` 与 `channel`，并按 Prompt 中各媒体的使用顺序排列。内部位置由服务端生成；路径不是 Resource 身份，不得提交。
 - 不传无关素材，不从文件名、近似名称或描述猜身份，不让参考图的偶然构图、姿态、光线或噪点代替本段导演判断。
 - `reference_audio` 是视频模型的内容条件，不是 `generateAudio` 开关，也不是后期背景音乐；当 `referenceAudioRequiresVisual=true` 时，必须同时提供至少一个 `reference_image` 或 `reference_video`。`reference_video` 是运动/内容条件，只在 `maxReferenceVideos > 0` 时使用。
 

@@ -6,6 +6,7 @@ import { publishOperationMutationReceipt } from '@/lib/workspace-resource/resour
 import { resolveOperationScopeInput } from './environment-input'
 import {
   buildProjectAgentToolInputCorrections,
+  expandProjectAgentToolInputIssues,
   normalizeProjectAgentToolInput,
 } from './tool-input-schema'
 import {
@@ -111,15 +112,20 @@ export async function prepareProjectAgentOperationInput(params: {
     : normalizedBusinessInput
   const parsedInput = params.operation.inputSchema.safeParse(canonicalInput)
   if (!parsedInput.success) {
+    const issues = expandProjectAgentToolInputIssues({
+      input: canonicalInput,
+      toolInputSchema: params.operation.toolInputSchema,
+      issues: parsedInput.error.issues,
+    })
     throw new ApiError('INVALID_PARAMS', {
       code: 'OPERATION_INPUT_INVALID',
       operationId: params.operation.id,
       message: 'PROJECT_AGENT_INVALID_OPERATION_INPUT',
-      issues: parsedInput.error.issues,
+      issues,
       corrections: buildProjectAgentToolInputCorrections({
         input: canonicalInput,
         toolInputSchema: params.operation.toolInputSchema,
-        issues: parsedInput.error.issues,
+        issues,
       }),
     })
   }

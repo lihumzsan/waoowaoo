@@ -15,6 +15,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
+function readSafeReasonCode(details: Record<string, unknown> | null | undefined): string | null {
+  const value = typeof details?.reasonCode === 'string'
+    ? details.reasonCode
+    : typeof details?.code === 'string'
+      ? details.code
+      : ''
+  const normalized = value.trim()
+  return /^[A-Z][A-Z0-9_]{0,127}$/.test(normalized) ? normalized : null
+}
+
 export function extractPrismaMissingColumn(error: unknown): string | null {
   if (!isRecord(error)) return null
   if (error.code !== 'P2022') return null
@@ -51,6 +61,7 @@ export function normalizeOperationExecutionToolError(params: {
     message: 'assistant tool execution failed; error normalized into tool payload',
     operationId: params.operationId,
     errorCode: params.error instanceof ApiError ? params.error.code : toolError.code,
+    details: toolError.details,
     error: params.error instanceof Error
       ? { name: params.error.name, message: params.error.message, stack: params.error.stack }
       : { message: toolError.message },
@@ -93,11 +104,8 @@ function buildOperationExecutionToolError(params: {
         fallbackCode: 'INTERNAL_ERROR',
       }))
   const safeDetails = projectModelErrorDetails(normalized.details)
-  const reasonCode = typeof safeDetails.reasonCode === 'string'
-    ? safeDetails.reasonCode
-    : typeof safeDetails.code === 'string'
-      ? safeDetails.code
-      : null
+  const reasonCode = readSafeReasonCode(normalized.details)
+    ?? readSafeReasonCode(safeDetails)
   const failure = projectErrorForModel(normalized.code)
   return buildToolError({
     code: 'OPERATION_EXECUTION_FAILED',

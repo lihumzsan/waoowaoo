@@ -22,9 +22,8 @@ export const generationReferenceSchema = z.object({
   contentVersion: z.number().int().positive()
     .describe('Exact immutable input version.'),
   role: z.string().trim().min(1).max(64),
-  position: z.number().int().nonnegative(),
   channel: z.enum(['context', 'image', 'audio', 'video']),
-}).strict()
+}).strict().describe('One ordered reference. Array order is authoritative; the server assigns frozen internal positions.')
 
 export const videoGenerationReferenceSchema = z.discriminatedUnion('channel', [
   generationReferenceSchema.extend({
@@ -115,7 +114,7 @@ export const videoGenerationItemSchema = z.object({
 }).strict()
 
 function validateGenerationItems(
-  value: { readonly items: readonly { readonly itemId: string; readonly count: number; readonly references?: readonly { readonly position: number }[] }[] },
+  value: { readonly items: readonly { readonly itemId: string; readonly count: number }[] },
   context: z.RefinementCtx,
 ): void {
   if (new Set(value.items.map((item) => item.itemId)).size !== value.items.length) {
@@ -129,12 +128,6 @@ function validateGenerationItems(
       message: `The expanded batch may contain at most ${String(OPERATION_EXECUTION_MAX_TASKS)} tasks.`,
     })
   }
-  value.items.forEach((item, index) => {
-    const positions = item.references?.map((reference) => reference.position) ?? []
-    if (new Set(positions).size !== positions.length) {
-      context.addIssue({ code: 'custom', path: ['items', index, 'references'], message: 'Reference positions must be unique.' })
-    }
-  })
 }
 
 const batchCommonShape = {
@@ -170,7 +163,7 @@ const assetGenerationItemSchema = imageGenerationItemSchema.safeExtend({
 }).strict()
 
 export const assetGenerationBatchOutputSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   outputKind: z.literal('asset_generation_batch'),
   batchId: z.string().trim().min(1).max(191),
   decision: z.enum(['produce', 'no_assets']),
@@ -189,7 +182,7 @@ export const assetGenerationBatchOutputSchema = z.object({
 })
 
 export const videoGenerationBatchOutputSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   outputKind: z.literal('video_generation_batch'),
   batchId: z.string().trim().min(1).max(191),
   overview: z.string().trim().min(1).max(8_000),
@@ -199,7 +192,7 @@ export const videoGenerationBatchOutputSchema = z.object({
 }).strict().superRefine(validateGenerationItems)
 
 export const audioGenerationBatchOutputSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   outputKind: z.literal('audio_generation_batch'),
   batchId: z.string().trim().min(1).max(191),
   decision: z.enum(['produce', 'no_music']),
