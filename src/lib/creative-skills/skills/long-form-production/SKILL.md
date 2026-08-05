@@ -7,19 +7,15 @@ description: Organize long-form creative work into resumable production units an
 
 ## 作用
 
-把长剧、电影或其他长篇内容组织成 Agent 能长期维护、并行创作、批量生产和局部续跑的工作区结构计划。Episode、Chapter、Scene 不是系统实体；作品的自然层级由目录路径和本次 `long_form_plan` 描述。
+把长剧、电影或其他长篇内容组织成 Agent 能长期维护、并行创作、批量生产和局部续跑的连续性与制作单元计划。Episode、Chapter、Scene 不是系统实体；作品的自然层级由内容本身和本次 `long_form_plan` 描述。
 
 ## 第一原则
 
 - 精确剧本和用户确认内容是故事事实；视觉方向、类型惯例和研究不能改写它。
-- 目录服务于理解和生产，不为了形式机械拆分。短内容不需要长篇结构。
+- 制作单元服务于理解和生产，不为了形式机械拆分。短内容不需要长篇结构。
 - 每份事实只有一个维护位置。共享人物、世界规则和持续状态只进入 `continuityFacts`；局部范围进入对应 `productionUnits`，不复制一份会漂移的共享事实。
 - 主 Agent 是 `long_form_plan` 的唯一 writer；其他专业领域也各自只形成一个固定的严格 JSON。跨领域步骤引用这些结果，不复制或改写其专业内容。
 - 系统只保证提交时冻结精确 Resource 版本，不理解或替 Agent 判断剧情一致性。
-
-## 工作区结构
-
-在 `workspaceStructure` 中根据作品类型和实际交付规划清楚但不过度机械的项目相对路径。面向用户的目录使用用户工作语言，并先延续项目已有的命名方式；不要预设或机械补齐空目录。示例：中文剧集可按 `分集/第001集/`，英文剧集可按 `Episodes/Episode-001/`；中文电影可按 `场次/第001场/`，英文电影可按 `Scenes/Scene-001/`。这些只示范语言一致、层级清楚和编号可排序，不是固定根目录、必需层级或系统协议；纪录片、广告、音乐、单片和其他用途应按内容本身组织。关键是路径清晰、边界互斥、共享事实单写。这里只描述结构和用途，不直接创建第二套目录文档。
 
 ## 连续性事实
 
@@ -32,7 +28,7 @@ description: Organize long-form creative work into resumable production units an
 - 优先按完整场景、动作、信息揭示、因果变化和情绪落点切分，不按固定字符或时长平均切。
 - 不在尚未完成的持续动作或状态变化中切分。
 - 每个单元写清来源范围、目标、入口状态、必须到达的出口状态以及所需共享资产。
-- 时长用 `creative-core` 的真实演出方法估算；Provider 的单次时长上限只决定生成分段，不决定故事目录。
+- 时长用 `creative-core` 的真实演出方法估算；Provider 的单次时长上限只决定生成分段，不决定故事结构。
 - 可独立单元可以并行规划；存在事实依赖的单元按顺序处理。
 
 ## 共享资产
@@ -46,7 +42,7 @@ description: Organize long-form creative work into resumable production units an
 每个真正提交的领域生成批次由主 Agent 使用对应专业 Skill 独占形成，并满足：
 
 - 每个 item 有稳定、唯一的本地 identity。
-- 明确输入 `resourceId + contentVersion`、完整最终 Prompt、显式生成参数和依赖；媒体 Placement 由服务端从 canonical folder ID 与名称派生。
+- 明确输入 `resourceId + contentVersion`、完整最终 Prompt、显式生成参数和依赖；媒体 Placement 由服务端从项目相对文件夹路径与名称派生。
 - 输入必须指向 canonical Resource；禁止“最近结果”或名称猜测。
 - 相互独立的 item 可并行；有依赖的 item 明确排序。
 - 提交前检查共享资产引用、时长和预算。

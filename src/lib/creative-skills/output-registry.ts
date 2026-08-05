@@ -43,13 +43,9 @@ const professionalDeliverableSchema = z.discriminatedUnion('workerKind', [
 ])
 
 export const longFormPlanOutputSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   outputKind: z.literal('long_form_plan'),
   overview: z.string().trim().min(1).max(12_000),
-  workspaceStructure: z.array(z.object({
-    path: z.string().trim().min(1).max(512),
-    purpose: z.string().trim().min(1).max(4_000),
-  }).strict()).max(1_024),
   continuityFacts: z.array(z.object({
     key: z.string().trim().min(1).max(191),
     fact: z.string().trim().min(1).max(8_000),
@@ -60,7 +56,6 @@ export const longFormPlanOutputSchema = z.object({
     title: z.string().trim().min(1).max(300),
     goal: z.string().trim().min(1).max(8_000),
     sourcePaths: textList(64, 512),
-    outputDirectory: z.string().trim().min(1).max(512),
     entryState: z.string().trim().min(1).max(8_000),
     exitState: z.string().trim().min(1).max(8_000),
     dependencies: textList(64, 191),

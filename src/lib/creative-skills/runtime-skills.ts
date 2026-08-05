@@ -42,7 +42,7 @@ export const CREATIVE_RUNTIME_SKILL_REGISTRY: Readonly<
   long_form: defineRuntimeSkill({
     kind: 'long_form',
     title: '长篇连续制作',
-    description: '组织长篇目录、连续性事实与生产单元，并形成 long_form_plan 专业结果。',
+    description: '组织长篇连续性事实、制作单元与依赖，并形成 long_form_plan 专业结果。',
     skillIds: ['creative-core', 'long-form-production'],
     executionFacts: 'Point to results owned by other professional domains; never author their prompts.',
   }),
