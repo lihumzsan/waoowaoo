@@ -75,6 +75,12 @@ export class RedisAssistantRuntimeOwnership implements RuntimeSessionOwnership {
     const lost = new Promise<void>((resolve) => {
       resolveLost = resolve
     })
+    const markLost = (): void => {
+      if (!active) return
+      active = false
+      if (timer) clearTimeout(timer)
+      resolveLost?.()
+    }
     const schedule = (): void => {
       if (!active) return
       timer = setTimeout(() => {
@@ -86,14 +92,12 @@ export class RedisAssistantRuntimeOwnership implements RuntimeSessionOwnership {
           String(OWNERSHIP_LEASE_MS),
         ).then((result) => {
           if (result !== 1) {
-            active = false
-            resolveLost?.()
+            markLost()
             return
           }
           schedule()
         }).catch(() => {
-          active = false
-          resolveLost?.()
+          markLost()
         })
       }, OWNERSHIP_RENEW_MS)
       timer.unref()
@@ -102,6 +106,20 @@ export class RedisAssistantRuntimeOwnership implements RuntimeSessionOwnership {
     return {
       ownerToken,
       lost,
+      async assertCurrent() {
+        if (!active) throw new Error('ASSISTANT_RUNTIME_OWNERSHIP_LOST')
+        let current: string | null
+        try {
+          current = await redis.get(key)
+        } catch (error) {
+          markLost()
+          throw new Error('ASSISTANT_RUNTIME_OWNERSHIP_CHECK_FAILED', { cause: error })
+        }
+        if (current !== ownerToken) {
+          markLost()
+          throw new Error('ASSISTANT_RUNTIME_OWNERSHIP_LOST')
+        }
+      },
       async release() {
         if (!active) return
         active = false

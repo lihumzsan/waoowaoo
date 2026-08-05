@@ -205,6 +205,20 @@ if (
 ) {
   missing.push('CODEX_RUNTIME_HOST_ROOT=absolute-non-root-path')
 }
+if (
+  validationMode === 'production'
+  && !isMissing(env.CODEX_RUNTIME_HOST_ROOT)
+  && (
+    path.resolve(env.CODEX_RUNTIME_HOST_ROOT) === '/tmp'
+    || path.resolve(env.CODEX_RUNTIME_HOST_ROOT).startsWith('/tmp/')
+    || path.resolve(env.CODEX_RUNTIME_HOST_ROOT) === '/run'
+    || path.resolve(env.CODEX_RUNTIME_HOST_ROOT).startsWith('/run/')
+    || path.resolve(env.CODEX_RUNTIME_HOST_ROOT) === '/dev/shm'
+    || path.resolve(env.CODEX_RUNTIME_HOST_ROOT).startsWith('/dev/shm/')
+  )
+) {
+  missing.push('CODEX_RUNTIME_HOST_ROOT=durable-host-volume-path')
+}
 const codexIdleTimeoutMs = Number(env.CODEX_RUNTIME_IDLE_TIMEOUT_MS)
 if (
   !isMissing(env.CODEX_RUNTIME_IDLE_TIMEOUT_MS)

@@ -416,7 +416,7 @@ services:
     environment:
       <<: *app-environment
       CODEX_RUNTIME_DRIVER: docker
-      CODEX_RUNTIME_HOST_ROOT: "${CODEX_RUNTIME_HOST_ROOT:-/tmp/wao-codex-runtime}"
+      CODEX_RUNTIME_HOST_ROOT: "${CODEX_RUNTIME_HOST_ROOT:-/var/lib/wao/codex-runtime}"
       CODEX_RUNTIME_IDLE_TIMEOUT_MS: "${CODEX_RUNTIME_IDLE_TIMEOUT_MS:-900000}"
       CODEX_RUNTIME_IMAGE: "${CODEX_RUNTIME_IMAGE:-ghcr.io/saturndec/waoowaoo-codex-runtime@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
       CODEX_RUNTIME_NETWORK: "${COMPOSE_PROJECT_NAME:-waoowaoo}_codex-runtime"
@@ -430,11 +430,12 @@ services:
       - ./data:/app/data
       - ./docker-logs:/app/logs
       - "${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock"
-      # The daemon and Web container must resolve the exact same absolute host
-      # paths because Codex runtime bind mounts are created by the daemon.
+      # Mount this host path from durable storage in production. The daemon and
+      # Web container must resolve the exact same path because runtime bind
+      # mounts are created by the daemon and Codex owns Thread persistence here.
       - type: bind
-        source: "${CODEX_RUNTIME_HOST_ROOT:-/tmp/wao-codex-runtime}"
-        target: "${CODEX_RUNTIME_HOST_ROOT:-/tmp/wao-codex-runtime}"
+        source: "${CODEX_RUNTIME_HOST_ROOT:-/var/lib/wao/codex-runtime}"
+        target: "${CODEX_RUNTIME_HOST_ROOT:-/var/lib/wao/codex-runtime}"
     networks:
       - default
       - codex-runtime

@@ -24,7 +24,6 @@ import {
   readProjectProductionContext,
   type ProjectProductionContext,
 } from '@/lib/project-production-context'
-import { deriveAssistantRuntimeRevision } from './runtime-revision'
 
 const MCP_PATH = '/api/internal/codex-runtime/mcp'
 // Codex defaults MCP tool calls to 60 seconds. Wao production calls can spend
@@ -93,7 +92,6 @@ export type AssistantRuntimeAccess = {
 export type AssistantRuntimeModelConfiguration = {
   readonly modelKey: string
   readonly runtimeModel: string
-  readonly runtimeRevision: string
   readonly projectProductionContext: ProjectProductionContext
   readonly thread: RuntimeSessionThreadConfiguration
 }
@@ -139,11 +137,6 @@ function runtimeInstructions(): string {
 }
 
 export const ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS = runtimeInstructions()
-export const ASSISTANT_RUNTIME_REVISION = deriveAssistantRuntimeRevision({
-  codexVersion: ASSISTANT_RUNTIME_CODEX_VERSION,
-  developerInstructions: ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
-  staticContract: ASSISTANT_RUNTIME_STATIC_CONTRACT,
-})
 
 function runtimeSandboxMode(): 'workspace-write' {
   const driver = process.env.CODEX_RUNTIME_DRIVER
@@ -284,7 +277,6 @@ export async function resolveAssistantRuntimeModelConfiguration(
   return {
     modelKey: gateway.modelKey,
     runtimeModel: gateway.runtimeModelId,
-    runtimeRevision: ASSISTANT_RUNTIME_REVISION,
     projectProductionContext,
     thread: {
       start,

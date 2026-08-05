@@ -1,22 +1,17 @@
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { chmod, lstat, mkdir, mkdtemp, rm } from 'node:fs/promises'
 import path from 'node:path'
-import type {
-  RuntimeSessionMaterialization,
-  RuntimeSessionPersistence,
-  RuntimeSessionScope,
+import {
+  buildRuntimeSessionScopeId,
+  type RuntimeSessionMaterialization,
+  type RuntimeSessionPersistence,
+  type RuntimeSessionScope,
 } from '@/lib/codex-runtime/runtime-session-manager'
 import { materializeCreativeRuntimeConfiguration } from '@/lib/creative-skills'
-import { prisma } from '@/lib/prisma'
-import { captureCodexStateBundle, restoreCodexStateBundle, saveCodexStateBundle } from './codex-state-store'
 import { markAssistantRuntimeProjectTurnsInterrupted } from './persistence'
 
+const MATERIALIZATION_DIRECTORY = 'materializations'
 const MATERIALIZATION_PREFIX = 'wao-codex-runtime-'
-
-type MaterializationLayout = {
-  readonly root: string
-  readonly workspace: string
-  readonly codexHome: string
-}
+const CODEX_HOME_DIRECTORY = 'codex-homes'
 
 function requireHostRoot(value: string): string {
   const normalized = path.resolve(value.trim())
@@ -26,50 +21,38 @@ function requireHostRoot(value: string): string {
   return normalized
 }
 
-function layoutFromMaterialization(
+async function ensurePrivateDirectory(directory: string): Promise<void> {
+  await mkdir(directory, { recursive: true, mode: 0o700 })
+  const stat = await lstat(directory)
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
+    throw new Error('ASSISTANT_RUNTIME_PERSISTENCE_DIRECTORY_INVALID')
+  }
+  await chmod(directory, 0o700)
+}
+
+function requireDisposableRoot(
   materialization: RuntimeSessionMaterialization,
   hostRoot: string,
-): MaterializationLayout {
+): string {
   const workspace = path.resolve(materialization.hostWorkspaceDirectory)
+  const disposableRoot = path.dirname(workspace)
+  const materializationsRoot = path.join(hostRoot, MATERIALIZATION_DIRECTORY)
   const codexHome = path.resolve(materialization.hostCodexHomeDirectory)
-  const root = path.dirname(workspace)
+  const codexHomesRoot = path.join(hostRoot, CODEX_HOME_DIRECTORY)
   if (
     path.basename(workspace) !== 'workspace'
-    || path.basename(codexHome) !== 'codex-home'
-    || path.dirname(codexHome) !== root
-    || path.dirname(root) !== hostRoot
-    || !path.basename(root).startsWith(MATERIALIZATION_PREFIX)
+    || path.dirname(disposableRoot) !== materializationsRoot
+    || !path.basename(disposableRoot).startsWith(MATERIALIZATION_PREFIX)
+    || path.dirname(codexHome) !== codexHomesRoot
+    || !path.basename(codexHome)
   ) {
     throw new Error('ASSISTANT_RUNTIME_MATERIALIZATION_LAYOUT_INVALID')
   }
-  return { root, workspace, codexHome }
+  return disposableRoot
 }
 
-async function checkpointRuntimeThreadBinding(input: {
-  readonly scope: RuntimeSessionScope
-  readonly productThreadId: string
-  readonly runtimeThreadId: string
-}): Promise<void> {
-  await prisma.$transaction(async (tx) => {
-    const thread = await tx.projectAssistantThread.findUnique({ where: { id: input.productThreadId } })
-    if (
-      !thread
-      || thread.projectId !== input.scope.projectId
-      || thread.userId !== input.scope.userId
-      || thread.assistantId !== 'workspace-command'
-    ) {
-      throw new Error('ASSISTANT_RUNTIME_CHECKPOINT_THREAD_SCOPE_DIVERGED')
-    }
-    if (thread.runtimeThreadId && thread.runtimeThreadId !== input.runtimeThreadId) {
-      throw new Error('ASSISTANT_RUNTIME_CHECKPOINT_THREAD_ID_DIVERGED')
-    }
-    if (!thread.runtimeThreadId) {
-      await tx.projectAssistantThread.update({
-        where: { id: thread.id },
-        data: { runtimeThreadId: input.runtimeThreadId },
-      })
-    }
-  })
+function scopeCodexHome(hostRoot: string, scope: RuntimeSessionScope): string {
+  return path.join(hostRoot, CODEX_HOME_DIRECTORY, buildRuntimeSessionScopeId(scope))
 }
 
 export class AssistantRuntimePersistence implements RuntimeSessionPersistence {
@@ -89,34 +72,48 @@ export class AssistantRuntimePersistence implements RuntimeSessionPersistence {
   }
 
   async materialize(scope: RuntimeSessionScope): Promise<RuntimeSessionMaterialization> {
-    await mkdir(this.hostRoot, { recursive: true, mode: 0o700 })
-    const root = await mkdtemp(path.join(this.hostRoot, MATERIALIZATION_PREFIX))
-    const workspace = path.join(root, 'workspace')
-    const codexHome = path.join(root, 'codex-home')
+    const materializationsRoot = path.join(this.hostRoot, MATERIALIZATION_DIRECTORY)
+    const codexHomesRoot = path.join(this.hostRoot, CODEX_HOME_DIRECTORY)
+    await ensurePrivateDirectory(this.hostRoot)
+    await ensurePrivateDirectory(materializationsRoot)
+    await ensurePrivateDirectory(codexHomesRoot)
+
+    const codexHome = scopeCodexHome(this.hostRoot, scope)
+    await ensurePrivateDirectory(codexHome)
+    await materializeCreativeRuntimeConfiguration(codexHome)
+
+    const disposableRoot = await mkdtemp(path.join(materializationsRoot, MATERIALIZATION_PREFIX))
+    const workspace = path.join(disposableRoot, 'workspace')
     try {
-      await mkdir(workspace, { recursive: true, mode: 0o700 })
-      await restoreCodexStateBundle({ scope, codexHomeDirectory: codexHome })
-      await materializeCreativeRuntimeConfiguration(codexHome)
-      return { hostWorkspaceDirectory: workspace, hostCodexHomeDirectory: codexHome }
+      await ensurePrivateDirectory(workspace)
+      return {
+        hostWorkspaceDirectory: workspace,
+        hostCodexHomeDirectory: codexHome,
+      }
     } catch (error) {
-      await rm(root, { recursive: true, force: true })
+      await rm(disposableRoot, { recursive: true, force: true })
       throw error
     }
   }
 
-  async checkpointRuntime(params: Parameters<RuntimeSessionPersistence['checkpointRuntime']>[0]): Promise<void> {
-    const layout = layoutFromMaterialization(params.materialization, this.hostRoot)
-    await saveCodexStateBundle({ scope: params.scope, codexHomeDirectory: layout.codexHome })
-    await checkpointRuntimeThreadBinding(params)
-  }
-
   async destroyMaterialization(materialization: RuntimeSessionMaterialization): Promise<void> {
-    const layout = layoutFromMaterialization(materialization, this.hostRoot)
-    await rm(layout.root, { recursive: true, force: true })
+    const disposableRoot = requireDisposableRoot(materialization, this.hostRoot)
+    await rm(disposableRoot, { recursive: true, force: true })
   }
-}
 
-/** Diagnostic-only helper for validating the strict Codex-home allowlist. */
-export async function inspectCapturedCodexState(codexHomeDirectory: string): Promise<number> {
-  return (await captureCodexStateBundle(codexHomeDirectory)).byteLength
+  async clearScope(scope: RuntimeSessionScope): Promise<void> {
+    await ensurePrivateDirectory(this.hostRoot)
+    const codexHomesRoot = path.join(this.hostRoot, CODEX_HOME_DIRECTORY)
+    await ensurePrivateDirectory(codexHomesRoot)
+    const codexHome = scopeCodexHome(this.hostRoot, scope)
+    const stat = await lstat(codexHome).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+      throw error
+    })
+    if (!stat) return
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      throw new Error('ASSISTANT_RUNTIME_CODEX_HOME_INVALID')
+    }
+    await rm(codexHome, { recursive: true, force: true })
+  }
 }

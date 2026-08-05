@@ -4,7 +4,7 @@
 
 ## 为什么是这样
 
-Codex app-server 是唯一 Agent Runtime；Wao 保留产品 View、WorkspaceResource、Capability Service、
+Codex app-server 是唯一 Agent Runtime，并独占模型 Thread/history；Wao 保留产品 View、WorkspaceResource、Capability Service、
 计费、审批、Task 和执行平面。Runtime 可被替换，因此 UI 和业务服务不直接依赖它的进程细节，统一经
 适配器与 AssistantRuntime。
 
@@ -23,21 +23,17 @@ Codex app-server 是唯一 Agent Runtime；Wao 保留产品 View、WorkspaceReso
 - **CRR-03 — 双层隔离，且不静默降级。** 生产多租户 driver 必须是容器并限制 CPU、内存、PID、
   磁盘与网络；Codex 只能写临时 Project workspace。开发可显式选择本地进程，但 production 不得
   自动降级，产品 edition 也不得自动决定 driver。
-- **CRR-04 — WorkspaceResource 才是持久事实。** Runtime 只物化空 scratch、关闭 agents 的固定配置
+- **CRR-04 — WorkspaceResource 才是项目持久事实。** Runtime 只物化空 scratch、关闭 agents 的固定配置
   与 registry 生成的主 Agent Skills；不物化项目文件，不复制 Catalog 或对象内容，也不在 Turn 结束时
-  capture 文件。项目生产事实由服务端每 Turn 直接附加给唯一 writer。Runtime 文件夹、inode 和临时
-  home 都不是产品权威，销毁不会丢失任何 Resource。
+  capture 文件。项目生产事实由服务端每 Turn 直接附加给唯一 writer。Codex home 只拥有原生
+  Thread/history，不拥有 Resource；scratch、inode 和 Runtime 路径都不是产品权威。
 - **CRR-05 — scratch 没有持久语义。** Runtime 可自由创建临时研究和工具文件，但这些文件不会被
   观察、上传或映射为 Resource。持久内容必须显式调用业务 Operation；媒体引用使用 canonical
   Resource id/version，不通过本地指针文件。
-- **CRR-06 — Runtime 状态与产品 View 分权。** 不透明会话状态只用于 resume；数据库 View 是聊天、
-  审批、计费归因和刷新显示的产品事实。两者必须先持久化再绑定 runtime thread id。
-- **CRR-06A — resume 必须匹配 Runtime revision。** 钉死版本、process host 或工具拓扑发生不兼容
-  变化时只允许一个共享 revision；该值必须由实际的固定开发指令、工具契约与 Runtime profile 契约
-  确定性派生，禁止依赖调用方手写版本后缀。状态存储 key 与线程记录必须使用同一值。revision 不匹配
-  时先完整停止旧 Runtime，再原子清空旧绑定，新线程由产品 View 的既有消息 seed。同 revision 的普通
-  重启、空闲停止与崩溃仍 resume 原线程，禁止每 Turn 重建或保留新旧双轨。可 resume 时绝不重放产品
-  消息；不可 resume 时恰好一次注入历史，且不伪造旧工具终态。
+- **CRR-06 — Runtime 状态与产品 View 分权。** 持久 Codex home 是模型 Thread/history 与 resume 的
+  唯一权威；数据库 View 是聊天展示、审批、计费归因和产品刷新事实。Product Thread 在首个原生 Turn
+  前绑定 native thread id；产品消息绝不 seed、修补或重建模型历史。两份事实服务不同消费者，任何
+  一方都不得被解释为另一方的恢复 fallback。
 - **CRR-07 — MCP 是唯一系统能力桥。** 真实媒体、导入、批量生产、预算与破坏性操作只经带当前 Turn
   凭据的 MCP；Capability Service 仍是业务实现，MCP 不复制逻辑。Runtime bearer 只证明能力调用权，
   绝不证明用户同意——计费与破坏性 writer 必须验证浏览器侧已持久化的同 Turn 决定。每次调用由同一
@@ -48,26 +44,27 @@ Codex app-server 是唯一 Agent Runtime；Wao 保留产品 View、WorkspaceReso
   UI 显示"已停止"，模型不得解释为服务失败或建议重试。
 - **CRR-07B — Runtime bearer 不是模型 API key。** bearer nonce 同时是当前 placement 的 ownership
   token；模型网关、搜索与 MCP 必须通过同一个 capability Turn resolver，先证明该 nonce 仍持有租约，
-  再证明 Project 恰好一个活跃、未取消、未 clear 且归属本次执行的 Turn。执行中不得要求 durable
-  thread id——它只在状态 checkpoint 后作为恢复身份绑定，新线程的首个活跃 Turn 合法地没有该字段。
-  placement 停止或轮换后旧 token 即使未过期也不能重放。
-- **CRR-08 — 空闲可停，但 Runtime 状态 checkpoint 是 sticky barrier。** 无活跃 Turn 时达到 idle
-  timeout 才保存不透明 Codex state/thread binding 并停止。原生 completion 必须同步登记状态
-  checkpoint；下一 Turn、进程退出、ownership 丢失或 Manager 重启必须先排空该 checkpoint 并确认
-  产品 Turn 已结算。scratch 直接销毁，不参与持久正确性。
+  再证明 Project 恰好一个活跃、未取消、未 clear 且归属本次执行的 Turn。native thread id 只标识
+  模型历史，绝不替代当前 Turn 与 ownership 的执行授权。placement 停止或轮换后旧 token 即使未过期
+  也不能重放。
+- **CRR-08 — 空闲可停，持久性不依赖停机事件。** 无活跃 Turn 时达到 idle timeout 可直接停止进程并
+  删除 scratch；原生 Codex home 始终位于该 scope 的持久存储，不等待 completion、checkpoint 或
+  shutdown 回调才获得持久性。释放 ownership 前仍必须确认产品 Turn 已结算。
 - **CRR-09 — 版本钉死，实验能力显式协商。** binary/协议版本与 smoke 一起升级；未知关键
   request/event 不得静默忽略。产品所需的实验方法必须在 initialize 显式声明并由真实 schema smoke
-  校验存在；关闭该能力等同缺失必需能力。
+  校验存在；关闭该能力等同缺失必需能力。升级前必须排空活跃 Turn，并在持久卷快照副本上验证原生
+  read/resume；不兼容时原地失败，禁止以产品 View 重建模型历史。
 - **CRR-09B — Provider 适配与重试只有一个 owner。** Runtime 是同一 Turn 内模型请求与流式连接重试
   的唯一 owner 且重试有界；网关不得再建第二套 retry。模型请求只能在唯一网关边界规范化：指令项
   提升到顶层 instructions，对话与工具历史保持原顺序，无法无损规范化时原地失败。中间错误只表示
   本次尝试，声明将重试时不得提前写产品 Turn 失败。
 - **CRR-11 — 进程内 Manager 唯一。** 同一进程的所有 route bundle 必须复用一个进程级 Manager；
-  开发热更新不能遗留仍在续租的模块级实例。跨进程唯一性由外部 ownership claim 裁决。
+  开发热更新不能遗留仍在续租的模块级实例。跨进程唯一性由外部 ownership claim 裁决；每个原生
+  命令和后台恢复入口在动作前确认同一个 owner generation，不能只在进程启动时获取一次租约。
 - **CRR-12 — 当前控制面单进程。** placement 与 MCP session 目前都是进程内对象，因此 Web 控制面
   只支持一个 Node 进程；媒体 Worker 可独立横向扩展。启用多 replica 前必须先增加按 owner 的请求
   路由与 session affinity，禁止把 ownership claim 误称为跨 replica 转发能力。
-- **CRR-13 — Runtime 路径不能成为产品链接。** materialization root、临时 home、scratch 相对路径、
+- **CRR-13 — Runtime 路径不能成为产品链接。** materialization root、Codex home、scratch 相对路径、
   绝对路径和 `file://` 只属于可销毁执行环境。用户可导航对象必须使用 canonical Resource identity
   并交给 Canvas 的唯一定位入口；任何 Runtime 路径都不得投影为产品链接。
 
@@ -76,7 +73,7 @@ Codex app-server 是唯一 Agent Runtime；Wao 保留产品 View、WorkspaceReso
 - Runtime 协议与适配：`src/lib/codex-runtime/runtime-adapter.ts`、`app-server-client.ts`
 - placement / ownership / idle / 恢复：`src/lib/codex-runtime/runtime-session-manager.ts`
 - 隔离与容器：`runtime-config.ts`、`Dockerfile.codex-runtime`
-- scratch、Runtime Skill 配置与不透明状态 checkpoint：`src/lib/assistant-runtime/runtime-persistence.ts`、
+- scratch、持久 Codex home 与 Runtime Skill 配置：`src/lib/assistant-runtime/runtime-persistence.ts`、
   `src/lib/project-production-context.ts`
 - 能力桥：`src/lib/wao-mcp/**`；模型网关：`src/lib/codex-model-gateway/**`
 
@@ -112,3 +109,6 @@ Codex app-server 是唯一 Agent Runtime；Wao 保留产品 View、WorkspaceReso
 - 删除资源镜像后曾保留一次性生成的 `system/project.json`；长生命周期 Runtime 中配置变更会让该文件
   过期，且相同路径又被误传给只认 Resource 的工具 → 可重建文件仍是竞争状态解释源 → 删除全部项目
   文件投影，每 Turn 从唯一 resolver 直接注入当前 View（CRR-04/13）。
+- Runtime state 曾只在成功 completion/idle 时复制到对象存储；失败或进程被杀时最新用户消息没有进入
+  bundle，恢复又用不含该消息的产品 View seed 新线程，导致约束回退 → checkpoint 与 UI seed 是两个
+  竞争历史 writer → 删除两者，模型历史只由持久 Codex home 原生维护（CRR-06/08）。

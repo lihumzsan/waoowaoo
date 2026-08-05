@@ -26,7 +26,6 @@ const FOLLOW_UP_INPUT_MAX_BYTES = 512 * 1_024
 type TransactionClient = Prisma.TransactionClient
 
 type ThreadView = AssistantRuntimeThreadIdentity & {
-  readonly runtimeRevision: string | null
   readonly messages: readonly UIMessage[]
   readonly createdAt: Date
   readonly updatedAt: Date
@@ -196,7 +195,6 @@ function threadView(row: ProjectAssistantThread, messages: readonly UIMessage[])
     assistantId: 'workspace-command',
     threadId: row.id,
     runtimeThreadId: row.runtimeThreadId,
-    runtimeRevision: row.runtimeRevision,
     messages,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -414,6 +412,7 @@ export async function bindAssistantRuntimeThread(input: {
   return await prisma.$transaction(async (tx) => {
     await lockProjectScope(tx, input.scope)
     const row = await lockThread(tx, input.scope, input.threadId)
+    if (row.clearRequestId) throw new Error('ASSISTANT_RUNTIME_CLEAR_IN_PROGRESS')
     if (row.runtimeThreadId && row.runtimeThreadId !== input.runtimeThreadId) {
       throw new Error('ASSISTANT_RUNTIME_CODEX_THREAD_ID_DIVERGED')
     }
@@ -423,37 +422,6 @@ export async function bindAssistantRuntimeThread(input: {
           where: { id: row.id },
           data: { runtimeThreadId: input.runtimeThreadId },
         })
-    return threadView(updated, await parseMessages(updated.messagesJson))
-  })
-}
-
-export async function rotateAssistantRuntimeThreadRevision(input: {
-  readonly scope: AssistantRuntimeScope
-  readonly threadId: string
-  readonly expectedRuntimeThreadId: string | null
-  readonly runtimeRevision: string
-}): Promise<ThreadView> {
-  const runtimeRevision = requireIdentity(
-    input.runtimeRevision,
-    'ASSISTANT_RUNTIME_REVISION_INVALID',
-    64,
-  )
-  return await prisma.$transaction(async (tx) => {
-    await lockProjectScope(tx, input.scope)
-    const row = await lockThread(tx, input.scope, input.threadId)
-    if (row.runtimeRevision === runtimeRevision) {
-      return threadView(row, await parseMessages(row.messagesJson))
-    }
-    if (row.runtimeThreadId !== input.expectedRuntimeThreadId) {
-      throw new Error('ASSISTANT_RUNTIME_REVISION_THREAD_DIVERGED')
-    }
-    const updated = await tx.projectAssistantThread.update({
-      where: { id: row.id },
-      data: {
-        runtimeThreadId: null,
-        runtimeRevision,
-      },
-    })
     return threadView(updated, await parseMessages(updated.messagesJson))
   })
 }

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { once } from 'node:events'
-import { access, cp, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { access, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -20,17 +20,15 @@ import type {
 import { createWaoMcpOperationCatalog } from '@/lib/wao-mcp/operation-catalog'
 import { createWaoMcpServer } from '@/lib/wao-mcp/server'
 import type { WaoMcpOperationExecutorResult } from '@/lib/wao-mcp/contracts'
-import { inspectCapturedCodexState } from '@/lib/assistant-runtime/runtime-persistence'
+import { AssistantRuntimePersistence } from '@/lib/assistant-runtime/runtime-persistence'
 import {
   ASSISTANT_RUNTIME_CODEX_VERSION,
   ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
-  ASSISTANT_RUNTIME_REVISION,
   ASSISTANT_RUNTIME_STATIC_CONTRACT,
 } from '@/lib/assistant-runtime/runtime-access'
 import {
   CREATIVE_RUNTIME_SKILLS,
   PRIMARY_AGENT_GLOBAL_INSTRUCTIONS,
-  materializeCreativeRuntimeConfiguration,
 } from '@/lib/creative-skills'
 import {
   ASSISTANT_RUNTIME_APPROVAL_METHODS,
@@ -43,13 +41,13 @@ const OFFLINE_STAGE_TIMEOUT_MS = 30_000
 
 type AppServerSmokeResult = {
   readonly initializedUserAgent: string
-  readonly runtimeRevision: string
   readonly threadId: string
   readonly resumed: boolean
+  readonly failedTurnPersisted: boolean
+  readonly idempotentScopeClearValidated: boolean
   readonly liveTurn: boolean
   readonly liveTurnStatus: string | null
   readonly streamedText: string
-  readonly capturedStateBytes: number
   readonly customResponsesProvider: boolean
   readonly skillsListed: readonly string[]
   readonly protocolSurfaceValidated: boolean
@@ -449,9 +447,13 @@ async function runAppServerSmoke(params: {
   )
   await assertPinnedProtocolSurface(params.rootDir)
 
-  const codexHome = path.join(params.rootDir, 'codex-home')
-  await mkdir(codexHome, { recursive: true, mode: 0o700 })
-  await materializeCreativeRuntimeConfiguration(codexHome)
+  const persistence = new AssistantRuntimePersistence({
+    hostRoot: path.join(params.rootDir, 'runtime-persistence'),
+  })
+  const persistenceScope = { userId: 'runtime-smoke-user', projectId: 'runtime-smoke-project' }
+  const materialization = await persistence.materialize(persistenceScope)
+  const codexHome = materialization.hostCodexHomeDirectory
+  const cwd = materialization.hostWorkspaceDirectory
   const primaryInstructions = await readFile(path.join(codexHome, 'AGENTS.md'), 'utf8')
   assert.equal(primaryInstructions.trim(), PRIMARY_AGENT_GLOBAL_INSTRUCTIONS.trim())
   assert.match(primaryInstructions, /Codex agents are disabled/)
@@ -498,8 +500,6 @@ async function runAppServerSmoke(params: {
   const requestCapture = await startRuntimeRequestCapture()
   let restoredManager: LocalRuntimeManager | null = null
   const runtimeKey = 'stage-0-smoke'
-  const cwd = path.join(params.rootDir, 'workspace')
-  await mkdir(cwd, { recursive: true, mode: 0o700 })
   const toolContract = ASSISTANT_RUNTIME_STATIC_CONTRACT.tools
   const customProviderConfig = {
     web_search: toolContract.webSearch,
@@ -590,6 +590,9 @@ async function runAppServerSmoke(params: {
     })
     assert.equal((await firstRuntime.readThread({ threadId: thread.id })).id, thread.id)
 
+    const persistenceMarker = params.liveTurn
+      ? 'Reply with exactly RUNTIME_SMOKE_OK.'
+      : 'FAILED_TURN_PERSISTENCE_MARKER'
     if (params.liveTurn) {
       const completed = waitForTurnCompletion({
         runtime: firstRuntime,
@@ -611,47 +614,31 @@ async function runAppServerSmoke(params: {
       assert.equal(liveTurnStatus, 'completed')
       assert.equal(streamedText.trim(), 'RUNTIME_SMOKE_OK')
     } else {
-      // Force a durable rollout without contacting the model gateway. This is
-      // the same stable Responses item shape used by legacy message injection.
-      await firstRuntime.injectThreadItems({
+      const completed = waitForTurnCompletion({
+        runtime: firstRuntime,
         threadId: thread.id,
-        items: [{
-          type: 'message',
-          role: 'user',
-          content: [{ type: 'input_text', text: 'Runtime persistence smoke.' }],
-        }, {
-          type: 'message',
-          role: 'assistant',
-          content: [{ type: 'output_text', text: 'Product View recovery smoke.' }],
-        }],
+        onDelta: () => undefined,
       })
+      const failedTurn = await firstRuntime.startTurn({
+        threadId: thread.id,
+        input: [{ type: 'text', text: persistenceMarker }],
+        cwd,
+        approvalPolicy: 'never',
+        sandboxPolicy: { type: 'readOnly', networkAccess: false },
+      })
+      const completedTurn = await completed
+      assert.equal(completedTurn.id, failedTurn.id)
+      liveTurnStatus = typeof completedTurn.status === 'string' ? completedTurn.status : null
+      assert.notEqual(liveTurnStatus, 'completed')
     }
 
-    const capturedStateBytes = await inspectCapturedCodexState(
-      codexHome,
-    )
-    assert.ok(capturedStateBytes > 30)
+    const beforeCrash = await firstRuntime.readThread({ threadId: thread.id, includeTurns: true })
+    assert.ok(JSON.stringify(beforeCrash.raw).includes(persistenceMarker))
 
-    await manager.shutdown(runtimeKey)
-    const restoredCodexHome = path.join(params.rootDir, 'restored-codex-home')
-    await mkdir(restoredCodexHome, { recursive: true, mode: 0o700 })
-    for (const directory of ['sessions', 'archived_sessions']) {
-      await cp(
-        path.join(codexHome, directory),
-        path.join(restoredCodexHome, directory),
-        { recursive: true, force: false, errorOnExist: true },
-      ).catch((error: unknown) => {
-        if (
-          typeof error === 'object'
-          && error !== null
-          && 'code' in error
-          && error.code === 'ENOENT'
-        ) return
-        throw error
-      })
-    }
-    await materializeCreativeRuntimeConfiguration(restoredCodexHome)
-    restoredManager = createManager(restoredCodexHome)
+    // SIGKILL the app-server and reuse the exact same Codex home. No Wao
+    // checkpoint, bundle restore, or product-message injection participates.
+    await manager.forceShutdown(runtimeKey)
+    restoredManager = createManager(codexHome)
     const secondRuntime = await restoredManager.ensure({ runtimeKey, cwd })
     const resumed = await secondRuntime.resumeThread({
       threadId: thread.id,
@@ -663,23 +650,30 @@ async function runAppServerSmoke(params: {
       config: customProviderConfig,
     })
     assert.equal(resumed.id, thread.id)
-    assert.equal((await secondRuntime.readThread({ threadId: thread.id })).id, thread.id)
+    const afterCrash = await secondRuntime.readThread({ threadId: thread.id, includeTurns: true })
+    assert.equal(afterCrash.id, thread.id)
+    assert.ok(JSON.stringify(afterCrash.raw).includes(persistenceMarker))
     const restoredSkills = await secondRuntime.listSkills({ cwds: [cwd], forceReload: true })
     const restoredEnabledSkillNames = (restoredSkills.data[0]?.skills ?? [])
       .filter((skill) => skill.enabled)
       .map((skill) => skill.name)
       .sort()
     assert.deepEqual(restoredEnabledSkillNames, [...professionalSkillIds].sort())
+    await restoredManager.shutdown(runtimeKey)
+    await persistence.destroyMaterialization(materialization)
+    await persistence.clearScope(persistenceScope)
+    await persistence.clearScope(persistenceScope)
+    await assert.rejects(access(codexHome), { code: 'ENOENT' })
 
     return {
       initializedUserAgent: initialized.userAgent,
-      runtimeRevision: ASSISTANT_RUNTIME_REVISION,
       threadId: thread.id,
       resumed: true,
+      failedTurnPersisted: !params.liveTurn,
+      idempotentScopeClearValidated: true,
       liveTurn: params.liveTurn,
       liveTurnStatus,
       streamedText,
-      capturedStateBytes,
       customResponsesProvider: true,
       skillsListed: listedSkills.data[0]?.skills
         .filter((skill) => skill.enabled)

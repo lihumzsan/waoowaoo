@@ -69,7 +69,6 @@ model ProjectAssistantThread {
   userId          String
   assistantId     String
   runtimeThreadId String?            @unique @db.VarChar(191)
-  runtimeRevision String?            @db.VarChar(64)
   clearRequestId  String?            @db.VarChar(128)
   messagesJson    Json
   planJson        Json?

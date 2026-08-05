@@ -81,6 +81,14 @@ export class LocalRuntimeManager {
     await entry.client.shutdown()
   }
 
+  async forceShutdown(runtimeKeyValue: string): Promise<void> {
+    const runtimeKey = requireRuntimeKey(runtimeKeyValue)
+    const entry = this.entries.get(runtimeKey)
+    if (!entry) return
+    this.entries.delete(runtimeKey)
+    await entry.client.forceShutdown()
+  }
+
   async shutdownAll(): Promise<void> {
     this.shuttingDown = true
     const entries = [...this.entries.values()]

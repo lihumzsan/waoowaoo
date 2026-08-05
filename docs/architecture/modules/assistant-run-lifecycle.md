@@ -8,18 +8,19 @@ Codex app-server 拥有单个 Agent 进程内的 Thread/Turn 与原生交互；W
 View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 placement、互斥、恢复和空闲停止，
 不解释模型思考或工具选择。
 
-产品 View 独立持久是刻意的：刷新不读 Codex 本地文件格式，UI 不解析流内容。Runtime 可以被替换，
-聊天历史不能跟着一起丢。
+产品 View 独立持久是刻意的：刷新不读 Codex 本地文件格式，UI 不解析流内容；它服务展示与业务归因，
+不充当模型上下文备份。模型 history 只由 Codex 原生 Thread 持久化。
 
 ## 不变量
 
 - **ARL-01 — Project scope。** Product Thread 只属于 `(userId, projectId)`；不从消息推断 scope。
-- **ARL-02 — 一个活跃 Turn、一个消息命令裁判。** 聊天发送是唯一准入入口，且"按稳定 sourceId
+- **ARL-02 — 一个活跃 Turn、一个消息命令裁判。** 用户聊天发送是唯一用户消息准入入口，且"按稳定 sourceId
   回放裁决 → 读当前 Turn → 选择 start/steer → 完成 handoff"必须在同一个 Project transition 内
   完成，不得在锁外预判目标。每条用户消息先以 project-scoped 命令 identity 持久化，原始客户端命令
   的 hash 在附件解析前冻结。steer 在调用 runtime 前为 pending，只有 runtime 明确接受、返回的
   Turn identity 一致且原子确认后才成为 accepted；pending/uncertain 永不自动重发。该命令事实不挂
-  Thread/Turn 外键——clear 只能删除对话 View，不能删除延迟重试的去重 tombstone。
+  Thread/Turn 外键——clear 只能删除对话 View，不能删除延迟重试的去重 tombstone。持久 Task follow-up
+  是独立 source identity，但与用户 start 共用同一 native Thread 准备、绑定与 Turn 启动入口。
 - **ARL-03 — 产品 View 独立持久。** 所有对话与交互事实由 projector 写入数据库；刷新不读 Runtime
   本地格式。一个 Turn 在每次已接受 steer 处冻结当前 assistant segment，后续输出进入递增 segment，
   因此顺序始终是"已发生内容 → 用户追加 → 后续内容"。
@@ -35,10 +36,10 @@ View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 pl
   `taskId` 关联裁决；重试后旧成员保留在审计与聊天中，但不再进入当前运行投影、focus 或失败汇总。
   只有被同一 Resource 的新 Task 明确替代的成员才可移除，缺失目标不能静默隐藏。
 - **ARL-07 — 崩溃可恢复且终态 writer 唯一。** 有 live projector 的退出只由 projector 等待全部
-  消息快照后结算；Manager 只停止 placement 与保存不透明 Runtime state，不抢写第二终态。释放 ownership 或创建下一
-  writer 前必须先观察终态已提交；结算失败保持失败并阻断 placement，不能被 catch 后当成功。
-  只有已持久化 Runtime 状态与绑定才允许 resume；未形成 durable binding 时，新 Thread 在首个新
-  Turn 前从产品 View 恰好一次注入历史。
+  消息快照后结算；Manager 只停止 placement，不抢写第二终态。释放 ownership 或创建下一 writer 前
+  必须先观察终态已提交；结算失败保持失败并阻断 placement，不能被 catch 后当成功。Product Thread
+  在首个 native Turn 前绑定 Codex Thread；普通停止、失败、崩溃与重新 placement 都从同一持久 home
+  resume，禁止从产品 View 回灌历史或创建恢复分支。
 - **ARL-11 — 刷新可续接中途增量。** 每个可见 chunk 取得单调 seq；持久快照同时保存完整前缀与该
   watermark。SSE bootstrap 必须缓冲订阅建立后的事件，客户端跳过已含 seq、只接受严格下一个 seq。
   无 watermark 的猜测、丢弃 bootstrap 事件或遇缺口后展示截断尾段都禁止。
@@ -49,7 +50,8 @@ View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 pl
   同步写或模型晚到输出不能越过取消标记开始新副作用。
 - **ARL-14 — clear 先 claim 再停 placement。** clear 标记是清空进行中的唯一 fence；claim 后新
   准入、模型网关、MCP binding、审批证明与所有 effect 事务立即失败关闭。已归档请求的重放直接返回，
-  绝不停止后来创建的新 Thread/Turn。
+  绝不停止后来创建的新 Thread/Turn。首次 clear 必须在独占 scope ownership 下停稳 placement，并
+  幂等删除该 scope 的 opaque Codex home 后再完成产品归档。
 - **ARL-15 — secret input fail closed。** 当前没有独立 secret authority；标记为 secret 的原生输入
   请求在写普通消息前拒绝。
 - **ARL-16 — 重连替换旧连接而不扩容。** 每个标签页对每个 Project 持有稳定的 session identity；
@@ -99,3 +101,6 @@ View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 pl
   仍被官方 Runtime 降成 `other` → 同一可见性不变量换 writer 后又漏掉真实入口 → 模型网关把 Provider
   非成功响应投影到官方 Codex 已支持的结构化错误类别，projector 再作为终态错误的唯一解释者映射到共享
   error registry，禁止维护 Runtime fork 或从错误文案反推状态。
+- Runtime 恢复曾把数据库消息重新注入新 Thread；失败 Turn 的最新用户消息尚未投影时，恢复上下文会
+  回到更早约束 → 产品 View 被误作模型 history writer → Product Thread 在首个 Turn 前绑定，后续只
+  resume 持久 Codex Thread，View 永不参与模型历史恢复（ARL-07）。
