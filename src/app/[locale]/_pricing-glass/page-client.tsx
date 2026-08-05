@@ -65,7 +65,7 @@ function IntervalSwitch({
                   'rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none',
                   active
                     ? 'bg-white/20 text-white'
-                    : 'bg-[var(--glass-tone-success-bg)] text-[var(--glass-tone-success-fg)]',
+                    : 'bg-[var(--glass-tone-success-bg)] text-[var(--glass-tone-success-fg)] shadow-[var(--glass-tone-shadow)]',
                 )}
               >
                 {t('yearlySaveHint')}
@@ -173,13 +173,13 @@ function PlanCard({
               {t('billedYearly', { amount: formatCny(priced.periodPriceCny) })}
             </span>
             {priced.savingsVersusMonthlyCny > 0 ? (
-              <span className="glass-num rounded-full bg-[var(--glass-tone-success-bg)] px-1.5 py-0.5 font-semibold text-[var(--glass-tone-success-fg)]">
+              <span className="glass-num rounded-full bg-[var(--glass-tone-success-bg)] px-1.5 py-0.5 font-semibold text-[var(--glass-tone-success-fg)] shadow-[var(--glass-tone-shadow)]">
                 {t('yearlySaveBadge', { amount: formatCny(priced.savingsVersusMonthlyCny) })}
               </span>
             ) : null}
           </>
         ) : plan.firstMonthPromoCny !== null ? (
-          <span className="glass-num rounded-full bg-[var(--glass-tone-success-bg)] px-1.5 py-0.5 font-semibold text-[var(--glass-tone-success-fg)]">
+          <span className="glass-num rounded-full bg-[var(--glass-tone-success-bg)] px-1.5 py-0.5 font-semibold text-[var(--glass-tone-success-fg)] shadow-[var(--glass-tone-shadow)]">
             {t('firstMonthPromo', { amount: formatCny(plan.firstMonthPromoCny) })}
           </span>
         ) : null}
@@ -301,7 +301,7 @@ export default function PricingGlassPageClient({
                   {beta('benefit')}
                 </p>
               </div>
-              <div className="shrink-0 rounded-2xl bg-[var(--glass-tone-info-bg)] px-4 py-3 text-center">
+              <div className="shrink-0 rounded-2xl bg-[var(--glass-tone-info-bg)] px-4 py-3 text-center shadow-[var(--glass-tone-shadow)]">
                 <p className="glass-num text-[22px] font-bold text-[var(--glass-tone-info-fg)]">
                   {paidBetaCampaign.paymentOpen ? paidBetaCampaign.remaining : 0}
                 </p>

@@ -36,7 +36,7 @@ export function FolderCardContent({ data }: WorkspaceCanvasNodeRendererProps) {
     >
       <button
         type="button"
-        className="nodrag nopan flex h-full w-full flex-col items-center justify-center gap-1.5 rounded-[14px] bg-amber-50/80 text-amber-500 ring-1 ring-amber-100"
+        className="nodrag nopan flex h-full w-full flex-col items-center justify-center gap-1.5 rounded-[14px] bg-[var(--glass-tone-surface)] text-[var(--glass-tone-warning-fg)] shadow-[var(--glass-tone-shadow)]"
         onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => {
           event.stopPropagation()
@@ -59,7 +59,7 @@ export function FolderCardContent({ data }: WorkspaceCanvasNodeRendererProps) {
         disabled={actions.busy}
         aria-label={t('deleteFolder', { path: data.folder.workspacePath })}
         title={t('deleteFolder', { path: data.folder.workspacePath })}
-        className="nodrag nopan absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-[var(--glass-tone-danger-fg)] shadow-sm ring-1 ring-red-100 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+        className="nodrag nopan absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-[var(--glass-tone-surface)] text-[var(--glass-tone-danger-fg)] shadow-[var(--glass-tone-shadow)] transition hover:shadow-[var(--glass-tone-shadow-hover)] disabled:cursor-not-allowed disabled:opacity-50"
         onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => {
           event.stopPropagation()
@@ -109,7 +109,7 @@ export function FolderSectionShell({ data }: { readonly data: WorkspaceCanvasFol
           disabled={actions.busy}
           aria-label={t('deleteFolder', { path: data.folder.workspacePath })}
           title={t('deleteFolder', { path: data.folder.workspacePath })}
-          className="nodrag nopan -mr-1 inline-flex h-6 w-6 items-center justify-center rounded-full text-[var(--glass-tone-danger-fg)] transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="nodrag nopan -mr-1 inline-flex h-6 w-6 items-center justify-center rounded-full text-[var(--glass-tone-danger-fg)] transition hover:bg-[var(--glass-tone-soft)] disabled:cursor-not-allowed disabled:opacity-50"
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation()

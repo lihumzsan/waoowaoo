@@ -107,7 +107,7 @@ export default function PhoneCaptchaDialog({
         {error ? (
           <p
             role="alert"
-            className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+            className="rounded-xl bg-[var(--glass-tone-surface)] px-4 py-3 text-sm text-[var(--glass-tone-danger-fg)] shadow-[var(--glass-tone-shadow)]"
           >
             {error}
           </p>

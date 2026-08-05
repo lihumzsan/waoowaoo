@@ -371,7 +371,7 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
     : null
 
   return (
-    <div className={`text-sm leading-5 ${failed || interrupted ? 'text-[var(--glass-tone-warn-fg)]' : 'text-[var(--glass-text-tertiary)]'}`}>
+    <div className={`text-sm leading-5 ${failed || interrupted ? 'text-[var(--glass-tone-warning-fg)]' : 'text-[var(--glass-text-tertiary)]'}`}>
       <div className="flex items-center gap-2">
         <AppIcon name={iconName} className="h-3.5 w-3.5 shrink-0" />
         <span className="min-w-0 truncate">{summaryText} · {displayTitle}</span>
@@ -418,7 +418,7 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
         </div>
       ) : null}
       {failed ? (
-        <div className="ml-5 mt-1 rounded-lg bg-[var(--glass-tone-warn-bg)]/45 px-2 py-1 text-xs leading-4">
+        <div className="ml-5 mt-1 rounded-lg bg-[var(--glass-tone-surface)] shadow-[var(--glass-tone-shadow)] px-2 py-1 text-xs leading-4">
           {t('toolCall.failedDetail')}
         </div>
       ) : null}

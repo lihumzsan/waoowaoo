@@ -174,7 +174,7 @@ export function ProviderAdvancedFields({
           <div className="flex items-center gap-2 text-[12px] font-semibold text-[var(--glass-text-primary)]">
             <TypeIcon type={currentType} className="h-3 w-3" />
             <span>{typeLabel(currentType, t)}</span>
-            <span className="rounded-full bg-[var(--glass-tone-neutral-bg)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--glass-tone-neutral-fg)]">
+            <span className="rounded-full bg-[var(--glass-tone-neutral-bg)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--glass-tone-neutral-fg)] shadow-[var(--glass-tone-shadow)]">
               {currentModels.length}
             </span>
           </div>

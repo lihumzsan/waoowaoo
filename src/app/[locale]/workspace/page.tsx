@@ -594,7 +594,7 @@ export default function WorkspacePage() {
           <div className="glass-surface-modal p-6 w-full max-w-md mx-4">
             <h2 className="text-xl font-bold text-[var(--glass-text-primary)] mb-4">{t('createProject')}</h2>
             {modelSetupCheckFailed && (
-              <div className="flex items-start gap-2 mb-4 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400">
+              <div className="flex items-start gap-2 mb-4 px-3 py-2.5 rounded-xl bg-[var(--glass-tone-surface)] text-[var(--glass-tone-warning-fg)] shadow-[var(--glass-tone-shadow)]">
                 <AppIcon name="alert" className="w-4 h-4 shrink-0 mt-0.5" />
                 <span className="text-[12px] leading-relaxed">
                   {t('modelSetupCheckFailedBeforeCreate')}
@@ -602,7 +602,7 @@ export default function WorkspacePage() {
               </div>
             )}
             {modelNotConfigured && (
-              <div className="flex items-start gap-2 mb-4 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400">
+              <div className="flex items-start gap-2 mb-4 px-3 py-2.5 rounded-xl bg-[var(--glass-tone-surface)] text-[var(--glass-tone-warning-fg)] shadow-[var(--glass-tone-shadow)]">
                 <AppIcon name="alert" className="w-4 h-4 shrink-0 mt-0.5" />
                 <span className="text-[12px] leading-relaxed">
                   {t('modelNotConfigured.before')}
@@ -659,7 +659,7 @@ export default function WorkspacePage() {
                 />
               </div>
               {createError && (
-                <p className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-600">
+                <p className="mb-4 rounded-xl bg-[var(--glass-tone-surface)] px-3 py-2 text-sm text-[var(--glass-tone-danger-fg)] shadow-[var(--glass-tone-shadow)]">
                   {createError}
                 </p>
               )}
@@ -735,7 +735,7 @@ export default function WorkspacePage() {
                 />
               </div>
               {editError && (
-                <p className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-600">
+                <p className="mb-4 rounded-xl bg-[var(--glass-tone-surface)] px-3 py-2 text-sm text-[var(--glass-tone-danger-fg)] shadow-[var(--glass-tone-shadow)]">
                   {editError}
                 </p>
               )}

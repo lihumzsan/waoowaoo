@@ -50,17 +50,42 @@
   --glass-density-compact-scale: 0.86;
   --glass-density-default-scale: 1;
 
-  /* Tone system */
-  --glass-tone-neutral-bg: rgba(100, 116, 139, 0.18);
-  --glass-tone-neutral-fg: #374151;
-  --glass-tone-info-bg: rgba(47, 123, 255, 0.2);
-  --glass-tone-info-fg: #1d63e8;
-  --glass-tone-success-bg: rgba(16, 185, 129, 0.2);
-  --glass-tone-success-fg: #0f9f62;
-  --glass-tone-warning-bg: rgba(245, 158, 11, 0.24);
-  --glass-tone-warning-fg: #b86400;
-  --glass-tone-danger-bg: rgba(239, 68, 68, 0.2);
-  --glass-tone-danger-fg: #cb3a3a;
+  /* Tone system
+   *
+   * Surfaces stay white; the colour lives in the text and the icon. A large
+   * block of low-saturation translucent colour is what reads cheap — the hue
+   * itself never did. Depth comes from a shadow rather than a ring, because a
+   * dense screen of ringed pills turns into a screen of boxes.
+   *
+   * Every tone therefore shares one background and one shadow, and differs
+   * only in `-fg`. Never reintroduce a per-tone background. */
+  --glass-tone-surface: #ffffff;
+  --glass-tone-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.07),
+    0 1px 3px -1px rgba(15, 23, 42, 0.05);
+  /* Interactive tone surfaces lift instead of tinting — there is no fill left
+     to darken, and tinting would put the colour back onto the block. */
+  --glass-tone-shadow-hover:
+    0 2px 4px -1px rgba(15, 23, 42, 0.10),
+    0 4px 10px -4px rgba(15, 23, 42, 0.14);
+
+  /* Not every job that used to grab a tone background is a chip. An icon disc,
+     a selected row and a loading placeholder all need a quiet neutral area,
+     not a semantic one — they get their own tokens so nobody reaches back into
+     the tone scale for a fill. */
+  --glass-tone-soft: rgba(15, 23, 42, 0.05);
+  --glass-skeleton-bg: rgba(15, 23, 42, 0.09);
+
+  --glass-tone-neutral-bg: var(--glass-tone-surface);
+  --glass-tone-neutral-fg: #52525b;
+  --glass-tone-info-bg: var(--glass-tone-surface);
+  --glass-tone-info-fg: #1d4ed8;
+  --glass-tone-success-bg: var(--glass-tone-surface);
+  --glass-tone-success-fg: #047857;
+  --glass-tone-warning-bg: var(--glass-tone-surface);
+  --glass-tone-warning-fg: #b45309;
+  --glass-tone-danger-bg: var(--glass-tone-surface);
+  --glass-tone-danger-fg: #b91c1c;
 
   --glass-overlay-soft: rgba(10, 16, 30, 0.34);
   --glass-overlay: rgba(10, 16, 30, 0.46);

@@ -105,7 +105,7 @@ export default function ProfileTransactionsTable({
         {visible.map((part, index) => (
           <span
             key={`${item.id}-detail-${index}`}
-            className="glass-num inline-flex items-center rounded-full bg-[var(--glass-tone-neutral-bg)]/50 px-2 py-0.5 text-[11px] font-medium text-[var(--glass-text-secondary)]"
+            className="glass-num inline-flex items-center rounded-full bg-[var(--glass-tone-surface)] px-2 py-0.5 text-[11px] font-medium text-[var(--glass-tone-neutral-fg)] shadow-[var(--glass-tone-shadow)]"
           >
             {part.kind === 'translation' ? t(part.key, part.params) : part.text}
           </span>
@@ -153,10 +153,11 @@ export default function ProfileTransactionsTable({
               </td>
               <td className="hidden align-middle xl:table-cell">{renderBillingDetail(item)}</td>
               <td className="text-right align-middle">
+                {/* Sign and ink both carry the direction; neither stands alone. */}
                 <span
-                  className={`glass-num inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${item.amount < 0
-                    ? 'bg-[var(--glass-tone-danger-bg)]/60 text-[var(--glass-tone-danger-fg)]'
-                    : 'bg-[var(--glass-tone-success-bg)]/60 text-[var(--glass-tone-success-fg)]'}`}
+                  className={`glass-num inline-flex items-center rounded-full bg-[var(--glass-tone-surface)] px-2 py-0.5 text-xs font-semibold shadow-[var(--glass-tone-shadow)] ${item.amount < 0
+                    ? 'text-[var(--glass-tone-danger-fg)]'
+                    : 'text-[var(--glass-tone-success-fg)]'}`}
                 >
                   {formatCreditDelta(item.amount)}
                 </span>

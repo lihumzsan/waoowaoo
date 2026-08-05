@@ -88,10 +88,10 @@ export default function WorkspaceNode({ data, id }: NodeProps<WorkspaceCanvasFlo
               <span
                 className={`${SELECTABLE_CARD_CHROME_CLASS} inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
                   isRunning
-                    ? 'border-sky-200 bg-sky-50 text-sky-700'
+                    ? 'border-transparent bg-[var(--glass-tone-surface)] text-[var(--glass-tone-info-fg)]'
                     : data.lifecycle.phase === 'failed'
-                      ? 'border-red-200 bg-red-50 text-[var(--glass-tone-danger-fg)]'
-                      : 'border-slate-200 bg-white text-[var(--glass-text-secondary)]'
+                      ? 'border-transparent bg-[var(--glass-tone-surface)] text-[var(--glass-tone-danger-fg)]'
+                      : 'border-transparent bg-[var(--glass-tone-surface)] text-[var(--glass-tone-neutral-fg)]'
                 }`}
               >
                 {isRunning ? <LoadingSpinner /> : null}

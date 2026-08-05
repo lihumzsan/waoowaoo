@@ -510,7 +510,7 @@ export function WorkspaceNodeDetailsPanel({
       ) : null}
 
       {failedErrorMessage ? (
-        <div className="rounded-xl bg-[var(--glass-tone-danger-bg)] px-3 py-2 text-xs leading-5 text-[var(--glass-tone-danger-fg)]">
+        <div className="rounded-xl bg-[var(--glass-tone-danger-bg)] px-3 py-2 text-xs leading-5 text-[var(--glass-tone-danger-fg)] shadow-[var(--glass-tone-shadow)]">
           {failedErrorMessage}
         </div>
       ) : null}

@@ -108,9 +108,9 @@ function EmptyModelState({
     const hideTooltip = useCallback(() => setTooltipRect(null), [])
 
     return (
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
+        <div className="rounded-xl bg-[var(--glass-tone-surface)] px-3 py-2 shadow-[var(--glass-tone-shadow)]">
             <div className="flex min-w-0 items-center gap-2">
-                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--glass-tone-soft)] text-[var(--glass-tone-warning-fg)]">
                     <AppIcon name="alert" className="h-3.5 w-3.5" />
                 </span>
                 <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[var(--glass-text-primary)]">
@@ -392,7 +392,7 @@ export function DefaultModelCards(allProps: DefaultModelCardsProps) {
                     {/* Assistant Model Card */}
                     <div className="flex-1 glass-surface glass-card-shadow-soft p-4 rounded-2xl border border-[var(--glass-stroke-base)] hover:border-blue-500/30 transition-colors bg-gradient-to-br from-[var(--glass-bg-surface)] to-transparent">
                         <div className="flex items-start justify-between mb-2">
-                            <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+                            <div className="w-8 h-8 rounded-lg bg-[var(--glass-tone-soft)] flex items-center justify-center shrink-0">
                                 <AppIcon name="brain" className="w-4 h-4 text-blue-500" />
                             </div>
                         </div>
@@ -409,7 +409,7 @@ export function DefaultModelCards(allProps: DefaultModelCardsProps) {
                     {/* Analysis Model Card */}
                     <div className="flex-1 glass-surface glass-card-shadow-soft p-4 rounded-2xl border border-[var(--glass-stroke-base)] hover:border-cyan-500/30 transition-colors bg-gradient-to-br from-[var(--glass-bg-surface)] to-transparent">
                         <div className="flex items-start justify-between mb-2">
-                            <div className="w-8 h-8 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                            <div className="w-8 h-8 rounded-lg bg-[var(--glass-tone-soft)] flex items-center justify-center shrink-0">
                                 <AppIcon name="fileText" className="w-4 h-4 text-cyan-500" />
                             </div>
                             <CompactConcurrencyControl
@@ -434,7 +434,7 @@ export function DefaultModelCards(allProps: DefaultModelCardsProps) {
                     {/* Video Model Card */}
                     <div className="flex-1 glass-surface glass-card-shadow-soft p-4 rounded-2xl border border-[var(--glass-stroke-base)] hover:border-purple-500/30 transition-colors bg-gradient-to-br from-[var(--glass-bg-surface)] to-transparent">
                         <div className="flex items-start justify-between mb-2">
-                            <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                            <div className="w-8 h-8 rounded-lg bg-[var(--glass-tone-soft)] flex items-center justify-center">
                                 <AppIcon name="clapperboard" className="w-4 h-4 text-purple-500" />
                             </div>
                             <CompactConcurrencyControl
@@ -465,7 +465,7 @@ export function DefaultModelCards(allProps: DefaultModelCardsProps) {
                         {t('defaultModelSection.creativePipeline')}
                     </h3>
                 </div>
-                <div className="glass-surface glass-card-shadow-soft p-6 rounded-3xl border border-indigo-500/20 bg-indigo-500/[0.02] mb-8">
+                <div className="glass-surface glass-card-shadow-soft p-6 rounded-3xl border border-[var(--glass-stroke-base)] mb-8">
                     {pipelineGlobalOptions.length === 0 ? (
                         <EmptyModelState
                             modelType="image"

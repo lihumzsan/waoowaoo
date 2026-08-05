@@ -93,7 +93,7 @@ export default function InAppAnnouncementHost({
     >
       {current ? (
         <div className="py-2 text-center">
-          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--glass-tone-info-bg)]">
+          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--glass-tone-soft)]">
             <AppIcon name="sparkles" className="h-7 w-7 text-[var(--glass-tone-info-fg)]" aria-hidden="true" />
           </span>
           <p className="mx-auto mt-4 max-w-sm text-[14px] leading-7 text-[var(--glass-text-secondary)]">

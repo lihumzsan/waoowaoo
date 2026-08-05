@@ -134,7 +134,7 @@ function SubagentActivity({ activity }: { readonly activity: WorkspaceAssistantS
   if (activity.kind === 'tool') {
     const label = activity.label ?? t('runtime.native.subagentActivity.tool')
     return (
-      <div className={`flex items-center gap-2 text-sm leading-5 ${activity.status === 'failed' ? 'text-[var(--glass-tone-warn-fg)]' : 'text-[var(--glass-text-tertiary)]'}`}>
+      <div className={`flex items-center gap-2 text-sm leading-5 ${activity.status === 'failed' ? 'text-[var(--glass-tone-warning-fg)]' : 'text-[var(--glass-text-tertiary)]'}`}>
         <AppIcon name={activity.status === 'failed' ? 'alert' : 'settingsHex'} className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         <span className="min-w-0 truncate">
           <span className={running ? 'assistant-shimmer-text' : ''}>

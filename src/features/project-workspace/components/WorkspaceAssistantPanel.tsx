@@ -119,7 +119,7 @@ function WorkspaceAssistantRunFailureNotice({
   return (
     <div
       role="alert"
-      className="flex items-start gap-2 rounded-md border border-[var(--glass-tone-warn-fg)]/25 bg-[var(--glass-tone-warn-bg)]/70 px-3 py-2 text-sm leading-5 text-[var(--glass-tone-warn-fg)]"
+      className="flex items-start gap-2 rounded-md bg-[var(--glass-tone-surface)] shadow-[var(--glass-tone-shadow)] px-3 py-2 text-sm leading-5 text-[var(--glass-tone-warning-fg)]"
     >
       <AppIcon name="alert" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
       <div className="min-w-0">
@@ -135,7 +135,7 @@ function WorkspaceAssistantRunFailureNotice({
             type="button"
             disabled={action.pending}
             onClick={action.onClick}
-            className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-[var(--glass-tone-warn-fg)]/30 bg-white/70 px-2 py-1 text-xs font-medium text-[var(--glass-tone-warn-fg)] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-[var(--glass-tone-warning-fg)]/30 bg-white/70 px-2 py-1 text-xs font-medium text-[var(--glass-tone-warning-fg)] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             <AppIcon name="refresh" className="h-3 w-3 shrink-0" />
             {action.pending ? action.pendingLabel : action.label}
@@ -306,7 +306,7 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
     return (
       <div
         role="alert"
-        className="rounded-md border border-[var(--glass-tone-warn-fg)]/25 bg-[var(--glass-tone-warn-bg)]/70 px-3 py-2 text-sm text-[var(--glass-tone-warn-fg)]"
+        className="rounded-md bg-[var(--glass-tone-surface)] shadow-[var(--glass-tone-shadow)] px-3 py-2 text-sm text-[var(--glass-tone-warning-fg)]"
       >
         {t('panel.sessionStateError')}
       </div>
@@ -367,7 +367,7 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
           </fieldset>
         ))}
         {error ? (
-          <div role="alert" className="text-xs text-[var(--glass-tone-warn-fg)]">
+          <div role="alert" className="text-xs text-[var(--glass-tone-warning-fg)]">
             {t('cards.interactionSubmitErrorFallback')}
           </div>
         ) : null}
@@ -572,12 +572,12 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
         </div>
       ) : null}
       {!schemaSupported ? (
-        <div role="alert" className="text-xs text-[var(--glass-tone-warn-fg)]">
+        <div role="alert" className="text-xs text-[var(--glass-tone-warning-fg)]">
           {t('panel.sessionStateError')}
         </div>
       ) : null}
       {error ? (
-        <div role="alert" className="text-xs text-[var(--glass-tone-warn-fg)]">
+        <div role="alert" className="text-xs text-[var(--glass-tone-warning-fg)]">
           {t('cards.interactionSubmitErrorFallback')}
         </div>
       ) : null}
@@ -972,7 +972,7 @@ export default function WorkspaceAssistantPanel({
                           {assistantRuntime.viewError ? (
                             <div
                               role="alert"
-                              className="rounded-md border border-[var(--glass-tone-warn-fg)]/25 bg-[var(--glass-tone-warn-bg)]/70 px-3 py-2 text-sm leading-5 text-[var(--glass-tone-warn-fg)]"
+                              className="rounded-md bg-[var(--glass-tone-surface)] shadow-[var(--glass-tone-shadow)] px-3 py-2 text-sm leading-5 text-[var(--glass-tone-warning-fg)]"
                             >
                               {t('panel.sessionStateError')}
                             </div>

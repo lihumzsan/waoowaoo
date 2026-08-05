@@ -86,9 +86,9 @@ export function ProviderBaseFields({ provider, t, state }: ProviderBaseFieldsPro
       {state.keyTestStatus !== 'idle' && (
         <div className="px-3.5 pt-2">
           <div className={`space-y-2 rounded-xl border-2 p-3 ${state.keyTestStatus === 'passed'
-            ? 'border-green-500/40 bg-green-500/5'
+            ? 'border-[var(--glass-stroke-success)] bg-[var(--glass-tone-surface)]'
             : state.keyTestStatus === 'failed'
-              ? 'border-red-500/40 bg-red-500/5'
+              ? 'border-[var(--glass-stroke-danger)] bg-[var(--glass-tone-surface)]'
               : 'border-[var(--glass-border)] bg-[var(--glass-bg-surface)]'
             }`}>
             {/* Header */}
@@ -176,7 +176,7 @@ export function ProviderBaseFields({ provider, t, state }: ProviderBaseFieldsPro
 
             {/* Success banner */}
             {state.keyTestStatus === 'passed' && (
-              <div className="flex items-center gap-2 rounded-lg bg-green-500/10 px-3 py-2 text-xs font-medium text-green-600 dark:text-green-400">
+              <div className="flex items-center gap-2 rounded-lg bg-[var(--glass-tone-surface)] px-3 py-2 text-xs font-medium text-[var(--glass-tone-success-fg)] shadow-[var(--glass-tone-shadow)]">
                 <AppIcon name="check" className="h-4 w-4 shrink-0" />
                 {t('testPassed')}
               </div>
@@ -184,7 +184,7 @@ export function ProviderBaseFields({ provider, t, state }: ProviderBaseFieldsPro
 
             {/* Failure warning */}
             {state.keyTestStatus === 'failed' && (
-              <div className="flex items-start gap-2 rounded-lg bg-yellow-500/10 px-3 py-2 text-[11px] text-[var(--glass-text-primary)]">
+              <div className="flex items-start gap-2 rounded-lg bg-[var(--glass-tone-surface)] px-3 py-2 text-[11px] text-[var(--glass-tone-warning-fg)] shadow-[var(--glass-tone-shadow)]">
                 <span className="mt-0.5 shrink-0 text-sm">&#9888;</span>
                 <span>{t('testWarning')}</span>
               </div>

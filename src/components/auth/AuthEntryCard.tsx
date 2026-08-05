@@ -436,12 +436,12 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
           ) : null}
 
           {error ? (
-            <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <p role="alert" className="mt-5 rounded-xl bg-[var(--glass-tone-surface)] px-4 py-3 text-sm text-[var(--glass-tone-danger-fg)] shadow-[var(--glass-tone-shadow)]">
               {error}
             </p>
           ) : null}
           {notice ? (
-            <p role="status" className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            <p role="status" className="mt-5 rounded-xl bg-[var(--glass-tone-surface)] px-4 py-3 text-sm text-[var(--glass-tone-success-fg)] shadow-[var(--glass-tone-shadow)]">
               {notice}
             </p>
           ) : null}

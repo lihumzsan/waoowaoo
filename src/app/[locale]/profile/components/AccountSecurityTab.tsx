@@ -292,7 +292,8 @@ export default function AccountSecurityTab({
             <p className="truncate text-sm text-[var(--glass-text-secondary)]">
               {security.email || t('emailNotBound')}
             </p>
-            <span className="mt-3 inline-flex rounded-full bg-[var(--glass-tone-info-bg)] px-2.5 py-1 text-xs font-medium text-[var(--glass-tone-info-fg)]">
+            {/* 「已绑定」在邮箱和 Google 上是同一个事实,必须是同一个语气。 */}
+            <span className={`glass-chip mt-3 ${security.email ? 'glass-chip-success' : 'glass-chip-neutral'}`}>
               {security.email ? t('bound') : t('notBound')}
             </span>
           </div>
@@ -307,7 +308,7 @@ export default function AccountSecurityTab({
                 {googleLinked ? t('googleBound') : t('googleNotBound')}
               </p>
               {googleLinked ? (
-                <span className="mt-3 inline-flex rounded-full bg-[var(--glass-tone-success-bg)] px-2.5 py-1 text-xs font-medium text-[var(--glass-tone-success-fg)]">
+                <span className="glass-chip glass-chip-success mt-3">
                   {t('bound')}
                 </span>
               ) : (
@@ -333,7 +334,7 @@ export default function AccountSecurityTab({
               <p className="text-sm text-[var(--glass-text-secondary)]">
                 {security.hasPassword ? t('passwordBound') : t('passwordNotSet')}
               </p>
-              <span className={`mt-3 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${security.hasPassword ? 'bg-[var(--glass-tone-success-bg)] text-[var(--glass-tone-success-fg)]' : 'bg-[var(--glass-tone-warning-bg)] text-[var(--glass-tone-warning-fg)]'}`}>
+              <span className={`glass-chip mt-3 ${security.hasPassword ? 'glass-chip-success' : 'glass-chip-warning'}`}>
                 {security.hasPassword ? t('set') : t('notSet')}
               </span>
               <button

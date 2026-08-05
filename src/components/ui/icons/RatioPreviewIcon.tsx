@@ -54,7 +54,7 @@ export function RatioPreviewIcon({
   }
 
   const toneClass = selected
-    ? 'bg-[var(--glass-tone-info-bg)] shadow-[0_0_0_1px_rgba(79,128,255,0.35)]'
+    ? 'bg-[var(--glass-tone-soft)] shadow-[0_0_0_1px_var(--glass-stroke-strong)]'
     : resolveUnselectedClass(variant)
 
   return <span aria-hidden="true" className={`${radiusClassName} block transition-all ${toneClass}`} style={style} />

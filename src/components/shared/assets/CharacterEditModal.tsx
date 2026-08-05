@@ -139,7 +139,7 @@ export function CharacterEditModal({
                     {changeReason && (
                         <div className="text-sm text-[var(--glass-text-secondary)]">
                             {t('character.appearance')}:
-                            <span className="ml-1 inline-flex items-center rounded-full px-2 py-0.5 bg-[var(--glass-tone-neutral-bg)] text-[var(--glass-tone-neutral-fg)]">
+                            <span className="ml-1 inline-flex items-center rounded-full px-2 py-0.5 bg-[var(--glass-tone-neutral-bg)] text-[var(--glass-tone-neutral-fg)] shadow-[var(--glass-tone-shadow)]">
                                 {changeReason}
                             </span>
                         </div>

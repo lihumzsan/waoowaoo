@@ -102,7 +102,7 @@ export function AssistantRuntimeSkillsDataCard({ data }: DataMessagePartProps<Ru
           </div>
         ))}
       </div>
-      <div className="mt-2 text-[11px] text-[var(--glass-tone-warn-fg)]">
+      <div className="mt-2 text-[11px] text-[var(--glass-tone-warning-fg)]">
         {t('runtime.skills.errors', { count: data.errorCount })}
       </div>
     </details>

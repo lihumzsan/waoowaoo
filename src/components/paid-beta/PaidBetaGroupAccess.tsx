@@ -12,7 +12,7 @@ export default function PaidBetaGroupAccess({
 
   return (
     <div className="flex flex-col items-center py-1 text-center">
-      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--glass-tone-success-bg)]">
+      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--glass-tone-soft)]">
         <AppIcon
           name="check"
           strokeWidth={2.6}

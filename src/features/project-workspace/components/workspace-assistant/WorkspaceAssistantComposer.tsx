@@ -148,7 +148,7 @@ export function WorkspaceAssistantComposer({
         {attachmentError ? (
           <p
             role="alert"
-            className="mt-2 rounded-lg bg-[var(--glass-tone-danger-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-danger-fg)]"
+            className="mt-2 rounded-lg bg-[var(--glass-tone-danger-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-danger-fg)] shadow-[var(--glass-tone-shadow)]"
           >
             {attachmentError}
           </p>
@@ -208,8 +208,8 @@ export function WorkspaceAssistantComposer({
           role={error.tone === 'info' ? 'status' : 'alert'}
           className={
             error.tone === 'info'
-              ? 'mt-1.5 rounded-lg bg-[var(--glass-tone-info-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-info-fg)]'
-              : 'mt-1.5 rounded-lg bg-[var(--glass-tone-danger-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-danger-fg)]'
+              ? 'mt-1.5 rounded-lg bg-[var(--glass-tone-info-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-info-fg)] shadow-[var(--glass-tone-shadow)]'
+              : 'mt-1.5 rounded-lg bg-[var(--glass-tone-danger-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-danger-fg)] shadow-[var(--glass-tone-shadow)]'
           }
         >
           <p className="font-medium">{error.headline}</p>

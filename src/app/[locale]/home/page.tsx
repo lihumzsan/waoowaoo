@@ -522,12 +522,12 @@ export default function HomePage() {
                     </div>
                   ) : null}
                   {attachError ? (
-                    <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600">
+                    <p className="rounded-xl bg-[var(--glass-tone-surface)] px-4 py-3 text-sm text-[var(--glass-tone-danger-fg)] shadow-[var(--glass-tone-shadow)]">
                       {attachError}
                     </p>
                   ) : null}
                   {createError ? (
-                    <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600">
+                    <p className="rounded-xl bg-[var(--glass-tone-surface)] px-4 py-3 text-sm text-[var(--glass-tone-danger-fg)] shadow-[var(--glass-tone-shadow)]">
                       {createError}
                     </p>
                   ) : null}

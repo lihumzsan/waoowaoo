@@ -50,7 +50,7 @@ interface NavbarProps {
 
 function NavbarSessionLoadingSkeleton({ label }: { label: string }) {
   const skeletonClassName =
-    'block rounded-full border border-[var(--glass-stroke-base)] bg-[var(--glass-tone-neutral-bg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] motion-safe:animate-pulse'
+    'block rounded-full border border-[var(--glass-stroke-base)] bg-[var(--glass-skeleton-bg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] motion-safe:animate-pulse'
 
   return (
     <div role="status" aria-label={label} className="flex items-center gap-1.5">
@@ -248,7 +248,7 @@ export default function Navbar({
                   {tc('appName')}
                 </span>
                 {showBetaBadge ? (
-                  <span className="mt-1 rounded-full border border-[var(--glass-accent-from)]/30 bg-[var(--glass-tone-info-bg)] px-1.5 py-0.5 text-[8px] font-bold tracking-[0.18em] text-[var(--glass-tone-info-fg)]">
+                  <span className="mt-1 rounded-full bg-[var(--glass-tone-surface)] px-1.5 py-0.5 text-[8px] font-bold tracking-[0.18em] text-[var(--glass-tone-info-fg)] shadow-[var(--glass-tone-shadow)]">
                     {tc('betaBadge')}
                   </span>
                 ) : null}
@@ -258,7 +258,7 @@ export default function Navbar({
               <button
                 type="button"
                 onClick={openModal}
-                className="relative inline-flex items-center gap-1.5 rounded-full border border-[var(--glass-tone-warning-fg)]/40 bg-[linear-gradient(135deg,var(--glass-tone-warning-bg),var(--glass-bg-surface-strong))] px-2.5 py-1 text-[11px] font-semibold text-[var(--glass-tone-warning-fg)] shadow-[0_8px_24px_-16px_rgba(245,158,11,0.9)] transition-all hover:brightness-105"
+                className="relative inline-flex items-center gap-1.5 rounded-full bg-[var(--glass-tone-surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--glass-tone-warning-fg)] shadow-[var(--glass-tone-shadow)] transition-shadow hover:shadow-[var(--glass-tone-shadow-hover)]"
                 aria-label={tc('updateNotice.openDialog')}
               >
                 {shouldPulse ? <span className="absolute -inset-1 animate-ping rounded-full bg-[var(--glass-tone-warning-fg)] opacity-20" /> : null}

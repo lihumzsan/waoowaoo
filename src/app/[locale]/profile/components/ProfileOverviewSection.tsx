@@ -34,17 +34,21 @@ export interface ProfileBalanceSummary {
  * Each tier gets its own accent so a glance at the card says which plan is in
  * force — a page where every plan looks identical gives the user nothing to
  * recognise, and nothing to want.
+ *
+ * The accent is an ink, not a fill: it colours the badge text, the meter and
+ * the corner glow, while the badge surface stays white like every other tone
+ * surface. See the tone system in ui-tokens-glass.css.
  */
-const PLAN_ACCENTS: Record<string, { readonly ring: string; readonly glow: string; readonly chip: string }> = {
-  starter: { ring: '#64748b', glow: 'rgba(100,116,139,0.18)', chip: 'rgba(100,116,139,0.14)' },
-  creator: { ring: '#3b82f6', glow: 'rgba(59,130,246,0.20)', chip: 'rgba(59,130,246,0.14)' },
-  pro: { ring: '#8b5cf6', glow: 'rgba(139,92,246,0.20)', chip: 'rgba(139,92,246,0.14)' },
-  studio: { ring: '#f59e0b', glow: 'rgba(245,158,11,0.20)', chip: 'rgba(245,158,11,0.16)' },
-  flagship: { ring: '#e11d48', glow: 'rgba(225,29,72,0.20)', chip: 'rgba(225,29,72,0.14)' },
+const PLAN_INKS: Record<string, string> = {
+  starter: '#52525b',
+  creator: '#1d4ed8',
+  pro: '#6d28d9',
+  studio: '#b45309',
+  flagship: '#be123c',
 }
 
-function planAccent(planId: string | undefined) {
-  return (planId && PLAN_ACCENTS[planId]) || null
+function planInk(planId: string | undefined): string | null {
+  return (planId && PLAN_INKS[planId]) || null
 }
 
 function normalizeAmount(value: number | undefined): number {
@@ -91,7 +95,7 @@ export default function ProfileOverviewSection({
   const total = available + spent
   const usageRatio = total > 0 ? Math.min(1, Math.max(0, available / total)) : 1
   const subscription = balance?.subscription ?? null
-  const accent = planAccent(subscription?.planId)
+  const ink = planInk(subscription?.planId)
 
   return (
     <div className="space-y-5">
@@ -104,26 +108,18 @@ export default function ProfileOverviewSection({
 
       {/* Plan and balance are one fact — what you have, and what keeps refilling
           it. Split across two cards they read as unrelated numbers. */}
-      <section
-        className="glass-surface-elevated relative overflow-hidden p-7"
-        style={accent ? { boxShadow: `0 0 0 1px ${accent.chip}, 0 18px 40px -28px ${accent.glow}` } : undefined}
-      >
+      <section className="glass-surface-elevated relative overflow-hidden p-7">
+        {/* The plan reads from the corner glow and the badge ink. A hard bar
+            across the top read as a loading indicator, not as a plan. */}
         <div
           aria-hidden="true"
           className="pointer-events-none absolute -right-24 -top-28 h-64 w-64 rounded-full blur-2xl"
           style={
-            accent
-              ? { background: `radial-gradient(circle, ${accent.glow}, transparent 70%)` }
+            ink
+              ? { background: `radial-gradient(circle, ${ink}24, transparent 70%)` }
               : { backgroundImage: 'var(--glass-cta-gradient)', opacity: 0.08 }
           }
         />
-        {accent ? (
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 top-0 h-[3px]"
-            style={{ background: `linear-gradient(90deg, ${accent.ring}, transparent)` }}
-          />
-        ) : null}
 
         <div className="relative flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
@@ -139,15 +135,11 @@ export default function ProfileOverviewSection({
             <div className="mt-1.5 text-xs text-[var(--glass-text-tertiary)]">{t('recharge.unitValue')}</div>
           </div>
 
-          {subscription && accent ? (
+          {subscription && ink ? (
             <div className="flex flex-col items-end gap-2">
               <span
-                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold"
-                style={{
-                  backgroundColor: accent.chip,
-                  color: accent.ring,
-                  boxShadow: `inset 0 0 0 1px ${accent.ring}40`,
-                }}
+                className="glass-chip px-3 py-1.5 text-[13px]"
+                style={{ color: ink }}
               >
                 <AppIcon name="sparkles" className="h-3.5 w-3.5" />
                 {t(`planNames.${subscription.planId}` as 'planNames.creator')}
@@ -183,7 +175,7 @@ export default function ProfileOverviewSection({
             className="glass-meter-fill"
             style={{
               width: `${Math.round(usageRatio * 100)}%`,
-              ...(accent ? { background: `linear-gradient(90deg, ${accent.ring}, ${accent.ring}99)` } : {}),
+              ...(ink ? { background: `linear-gradient(90deg, ${ink}, ${ink}99)` } : {}),
             }}
           />
         </div>
@@ -191,10 +183,9 @@ export default function ProfileOverviewSection({
         {/* The two pools behave differently — one expires, one does not — so a
             single total hides the thing a user most needs to know. */}
         <div className="relative mt-5 grid grid-cols-2 gap-3">
-          <div
-            className="rounded-xl border border-[var(--glass-stroke-soft)] bg-white/70 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
-            style={accent ? { borderColor: `${accent.ring}33` } : undefined}
-          >
+          {/* Both pools share one stroke. The plan already identifies itself
+              through the badge ink, the corner glow and the meter. */}
+          <div className="rounded-xl border border-[var(--glass-stroke-soft)] bg-white/70 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
             <p className="text-xs font-medium text-[var(--glass-text-tertiary)]">{t('planCredits')}</p>
             <p className="glass-num mt-1 text-xl font-semibold tracking-tight text-[var(--glass-text-primary)]">
               {formatStatAmount(balance?.subscriptionCredits)}
