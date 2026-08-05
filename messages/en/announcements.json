@@ -1,7 +1,7 @@
 {
   "canvasBetaWelcome": {
-    "title": "Welcome to waoowaoo Beta 🛠️",
-    "body": "This place is growing while the ideas arrive. If you spot a rough edge, tell us — you may have just helped it evolve.",
-    "action": "Nice, let's play"
+    "title": "A quick heads-up: this is still Beta 👀",
+    "body": "We're still polishing things. You may run into slower loading, an occasional failed generation, or a page that takes a moment to catch up. Wait a bit or refresh before trying again; if it still looks wrong, send us a screenshot and we'll take a look.",
+    "action": "Got it, keep creating"
   }
 }
