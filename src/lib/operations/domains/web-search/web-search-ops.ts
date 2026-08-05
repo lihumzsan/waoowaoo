@@ -20,6 +20,7 @@ import {
 } from '@/lib/billing/llm-usage'
 import { defineOperation } from '@/lib/operations/define-operation'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import { createScopedLogger } from '@/lib/logging/core'
 import { prisma } from '@/lib/prisma'
 import { normalizeProjectAgentLocale, type ProjectAgentLocale } from '@/lib/project-agent/locale'
 import {
@@ -32,6 +33,8 @@ import {
   type WebSearchResponse,
   type WebSearchUsage,
 } from '@/lib/web-search'
+
+const usageLogger = createScopedLogger({ module: 'web-search.usage' })
 
 type SearchWeb = (input: {
   readonly request: WebSearchRequest
@@ -171,14 +174,29 @@ async function recordUsage(
     requestCount: 1,
     toolCalls: usage.toolCalls,
   }
-  await prisma.$transaction(async (tx) => {
-    await recordLlmUsageFact(tx, {
-      usageId: buildLlmUsageFactId('web-search', [turnId, callId]),
-      projectId: ctx.projectId,
-      userId: ctx.userId,
-      action: 'assistant.web_search',
-      usage: fact,
-      metadata: { turnId, callId },
+  try {
+    await prisma.$transaction(async (tx) => {
+      await recordLlmUsageFact(tx, {
+        usageId: buildLlmUsageFactId('web-search', [turnId, callId]),
+        projectId: ctx.projectId,
+        userId: ctx.userId,
+        action: 'assistant.web_search',
+        usage: fact,
+        metadata: { turnId, callId },
+      })
     })
-  })
+  } catch (error) {
+    // The research already ran and the user is owed its result, so a ledger
+    // fault must not turn a successful search into a failed tool call. It is
+    // loud in the log instead, where unbilled usage is actionable.
+    usageLogger.error({
+      audit: true,
+      action: 'alert.billing.web_search_usage_unrecorded',
+      message: 'web search usage could not be recorded; the provider call is unbilled',
+      userId: ctx.userId,
+      projectId: ctx.projectId,
+      details: { turnId, callId, model: usage.model, toolCalls: usage.toolCalls },
+      error,
+    })
+  }
 }

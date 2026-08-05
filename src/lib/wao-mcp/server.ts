@@ -144,6 +144,13 @@ export function createWaoMcpServer(
         progressSequence += 1
         // Progress is decoration: a transport hiccup here must never surface as
         // a tool failure, so delivery failures are dropped on purpose.
+        // Records what we actually put on the wire, so a missing progress line
+        // can be attributed to a hop instead of investigated from scratch.
+        mcpLogger.info({
+          action: 'wao_mcp.progress_sent',
+          message: 'wao mcp progress notification sent',
+          details: { operationId: entry.operationId, sequence: progressSequence },
+        })
         void extra.sendNotification({
           method: 'notifications/progress',
           params: { progressToken, progress: progressSequence, message: text.slice(0, 500) },
