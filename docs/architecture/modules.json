@@ -218,7 +218,7 @@
       "title": "托管联网研究",
       "sourcePaths": [
         "src/lib/web-search",
-        "src/lib/operations/domains/web-search",
+        "src/lib/codex-model-gateway/standalone-search.ts",
         "src/lib/ai-providers/openai",
         "src/lib/ai-exec/hosted-web-search.ts",
         "src/lib/wao-mcp",
@@ -278,7 +278,9 @@
       "sourcePaths": [
         "src/lib/logging",
         "src/lib/llm-observe",
-        "src/app/api/logs"
+        "src/lib/errors/client-reporter.ts",
+        "src/app/api/client-log",
+        "src/app/api/admin/download-logs"
       ]
     },
     {
@@ -289,9 +291,10 @@
         "tests",
         "scripts/architecture-impact.mjs",
         "scripts/architecture-impact-lib.mjs",
-        "scripts/check-conformance.mjs",
+        "scripts/test-verification",
         "vitest.config.ts",
-        "playwright.config.ts"
+        "tests/browser-security/playwright.config.ts",
+        "tsconfig.runtime-scripts.json"
       ]
     }
   ]
