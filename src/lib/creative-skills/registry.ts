@@ -50,9 +50,9 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'video-direction': defineSkill({
     id: 'video-direction',
-    version: '3.0.0',
+    version: '4.0.0',
     title: '视频导演与生成设计',
-    summary: '先从剧本派生整片时间线，再完成导演规划、分段装载、最终提示词与输出前自检。',
+    summary: '以结构化状态接力和物理表演设计完成整片时间线、最少分段装载、最终提示词与接缝自检。',
     tags: ['video', 'director', 'prompt', 'editing', 'timeline', 'shot', 'camera', 'continuity', 'audio'],
   }),
   'music-direction': defineSkill({
