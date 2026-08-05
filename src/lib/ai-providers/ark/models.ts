@@ -308,9 +308,9 @@ export const ARK_BUILTIN_PRICING_CATALOG_ENTRIES = [
   { apiType: 'text', provider: 'ark', modelId: 'doubao-seed-1-6-lite-251015', cost: arkTokenPricing(0.3, 0.6) },
   // Seedream 5.0 lists at US$0.045 per image up to 2.36MP; converted at the
   // catalog's USD rate. Verify against the Ark console before launch.
-  { apiType: 'image', provider: 'ark', modelId: 'doubao-seedream-5-0-260128', cost: arkFlatPricing(0.324), retail: arkFlatPricing(7) },
-  { apiType: 'image', provider: 'ark', modelId: 'doubao-seedream-4-5-251128', cost: arkFlatPricing(0.25), retail: arkFlatPricing(5) },
-  { apiType: 'image', provider: 'ark', modelId: 'doubao-seedream-4-0-250828', cost: arkFlatPricing(0.2), retail: arkFlatPricing(4) },
+  { apiType: 'image', provider: 'ark', modelId: 'doubao-seedream-5-0-260128', cost: arkFlatPricing(0.324), retail: arkFlatPricing(15) },
+  { apiType: 'image', provider: 'ark', modelId: 'doubao-seedream-4-5-251128', cost: arkFlatPricing(0.25), retail: arkFlatPricing(11) },
+  { apiType: 'image', provider: 'ark', modelId: 'doubao-seedream-4-0-250828', cost: arkFlatPricing(0.2), retail: arkFlatPricing(9) },
   {
     apiType: 'video',
     provider: 'ark',
