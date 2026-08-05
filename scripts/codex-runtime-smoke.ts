@@ -126,6 +126,7 @@ async function assertPinnedProtocolSurface(rootDir: string): Promise<void> {
     'mcpToolCall',
     'collabAgentToolCall',
     'subAgentActivity',
+    'webSearch',
   ]) {
     assert.ok(notifications.includes(`\"${itemType}\"`), `Pinned Codex protocol no longer exposes ${itemType}`)
   }
@@ -388,11 +389,11 @@ async function runAppServerSmoke(params: {
   const runtimeKey = 'stage-0-smoke'
   const cwd = path.join(params.rootDir, 'workspace')
   const customProviderConfig = {
-    web_search: 'disabled',
+    web_search: 'live',
     features: {
       skill_search: false,
       image_generation: false,
-      standalone_web_search: false,
+      standalone_web_search: true,
       code_mode: {
         enabled: true,
         direct_only_tool_namespaces: ['wao'],
@@ -409,7 +410,7 @@ async function runAppServerSmoke(params: {
         env_key: 'WAO_MCP_RUNTIME_BEARER_TOKEN',
         wire_api: 'responses',
         requires_openai_auth: false,
-        supports_standalone_web_search: false,
+        supports_standalone_web_search: true,
         request_max_retries: 0,
         stream_max_retries: 0,
       },

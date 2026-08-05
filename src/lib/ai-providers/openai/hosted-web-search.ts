@@ -30,8 +30,6 @@ import {
   webSearchResponseSchema,
   type NormalizedWebSearchRequest,
   type WebSearchImage,
-  type WebSearchProgressEvent,
-  type WebSearchProgressListener,
   type WebSearchUsage,
   type WebSearchSource,
 } from '@/lib/web-search/contracts'
@@ -120,7 +118,6 @@ export type OpenAIHostedSearchRunner = (input: {
   readonly model: string
   readonly apiKey: string
   readonly signal: AbortSignal
-  readonly onProgress?: WebSearchProgressListener
 }) => Promise<OpenAIHostedSearchRunResult>
 
 type UnknownRecord = Readonly<Record<string, unknown>>
@@ -389,40 +386,6 @@ function projectUsage(
   }
 }
 
-function readProgressAction(value: unknown): WebSearchProgressEvent['action'] {
-  const type = readString(readRecord(value)?.type)
-  return type === 'search' || type === 'open_page' || type === 'find_in_page' ? type : null
-}
-
-function emitProgressFromEvent(
-  onProgress: WebSearchProgressListener | undefined,
-  event: UnknownRecord,
-): void {
-  if (!onProgress) return
-  const type = readString(event.type)
-  // A step announces only that it started; OpenAI populates `action` when the
-  // step finishes. Reporting a running step as "reading example.com" would
-  // therefore be invented, so a start is reported as a start and nothing more.
-  if (type === 'response.web_search_call.in_progress') {
-    onProgress({ phase: 'started', action: null, query: null, url: null })
-    return
-  }
-  if (type !== 'response.output_item.done') return
-  const item = readRecord(event.item)
-  if (!item || item.type !== 'web_search_call') return
-  const actionRecord = readRecord(item.action)
-  const action = readProgressAction(item.action)
-  if (!action) return
-  const query = readString(actionRecord?.query).slice(0, 1_000)
-  const url = normalizeHttpUrl(actionRecord?.url)
-  onProgress({
-    phase: 'completed',
-    action,
-    query: query.length > 0 ? query : null,
-    url,
-  })
-}
-
 /**
  * The one place that talks to OpenAI.
  *
@@ -437,7 +400,6 @@ const runOpenAIHostedSearch: OpenAIHostedSearchRunner = async ({
   model,
   apiKey,
   signal,
-  onProgress,
 }) => {
   const client = new OpenAI({ apiKey, maxRetries: 0 })
   // The declared tool request is ahead of the installed SDK's `Tool` union; the
@@ -461,7 +423,6 @@ const runOpenAIHostedSearch: OpenAIHostedSearchRunner = async ({
   for await (const eventValue of stream) {
     const event = readRecord(eventValue)
     if (!event) continue
-    emitProgressFromEvent(onProgress, event)
     if (readString(event.type) !== 'response.completed') continue
     const response = readRecord(event.response)
     if (!response) continue
@@ -602,7 +563,6 @@ export function createOpenAIWebSearchProvider(input: {
           model,
           apiKey,
           signal,
-          onProgress: options.onProgress,
         })
       } catch (error) {
         throw mapProviderError({

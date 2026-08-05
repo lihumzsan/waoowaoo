@@ -39,14 +39,11 @@ type WorkspaceAssistantToolCallContextValue = {
   readonly repeatedByToolCallId: ReadonlyMap<string, RepeatedToolCallEntry>
   readonly subagentsByToolCallId: ReadonlyMap<string, WorkspaceAssistantSubagentLifecycleView>
   readonly interruptedToolCallIds: ReadonlySet<string>
-  /** Latest live progress line per tool call, keyed by the runtime item id. */
-  readonly progressByToolCallId: ReadonlyMap<string, string>
 }
 const EMPTY_TOOL_CALL_CONTEXT: WorkspaceAssistantToolCallContextValue = {
   repeatedByToolCallId: new Map(),
   subagentsByToolCallId: new Map(),
   interruptedToolCallIds: new Set(),
-  progressByToolCallId: new Map(),
 }
 const WorkspaceAssistantToolCallContext = createContext<WorkspaceAssistantToolCallContextValue>(EMPTY_TOOL_CALL_CONTEXT)
 const NATIVE_SUBAGENT_TOOL_NAMES = new Set([
@@ -209,20 +206,11 @@ export function WorkspaceAssistantRepeatedToolCallGroupProvider({
     )
     const subagentsByToolCallId = new Map<string, WorkspaceAssistantSubagentLifecycleView>()
     const interruptedToolCallIds = new Set<string>()
-    const progressByToolCallId = new Map<string, string>()
     for (const message of messages) {
       for (const part of message.parts) {
         if (isToolUIPart(part) && isWorkspaceAssistantRuntimeInterruptedToolPart(part)) {
           interruptedToolCallIds.add(part.toolCallId)
         }
-        // Progress belongs to the row that produced it, not to a card of its
-        // own: a running tool with its own live line is what makes a minutes
-        // long call legible.
-        if (!isRecord(part) || part.type !== 'data-assistant-runtime-progress') continue
-        const data = isRecord(part.data) ? part.data : null
-        const itemId = readText(data?.itemId)
-        const message = readText(data?.message)
-        if (itemId && message && data?.kind === 'mcp') progressByToolCallId.set(itemId, message)
       }
       const lifecycle = lifecycleByMessageId.get(message.id)
       if (!lifecycle) continue
@@ -231,7 +219,7 @@ export function WorkspaceAssistantRepeatedToolCallGroupProvider({
         subagentsByToolCallId.set(part.toolCallId, lifecycle)
       }
     }
-    return { repeatedByToolCallId, subagentsByToolCallId, interruptedToolCallIds, progressByToolCallId }
+    return { repeatedByToolCallId, subagentsByToolCallId, interruptedToolCallIds }
   }, [messages, turns])
   return (
     <WorkspaceAssistantToolCallContext.Provider value={value}>
@@ -374,12 +362,12 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
   const webSearchSources = operationId === 'web_search'
     ? resolveWebSearchSources(props.result)
     : []
-  // The model writes a long research brief, and showing it verbatim buried the
-  // one thing the user needs while waiting — that a search is underway — under
-  // a paragraph of instructions to itself. The brief is not the status.
-  const webSearchRunning = operationId === 'web_search' && displayState === 'running'
-  const liveProgress = displayState === 'running'
-    ? context.progressByToolCallId.get(props.toolCallId) ?? null
+  // Codex creates one webSearch item per call carrying the model's own query,
+  // so a run of three searches is three rows that each say what they are for.
+  // That per-item query is the live signal; there is no progress channel here
+  // and none is needed.
+  const webSearchQuery = operationId === 'web_search' && displayState === 'running'
+    ? readText(isRecord(props.args) ? props.args.query : null)
     : null
 
   return (
@@ -391,16 +379,10 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
           <span className="shrink-0 tabular-nums opacity-60">{formatRunningSeconds(runningSeconds)}</span>
         ) : null}
       </div>
-      {liveProgress ? (
-        <div className="ml-5 mt-1 flex min-w-0 items-center gap-1.5 text-xs leading-4">
-          <AppIcon name="loader" className="h-3 w-3 shrink-0 animate-spin opacity-70" aria-hidden="true" />
-          <span className="assistant-shimmer-text min-w-0 truncate">{liveProgress}</span>
-        </div>
-      ) : null}
-      {webSearchRunning && !liveProgress ? (
+      {webSearchQuery ? (
         <div className="ml-5 mt-1 flex min-w-0 items-center gap-1.5 text-xs leading-4">
           <AppIcon name="search" className="h-3 w-3 shrink-0 opacity-70" aria-hidden="true" />
-          <span className="assistant-shimmer-text min-w-0 truncate">{t('toolCall.webSearchRunning')}</span>
+          <span className="min-w-0 truncate text-[var(--glass-text-secondary)]">{webSearchQuery}</span>
         </div>
       ) : null}
       {webSearchSources.length > 0 ? (

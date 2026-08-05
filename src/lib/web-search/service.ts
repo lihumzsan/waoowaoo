@@ -8,7 +8,6 @@
  */
 import {
   webSearchRequestSchema,
-  type WebSearchProgressListener,
   type WebSearchRequest,
   type WebSearchResponse,
   type WebSearchUsageListener,
@@ -79,7 +78,6 @@ export function createConfiguredWebSearchProvider(
       model,
       request,
       signal: options.signal,
-      onProgress: options.onProgress,
       onUsage: options.onUsage,
     }),
   }
@@ -95,7 +93,6 @@ export async function searchWeb(input: {
   readonly request: WebSearchRequest
   readonly signal: AbortSignal
   readonly provider?: WebSearchProvider
-  readonly onProgress?: WebSearchProgressListener
   readonly onUsage?: WebSearchUsageListener
 }): Promise<WebSearchResponse> {
   const parsed = webSearchRequestSchema.safeParse(input.request)
@@ -109,7 +106,6 @@ export async function searchWeb(input: {
   const provider = input.provider ?? createConfiguredWebSearchProvider()
   return provider.search(parsed.data, {
     signal: input.signal,
-    onProgress: input.onProgress,
     onUsage: input.onUsage,
   })
 }

@@ -13,8 +13,6 @@ export {
 export type {
   NormalizedWebSearchRequest,
   WebSearchImage,
-  WebSearchProgressEvent,
-  WebSearchProgressListener,
   WebSearchRequest,
   WebSearchResponse,
   WebSearchSource,

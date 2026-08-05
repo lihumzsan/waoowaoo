@@ -63,33 +63,6 @@ export type WebSearchSource = z.infer<typeof webSearchSourceSchema>
 export type WebSearchImage = z.infer<typeof webSearchImageSchema>
 
 /**
- * Live hosted-search progress, mirroring the action vocabulary the hosted model
- * reports as it works: it plans queries, opens pages, and searches within them.
- * Surfacing the action is what makes a variable-length research run legible —
- * the same run can be one four-second lookup or three rounds of reading.
- *
- * It is presentation only: no caller may derive a completion, failure, or
- * evidence decision from it. Progress can be dropped, delayed or replayed
- * without changing a single recorded fact.
- */
-export interface WebSearchProgressEvent {
-  readonly phase: 'started' | 'completed'
-  /**
-   * Null while a step is still running: OpenAI only populates the action once
-   * the step finishes, so claiming "opening zhihu.com" mid-flight would be a
-   * guess. A running step is reported as exactly what is known — that one is
-   * in flight — and names itself when it completes.
-   */
-  readonly action: 'search' | 'open_page' | 'find_in_page' | null
-  /** Present for a completed `search`; the query the hosted model actually ran. */
-  readonly query: string | null
-  /** Present for a completed `open_page` / `find_in_page`; the page it read. */
-  readonly url: string | null
-}
-
-export type WebSearchProgressListener = (event: WebSearchProgressEvent) => void
-
-/**
  * What the hosted run cost, delivered out of band. It is deliberately not part
  * of `WebSearchResponse`: the model must never see accounting, and the response
  * schema is what the model sees.

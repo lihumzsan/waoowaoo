@@ -1,5 +1,4 @@
 import { createConfigOperations } from './domains/config/config-ops'
-import { createWebSearchOperations } from './domains/web-search/web-search-ops'
 import { createProjectCrudOperations } from './domains/project/project-crud-ops'
 import { createSystemProjectOperations } from './domains/project/system-project-ops'
 import { createTaskOperations } from './domains/task/task-ops'
@@ -33,7 +32,6 @@ const CONFIRM_NONE = {
 const API_ONLY = { tool: false, api: true, mcp: false } as const
 const CAPABILITY_API = { tool: true, api: true, mcp: false } as const
 const CAPABILITY_ONLY = { tool: true, api: false, mcp: false } as const
-const CAPABILITY_MCP = { tool: true, api: false, mcp: true } as const
 
 /**
  * The complete Wao Capability registry.
@@ -124,13 +122,6 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
     ...withOperationPack(createConfigOperations(), {
       groupPath: ['config'],
       channels: API_ONLY,
-      confirmation: CONFIRM_NONE,
-    }),
-    // Research is the Agent's only external-knowledge capability and is
-    // reachable exclusively through Wao MCP: it has no product UI surface.
-    ...withOperationPack(createWebSearchOperations(), {
-      groupPath: ['research'],
-      channels: CAPABILITY_MCP,
       confirmation: CONFIRM_NONE,
     }),
     ...withOperationPack(createWorkspaceResourceGenerationOperations(), {

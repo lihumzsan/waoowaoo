@@ -13,15 +13,12 @@ import type {
   WaoMcpOperationExecutor,
   WaoMcpOperationExecutorResult,
 } from './contracts'
-import { createScopedLogger } from '@/lib/logging/core'
 import { createWaoMcpOperationCatalog } from './operation-catalog'
 import { WAO_RUNTIME_TOKEN_MAX_TTL_SECONDS } from './runtime-token'
 
 // MCP server-to-client requests have their own 60 second SDK default, separate
 // from Codex's per-tool timeout. A billing elicitation is a user decision, so
 // keep it alive within (but safely below) the capability token lifetime.
-const mcpLogger = createScopedLogger({ module: 'wao-mcp.server' })
-
 const WAO_MCP_ELICITATION_TIMEOUT_MS = (
   WAO_RUNTIME_TOKEN_MAX_TTL_SECONDS - 5 * 60
 ) * 1_000
@@ -35,11 +32,6 @@ export interface CreateWaoMcpServerParams {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function readProgressToken(meta: unknown): string | number | null {
-  const token = isRecord(meta) ? meta.progressToken : undefined
-  return typeof token === 'string' || typeof token === 'number' ? token : null
 }
 
 function toJsonObject(value: unknown): JsonObject {
@@ -122,41 +114,6 @@ export function createWaoMcpServer(
         )
       }
 
-      // MCP only permits progress for a request that asked for it, and the
-      // token is what routes a notification back to that call. No token means
-      // the client wants none, so nothing is sent.
-      const progressToken = readProgressToken(request.params._meta)
-      // Whether the client asks for progress is not knowable from our side, and
-      // the answer decides whether live tool lines can exist at all. Record it
-      // once per call so real usage settles it instead of a guess.
-      mcpLogger.info({
-        action: 'wao_mcp.tool_call_received',
-        message: 'wao mcp tool call received',
-        details: { operationId: entry.operationId, progressRequested: progressToken !== null },
-      })
-      // MCP requires the progress value to increase with every notification, and
-      // a compliant client drops the ones that do not. A fixed value therefore
-      // sends nothing at all — the notifications leave and are discarded.
-      let progressSequence = 0
-      const reportProgress = (message: string): void => {
-        const text = message.trim()
-        if (progressToken === null || !text) return
-        progressSequence += 1
-        // Progress is decoration: a transport hiccup here must never surface as
-        // a tool failure, so delivery failures are dropped on purpose.
-        // Records what we actually put on the wire, so a missing progress line
-        // can be attributed to a hop instead of investigated from scratch.
-        mcpLogger.info({
-          action: 'wao_mcp.progress_sent',
-          message: 'wao mcp progress notification sent',
-          details: { operationId: entry.operationId, sequence: progressSequence },
-        })
-        void extra.sendNotification({
-          method: 'notifications/progress',
-          params: { progressToken, progress: progressSequence, message: text.slice(0, 500) },
-        }).catch(() => undefined)
-      }
-
       try {
         const context = await params.contextResolver.resolve({
           operationId: entry.operationId,
@@ -176,7 +133,6 @@ export function createWaoMcpServer(
             input: request.params.arguments ?? {},
             context,
             signal: extra.signal,
-            reportProgress,
             elicit: async (elicitation) => {
               // Keep the server request related to this tools/call request.
               // Streamable HTTP routes related requests over the active POST
