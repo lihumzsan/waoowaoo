@@ -89,7 +89,7 @@ description: Scope reusable production assets and define stable visible designs 
 - 角色：一张 4:3 横向图，左右等分；左侧同一角色脸部特写，右侧同一角色无遮挡全身；纯白背景；不得出现其他人物、道具或环境。
 - 场景：一张 4:3 横向图，正前方完整展示整个空间，不拆多视图；不得出现人物、松散家具或独立道具；场景固定结构可保留。
 - 道具：一张 4:3 横向图，只出现一个居中、完整、方向明确、无遮挡的道具；纯白背景；不得出现人物、其他道具或环境。
-- `aspectRatio` 必须显式写成 `"4:3"`。这是实际生成参数，不允许只在 Prompt 里提到比例。
+- 不输出 `aspectRatio`。可复用资产的 4:3 画幅由服务端资产策略唯一决定，不在专业交接中重复提交。
 - `assetKind` 与 `schemaId` 必须严格对应：`character → project.character_image`、`location → project.location_image`、`prop → project.prop_image`。
 - 唯一正式交付是 Agent profile 注入的 `outputKind: "asset_generation_batch"` 严格 JSON，并直接作为最终回复返回主 Agent。该机器 Schema 是字段、必填项和层级的唯一权威；本 Skill 不另写文件或第二份模板。`references` 只使用主 Agent分配的精确 ready Resource 身份与版本。
 - `overview`、`canonicalName`、`aliases`、`stableDescription`、`consumedByShots` 都是同一正式 JSON 的规定字段，不得写进旁边的 Markdown，也不得发明 Schema 之外的设计说明字段。

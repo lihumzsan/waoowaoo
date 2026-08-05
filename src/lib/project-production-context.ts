@@ -1,23 +1,55 @@
-import { prisma } from '@/lib/prisma'
+import { createHash } from 'node:crypto'
 import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
 import { getProjectModelConfig, type ProjectModelConfig } from '@/lib/config-service'
-import {
-  validateWorkspaceBundle,
-  WORKSPACE_BUNDLE_SCHEMA_VERSION,
-} from '@/lib/codex-runtime/workspace-bundle'
+import { prisma } from '@/lib/prisma'
 import { CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS } from '@/lib/workspace-resource/generation-contract'
-import {
-  CODEX_WORKSPACE_PROJECT_FILE,
-  type CodexWorkspaceProductionCapabilities,
-  type CodexWorkspaceProjectSnapshot,
-  type CodexWorkspaceProjection,
-} from './contracts'
 
-function formatJson(value: unknown): string {
-  return `${JSON.stringify(value, null, 2)}\n`
+export type ProjectProductionCapabilities = {
+  readonly video: {
+    readonly modelKey: string
+    readonly aspectRatio: string
+    readonly allowedSegmentDurationsSeconds: readonly number[]
+    readonly minSegmentDurationSeconds: number
+    readonly maxSegmentDurationSeconds: number
+    readonly maxReferenceImages: number
+    readonly maxReferenceAudios: number
+    readonly supportsTextToVideo: boolean
+  } | null
+  readonly music: {
+    readonly modelKey: string
+    readonly promptMaxCharacters: number
+    readonly durationSecondsOptions: readonly number[]
+    readonly durationSecondsRange: {
+      readonly min: number
+      readonly max: number
+    } | null
+    readonly vocalModeOptions: readonly string[]
+    readonly maxReferenceVideos: number
+  } | null
 }
 
-function productionCapabilities(config: ProjectModelConfig): CodexWorkspaceProductionCapabilities {
+export type ProjectProductionContext = {
+  readonly schemaVersion: 1
+  readonly version: string
+  readonly project: {
+    readonly projectId: string
+    readonly name: string
+    readonly description: string | null
+    readonly videoRatio: string | null
+    readonly videoResolution: string
+    readonly imageResolution: string
+  }
+  readonly productionCapabilities: ProjectProductionCapabilities
+}
+
+export class ProjectProductionContextError extends Error {
+  constructor() {
+    super('PROJECT_PRODUCTION_CONTEXT_NOT_OWNED')
+    this.name = 'ProjectProductionContextError'
+  }
+}
+
+function resolveProductionCapabilities(config: ProjectModelConfig): ProjectProductionCapabilities {
   const video = config.videoModel
     ? resolveBuiltinCapabilitiesByModelKey('video', config.videoModel)?.video
     : undefined
@@ -77,10 +109,14 @@ function productionCapabilities(config: ProjectModelConfig): CodexWorkspaceProdu
   return { video: videoCapabilities, music: musicCapabilities }
 }
 
-export async function readCodexRuntimeWorkspace(input: {
+function contextVersion(value: Omit<ProjectProductionContext, 'version'>): string {
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex')
+}
+
+export async function readProjectProductionContext(input: {
   readonly projectId: string
   readonly userId: string
-}): Promise<CodexWorkspaceProjection> {
+}): Promise<ProjectProductionContext> {
   const [project, modelConfig] = await Promise.all([
     prisma.project.findFirst({
       where: { id: input.projectId, userId: input.userId },
@@ -88,36 +124,28 @@ export async function readCodexRuntimeWorkspace(input: {
         id: true,
         name: true,
         description: true,
-        videoRatio: true,
         videoResolution: true,
         imageResolution: true,
       },
     }),
     getProjectModelConfig(input.projectId, input.userId),
   ])
-  if (!project) throw new Error('CODEX_WORKSPACE_PROJECT_NOT_OWNED')
-  const snapshot: CodexWorkspaceProjectSnapshot = {
+  if (!project) throw new ProjectProductionContextError()
+  const value: Omit<ProjectProductionContext, 'version'> = {
     schemaVersion: 1,
-    projectId: project.id,
-    name: project.name,
-    description: project.description,
-    videoRatio: project.videoRatio,
-    videoResolution: project.videoResolution,
-    imageResolution: project.imageResolution,
-    productionCapabilities: productionCapabilities(modelConfig),
-    instructions: [
-      'This directory is disposable Runtime scratch, not the persistent project resource tree.',
-      'system/project.json is a rebuildable read-only capability snapshot; never modify system/.',
-      'Use list_resources and get_resource for canonical project data.',
-      'Use create_image, create_audio, create_video, or generate_voice for media production.',
-      'A Subagent final result remains an in-memory handoff unless the primary Agent explicitly saves a document.',
-    ],
+    project: {
+      projectId: project.id,
+      name: project.name,
+      description: project.description,
+      videoRatio: modelConfig.videoRatio,
+      videoResolution: project.videoResolution,
+      imageResolution: project.imageResolution,
+    },
+    productionCapabilities: resolveProductionCapabilities(modelConfig),
   }
-  const projectedFiles = [{ path: CODEX_WORKSPACE_PROJECT_FILE, content: formatJson(snapshot) }]
-  const runtimeBundle = validateWorkspaceBundle({
-    schemaVersion: WORKSPACE_BUNDLE_SCHEMA_VERSION,
-    directories: ['system'],
-    files: projectedFiles,
-  })
-  return { runtimeBundle }
+  return { ...value, version: contextVersion(value) }
+}
+
+export function formatProjectProductionContext(context: ProjectProductionContext): string {
+  return JSON.stringify(context, null, 2)
 }

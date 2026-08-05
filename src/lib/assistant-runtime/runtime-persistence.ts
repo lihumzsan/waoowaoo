@@ -1,12 +1,10 @@
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import path from 'node:path'
-import { materializeWorkspaceBundle } from '@/lib/codex-runtime/workspace-bundle'
 import type {
   RuntimeSessionMaterialization,
   RuntimeSessionPersistence,
   RuntimeSessionScope,
 } from '@/lib/codex-runtime/runtime-session-manager'
-import { readCodexRuntimeWorkspace } from '@/lib/codex-workspace'
 import { materializeCreativeRuntimeConfiguration } from '@/lib/creative-skills'
 import { prisma } from '@/lib/prisma'
 import { captureCodexStateBundle, restoreCodexStateBundle, saveCodexStateBundle } from './codex-state-store'
@@ -96,8 +94,7 @@ export class AssistantRuntimePersistence implements RuntimeSessionPersistence {
     const workspace = path.join(root, 'workspace')
     const codexHome = path.join(root, 'codex-home')
     try {
-      const projection = await readCodexRuntimeWorkspace({ projectId: scope.projectId, userId: scope.userId })
-      await materializeWorkspaceBundle(workspace, projection.runtimeBundle)
+      await mkdir(workspace, { recursive: true, mode: 0o700 })
       await restoreCodexStateBundle({ scope, codexHomeDirectory: codexHome })
       await materializeCreativeRuntimeConfiguration(codexHome)
       return { hostWorkspaceDirectory: workspace, hostCodexHomeDirectory: codexHome }

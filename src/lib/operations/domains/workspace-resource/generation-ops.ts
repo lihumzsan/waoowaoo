@@ -12,6 +12,7 @@ import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabili
 import { supportsTextToVideoModel } from '@/lib/ai-registry/video-model-helpers'
 import type { CapabilityValue } from '@/lib/ai-registry/types'
 import { ApiError } from '@/lib/api-errors'
+import { getAssetImageFormatPolicy } from '@/lib/asset-generation'
 import {
   readCreativeOutputDefinition,
   readCreativeOutputKind,
@@ -56,7 +57,8 @@ import {
   PROJECT_VIDEO_RATIO_METADATA_KEY,
   PROJECT_VIDEO_RATIO_REQUIRED_METADATA_KEY,
   projectVideoRatioSnapshotSchema,
-  requireProjectVideoRatio,
+  readProjectVideoRatioSnapshot,
+  type ProjectVideoRatioSnapshot,
 } from '@/lib/operations/project-video-ratio-policy'
 import {
   createPlannedTask,
@@ -79,7 +81,7 @@ import { AppError } from '@/lib/errors/app-error'
 import { describeUnknownError } from '@/lib/errors/normalize'
 
 const MAX_BATCH_ITEMS = OPERATION_EXECUTION_MAX_TASKS
-const MEDIA_GENERATION_PLAN_CONTRACT_REVISION = 'workspace-resource-generation-batch/v2'
+const MEDIA_GENERATION_PLAN_CONTRACT_REVISION = 'workspace-resource-generation-batch/v3'
 
 const workspaceResourceJsonValueSchema: z.ZodType<WorkspaceResourceJsonValue> = z.lazy(() => z.union([
   z.string(),
@@ -298,19 +300,51 @@ function frozenScalarOptions(value: Record<string, unknown> | undefined): Record
   return result
 }
 
-function throwMediaPreflightError(error: unknown, mediaType: PlannedResource['mediaType']): never {
+function throwMediaPreflightError(
+  error: unknown,
+  input: {
+    readonly mediaType: PlannedResource['mediaType']
+    readonly modelKey?: string
+    readonly aspectRatio?: string | null
+    readonly ratioOwner?: 'project' | 'asset' | null
+  },
+): never {
   if (error instanceof ApiError || error instanceof AppError) throw error
   if (error instanceof AiOptionValidationError) {
+    if (error.field === 'aspectRatio' && input.aspectRatio && input.modelKey) {
+      if (input.ratioOwner === 'project') {
+        throw new ApiError('INVALID_PARAMS', {
+          code: 'PROJECT_VIDEO_RATIO_UNSUPPORTED_BY_MODEL',
+          field: 'videoRatio',
+          value: input.aspectRatio,
+          modelKey: input.modelKey,
+          correction: {
+            interaction: 'codex_request_user_input',
+            commitmentOperationId: 'update_project_config',
+            commitmentInputField: 'videoRatio',
+          },
+          agentRetryableAfterCorrection: true,
+        })
+      }
+      if (input.ratioOwner === 'asset') {
+        throw new ApiError('INVALID_PARAMS', {
+          code: 'ASSET_IMAGE_RATIO_UNSUPPORTED_BY_MODEL',
+          field: 'modelKey',
+          value: input.aspectRatio,
+          modelKey: input.modelKey,
+        })
+      }
+    }
     throw new ApiError('INVALID_PARAMS', {
       code: 'MEDIA_GENERATION_OPTION_INVALID',
       field: error.field ?? 'generation',
       reason: error.reason ?? error.failure,
-      mediaType,
+      mediaType: input.mediaType,
     })
   }
   throw new ApiError('INVALID_PARAMS', {
     code: 'MEDIA_GENERATION_PREFLIGHT_FAILED',
-    field: mediaType,
+    field: input.mediaType,
     reason: describeUnknownError(error),
   })
 }
@@ -395,6 +429,7 @@ function validateReferenceCapabilities(input: {
 async function compileMediaExecution(input: {
   readonly ctx: ProjectAgentOperationContext
   readonly item: GenerationItem
+  readonly aspectRatio: string | null
   readonly schemaId: string
   readonly modelKey: string
   readonly references: readonly z.infer<typeof generationReferenceSchema>[]
@@ -403,7 +438,7 @@ async function compileMediaExecution(input: {
   readonly generationOptions: Record<string, string | number | boolean | null>
 }> {
   const { item, modelKey } = input
-  const aspectRatio = item.mediaType === 'audio' ? null : item.aspectRatio
+  const aspectRatio = input.aspectRatio
   const prompt = item.prompt
 
   try {
@@ -495,7 +530,16 @@ async function compileMediaExecution(input: {
       generationOptions: frozenScalarOptions(preflight.options),
     }
   } catch (error) {
-    throwMediaPreflightError(error, item.mediaType)
+    throwMediaPreflightError(error, {
+      mediaType: item.mediaType,
+      modelKey,
+      aspectRatio,
+      ratioOwner: item.mediaType === 'audio'
+        ? null
+        : item.mediaType === 'image' && item.assetKind !== null
+          ? 'asset'
+          : 'project',
+    })
   }
 }
 
@@ -556,7 +600,7 @@ async function preflightFrozenRetry(input: {
       prompt: input.prompt,
     })
   } catch (error) {
-    throwMediaPreflightError(error, input.mediaType)
+    throwMediaPreflightError(error, { mediaType: input.mediaType })
   }
 }
 
@@ -623,20 +667,19 @@ async function buildPlannedItem(input: {
   readonly item: GenerationItem
   readonly memberIndex: number
   readonly alternatives: boolean
+  readonly projectVideoRatio: ProjectVideoRatioSnapshot | null
 }): Promise<{ readonly task: PlannedTask; readonly resource: PlannedResource }> {
   const mediaType = input.item.mediaType
   const schemaId = schemaForMedia(mediaType, input.item.schemaId)
-  const requestedAspectRatio = 'aspectRatio' in input.item ? input.item.aspectRatio : undefined
   const requestedAssetKind = input.item.mediaType === 'image' ? input.item.assetKind : null
-  const usesProjectVideoRatio = mediaType !== 'audio'
-    && !requestedAspectRatio
-    && !requestedAssetKind
-  const resolvedProjectAspectRatio = usesProjectVideoRatio
-    ? requireProjectVideoRatio((await getProjectModelConfig(input.ctx.projectId, input.ctx.userId)).videoRatio).value
-    : null
-  const item: GenerationItem = mediaType === 'audio' || requestedAspectRatio
-    ? input.item
-    : { ...input.item, aspectRatio: requestedAssetKind ? '4:3' : resolvedProjectAspectRatio ?? undefined }
+  const usesProjectVideoRatio = mediaType !== 'audio' && !requestedAssetKind
+  const aspectRatio = mediaType === 'audio'
+    ? null
+    : requestedAssetKind
+      ? getAssetImageFormatPolicy(requestedAssetKind).aspectRatio
+      : input.projectVideoRatio?.value
+        ?? (() => { throw new Error('PROJECT_VIDEO_RATIO_SNAPSHOT_REQUIRED') })()
+  const item = input.item
   const resourceId = buildWorkspaceResourceId({
     operationId: input.operationId,
     requestId: `${input.requestId}:${input.item.itemId}`,
@@ -659,6 +702,7 @@ async function buildPlannedItem(input: {
   const compiled = await compileMediaExecution({
     ctx: input.ctx,
     item,
+    aspectRatio,
     schemaId,
     modelKey,
     references: publicReferences,
@@ -781,6 +825,7 @@ function buildPlan(input: {
   readonly tasks: readonly PlannedTask[]
   readonly resources: readonly PlannedResource[]
   readonly retry: boolean
+  readonly projectVideoRatio: ProjectVideoRatioSnapshot | null
 }): OperationPlan {
   return {
     kind: 'task_submission',
@@ -796,6 +841,9 @@ function buildPlan(input: {
       [PROJECT_VIDEO_RATIO_REQUIRED_METADATA_KEY]: input.resources.some(
         (resource) => resource.usesProjectVideoRatio,
       ),
+      ...(input.projectVideoRatio
+        ? { [PROJECT_VIDEO_RATIO_METADATA_KEY]: input.projectVideoRatio }
+        : {}),
     }),
   }
 }
@@ -811,6 +859,13 @@ async function planNewMedia(
   if (items.some((item) => item.mediaType !== mediaType)) {
     throw new Error(`WORKSPACE_RESOURCE_GENERATION_MEDIA_TYPE_INVALID:${operationId}`)
   }
+  const usesProjectVideoRatio = items.some((item) => (
+    item.mediaType !== 'audio'
+    && !(item.mediaType === 'image' && item.assetKind !== null)
+  ))
+  const projectVideoRatio = usesProjectVideoRatio
+    ? await readProjectVideoRatioSnapshot({ projectId: ctx.projectId, userId: ctx.userId })
+    : null
   const built = await Promise.all(items.flatMap((item) => (
     Array.from({ length: item.count }, (_, memberIndex) => buildPlannedItem({
       ctx,
@@ -819,6 +874,7 @@ async function planNewMedia(
       item,
       memberIndex,
       alternatives: item.count > 1,
+      projectVideoRatio,
     }))
   )))
   assertBudget(built.map((entry) => entry.task), request.maxBudgetCredits)
@@ -829,6 +885,7 @@ async function planNewMedia(
     tasks: built.map((entry) => entry.task),
     resources: built.map((entry) => entry.resource),
     retry: false,
+    projectVideoRatio,
   })
 }
 
@@ -975,6 +1032,7 @@ async function planRetry(
     tasks: built.map((entry) => entry.task),
     resources: built.map((entry) => entry.resource),
     retry: true,
+    projectVideoRatio: null,
   })
 }
 

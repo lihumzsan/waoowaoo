@@ -51,7 +51,7 @@ description: Direct screenplay-based video generation with explicit state contin
 
 ## 装段与接缝
 
-- Segment 是执行容器，不是剧情节拍。分段数最少优先：除尾部余量组合外，使用 `system/project.json.productionCapabilities.video.allowedSegmentDurationsSeconds` 中的最大允许时长；尾部用最少数量的允许时长精确补齐。
+- Segment 是执行容器，不是剧情节拍。分段数最少优先：除尾部余量组合外，使用系统注入的 `productionCapabilities.video.allowedSegmentDurationsSeconds` 中的最大允许时长；尾部用最少数量的允许时长精确补齐。
 - 时空切换不是缩短 Segment 的理由，应写为同一提示词内部的镜头切换。不得把未完成动作切到两次独立生成。
 - 多段结果中，非首段必须写 `[入口状态]`，非末段必须写 `[出口状态]`；两者逐项对齐人物落位、朝向、视线、道具、环境、已完成节拍和持续声音。
 - 逐对检查相邻 Segment：前段末镜头与后段首镜头必须有真实可见的景别变化，而且时间继续前进。只换角度、只改景别名称或重拍前段落点都不合格。
@@ -60,7 +60,7 @@ description: Direct screenplay-based video generation with explicit state contin
 ## 参考素材
 
 - 图片和声音各自按传入顺序独立编号。中文提示词使用 `@图片N` / `@音频N`，英文使用 `@Image N` / `@Audio N`；不要混写双重编号。
-- `[参考]` 中每个引用用一句话声明唯一主要用途，例如角色身份、场景结构、关键道具或锁定音色。每个 item 的 `references` 只列当前 Segment 实际使用的 ready Resource，精确复制 `resourceId`、`contentVersion`、`workspacePath`、`role`、`position` 与 `channel`，并与 Prompt 中图片、声音的媒体顺序一致。
+- `[参考]` 中每个引用用一句话声明唯一主要用途，例如角色身份、场景结构、关键道具或锁定音色。每个 item 的 `references` 只列当前 Segment 实际使用的 ready Resource，精确复制 `resourceId`、`contentVersion`、`role`、`position` 与 `channel`，并与 Prompt 中图片、声音的媒体顺序一致。路径不是 Resource 身份，不得提交。
 - 不传无关素材，不从文件名、近似名称或描述猜身份，不让参考图的偶然构图、姿态、光线或噪点代替本段导演判断。
 - 引用声音的 Segment 必须同时至少引用一张图片。声音参考与首帧/末帧定格用途的图片参考互斥；两者都需要时拆为相邻 Segment。
 
@@ -77,7 +77,7 @@ description: Direct screenplay-based video generation with explicit state contin
 
 ```text
 [风格] 题材 + 已确认视觉政策 + 2–3 个材质/光线关键词
-[时长] N 秒，[画幅] system/project.json.productionCapabilities.video.aspectRatio
+[时长] N 秒
 [参考] @图片1——明确用途；@音频1——明确用途
 [入口状态] 非首段必写：承接上段出口，并说明已完成节拍
 [场景] 地点、时间、光线、空气与关键空间锚点
@@ -118,4 +118,4 @@ description: Direct screenplay-based video generation with explicit state contin
 
 ## 边界
 
-本 Skill 只负责视频导演方法与最终提示词。能力事实只读取 `system/project.json.productionCapabilities.video`；固定 `video_generation_batch` 字段由 Agent profile 注入的机器 Schema 定义，Resource 身份校验、Provider 执行、计费、Task 与合成由系统负责。
+本 Skill 只负责视频导演方法与最终提示词。能力事实只读取系统直接注入的 `productionCapabilities.video`；项目画幅由服务端项目配置唯一决定，不作为生成 item 或 Prompt 参数重复提交。固定 `video_generation_batch` 字段由 Agent profile 注入的机器 Schema 定义，Resource 身份校验、Provider 执行、计费、Task 与合成由系统负责。

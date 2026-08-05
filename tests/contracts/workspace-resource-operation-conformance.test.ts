@@ -42,7 +42,15 @@ describe('WorkspaceResource Operation registry conformance', () => {
       expect(published, operationId).not.toContain('outputPath')
       expect(published, operationId).not.toContain('modelKey')
       expect(published, operationId).not.toContain('generationOptions')
+      if (operationId === 'create_image' || operationId === 'create_video') {
+        expect(published, operationId).not.toContain('aspectRatio')
+      }
     }
+    const getResource = registry.get_resource
+    if (!getResource) throw new Error('Required Resource read operation missing')
+    const getResourceInput = JSON.stringify(getResource.toolInputSchema)
+    expect(getResourceInput).toContain('resourceId')
+    expect(getResourceInput).not.toContain('workspacePath')
   })
 
   it('accepts independent video items and caps their expanded Task count', () => {
@@ -65,7 +73,7 @@ describe('WorkspaceResource Operation registry conformance', () => {
     }).success).toBe(false)
   })
 
-  it('requires complete reusable-asset identity and 4:3 parameters', () => {
+  it('requires complete reusable-asset identity while the server owns framing', () => {
     const batch = {
       schemaVersion: 1 as const,
       outputKind: 'asset_generation_batch' as const,
@@ -78,7 +86,6 @@ describe('WorkspaceResource Operation registry conformance', () => {
         mediaType: 'image' as const,
         schemaId: 'project.character_image' as const,
         assetKind: 'character' as const,
-        aspectRatio: '4:3' as const,
         aliases: [],
         stableDescription: 'A stable visible character design.',
         consumedByShots: ['scene-1'],
@@ -91,7 +98,7 @@ describe('WorkspaceResource Operation registry conformance', () => {
     expect(assetGenerationBatchOutputSchema.safeParse(batch).success).toBe(true)
     expect(assetGenerationBatchOutputSchema.safeParse({
       ...batch,
-      items: [{ ...batch.items[0], aspectRatio: '16:9' }],
+      items: [{ ...batch.items[0], aspectRatio: '4:3' }],
     }).success).toBe(false)
   })
 

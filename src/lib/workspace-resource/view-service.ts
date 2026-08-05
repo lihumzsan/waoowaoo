@@ -29,7 +29,6 @@ import {
 import {
   isWorkspaceSubtreePath,
   parentWorkspacePath,
-  validateWorkspaceResourceFilePath,
   validateWorkspaceResourceFolderPath,
   workspacePathAncestors,
 } from './path'
@@ -510,21 +509,13 @@ export async function listAllWorkspaceResourcesForRuntime(input: {
 export async function readWorkspaceResource(input: {
   readonly userId: string
   readonly projectId: string
-  readonly resourceId?: string
-  readonly workspacePath?: string
+  readonly resourceId: string
 }): Promise<WorkspaceResourceView> {
-  const workspacePath = input.workspacePath
-    ? (() => {
-        try { return validateWorkspaceResourceFilePath(input.workspacePath) }
-        catch { return validateWorkspaceResourceFolderPath(input.workspacePath) }
-      })()
-    : null
-  if (!input.resourceId && !workspacePath) throw new Error('WORKSPACE_RESOURCE_IDENTITY_REQUIRED')
   const row = await prisma.workspaceResource.findFirst({
     where: {
       userId: input.userId,
       projectId: input.projectId,
-      ...(input.resourceId ? { id: input.resourceId } : { activePath: workspacePath }),
+      id: input.resourceId,
     },
     select: resourceSelect,
   })

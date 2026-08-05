@@ -48,6 +48,23 @@ export function requireProjectVideoRatio(value: string | null | undefined): Proj
   }
 }
 
+export async function readProjectVideoRatioSnapshot(input: {
+  readonly projectId: string
+  readonly userId: string
+}): Promise<ProjectVideoRatioSnapshot> {
+  const project = await prisma.project.findFirst({
+    where: {
+      id: input.projectId,
+      userId: input.userId,
+    },
+    select: {
+      videoRatio: true,
+    },
+  })
+  if (!project) throw new ApiError('NOT_FOUND')
+  return requireProjectVideoRatio(project.videoRatio)
+}
+
 function containsProjectImageOrVideoTask(plan: OperationPlan): boolean {
   if (plan.metadata?.[PROJECT_VIDEO_RATIO_REQUIRED_METADATA_KEY] === false) return false
   return plan.tasks.some((task) => {
@@ -73,19 +90,10 @@ export async function freezeProjectVideoRatioIntoPlan(
   if (plan.projectId === GLOBAL_ASSET_PROJECT_ID || !containsProjectImageOrVideoTask(plan)) {
     return plan
   }
-
-  const project = await prisma.project.findFirst({
-    where: {
-      id: plan.projectId,
-      userId: plan.userId,
-    },
-    select: {
-      videoRatio: true,
-    },
-  })
-  if (!project) throw new ApiError('NOT_FOUND')
-
-  const snapshot = requireProjectVideoRatio(project.videoRatio)
+  const existing = plan.metadata?.[PROJECT_VIDEO_RATIO_METADATA_KEY]
+  const snapshot = existing === undefined
+    ? await readProjectVideoRatioSnapshot({ projectId: plan.projectId, userId: plan.userId })
+    : projectVideoRatioSnapshotSchema.parse(existing)
 
   return {
     ...plan,

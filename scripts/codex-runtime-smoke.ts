@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { once } from 'node:events'
 import { cp, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
@@ -10,12 +10,6 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { ElicitRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import {
-  captureWorkspaceBundle,
-  encodeWorkspaceBundle,
-  materializeWorkspaceBundle,
-  type WorkspaceBundleV1,
-} from '@/lib/codex-runtime/workspace-bundle'
 import { LocalRuntimeManager } from '@/lib/codex-runtime/local-runtime-manager'
 import { PRODUCTION_CODEX_INITIALIZE_CAPABILITIES } from '@/lib/codex-runtime/runtime-config'
 import type {
@@ -69,6 +63,12 @@ type RuntimeRequestCapture = {
   readonly close: () => Promise<void>
 }
 
+type HookContextServer = {
+  readonly url: string
+  readonly requestCount: () => number
+  readonly close: () => Promise<void>
+}
+
 function requireObject(value: unknown, label: string): RuntimeJsonObject {
   assert(value !== null && typeof value === 'object' && !Array.isArray(value), `${label} must be an object`)
   return value as RuntimeJsonObject
@@ -102,6 +102,29 @@ function closeServer(server: Server): Promise<void> {
       if (error) reject(error)
       else resolve()
     })
+  })
+}
+
+function runHookScript(input: {
+  readonly scriptPath: string
+  readonly event: RuntimeJsonObject
+  readonly environment: NodeJS.ProcessEnv
+}): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('node', [input.scriptPath], {
+      env: input.environment,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+    const stdout: Buffer[] = []
+    const stderr: Buffer[] = []
+    child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk))
+    child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk))
+    child.once('error', reject)
+    child.once('close', (code) => {
+      if (code === 0) resolve(Buffer.concat(stdout).toString('utf8'))
+      else reject(new Error(`CODEX_RUNTIME_HOOK_SMOKE_FAILED:${String(code)}:${Buffer.concat(stderr).toString('utf8')}`))
+    })
+    child.stdin.end(JSON.stringify(input.event))
   })
 }
 
@@ -149,6 +172,44 @@ async function startRuntimeRequestCapture(): Promise<RuntimeRequestCapture> {
     baseUrl: `http://127.0.0.1:${String(address.port)}/api/internal/codex-runtime/model`,
     request,
     close: async () => await closeServer(server),
+  }
+}
+
+async function startHookContextServer(): Promise<HookContextServer> {
+  let requests = 0
+  const server = createServer((incoming, response) => {
+    if (incoming.method !== 'GET' || incoming.headers.authorization !== 'Bearer runtime-smoke-token') {
+      response.writeHead(401, { 'content-type': 'application/json' })
+      response.end('{"error":{"code":"unauthorized"}}')
+      return
+    }
+    requests += 1
+    response.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
+    response.end(JSON.stringify({
+      schemaVersion: 1,
+      version: 'runtime-smoke-project-context-v1',
+      project: {
+        projectId: 'runtime-smoke-project',
+        name: 'Runtime smoke project',
+        description: null,
+        videoRatio: '16:9',
+        videoResolution: '720p',
+        imageResolution: '1K',
+      },
+      productionCapabilities: { video: null, music: null },
+    }))
+  })
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const address = server.address()
+  assert(address && typeof address === 'object')
+  return {
+    url: `http://127.0.0.1:${String(address.port)}/project-context`,
+    requestCount: () => requests,
+    close: async () => {
+      server.closeAllConnections()
+      await closeServer(server)
+    },
   }
 }
 
@@ -241,28 +302,6 @@ async function assertPinnedProtocolSurface(rootDir: string): Promise<void> {
       `Pinned Codex protocol no longer exposes terminal error field ${terminalErrorField}`,
     )
   }
-}
-
-async function runWorkspaceSmoke(rootDir: string): Promise<void> {
-  const workspaceDir = path.join(rootDir, 'workspace')
-  const bundle: WorkspaceBundleV1 = {
-    schemaVersion: 1,
-    directories: ['project', 'project/empty'],
-    files: [
-      {
-        path: 'project/brief.md',
-        content: '# Runtime smoke\n\nThis file is disposable Runtime scratch and never becomes a Canvas Resource.\n',
-      },
-      {
-        path: 'project/resources.json',
-        content: '{"resources":[]}',
-      },
-    ],
-  }
-
-  await materializeWorkspaceBundle(workspaceDir, bundle)
-  const captured = await captureWorkspaceBundle(workspaceDir)
-  assert.deepEqual(encodeWorkspaceBundle(captured), encodeWorkspaceBundle(bundle))
 }
 
 async function runMcpSmoke(): Promise<void> {
@@ -471,11 +510,14 @@ async function runAppServerSmoke(params: {
   assert.match(primaryInstructions, /may autonomously spawn and coordinate Subagents/)
   assert.match(primaryInstructions, /fork_turns="none"/)
   const primaryConfig = await readFile(path.join(codexHome, 'config.toml'), 'utf8')
+  const hooksConfig = await readFile(path.join(codexHome, 'hooks.json'), 'utf8')
   assert.match(primaryConfig, /\[agents\]\nenabled = true/)
+  assert.match(primaryConfig, /\[features\]\nhooks = true/)
+  assert.match(hooksConfig, /SubagentStart/)
+  assert.match(hooksConfig, /wao_\(story\|long_form\|direction\|assets\|video\|music\)/)
   for (const worker of CREATIVE_WORKERS) {
     const profile = await readFile(path.join(codexHome, 'agents', `${worker.agentType}.toml`), 'utf8')
     assert.ok(profile.includes(`name = "${worker.agentType}"`))
-    assert.ok(profile.includes('Never expand any path to an absolute host or Runtime path.'))
     assert.ok(profile.includes(`outputKind=\\"${worker.outputKind}\\"`))
     assert.ok(profile.includes('<wao_output_schema'))
     assert.ok(profile.includes(
@@ -490,6 +532,18 @@ async function runAppServerSmoke(params: {
       ))
     }
   }
+  const hookContext = await startHookContextServer()
+  const hookOutput = await runHookScript({
+    scriptPath: path.join(codexHome, 'hooks', 'project-production-context.mjs'),
+    event: { hook_event_name: 'SubagentStart' },
+    environment: {
+      ...process.env,
+      WAO_MCP_RUNTIME_BEARER_TOKEN: 'runtime-smoke-token',
+      WAO_MCP_PROJECT_CONTEXT_URL: hookContext.url,
+    },
+  })
+  assert.ok(hookOutput.includes('runtime-smoke-project-context-v1'))
+  assert.ok(hookContext.requestCount() > 0)
   const createManager = (home: string) => new LocalRuntimeManager({
     clientInfo: {
       name: 'wao-runtime-smoke',
@@ -501,6 +555,7 @@ async function runAppServerSmoke(params: {
       CODEX_HOME: home,
       HOME: home,
       WAO_MCP_RUNTIME_BEARER_TOKEN: 'runtime-smoke-token',
+      WAO_MCP_PROJECT_CONTEXT_URL: hookContext.url,
     },
     initializeCapabilities: PRODUCTION_CODEX_INITIALIZE_CAPABILITIES,
   })
@@ -509,6 +564,7 @@ async function runAppServerSmoke(params: {
   let restoredManager: LocalRuntimeManager | null = null
   const runtimeKey = 'stage-0-smoke'
   const cwd = path.join(params.rootDir, 'workspace')
+  await mkdir(cwd, { recursive: true, mode: 0o700 })
   const toolContract = ASSISTANT_RUNTIME_STATIC_CONTRACT.tools
   const customProviderConfig = {
     web_search: toolContract.webSearch,
@@ -702,6 +758,7 @@ async function runAppServerSmoke(params: {
       manager.shutdownAll(),
       restoredManager?.shutdownAll() ?? Promise.resolve(),
       requestCapture.close(),
+      hookContext.close(),
     ])
   }
 }
@@ -710,7 +767,6 @@ async function main(): Promise<void> {
   const liveTurn = process.argv.includes('--live-turn')
   const rootDir = await mkdtemp(path.join(tmpdir(), 'wao-codex-runtime-smoke-'))
   try {
-    await withStageTimeout('workspace', async () => await runWorkspaceSmoke(rootDir))
     await withStageTimeout('mcp', async () => await runMcpSmoke())
     const appServer = await withStageTimeout(
       'app-server',
@@ -718,7 +774,6 @@ async function main(): Promise<void> {
     )
     process.stdout.write(`${JSON.stringify({
       ok: true,
-      workspace: 'disposable_scratch_round_trip',
       mcp: createWaoMcpOperationCatalog().map((entry) => entry.operationId),
       appServer,
     }, null, 2)}\n`)

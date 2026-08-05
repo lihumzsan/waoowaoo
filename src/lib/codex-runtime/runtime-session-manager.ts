@@ -30,7 +30,7 @@ export type RuntimeSessionCheckpointReason = 'turn_completed' | 'idle' | 'shutdo
 export interface RuntimeSessionPersistence {
   /** Idempotently settle an abandoned product Turn before a new placement. */
   reconcileBeforeStart(scope: RuntimeSessionScope): Promise<void>
-  /** Materialize disposable scratch, read-only project facts, and opaque Codex home once per container. */
+  /** Materialize disposable scratch, fixed Runtime configuration, and opaque Codex home once per container. */
   materialize(scope: RuntimeSessionScope): Promise<RuntimeSessionMaterialization>
   /**
    * The unique durable runtime-thread binding writer. It must commit the opaque
@@ -206,7 +206,7 @@ type SessionEntry = {
   childGenerationUsed: boolean
   restartRequired: boolean
   turnBindingBarrier: Promise<boolean> | null
-  workspaceCaptureAllowed: boolean
+  runtimeCheckpointAllowed: boolean
   unsubscribeRuntime: (() => void) | null
   status: SessionStatus
   lastActivityAt: number
@@ -440,7 +440,7 @@ export class RuntimeSessionManager {
       productThreadId: managed.thread.productThreadId,
       runtimeTurnId: null,
     }
-    managed.session.workspaceCaptureAllowed = false
+    managed.session.runtimeCheckpointAllowed = false
     let resolveBinding!: (bound: boolean) => void
     managed.session.turnBindingBarrier = new Promise<boolean>((resolve) => {
       resolveBinding = resolve
@@ -455,7 +455,7 @@ export class RuntimeSessionManager {
         runtimeTurnId: turn.id,
       }
       await bindStartedTurn(turn)
-      managed.session.workspaceCaptureAllowed = true
+      managed.session.runtimeCheckpointAllowed = true
       resolveBinding(true)
       return turn
     } catch (error) {
@@ -472,7 +472,7 @@ export class RuntimeSessionManager {
     const slot = this.slots.get(scopeId)
     if (!slot) return
     const entry = await slot.entry
-    if (entry.workspaceCaptureAllowed) {
+    if (entry.runtimeCheckpointAllowed) {
       throw new Error('CODEX_RUNTIME_DISCARD_BOUND_TURN_FORBIDDEN')
     }
     if (entry.transition) return await entry.transition
@@ -649,7 +649,7 @@ export class RuntimeSessionManager {
         childGenerationUsed: false,
         restartRequired: false,
         turnBindingBarrier: null,
-        workspaceCaptureAllowed: true,
+        runtimeCheckpointAllowed: true,
         unsubscribeRuntime,
         status: 'ready',
         lastActivityAt: Date.now(),
@@ -899,8 +899,8 @@ export class RuntimeSessionManager {
       await entry.persistenceQueue
       const specs = await this.buildRecoverySpecs(entry)
       if (!hadActiveTurn) await entry.container.stop('force')
-      const captureAllowed = await (entry.turnBindingBarrier ?? Promise.resolve(true))
-      if (captureAllowed) await this.options.waitForTurnSettlement(entry.scope)
+      const checkpointAllowed = await (entry.turnBindingBarrier ?? Promise.resolve(true))
+      if (checkpointAllowed) await this.options.waitForTurnSettlement(entry.scope)
       await this.options.persistence.destroyMaterialization(entry.materialization)
       entry.unsubscribeRuntime?.()
       entry.unsubscribeRuntime = null
@@ -937,9 +937,9 @@ export class RuntimeSessionManager {
         await entry.container.stop('force')
         forcedForChildDrain = true
       }
-      const captureAllowed = await (entry.turnBindingBarrier ?? Promise.resolve(true))
-      if (captureAllowed) await this.options.waitForTurnSettlement(entry.scope)
-      if (!activeTurn && !forcedForChildDrain && captureAllowed) {
+      const checkpointAllowed = await (entry.turnBindingBarrier ?? Promise.resolve(true))
+      if (checkpointAllowed) await this.options.waitForTurnSettlement(entry.scope)
+      if (!activeTurn && !forcedForChildDrain && checkpointAllowed) {
         const threads = await this.readThreads(entry)
         for (const thread of threads) {
           if (!thread.checkpointRequired) continue

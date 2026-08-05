@@ -141,9 +141,10 @@ function isMessageReplayControl(
 function withTurnContext(
   inputs: readonly RuntimeUserInput[],
   locale: string,
+  projectProductionContext: AssistantRuntimeModelConfiguration['projectProductionContext'],
 ): readonly RuntimeUserInput[] {
   return [
-    { type: 'text', text: buildAssistantRuntimeTurnContext(locale) },
+    { type: 'text', text: buildAssistantRuntimeTurnContext(locale, projectProductionContext) },
     ...inputs,
   ]
 }
@@ -726,7 +727,11 @@ export class AssistantRuntimeService {
       })
       const runtimeTurn = await this.manager.startTurn(scope, input.preparedThread.threadId, {
         clientUserMessageId: input.sourceId,
-        input: withTurnContext(input.inputs, input.locale),
+        input: withTurnContext(
+          input.inputs,
+          input.locale,
+          input.preparedThread.model.projectProductionContext,
+        ),
         model: input.preparedThread.model.runtimeModel,
         approvalPolicy: 'on-request',
         sandboxPolicy: buildTurnSandboxPolicy(

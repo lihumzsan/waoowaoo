@@ -8,6 +8,7 @@ export {
   CREATIVE_WORKERS,
   PRIMARY_AGENT_DISABLED_NATIVE_SKILL_IDS,
   PRIMARY_AGENT_GLOBAL_INSTRUCTIONS,
+  PROJECT_PRODUCTION_CONTEXT_HOOK_CONTRACT,
   creativeWorkerRoutingInstructions,
   materializeCreativeRuntimeConfiguration,
 } from './agent-profiles'

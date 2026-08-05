@@ -63,14 +63,14 @@ export const CREATIVE_WORKER_REGISTRY: Readonly<Record<CreativeWorkerKind, Creat
     title: '视频导演专业子 Agent',
     description: '只负责视频导演、分段与最终视频提示词；最终回复固定 video_generation_batch JSON。',
     skillIds: ['creative-core', 'video-direction'],
-    executionFacts: 'Read the exact system/project.json assigned by the parent and use only its non-null productionCapabilities.video facts. Never guess capability limits.',
+    executionFacts: 'Use only the non-null productionCapabilities.video facts injected below by the Wao system. Never ask the parent to relay or guess capability limits.',
   }),
   music: defineWorker({
     kind: 'music',
     title: '音乐导演专业子 Agent',
     description: '只负责音乐设计和最终音乐提示词；最终回复固定 audio_generation_batch JSON。',
     skillIds: ['creative-core', 'music-direction'],
-    executionFacts: 'Read the exact system/project.json assigned by the parent and use only its non-null productionCapabilities.music facts. Never guess capability limits.',
+    executionFacts: 'Use only the non-null productionCapabilities.music facts injected below by the Wao system. Never ask the parent to relay or guess capability limits.',
   }),
 }
 
@@ -98,6 +98,41 @@ export const PRIMARY_AGENT_GLOBAL_INSTRUCTIONS = `# Wao orchestration
 - If the strict output or media tool validation rejects a field, send the exact correction back to the same fixed worker. Do not rewrite the output or repeat the same submission until the worker returns a corrected final object.
 - Keep delegation bounded: do not create redundant workers.`
 
+export const PROJECT_PRODUCTION_CONTEXT_HOOK_CONTRACT = {
+  revision: 2,
+  environmentUrlKey: 'WAO_MCP_PROJECT_CONTEXT_URL',
+  bearerTokenKey: 'WAO_MCP_RUNTIME_BEARER_TOKEN',
+  subagentEvent: 'SubagentStart',
+  subagentMatcher: '^wao_(story|long_form|direction|assets|video|music)$',
+} as const
+
+const PROJECT_PRODUCTION_CONTEXT_HOOK_SCRIPT = `const chunks = []
+for await (const chunk of process.stdin) chunks.push(chunk)
+const event = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+const eventName = event?.hook_event_name
+if (eventName !== 'SubagentStart') {
+  throw new Error('WAO_PROJECT_CONTEXT_HOOK_EVENT_INVALID')
+}
+const url = process.env.WAO_MCP_PROJECT_CONTEXT_URL
+const token = process.env.WAO_MCP_RUNTIME_BEARER_TOKEN
+if (!url || !token) throw new Error('WAO_PROJECT_CONTEXT_HOOK_ENVIRONMENT_MISSING')
+const response = await fetch(url, {
+  headers: { authorization: \`Bearer \${token}\`, accept: 'application/json' },
+})
+if (!response.ok) throw new Error(\`WAO_PROJECT_CONTEXT_HOOK_FETCH_FAILED:\${response.status}\`)
+const context = await response.json()
+const additionalContext = [
+  'The Wao system injected the current project production context below as read-only developer context.',
+  'It is authoritative for this request. Never ask the parent Agent or user to relay, repeat, or guess these facts.',
+  '<wao_project_production_context>',
+  JSON.stringify(context, null, 2),
+  '</wao_project_production_context>',
+].join('\\n')
+process.stdout.write(JSON.stringify({
+  hookSpecificOutput: { hookEventName: eventName, additionalContext },
+}))
+`
+
 function tomlString(value: string): string {
   return JSON.stringify(value)
 }
@@ -121,7 +156,7 @@ ${resource.content.trim()}
   return [
     `You are the fixed Wao professional worker ${worker.agentType}.`,
     'Your role and Skill set were selected deterministically by the Wao worker registry. Do not discover, load, or apply any other Wao Skill.',
-    'Treat the writable workspace as disposable scratch only. Do not modify system/** and do not treat scratch files as project resources.',
+    'Treat the writable workspace as disposable scratch only. Scratch files are never project resources.',
     `Your only formal deliverable is exactly one strict JSON object with outputKind=${JSON.stringify(worker.outputKind)} in your final response. Do not create a manifest file, an auxiliary Markdown deliverable, or a parallel explanation file.`,
     'Never invent project paths. Use canonical Resource IDs and versions supplied by the parent for references. The server owns media placement.',
     'The wao MCP server is disabled for this worker. Never submit paid production, billing, Task, approval, or Resource operations.',
@@ -137,7 +172,11 @@ ${jsonSchema}
 
 export async function materializeCreativeRuntimeConfiguration(codexHomeDirectory: string): Promise<void> {
   const agentsDirectory = path.join(codexHomeDirectory, 'agents')
-  await mkdir(agentsDirectory, { recursive: true, mode: 0o700 })
+  const hooksDirectory = path.join(codexHomeDirectory, 'hooks')
+  await Promise.all([
+    mkdir(agentsDirectory, { recursive: true, mode: 0o700 }),
+    mkdir(hooksDirectory, { recursive: true, mode: 0o700 }),
+  ])
   await Promise.all(CREATIVE_WORKERS.map(async (worker) => {
     const developerInstructions = await buildDeveloperInstructions(worker)
     const file = [
@@ -170,12 +209,38 @@ export async function materializeCreativeRuntimeConfiguration(codexHomeDirectory
     writeFile(
       path.join(codexHomeDirectory, 'config.toml'),
       [
+        '[features]',
+        'hooks = true',
+        '',
         '[agents]',
         'enabled = true',
         '',
         disabledSkills.join('\n'),
         '',
       ].join('\n'),
+      { mode: 0o600 },
+    ),
+    writeFile(
+      path.join(hooksDirectory, 'project-production-context.mjs'),
+      PROJECT_PRODUCTION_CONTEXT_HOOK_SCRIPT,
+      { mode: 0o600 },
+    ),
+    writeFile(
+      path.join(codexHomeDirectory, 'hooks.json'),
+      `${JSON.stringify({
+        description: 'Wao system-owned project production context injection.',
+        hooks: {
+          SubagentStart: [{
+            matcher: PROJECT_PRODUCTION_CONTEXT_HOOK_CONTRACT.subagentMatcher,
+            hooks: [{
+              type: 'command',
+              command: 'node "$CODEX_HOME/hooks/project-production-context.mjs"',
+              timeout: 10,
+              additionalContextLimit: 5_000,
+            }],
+          }],
+        },
+      }, null, 2)}\n`,
       { mode: 0o600 },
     ),
   ])

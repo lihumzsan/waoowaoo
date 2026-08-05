@@ -15,4 +15,4 @@ test -w "$CODEX_HOME"
 command -v codex-code-mode-host >/dev/null 2>&1
 
 umask 077
-exec codex app-server --listen stdio:// --enable code_mode_host "$@"
+exec codex --dangerously-bypass-hook-trust app-server --listen stdio:// --enable code_mode_host "$@"

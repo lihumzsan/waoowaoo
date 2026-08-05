@@ -30,8 +30,9 @@ agent 和固定 Skill 集，Runtime 启动时把 Skill 正文只注入对应子 
   同一 registry schema 验证。没有强制输出文件、checkpoint、第二份 Markdown、Skill output 或
   Worker Task；明确需要长期文档时才显式保存为 Resource。
 - **CS-07 — 生成 items 是执行连接件。** 图片、视频和音乐角色返回可直接传给对应媒体 Operation 的
-  完整 items，包含最终 Prompt、创作身份、显式参数和 Resource 版本引用；主 Agent 不再先创建中间
-  Manifest。视频/音乐角色必须读取只读能力投影，服务端只校验、冻结和执行，不补写创作内容。
+  完整 items，包含最终 Prompt、创作身份、创作参数和 Resource 版本引用；Project 画幅与资产格式由
+  服务端 owner 决定，不在 item 重复提交。主 Agent 不再先创建中间 Manifest。视频/音乐角色必须读取
+  系统 hook 直接注入的当前能力 View；服务端校验、冻结和执行，不补写创作内容。
 - **CS-08 — 原生生命周期。** 创建、等待、中断和完成只消费原生 Subagent 事件并投影到现有 UI；
   不恢复旧 Worker 卡片或第二状态机。
 - **CS-09 — 语言由用户决定。** Skill 可以使用适合模型的知识语言，但用户可见文本和工作区交付遵循
@@ -63,8 +64,9 @@ agent 和固定 Skill 集，Runtime 启动时把 Skill 正文只注入对应子 
 
 ## 踩过的坑
 
-- 服务端曾按 schemaId 猜资产类型、拼接创作 Prompt 并覆盖画幅 → 形成第二个创作 writer，也让验证
-  无法区分 Skill 效果 → 子 Agent 写完整 Prompt 与显式参数，服务端只严格验证与冻结（CS-05）。
+- 服务端曾按 schemaId 猜资产类型、拼接创作 Prompt 并覆盖调用方画幅 → 形成第二个创作 writer，也让
+  验证无法区分 Skill 效果 → 子 Agent 写完整 Prompt 与创作参数；Project 画幅和资产格式由各自系统
+  owner 唯一解析，服务端只严格验证与冻结（CS-05/07）。
 - 固定 Worker 首版只绑定 agentType 与 Skill，自然语言交付说明没有绑定机器 outputKind：Skill 要求
   的字段被付费入口的 strict schema 禁止，错误投影又丢弃字段级 issue 并把所有路径错误归成同一个
   字段，模型于是把正确的相对路径改成必然过期的绝对路径反复提交 → 同一契约两份表示 → 六个 worker

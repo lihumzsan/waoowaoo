@@ -8,7 +8,7 @@
         "src/lib/codex-runtime",
         "src/lib/codex-model-gateway",
         "src/lib/assistant-runtime",
-        "src/lib/codex-workspace",
+        "src/lib/project-production-context.ts",
         "src/lib/wao-mcp",
         "src/app/api/internal/codex-runtime",
         "src/app/api/projects/[projectId]/assistant",
@@ -91,7 +91,7 @@
       "title": "Workspace Resource 持久树与直接生产",
       "sourcePaths": [
         "src/lib/workspace-resource",
-        "src/lib/codex-workspace",
+        "src/lib/project-production-context.ts",
         "src/lib/adapters/operation-error-normalizer.ts",
         "src/lib/errors/projection.ts",
         "src/lib/operations/domains/workspace-resource",
@@ -171,7 +171,8 @@
       "document": "docs/architecture/modules/creative-skills.md",
       "title": "Creative Skills 与原生 Subagent 内存交接",
       "sourcePaths": [
-        "src/lib/creative-skills"
+        "src/lib/creative-skills",
+        "src/lib/project-production-context.ts"
       ]
     },
     {
@@ -206,6 +207,7 @@
         "src/lib/codex-runtime/runtime-adapter.ts",
         "src/lib/codex-runtime/app-server-client.ts",
         "src/lib/creative-skills",
+        "src/lib/project-production-context.ts",
         "src/lib/wao-mcp/contracts.ts",
         "src/lib/operations/project-agent.ts",
         "messages/en/errors.json",

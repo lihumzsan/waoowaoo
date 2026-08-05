@@ -43,7 +43,6 @@ export const imageGenerationItemSchema = z.object({
   mediaType: z.literal('image'),
   schemaId: z.enum(WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.image),
   assetKind: z.enum(['character', 'location', 'prop']).nullable().default(null),
-  aspectRatio: z.string().trim().regex(/^\d+:\d+$/u, 'aspectRatio must use W:H form.').optional(),
   references: z.array(generationReferenceSchema.extend({
     channel: z.enum(['context', 'image']),
   }).strict()).max(16).optional(),
@@ -69,9 +68,6 @@ export const imageGenerationItemSchema = z.object({
   if (item.assetKind === null && assetSchemaIds.includes(item.schemaId)) {
     context.addIssue({ code: 'custom', path: ['assetKind'], message: 'assetKind is required for a reusable asset image schema.' })
   }
-  if (item.assetKind !== null && item.aspectRatio !== undefined && item.aspectRatio !== '4:3') {
-    context.addIssue({ code: 'custom', path: ['aspectRatio'], message: 'Reusable asset images must use aspectRatio 4:3.' })
-  }
 })
 
 export const audioGenerationItemSchema = z.object({
@@ -96,7 +92,6 @@ export const videoGenerationItemSchema = z.object({
   ...commonItemShape,
   mediaType: z.literal('video'),
   schemaId: z.enum(WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.video),
-  aspectRatio: z.string().trim().regex(/^\d+:\d+$/u, 'aspectRatio must use W:H form.').optional(),
   references: z.array(generationReferenceSchema.extend({
     channel: z.enum(['context', 'image', 'audio']),
   }).strict()).max(16).optional(),
@@ -153,7 +148,6 @@ export type GenerationItem =
 
 const assetGenerationItemSchema = imageGenerationItemSchema.safeExtend({
   assetKind: z.enum(['character', 'location', 'prop']),
-  aspectRatio: z.literal('4:3'),
   aliases: textList(64, 300),
   stableDescription: z.string().trim().min(1).max(16_000),
   consumedByShots: textList(512, 512),

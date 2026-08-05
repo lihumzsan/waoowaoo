@@ -37,11 +37,8 @@ const listResourcesOutputSchema = z.object({
 }).strict()
 
 const getResourceInputSchema = z.object({
-  resourceId: z.string().trim().min(1).max(32).optional(),
-  workspacePath: z.string().trim().min(1).max(512).optional(),
-}).strict().refine((value) => Boolean(value.resourceId) !== Boolean(value.workspacePath), {
-  message: 'Provide exactly one of resourceId or workspacePath.',
-})
+  resourceId: z.string().trim().min(1).max(32),
+}).strict()
 
 const getResourceOutputSchema = z.object({ success: z.literal(true), resource: resourceViewSchema }).strict()
 
@@ -137,7 +134,7 @@ export function createWorkspaceResourceOperations(): ProjectAgentOperationRegist
     }),
     get_resource: defineOperation({
       id: 'get_resource',
-      summary: 'Read one canonical file or folder by stable Resource ID or its current path.',
+      summary: 'Read one canonical project file or folder by stable Resource ID.',
       intent: 'query',
       channels: { tool: true, api: true, mcp: true },
       effects: readEffects,
@@ -149,7 +146,6 @@ export function createWorkspaceResourceOperations(): ProjectAgentOperationRegist
           userId: ctx.userId,
           projectId: ctx.projectId,
           resourceId: input.resourceId,
-          workspacePath: input.workspacePath,
         }),
       }),
     }),

@@ -32,6 +32,7 @@ import type {
 
 const DEFAULT_COMMAND = 'codex'
 const DEFAULT_ARGS = [
+  '--dangerously-bypass-hook-trust',
   'app-server',
   '--listen',
   'stdio://',

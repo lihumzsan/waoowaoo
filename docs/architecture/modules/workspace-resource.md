@@ -56,12 +56,14 @@ Episode、Chapter、Scene、Shot、Canon 都是用户目录与文件内容，不
 - **WR-15 — MCP 直接消费持久事实。** MCP Operation 直接从 Catalog、Version、Task 与配置读取权威
   状态；调用前后没有 Runtime 文件 flush/refresh，也没有“资源指针同步中”生命周期。工具提交成功
   后，pending/ready/failed 只由 Resource 与 Task View 表达。
-- **WR-16 — 创作内容不在服务端编译。** 专业 JSON 必须包含完整最终 Prompt、创作身份与显式参数。
+- **WR-16 — 创作内容不在服务端编译。** 专业 JSON 必须包含完整最终 Prompt、创作身份与创作参数；
+  Project 画幅与资产格式等系统参数由各自服务端 owner 解析，禁止 Agent 重复提交。
   Planner 在任何 Plan、报价、Resource 或 Task 副作用前严格校验、选择正式模型、解析精确引用并
-  逐字冻结；禁止依据 schemaId 追加 Prompt、猜资产类型或覆盖比例。
-- **WR-17 — Runtime 能力文件只读且可重建。** 只读能力投影由当前项目配置与生产 registry 派生，
-  不是 Agent 可写配置、Task 快照或第二份能力权威。缺必需能力时对应值为空，专业子 Agent 必须停止
-  而非猜测；提交时仍以当前配置重新校验并冻结真实执行参数。
+  逐字冻结；禁止依据 schemaId 追加 Prompt、猜资产类型，或让调用方覆盖 Project 画幅。
+- **WR-17 — 项目生产上下文由系统实时注入。** 只读上下文由当前 Project 配置与生产 registry 的唯一
+  resolver 派生；主 Agent 每 Turn 由服务端直接附加，固定子 Agent 由 Runtime lifecycle hook 注入。
+  它不是 workspace 文件、Agent 可写配置或第二份能力权威。缺必需能力时对应值为空，专业子 Agent
+  必须停止而非猜测；提交时仍由同一服务端事实校验并冻结真实执行参数。
 
 ## 权威入口
 
@@ -94,3 +96,6 @@ Episode、Chapter、Scene、Shot、Canon 都是用户目录与文件内容，不
   任一层字段、路径或同步状态漂移都会在真实生产中表现为参数失败或“资源仍在同步”，此前修复只补
   单个校验点所以换形式复发 → 删除整条文件/指针协议，公开输入只保留批量 items、父 Resource id、
   名称与版本引用，服务端一次完成 placement、预检、报价和提交（WR-06/07/08/10/15）。
+- 删除文件/指针协议时仍保留 `system/project.json` 与 `get_resource(workspacePath)`；系统提示因此把
+  Runtime 临时路径伪装成 Resource identity，边界只能稳定拒绝并显示参数失败 → 上一版只删除 writer，
+  没删除竞争命名空间 → 能力改为 lifecycle hook 实时注入，`get_resource` 只接受 `resourceId`（WR-17）。
