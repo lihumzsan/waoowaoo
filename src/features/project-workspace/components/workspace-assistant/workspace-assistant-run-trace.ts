@@ -3,6 +3,10 @@ import type { AssistantRuntimeSessionTurnView } from '@/lib/assistant-runtime/vi
 
 export const WORKSPACE_ASSISTANT_HIDDEN_TRACE_TOOL_NAMES = [
   'update_plan',
+  // Deleted file/pointer protocol. Historical messages may still contain its
+  // calls, but rendering their intermediate success/failure counts would
+  // misrepresent the canonical media Task results.
+  'submit_production_manifest',
 ] as const
 
 type MessagePartRecord = {

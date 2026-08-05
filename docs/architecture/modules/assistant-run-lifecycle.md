@@ -61,7 +61,8 @@ View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 pl
   进入 Runtime 的消息才允许忠实重发。
 - **ARL-18 — 工具输出与长期 Task 展示分权。** projector 只把结构化结果作为业务输出；transport
   外壳与工具完成不能把异步提交解释成媒体成功。聊天保留本 Turn 的调用与错误，但不永久渲染项目
-  Task 批次状态；资源与 Task 状态只由正式 View 展示。
+  Task 批次状态；资源与 Task 状态只由正式 View 展示。已删除的中间提交工具即使仍存在于历史消息，
+  也不得继续渲染其局部成功/失败计数来冒充当前媒体结果。
 - **ARL-19 — 聊天附件只物化一次，不旁路专业生产。** 注册后唯一变成 ready Resource。主 Agent
   把 canonical id/version 与用途交给固定专业子 Agent，由后者在 generation items 中声明精确引用；
   父 Agent 验证后调用对应媒体 Operation，不能按消息内容、路径或最近附件猜输入。
