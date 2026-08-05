@@ -131,7 +131,7 @@
         "openFolder": "Open folder",
         "deleteFolder": "Delete folder {path}",
         "sectionCount": "{count} items",
-        "directory": "Directory",
+        "directory": "Content",
         "directoryEmpty": "No folders yet",
         "jumpToFolder": "Jump to canvas position"
       },

@@ -131,7 +131,7 @@
         "openFolder": "打开文件夹",
         "deleteFolder": "删除文件夹 {path}",
         "sectionCount": "{count} 项",
-        "directory": "目录",
+        "directory": "内容管理",
         "directoryEmpty": "暂无文件夹",
         "jumpToFolder": "跳转到画布位置"
       },

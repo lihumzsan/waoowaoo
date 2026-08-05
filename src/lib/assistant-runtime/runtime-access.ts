@@ -299,6 +299,7 @@ export function buildAssistantRuntimeTurnContext(locale: string): string {
     '<wao_turn_context>',
     `locale: ${JSON.stringify(normalized)}`,
     'Write every user-visible response, progress update, plan explanation, and reasoning summary in this locale unless the user explicitly requests another language.',
+    'Use this same working language for every user-visible project folder, document, and Resource name unless the user explicitly requests another language.',
     '</wao_turn_context>',
   ].join('\n')
 }
