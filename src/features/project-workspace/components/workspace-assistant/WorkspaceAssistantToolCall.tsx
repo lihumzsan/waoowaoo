@@ -374,13 +374,10 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
   const webSearchSources = operationId === 'web_search'
     ? resolveWebSearchSources(props.result)
     : []
-  // A running search shows the query it actually declared, because a silent
-  // multi-second wait is the one thing the user cannot interpret. This is the
-  // Codex item's own `query` field — never parsed out of assistant text — and
-  // it gives way to the source cards the moment results land.
-  const webSearchQuery = operationId === 'web_search' && displayState === 'running'
-    ? readText(isRecord(props.args) ? props.args.query : null)
-    : null
+  // The model writes a long research brief, and showing it verbatim buried the
+  // one thing the user needs while waiting — that a search is underway — under
+  // a paragraph of instructions to itself. The brief is not the status.
+  const webSearchRunning = operationId === 'web_search' && displayState === 'running'
   const liveProgress = displayState === 'running'
     ? context.progressByToolCallId.get(props.toolCallId) ?? null
     : null
@@ -400,10 +397,10 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
           <span className="assistant-shimmer-text min-w-0 truncate">{liveProgress}</span>
         </div>
       ) : null}
-      {webSearchQuery ? (
+      {webSearchRunning && !liveProgress ? (
         <div className="ml-5 mt-1 flex min-w-0 items-center gap-1.5 text-xs leading-4">
           <AppIcon name="search" className="h-3 w-3 shrink-0 opacity-70" aria-hidden="true" />
-          <span className="min-w-0 truncate text-[var(--glass-text-secondary)]">{webSearchQuery}</span>
+          <span className="assistant-shimmer-text min-w-0 truncate">{t('toolCall.webSearchRunning')}</span>
         </div>
       ) : null}
       {webSearchSources.length > 0 ? (

@@ -87,7 +87,8 @@
     "hide": "Hide",
     "arguments": "Arguments",
     "result": "Result",
-    "waiting": "Waiting for tool result..."
+    "waiting": "Waiting for tool result...",
+    "webSearchRunning": "Searching the web…"
   },
   "runtime": {
     "goal": "Active goal",
