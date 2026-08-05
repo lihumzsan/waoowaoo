@@ -50,11 +50,12 @@ describe('provider contract - Toonflow video', () => {
         modelKey: 'toonflow::seedance-2.0',
         variantSubKind: 'official',
       },
-      imageUrl: 'https://example.com/first.png',
+      imageUrl: '',
       options: {
         prompt: 'A slow cinematic push through a rain-soaked station.',
         referenceImages: ['https://example.com/character.png'],
         referenceAudios: ['https://example.com/voice.wav'],
+        referenceVideos: ['https://example.com/motion.mp4'],
         duration: 4,
         resolution: '480p',
         aspectRatio: '16:9',
@@ -81,11 +82,6 @@ describe('provider contract - Toonflow video', () => {
         references: [
           {
             type: 'image_url',
-            image_url: { url: 'https://example.com/first.png' },
-            role: 'first_frame',
-          },
-          {
-            type: 'image_url',
             image_url: { url: 'https://example.com/character.png' },
             role: 'reference_image',
           },
@@ -93,6 +89,11 @@ describe('provider contract - Toonflow video', () => {
             type: 'audio_url',
             audio_url: { url: 'https://example.com/voice.wav' },
             role: 'reference_audio',
+          },
+          {
+            type: 'video_url',
+            video_url: { url: 'https://example.com/motion.mp4' },
+            role: 'reference_video',
           },
         ],
         watermark: false,

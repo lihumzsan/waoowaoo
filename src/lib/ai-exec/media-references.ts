@@ -1,6 +1,7 @@
 type MediaReferenceOptions = {
   readonly referenceImages?: unknown
   readonly referenceAudios?: unknown
+  readonly referenceVideos?: unknown
   readonly lastFrameImageUrl?: unknown
   readonly referenceVideoUrl?: unknown
 }
@@ -81,6 +82,9 @@ export function createMediaProviderRequestIdentity<T extends MediaRequestIdentit
     if ('referenceAudios' in options) {
       options.referenceAudios = stableMediaUrlArray(options.referenceAudios, 'referenceAudios')
     }
+    if ('referenceVideos' in options) {
+      options.referenceVideos = stableMediaUrlArray(options.referenceVideos, 'referenceVideos')
+    }
     if ('lastFrameImageUrl' in options && options.lastFrameImageUrl !== undefined) {
       options.lastFrameImageUrl = stableMediaUrl(options.lastFrameImageUrl, 'lastFrameImageUrl')
     }
@@ -107,6 +111,7 @@ export function assertVideoMediaReferencesUseHttps(input: {
   const mediaOptions = input.options as MediaReferenceOptions
   assertHttpsMediaArray(mediaOptions.referenceImages, 'referenceImages')
   assertHttpsMediaArray(mediaOptions.referenceAudios, 'referenceAudios')
+  assertHttpsMediaArray(mediaOptions.referenceVideos, 'referenceVideos')
   if (mediaOptions.lastFrameImageUrl !== undefined) {
     assertHttpsMediaUrl(mediaOptions.lastFrameImageUrl, 'lastFrameImageUrl')
   }

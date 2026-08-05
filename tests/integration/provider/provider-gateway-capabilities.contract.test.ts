@@ -768,8 +768,17 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
         && candidate.provider === 'openrouter'
         && candidate.modelId === 'bytedance/seedance-2.0-fast'
       ))
-      expect(entry?.capabilities?.video?.maxReferenceImages).toBe(8)
+      expect(entry?.capabilities?.video?.maxReferenceImages).toBe(9)
       expect(entry?.capabilities?.video?.maxReferenceAudios).toBe(3)
+      expect(entry?.capabilities?.video?.maxReferenceVideos).toBe(3)
+      expect(entry?.capabilities?.video?.maxReferenceFiles).toBe(12)
+      expect(entry?.capabilities?.video?.referenceAudioRequiresVisual).toBe(true)
+      expect(entry?.capabilities?.video?.supportedInputModes).toEqual([
+        'text_to_video',
+        'first_frame',
+        'first_last_frame',
+        'reference',
+      ])
     })
 
     it('declares all Ark video models as multi-reference capable', () => {

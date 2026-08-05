@@ -400,13 +400,10 @@ export async function resolveVideoSourceFromGeneration(
   params: {
     userId: string
     modelId: string
-    imageUrl?: string
-    referenceImages?: readonly VideoReferenceImageInput[]
+    referenceImages: readonly VideoReferenceImageInput[]
     referenceAudios?: readonly string[]
-    allowTextOnly?: boolean
-    options?: AiVideoExecutionOptions & {
-      generationMode?: 'normal' | 'firstlastframe'
-    }
+    referenceVideos?: readonly string[]
+    options?: AiVideoExecutionOptions
     pollProgress?: { start?: number; end?: number }
   },
 ): Promise<{ url: string; actualVideoTokens?: number; downloadHeaders?: Record<string, string> }> {
@@ -422,15 +419,10 @@ export async function resolveVideoSourceFromGeneration(
 
   const providerReferencePayload = resolveProviderVideoReferencePayload({
     referenceImages: params.referenceImages,
-    imageUrl: params.imageUrl,
-    legacyReferenceImages: params.options?.referenceImages,
-    legacyLastFrameImageUrl: params.options?.lastFrameImageUrl,
-    allowTextOnly: params.allowTextOnly,
   })
   const providerRequestOptions: Record<string, string | number | boolean | string[]> = {}
   for (const [key, value] of Object.entries(params.options || {})) {
     if (
-      key === 'generationMode' ||
       key === 'referenceImages' ||
       key === 'lastFrameImageUrl' ||
       value === undefined
@@ -458,6 +450,9 @@ export async function resolveVideoSourceFromGeneration(
           ...providerReferencePayload.options,
           ...(params.referenceAudios && params.referenceAudios.length > 0
             ? { referenceAudios: [...params.referenceAudios] }
+            : {}),
+          ...(params.referenceVideos && params.referenceVideos.length > 0
+            ? { referenceVideos: [...params.referenceVideos] }
             : {}),
         },
         { key: 'media:video:primary' },

@@ -18,7 +18,9 @@ export const WORKSPACE_RESOURCE_SCHEMA = {
   ASSET_GENERATION_BATCH: 'project.asset_manifest',
   VIDEO_GENERATION_BATCH: 'project.video_prompt_set',
   AUDIO_GENERATION_BATCH: 'project.music_direction',
-  STYLE: 'project.style',
+  // Historical read-only identity. New generation cannot mint this retired
+  // schema; existing Resources remain readable without a destructive data migration.
+  LEGACY_STYLE: 'project.style',
   CHARACTER_IMAGE: 'project.character_image',
   LOCATION_IMAGE: 'project.location_image',
   PROP_IMAGE: 'project.prop_image',
@@ -114,7 +116,7 @@ export const WORKSPACE_RESOURCE_SCHEMA_IDS_BY_MEDIA = {
   ],
   image: [
     WORKSPACE_RESOURCE_SCHEMA.GENERIC_IMAGE,
-    WORKSPACE_RESOURCE_SCHEMA.STYLE,
+    WORKSPACE_RESOURCE_SCHEMA.LEGACY_STYLE,
     WORKSPACE_RESOURCE_SCHEMA.CHARACTER_IMAGE,
     WORKSPACE_RESOURCE_SCHEMA.LOCATION_IMAGE,
     WORKSPACE_RESOURCE_SCHEMA.PROP_IMAGE,
@@ -157,6 +159,10 @@ const DEDICATED_ORIGIN_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new 
   WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
 ])
 
+const RETIRED_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new Set([
+  WORKSPACE_RESOURCE_SCHEMA.LEGACY_STYLE,
+])
+
 /**
  * Formal creative JSON identities are minted only by the explicit
  * save_project_document operation after the outputKind registry validates the
@@ -179,6 +185,7 @@ function generationMintableSchemas(
     !IMPORT_ORIGIN_SCHEMA_IDS.has(schemaId)
     && !DEDICATED_ORIGIN_SCHEMA_IDS.has(schemaId)
     && !CREATIVE_OUTPUT_SCHEMA_IDS.has(schemaId)
+    && !RETIRED_SCHEMA_IDS.has(schemaId)
   ))
 }
 

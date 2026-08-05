@@ -80,6 +80,7 @@ export const TOONFLOW_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: TOONFLOW_SEEDANCE_2_MODEL_ID,
     capabilities: {
       video: {
+        supportedInputModes: ['text_to_video', 'first_frame', 'first_last_frame', 'reference'],
         supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
         generateAudioOptions: [true, false],
@@ -88,8 +89,11 @@ export const TOONFLOW_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         firstlastframe: true,
         supportGenerateAudio: true,
         assetReferenceMultiReference: true,
-        maxReferenceImages: 8,
+        maxReferenceImages: 9,
         maxReferenceAudios: 3,
+        maxReferenceVideos: 3,
+        maxReferenceFiles: 12,
+        referenceAudioRequiresVisual: true,
       },
     },
   },
@@ -99,6 +103,7 @@ export const TOONFLOW_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: TOONFLOW_SEEDANCE_2_FAST_MODEL_ID,
     capabilities: {
       video: {
+        supportedInputModes: ['text_to_video', 'first_frame', 'first_last_frame', 'reference'],
         supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
         generateAudioOptions: [true, false],
@@ -107,8 +112,11 @@ export const TOONFLOW_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         firstlastframe: true,
         supportGenerateAudio: true,
         assetReferenceMultiReference: true,
-        maxReferenceImages: 8,
+        maxReferenceImages: 9,
         maxReferenceAudios: 3,
+        maxReferenceVideos: 3,
+        maxReferenceFiles: 12,
+        referenceAudioRequiresVisual: true,
       },
     },
   },
@@ -155,7 +163,7 @@ export function resolveToonflowOptionSchema(
     throw new Error(`TOONFLOW_MODALITY_UNSUPPORTED:${modality}:${modelId}`)
   }
   return buildMediaOptionSchema('video', {
-    allowedKeys: ['referenceImages', 'referenceAudios'],
+    allowedKeys: ['referenceImages', 'referenceAudios', 'referenceVideos'],
     excludedKeys: [
       'size',
       'promptExtend',
@@ -177,8 +185,9 @@ export function resolveToonflowOptionSchema(
       ),
       aspectRatio: enumValidator(TOONFLOW_SEEDANCE_2_ASPECT_RATIO_OPTIONS),
       generateAudio: booleanValidator(),
-      referenceImages: stringArrayValidator({ maxLength: 8 }),
+      referenceImages: stringArrayValidator({ maxLength: 9 }),
       referenceAudios: stringArrayValidator({ maxLength: 3 }),
+      referenceVideos: stringArrayValidator({ maxLength: 3 }),
     },
     objectValidators: [(options) => {
       const lastFrame = typeof options.lastFrameImageUrl === 'string'

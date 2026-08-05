@@ -9,7 +9,6 @@ import {
   preflightMediaProviderRoutes,
 } from '@/lib/ai-exec/media-preflight'
 import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
-import { supportsTextToVideoModel } from '@/lib/ai-registry/video-model-helpers'
 import type { CapabilityValue } from '@/lib/ai-registry/types'
 import { ApiError } from '@/lib/api-errors'
 import { getAssetImageFormatPolicy } from '@/lib/asset-generation'
@@ -260,6 +259,7 @@ function providerTransportPreflightOptions(input: {
   readonly mediaType: PlannedResource['mediaType']
   readonly options: Readonly<Record<string, unknown>>
   readonly imageCount: number
+  readonly referenceImageCount: number
   readonly audioCount: number
   readonly videoCount: number
   readonly usesLastFrame: boolean
@@ -270,14 +270,17 @@ function providerTransportPreflightOptions(input: {
     ...(input.mediaType === 'image' && input.imageCount > 0
       ? { referenceImages: providerPlaceholderUrls(input.imageCount, 'image') }
       : {}),
-    ...(input.mediaType === 'video' && input.imageCount > 1 && !input.usesLastFrame
-      ? { referenceImages: providerPlaceholderUrls(input.imageCount, 'image') }
+    ...(input.mediaType === 'video' && input.referenceImageCount > 0
+      ? { referenceImages: providerPlaceholderUrls(input.referenceImageCount, 'image') }
       : {}),
     ...(input.mediaType === 'video' && input.usesLastFrame
       ? { lastFrameImageUrl: providerPlaceholderUrls(1, 'image')[0] }
       : {}),
     ...(input.mediaType === 'video' && input.audioCount > 0
       ? { referenceAudios: providerPlaceholderUrls(input.audioCount, 'audio') }
+      : {}),
+    ...(input.mediaType === 'video' && input.videoCount > 0
+      ? { referenceVideos: providerPlaceholderUrls(input.videoCount, 'video') }
       : {}),
     ...(input.mediaType === 'audio' && input.videoCount > 0
       ? {
@@ -363,26 +366,46 @@ function validateReferenceCapabilities(input: {
 
   if (input.mediaType === 'video') {
     const capabilities = resolveBuiltinCapabilitiesByModelKey('video', input.modelKey)?.video
-    const firstFrames = imageReferences.filter((reference) => reference.role === 'first_frame')
-    const lastFrames = imageReferences.filter((reference) => reference.role === 'last_frame')
-    const ordinaryImages = imageReferences.filter((reference) => reference.role !== 'first_frame' && reference.role !== 'last_frame')
-    const usesFramePair = firstFrames.length > 0 || lastFrames.length > 0
     if (
-      usesFramePair
-      && (
-        firstFrames.length !== 1
-        || lastFrames.length !== 1
-        || ordinaryImages.length > 0
-        || capabilities?.firstlastframe !== true
-      )
+      imageReferences.some((reference) => !['first_frame', 'last_frame', 'reference_image'].includes(reference.role))
+      || audioReferences.some((reference) => reference.role !== 'reference_audio')
+      || videoReferences.some((reference) => reference.role !== 'reference_video')
     ) {
       throw new ApiError('INVALID_PARAMS', {
-        code: 'VIDEO_MODEL_FIRST_LAST_FRAME_INVALID',
+        code: 'VIDEO_REFERENCE_ROLE_INVALID',
         field: 'references',
       })
     }
-    const maxImages = usesFramePair ? 2 : capabilities?.maxReferenceImages ?? 1
-    if (imageReferences.length > maxImages) {
+    const firstFrames = imageReferences.filter((reference) => reference.role === 'first_frame')
+    const lastFrames = imageReferences.filter((reference) => reference.role === 'last_frame')
+    const referenceImages = imageReferences.filter((reference) => reference.role === 'reference_image')
+    const usesFrames = firstFrames.length > 0 || lastFrames.length > 0
+    const usesReferences = referenceImages.length > 0 || audioReferences.length > 0 || videoReferences.length > 0
+    const inputMode = usesFrames
+      ? lastFrames.length > 0 ? 'first_last_frame' : 'first_frame'
+      : usesReferences ? 'reference' : 'text_to_video'
+    if (!capabilities?.supportedInputModes?.includes(inputMode)) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'VIDEO_MODEL_INPUT_MODE_UNSUPPORTED',
+        field: 'references',
+        inputMode,
+      })
+    }
+    if (
+      usesFrames
+      && (
+        firstFrames.length !== 1
+        || lastFrames.length > 1
+        || usesReferences
+      )
+    ) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'VIDEO_MODEL_FRAME_INPUT_INVALID',
+        field: 'references',
+      })
+    }
+    const maxImages = capabilities?.maxReferenceImages ?? 0
+    if (referenceImages.length > maxImages) {
       throw new ApiError('INVALID_PARAMS', {
         code: 'VIDEO_MODEL_REFERENCE_LIMIT_EXCEEDED',
         field: 'references',
@@ -397,21 +420,31 @@ function validateReferenceCapabilities(input: {
         limit: maxAudios,
       })
     }
-    if (imageReferences.length === 0 && !supportsTextToVideoModel(input.modelKey)) {
+    const maxVideos = capabilities?.maxReferenceVideos ?? 0
+    if (videoReferences.length > maxVideos) {
       throw new ApiError('INVALID_PARAMS', {
-        code: 'VIDEO_MODEL_TEXT_TO_VIDEO_UNSUPPORTED',
+        code: 'VIDEO_MODEL_VIDEO_REFERENCE_LIMIT_EXCEEDED',
         field: 'references',
+        limit: maxVideos,
       })
     }
-    if (audioReferences.length > 0 && imageReferences.length === 0) {
+    const referenceFileCount = referenceImages.length + audioReferences.length + videoReferences.length
+    const maxReferenceFiles = capabilities?.maxReferenceFiles ?? 0
+    if (usesReferences && referenceFileCount > maxReferenceFiles) {
       throw new ApiError('INVALID_PARAMS', {
-        code: 'VIDEO_MODEL_REFERENCE_AUDIO_REQUIRES_IMAGE',
+        code: 'VIDEO_MODEL_TOTAL_REFERENCE_LIMIT_EXCEEDED',
         field: 'references',
+        limit: maxReferenceFiles,
       })
     }
-    if (audioReferences.length > 0 && usesFramePair) {
+    if (
+      capabilities?.referenceAudioRequiresVisual === true
+      && audioReferences.length > 0
+      && referenceImages.length === 0
+      && videoReferences.length === 0
+    ) {
       throw new ApiError('INVALID_PARAMS', {
-        code: 'VIDEO_MODEL_REFERENCE_AUDIO_FRAME_ROLE_CONFLICT',
+        code: 'VIDEO_MODEL_REFERENCE_AUDIO_REQUIRES_VISUAL',
         field: 'references',
       })
     }
@@ -492,6 +525,9 @@ async function compileMediaExecution(input: {
     }
 
     const imageCount = input.references.filter((reference) => reference.channel === 'image').length
+    const referenceImageCount = item.mediaType === 'video'
+      ? input.references.filter((reference) => reference.channel === 'image' && reference.role === 'reference_image').length
+      : 0
     const audioCount = input.references.filter((reference) => reference.channel === 'audio').length
     const videoCount = input.references.filter((reference) => reference.channel === 'video').length
     const usesLastFrame = item.mediaType === 'video'
@@ -501,6 +537,7 @@ async function compileMediaExecution(input: {
       mediaType: item.mediaType,
       options: requested,
       imageCount,
+      referenceImageCount,
       audioCount,
       videoCount,
       usesLastFrame,
@@ -517,6 +554,7 @@ async function compileMediaExecution(input: {
       mediaType: item.mediaType,
       options: frozenScalarOptions(preflight.options),
       imageCount,
+      referenceImageCount,
       audioCount,
       videoCount,
       usesLastFrame,
@@ -579,10 +617,12 @@ async function preflightFrozenRetry(input: {
     inputByPosition.get(position)
   ))
   const usesLastFrame = imageReferences.some((reference) => reference?.role === 'last_frame')
+  const referenceImageCount = imageReferences.filter((reference) => reference?.role === 'reference_image').length
   const options = providerTransportPreflightOptions({
     mediaType: input.mediaType,
     options: input.generationOptions,
     imageCount: input.source.resource.imageInputPositions.length,
+    referenceImageCount,
     audioCount: input.source.resource.audioInputPositions.length,
     videoCount: input.source.resource.videoInputPositions.length,
     usesLastFrame,
@@ -923,6 +963,7 @@ async function loadFailedTasks(
       throw new Error(`WORKSPACE_RESOURCE_RETRY_TASK_TARGET_MISMATCH:${resourceId}`)
     }
     const mediaType = resource.mediaType as PlannedResource['mediaType']
+    schemaForMedia(mediaType, resource.schemaId)
     const prompt = resource.prompt?.trim()
     const modelKey = resource.modelKey?.trim()
     if (!prompt || !modelKey) {

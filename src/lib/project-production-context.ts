@@ -3,6 +3,7 @@ import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabili
 import { getProjectModelConfig, type ProjectModelConfig } from '@/lib/config-service'
 import { prisma } from '@/lib/prisma'
 import { CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS } from '@/lib/workspace-resource/generation-contract'
+import type { VideoInputMode } from '@/lib/ai-registry/types'
 
 export type ProjectProductionCapabilities = {
   readonly video: {
@@ -13,7 +14,10 @@ export type ProjectProductionCapabilities = {
     readonly maxSegmentDurationSeconds: number
     readonly maxReferenceImages: number
     readonly maxReferenceAudios: number
-    readonly supportsTextToVideo: boolean
+    readonly maxReferenceVideos: number
+    readonly maxReferenceFiles: number
+    readonly referenceAudioRequiresVisual: boolean
+    readonly supportedInputModes: readonly VideoInputMode[]
   } | null
   readonly music: {
     readonly modelKey: string
@@ -29,7 +33,7 @@ export type ProjectProductionCapabilities = {
 }
 
 export type ProjectProductionContext = {
-  readonly schemaVersion: 1
+  readonly schemaVersion: 2
   readonly version: string
   readonly project: {
     readonly projectId: string
@@ -75,7 +79,10 @@ function resolveProductionCapabilities(config: ProjectModelConfig): ProjectProdu
         maxSegmentDurationSeconds,
         maxReferenceImages: video.maxReferenceImages ?? 1,
         maxReferenceAudios: video.maxReferenceAudios ?? 0,
-        supportsTextToVideo: video.supportsTextToVideo === true,
+        maxReferenceVideos: video.maxReferenceVideos ?? 0,
+        maxReferenceFiles: video.maxReferenceFiles ?? 0,
+        referenceAudioRequiresVisual: video.referenceAudioRequiresVisual === true,
+        supportedInputModes: video.supportedInputModes ?? [],
       }
     : null
 
@@ -132,7 +139,7 @@ export async function readProjectProductionContext(input: {
   ])
   if (!project) throw new ProjectProductionContextError()
   const value: Omit<ProjectProductionContext, 'version'> = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     project: {
       projectId: project.id,
       name: project.name,

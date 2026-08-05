@@ -26,6 +26,24 @@ export const generationReferenceSchema = z.object({
   channel: z.enum(['context', 'image', 'audio', 'video']),
 }).strict()
 
+export const videoGenerationReferenceSchema = z.discriminatedUnion('channel', [
+  generationReferenceSchema.extend({
+    channel: z.literal('context'),
+  }).strict(),
+  generationReferenceSchema.extend({
+    channel: z.literal('image'),
+    role: z.enum(['first_frame', 'last_frame', 'reference_image']),
+  }).strict(),
+  generationReferenceSchema.extend({
+    channel: z.literal('audio'),
+    role: z.literal('reference_audio'),
+  }).strict(),
+  generationReferenceSchema.extend({
+    channel: z.literal('video'),
+    role: z.literal('reference_video'),
+  }).strict(),
+])
+
 const commonItemShape = {
   itemId: z.string().trim().min(1).max(191),
   name: resourceNameSchema,
@@ -92,9 +110,7 @@ export const videoGenerationItemSchema = z.object({
   ...commonItemShape,
   mediaType: z.literal('video'),
   schemaId: z.enum(WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.video),
-  references: z.array(generationReferenceSchema.extend({
-    channel: z.enum(['context', 'image', 'audio']),
-  }).strict()).max(16).optional(),
+  references: z.array(videoGenerationReferenceSchema).max(16).optional(),
   durationSeconds: z.number().int().min(1).max(CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS),
 }).strict()
 

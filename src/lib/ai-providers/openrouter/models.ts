@@ -507,6 +507,7 @@ export const OPENROUTER_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: OPENROUTER_SEEDANCE_2_VIDEO_MODEL_ID,
     capabilities: {
       video: {
+        supportedInputModes: ['text_to_video', 'first_frame', 'first_last_frame', 'reference'],
         supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
         generateAudioOptions: [true, false],
@@ -515,8 +516,11 @@ export const OPENROUTER_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         firstlastframe: true,
         supportGenerateAudio: true,
         assetReferenceMultiReference: true,
-        maxReferenceImages: 8,
+        maxReferenceImages: 9,
         maxReferenceAudios: 3,
+        maxReferenceVideos: 3,
+        maxReferenceFiles: 12,
+        referenceAudioRequiresVisual: true,
       },
     },
   },
@@ -526,6 +530,7 @@ export const OPENROUTER_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: OPENROUTER_SEEDANCE_2_FAST_VIDEO_MODEL_ID,
     capabilities: {
       video: {
+        supportedInputModes: ['text_to_video', 'first_frame', 'first_last_frame', 'reference'],
         supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
         generateAudioOptions: [true, false],
@@ -534,8 +539,11 @@ export const OPENROUTER_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         firstlastframe: true,
         supportGenerateAudio: true,
         assetReferenceMultiReference: true,
-        maxReferenceImages: 8,
+        maxReferenceImages: 9,
         maxReferenceAudios: 3,
+        maxReferenceVideos: 3,
+        maxReferenceFiles: 12,
+        referenceAudioRequiresVisual: true,
       },
     },
   },
@@ -632,7 +640,7 @@ export function resolveOpenRouterOptionSchema(modality: MediaModality, modelId?:
   }
   if (modality === 'video') {
     return buildMediaOptionSchema('video', {
-      allowedKeys: ['referenceImages', 'referenceAudios'],
+      allowedKeys: ['referenceImages', 'referenceAudios', 'referenceVideos'],
       validators: {
         duration: integerRangeValidator({ min: 4, max: 15 }),
         aspectRatio: enumValidator(OPENROUTER_SEEDANCE_2_ASPECT_RATIO_OPTIONS),
@@ -643,6 +651,7 @@ export function resolveOpenRouterOptionSchema(modality: MediaModality, modelId?:
         ),
         generateAudio: booleanValidator(),
         referenceAudios: stringArrayValidator(),
+        referenceVideos: stringArrayValidator({ maxLength: 3 }),
       },
     })
   }

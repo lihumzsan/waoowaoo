@@ -218,10 +218,12 @@ describe('provider contract - OpenRouter video', () => {
         modelKey: 'openrouter::bytedance/seedance-2.0-fast',
         variantSubKind: 'official',
       },
-      imageUrl: 'https://example.com/character.png',
+      imageUrl: '',
       options: {
-        prompt: 'Image 1 (@Image1) speaks with audio 1 (@Audio1): {Stay with me.}',
+        prompt: 'Image 1 speaks with audio 1 while following video 1 motion.',
+        referenceImages: ['https://example.com/character.png'],
         referenceAudios: [referenceAudioDataUrl],
+        referenceVideos: ['https://example.com/motion.mp4'],
         duration: 6,
         resolution: '720p',
         aspectRatio: '16:9',
@@ -237,6 +239,7 @@ describe('provider contract - OpenRouter video', () => {
       input_references: [
         { type: 'image_url', image_url: { url: 'https://example.com/character.png' } },
         { type: 'audio_url', audio_url: { url: referenceAudioDataUrl } },
+        { type: 'video_url', video_url: { url: 'https://example.com/motion.mp4' } },
       ],
     })
   })

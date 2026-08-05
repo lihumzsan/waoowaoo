@@ -77,6 +77,7 @@ export type AiVideoExecutionOptions = {
   lastFrameImageUrl?: string
   referenceImages?: string[]
   referenceAudios?: string[]
+  referenceVideos?: string[]
   [key: string]: string | number | boolean | string[] | undefined
 }
 

@@ -42,6 +42,11 @@ type ToonflowReference =
     audio_url: { url: string }
     role: 'reference_audio'
   }
+  | {
+    type: 'video_url'
+    video_url: { url: string }
+    role: 'reference_video'
+  }
 
 type ToonflowGeneratePayload = {
   model: string
@@ -230,11 +235,29 @@ function buildReferences(input: {
   lastFrameImageUrl?: string
   referenceImages?: readonly string[]
   referenceAudios?: readonly string[]
+  referenceVideos?: readonly string[]
 }): ToonflowReference[] {
   const firstFrame = input.imageUrl.trim()
   const lastFrame = input.lastFrameImageUrl?.trim() ?? ''
   const extraImages = uniqueUrls(input.referenceImages).filter((url) => url !== firstFrame)
   const audios = uniqueUrls(input.referenceAudios)
+  const videos = uniqueUrls(input.referenceVideos)
+
+  if (extraImages.length > 9 || audios.length > 3 || videos.length > 3) {
+    throw new AppError('INVALID_PARAMS', 'Toonflow reference channel limit exceeded', {
+      provider: 'toonflow',
+    })
+  }
+  if (extraImages.length + audios.length + videos.length > 12) {
+    throw new AppError('INVALID_PARAMS', 'Toonflow total reference limit exceeded', {
+      provider: 'toonflow',
+    })
+  }
+  if (audios.length > 0 && extraImages.length === 0 && videos.length === 0) {
+    throw new AppError('INVALID_PARAMS', 'Toonflow reference audio requires an image or video', {
+      provider: 'toonflow',
+    })
+  }
 
   if (lastFrame) {
     if (!firstFrame) {
@@ -242,10 +265,21 @@ function buildReferences(input: {
         provider: 'toonflow',
       })
     }
+    if (extraImages.length > 0 || audios.length > 0 || videos.length > 0) {
+      throw new AppError('INVALID_PARAMS', 'Toonflow frame mode cannot be combined with references', {
+        provider: 'toonflow',
+      })
+    }
     return [
       { type: 'image_url', image_url: { url: firstFrame }, role: 'first_frame' },
       { type: 'image_url', image_url: { url: lastFrame }, role: 'last_frame' },
     ]
+  }
+
+  if (firstFrame && (extraImages.length > 0 || audios.length > 0 || videos.length > 0)) {
+    throw new AppError('INVALID_PARAMS', 'Toonflow frame mode cannot be combined with references', {
+      provider: 'toonflow',
+    })
   }
 
   return [
@@ -261,6 +295,11 @@ function buildReferences(input: {
       type: 'audio_url' as const,
       audio_url: { url },
       role: 'reference_audio' as const,
+    })),
+    ...videos.map((url) => ({
+      type: 'video_url' as const,
+      video_url: { url },
+      role: 'reference_video' as const,
     })),
   ]
 }
@@ -305,6 +344,7 @@ function buildGeneratePayload(
         lastFrameImageUrl: options.lastFrameImageUrl,
         referenceImages: options.referenceImages,
         referenceAudios: options.referenceAudios,
+        referenceVideos: options.referenceVideos,
       }),
       watermark: false,
       seed: -1,

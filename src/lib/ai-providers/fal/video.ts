@@ -101,8 +101,9 @@ type FalSeedance2ImageVideoPayload = {
 
 type FalSeedance2ReferenceVideoPayload = {
   prompt: string
-  image_urls: string[]
+  image_urls?: string[]
   audio_urls?: string[]
+  video_urls?: string[]
   resolution?: string
   duration?: string
   aspect_ratio?: string
@@ -238,16 +239,21 @@ function buildSeedance2Payload(input: {
     ? input.options.referenceImages.filter((url): url is string => typeof url === 'string' && url.trim().length > 0)
     : []
   const inputImageUrl = typeof input.imageUrl === 'string' ? input.imageUrl.trim() : ''
-  const uniqueReferences = Array.from(new Set([
-    ...(inputImageUrl ? [inputImageUrl] : []),
-    ...referenceImages,
-  ]))
+  const uniqueReferences = Array.from(new Set(referenceImages))
   const referenceAudios = Array.isArray(input.options.referenceAudios)
     ? Array.from(new Set(input.options.referenceAudios.filter(
       (url): url is string => typeof url === 'string' && url.trim().length > 0,
     )))
     : []
-  assertSeedance2VideoOptions(input.options, { fast: input.fast, textOnly: uniqueReferences.length === 0 })
+  const referenceVideos = Array.isArray(input.options.referenceVideos)
+    ? Array.from(new Set(input.options.referenceVideos.filter(
+      (url): url is string => typeof url === 'string' && url.trim().length > 0,
+    )))
+    : []
+  assertSeedance2VideoOptions(input.options, {
+    fast: input.fast,
+    textOnly: !inputImageUrl && uniqueReferences.length === 0 && referenceAudios.length === 0 && referenceVideos.length === 0,
+  })
 
   if (referenceAudios.length > 3) {
     throw new Error('FAL_VIDEO_OPTION_VALUE_UNSUPPORTED: referenceAudios>3')
@@ -255,16 +261,22 @@ function buildSeedance2Payload(input: {
   if (uniqueReferences.length > 9) {
     throw new Error('FAL_VIDEO_OPTION_VALUE_UNSUPPORTED: referenceImages>9')
   }
-  if (referenceAudios.length > 0 && uniqueReferences.length === 0) {
-    throw new Error('FAL_VIDEO_REFERENCE_AUDIO_REQUIRES_IMAGE')
+  if (referenceVideos.length > 3) {
+    throw new Error('FAL_VIDEO_OPTION_VALUE_UNSUPPORTED: referenceVideos>3')
+  }
+  if (uniqueReferences.length + referenceAudios.length + referenceVideos.length > 12) {
+    throw new Error('FAL_VIDEO_OPTION_VALUE_UNSUPPORTED: totalReferences>12')
+  }
+  if (referenceAudios.length > 0 && uniqueReferences.length === 0 && referenceVideos.length === 0) {
+    throw new Error('FAL_VIDEO_REFERENCE_AUDIO_REQUIRES_VISUAL')
   }
 
   if (input.options.lastFrameImageUrl) {
     if (!inputImageUrl) {
       throw new Error('FAL_VIDEO_OPTION_VALUE_UNSUPPORTED: lastFrameImageUrl_without_imageUrl')
     }
-    if (referenceAudios.length > 0) {
-      throw new Error('FAL_VIDEO_OPTION_UNSUPPORTED: referenceAudios_with_lastFrameImageUrl')
+    if (uniqueReferences.length > 0 || referenceAudios.length > 0 || referenceVideos.length > 0) {
+      throw new Error('FAL_VIDEO_OPTION_UNSUPPORTED: references_with_lastFrameImageUrl')
     }
     return {
       endpoint: `${endpointPrefix}/image-to-video`,
@@ -277,38 +289,37 @@ function buildSeedance2Payload(input: {
     }
   }
 
-  if (uniqueReferences.length > 1 || referenceAudios.length > 0) {
+  if (inputImageUrl) {
+    if (uniqueReferences.length > 0 || referenceAudios.length > 0 || referenceVideos.length > 0) {
+      throw new Error('FAL_VIDEO_OPTION_UNSUPPORTED: frame_with_references')
+    }
+    return {
+      endpoint: `${endpointPrefix}/image-to-video`,
+      payload: {
+        prompt,
+        image_url: inputImageUrl,
+        ...sharedOptions,
+      },
+    }
+  }
+
+  if (uniqueReferences.length > 0 || referenceAudios.length > 0 || referenceVideos.length > 0) {
     return {
       endpoint: `${endpointPrefix}/reference-to-video`,
       payload: {
         prompt,
-        image_urls: uniqueReferences,
+        ...(uniqueReferences.length > 0 ? { image_urls: uniqueReferences } : {}),
         ...(referenceAudios.length > 0 ? { audio_urls: referenceAudios } : {}),
+        ...(referenceVideos.length > 0 ? { video_urls: referenceVideos } : {}),
         ...sharedOptions,
       },
     }
-  }
-
-  if (uniqueReferences.length === 0) {
-    return {
-      endpoint: `${endpointPrefix}/text-to-video`,
-      payload: {
-        prompt,
-        ...sharedOptions,
-      },
-    }
-  }
-
-  const primaryReference = uniqueReferences[0]
-  if (!primaryReference) {
-    throw new Error('FAL_VIDEO_REFERENCE_IMAGE_REQUIRED')
   }
 
   return {
-    endpoint: `${endpointPrefix}/image-to-video`,
+    endpoint: `${endpointPrefix}/text-to-video`,
     payload: {
       prompt,
-      image_url: primaryReference,
       ...sharedOptions,
     },
   }
@@ -327,6 +338,7 @@ function assertAllowedFalVideoOptions(options: FalVideoOptions) {
     'lastFrameImageUrl',
     'referenceImages',
     'referenceAudios',
+    'referenceVideos',
   ])
   for (const [key, value] of Object.entries(options)) {
     if (value === undefined) continue
@@ -402,6 +414,14 @@ export async function executeFalVideoGeneration(input: AiProviderVideoExecutionC
     && modelId !== FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID
   ) {
     throw new Error(`FAL_VIDEO_OPTION_UNSUPPORTED: referenceAudios for ${modelId}`)
+  }
+  if (
+    Array.isArray(options.referenceVideos)
+    && options.referenceVideos.length > 0
+    && modelId !== FAL_SEEDANCE_2_VIDEO_MODEL_ID
+    && modelId !== FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID
+  ) {
+    throw new Error(`FAL_VIDEO_OPTION_UNSUPPORTED: referenceVideos for ${modelId}`)
   }
 
   let endpoint = FAL_VIDEO_ENDPOINTS[modelId]

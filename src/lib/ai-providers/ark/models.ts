@@ -28,6 +28,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: 'doubao-seedance-2-0-260128',
     capabilities: {
       video: {
+        supportedInputModes: ['text_to_video', 'first_frame', 'first_last_frame', 'reference'],
         supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
         generateAudioOptions: [true],
@@ -36,8 +37,11 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         firstlastframe: true,
         supportGenerateAudio: true,
         assetReferenceMultiReference: true,
-        maxReferenceImages: 8,
+        maxReferenceImages: 9,
         maxReferenceAudios: 3,
+        maxReferenceVideos: 3,
+        maxReferenceFiles: 12,
+        referenceAudioRequiresVisual: true,
       },
     },
   },
@@ -47,6 +51,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: 'doubao-seedance-2-0-fast-260128',
     capabilities: {
       video: {
+        supportedInputModes: ['text_to_video', 'first_frame', 'first_last_frame', 'reference'],
         supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
         generateAudioOptions: [true],
@@ -55,8 +60,11 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         firstlastframe: true,
         supportGenerateAudio: true,
         assetReferenceMultiReference: true,
-        maxReferenceImages: 8,
+        maxReferenceImages: 9,
         maxReferenceAudios: 3,
+        maxReferenceVideos: 3,
+        maxReferenceFiles: 12,
+        referenceAudioRequiresVisual: true,
       },
     },
   },
@@ -404,7 +412,7 @@ export function resolveArkOptionSchema(modality: MediaModality, modelId: string)
     return buildMediaOptionSchema('video', {
       ...ARK_VIDEO_OPTION_SCHEMA_CONFIG,
       allowedKeys: modelId === 'doubao-seedance-2-0-260128' || modelId === 'doubao-seedance-2-0-fast-260128'
-        ? ['referenceImages', 'referenceAudios']
+        ? ['referenceImages', 'referenceAudios', 'referenceVideos']
         : ['referenceImages'],
       validators: {
         aspectRatio: enumValidator(ARK_VIDEO_RATIOS),
@@ -419,6 +427,7 @@ export function resolveArkOptionSchema(modality: MediaModality, modelId: string)
         serviceTier: enumValidator(ARK_VIDEO_SERVICE_TIERS),
         executionExpiresAfter: integerRangeValidator({ min: 1 }),
         referenceAudios: stringArrayValidator(),
+        referenceVideos: stringArrayValidator({ maxLength: 3 }),
       },
     })
   }

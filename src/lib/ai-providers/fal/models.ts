@@ -121,6 +121,7 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID,
     capabilities: {
       video: {
+        supportedInputModes: ['text_to_video', 'first_frame', 'first_last_frame', 'reference'],
         supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
         generateAudioOptions: [true],
@@ -129,8 +130,11 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         firstlastframe: true,
         supportGenerateAudio: true,
         assetReferenceMultiReference: true,
-        maxReferenceImages: 8,
+        maxReferenceImages: 9,
         maxReferenceAudios: 3,
+        maxReferenceVideos: 3,
+        maxReferenceFiles: 12,
+        referenceAudioRequiresVisual: true,
       },
     },
   },
@@ -140,6 +144,7 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID,
     capabilities: {
       video: {
+        supportedInputModes: ['text_to_video', 'first_frame', 'first_last_frame', 'reference'],
         supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
         generateAudioOptions: [true],
@@ -148,8 +153,11 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         firstlastframe: true,
         supportGenerateAudio: true,
         assetReferenceMultiReference: true,
-        maxReferenceImages: 8,
+        maxReferenceImages: 9,
         maxReferenceAudios: 3,
+        maxReferenceVideos: 3,
+        maxReferenceFiles: 12,
+        referenceAudioRequiresVisual: true,
       },
     },
   },
@@ -472,12 +480,13 @@ export function resolveFalOptionSchema(modality: MediaModality, modelId: string)
     if (modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID || modelId === FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID) {
       return buildMediaOptionSchema('video', {
         ...FAL_VIDEO_OPTION_SCHEMA_CONFIG,
-        allowedKeys: ['referenceImages', 'referenceAudios'],
+        allowedKeys: ['referenceImages', 'referenceAudios', 'referenceVideos'],
         validators: {
           duration: integerRangeValidator({ min: 4, max: 15 }),
           aspectRatio: enumValidator(['auto', '21:9', '16:9', '4:3', '1:1', '3:4', '9:16']),
           resolution: enumValidator(modelId === FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID ? ['480p', '720p'] : ['480p', '720p', '1080p']),
           referenceAudios: stringArrayValidator(),
+          referenceVideos: stringArrayValidator({ maxLength: 3 }),
         },
         objectValidators: [createFalVideoObjectValidator(modelId, FAL_VIDEO_MODEL_IDS)],
       })

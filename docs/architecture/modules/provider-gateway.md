@@ -74,6 +74,10 @@ Provider 差异只停留在 `ai-providers` 的实现、`ai-exec` 的统一执行
 - **PG-20 — 同一模态共享一次 preflight。** planner 与执行层调用同一 option normalizer；planner
   还要在 Plan 前验证所选 provider 的凭证与连接配置。已冻结 option 到 adapter 前不得再补默认或
   删除未知字段。敏感内容拒绝是 permanent 业务事实，不能坍缩成内部错误或被跨工具绕过。
+- **PG-21 — 视频输入模式必须显式。** 所选模型在 registry 声明可用的文本、首帧、首尾帧与参考素材
+  模式；Workspace 输入用 `first_frame`、`last_frame`、`reference_image`、`reference_audio`、
+  `reference_video` 明确角色，Planner 在报价和副作用前验证唯一模式与各通道上限。普通参考图无论
+  数量都不得被共享层或 adapter 推断成首帧；Provider adapter 只映射已冻结的显式角色。
 
 ## 权威入口
 

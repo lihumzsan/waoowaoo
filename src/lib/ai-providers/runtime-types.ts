@@ -94,6 +94,7 @@ export type AiProviderVideoExecutionContext = {
     lastFrameImageUrl?: string
     referenceImages?: string[]
     referenceAudios?: string[]
+    referenceVideos?: string[]
     [key: string]: unknown
   }
 }

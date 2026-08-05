@@ -59,10 +59,13 @@ description: Direct screenplay-based video generation with explicit state contin
 
 ## 参考素材
 
-- 图片和声音各自按传入顺序独立编号。中文提示词使用 `@图片N` / `@音频N`，英文使用 `@Image N` / `@Audio N`；不要混写双重编号。
-- `[参考]` 中每个引用用一句话声明唯一主要用途，例如角色身份、场景结构、关键道具或锁定音色。每个 item 的 `references` 只列当前 Segment 实际使用的 ready Resource，精确复制 `resourceId`、`contentVersion`、`role`、`position` 与 `channel`，并与 Prompt 中图片、声音的媒体顺序一致。路径不是 Resource 身份，不得提交。
+- 先从系统注入的 `productionCapabilities.video.supportedInputModes` 选择本段唯一输入模式：`text_to_video`、`first_frame`、`first_last_frame` 或 `reference`。不支持的模式不得提交，也不得自动降级。
+- `text_to_video` 不传媒体参考；`first_frame` 恰好传一张 `role=first_frame` 图片；`first_last_frame` 恰好传一张 `role=first_frame` 和一张 `role=last_frame` 图片；`reference` 使用 `role=reference_image`、`reference_audio`、`reference_video`，并遵守注入的各通道数量与总文件数上限。
+- 帧模式与参考模式互斥。普通参考图永远不是首帧；只有创意明确要求画面从该图开始运动时才使用 `first_frame`。末帧不能单独存在。
+- 图片、声音和视频各自按传入顺序独立编号。中文提示词使用 `@图片N` / `@音频N` / `@视频N`，英文使用 `@Image N` / `@Audio N` / `@Video N`；不要混写双重编号。
+- `[参考]` 中每个引用用一句话声明唯一主要用途，例如角色身份、场景结构、关键道具、锁定音色或参考运动。每个 item 的 `references` 只列当前 Segment 实际使用的 ready Resource，精确复制 `resourceId`、`contentVersion`、`role`、`position` 与 `channel`，并与 Prompt 中各媒体的顺序一致。路径不是 Resource 身份，不得提交。
 - 不传无关素材，不从文件名、近似名称或描述猜身份，不让参考图的偶然构图、姿态、光线或噪点代替本段导演判断。
-- 引用声音的 Segment 必须同时至少引用一张图片。声音参考与首帧/末帧定格用途的图片参考互斥；两者都需要时拆为相邻 Segment。
+- `reference_audio` 是视频模型的内容条件，不是 `generateAudio` 开关，也不是后期背景音乐；当 `referenceAudioRequiresVisual=true` 时，必须同时提供至少一个 `reference_image` 或 `reference_video`。`reference_video` 是运动/内容条件，只在 `maxReferenceVideos > 0` 时使用。
 
 ## 对白与声音
 
@@ -78,7 +81,7 @@ description: Direct screenplay-based video generation with explicit state contin
 ```text
 [风格] 题材 + 已确认视觉政策 + 2–3 个材质/光线关键词
 [时长] N 秒
-[参考] @图片1——明确用途；@音频1——明确用途
+[参考] @图片1——明确用途；@音频1——明确用途；@视频1——明确用途
 [入口状态] 非首段必写：承接上段出口，并说明已完成节拍
 [场景] 地点、时间、光线、空气与关键空间锚点
 [00:00–00:0X] 镜头1：景别 + 机位 + 主体落位 ｜ 一种主要运镜

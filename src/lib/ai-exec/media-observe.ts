@@ -54,6 +54,7 @@ export function summarizeMediaRequestInput(input: AiMediaExecutionInput): Record
       promptChars: input.options?.prompt?.length ?? 0,
       referenceImageCount: input.options?.referenceImages?.length ?? 0,
       referenceAudioCount: input.options?.referenceAudios?.length ?? 0,
+      referenceVideoCount: input.options?.referenceVideos?.length ?? 0,
       durationSeconds: typeof input.options?.duration === 'number' ? input.options.duration : null,
       resolution: input.options?.resolution ?? null,
     }

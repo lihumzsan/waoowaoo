@@ -32,7 +32,7 @@ const frozenResourceSchema = z.object({
   // planning preflight; GPT Image 2 legitimately accepts up to 16 references.
   imageInputPositions: z.array(z.number().int().nonnegative()).max(16),
   audioInputPositions: z.array(z.number().int().nonnegative()).max(3),
-  videoInputPositions: z.array(z.number().int().nonnegative()).max(1),
+  videoInputPositions: z.array(z.number().int().nonnegative()).max(3),
   toolCallId: z.string().trim().min(1).max(191).nullable(),
   sourceTurnId: z.string().trim().min(1).max(191).nullable(),
 }).strict().superRefine((resource, context) => {

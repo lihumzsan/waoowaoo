@@ -43,6 +43,7 @@ describe('WorkspaceResource Operation registry conformance', () => {
       expect(published, operationId).not.toContain('parentFolderId')
       expect(published, operationId).not.toContain('outputPath')
       expect(published, operationId).not.toContain('modelKey')
+      if (operationId === 'create_image') expect(published).not.toContain('project.style')
       expect(published, operationId).not.toContain('generationOptions')
       if (operationId === 'create_image' || operationId === 'create_video') {
         expect(published, operationId).not.toContain('aspectRatio')
@@ -140,12 +141,56 @@ describe('WorkspaceResource Operation registry conformance', () => {
         itemId: 'shot', name: 'Shot', mediaType: 'video', schemaId: 'project.video_segment',
         prompt: 'A shot.', durationSeconds: 15, outputPath: 'forbidden',
         references: [
-          { resourceId: 'res_a', contentVersion: 1, role: 'reference', position: 0, channel: 'image' },
-          { resourceId: 'res_b', contentVersion: 1, role: 'reference', position: 0, channel: 'image' },
+          { resourceId: 'res_a', contentVersion: 1, role: 'reference_image', position: 0, channel: 'image' },
+          { resourceId: 'res_b', contentVersion: 1, role: 'reference_image', position: 0, channel: 'image' },
         ],
       }] },
     }).success).toBe(false)
     expect(image.inputSchema.safeParse({ request: { kind: 'retry', resourceIds: ['res_a', 'res_a'] } }).success).toBe(false)
+  })
+
+  it('requires explicit video input roles and exposes reference video conditioning', () => {
+    const video = createProjectAgentOperationRegistryForApi().create_video
+    if (!video) throw new Error('create_video missing')
+    const item = {
+      itemId: 'shot',
+      name: 'Shot',
+      mediaType: 'video' as const,
+      schemaId: 'project.video_segment' as const,
+      prompt: 'A controlled movement reference.',
+      durationSeconds: 6,
+      count: 1,
+    }
+    expect(video.inputSchema.safeParse({
+      request: {
+        kind: 'new',
+        items: [{
+          ...item,
+          references: [{
+            resourceId: 'res_video',
+            contentVersion: 1,
+            role: 'reference_video',
+            position: 0,
+            channel: 'video',
+          }],
+        }],
+      },
+    }).success).toBe(true)
+    expect(video.inputSchema.safeParse({
+      request: {
+        kind: 'new',
+        items: [{
+          ...item,
+          references: [{
+            resourceId: 'res_image',
+            contentVersion: 1,
+            role: 'reference',
+            position: 0,
+            channel: 'image',
+          }],
+        }],
+      },
+    }).success).toBe(false)
   })
 
   it('keeps the public 16-image reference boundary representable in the frozen Task envelope', () => {
