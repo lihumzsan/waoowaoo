@@ -123,28 +123,6 @@
       "fileChange": "File change",
       "webSearch": "Web search",
       "viewImage": "View image",
-      "subagent": "Subagent",
-      "subagentAction": {
-        "spawnAgent": "Start Subagent",
-        "sendInput": "Send input to Subagent",
-        "resumeAgent": "Resume Subagent",
-        "wait": "Wait for Subagent",
-        "closeAgent": "Close Subagent",
-        "interruptAgent": "Interrupt Subagent",
-        "listAgents": "Check Subagent status",
-        "activity": "Subagent activity"
-      },
-      "subagentSummary": "{active} active · {completed} done · {interrupted} interrupted",
-      "subagentStatus": {
-        "active": "Active",
-        "completed": "Done",
-        "interrupted": "Interrupted"
-      },
-      "subagentActivity": {
-        "message": "Response",
-        "reasoning": "Reasoning",
-        "tool": "Tool call"
-      },
       "web": {
         "search": "Search: {query}",
         "openPage": "Page: {value}",
@@ -225,12 +203,5 @@
     "interactionSubmitErrorFallback": "This response could not be submitted. Refresh the conversation and try again.",
     "contextCompacted": "Compressed {count} earlier context records",
     "contextCompactedUnknown": "Earlier context was compressed"
-  },
-  "subagentTabs": {
-    "label": "Subagents",
-    "mainThread": "Main thread",
-    "empty": "This subagent has not produced any activity yet.",
-    "readOnly": "{path} is read-only",
-    "backToMain": "Back to main thread"
   }
 }

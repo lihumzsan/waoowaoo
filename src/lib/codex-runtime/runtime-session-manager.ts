@@ -155,42 +155,6 @@ type ActiveTurn = {
   readonly runtimeTurnId: string | null
 }
 
-type ChildTurn = {
-  readonly runtimeTurnId: string
-  readonly completion: Promise<void>
-  readonly resolveCompletion: () => void
-  interruptRequested: boolean
-}
-
-const CHILD_TURN_DRAIN_TIMEOUT_MS = 15_000
-
-function createChildTurn(runtimeTurnId: string): ChildTurn {
-  let resolveCompletion!: () => void
-  const completion = new Promise<void>((resolve) => {
-    resolveCompletion = resolve
-  })
-  return {
-    runtimeTurnId,
-    completion,
-    resolveCompletion,
-    interruptRequested: false,
-  }
-}
-
-async function withChildDrainTimeout<T>(promise: Promise<T>, code: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | null = null
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error(code)), CHILD_TURN_DRAIN_TIMEOUT_MS)
-      }),
-    ])
-  } finally {
-    if (timer) clearTimeout(timer)
-  }
-}
-
 type SessionEntry = {
   readonly scope: RuntimeSessionScope
   readonly scopeId: string
@@ -201,10 +165,6 @@ type SessionEntry = {
   readonly environmentFingerprint: string
   readonly threads: Map<string, ThreadSlot>
   readonly runtimeThreadToProductThread: Map<string, string>
-  readonly childTurns: Map<string, ChildTurn>
-  childDrain: Promise<void>
-  childGenerationUsed: boolean
-  restartRequired: boolean
   turnBindingBarrier: Promise<boolean> | null
   runtimeCheckpointAllowed: boolean
   unsubscribeRuntime: (() => void) | null
@@ -275,15 +235,6 @@ export class RuntimeSessionManager {
       }
       const entry = await existing.entry
       if (entry.status === 'ready') {
-        if (entry.restartRequired) {
-          await entry.persistenceQueue
-          if (!entry.transition) this.scheduleRecovery(entry)
-          if (entry.transition) {
-            await entry.transition
-            return await this.startOrResume(scope, launchOptions)
-          }
-          throw new Error('CODEX_RUNTIME_SESSION_RESTART_REQUIRED')
-        }
         entry.lastActivityAt = Date.now()
         return toSessionView(entry)
       }
@@ -425,16 +376,11 @@ export class RuntimeSessionManager {
     bindStartedTurn: (turn: RuntimeTurn) => Promise<void>,
   ): Promise<RuntimeTurn> {
     const managed = await this.requireManagedThread(scope, productThreadId)
-    await managed.session.childDrain
     await managed.session.persistenceQueue
     if (managed.session.status !== 'ready') {
       throw new Error(`CODEX_RUNTIME_SESSION_NOT_READY:${managed.session.status}`)
     }
-    if (managed.session.restartRequired || managed.session.childTurns.size > 0) {
-      throw new Error('CODEX_RUNTIME_CHILD_GENERATION_NOT_CLOSED')
-    }
     if (managed.session.activeTurn) throw new Error('CODEX_RUNTIME_SESSION_TURN_ALREADY_ACTIVE')
-    managed.session.childGenerationUsed = false
     managed.session.lastActivityAt = Date.now()
     managed.session.activeTurn = {
       productThreadId: managed.thread.productThreadId,
@@ -644,10 +590,6 @@ export class RuntimeSessionManager {
         environmentFingerprint,
         threads: new Map(),
         runtimeThreadToProductThread: new Map(),
-        childTurns: new Map(),
-        childDrain: Promise.resolve(),
-        childGenerationUsed: false,
-        restartRequired: false,
         turnBindingBarrier: null,
         runtimeCheckpointAllowed: true,
         unsubscribeRuntime,
@@ -729,8 +671,6 @@ export class RuntimeSessionManager {
   private handleRuntimeEvent(entry: SessionEntry, event: RuntimeEvent): void {
     entry.lastActivityAt = Date.now()
     if (event.type === 'processExited') {
-      for (const child of entry.childTurns.values()) child.resolveCompletion()
-      entry.childTurns.clear()
       if (!event.expected && entry.status === 'ready') this.scheduleRecovery(entry)
       return
     }
@@ -754,19 +694,10 @@ export class RuntimeSessionManager {
         this.scheduleRecovery(entry)
         return
       }
-      // Native Subagents own child Threads in the same app-server process.
-      // Their Turn lifecycle is projected through collab/subAgent items on the
-      // parent Turn; it must not mutate or invalidate the Product Turn slot.
       if (!productThreadId) {
-        entry.childGenerationUsed = true
-        const existing = entry.childTurns.get(runtimeThreadId)
-        if (existing) {
-          if (existing.runtimeTurnId !== runtimeTurnId) {
-            this.scheduleRecovery(entry)
-          }
-          return
-        }
-        entry.childTurns.set(runtimeThreadId, createChildTurn(runtimeTurnId))
+        // Wao disables Codex agents. A Turn on an unbound Runtime Thread is
+        // protocol divergence, not a second lifecycle to track locally.
+        this.scheduleRecovery(entry)
         return
       }
       if (entry.activeTurn && entry.activeTurn.productThreadId !== productThreadId) {
@@ -793,19 +724,9 @@ export class RuntimeSessionManager {
       return
     }
     if (!productThreadId) {
-      const child = entry.childTurns.get(completedRuntimeThreadId)
-      if (child?.runtimeTurnId === runtimeTurnId) {
-        entry.childTurns.delete(completedRuntimeThreadId)
-        child.resolveCompletion()
-      }
+      this.scheduleRecovery(entry)
       return
     }
-    entry.childDrain = entry.childDrain.then(
-      async () => await this.interruptChildTurns(entry),
-    )
-    const childDrain = entry.childDrain
-    const restartAfterChildTurns = entry.childGenerationUsed
-    if (restartAfterChildTurns) entry.restartRequired = true
     const bindingBarrier = entry.turnBindingBarrier ?? Promise.resolve(true)
     entry.activeTurn = null
     const threadSlot = entry.threads.get(productThreadId)
@@ -818,12 +739,7 @@ export class RuntimeSessionManager {
     void this.enqueuePersistence(entry, async () => {
       const thread = await threadSlot.entry
       const bound = await bindingBarrier
-      await childDrain
       if (!bound) return
-      // A native Subagent may spawn descendants on its own thread. Closing the
-      // app-server after the observed generation drains is the only protocol
-      // boundary that proves no delayed child notification or writer remains.
-      if (restartAfterChildTurns) await entry.container.stop('graceful')
       if (status === 'completed') {
         await this.options.persistence.checkpointRuntime({
           scope: entry.scope,
@@ -836,47 +752,12 @@ export class RuntimeSessionManager {
         thread.resumable = true
         this.publishThreadCheckpointed(entry, thread)
       }
-    }).then(
-      () => {
-        if (restartAfterChildTurns) this.scheduleRecovery(entry)
-      },
+    }).catch(
       (error: unknown) => {
         this.reportError(entry.scope, 'turn_terminal_persistence', error)
         if (entry.status === 'ready') this.scheduleRecovery(entry)
       },
     )
-  }
-
-  private async interruptChildTurns(entry: SessionEntry): Promise<void> {
-    while (entry.childTurns.size > 0) {
-      const turns = [...entry.childTurns.entries()]
-      await Promise.all(turns.map(async ([threadId, child]) => {
-        if (child.interruptRequested) return
-        child.interruptRequested = true
-        try {
-          await withChildDrainTimeout(
-            entry.container.runtime.interruptTurn({
-              threadId,
-              turnId: child.runtimeTurnId,
-            }),
-            'CODEX_RUNTIME_CHILD_INTERRUPT_TIMEOUT',
-          )
-        } catch (error) {
-          // A completion notification racing the RPC has already removed the
-          // writer and is equivalent to a successful drain.
-          if (entry.childTurns.get(threadId) !== child) return
-          this.reportError(entry.scope, 'child_turn_interrupt', error)
-          throw error
-        }
-      }))
-      await Promise.all(turns.map(async ([threadId, child]) => {
-        if (entry.childTurns.get(threadId) !== child) return
-        await withChildDrainTimeout(
-          child.completion,
-          'CODEX_RUNTIME_CHILD_COMPLETION_TIMEOUT',
-        )
-      }))
-    }
   }
 
   private handleOwnershipLost(entry: SessionEntry): void {
@@ -929,17 +810,9 @@ export class RuntimeSessionManager {
     try {
       if (activeTurn) await entry.container.stop('force')
       await entry.persistenceQueue
-      let forcedForChildDrain = false
-      try {
-        await entry.childDrain
-      } catch (error) {
-        this.reportError(entry.scope, 'child_turn_drain_force_stop', error)
-        await entry.container.stop('force')
-        forcedForChildDrain = true
-      }
       const checkpointAllowed = await (entry.turnBindingBarrier ?? Promise.resolve(true))
       if (checkpointAllowed) await this.options.waitForTurnSettlement(entry.scope)
-      if (!activeTurn && !forcedForChildDrain && checkpointAllowed) {
+      if (!activeTurn && checkpointAllowed) {
         const threads = await this.readThreads(entry)
         for (const thread of threads) {
           if (!thread.checkpointRequired) continue
@@ -955,7 +828,7 @@ export class RuntimeSessionManager {
           this.publishThreadCheckpointed(entry, thread)
         }
         await entry.container.stop('graceful')
-      } else if (!activeTurn && !forcedForChildDrain) {
+      } else if (!activeTurn) {
         await entry.container.stop('force')
       }
       await this.options.persistence.destroyMaterialization(entry.materialization)

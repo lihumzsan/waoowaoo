@@ -23,10 +23,10 @@ Codex app-server 是唯一 Agent Runtime；Wao 保留产品 View、WorkspaceReso
 - **CRR-03 — 双层隔离，且不静默降级。** 生产多租户 driver 必须是容器并限制 CPU、内存、PID、
   磁盘与网络；Codex 只能写临时 Project workspace。开发可显式选择本地进程，但 production 不得
   自动降级，产品 edition 也不得自动决定 driver。
-- **CRR-04 — WorkspaceResource 才是持久事实。** Runtime 只物化空 scratch、固定 Agent 配置与系统
-  hook；不物化项目文件，不复制 Catalog 或对象内容，也不在 Turn 结束时 capture 文件。项目生产事实
-  由服务端直接附加到主 Turn，并由 hook 从当前 View 注入固定子 Agent 的 developer context。Runtime
-  文件夹、inode 和临时 home 都不是产品权威，销毁不会丢失任何 Resource。
+- **CRR-04 — WorkspaceResource 才是持久事实。** Runtime 只物化空 scratch、关闭 agents 的固定配置
+  与 registry 生成的主 Agent Skills；不物化项目文件，不复制 Catalog 或对象内容，也不在 Turn 结束时
+  capture 文件。项目生产事实由服务端每 Turn 直接附加给唯一 writer。Runtime 文件夹、inode 和临时
+  home 都不是产品权威，销毁不会丢失任何 Resource。
 - **CRR-05 — scratch 没有持久语义。** Runtime 可自由创建临时研究和工具文件，但这些文件不会被
   观察、上传或映射为 Resource。持久内容必须显式调用业务 Operation；媒体引用使用 canonical
   Resource id/version，不通过本地指针文件。
@@ -76,7 +76,7 @@ Codex app-server 是唯一 Agent Runtime；Wao 保留产品 View、WorkspaceReso
 - Runtime 协议与适配：`src/lib/codex-runtime/runtime-adapter.ts`、`app-server-client.ts`
 - placement / ownership / idle / 恢复：`src/lib/codex-runtime/runtime-session-manager.ts`
 - 隔离与容器：`runtime-config.ts`、`Dockerfile.codex-runtime`
-- scratch、系统 context hook 与不透明状态 checkpoint：`src/lib/assistant-runtime/runtime-persistence.ts`、
+- scratch、Runtime Skill 配置与不透明状态 checkpoint：`src/lib/assistant-runtime/runtime-persistence.ts`、
   `src/lib/project-production-context.ts`
 - 能力桥：`src/lib/wao-mcp/**`；模型网关：`src/lib/codex-model-gateway/**`
 
@@ -111,4 +111,4 @@ Codex app-server 是唯一 Agent Runtime；Wao 保留产品 View、WorkspaceReso
   Runtime 只保留可销毁 scratch，所有持久事实直接经 Operation 读写（CRR-04/05/07/08）。
 - 删除资源镜像后曾保留一次性生成的 `system/project.json`；长生命周期 Runtime 中配置变更会让该文件
   过期，且相同路径又被误传给只认 Resource 的工具 → 可重建文件仍是竞争状态解释源 → 删除全部项目
-  文件投影，系统 hook 每次从唯一 resolver 获取当前 View（CRR-04/13）。
+  文件投影，每 Turn 从唯一 resolver 直接注入当前 View（CRR-04/13）。

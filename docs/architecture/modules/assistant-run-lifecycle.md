@@ -46,7 +46,7 @@ View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 pl
   Turn 已完成；仍活跃的 projector 必须等待其持久队列、结算 interrupted 并释放订阅。
 - **ARL-13 — cancel 是持久副作用 fence。** queued Turn 可在绑定前原子取消，后续绑定必须拒绝；
   running/waiting 的取消与所有 pending 交互在同一 Project 锁下关闭。晚到审批、Grant、Task、
-  同步写或子 Agent 不能越过取消标记开始新副作用。
+  同步写或模型晚到输出不能越过取消标记开始新副作用。
 - **ARL-14 — clear 先 claim 再停 placement。** clear 标记是清空进行中的唯一 fence；claim 后新
   准入、模型网关、MCP binding、审批证明与所有 effect 事务立即失败关闭。已归档请求的重放直接返回，
   绝不停止后来创建的新 Thread/Turn。
@@ -64,8 +64,8 @@ View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 pl
   Task 批次状态；资源与 Task 状态只由正式 View 展示。已删除的中间提交工具即使仍存在于历史消息，
   也不得继续渲染其局部成功/失败计数来冒充当前媒体结果。
 - **ARL-19 — 聊天附件只物化一次，不旁路专业生产。** 注册后唯一变成 ready Resource。主 Agent
-  把 canonical id/version 与用途交给固定专业子 Agent，由后者在 generation items 中声明精确引用；
-  父 Agent 验证后调用对应媒体 Operation，不能按消息内容、路径或最近附件猜输入。
+  把 canonical id/version 与用途写进匹配 Wao Skill 的唯一 generation result，再把同一 items 交给
+  对应媒体 Operation；不能按消息内容、路径或最近附件猜输入，也不能另写第二版 Prompt。
 
 ## 权威入口
 

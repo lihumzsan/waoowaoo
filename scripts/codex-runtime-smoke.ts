@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
-import { execFileSync, spawn } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { once } from 'node:events'
-import { cp, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { access, cp, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -28,8 +28,7 @@ import {
   ASSISTANT_RUNTIME_STATIC_CONTRACT,
 } from '@/lib/assistant-runtime/runtime-access'
 import {
-  CREATIVE_SKILL_IDS,
-  CREATIVE_WORKERS,
+  CREATIVE_RUNTIME_SKILLS,
   PRIMARY_AGENT_GLOBAL_INSTRUCTIONS,
   materializeCreativeRuntimeConfiguration,
 } from '@/lib/creative-skills'
@@ -60,12 +59,6 @@ type AppServerSmokeResult = {
 type RuntimeRequestCapture = {
   readonly baseUrl: string
   readonly request: Promise<RuntimeJsonObject>
-  readonly close: () => Promise<void>
-}
-
-type HookContextServer = {
-  readonly url: string
-  readonly requestCount: () => number
   readonly close: () => Promise<void>
 }
 
@@ -102,29 +95,6 @@ function closeServer(server: Server): Promise<void> {
       if (error) reject(error)
       else resolve()
     })
-  })
-}
-
-function runHookScript(input: {
-  readonly scriptPath: string
-  readonly event: RuntimeJsonObject
-  readonly environment: NodeJS.ProcessEnv
-}): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = spawn('node', [input.scriptPath], {
-      env: input.environment,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    })
-    const stdout: Buffer[] = []
-    const stderr: Buffer[] = []
-    child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk))
-    child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk))
-    child.once('error', reject)
-    child.once('close', (code) => {
-      if (code === 0) resolve(Buffer.concat(stdout).toString('utf8'))
-      else reject(new Error(`CODEX_RUNTIME_HOOK_SMOKE_FAILED:${String(code)}:${Buffer.concat(stderr).toString('utf8')}`))
-    })
-    child.stdin.end(JSON.stringify(input.event))
   })
 }
 
@@ -175,44 +145,6 @@ async function startRuntimeRequestCapture(): Promise<RuntimeRequestCapture> {
   }
 }
 
-async function startHookContextServer(): Promise<HookContextServer> {
-  let requests = 0
-  const server = createServer((incoming, response) => {
-    if (incoming.method !== 'GET' || incoming.headers.authorization !== 'Bearer runtime-smoke-token') {
-      response.writeHead(401, { 'content-type': 'application/json' })
-      response.end('{"error":{"code":"unauthorized"}}')
-      return
-    }
-    requests += 1
-    response.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
-    response.end(JSON.stringify({
-      schemaVersion: 1,
-      version: 'runtime-smoke-project-context-v1',
-      project: {
-        projectId: 'runtime-smoke-project',
-        name: 'Runtime smoke project',
-        description: null,
-        videoRatio: '16:9',
-        videoResolution: '720p',
-        imageResolution: '1K',
-      },
-      productionCapabilities: { video: null, music: null },
-    }))
-  })
-  server.listen(0, '127.0.0.1')
-  await once(server, 'listening')
-  const address = server.address()
-  assert(address && typeof address === 'object')
-  return {
-    url: `http://127.0.0.1:${String(address.port)}/project-context`,
-    requestCount: () => requests,
-    close: async () => {
-      server.closeAllConnections()
-      await closeServer(server)
-    },
-  }
-}
-
 function assertRuntimeContractRequest(request: RuntimeJsonObject): void {
   const serialized = JSON.stringify(request)
   assert.ok(
@@ -231,6 +163,23 @@ function assertRuntimeContractRequest(request: RuntimeJsonObject): void {
     !serialized.includes('mcp__wao__web_search'),
     'The live model request installed the deleted Wao MCP search tool.',
   )
+  assert.ok(
+    serialized.includes('Codex agents are disabled'),
+    'The live model request did not contain the primary-only execution boundary.',
+  )
+  for (const runtimeSkill of CREATIVE_RUNTIME_SKILLS) {
+    const professionalSkillId = runtimeSkill.skillIds[1]
+    assert.ok(
+      serialized.includes(professionalSkillId),
+      `The live model request did not expose Wao Skill ${professionalSkillId}.`,
+    )
+  }
+  for (const toolName of ['spawn_agent', 'send_message', 'wait_agent', 'interrupt_agent']) {
+    assert.ok(
+      !serialized.includes(`\"${toolName}\"`),
+      `The live model request exposed disabled collaboration tool ${toolName}.`,
+    )
+  }
 }
 
 async function withStageTimeout<T>(label: string, action: () => Promise<T>): Promise<T> {
@@ -284,8 +233,6 @@ async function assertPinnedProtocolSurface(rootDir: string): Promise<void> {
     'commandExecution',
     'fileChange',
     'mcpToolCall',
-    'collabAgentToolCall',
-    'subAgentActivity',
     'webSearch',
   ]) {
     assert.ok(notifications.includes(`\"${itemType}\"`), `Pinned Codex protocol no longer exposes ${itemType}`)
@@ -507,43 +454,32 @@ async function runAppServerSmoke(params: {
   await materializeCreativeRuntimeConfiguration(codexHome)
   const primaryInstructions = await readFile(path.join(codexHome, 'AGENTS.md'), 'utf8')
   assert.equal(primaryInstructions.trim(), PRIMARY_AGENT_GLOBAL_INSTRUCTIONS.trim())
-  assert.match(primaryInstructions, /may autonomously spawn and coordinate Subagents/)
-  assert.match(primaryInstructions, /fork_turns="none"/)
+  assert.match(primaryInstructions, /Codex agents are disabled/)
+  assert.match(primaryInstructions, /read exactly one matching Wao domain Skill/)
   const primaryConfig = await readFile(path.join(codexHome, 'config.toml'), 'utf8')
-  const hooksConfig = await readFile(path.join(codexHome, 'hooks.json'), 'utf8')
-  assert.match(primaryConfig, /\[agents\]\nenabled = true/)
-  assert.match(primaryConfig, /\[features\]\nhooks = true/)
-  assert.match(hooksConfig, /SubagentStart/)
-  assert.match(hooksConfig, /wao_\(story\|long_form\|direction\|assets\|video\|music\)/)
-  for (const worker of CREATIVE_WORKERS) {
-    const profile = await readFile(path.join(codexHome, 'agents', `${worker.agentType}.toml`), 'utf8')
-    assert.ok(profile.includes(`name = "${worker.agentType}"`))
-    assert.ok(profile.includes(`outputKind=\\"${worker.outputKind}\\"`))
-    assert.ok(profile.includes('<wao_output_schema'))
-    assert.ok(profile.includes(
-      '[mcp_servers.wao]\nurl = "http://127.0.0.1:1/disabled-wao-mcp"\nenabled = false',
-    ))
-    for (const skillId of worker.skillIds) {
-      assert.ok(profile.includes(`<wao_skill id=\\"${skillId}\\"`))
-    }
-    for (const skillId of CREATIVE_SKILL_IDS.filter((skillId) => !worker.skillIds.includes(skillId))) {
-      assert.ok(!profile.includes(`<wao_skill id=\\"${skillId}\\"`), (
-        `Custom agent ${worker.agentType} received an undeclared Skill: ${skillId}`
+  assert.match(primaryConfig, /\[agents\]\nenabled = false/)
+  assert.ok(!primaryConfig.includes('hooks = true'))
+  await assert.rejects(access(path.join(codexHome, 'agents')), { code: 'ENOENT' })
+  await assert.rejects(access(path.join(codexHome, 'hooks.json')), { code: 'ENOENT' })
+  await assert.rejects(access(path.join(codexHome, 'hooks')), { code: 'ENOENT' })
+  const professionalSkillIds = CREATIVE_RUNTIME_SKILLS.map((skill) => skill.skillIds[1])
+  for (const runtimeSkill of CREATIVE_RUNTIME_SKILLS) {
+    const professionalSkillId = runtimeSkill.skillIds[1]
+    const installedSkill = await readFile(
+      path.join(codexHome, 'skills', professionalSkillId, 'SKILL.md'),
+      'utf8',
+    )
+    assert.ok(installedSkill.includes(`name: ${professionalSkillId}`))
+    assert.ok(installedSkill.includes(`outputKind=${JSON.stringify(runtimeSkill.outputKind)}`))
+    assert.ok(installedSkill.includes('<wao_output_schema'))
+    assert.ok(installedSkill.includes('<wao_skill_source id="creative-core"'))
+    assert.ok(installedSkill.includes(`<wao_skill_source id="${professionalSkillId}"`))
+    for (const otherSkillId of professionalSkillIds.filter((skillId) => skillId !== professionalSkillId)) {
+      assert.ok(!installedSkill.includes(`<wao_skill_source id="${otherSkillId}"`), (
+        `Runtime Skill ${professionalSkillId} embedded another professional domain: ${otherSkillId}`
       ))
     }
   }
-  const hookContext = await startHookContextServer()
-  const hookOutput = await runHookScript({
-    scriptPath: path.join(codexHome, 'hooks', 'project-production-context.mjs'),
-    event: { hook_event_name: 'SubagentStart' },
-    environment: {
-      ...process.env,
-      WAO_MCP_RUNTIME_BEARER_TOKEN: 'runtime-smoke-token',
-      WAO_MCP_PROJECT_CONTEXT_URL: hookContext.url,
-    },
-  })
-  assert.ok(hookOutput.includes('runtime-smoke-project-context-v1'))
-  assert.ok(hookContext.requestCount() > 0)
   const createManager = (home: string) => new LocalRuntimeManager({
     clientInfo: {
       name: 'wao-runtime-smoke',
@@ -555,7 +491,6 @@ async function runAppServerSmoke(params: {
       CODEX_HOME: home,
       HOME: home,
       WAO_MCP_RUNTIME_BEARER_TOKEN: 'runtime-smoke-token',
-      WAO_MCP_PROJECT_CONTEXT_URL: hookContext.url,
     },
     initializeCapabilities: PRODUCTION_CODEX_INITIALIZE_CAPABILITIES,
   })
@@ -608,14 +543,11 @@ async function runAppServerSmoke(params: {
     assert.equal(listedSkills.data.length, 1)
     assert.equal(listedSkills.data[0]?.cwd, cwd)
     assert.deepEqual(listedSkills.data[0]?.errors, [])
-    assert.ok(listedSkills.data[0]?.skills.every((skill) => !skill.enabled), (
-      'The primary Agent must not have any enabled native Skill.'
-    ))
-    for (const skillId of CREATIVE_SKILL_IDS) {
-      assert.ok(!listedSkills.data[0]?.skills.some((skill) => skill.name === skillId), (
-        `Wao professional Skill leaked into the primary Agent inventory: ${skillId}`
-      ))
-    }
+    const enabledSkillNames = (listedSkills.data[0]?.skills ?? [])
+      .filter((skill) => skill.enabled)
+      .map((skill) => skill.name)
+      .sort()
+    assert.deepEqual(enabledSkillNames, [...professionalSkillIds].sort())
     const probeThread = await firstRuntime.startThread({
       model: process.env.CODEX_RUNTIME_SMOKE_MODEL?.trim() || DEFAULT_MODEL,
       modelProvider: 'wao-runtime-smoke',
@@ -733,9 +665,11 @@ async function runAppServerSmoke(params: {
     assert.equal(resumed.id, thread.id)
     assert.equal((await secondRuntime.readThread({ threadId: thread.id })).id, thread.id)
     const restoredSkills = await secondRuntime.listSkills({ cwds: [cwd], forceReload: true })
-    assert.ok(restoredSkills.data[0]?.skills.every((skill) => !skill.enabled), (
-      'The resumed primary Agent must not regain native Skills.'
-    ))
+    const restoredEnabledSkillNames = (restoredSkills.data[0]?.skills ?? [])
+      .filter((skill) => skill.enabled)
+      .map((skill) => skill.name)
+      .sort()
+    assert.deepEqual(restoredEnabledSkillNames, [...professionalSkillIds].sort())
 
     return {
       initializedUserAgent: initialized.userAgent,
@@ -758,7 +692,6 @@ async function runAppServerSmoke(params: {
       manager.shutdownAll(),
       restoredManager?.shutdownAll() ?? Promise.resolve(),
       requestCapture.close(),
-      hookContext.close(),
     ])
   }
 }

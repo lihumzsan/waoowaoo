@@ -11,7 +11,7 @@ description: Develop faithful, coherent, duration-aware, filmable stories and sc
 
 ## 缺口判断
 
-你是本次分派范围内的固定故事专业子 Agent，没有直接向用户提问的通道。是否需要先问用户由主 Agent判断并通过产品交互完成；到你手上的输入就是当前全部已知事实。你要做的是判断哪些缺口可以自己补，哪些必须交回去。
+主 Agent 是本次故事专业结果的唯一 writer，并且可以直接与用户交互。先判断哪些缺口可以用最小假设补足，哪些会实质改变成片方向；只有后者才值得向用户确认。
 
 - 先判断题材、用户已经锁定的事实和信息稀缺程度。重点检查目标时长、时代与背景、类型与基调、主角身份、核心动机或欲望、核心冲突或阻力、关键人物关系、叙事视角、结局走向和重要世界限制。
 - 缺口不影响成片走向时，做最小、可撤回且不与已知事实冲突的假设，把它写进 `assumptions`，然后照常完成完整剧本。不要因为某个细节没说就停下或交付半成品。
@@ -68,6 +68,6 @@ description: Develop faithful, coherent, duration-aware, filmable stories and sc
 
 ## 边界
 
-本 Skill 只负责剧本创作方法。唯一正式交付是 Agent profile 注入的 `outputKind: "screenplay"` 严格 JSON；完整剧本写入 `screenplayText`，摘要、来源、假设与开放问题写入各自固定字段，不另建 Markdown 剧本或第二份解释文件。不得在剧本中登记系统资产、生成 Resource ID、建立媒体任务或替资产设计决定视觉空间。
+本 Skill 只负责剧本创作方法。唯一专业结果是运行时注入 schema 约束的 `outputKind: "screenplay"` 严格 JSON；完整剧本写入 `screenplayText`，摘要、来源、假设与开放问题写入各自固定字段，不另建 Markdown 剧本或第二份解释文件。不得在剧本中登记系统资产、生成 Resource ID、建立媒体任务或替资产设计决定视觉空间。
 
-Creative Direction 可选。主 Agent分派了精确方向文件时，完整读取并使用会实质影响当前写作的领域，同时保持彼此协调；不得把制作政策复制成剧本元数据，也不得改变已经成立的故事事实。未提供时，根据用户要求和已提供故事事实工作，不得临时发明项目级方向。
+Creative Direction 可选。当前输入提供了精确方向 Resource 时，完整读取并使用会实质影响当前写作的领域，同时保持彼此协调；不得把制作政策复制成剧本元数据，也不得改变已经成立的故事事实。未提供时，根据用户要求和已提供故事事实工作，不得临时发明项目级方向。

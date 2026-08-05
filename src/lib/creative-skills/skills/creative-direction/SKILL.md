@@ -14,7 +14,7 @@ description: Establish one coherent visual, narrative, directing, editing, sound
 ## 契约字段职责
 
 - `styleSummary`：供卡片展示和快速理解的一句话摘要，不能替代六个可执行领域。
-- `rawUserStyle`：有用户原始风格表达时原样保存，否则为 `null`；下游 Agent/Subagent 只能把它当作原始意图语境，不能用它覆盖六个可执行领域。
+- `rawUserStyle`：有用户原始风格表达时原样保存，否则为 `null`；后续专业工作只能把它当作原始意图语境，不能用它覆盖六个可执行领域。
 - `visual`：跨媒体画面处理，以及资产参考图专用的灯光与材质。
   - `visual.visualStyle` 定义媒介、色彩、画面处理、完成度与跨媒体质感；必须完整包含「视觉政策」规定的四项硬要素。
   - `visual.assetImageStyle.lighting` 和 `.texture` 只用于资产参考图，不自动成为所有剧情镜头的光影。
@@ -22,7 +22,7 @@ description: Establish one coherent visual, narrative, directing, editing, sound
 - `directing`：默认镜头行为、何时允许或禁止移动、构图、焦段/景别倾向、表演观察方式与镜头节奏。
 - `editing`：剪辑速度、切点语法、转场政策、时间跳跃方式，以及禁止的剪辑习惯。
 - `sound`：环境声、人声处理、听觉视点、与音乐的关系、动态范围和静默政策。
-- `assetPolicy`：角色、场景、道具、图形、字体、档案素材或反复母题的选择与处理方针。它不写逐项图片画幅、资产板版式或 Provider 参数；这些由 `asset-development` 专业子 Agent写入最终生成批次。
+- `assetPolicy`：角色、场景、道具、图形、字体、档案素材或反复母题的选择与处理方针。它不写逐项图片画幅、资产板版式或 Provider 参数；这些由 `asset-development` 专业结果负责。
 
 铁律或禁止项必须写进拥有它的领域，禁止另建全局 `invariants` 或 `avoid` 形成第二套权威。
 
@@ -65,7 +65,7 @@ description: Establish one coherent visual, narrative, directing, editing, sound
 - 这四项是全部资产图与镜头共享的稳定风格锚点。只有“温暖”“梦幻”“电影感”等形容词而缺少任一项的 `visualStyle` 视为未完成。四项要素同样服从风格契合原则：它们把已选定的契合风格钉死为可复现的执行参数，不是引入额外风格花样的许可。
 - 参考图可以支持身份和结构，但不能静默改写项目方向。
 - 区分物理故事事实与风格化表达：场景真实存在的窗户、灯具属于资产事实；资产参考图怎样表现灯光属于 `visual.assetImageStyle`。
-- 固定资产板版式和逐项生成参数不属于 Direction，由资产专业子 Agent在最终结构化结果中负责。
+- 固定资产板版式和逐项生成参数不属于 Direction，由资产专业结果负责。
 
 ## 叙事与导演政策
 
@@ -125,9 +125,9 @@ description: Establish one coherent visual, narrative, directing, editing, sound
 - `styleSummary` 与 `rawUserStyle` 是否只提供意图语境，没有覆盖六个可执行领域？
 - 是否已把内部比较收敛为一份最终方向，没有并列版本或候选？
 - 使用研究时，是否先交叉验证再转译，而不是照搬？
-- 每个下游 Agent/Subagent 读取同一份完整 Direction 后，是否能选择实质相关内容、保持六领域协调，并且不把呈现政策变成故事事实？
+- 每个下游专业步骤读取同一份完整 Direction 后，是否能选择实质相关内容、保持六领域协调，并且不把呈现政策变成故事事实？
 - 已有精确剧本时，六领域政策是否只改变呈现，没有新增或延长任何剧本时间？
 
 ## 边界
 
-本 Skill 只提供项目级呈现政策的方法，不负责创建系统状态、筛选生产资产、编写最终镜头、生成媒体或执行 Operation。唯一正式交付是 Agent profile 注入的 `outputKind: "creative_direction"` 严格 JSON，不另建 Markdown 方向文档；主 Agent把同一路径分派给需要它的固定专业子 Agent，由各自专业边界判断相关性。
+本 Skill 只提供项目级呈现政策的方法，不负责创建系统状态、筛选生产资产、编写最终镜头、生成媒体或执行 Operation。唯一专业结果是运行时注入 schema 约束的 `outputKind: "creative_direction"` 严格 JSON，不另建平行 Markdown 方向文档；后续专业步骤使用同一 canonical Resource，并按各自边界判断相关性。

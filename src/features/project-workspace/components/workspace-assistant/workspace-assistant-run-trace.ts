@@ -1,5 +1,4 @@
 import { getToolName, isToolUIPart, type UIMessage } from 'ai'
-import type { AssistantRuntimeSessionTurnView } from '@/lib/assistant-runtime/view-contract'
 
 export const WORKSPACE_ASSISTANT_HIDDEN_TRACE_TOOL_NAMES = [
   'update_plan',
@@ -7,6 +6,20 @@ export const WORKSPACE_ASSISTANT_HIDDEN_TRACE_TOOL_NAMES = [
   // calls, but rendering their intermediate success/failure counts would
   // misrepresent the canonical media Task results.
   'submit_production_manifest',
+  // Codex agents are disabled. Keep historical collaboration calls out of the
+  // current trace instead of preserving a dead lifecycle renderer.
+  'spawnAgent',
+  'spawn_agent',
+  'sendInput',
+  'send_message',
+  'resumeAgent',
+  'followup_task',
+  'wait',
+  'wait_agent',
+  'closeAgent',
+  'interrupt_agent',
+  'list_agents',
+  'subagent_activity',
 ] as const
 
 type MessagePartRecord = {
@@ -20,11 +33,6 @@ type MessagePartRecord = {
   readonly toolCallId?: unknown
   readonly toolName?: unknown
   readonly input?: unknown
-  readonly agentThreadId?: unknown
-  readonly agentPath?: unknown
-  readonly activities?: unknown
-  readonly label?: unknown
-  readonly kind?: unknown
   readonly result?: unknown
   readonly output?: unknown
   readonly errorText?: unknown
@@ -37,39 +45,6 @@ type MessagePartRecord = {
 }
 
 const RUNTIME_TOOL_INTERRUPTED_PREFIX = 'ASSISTANT_RUNTIME_TOOL_INTERRUPTED:'
-
-export type WorkspaceAssistantSubagentStatus = 'active' | 'completed' | 'interrupted'
-
-export type WorkspaceAssistantSubagentView = {
-  readonly agentThreadId: string
-  readonly agentPath: string
-  readonly status: WorkspaceAssistantSubagentStatus
-  readonly activities: readonly WorkspaceAssistantSubagentActivityView[]
-}
-
-export type WorkspaceAssistantSubagentActivityView = {
-  readonly id: string
-  readonly kind: 'message' | 'reasoning' | 'tool'
-  readonly label: string | null
-  readonly text: string | null
-  readonly status: 'running' | 'completed' | 'failed'
-}
-
-export type WorkspaceAssistantSubagentLifecycleView = {
-  readonly agents: readonly WorkspaceAssistantSubagentView[]
-  readonly active: number
-  readonly completed: number
-  readonly interrupted: number
-}
-
-export type WorkspaceAssistantMessageTurnStatus =
-  | 'queued'
-  | 'running'
-  | 'waiting_approval'
-  | 'completed'
-  | 'failed'
-  | 'interrupted'
-  | 'cancelled'
 
 export type WorkspaceAssistantRepeatedToolCallGroup = {
   readonly leaderToolCallId: string
@@ -104,144 +79,6 @@ function readPart(value: unknown): MessagePartRecord | null {
 
 function readNonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value : null
-}
-
-function readRecord(value: unknown): Readonly<Record<string, unknown>> | null {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Readonly<Record<string, unknown>>
-    : null
-}
-
-function subagentStatusForTurn(status: WorkspaceAssistantMessageTurnStatus | undefined): WorkspaceAssistantSubagentStatus {
-  if (status === 'queued' || status === 'running' || status === 'waiting_approval') return 'active'
-  if (status === 'failed' || status === 'interrupted' || status === 'cancelled') return 'interrupted'
-  return 'completed'
-}
-
-function readSubagentActivities(value: unknown): WorkspaceAssistantSubagentActivityView[] {
-  if (!Array.isArray(value)) return []
-  return value.flatMap((entry): WorkspaceAssistantSubagentActivityView[] => {
-    const activity = readPart(entry)
-    const id = readNonEmptyString(activity?.id)
-    const kind = readNonEmptyString(activity?.kind)
-    const status = readNonEmptyString(activity?.status)
-    if (
-      !id
-      || (kind !== 'message' && kind !== 'reasoning' && kind !== 'tool')
-      || (status !== 'running' && status !== 'completed' && status !== 'failed')
-    ) return []
-    return [{
-      id,
-      kind,
-      label: readNonEmptyString(activity?.label),
-      text: readNonEmptyString(activity?.text),
-      status,
-    }]
-  })
-}
-
-/**
- * Subagent activity items carry the stable child thread and path identities,
- * while the Wao Turn is the authority for whether that collaboration is still
- * active, completed, or interrupted. This keeps the UI from treating a
- * completed `spawn`/`wait` tool call as the child agent's lifecycle.
- */
-export function resolveWorkspaceAssistantSubagentLifecycleViews(
-  messages: readonly UIMessage[],
-  statusByAssistantMessageId: ReadonlyMap<string, WorkspaceAssistantMessageTurnStatus>,
-): ReadonlyMap<string, WorkspaceAssistantSubagentLifecycleView> {
-  const views = new Map<string, WorkspaceAssistantSubagentLifecycleView>()
-  for (const message of messages) {
-    if (message.role !== 'assistant') continue
-    const status = subagentStatusForTurn(statusByAssistantMessageId.get(message.id))
-    const byThreadId = new Map<string, WorkspaceAssistantSubagentView>()
-    for (const part of message.parts) {
-      const record = readPart(part)
-      if (record?.type === 'data-assistant-runtime-subagent') {
-        const data = readPart(record.data)
-        const agentThreadId = readNonEmptyString(data?.agentThreadId)
-        const agentPath = readNonEmptyString(data?.agentPath)
-        const childStatus = readNonEmptyString(data?.status)
-        if (
-          agentThreadId
-          && agentPath
-          && (childStatus === 'active' || childStatus === 'completed' || childStatus === 'interrupted')
-        ) {
-          byThreadId.set(agentThreadId, {
-            agentThreadId,
-            agentPath,
-            status: childStatus,
-            activities: readSubagentActivities(data?.activities),
-          })
-        }
-        continue
-      }
-      if (!isToolUIPart(part) || getToolName(part) !== 'subagent_activity') continue
-      const input = readPart(record?.input)
-      const agentThreadId = readNonEmptyString(input?.agentThreadId)
-      const agentPath = readNonEmptyString(input?.agentPath)
-      if (!agentThreadId || !agentPath) continue
-      const kind = readNonEmptyString(input?.kind)
-      if (byThreadId.has(agentThreadId)) continue
-      byThreadId.set(agentThreadId, {
-        agentThreadId,
-        agentPath,
-        status: kind === 'interrupted' ? 'interrupted' : status,
-        activities: [],
-      })
-    }
-    if (byThreadId.size === 0) continue
-    const agents = [...byThreadId.values()].sort((left, right) => left.agentPath.localeCompare(right.agentPath))
-    views.set(message.id, {
-      agents,
-      active: agents.filter((agent) => agent.status === 'active').length,
-      completed: agents.filter((agent) => agent.status === 'completed').length,
-      interrupted: agents.filter((agent) => agent.status === 'interrupted').length,
-    })
-  }
-  return views
-}
-
-/**
- * The Wao Turn is the authority for whether an assistant message's collaboration
- * is still running. Both the tool-call trace and the subagent tab strip resolve
- * it here so a single rule decides "is this child still active".
- */
-export function resolveWorkspaceAssistantTurnStatusByMessageId(
-  messages: readonly UIMessage[],
-  turns: readonly AssistantRuntimeSessionTurnView[],
-): ReadonlyMap<string, WorkspaceAssistantMessageTurnStatus> {
-  const statusByAssistantMessageId = new Map(turns.flatMap((turn) => (
-    turn.assistantMessageId ? [[turn.assistantMessageId, turn.status] as const] : []
-  )))
-  const statusByTurnId = new Map(turns.map((turn) => [turn.turnId, turn.status] as const))
-  for (const message of messages) {
-    if (message.role !== 'assistant') continue
-    const custom = readRecord(readRecord(message.metadata)?.custom)
-    const turnId = readNonEmptyString(custom?.waoAgentTurnId)
-    const status = turnId ? statusByTurnId.get(turnId) : null
-    if (status) statusByAssistantMessageId.set(message.id, status)
-  }
-  return statusByAssistantMessageId
-}
-
-/**
- * The subagent tabs the panel should currently offer. A child that reached a
- * terminal state closes immediately: its work product already lives in the main
- * thread, and a settled tab would only be a stale surface to click.
- */
-export function resolveWorkspaceAssistantOpenSubagentTabs(
-  messages: readonly UIMessage[],
-  statusByAssistantMessageId: ReadonlyMap<string, WorkspaceAssistantMessageTurnStatus>,
-): readonly WorkspaceAssistantSubagentView[] {
-  const byThreadId = new Map<string, WorkspaceAssistantSubagentView>()
-  const views = resolveWorkspaceAssistantSubagentLifecycleViews(messages, statusByAssistantMessageId)
-  for (const view of views.values()) {
-    // Message order is chronological, so a later projection of the same child
-    // thread deterministically replaces the earlier one.
-    for (const agent of view.agents) byThreadId.set(agent.agentThreadId, agent)
-  }
-  return [...byThreadId.values()].filter((agent) => agent.status === 'active')
 }
 
 function isSubmittedToolResult(result: unknown): boolean {

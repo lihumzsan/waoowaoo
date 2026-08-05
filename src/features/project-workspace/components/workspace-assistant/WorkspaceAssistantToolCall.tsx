@@ -1,7 +1,7 @@
 'use client'
 
 import type { ToolCallMessagePartProps } from '@assistant-ui/react'
-import { getToolName, isToolUIPart, type UIMessage } from 'ai'
+import { isToolUIPart, type UIMessage } from 'ai'
 import { useLocale, useTranslations } from 'next-intl'
 import {
   createContext,
@@ -17,16 +17,12 @@ import { WebSourceFavicon } from './WebSourceFavicon'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 import { resolveUnifiedErrorCode, type UnifiedErrorCode } from '@/lib/errors/codes'
-import type { AssistantRuntimeSessionTurnView } from '@/lib/assistant-runtime/view-contract'
 import { useWorkspaceAssistantRunningSurface } from './WorkspaceAssistantReasoning'
 import {
   isWorkspaceAssistantRuntimeInterruptedToolPart,
   resolveWorkspaceAssistantRepeatedToolCallGroups,
-  resolveWorkspaceAssistantSubagentLifecycleViews,
   resolveWorkspaceAssistantToolCallDisplayState,
   resolveWorkspaceAssistantToolCallGroupView,
-  resolveWorkspaceAssistantTurnStatusByMessageId,
-  type WorkspaceAssistantSubagentLifecycleView,
   type WorkspaceAssistantRepeatedToolCallGroup,
   type WorkspaceAssistantToolCallDisplayState,
   type WorkspaceAssistantToolCallGroupView,
@@ -38,29 +34,13 @@ type RepeatedToolCallEntry = {
 }
 type WorkspaceAssistantToolCallContextValue = {
   readonly repeatedByToolCallId: ReadonlyMap<string, RepeatedToolCallEntry>
-  readonly subagentsByToolCallId: ReadonlyMap<string, WorkspaceAssistantSubagentLifecycleView>
   readonly interruptedToolCallIds: ReadonlySet<string>
 }
 const EMPTY_TOOL_CALL_CONTEXT: WorkspaceAssistantToolCallContextValue = {
   repeatedByToolCallId: new Map(),
-  subagentsByToolCallId: new Map(),
   interruptedToolCallIds: new Set(),
 }
 const WorkspaceAssistantToolCallContext = createContext<WorkspaceAssistantToolCallContextValue>(EMPTY_TOOL_CALL_CONTEXT)
-const NATIVE_SUBAGENT_TOOL_NAMES = new Set([
-  'spawnAgent',
-  'spawn_agent',
-  'sendInput',
-  'send_message',
-  'resumeAgent',
-  'followup_task',
-  'wait',
-  'wait_agent',
-  'closeAgent',
-  'interrupt_agent',
-  'list_agents',
-  'subagent_activity',
-])
 
 type AssistantAgentTranslator = ReturnType<typeof useTranslations<'assistantAgent'>>
 
@@ -94,22 +74,6 @@ function resolveToolFailureCode(result: unknown): UnifiedErrorCode | null {
 }
 
 function resolveNativeToolTitle(toolName: string, t: AssistantAgentTranslator): string | null {
-  if (NATIVE_SUBAGENT_TOOL_NAMES.has(toolName)) {
-    switch (toolName) {
-      case 'spawnAgent': return t('runtime.native.subagentAction.spawnAgent')
-      case 'spawn_agent': return t('runtime.native.subagentAction.spawnAgent')
-      case 'sendInput': return t('runtime.native.subagentAction.sendInput')
-      case 'send_message': return t('runtime.native.subagentAction.sendInput')
-      case 'resumeAgent': return t('runtime.native.subagentAction.resumeAgent')
-      case 'followup_task': return t('runtime.native.subagentAction.resumeAgent')
-      case 'wait': return t('runtime.native.subagentAction.wait')
-      case 'wait_agent': return t('runtime.native.subagentAction.wait')
-      case 'closeAgent': return t('runtime.native.subagentAction.closeAgent')
-      case 'interrupt_agent': return t('runtime.native.subagentAction.interruptAgent')
-      case 'list_agents': return t('runtime.native.subagentAction.listAgents')
-      case 'subagent_activity': return t('runtime.native.subagentAction.activity')
-    }
-  }
   switch (toolName) {
     case 'shell': return t('runtime.native.shell')
     case 'file_change': return t('runtime.native.fileChange')
@@ -117,31 +81,6 @@ function resolveNativeToolTitle(toolName: string, t: AssistantAgentTranslator): 
     case 'view_image': return t('runtime.native.viewImage')
     default: return null
   }
-}
-
-function resolveSubagentSummary(
-  args: unknown,
-  result: unknown,
-  t: AssistantAgentTranslator,
-): string | null {
-  const output = isRecord(result) ? result : null
-  const input = isRecord(args) ? args : null
-  const states = isRecord(output?.agentsStates)
-    ? output.agentsStates
-    : isRecord(input?.agentsStates)
-      ? input.agentsStates
-      : null
-  if (!states) return null
-  let active = 0
-  let completed = 0
-  let failed = 0
-  for (const value of Object.values(states)) {
-    const status = isRecord(value) ? readText(value.status) : null
-    if (status === 'pendingInit' || status === 'running') active += 1
-    else if (status === 'completed' || status === 'shutdown') completed += 1
-    else if (status === 'interrupted' || status === 'errored' || status === 'notFound') failed += 1
-  }
-  return t('runtime.native.subagentSummary', { active, completed, interrupted: failed })
 }
 
 type WebSearchSource = {
@@ -203,11 +142,9 @@ function resolveWebSearchQuery(args: unknown): string | null {
 export function WorkspaceAssistantRepeatedToolCallGroupProvider({
   children,
   messages = [],
-  turns = [],
 }: {
   readonly children: ReactNode
   readonly messages: readonly UIMessage[]
-  readonly turns: readonly AssistantRuntimeSessionTurnView[]
 }) {
   const value = useMemo((): WorkspaceAssistantToolCallContextValue => {
     const repeatedByToolCallId = new Map<string, RepeatedToolCallEntry>()
@@ -218,11 +155,6 @@ export function WorkspaceAssistantRepeatedToolCallGroupProvider({
       }
       for (const toolCallId of group.toolCallIds) repeatedByToolCallId.set(toolCallId, entry)
     }
-    const lifecycleByMessageId = resolveWorkspaceAssistantSubagentLifecycleViews(
-      messages,
-      resolveWorkspaceAssistantTurnStatusByMessageId(messages, turns),
-    )
-    const subagentsByToolCallId = new Map<string, WorkspaceAssistantSubagentLifecycleView>()
     const interruptedToolCallIds = new Set<string>()
     for (const message of messages) {
       for (const part of message.parts) {
@@ -230,15 +162,9 @@ export function WorkspaceAssistantRepeatedToolCallGroupProvider({
           interruptedToolCallIds.add(part.toolCallId)
         }
       }
-      const lifecycle = lifecycleByMessageId.get(message.id)
-      if (!lifecycle) continue
-      for (const part of message.parts) {
-        if (!isToolUIPart(part) || !NATIVE_SUBAGENT_TOOL_NAMES.has(getToolName(part))) continue
-        subagentsByToolCallId.set(part.toolCallId, lifecycle)
-      }
     }
-    return { repeatedByToolCallId, subagentsByToolCallId, interruptedToolCallIds }
-  }, [messages, turns])
+    return { repeatedByToolCallId, interruptedToolCallIds }
+  }, [messages])
   return (
     <WorkspaceAssistantToolCallContext.Provider value={value}>
       {children}
@@ -325,7 +251,6 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
   const locale = normalizeProjectAgentLocale(useLocale())
   const context = useContext(WorkspaceAssistantToolCallContext)
   const repeatedEntry = context.repeatedByToolCallId.get(props.toolCallId)
-  const subagentLifecycle = context.subagentsByToolCallId.get(props.toolCallId) ?? null
   const groupView = repeatedEntry?.view ?? null
   const operationId = props.toolName.startsWith('wao.')
     ? props.toolName.slice('wao.'.length)
@@ -339,10 +264,6 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
     toolStatus === 'running' || toolStatus === 'requires-action',
   )
   if (groupView && groupView.leaderToolCallId !== props.toolCallId) return null
-  // The subagent tab strip is the single renderer of child-agent lifecycle.
-  // Keeping these rows in the trace would give the same facts a second,
-  // competing surface that can disagree with the tabs.
-  if (subagentLifecycle && NATIVE_SUBAGENT_TOOL_NAMES.has(props.toolName)) return null
 
   // Two failure shapes exist: the app-level ToolResult envelope ({ok:false})
   // and the terminal-closure/SDK error output ({error}, isError=true) written
@@ -360,10 +281,7 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
         })
   const failed = groupView ? groupView.failed > 0 : displayState === 'failed'
   const interrupted = groupView ? groupView.interrupted > 0 : displayState === 'interrupted'
-  const nativeSummary = NATIVE_SUBAGENT_TOOL_NAMES.has(props.toolName)
-    ? resolveSubagentSummary(props.args, props.result, t)
-    : null
-  const summaryText = nativeSummary ?? translateDisplayState(displayState, t)
+  const summaryText = translateDisplayState(displayState, t)
   const failureCode = groupView ? null : resolveToolFailureCode(props.result)
   const failureDetail = failureCode && tErrors.has(failureCode)
     ? tErrors(failureCode)

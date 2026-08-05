@@ -118,4 +118,4 @@ description: Direct screenplay-based video generation with explicit state contin
 
 ## 边界
 
-本 Skill 只负责视频导演方法与最终提示词。能力事实只读取系统直接注入的 `productionCapabilities.video`；项目画幅由服务端项目配置唯一决定，不作为生成 item 或 Prompt 参数重复提交。固定 `video_generation_batch` 字段由 Agent profile 注入的机器 Schema 定义，Resource 身份校验、Provider 执行、计费、Task 与合成由系统负责。
+本 Skill 只负责视频导演方法与最终提示词。能力事实只读取系统直接注入的 `productionCapabilities.video`；项目画幅由服务端项目配置唯一决定，不作为生成 item 或 Prompt 参数重复提交。固定 `video_generation_batch` 字段由运行时注入的机器 Schema 定义，Resource 身份校验、Provider 执行、计费、Task 与合成由系统负责。

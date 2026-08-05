@@ -106,9 +106,9 @@ description: Design continuous instrumental scoring, dynamics, silence, and dial
 
 ## 返回音频生成批次
 
-- 每个 cue 对应一个 `mediaType: "audio"` item；`prompt` 必须是该 cue 完整最终生成指令，主 Agent与服务端不会再补写。
+- 每个 cue 对应一个 `mediaType: "audio"` item；`prompt` 必须是该 cue 完整最终生成指令，提交阶段与服务端不会再补写。
 - 显式填写 `durationSeconds`、`vocalMode`，以及确实需要的 `genre`、`mood`、`bpm`。当前 BGM 默认 `schemaId` 为 `project.bgm_audio`。
-- 唯一正式交付是 Agent profile 注入的 `outputKind: "audio_generation_batch"` 严格 JSON，并直接作为最终回复返回主 Agent。该机器 Schema 是字段、必填项和层级的唯一权威；本 Skill 不另写一份可能漂移的 JSON 模板或配乐说明文件。
+- 唯一专业结果是运行时注入 schema 约束的 `outputKind: "audio_generation_batch"` 严格 JSON。该机器 Schema 是字段、必填项和层级的唯一权威；本 Skill 不另写一份可能漂移的 JSON 模板或配乐说明文件。
 
 ## 边界
 

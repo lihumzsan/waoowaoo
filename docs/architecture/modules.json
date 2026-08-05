@@ -169,7 +169,7 @@
     {
       "id": "creative-skills",
       "document": "docs/architecture/modules/creative-skills.md",
-      "title": "Creative Skills 与原生 Subagent 内存交接",
+      "title": "Creative Skills 与主 Agent 专业输出",
       "sourcePaths": [
         "src/lib/creative-skills",
         "src/lib/project-production-context.ts"

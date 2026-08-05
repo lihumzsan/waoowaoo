@@ -1170,7 +1170,7 @@ export function createWorkspaceResourceGenerationOperations(): ProjectAgentOpera
   return {
     save_project_document: defineOperation({
       id: 'save_project_document',
-      summary: 'Explicitly save one text or structured document as a canonical project Resource. Runtime scratch and Subagent results are never saved implicitly.',
+      summary: 'Explicitly save one text or structured document as a canonical project Resource. Runtime scratch and in-turn professional results are never saved implicitly.',
       intent: 'act',
       channels: { tool: true, api: true, mcp: true },
       toolContractRevision: 'save_project_document/v1',

@@ -26,7 +26,7 @@ Episode、Chapter、Scene、Shot、Canon 都是用户目录与文件内容，不
   和审计。显式保存带注册 outputKind 的结构化内容时必须通过同一 Output schema；同一 Resource
   不能改成另一 outputKind。
 - **WR-05 — 字段所有权明确。** Agent 只能通过显式 Operation 创建、移动、改名、软删除或保存内容；
-  不可写 identity、status、Task、Lineage、模型、成本或系统投影。Runtime scratch、Subagent 最终文本
+  不可写 identity、status、Task、Lineage、模型、成本或系统投影。Runtime scratch、in-turn 专业结果
   与工具临时文件不会自动成为 Resource。
 - **WR-06 — 持久写入只有显式入口。** 文档只经 `save_project_document`，媒体只经对应创建、上传、
   合并 Operation，异步结果只经 terminal materializer。Runtime 不投影资源树、不 capture 文件、
@@ -50,9 +50,9 @@ Episode、Chapter、Scene、Shot、Canon 都是用户目录与文件内容，不
 - **WR-13 — 大项目按目录读取。** 列表与搜索用 cursor 分页和有界摘要，摘要来自版本行物化的预览
   列，列表路径零对象存储读取；完整正文只经单资源读取入口按需加载。规模上限必须明确失败，不能
   恢复静默截断。
-- **WR-14 — Subagent 结果是内存交接。** 专业 Subagent 在最终响应返回 strict JSON，父 Agent 验证后
-  直接提交对应媒体 Operation；只有用户明确要求保存文档时才调用 `save_project_document`。并行
-  Subagent 不共享持久目录，也不因写 scratch 自动生成 Canvas 资源。
+- **WR-14 — 专业结果留在当前 Turn。** 主 Agent 构造一个 strict JSON 专业结果并把同一 items 直接
+  提交对应媒体 Operation；只有用户明确要求保存文档时才调用 `save_project_document`。结果不因写入
+  scratch 或出现在对话中自动生成 Canvas 资源。
 - **WR-15 — MCP 直接消费持久事实。** MCP Operation 直接从 Catalog、Version、Task 与配置读取权威
   状态；调用前后没有 Runtime 文件 flush/refresh，也没有“资源指针同步中”生命周期。工具提交成功
   后，pending/ready/failed 只由 Resource 与 Task View 表达。
@@ -61,9 +61,9 @@ Episode、Chapter、Scene、Shot、Canon 都是用户目录与文件内容，不
   Planner 在任何 Plan、报价、Resource 或 Task 副作用前严格校验、选择正式模型、解析精确引用并
   逐字冻结；禁止依据 schemaId 追加 Prompt、猜资产类型，或让调用方覆盖 Project 画幅。
 - **WR-17 — 项目生产上下文由系统实时注入。** 只读上下文由当前 Project 配置与生产 registry 的唯一
-  resolver 派生；主 Agent 每 Turn 由服务端直接附加，固定子 Agent 由 Runtime lifecycle hook 注入。
-  它不是 workspace 文件、Agent 可写配置或第二份能力权威。缺必需能力时对应值为空，专业子 Agent
-  必须停止而非猜测；提交时仍由同一服务端事实校验并冻结真实执行参数。
+  resolver 派生，并由服务端每 Turn 直接附加给主 Agent。它不是 workspace 文件、Skill 副本或 Agent
+  可写配置。缺必需能力时对应值为空，主 Agent 必须停止而非猜测；提交时仍由同一服务端事实校验并
+  冻结真实执行参数。
 
 ## 权威入口
 
@@ -98,4 +98,5 @@ Episode、Chapter、Scene、Shot、Canon 都是用户目录与文件内容，不
   名称与版本引用，服务端一次完成 placement、预检、报价和提交（WR-06/07/08/10/15）。
 - 删除文件/指针协议时仍保留 `system/project.json` 与 `get_resource(workspacePath)`；系统提示因此把
   Runtime 临时路径伪装成 Resource identity，边界只能稳定拒绝并显示参数失败 → 上一版只删除 writer，
-  没删除竞争命名空间 → 能力改为 lifecycle hook 实时注入，`get_resource` 只接受 `resourceId`（WR-17）。
+  没删除竞争命名空间 → 能力改为每 Turn 从唯一 resolver 直接注入，`get_resource` 只接受
+  `resourceId`（WR-17）。

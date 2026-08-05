@@ -400,7 +400,7 @@
   }
 }
 
-/* Assistant 执行态动效:思考中标题扫光 + 运行中 Subagent 卡片扫光。
+/* Assistant 执行态动效：思考中标题扫光 + 运行中工具卡片扫光。
    仅表达"正在进行",不承担任何状态解释。 */
 .assistant-shimmer-text {
   background-image: linear-gradient(

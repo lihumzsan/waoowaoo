@@ -4,14 +4,13 @@ export {
 } from './registry'
 export { readCreativeSkillResource } from './loader'
 export {
-  CREATIVE_WORKER_REGISTRY,
-  CREATIVE_WORKERS,
+  CREATIVE_RUNTIME_SKILL_REGISTRY,
+  CREATIVE_RUNTIME_SKILLS,
   PRIMARY_AGENT_DISABLED_NATIVE_SKILL_IDS,
   PRIMARY_AGENT_GLOBAL_INSTRUCTIONS,
-  PROJECT_PRODUCTION_CONTEXT_HOOK_CONTRACT,
-  creativeWorkerRoutingInstructions,
+  creativeSkillRoutingInstructions,
   materializeCreativeRuntimeConfiguration,
-} from './agent-profiles'
+} from './runtime-skills'
 export {
   isCreativeSkillId,
   parseCreativeSkillUri,
@@ -38,4 +37,4 @@ export type {
   CreativeWorkerKind,
 } from './types'
 export type { CreativeOutput } from './output-registry'
-export type { CreativeWorkerDefinition } from './agent-profiles'
+export type { CreativeRuntimeSkillDefinition } from './runtime-skills'

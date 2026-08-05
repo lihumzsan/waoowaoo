@@ -123,28 +123,6 @@
       "fileChange": "修改文件",
       "webSearch": "联网检索",
       "viewImage": "查看图片",
-      "subagent": "Subagent",
-      "subagentAction": {
-        "spawnAgent": "启动 Subagent",
-        "sendInput": "向 Subagent 发送输入",
-        "resumeAgent": "恢复 Subagent",
-        "wait": "等待 Subagent",
-        "closeAgent": "关闭 Subagent",
-        "interruptAgent": "中断 Subagent",
-        "listAgents": "查看 Subagent 状态",
-        "activity": "Subagent 动态"
-      },
-      "subagentSummary": "{active} 个进行中 · {completed} 个完成 · {interrupted} 个中断",
-      "subagentStatus": {
-        "active": "进行中",
-        "completed": "已完成",
-        "interrupted": "已中断"
-      },
-      "subagentActivity": {
-        "message": "回复",
-        "reasoning": "思考",
-        "tool": "工具调用"
-      },
       "web": {
         "search": "搜索：{query}",
         "openPage": "页面：{value}",
@@ -225,12 +203,5 @@
     "interactionSubmitErrorFallback": "该响应暂时无法提交，请刷新对话后重试。",
     "contextCompacted": "已压缩较早的 {count} 条上下文记录",
     "contextCompactedUnknown": "已压缩较早的上下文"
-  },
-  "subagentTabs": {
-    "label": "子代理",
-    "mainThread": "主线程",
-    "empty": "该子代理还没有产生可显示的活动。",
-    "readOnly": "{path} 为只读视图",
-    "backToMain": "回主线程发送"
   }
 }

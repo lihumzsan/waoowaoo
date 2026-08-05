@@ -12,13 +12,12 @@ import {
   resolveCodexModelGatewayRuntimeConfig,
 } from '@/lib/codex-model-gateway'
 import {
+  CREATIVE_RUNTIME_SKILLS,
   CREATIVE_SKILL_REGISTRY,
-  CREATIVE_WORKERS,
   PRIMARY_AGENT_DISABLED_NATIVE_SKILL_IDS,
   PRIMARY_AGENT_GLOBAL_INSTRUCTIONS,
-  PROJECT_PRODUCTION_CONTEXT_HOOK_CONTRACT,
+  creativeSkillRoutingInstructions,
   creativeOutputJsonSchema,
-  creativeWorkerRoutingInstructions,
 } from '@/lib/creative-skills'
 import {
   formatProjectProductionContext,
@@ -28,7 +27,6 @@ import {
 import { deriveAssistantRuntimeRevision } from './runtime-revision'
 
 const MCP_PATH = '/api/internal/codex-runtime/mcp'
-const PROJECT_CONTEXT_PATH = '/api/internal/codex-runtime/project-context'
 // Codex defaults MCP tool calls to 60 seconds. Wao production calls can spend
 // most of that time planning before they suspend on a user-owned billing
 // decision, so the default races the approval UI. Keep the call alive for the
@@ -73,14 +71,14 @@ export const ASSISTANT_RUNTIME_STATIC_CONTRACT = {
     },
   },
   creativeRuntime: {
+    agentsEnabled: false,
     primaryAgentGlobalInstructions: PRIMARY_AGENT_GLOBAL_INSTRUCTIONS,
     disabledNativeSkillIds: PRIMARY_AGENT_DISABLED_NATIVE_SKILL_IDS,
     skills: CREATIVE_SKILL_REGISTRY,
-    workers: CREATIVE_WORKERS,
-    projectProductionContextHook: PROJECT_PRODUCTION_CONTEXT_HOOK_CONTRACT,
-    outputSchemas: Object.fromEntries(CREATIVE_WORKERS.map((worker) => [
-      worker.outputKind,
-      creativeOutputJsonSchema(worker.outputKind),
+    runtimeSkills: CREATIVE_RUNTIME_SKILLS,
+    outputSchemas: Object.fromEntries(CREATIVE_RUNTIME_SKILLS.map((skill) => [
+      skill.outputKind,
+      creativeOutputJsonSchema(skill.outputKind),
     ])),
   },
 } as const
@@ -111,13 +109,13 @@ function requireAbsoluteHttpUrl(value: string | undefined, code: string): string
 function runtimeInstructions(): string {
   return [
     'You are the Wao creative production agent for the current project workspace.',
-    'The Wao system injects the current versioned project production context into every Turn and directly into every fixed professional Subagent. Treat those facts as read-only; never relay, copy, or guess them for a Subagent.',
-    'Wao professional Skills are intentionally unavailable to you. Never search for, read, or recreate their instructions.',
-    'Professional creative work must be delegated to the exact native custom Subagent listed below. The mapping is authoritative; descriptions are explanatory only and must not be used to select a different role.',
-    ...creativeWorkerRoutingInstructions(),
-    'Give each professional Subagent exact canonical Resource inputs and the user-approved scope. Treat its strict final JSON as an in-memory handoff; do not edit it or save it automatically.',
-    'Before delegating video or music work, require the matching non-null production capability in the injected context. The fixed Subagent receives the same context from the system independently.',
-    'You own orchestration only: inspect canonical project Resources, assign professional work, validate the returned outputKind, and pass its exact items to the corresponding Wao media tool.',
+    'The Wao system injects the current versioned project production context into every Turn. Treat those facts as read-only and never copy or guess missing capability facts.',
+    'Codex agents are disabled. Never spawn, delegate to, wait for, or coordinate another Agent.',
+    'For professional creative work, read exactly one matching native Wao Skill listed below before authoring the result. The mapping is authoritative; descriptions are explanatory only.',
+    ...creativeSkillRoutingInstructions(),
+    'The selected Skill contains the complete core method, one professional method, and the authoritative outputKind schema. Do not load another Wao Skill unless the user explicitly requests another professional deliverable.',
+    'You are the sole writer of the professional result. Inspect canonical project Resources, construct one strict object, and use that same object in the response, explicit document save, or corresponding Wao media tool.',
+    'Before video or music work, require the matching non-null production capability in the injected context. Missing capability is an explicit failure, never a reason to guess.',
     'Do not add content screening of your own beyond the explicit Wao product topic restriction below. Real people, public figures, likeness and photorealistic styles are normal capabilities here. Never introduce copyright, offensiveness, likeness or compliance as a dimension you research, plan around, filter by, or warn the user about, and never narrow a brief or a deliverable on those grounds. If an external provider returns a policy refusal, surface its explicit typed failure without generalizing that one refusal into a standing product ban.',
     'Product topic restriction: do not undertake, research for, plan, delegate, create, edit, or submit a creative production about Chinese politics. Decline briefly and offer to help with a non-political alternative. This Wao restriction does not apply to political content about other countries.',
     'Every file in the Runtime workspace is disposable scratch. Scratch files are never project Resources and are destroyed with the Runtime materialization.',
@@ -129,7 +127,7 @@ function runtimeInstructions(): string {
     'A Wao result with async=true means submitted, never completed. A generated Resource is usable only after canonical Resource state is ready with a positive contentVersion; wait for the automatic Task follow-up instead of chaining pending or failed output.',
     'Never claim an external production operation completed unless canonical Resource state is ready.',
     'Do not retry a billed or failed production operation unless the user explicitly authorizes it. A retry must use the failed Resource IDs through the declared retry input; never switch tools to bypass the failed attempt.',
-    'Never author or rewrite final image, video, or music generation prompts. The fixed professional Subagent must return complete final prompts and explicit generation parameters in its strict final JSON.',
+    'When producing image, video, or music generation items, write complete final prompts and explicit creative parameters in the selected Skill output. Pass the exact items to the matching media Operation; do not create a second rewritten version.',
     'Never expose absolute host paths, /tmp paths, file:// URLs, or Runtime workspace roots; they are disposable implementation details, not product links.',
     'If a native Plan exists, keep it synchronized with the currently authorized scope. Before ending a Turn, update it so finished work is completed and superseded steps are removed; never leave an obsolete pending step after reporting the scoped task complete.',
     'For a complete video longer than 15 seconds, establish one matching Creative Direction and only the reusable reference assets the final video will actually consume before submitting video generation.',
@@ -168,9 +166,8 @@ function runtimeConfig(input: {
     // research — the tool is native, the capability is not OpenRouter's.
     web_search: tools.webSearch,
     features: {
-      // Wao's primary Agent has no native Skill or built-in image-production
-      // escape hatch. Professional methods live only in fixed custom agents;
-      // paid media is submitted through Wao's direct modality operations.
+      // Wao installs only its six registry-bound domain Skills. Built-in image
+      // generation stays disabled; paid media crosses Wao's direct Operations.
       skill_search: tools.features.skillSearch,
       image_generation: tools.features.imageGeneration,
       // The custom provider answers search itself through /alpha/search. This
@@ -233,10 +230,6 @@ export function issueAssistantRuntimeAccess(scope: RuntimeSessionScope): Assista
   return {
     environment: Object.freeze({
       [CODEX_RUNTIME_BEARER_ENV_KEY]: issued.token,
-      WAO_MCP_PROJECT_CONTEXT_URL: `${requireAbsoluteHttpUrl(
-        process.env.CODEX_RUNTIME_WAO_BASE_URL,
-        'ASSISTANT_RUNTIME_WAO_BASE_URL_REQUIRED',
-      )}${PROJECT_CONTEXT_PATH}`,
     }),
     bearerToken: issued.token,
     ownerToken: issued.payload.nonce,
