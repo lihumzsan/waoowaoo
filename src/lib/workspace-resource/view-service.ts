@@ -161,8 +161,7 @@ function projectActions(input: {
       || input.resource.operationId === 'create_audio'
       || input.resource.operationId === 'create_video'
       ? input.resource.operationId
-      : input.resource.operationId === 'submit_production_manifest'
-        || input.resource.operationId === 'rerun_failed_production_items'
+      : input.resource.operationId === 'rerun_failed_production_items'
         ? 'rerun_failed_production_items'
         : null
   const retryInput: WorkspaceResourceJsonObject | null = retryOperationId === 'rerun_failed_production_items'

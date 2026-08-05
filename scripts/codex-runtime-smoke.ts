@@ -251,7 +251,7 @@ async function runWorkspaceSmoke(rootDir: string): Promise<void> {
     files: [
       {
         path: 'project/brief.md',
-        content: '# Runtime smoke\n\nThe Canvas is a projection of this project workspace.\n',
+        content: '# Runtime smoke\n\nThis file is disposable Runtime scratch and never becomes a Canvas Resource.\n',
       },
       {
         path: 'project/resources.json',
@@ -275,6 +275,10 @@ async function runMcpSmoke(): Promise<void> {
   assert.ok(!operationIds.some((operationId) => operationId === 'web_search'), (
     'Wao MCP must not register a second search entry beside native Web Search.'
   ))
+  assert.ok(!operationIds.includes('submit_production_manifest'), 'Deleted Manifest operation remains in Wao MCP.')
+  for (const operationId of ['create_image', 'create_audio', 'create_video']) {
+    assert.ok(operationIds.includes(operationId), `Direct media operation missing from Wao MCP: ${operationId}`)
+  }
   const server = createWaoMcpServer({
     contextResolver: {
       resolve: async ({ requestId }) => ({
@@ -367,8 +371,21 @@ async function runMcpSmoke(): Promise<void> {
     )
     let toolCallSettled = false
     const pendingResult = client.callTool({
-      name: 'submit_production_manifest',
-      arguments: { manifestPath: 'production/smoke-manifest.json' },
+      name: 'create_image',
+      arguments: {
+        request: {
+          kind: 'new',
+          items: [{
+            itemId: 'smoke-image',
+            name: 'Smoke image',
+            mediaType: 'image',
+            schemaId: 'generic.image',
+            assetKind: null,
+            prompt: 'A minimal runtime contract smoke image.',
+            count: 1,
+          }],
+        },
+      },
     }).finally(() => {
       toolCallSettled = true
     })
@@ -378,7 +395,7 @@ async function runMcpSmoke(): Promise<void> {
     approvalReleased.resolve()
     const result = await pendingResult
     assert.equal(result.isError, undefined)
-    assert.deepEqual(calls, ['submit_production_manifest'])
+    assert.deepEqual(calls, ['create_image'])
     assert.equal(completedCalls, 1)
     await clientTransport.terminateSession()
     assert.equal(sessionClosed, true)
@@ -701,7 +718,7 @@ async function main(): Promise<void> {
     )
     process.stdout.write(`${JSON.stringify({
       ok: true,
-      workspace: 'canonical_round_trip',
+      workspace: 'disposable_scratch_round_trip',
       mcp: createWaoMcpOperationCatalog().map((entry) => entry.operationId),
       appServer,
     }, null, 2)}\n`)

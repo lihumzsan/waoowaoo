@@ -16,7 +16,7 @@ export const WORKSPACE_BUNDLE_MAX_TOTAL_BYTES = 64 * 1024 * 1024
 export const WORKSPACE_BUNDLE_MAX_PATH_BYTES = 512
 export const WORKSPACE_BUNDLE_MAX_ENCODED_BYTES = 64 * 1024 * 1024
 
-const ALLOWED_EXTENSIONS = new Set(['.json', '.md', '.txt', '.resource'])
+const ALLOWED_EXTENSIONS = new Set(['.json', '.md', '.txt'])
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true })
 
 export type WorkspaceBundleFile = {

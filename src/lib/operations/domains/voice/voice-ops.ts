@@ -1,4 +1,3 @@
-import path from 'node:path'
 import { z } from 'zod'
 import { VOICE_DESIGN_LANGUAGE_OPTIONS } from '@/lib/ai-registry/voice-design-contract'
 import { parseWorkspaceResourceGenerationTaskPayload } from '@/lib/workspace-resource/generation-contract'
@@ -6,7 +5,7 @@ import { buildWorkspaceResourceId } from '@/lib/workspace-resource/identity'
 import { resourceNameFromPath } from '@/lib/workspace-resource/path'
 import {
   reserveWorkspaceResourceInTransaction,
-  validateWorkspaceResourcePlacement,
+  resolveGeneratedWorkspaceResourcePlacement,
 } from '@/lib/workspace-resource/persistence'
 import { WORKSPACE_RESOURCE_SCHEMA } from '@/lib/workspace-resource/schema-registry'
 import { buildWorkspaceResourceLifecycleProjection } from '@/lib/workspace-resource/task-runtime-envelope'
@@ -34,8 +33,8 @@ import { ApiError } from '@/lib/api-errors'
 
 const voiceNewSchema = z.object({
   kind: z.literal('new'),
-  outputPath: z.string().trim().min(1).max(512)
-    .regex(/\.resource$/u, 'Voice outputPath must end in .resource.'),
+  parentFolderId: z.string().trim().min(1).max(32).nullable().optional(),
+  name: z.string().trim().min(1).max(300),
   description: z.string().trim().min(1).max(4_000),
   previewText: z.string().trim().min(1).max(10_000),
   language: z.enum(VOICE_DESIGN_LANGUAGE_OPTIONS),
@@ -84,12 +83,6 @@ const voicePlanMetadataSchema = z.object({
     taskPlanId: z.string().min(1),
   }).strict()).min(1),
 }).strict()
-
-function alternativePath(outputPath: string, memberIndex: number): string {
-  if (memberIndex === 0) return outputPath
-  const extension = path.posix.extname(outputPath)
-  return `${outputPath.slice(0, -extension.length)}-${String(memberIndex + 1)}${extension}`
-}
 
 async function preflightVoiceGeneration(
   ctx: ProjectAgentOperationContext,
@@ -141,22 +134,24 @@ async function planNewVoice(
     ctx.toolCallId?.trim() || ctx.requestId?.trim() || fingerprint,
     fingerprint,
   ].join(':')
-  const resources = Array.from({ length: request.count }, (_, memberIndex) => {
+  const resources = await Promise.all(Array.from({ length: request.count }, async (_, memberIndex) => {
     const resourceId = buildWorkspaceResourceId({ operationId: 'generate_voice', requestId, memberIndex })
+    const workspacePath = await resolveGeneratedWorkspaceResourcePlacement(prisma, {
+      userId: ctx.userId,
+      projectId: ctx.projectId,
+      parentFolderId: request.parentFolderId,
+      name: request.name,
+      resourceId,
+      mediaType: 'audio',
+      schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
+    })
     return {
       resourceId,
-      workspacePath: alternativePath(request.outputPath, memberIndex),
+      workspacePath,
       memberIndex,
       taskPlanId: `generate_voice:${resourceId}`,
     }
-  })
-  await Promise.all(resources.map(async (resource) => await validateWorkspaceResourcePlacement(prisma, {
-    userId: ctx.userId,
-    projectId: ctx.projectId,
-    outputPath: resource.workspacePath,
-    mediaType: 'audio',
-    schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
-  })))
+  }))
   const tasks = resources.map((resource) => {
     const inputHash = stableArgsFingerprint({
       description: request.description,
@@ -374,7 +369,7 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
   return {
     generate_voice: defineOperation({
       id: 'generate_voice',
-      summary: 'Design voice preview audio Resources at explicit workspace paths. Alternatives are independent Tasks; retry reuses the original frozen payload.',
+      summary: 'Design voice preview audio Resources with server-owned placement. Alternatives are independent Tasks; retry reuses the original frozen payload.',
       intent: 'act',
       channels: { tool: true, api: true, mcp: true },
       effects: {
@@ -406,7 +401,7 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
         },
       },
       confirmation: { kind: 'billable_media', required: true },
-      planContractRevision: 'voice-generation/v5',
+      planContractRevision: 'voice-generation/v6',
       inputSchema: generateVoiceInputSchema,
       outputSchema: generateVoiceOutputSchema,
       plan: async (ctx, input) => input.request.kind === 'retry'

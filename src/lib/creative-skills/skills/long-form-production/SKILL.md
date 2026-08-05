@@ -1,6 +1,6 @@
 ---
 name: long-form-production
-description: Organize long-form creative work into resumable workspace folders and production manifests.
+description: Organize long-form creative work into resumable production units and direct media batches.
 ---
 
 # 长篇连续制作
@@ -14,8 +14,8 @@ description: Organize long-form creative work into resumable workspace folders a
 - 精确剧本和用户确认内容是故事事实；视觉方向、类型惯例和研究不能改写它。
 - 目录服务于理解和生产，不为了形式机械拆分。短内容不需要长篇结构。
 - 每份事实只有一个维护位置。共享人物、世界规则和持续状态只进入 `continuityFacts`；局部范围进入对应 `productionUnits`，不复制一份会漂移的共享事实。
-- 本长篇专业子 Agent是 `long_form_plan` 的唯一 writer；其他专业子 Agent只写主 Agent明确分派的互斥 JSON。主 Agent只编排和提交，不改写专业内容。
-- 系统只保证提交时冻结实际文件与 Resource 版本，不理解或替 Agent 判断剧情一致性。
+- 本长篇专业子 Agent是 `long_form_plan` 的唯一 writer；其他专业子 Agent只返回各自固定的严格 JSON。主 Agent只编排和提交，不改写专业内容。
+- 系统只保证提交时冻结精确 Resource 版本，不理解或替 Agent 判断剧情一致性。
 
 ## 工作区结构
 
@@ -39,27 +39,27 @@ description: Organize long-form creative work into resumable workspace folders a
 
 重复出现的人物、地点、道具和声音参考只保留一个权威 WorkspaceResource 路径。各单元通过路径引用，不重新生成不同身份。需要新状态时明确创建版本或新资源，并在连续性文档写明生效范围。
 
-## Production Index 与领域 Manifest
+## Production Index 与领域生成批次
 
-批量生产前，本长篇专业子 Agent在 `productionUnits` 中列出制作单元、依赖、权威输入路径、入口/出口状态、负责的固定专业角色和应产出的唯一 JSON 路径。它不替资产、视频或音乐专业子 Agent编写最终 Prompt。
+批量生产前，本长篇专业子 Agent在 `productionUnits` 中列出制作单元、依赖、权威输入、入口/出口状态和负责的固定专业角色。它不替资产、视频或音乐专业子 Agent编写最终 Prompt。
 
-每个真正提交的领域 Manifest 由对应固定专业子 Agent独占写入，并满足：
+每个真正提交的领域生成批次由对应固定专业子 Agent独占返回，并满足：
 
 - 每个 item 有稳定、唯一的本地 identity。
-- 明确 Placement、输入 `workspacePath`、完整最终 Prompt、显式生成参数和依赖。
-- 输入路径必须指向当前工作区实际文件/资源；禁止“最近结果”或名称猜测。
+- 明确输入 `resourceId + contentVersion`、完整最终 Prompt、显式生成参数和依赖；媒体 Placement 由服务端从 canonical folder ID 与名称派生。
+- 输入必须指向主 Agent提供的 canonical Resource；禁止“最近结果”或名称猜测。
 - 相互独立的 item 可并行；有依赖的 item 明确排序。
-- 提交前检查目标路径冲突、共享资产引用、时长和预算。
+- 提交前检查共享资产引用、时长和预算。
 
-一次提交由 Wao 在同一个 PlanSnapshot 中冻结实际 `resourceId + contentVersion`、Placement、报价和 manifest item。失败后只续跑失败 item；成功 item 不重新提交或收费。
+一次媒体工具调用由 Wao 在同一个 PlanSnapshot 中冻结实际 `resourceId + contentVersion`、服务端 Placement、报价和 batch item。失败后只续跑失败 item；成功 item 不重新提交或收费。
 
 ## 质量检查
 
 - 每个制作单元是否完整覆盖其剧本范围，没有重复或遗漏？
 - 入口/出口和共享连续性是否一致？
 - 同一角色、地点、道具和声音是否引用同一路径身份？
-- 并行专业子 Agent是否严格写各自目录，共享连续性文件是否只有本长篇专业子 Agent写？
-- `productionUnits.deliverables` 是否指向唯一的领域 JSON，且每个专业输出只有一个 writer？
+- 并行专业子 Agent是否严格返回各自固定 outputKind，共享连续性是否只有本长篇专业子 Agent维护？
+- `productionUnits.deliverables` 是否为每个专业输出指定唯一 workerKind/outputKind？
 - 失败续跑是否只包含失败项？
 
 ## 边界

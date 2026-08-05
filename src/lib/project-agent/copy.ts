@@ -7,13 +7,12 @@ type ProjectAgentOperationTitleCopy = {
 
 const PROJECT_AGENT_OPERATION_TITLE_COPY: Record<string, ProjectAgentOperationTitleCopy> = {
   register_uploaded_media: { zh: '保存上传素材', en: 'Save uploaded media' },
-  create_text: { zh: '创建项目文件', en: 'Create project file' },
+  save_project_document: { zh: '保存项目文档', en: 'Save project document' },
   create_folder: { zh: '创建文件夹', en: 'Create folder' },
   create_image: { zh: '生成图片资源', en: 'Generate image resource' },
   create_audio: { zh: '生成音频资源', en: 'Generate audio resource' },
   create_video: { zh: '生成视频资源', en: 'Generate video resource' },
   merge_videos: { zh: '合并视频资源', en: 'Merge video resources' },
-  submit_production_manifest: { zh: '提交制作清单', en: 'Submit production manifest' },
   rerun_failed_production_items: { zh: '重试失败资源', en: 'Retry failed resources' },
   move_resource: { zh: '移动项目资源', en: 'Move project resource' },
   delete_resource: { zh: '删除项目资源', en: 'Delete project resource' },

@@ -5,8 +5,8 @@ describe('workspace assistant project links', () => {
   it('accepts only decoded project-relative workspace paths', () => {
     expect(projectWorkspacePathFromHref('production/%E5%89%A7%E6%9C%AC.md#scene-1'))
       .toBe('production/剧本.md')
-    expect(projectWorkspacePathFromHref('episodes/01/%E9%95%9C%E5%A4%B4/001.resource?focus=1'))
-      .toBe('episodes/01/镜头/001.resource')
+    expect(projectWorkspacePathFromHref('episodes/01/%E9%95%9C%E5%A4%B4/001?focus=1'))
+      .toBe('episodes/01/镜头/001')
 
     for (const unsafe of [
       '/tmp/runtime/workspace/file.md',

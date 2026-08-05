@@ -9,6 +9,7 @@ import { parseWorkspaceResourceGenerationTaskPayload } from '@/lib/workspace-res
 import { TASK_TYPE } from '@/lib/task/types'
 
 export const PROJECT_VIDEO_RATIO_METADATA_KEY = 'projectVideoRatio'
+export const PROJECT_VIDEO_RATIO_REQUIRED_METADATA_KEY = 'projectVideoRatioRequired'
 
 export const projectVideoRatioSnapshotSchema = z.object({
   value: z.string().trim().min(1),
@@ -48,6 +49,7 @@ export function requireProjectVideoRatio(value: string | null | undefined): Proj
 }
 
 function containsProjectImageOrVideoTask(plan: OperationPlan): boolean {
+  if (plan.metadata?.[PROJECT_VIDEO_RATIO_REQUIRED_METADATA_KEY] === false) return false
   return plan.tasks.some((task) => {
     if (!task.billingInfo.billable) return false
     if (task.billingInfo.apiType !== 'image' && task.billingInfo.apiType !== 'video') return false
@@ -55,15 +57,13 @@ function containsProjectImageOrVideoTask(plan: OperationPlan): boolean {
       task.taskType !== TASK_TYPE.WORKSPACE_RESOURCE_IMAGE
       && task.taskType !== TASK_TYPE.WORKSPACE_RESOURCE_VIDEO
     ) return true
-    const payload = parseWorkspaceResourceGenerationTaskPayload(task.payload)
-    return payload.productionManifestSource === undefined
+    parseWorkspaceResourceGenerationTaskPayload(task.payload)
+    return true
   })
 }
 
 /**
- * Freezes the current project frame fact into direct Canvas/API image and video plans.
- * Professional production manifests declare and freeze their own explicit aspect ratios,
- * so their execution never depends on a later project-ratio read.
+ * Freezes the current project frame fact into every image and video generation plan.
  * This is the single planning boundary shared by Agent and API callers, so no
  * task, approval, retry, or replay can reuse a plan after the fact changes.
  */

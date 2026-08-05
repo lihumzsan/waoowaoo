@@ -88,7 +88,7 @@
     {
       "id": "workspace-resource",
       "document": "docs/architecture/modules/workspace-resource.md",
-      "title": "Workspace Resource 树",
+      "title": "Workspace Resource 持久树与直接生产",
       "sourcePaths": [
         "src/lib/workspace-resource",
         "src/lib/codex-workspace",
@@ -169,7 +169,7 @@
     {
       "id": "creative-skills",
       "document": "docs/architecture/modules/creative-skills.md",
-      "title": "Creative Skills 与原生 Subagent",
+      "title": "Creative Skills 与原生 Subagent 内存交接",
       "sourcePaths": [
         "src/lib/creative-skills"
       ]

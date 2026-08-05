@@ -73,7 +73,6 @@ import { CanvasUploadQueue } from './upload/CanvasUploadQueue'
 import { CanvasViewportControls } from './controls/CanvasViewportControls'
 import { CanvasFolderNavigation } from './controls/CanvasFolderNavigation'
 import { buildWorkspaceCanvasCreateOperationInput } from './create/canvas-create-input'
-import { buildCanvasCreationOutputPath } from './create/canvas-output-path'
 import { useCanvasUploadBridge } from './upload/useCanvasUploadBridge'
 
 const EMPTY_SAVED_NODE_LAYOUTS: readonly CanvasNodeLayout[] = []
@@ -254,7 +253,7 @@ function ProjectWorkspaceFolderCanvas({
   }, [])
   const uploadQueue = useCanvasUploadQueue({
     projectId,
-    directoryPath: folder.workspacePath,
+    parentFolderId: folder.folderKey === WORKSPACE_RESOURCE_ROOT_FOLDER_KEY ? null : folder.folderKey,
     onMaterialized: placeUploadedResource,
   })
   const {
@@ -632,15 +631,12 @@ function ProjectWorkspaceFolderCanvas({
     })
   }, [])
   const submitCanvasCreation = useCallback((draftId: string, request: WorkspaceCanvasCreateRequest) => {
-    const outputPath = buildCanvasCreationOutputPath({
-      directoryPath: folder.workspacePath,
-      name: request.name || request.capability.mediaKind,
-      kind: request.capability.mediaKind,
-      uniqueSuffix: crypto.randomUUID(),
-    })
+    const parentFolderId = folder.folderKey === WORKSPACE_RESOURCE_ROOT_FOLDER_KEY
+      ? null
+      : folder.folderKey
     void operationAction.begin({
       operationId: request.capability.operationId,
-      input: buildWorkspaceCanvasCreateOperationInput(request, outputPath),
+      input: buildWorkspaceCanvasCreateOperationInput(request, parentFolderId),
       confirmation: 'billable_media',
       onAccepted: (plan) => {
         if (!plan) return
@@ -652,7 +648,7 @@ function ProjectWorkspaceFolderCanvas({
         } : current)
       },
     })
-  }, [folder.workspacePath, operationAction, placePlannedResources])
+  }, [folder.folderKey, operationAction, placePlannedResources])
   const selectionForCard = useCallback((card: WorkspaceResourceCardMemberView): WorkspaceCanvasSelection | null => {
     const node = flowNodes.find((candidate) => candidate.data.targetId === card.resource.resourceId)
     return node ? selectionForNode(node) : null

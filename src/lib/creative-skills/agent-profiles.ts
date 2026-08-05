@@ -54,21 +54,21 @@ export const CREATIVE_WORKER_REGISTRY: Readonly<Record<CreativeWorkerKind, Creat
   assets: defineWorker({
     kind: 'assets',
     title: '资产设计专业子 Agent',
-    description: '只负责资产筛选、设计和最终资产图片提示词；交付固定 asset_manifest JSON。',
+    description: '只负责资产筛选、设计和最终资产图片提示词；最终回复固定 asset_generation_batch JSON。',
     skillIds: ['creative-core', 'asset-development'],
-    executionFacts: 'Every produced asset must include its stable creative identity, complete final prompt, explicit generation parameters, and project-relative .resource placement in the one assigned JSON file.',
+    executionFacts: 'Every produced asset must include its stable creative identity, complete final prompt, explicit generation parameters, and user-visible name. The server owns Resource placement.',
   }),
   video: defineWorker({
     kind: 'video',
     title: '视频导演专业子 Agent',
-    description: '只负责视频导演、分段与最终视频提示词；交付固定 video_prompt_set JSON。',
+    description: '只负责视频导演、分段与最终视频提示词；最终回复固定 video_generation_batch JSON。',
     skillIds: ['creative-core', 'video-direction'],
     executionFacts: 'Read the exact system/project.json assigned by the parent and use only its non-null productionCapabilities.video facts. Never guess capability limits.',
   }),
   music: defineWorker({
     kind: 'music',
     title: '音乐导演专业子 Agent',
-    description: '只负责音乐设计和最终音乐提示词；交付固定 music_direction JSON。',
+    description: '只负责音乐设计和最终音乐提示词；最终回复固定 audio_generation_batch JSON。',
     skillIds: ['creative-core', 'music-direction'],
     executionFacts: 'Read the exact system/project.json assigned by the parent and use only its non-null productionCapabilities.music facts. Never guess capability limits.',
   }),
@@ -91,11 +91,12 @@ export const PRIMARY_AGENT_DISABLED_NATIVE_SKILL_IDS = [
 export const PRIMARY_AGENT_GLOBAL_INSTRUCTIONS = `# Wao orchestration
 
 - The primary Wao Agent may autonomously spawn and coordinate Subagents whenever delegation materially improves exploration, planning, or execution. The user does not need to ask for Subagents explicitly.
-- For professional creative work, the primary Agent must use the fixed native custom Subagent routing supplied by Wao developer instructions. Assign exactly one exclusive project-relative .json output path for the worker's registered outputKind. Spawn every fixed custom agent with \`fork_turns="none"\`; full-history forks cannot select a custom \`agent_type\`.
+- For professional creative work, the primary Agent must use the fixed native custom Subagent routing supplied by Wao developer instructions. Spawn every fixed custom agent with \`fork_turns="none"\`; full-history forks cannot select a custom \`agent_type\`.
 - Fixed Wao professional workers execute their assigned bounded deliverable directly. They must not spawn or delegate to additional agents.
-- The primary Agent never writes, copies, repairs, or rewrites professional creative contents. It may read the completed JSON and, for asset_manifest, video_prompt_set, or music_direction with actual items, submit that exact file through Wao MCP.
-- If Workspace checkpoint or production validation rejects a professional JSON, send the exact reported field correction back to the same fixed worker. Do not change paths, rewrite the manifest, or repeat the same submission until that worker has produced a new file version.
-- Keep delegation bounded: do not create redundant workers, and never let two agents write the same file or directory.`
+- A professional worker returns one strict JSON object in its final response. This response is an in-memory handoff to the primary Agent; it is not a project file and must not be saved to Canvas automatically.
+- The primary Agent never repairs or rewrites professional creative contents. For an asset_generation_batch, video_generation_batch, or audio_generation_batch with actual items, pass those exact items to create_image, create_video, or create_audio respectively.
+- If the strict output or media tool validation rejects a field, send the exact correction back to the same fixed worker. Do not rewrite the output or repeat the same submission until the worker returns a corrected final object.
+- Keep delegation bounded: do not create redundant workers.`
 
 function tomlString(value: string): string {
   return JSON.stringify(value)
@@ -120,14 +121,14 @@ ${resource.content.trim()}
   return [
     `You are the fixed Wao professional worker ${worker.agentType}.`,
     'Your role and Skill set were selected deterministically by the Wao worker registry. Do not discover, load, or apply any other Wao Skill.',
-    'Work only on the exact files or directories assigned by the parent Agent. Do not modify system/** or .resource pointer contents.',
-    `Your only formal deliverable is exactly one strict JSON object with outputKind=${JSON.stringify(worker.outputKind)}, written to the one assigned project-relative .json path. Do not create an auxiliary Markdown deliverable, a second manifest, or a parallel explanation file.`,
-    'Use the assigned project-relative output path exactly as written. Never expand any path to an absolute host or Runtime path. Every media outputPath inside a production JSON must be project-relative, must end in .resource, and must not start with /, ./, ../, system/, or .wao/.',
+    'Treat the writable workspace as disposable scratch only. Do not modify system/** and do not treat scratch files as project resources.',
+    `Your only formal deliverable is exactly one strict JSON object with outputKind=${JSON.stringify(worker.outputKind)} in your final response. Do not create a manifest file, an auxiliary Markdown deliverable, or a parallel explanation file.`,
+    'Never invent project paths. Use canonical Resource IDs and versions supplied by the parent for references. The server owns media placement.',
     'The wao MCP server is disabled for this worker. Never submit paid production, billing, Task, approval, or Resource operations.',
-    'You are the sole author of the professional deliverable for this assignment. The parent Agent may submit your file but must not copy, rewrite, or complete its professional contents.',
+    'You are the sole author of the professional result for this assignment. The parent Agent may submit its media items but must not rewrite or complete its professional contents.',
     worker.executionFacts,
     ...skills,
-    'The JSON must match the authoritative schema below exactly: include every required field, include no unknown field, emit raw JSON without Markdown fences, and never invent a schema from a Skill example. This schema is the same machine contract enforced at Workspace checkpoint and production submission.',
+    'The final JSON must match the authoritative schema below exactly: include every required field, include no unknown field, emit raw JSON without Markdown fences, and never invent a schema from a Skill example. Media item fields are the same contract consumed by the corresponding generation tool.',
     `<wao_output_schema outputKind=${JSON.stringify(worker.outputKind)}>
 ${jsonSchema}
 </wao_output_schema>`,

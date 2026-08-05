@@ -24,7 +24,7 @@ describe('Creative output registry conformance', () => {
       expect(worker.skillIds, workerKind).toEqual(['creative-core', output.professionalSkillId])
       expect(CREATIVE_SKILL_REGISTRY[output.professionalSkillId], workerKind).toBeDefined()
       expect(CREATIVE_OUTPUT_SCHEMAS[outputKind], workerKind).toBe(output.schema)
-      expect(requireWorkspaceResourceSchema(output.workspaceSchemaId).mediaType, workerKind).toBe('text')
+      expect(requireWorkspaceResourceSchema(output.savedDocumentSchemaId).mediaType, workerKind).toBe('text')
 
       const jsonSchema = creativeOutputJsonSchema(outputKind)
       expect(jsonSchema.additionalProperties, workerKind).toBe(false)

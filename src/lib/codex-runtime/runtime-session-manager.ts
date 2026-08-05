@@ -27,23 +27,11 @@ export type RuntimeSessionScope = {
 
 export type RuntimeSessionMaterialization = RuntimeContainerMaterialization
 export type RuntimeSessionCheckpointReason = 'turn_completed' | 'idle' | 'shutdown' | 'recover'
-export type RuntimeSessionInterruptionReason = 'process_exited' | 'ownership_lost' | 'shutdown' | 'recover'
-
 export interface RuntimeSessionPersistence {
   /** Idempotently settle an abandoned product Turn before a new placement. */
   reconcileBeforeStart(scope: RuntimeSessionScope): Promise<void>
-  /** Materialize the project workspace and opaque Codex home exactly once per container. */
+  /** Materialize disposable scratch, read-only project facts, and opaque Codex home once per container. */
   materialize(scope: RuntimeSessionScope): Promise<RuntimeSessionMaterialization>
-  captureWorkspace(params: {
-    readonly scope: RuntimeSessionScope
-    readonly materialization: RuntimeSessionMaterialization
-    readonly reason: RuntimeSessionCheckpointReason | RuntimeSessionInterruptionReason | 'mcp_preflight'
-  }): Promise<void>
-  /** Refresh a quiescent Runtime copy from the current authoritative Catalog. */
-  refreshWorkspace(params: {
-    readonly scope: RuntimeSessionScope
-    readonly materialization: RuntimeSessionMaterialization
-  }): Promise<void>
   /**
    * The unique durable runtime-thread binding writer. It must commit the opaque
    * Codex state before binding productThreadId to runtimeThreadId. A newly
@@ -289,7 +277,7 @@ export class RuntimeSessionManager {
       if (entry.status === 'ready') {
         if (entry.restartRequired) {
           await entry.persistenceQueue
-          if (!entry.transition) this.scheduleRecovery(entry, 'recover')
+          if (!entry.transition) this.scheduleRecovery(entry)
           if (entry.transition) {
             await entry.transition
             return await this.startOrResume(scope, launchOptions)
@@ -545,62 +533,6 @@ export class RuntimeSessionManager {
     await session.container.runtime.respondToServerRequest(response)
   }
 
-  async flushWorkspaceForMcp(
-    scope: RuntimeSessionScope,
-    productThreadId: string,
-    runtimeTurnIdValue: string,
-  ): Promise<void> {
-    const { session, thread } = await this.requireManagedThread(scope, productThreadId)
-    const runtimeTurnId = requireIdentity(
-      runtimeTurnIdValue,
-      'CODEX_RUNTIME_MCP_TURN_ID_INVALID',
-    )
-    if (
-      session.activeTurn?.productThreadId !== thread.productThreadId
-      || session.activeTurn.runtimeTurnId !== runtimeTurnId
-    ) {
-      throw new Error('CODEX_RUNTIME_MCP_ACTIVE_TURN_DIVERGED')
-    }
-    session.lastActivityAt = Date.now()
-    await this.enqueuePersistence(session, async () => {
-      await this.options.persistence.captureWorkspace({
-        scope: session.scope,
-        materialization: session.materialization,
-        reason: 'mcp_preflight',
-      })
-    })
-  }
-
-  async refreshWorkspaceAfterMcp(
-    scope: RuntimeSessionScope,
-    productThreadId: string,
-    runtimeTurnIdValue: string,
-  ): Promise<void> {
-    const { session, thread } = await this.requireManagedThread(scope, productThreadId)
-    const runtimeTurnId = requireIdentity(
-      runtimeTurnIdValue,
-      'CODEX_RUNTIME_MCP_TURN_ID_INVALID',
-    )
-    if (
-      session.activeTurn?.productThreadId !== thread.productThreadId
-      || session.activeTurn.runtimeTurnId !== runtimeTurnId
-    ) {
-      throw new Error('CODEX_RUNTIME_MCP_ACTIVE_TURN_DIVERGED')
-    }
-    session.lastActivityAt = Date.now()
-    try {
-      await this.enqueuePersistence(session, async () => {
-        await this.options.persistence.refreshWorkspace({
-          scope: session.scope,
-          materialization: session.materialization,
-        })
-      })
-    } catch (error) {
-      this.scheduleRecovery(session, 'recover')
-      throw error
-    }
-  }
-
   touch(scopeValue: RuntimeSessionScope): void {
     const scope = normalizeScope(scopeValue)
     const slot = this.slots.get(buildRuntimeSessionScopeId(scope))
@@ -799,7 +731,7 @@ export class RuntimeSessionManager {
     if (event.type === 'processExited') {
       for (const child of entry.childTurns.values()) child.resolveCompletion()
       entry.childTurns.clear()
-      if (!event.expected && entry.status === 'ready') this.scheduleRecovery(entry, 'process_exited')
+      if (!event.expected && entry.status === 'ready') this.scheduleRecovery(entry)
       return
     }
     if (event.type !== 'notification') return
@@ -812,14 +744,14 @@ export class RuntimeSessionManager {
         ? event.params.threadId
         : null
       if (!runtimeThreadId) {
-        this.scheduleRecovery(entry, 'process_exited')
+        this.scheduleRecovery(entry)
         return
       }
       const productThreadId = entry.runtimeThreadToProductThread.get(runtimeThreadId)
       const turn = getRecord(event.params.turn)
       const runtimeTurnId = turn && typeof turn.id === 'string' ? turn.id : null
       if (!runtimeTurnId) {
-        this.scheduleRecovery(entry, 'process_exited')
+        this.scheduleRecovery(entry)
         return
       }
       // Native Subagents own child Threads in the same app-server process.
@@ -830,7 +762,7 @@ export class RuntimeSessionManager {
         const existing = entry.childTurns.get(runtimeThreadId)
         if (existing) {
           if (existing.runtimeTurnId !== runtimeTurnId) {
-            this.scheduleRecovery(entry, 'recover')
+            this.scheduleRecovery(entry)
           }
           return
         }
@@ -838,7 +770,7 @@ export class RuntimeSessionManager {
         return
       }
       if (entry.activeTurn && entry.activeTurn.productThreadId !== productThreadId) {
-        this.scheduleRecovery(entry, 'process_exited')
+        this.scheduleRecovery(entry)
         return
       }
       entry.activeTurn = { productThreadId, runtimeTurnId }
@@ -849,7 +781,7 @@ export class RuntimeSessionManager {
       ? event.params.threadId
       : null
     if (!completedRuntimeThreadId) {
-      this.scheduleRecovery(entry, 'process_exited')
+      this.scheduleRecovery(entry)
       return
     }
     const productThreadId = entry.runtimeThreadToProductThread.get(completedRuntimeThreadId)
@@ -857,7 +789,7 @@ export class RuntimeSessionManager {
     const runtimeTurnId = turn && typeof turn.id === 'string' ? turn.id : null
     const status = turn && typeof turn.status === 'string' ? turn.status : null
     if (!runtimeTurnId || !status) {
-      this.scheduleRecovery(entry, 'process_exited')
+      this.scheduleRecovery(entry)
       return
     }
     if (!productThreadId) {
@@ -878,12 +810,11 @@ export class RuntimeSessionManager {
     entry.activeTurn = null
     const threadSlot = entry.threads.get(productThreadId)
     if (!threadSlot) {
-      this.scheduleRecovery(entry, 'process_exited')
+      this.scheduleRecovery(entry)
       return
     }
-    // Register the terminal persistence barrier synchronously with the native
-    // completion event. A following Turn therefore cannot slip in before the
-    // prior workspace capture/checkpoint has joined persistenceQueue.
+    // Register the terminal runtime-state checkpoint barrier synchronously with
+    // the native completion event. Disposable workspace scratch is never captured.
     void this.enqueuePersistence(entry, async () => {
       const thread = await threadSlot.entry
       const bound = await bindingBarrier
@@ -893,11 +824,6 @@ export class RuntimeSessionManager {
       // app-server after the observed generation drains is the only protocol
       // boundary that proves no delayed child notification or writer remains.
       if (restartAfterChildTurns) await entry.container.stop('graceful')
-      await this.options.persistence.captureWorkspace({
-        scope: entry.scope,
-        materialization: entry.materialization,
-        reason: 'turn_completed',
-      })
       if (status === 'completed') {
         await this.options.persistence.checkpointRuntime({
           scope: entry.scope,
@@ -912,11 +838,11 @@ export class RuntimeSessionManager {
       }
     }).then(
       () => {
-        if (restartAfterChildTurns) this.scheduleRecovery(entry, 'recover')
+        if (restartAfterChildTurns) this.scheduleRecovery(entry)
       },
       (error: unknown) => {
         this.reportError(entry.scope, 'turn_terminal_persistence', error)
-        if (entry.status === 'ready') this.scheduleRecovery(entry, 'recover')
+        if (entry.status === 'ready') this.scheduleRecovery(entry)
       },
     )
   }
@@ -954,19 +880,19 @@ export class RuntimeSessionManager {
   }
 
   private handleOwnershipLost(entry: SessionEntry): void {
-    if (entry.status === 'ready') this.scheduleRecovery(entry, 'ownership_lost')
+    if (entry.status === 'ready') this.scheduleRecovery(entry)
   }
 
-  private scheduleRecovery(entry: SessionEntry, reason: RuntimeSessionInterruptionReason): void {
+  private scheduleRecovery(entry: SessionEntry): void {
     if (entry.transition || this.shuttingDown) return
     entry.status = 'recovering'
     this.publish(entry.scopeId, { type: 'state', state: 'recovering' })
-    const transition = this.recoverEntry(entry, reason)
+    const transition = this.recoverEntry(entry)
     entry.transition = transition
     void transition.catch((error: unknown) => this.reportError(entry.scope, 'recover', error))
   }
 
-  private async recoverEntry(entry: SessionEntry, reason: RuntimeSessionInterruptionReason): Promise<void> {
+  private async recoverEntry(entry: SessionEntry): Promise<void> {
     try {
       const hadActiveTurn = entry.activeTurn !== null
       if (hadActiveTurn) await entry.container.stop('force')
@@ -974,14 +900,7 @@ export class RuntimeSessionManager {
       const specs = await this.buildRecoverySpecs(entry)
       if (!hadActiveTurn) await entry.container.stop('force')
       const captureAllowed = await (entry.turnBindingBarrier ?? Promise.resolve(true))
-      if (captureAllowed) {
-        await this.options.waitForTurnSettlement(entry.scope)
-        await this.options.persistence.captureWorkspace({
-          scope: entry.scope,
-          materialization: entry.materialization,
-          reason,
-        })
-      }
+      if (captureAllowed) await this.options.waitForTurnSettlement(entry.scope)
       await this.options.persistence.destroyMaterialization(entry.materialization)
       entry.unsubscribeRuntime?.()
       entry.unsubscribeRuntime = null
@@ -1019,14 +938,7 @@ export class RuntimeSessionManager {
         forcedForChildDrain = true
       }
       const captureAllowed = await (entry.turnBindingBarrier ?? Promise.resolve(true))
-      if (captureAllowed) {
-        await this.options.waitForTurnSettlement(entry.scope)
-        await this.options.persistence.captureWorkspace({
-          scope: entry.scope,
-          materialization: entry.materialization,
-          reason,
-        })
-      }
+      if (captureAllowed) await this.options.waitForTurnSettlement(entry.scope)
       if (!activeTurn && !forcedForChildDrain && captureAllowed) {
         const threads = await this.readThreads(entry)
         for (const thread of threads) {

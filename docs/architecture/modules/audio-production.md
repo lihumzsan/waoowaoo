@@ -4,18 +4,19 @@
 
 ## 为什么是这样
 
-音乐、声音参考和混音结果都是普通 WorkspaceResource。创作判断由固定专业子 Agent 完成并写入
-Production Manifest，主 Agent 只按路径提交。系统没有自动 BGM 阶段、声音工作流状态机或"规划完成
-自动生成"。
+音乐、声音参考和混音结果都是普通 WorkspaceResource。创作判断由固定专业子 Agent 完成并以 strict
+JSON 返回，主 Agent 把 items 直接提交给 `create_audio`。系统没有自动 BGM 阶段、声音工作流状态机
+或“规划完成自动生成”。
 
 最终混音只做显式技术装配：输入、顺序、时间和增益全部冻结，执行不分析内容后改写创作决定。
 
 ## 不变量
 
-- **AP-01 — 方向是固定 JSON 文件。** 配乐方向、cue 和音效说明由音乐子 Agent 写入唯一 outputKind
-  的 JSON；没有第二份 Markdown、Worker output 或 BGM plan 实体。"不配乐"是同一 schema 的显式空
-  分支，不能提交为生产任务。
-- **AP-02 — 每次生成显式提交。** Manifest 必须给出 Placement、模态公共参数和精确输入引用；
+- **AP-01 — 方向是固定 JSON 结果。** 配乐方向、cue 和音效说明由音乐子 Agent 返回唯一 outputKind
+  的 JSON；没有强制文件、第二份 Markdown、Worker output 或 BGM plan 实体。“不配乐”是同一
+  schema 的显式空分支，不能提交为生产任务。
+- **AP-02 — 每次生成显式提交。** `create_audio` items 必须给出名称、模态公共参数和精确输入引用；
+  Placement 由服务端根据 parent Resource id 派生；
   候选数量上限由 registry 声明。成功只生成对应 Resource，不自动触发混音或视频。
 - **AP-03 — Provider 能力只约束单次执行。** 时长、格式和输入上限由 capability registry 唯一声明；
   不得据此自动拆分作品或创建系统层级实体。
@@ -25,7 +26,7 @@ Production Manifest，主 Agent 只按路径提交。系统没有自动 BGM 阶�
   执行统一采样率、时间戳、pad/trim 与超时，不能分析内容后改写创作决定。
 - **AP-06 — 终态不连锁。** 音频 Task 只结算自身 Resource 与账单；后续采用、重做、混音或视频均需
   独立用户意图和授权。
-- **AP-07 — 音乐输入是显式 Manifest 字段。** 子 Agent 写完整最终 Prompt、时长、演唱模式与精确
+- **AP-07 — 音乐输入是显式 generation item 字段。** 子 Agent 写完整最终 Prompt、时长、演唱模式与精确
   引用；格式、模型和 provider option 由服务端 registry/config 决定并在 Plan 前校验。Planner 不
   拼接 Prompt，只校验并逐字冻结；handler 只消费冻结结果。
 

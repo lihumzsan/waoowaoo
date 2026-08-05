@@ -80,7 +80,7 @@ async function seedSourceVideos(input: {
         requestId: input.suffix,
         memberIndex: index,
       })
-      const workspacePath = `task-durability-${input.suffix}-source-${String(index)}.resource`
+      const workspacePath = `task-durability-${input.suffix}-source-${String(index)}`
       await reserveWorkspaceResourceInTransaction(tx, {
         resourceId,
         userId: input.userId,
@@ -181,7 +181,7 @@ async function submitFixtureTask(input: {
               resourceId,
               userId: input.userId,
               projectId: input.projectId,
-              outputPath: `task-durability-${input.suffix}-output.resource`,
+              outputPath: `task-durability-${input.suffix}-output`,
               mediaType: 'video',
               schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
               operationId,

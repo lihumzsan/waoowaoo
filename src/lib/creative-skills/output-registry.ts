@@ -1,10 +1,10 @@
 import { z } from 'zod'
 import { creativeDirectionSchema } from '@/lib/creative-direction/contracts'
 import {
-  assetManifestOutputSchema,
-  musicDirectionOutputSchema,
-  videoPromptSetOutputSchema,
-} from '@/lib/workspace-resource/production-manifest'
+  assetGenerationBatchOutputSchema,
+  audioGenerationBatchOutputSchema,
+  videoGenerationBatchOutputSchema,
+} from '@/lib/workspace-resource/generation-request'
 import {
   WORKSPACE_RESOURCE_SCHEMA,
   type WorkspaceResourceSchemaId,
@@ -34,18 +34,12 @@ export const screenplayOutputSchema = z.object({
   openQuestions: textList(64, 2_000),
 }).strict()
 
-const professionalOutputPathSchema = z.string().min(1).max(512)
-  .regex(
-    /^(?!\/)(?!\.\.?\/)(?!.*\/\.\.?(?:\/|$))(?!.*\\)(?!system(?:\/|$))(?!\.wao(?:\/|$)).+\.json$/u,
-    'outputPath must be one normalized project-relative .json path.',
-  )
-
 const professionalDeliverableSchema = z.discriminatedUnion('workerKind', [
-  z.object({ workerKind: z.literal('story'), outputKind: z.literal('screenplay'), outputPath: professionalOutputPathSchema }).strict(),
-  z.object({ workerKind: z.literal('direction'), outputKind: z.literal('creative_direction'), outputPath: professionalOutputPathSchema }).strict(),
-  z.object({ workerKind: z.literal('assets'), outputKind: z.literal('asset_manifest'), outputPath: professionalOutputPathSchema }).strict(),
-  z.object({ workerKind: z.literal('video'), outputKind: z.literal('video_prompt_set'), outputPath: professionalOutputPathSchema }).strict(),
-  z.object({ workerKind: z.literal('music'), outputKind: z.literal('music_direction'), outputPath: professionalOutputPathSchema }).strict(),
+  z.object({ workerKind: z.literal('story'), outputKind: z.literal('screenplay') }).strict(),
+  z.object({ workerKind: z.literal('direction'), outputKind: z.literal('creative_direction') }).strict(),
+  z.object({ workerKind: z.literal('assets'), outputKind: z.literal('asset_generation_batch') }).strict(),
+  z.object({ workerKind: z.literal('video'), outputKind: z.literal('video_generation_batch') }).strict(),
+  z.object({ workerKind: z.literal('music'), outputKind: z.literal('audio_generation_batch') }).strict(),
 ])
 
 export const longFormPlanOutputSchema = z.object({
@@ -92,18 +86,18 @@ export const CREATIVE_OUTPUT_SCHEMAS = {
   screenplay: screenplayOutputSchema,
   long_form_plan: longFormPlanOutputSchema,
   creative_direction: creativeDirectionOutputSchema,
-  asset_manifest: assetManifestOutputSchema,
-  video_prompt_set: videoPromptSetOutputSchema,
-  music_direction: musicDirectionOutputSchema,
+  asset_generation_batch: assetGenerationBatchOutputSchema,
+  video_generation_batch: videoGenerationBatchOutputSchema,
+  audio_generation_batch: audioGenerationBatchOutputSchema,
 } as const satisfies Record<CreativeOutputKind, z.ZodType>
 
 export const creativeOutputSchema = z.discriminatedUnion('outputKind', [
   screenplayOutputSchema,
   longFormPlanOutputSchema,
   creativeDirectionOutputSchema,
-  assetManifestOutputSchema,
-  videoPromptSetOutputSchema,
-  musicDirectionOutputSchema,
+  assetGenerationBatchOutputSchema,
+  videoGenerationBatchOutputSchema,
+  audioGenerationBatchOutputSchema,
 ])
 
 export type CreativeOutput = z.infer<typeof creativeOutputSchema>
@@ -112,17 +106,17 @@ export const CREATIVE_WORKER_OUTPUT_KIND = {
   story: 'screenplay',
   long_form: 'long_form_plan',
   direction: 'creative_direction',
-  assets: 'asset_manifest',
-  video: 'video_prompt_set',
-  music: 'music_direction',
+  assets: 'asset_generation_batch',
+  video: 'video_generation_batch',
+  music: 'audio_generation_batch',
 } as const satisfies Record<CreativeWorkerKind, CreativeOutputKind>
 
 type CreativeOutputDefinition = {
   readonly outputKind: CreativeOutputKind
   readonly workerKind: CreativeWorkerKind
   readonly professionalSkillId: Exclude<CreativeSkillId, 'creative-core'>
-  readonly workspaceSchemaId: WorkspaceResourceSchemaId
-  readonly production: boolean
+  readonly savedDocumentSchemaId: WorkspaceResourceSchemaId
+  readonly mediaOperationId: 'create_image' | 'create_audio' | 'create_video' | null
   readonly schema: z.ZodType
 }
 
@@ -137,49 +131,49 @@ export const CREATIVE_OUTPUT_REGISTRY: Readonly<Record<CreativeOutputKind, Creat
     outputKind: 'screenplay',
     workerKind: 'story',
     professionalSkillId: 'story-development',
-    workspaceSchemaId: WORKSPACE_RESOURCE_SCHEMA.SCREENPLAY,
-    production: false,
+    savedDocumentSchemaId: WORKSPACE_RESOURCE_SCHEMA.SCREENPLAY,
+    mediaOperationId: null,
     schema: screenplayOutputSchema,
   }),
   long_form_plan: defineOutput({
     outputKind: 'long_form_plan',
     workerKind: 'long_form',
     professionalSkillId: 'long-form-production',
-    workspaceSchemaId: WORKSPACE_RESOURCE_SCHEMA.LONG_FORM_PLAN,
-    production: false,
+    savedDocumentSchemaId: WORKSPACE_RESOURCE_SCHEMA.LONG_FORM_PLAN,
+    mediaOperationId: null,
     schema: longFormPlanOutputSchema,
   }),
   creative_direction: defineOutput({
     outputKind: 'creative_direction',
     workerKind: 'direction',
     professionalSkillId: 'creative-direction',
-    workspaceSchemaId: WORKSPACE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
-    production: false,
+    savedDocumentSchemaId: WORKSPACE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
+    mediaOperationId: null,
     schema: creativeDirectionOutputSchema,
   }),
-  asset_manifest: defineOutput({
-    outputKind: 'asset_manifest',
+  asset_generation_batch: defineOutput({
+    outputKind: 'asset_generation_batch',
     workerKind: 'assets',
     professionalSkillId: 'asset-development',
-    workspaceSchemaId: WORKSPACE_RESOURCE_SCHEMA.ASSET_MANIFEST,
-    production: true,
-    schema: assetManifestOutputSchema,
+    savedDocumentSchemaId: WORKSPACE_RESOURCE_SCHEMA.ASSET_GENERATION_BATCH,
+    mediaOperationId: 'create_image',
+    schema: assetGenerationBatchOutputSchema,
   }),
-  video_prompt_set: defineOutput({
-    outputKind: 'video_prompt_set',
+  video_generation_batch: defineOutput({
+    outputKind: 'video_generation_batch',
     workerKind: 'video',
     professionalSkillId: 'video-direction',
-    workspaceSchemaId: WORKSPACE_RESOURCE_SCHEMA.VIDEO_PROMPT_SET,
-    production: true,
-    schema: videoPromptSetOutputSchema,
+    savedDocumentSchemaId: WORKSPACE_RESOURCE_SCHEMA.VIDEO_GENERATION_BATCH,
+    mediaOperationId: 'create_video',
+    schema: videoGenerationBatchOutputSchema,
   }),
-  music_direction: defineOutput({
-    outputKind: 'music_direction',
+  audio_generation_batch: defineOutput({
+    outputKind: 'audio_generation_batch',
     workerKind: 'music',
     professionalSkillId: 'music-direction',
-    workspaceSchemaId: WORKSPACE_RESOURCE_SCHEMA.MUSIC_DIRECTION,
-    production: true,
-    schema: musicDirectionOutputSchema,
+    savedDocumentSchemaId: WORKSPACE_RESOURCE_SCHEMA.AUDIO_GENERATION_BATCH,
+    mediaOperationId: 'create_audio',
+    schema: audioGenerationBatchOutputSchema,
   }),
 }
 

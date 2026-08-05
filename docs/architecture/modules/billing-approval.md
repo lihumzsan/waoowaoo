@@ -27,10 +27,10 @@ Task 并扣费。Web、MCP 与未来 CLI 调用同一 planning/submit service；
 - **BA-01D — 计价单位必须是真实计价基准。** 按 token 计价的模型不得把"每百万 token 单价"注册成
   整次金额。价格档位必须能由报价时已冻结的输入穷尽解析；无法表达的计价基准必须缺档并 fail
   closed，不得声明近似档位。
-- **BA-02 — 计划先于副作用。** 付费前完成权限、模型、参数、资源引用、Placement、输出数量与路径
-  冲突校验；PlanSnapshot 创建前不得提交 Provider 或创建 pending Resource。
+- **BA-02 — 计划先于副作用。** 付费前完成权限、模型、参数、资源引用、服务端 Placement、输出数量
+  与路径冲突校验；PlanSnapshot 创建前不得提交 Provider 或创建 pending Resource。
 - **BA-03 — 冻结同一输入。** Snapshot 冻结实际读取的资源 id + 内容版本 + 路径、Operation
-  revision、模型参数、输出 Placement 与 quote。执行快照就是该 Snapshot，不建立第二份冻结。
+  revision、模型参数、服务端派生 Placement 与 quote。执行快照就是该 Snapshot，不建立第二份冻结。
 - **BA-05 — 授权精确。** Grant 只授权一个 Snapshot，或明确金额/范围/期限的预算。shell/patch
   审批不能授权消费，普通用户输入请求也不能。
 - **BA-06 — 提交幂等。** 同一 request identity、Snapshot 与 execution identity 重放返回同一
@@ -60,7 +60,7 @@ Task 并扣费。Web、MCP 与未来 CLI 调用同一 planning/submit service；
   统一向上取整一次。事前只检查"是否还有可用额度"，不得伪造预估报价来拒绝工作。供应商回报的成本
   只作为观测事实，永远不得成为扣费金额。
 - **BA-18 — 确定性 preflight 全部先于 Plan。** 模型选择、凭证与 endpoint 存在性、项目能力默认与
-  覆盖、option 兼容性、引用模态与数量、Placement 与输出数量，都必须在创建 Snapshot、报价、
+  覆盖、option 兼容性、引用模态与数量、父 Resource/名称派生的 Placement 与输出数量，都必须在创建 Snapshot、报价、
   pending Resource 或 Task 之前完成。任何可由 registry 或本地配置判定的错误都返回结构化可纠正
   字段，不得让 Worker 或 Provider fence 成为第一位发现者。
 - **BA-19 — 限额付费活动只有一个席位裁判。** 容量与去重参与身份由同一 admission service 拥有，

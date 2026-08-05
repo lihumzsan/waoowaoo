@@ -13,9 +13,11 @@ export const WORKSPACE_RESOURCE_SCHEMA = {
   SCREENPLAY: 'project.screenplay',
   LONG_FORM_PLAN: 'project.long_form_plan',
   CREATIVE_DIRECTION: 'project.creative_direction',
-  ASSET_MANIFEST: 'project.asset_manifest',
-  VIDEO_PROMPT_SET: 'project.video_prompt_set',
-  MUSIC_DIRECTION: 'project.music_direction',
+  // Stable persisted schema IDs; names now describe optional saved documents,
+  // never a production submission protocol.
+  ASSET_GENERATION_BATCH: 'project.asset_manifest',
+  VIDEO_GENERATION_BATCH: 'project.video_prompt_set',
+  AUDIO_GENERATION_BATCH: 'project.music_direction',
   STYLE: 'project.style',
   CHARACTER_IMAGE: 'project.character_image',
   LOCATION_IMAGE: 'project.location_image',
@@ -79,17 +81,17 @@ const STRUCTURED_SUMMARY_PROJECTORS: Partial<
   [WORKSPACE_RESOURCE_SCHEMA.LONG_FORM_PLAN]: (data) => (
     stringValue(objectValue(data), 'overview')
   ),
-  [WORKSPACE_RESOURCE_SCHEMA.ASSET_MANIFEST]: (data) => (
+  [WORKSPACE_RESOURCE_SCHEMA.ASSET_GENERATION_BATCH]: (data) => (
     stringValue(objectValue(data), 'overview')
   ),
-  [WORKSPACE_RESOURCE_SCHEMA.VIDEO_PROMPT_SET]: (data) => {
+  [WORKSPACE_RESOURCE_SCHEMA.VIDEO_GENERATION_BATCH]: (data) => {
     const firstSegment = objectValue(arrayField(objectValue(data), 'items')[0] ?? null)
     return firstText(
       stringValue(firstSegment, 'prompt'),
       stringValue(firstSegment, 'key'),
     )
   },
-  [WORKSPACE_RESOURCE_SCHEMA.MUSIC_DIRECTION]: (data) => (
+  [WORKSPACE_RESOURCE_SCHEMA.AUDIO_GENERATION_BATCH]: (data) => (
     stringValue(objectValue(data), 'overview')
   ),
 }
@@ -106,9 +108,9 @@ export const WORKSPACE_RESOURCE_SCHEMA_IDS_BY_MEDIA = {
     WORKSPACE_RESOURCE_SCHEMA.SCREENPLAY,
     WORKSPACE_RESOURCE_SCHEMA.LONG_FORM_PLAN,
     WORKSPACE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
-    WORKSPACE_RESOURCE_SCHEMA.ASSET_MANIFEST,
-    WORKSPACE_RESOURCE_SCHEMA.VIDEO_PROMPT_SET,
-    WORKSPACE_RESOURCE_SCHEMA.MUSIC_DIRECTION,
+    WORKSPACE_RESOURCE_SCHEMA.ASSET_GENERATION_BATCH,
+    WORKSPACE_RESOURCE_SCHEMA.VIDEO_GENERATION_BATCH,
+    WORKSPACE_RESOURCE_SCHEMA.AUDIO_GENERATION_BATCH,
   ],
   image: [
     WORKSPACE_RESOURCE_SCHEMA.GENERIC_IMAGE,
@@ -156,18 +158,18 @@ const DEDICATED_ORIGIN_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new 
 ])
 
 /**
- * Formal creative JSON identities are minted only by the Codex workspace
- * checkpoint after the outputKind registry has validated the entire file.
- * Generic text creation must not let a caller label arbitrary JSON as a
- * screenplay, direction, or production manifest.
+ * Formal creative JSON identities are minted only by the explicit
+ * save_project_document operation after the outputKind registry validates the
+ * entire inline value. Generic schemas cannot label arbitrary JSON as a
+ * screenplay, direction, or generation batch.
  */
 const CREATIVE_OUTPUT_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new Set([
   WORKSPACE_RESOURCE_SCHEMA.SCREENPLAY,
   WORKSPACE_RESOURCE_SCHEMA.LONG_FORM_PLAN,
   WORKSPACE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
-  WORKSPACE_RESOURCE_SCHEMA.ASSET_MANIFEST,
-  WORKSPACE_RESOURCE_SCHEMA.VIDEO_PROMPT_SET,
-  WORKSPACE_RESOURCE_SCHEMA.MUSIC_DIRECTION,
+  WORKSPACE_RESOURCE_SCHEMA.ASSET_GENERATION_BATCH,
+  WORKSPACE_RESOURCE_SCHEMA.VIDEO_GENERATION_BATCH,
+  WORKSPACE_RESOURCE_SCHEMA.AUDIO_GENERATION_BATCH,
 ])
 
 function generationMintableSchemas(

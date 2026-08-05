@@ -7,7 +7,7 @@ description: Direct screenplay-based video generation with explicit state contin
 
 ## 作用
 
-把已经成立的剧情事实组织成可执行导演设计，并为每个独立生成分段写一份结构化最终提示词。本 Skill 是 `outputKind=video_prompt_set` 的唯一专业 Skill：镜头、表演、构图、声音、连续性、装段与接缝判断全部内化进每段唯一 `prompt`，最终只提交 strict `video_prompt_set`，不输出平行导演表、时间线或解释文件。
+把已经成立的剧情事实组织成可执行导演设计，并为每个独立生成分段写一份结构化最终提示词。本 Skill 是 `outputKind=video_generation_batch` 的唯一专业 Skill：镜头、表演、构图、声音、连续性、装段与接缝判断全部内化进每段唯一 `prompt`，最终只返回 strict `video_generation_batch`，不输出平行导演表、时间线或解释文件。
 
 ## 事实与时长权威
 
@@ -118,4 +118,4 @@ description: Direct screenplay-based video generation with explicit state contin
 
 ## 边界
 
-本 Skill 只负责视频导演方法与最终提示词。能力事实只读取 `system/project.json.productionCapabilities.video`；固定 `video_prompt_set` 字段由 Agent profile 注入的机器 Schema 定义，Resource 身份校验、Provider 执行、计费、Task 与合成由系统负责。
+本 Skill 只负责视频导演方法与最终提示词。能力事实只读取 `system/project.json.productionCapabilities.video`；固定 `video_generation_batch` 字段由 Agent profile 注入的机器 Schema 定义，Resource 身份校验、Provider 执行、计费、Task 与合成由系统负责。

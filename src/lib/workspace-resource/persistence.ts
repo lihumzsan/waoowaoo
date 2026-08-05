@@ -5,11 +5,12 @@ import { storeWorkspaceResourceContent, workspaceResourceContentPreview } from '
 import type {
   WorkspaceResourceInputRef,
   WorkspaceResourceJsonValue,
-  WorkspaceResourceKind,
   WorkspaceResourceMediaType,
 } from './contracts'
 import { createWorkspaceResourceId } from './identity'
 import {
+  buildGeneratedWorkspaceResourcePath,
+  buildSavedWorkspaceDocumentPath,
   contentKindFromPath,
   isWorkspaceSubtreePath,
   parentWorkspacePath,
@@ -30,31 +31,6 @@ export type WorkspaceResourceMaterializationContent =
   | { readonly kind: 'text'; readonly text: string }
   | { readonly kind: 'structured'; readonly data: WorkspaceResourceJsonValue }
   | { readonly kind: 'media'; readonly mediaId: string }
-
-export type WorkspaceResourceTreeBaselineEntry = {
-  readonly resourceId: string
-  readonly workspacePath: string
-  readonly resourceKind: WorkspaceResourceKind
-  readonly mediaType: WorkspaceResourceMediaType | null
-  readonly contentVersion: number
-}
-
-export type WorkspaceResourceTreeEntry = {
-  readonly resourceId: string
-  readonly schemaId: string
-  readonly workspacePath: string
-  readonly resourceKind: WorkspaceResourceKind
-  readonly mediaType: WorkspaceResourceMediaType | null
-  /** Present only for a new or edited user-owned text file. */
-  readonly content: Extract<WorkspaceResourceMaterializationContent, { kind: 'text' | 'structured' }> | null
-}
-
-export type WorkspaceResourceTreeChange = {
-  readonly kind: 'created' | 'updated' | 'moved' | 'deleted'
-  readonly resourceId: string
-  readonly beforePath: string | null
-  readonly afterPath: string | null
-}
 
 export type WorkspaceResourceClient = Pick<
   Prisma.TransactionClient,
@@ -139,264 +115,6 @@ async function requirePathAvailable(
   }
 }
 
-function assertExactTreeTargets(entries: readonly WorkspaceResourceTreeEntry[]): void {
-  const byPath = new Map<string, WorkspaceResourceTreeEntry>()
-  for (const entry of entries) {
-    const workspacePath = validateWorkspaceResourcePathForKind(entry.workspacePath, entry.resourceKind)
-    if (workspacePath !== entry.workspacePath || byPath.has(workspacePath)) {
-      throw new WorkspaceResourcePlacementError('WORKSPACE_RESOURCE_TREE_PATH_CONFLICT', workspacePath)
-    }
-    if ((entry.resourceKind === 'folder') !== (entry.mediaType === null)) {
-      throw new Error(`WORKSPACE_RESOURCE_KIND_MEDIA_MISMATCH:${entry.resourceId}`)
-    }
-    const schema = requireWorkspaceResourceSchema(entry.schemaId)
-    if (schema.resourceKind !== entry.resourceKind || schema.mediaType !== entry.mediaType) {
-      throw new Error(`WORKSPACE_RESOURCE_TREE_SCHEMA_MISMATCH:${entry.resourceId}:${entry.schemaId}`)
-    }
-    if (entry.content && (entry.resourceKind !== 'file' || entry.mediaType !== 'text')) {
-      throw new Error(`WORKSPACE_RESOURCE_TREE_CONTENT_INVALID:${entry.resourceId}`)
-    }
-    byPath.set(workspacePath, entry)
-  }
-  for (const entry of entries) {
-    const parentPath = parentWorkspacePath(entry.workspacePath)
-    if (!parentPath) continue
-    const parent = byPath.get(parentPath)
-    if (!parent || parent.resourceKind !== 'folder') {
-      throw new WorkspaceResourcePlacementError(
-        'WORKSPACE_RESOURCE_PARENT_FOLDER_NOT_FOUND',
-        parentPath,
-      )
-    }
-  }
-}
-
-/**
- * Atomically reconciles one Runtime checkpoint against the complete active
- * WorkspaceResource tree. This is the only batch writer used by Codex
- * writeback; callers must never reconstruct versions or paths themselves.
- */
-export async function reconcileWorkspaceResourceTreeInTransaction(
-  tx: Prisma.TransactionClient,
-  input: {
-    readonly userId: string
-    readonly projectId: string
-    readonly baseline: readonly WorkspaceResourceTreeBaselineEntry[]
-    readonly entries: readonly WorkspaceResourceTreeEntry[]
-    readonly sourceTurnId?: string | null
-  },
-): Promise<readonly WorkspaceResourceTreeChange[]> {
-  await lockOwnedProject(tx, input.projectId, input.userId)
-  assertExactTreeTargets(input.entries)
-  const baselineById = new Map(input.baseline.map((entry) => [entry.resourceId, entry]))
-  if (baselineById.size !== input.baseline.length) throw new Error('WORKSPACE_RESOURCE_BASELINE_DUPLICATE')
-  const entryById = new Map(input.entries.map((entry) => [entry.resourceId, entry]))
-  if (entryById.size !== input.entries.length) throw new Error('WORKSPACE_RESOURCE_TREE_ID_DUPLICATE')
-
-  const current = await tx.workspaceResource.findMany({
-    where: { projectId: input.projectId, userId: input.userId, deletedAt: null, activePath: { not: null } },
-  })
-  const currentById = new Map(current.map((resource) => [resource.id, resource]))
-  if (current.length !== input.baseline.length) throw new Error('WORKSPACE_RESOURCE_BASELINE_DIVERGED')
-  for (const baseline of input.baseline) {
-    const row = currentById.get(baseline.resourceId)
-    if (
-      !row
-      || row.workspacePath !== baseline.workspacePath
-      || row.activePath !== baseline.workspacePath
-      || row.resourceKind !== baseline.resourceKind
-      || row.mediaType !== baseline.mediaType
-      // User-owned text content participates in optimistic concurrency. A
-      // media pointer is immutable to the Runtime and contains only the stable
-      // Resource identity, so its Task terminal writer may materialize a new
-      // media version without conflicting with an unchanged Agent workspace.
-      || (baseline.mediaType === 'text' && row.currentVersion !== baseline.contentVersion)
-    ) {
-      throw new Error(`WORKSPACE_RESOURCE_BASELINE_DIVERGED:${baseline.resourceId}`)
-    }
-  }
-  const newIds = input.entries
-    .filter((entry) => !baselineById.has(entry.resourceId))
-    .map((entry) => entry.resourceId)
-  if (newIds.length > 0) {
-    const existing = await tx.workspaceResource.findFirst({ where: { id: { in: newIds } }, select: { id: true } })
-    if (existing) throw new Error(`WORKSPACE_RESOURCE_TREE_ID_CONFLICT:${existing.id}`)
-  }
-
-  const changedOrDeletedIds = input.baseline
-    .filter((baseline) => {
-      const entry = entryById.get(baseline.resourceId)
-      return !entry || entry.workspacePath !== baseline.workspacePath
-    })
-    .map((entry) => entry.resourceId)
-  await requireNoActiveResourceTasks(tx, changedOrDeletedIds)
-  for (const resourceId of changedOrDeletedIds) {
-    const row = currentById.get(resourceId)
-    if (row?.status === 'pending' && !entryById.has(resourceId)) {
-      throw new Error('WORKSPACE_RESOURCE_PENDING_DELETE_CONFLICT')
-    }
-  }
-
-  const changes: WorkspaceResourceTreeChange[] = []
-  const now = new Date()
-  await tx.workspaceResource.updateMany({
-    where: { id: { in: current.map((resource) => resource.id) } },
-    data: { activePath: null },
-  })
-
-  for (const baseline of input.baseline) {
-    if (entryById.has(baseline.resourceId)) continue
-    await tx.workspaceResource.update({
-      where: { id: baseline.resourceId },
-      data: { deletedAt: now },
-    })
-    changes.push({
-      kind: 'deleted',
-      resourceId: baseline.resourceId,
-      beforePath: baseline.workspacePath,
-      afterPath: null,
-    })
-  }
-
-  for (const entry of input.entries) {
-    const baseline = baselineById.get(entry.resourceId)
-    if (!baseline) {
-      if (entry.resourceKind === 'folder') {
-        await tx.workspaceResource.create({
-          data: {
-            id: entry.resourceId,
-            userId: input.userId,
-            projectId: input.projectId,
-            workspacePath: entry.workspacePath,
-            activePath: entry.workspacePath,
-            resourceKind: 'folder',
-            mediaType: null,
-            schemaId: entry.schemaId,
-            name: resourceNameFromPath(entry.workspacePath, 'folder'),
-            status: 'ready',
-            currentVersion: 0,
-            sourceType: 'agent_folder',
-            sourceId: entry.resourceId,
-            materializedAt: now,
-          },
-        })
-      } else {
-        if (entry.mediaType !== 'text' || !entry.content) {
-          throw new Error(`WORKSPACE_RESOURCE_NEW_FILE_CONTENT_REQUIRED:${entry.resourceId}`)
-        }
-        const serialized = entry.content.kind === 'text'
-          ? entry.content.text
-          : `${JSON.stringify(entry.content.data, null, 2)}\n`
-        const media = await storeWorkspaceResourceContent({
-          projectId: input.projectId,
-          resourceId: entry.resourceId,
-          version: 1,
-          workspacePath: entry.workspacePath,
-          content: serialized,
-        })
-        await tx.workspaceResource.create({
-          data: {
-            id: entry.resourceId,
-            userId: input.userId,
-            projectId: input.projectId,
-            workspacePath: entry.workspacePath,
-            activePath: entry.workspacePath,
-            resourceKind: 'file',
-            mediaType: 'text',
-            schemaId: entry.schemaId,
-            name: resourceNameFromPath(entry.workspacePath),
-            status: 'ready',
-            currentVersion: 1,
-            sourceType: 'agent_file',
-            sourceId: entry.resourceId,
-            materializedAt: now,
-            versions: {
-              create: {
-                id: randomUUID(),
-                version: 1,
-                contentKind: entry.content.kind,
-                mediaId: media.id,
-                sha256: media.sha256,
-                sizeBytes: media.sizeBytes === null || media.sizeBytes === undefined ? null : BigInt(media.sizeBytes),
-                contentPreview: workspaceResourceContentPreview(serialized),
-                sourceTurnId: input.sourceTurnId?.trim() || null,
-              },
-            },
-          },
-        })
-      }
-      changes.push({ kind: 'created', resourceId: entry.resourceId, beforePath: null, afterPath: entry.workspacePath })
-      continue
-    }
-
-    const row = currentById.get(entry.resourceId)
-    if (!row) throw new Error(`WORKSPACE_RESOURCE_BASELINE_DIVERGED:${entry.resourceId}`)
-    if (entry.resourceKind !== baseline.resourceKind || entry.mediaType !== baseline.mediaType) {
-      throw new Error(`WORKSPACE_RESOURCE_TREE_KIND_CHANGE_FORBIDDEN:${entry.resourceId}`)
-    }
-    if (entry.schemaId !== row.schemaId) {
-      throw new Error(`WORKSPACE_RESOURCE_TREE_SCHEMA_CHANGE_FORBIDDEN:${entry.resourceId}`)
-    }
-    let nextVersion = row.currentVersion
-    if (entry.content) {
-      const expectedKind = contentKindFromPath(entry.workspacePath)
-      if (expectedKind !== entry.content.kind) throw new Error('WORKSPACE_RESOURCE_CONTENT_PATH_MISMATCH')
-      nextVersion += 1
-      const serialized = entry.content.kind === 'text'
-        ? entry.content.text
-        : `${JSON.stringify(entry.content.data, null, 2)}\n`
-      const media = await storeWorkspaceResourceContent({
-        projectId: input.projectId,
-        resourceId: entry.resourceId,
-        version: nextVersion,
-        workspacePath: entry.workspacePath,
-        content: serialized,
-      })
-      await tx.workspaceResourceVersion.create({
-        data: {
-          id: randomUUID(),
-          resourceId: entry.resourceId,
-          version: nextVersion,
-          contentKind: entry.content.kind,
-          mediaId: media.id,
-          sha256: media.sha256,
-          sizeBytes: media.sizeBytes === null || media.sizeBytes === undefined ? null : BigInt(media.sizeBytes),
-          contentPreview: workspaceResourceContentPreview(serialized),
-          sourceTurnId: input.sourceTurnId?.trim() || null,
-        },
-      })
-    }
-    await tx.workspaceResource.update({
-      where: { id: entry.resourceId },
-      data: {
-        workspacePath: entry.workspacePath,
-        activePath: entry.workspacePath,
-        name: resourceNameFromPath(entry.workspacePath, entry.resourceKind),
-        currentVersion: nextVersion,
-        ...(entry.content ? { status: 'ready', materializedAt: now, errorCode: null, errorMessage: null } : {}),
-        deletedAt: null,
-      },
-    })
-    if (baseline.workspacePath !== entry.workspacePath) {
-      changes.push({
-        kind: 'moved',
-        resourceId: entry.resourceId,
-        beforePath: baseline.workspacePath,
-        afterPath: entry.workspacePath,
-      })
-    }
-    if (entry.content) {
-      changes.push({
-        kind: 'updated',
-        resourceId: entry.resourceId,
-        beforePath: baseline.workspacePath,
-        afterPath: entry.workspacePath,
-      })
-    }
-  }
-  return changes
-}
-
 export type ReserveWorkspaceResourceInput = {
   readonly resourceId?: string
   readonly userId: string
@@ -418,46 +136,102 @@ export type ReserveWorkspaceResourceInput = {
   readonly taskId?: string | null
 }
 
-export async function validateWorkspaceResourcePlacement(
+export async function resolveGeneratedWorkspaceResourcePlacement(
   client: WorkspaceResourceClient,
   input: {
     readonly userId: string
     readonly projectId: string
-    readonly outputPath: string
-    readonly mediaType: WorkspaceResourceMediaType
+    readonly parentFolderId?: string | null
+    readonly name: string
+    readonly resourceId: string
+    readonly mediaType: Exclude<WorkspaceResourceMediaType, 'text'>
     readonly schemaId: string
   },
 ): Promise<string> {
   await requireOwnedProject(client, input.projectId, input.userId)
-  const workspacePath = requireOutputPathForMediaType(input.outputPath, input.mediaType)
   const schema = requireWorkspaceResourceSchema(input.schemaId)
   if (schema.resourceKind !== 'file' || schema.mediaType !== input.mediaType) {
     throw new Error(`WORKSPACE_RESOURCE_SCHEMA_MEDIA_MISMATCH:${input.schemaId}:${input.mediaType}`)
   }
-  const parentPath = parentWorkspacePath(workspacePath)
-  if (parentPath) {
-    const parent = await client.workspaceResource.findFirst({
-      where: {
-        projectId: input.projectId,
-        userId: input.userId,
-        activePath: parentPath,
-        resourceKind: 'folder',
-        deletedAt: null,
-      },
-      select: { id: true },
-    })
-    if (!parent) {
-      throw new WorkspaceResourcePlacementError(
-        'WORKSPACE_RESOURCE_PARENT_FOLDER_NOT_FOUND',
-        parentPath,
-      )
-    }
+  const parent = input.parentFolderId
+    ? await client.workspaceResource.findFirst({
+        where: {
+          id: input.parentFolderId,
+          projectId: input.projectId,
+          userId: input.userId,
+          resourceKind: 'folder',
+          activePath: { not: null },
+          deletedAt: null,
+        },
+        select: { workspacePath: true },
+      })
+    : null
+  if (input.parentFolderId && !parent) {
+    throw new WorkspaceResourcePlacementError(
+      'WORKSPACE_RESOURCE_PARENT_FOLDER_NOT_FOUND',
+      input.parentFolderId,
+    )
   }
+  const workspacePath = buildGeneratedWorkspaceResourcePath({
+    parentPath: parent?.workspacePath ?? null,
+    name: input.name,
+    resourceId: input.resourceId,
+    mediaType: input.mediaType,
+  })
   const occupied = await client.workspaceResource.findFirst({
     where: { projectId: input.projectId, activePath: workspacePath },
     select: { id: true },
   })
-  if (occupied) {
+  if (occupied && occupied.id !== input.resourceId) {
+    throw new WorkspaceResourcePlacementError('WORKSPACE_RESOURCE_PATH_CONFLICT', workspacePath)
+  }
+  return workspacePath
+}
+
+export async function resolveSavedWorkspaceDocumentPlacement(
+  client: WorkspaceResourceClient,
+  input: {
+    readonly userId: string
+    readonly projectId: string
+    readonly parentFolderId?: string | null
+    readonly name: string
+    readonly resourceId: string
+    readonly contentKind: 'text' | 'structured'
+    readonly schemaId: string
+  },
+): Promise<string> {
+  await requireOwnedProject(client, input.projectId, input.userId)
+  const schema = requireWorkspaceResourceSchema(input.schemaId)
+  if (schema.resourceKind !== 'file' || schema.mediaType !== 'text') {
+    throw new Error(`WORKSPACE_RESOURCE_SCHEMA_MEDIA_MISMATCH:${input.schemaId}:text`)
+  }
+  const parent = input.parentFolderId
+    ? await client.workspaceResource.findFirst({
+        where: {
+          id: input.parentFolderId,
+          projectId: input.projectId,
+          userId: input.userId,
+          resourceKind: 'folder',
+          activePath: { not: null },
+          deletedAt: null,
+        },
+        select: { workspacePath: true },
+      })
+    : null
+  if (input.parentFolderId && !parent) {
+    throw new WorkspaceResourcePlacementError('WORKSPACE_RESOURCE_PARENT_FOLDER_NOT_FOUND', input.parentFolderId)
+  }
+  const workspacePath = buildSavedWorkspaceDocumentPath({
+    parentPath: parent?.workspacePath ?? null,
+    name: input.name,
+    resourceId: input.resourceId,
+    contentKind: input.contentKind,
+  })
+  const occupied = await client.workspaceResource.findFirst({
+    where: { projectId: input.projectId, activePath: workspacePath },
+    select: { id: true },
+  })
+  if (occupied && occupied.id !== input.resourceId) {
     throw new WorkspaceResourcePlacementError('WORKSPACE_RESOURCE_PATH_CONFLICT', workspacePath)
   }
   return workspacePath
@@ -563,38 +337,44 @@ export async function resolveWorkspaceResourceInputs(
     readonly userId: string
     readonly projectId: string
     readonly references: readonly {
-      readonly workspacePath: string
-      readonly resourceId?: string
-      readonly contentVersion?: number
+      readonly workspacePath?: string
+      readonly resourceId: string
+      readonly contentVersion: number
       readonly role: string
       readonly position: number
     }[]
   },
 ): Promise<readonly WorkspaceResourceInputRef[]> {
-  const paths = input.references.map((reference) => validateWorkspaceResourceFilePath(reference.workspacePath))
-  const resources = paths.length === 0 ? [] : await client.workspaceResource.findMany({
+  const resourceIds = input.references.map((reference) => reference.resourceId)
+  const resources = resourceIds.length === 0 ? [] : await client.workspaceResource.findMany({
     where: {
+      id: { in: resourceIds },
       projectId: input.projectId,
       userId: input.userId,
-      activePath: { in: paths },
+      activePath: { not: null },
       resourceKind: 'file',
       deletedAt: null,
     },
     select: { id: true, workspacePath: true, currentVersion: true, status: true },
   })
-  const byPath = new Map(resources.map((resource) => [resource.workspacePath, resource]))
+  const byId = new Map(resources.map((resource) => [resource.id, resource]))
   const seenPositions = new Set<string>()
   const resolved: WorkspaceResourceInputRef[] = []
-  for (const [index, reference] of input.references.entries()) {
-    const workspacePath = paths[index]
-    if (!workspacePath) throw new Error('WORKSPACE_RESOURCE_INPUT_PATH_INVALID')
-    const resource = byPath.get(workspacePath)
-    if (!resource || (reference.resourceId && reference.resourceId !== resource.id)) {
-      throw new Error(`WORKSPACE_RESOURCE_INPUT_NOT_FOUND:${workspacePath}`)
+  for (const reference of input.references) {
+    const resource = byId.get(reference.resourceId)
+    if (!resource) {
+      throw new Error(`WORKSPACE_RESOURCE_INPUT_NOT_FOUND:${reference.resourceId}`)
     }
-    const contentVersion = reference.contentVersion ?? resource.currentVersion
+    const workspacePath = validateWorkspaceResourceFilePath(resource.workspacePath)
+    if (
+      reference.workspacePath !== undefined
+      && validateWorkspaceResourceFilePath(reference.workspacePath) !== workspacePath
+    ) {
+      throw new Error(`WORKSPACE_RESOURCE_INPUT_PATH_STALE:${reference.resourceId}`)
+    }
+    const contentVersion = reference.contentVersion
     if (resource.status !== 'ready' || !Number.isSafeInteger(contentVersion) || contentVersion < 1) {
-      throw new Error(`WORKSPACE_RESOURCE_INPUT_NOT_READY:${workspacePath}`)
+      throw new Error(`WORKSPACE_RESOURCE_INPUT_NOT_READY:${reference.resourceId}`)
     }
     const version = await client.workspaceResourceVersion.findUnique({
       where: { resourceId_version: { resourceId: resource.id, version: contentVersion } },
@@ -688,7 +468,7 @@ export async function materializeWorkspaceResourceInTransaction(
   } else {
     if (input.mediaType !== 'text') throw new Error('WORKSPACE_RESOURCE_TEXT_MEDIA_TYPE_REQUIRED')
     const expectedKind = contentKindFromPath(resource.workspacePath)
-    if (expectedKind === 'pointer' || expectedKind !== input.content.kind) {
+    if (expectedKind !== input.content.kind) {
       throw new Error(`WORKSPACE_RESOURCE_CONTENT_PATH_MISMATCH:${resource.workspacePath}`)
     }
     const serialized = input.content.kind === 'text'

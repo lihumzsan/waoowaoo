@@ -11,7 +11,7 @@ Codex app-server 是唯一 Agent Runtime；Wao 保留产品 View、WorkspaceReso
 容器是租户和资源边界，Codex 内层 sandbox 是纵深防御——两者职责不同，不能互相替代。产品 edition
 不是运行环境 profile：把两者混为一谈会让本地开发无法启动，或让生产静默降级。
 
-不使用 Git：创作历史由资源版本拥有，并发安全来自 ownership、单 Turn 与 baseline CAS。
+不使用 Git：创作历史由资源版本拥有，并发安全来自 ownership、单 Turn、Catalog 锁与不可变版本身份。
 
 ## 不变量
 
@@ -23,11 +23,12 @@ Codex app-server 是唯一 Agent Runtime；Wao 保留产品 View、WorkspaceReso
 - **CRR-03 — 双层隔离，且不静默降级。** 生产多租户 driver 必须是容器并限制 CPU、内存、PID、
   磁盘与网络；Codex 只能写临时 Project workspace。开发可显式选择本地进程，但 production 不得
   自动降级，产品 edition 也不得自动决定 driver。
-- **CRR-04 — WorkspaceResource 才是持久事实。** 启动时从 Catalog/对象存储 materialize，Turn
-  checkpoint 时以完整 baseline CAS 原子 capture。Runtime 文件夹、inode 和临时 home 都不是产品
-  权威。
-- **CRR-05 — 系统字段不可写。** Runtime 可自由组织用户工作区，但不能修改 Resource status、Task、
-  Artifact、Billing、media identity 或系统投影。媒体文件是受保护引用。
+- **CRR-04 — WorkspaceResource 才是持久事实。** Runtime 启动时只物化只读系统快照与空 scratch；
+  不复制 Catalog 或对象内容，也不在 Turn 结束时 capture 文件。Runtime 文件夹、inode 和临时 home
+  都不是产品权威，销毁不会丢失任何 Resource。
+- **CRR-05 — scratch 没有持久语义。** Runtime 可自由创建临时研究和工具文件，但这些文件不会被
+  观察、上传或映射为 Resource。持久内容必须显式调用业务 Operation；媒体引用使用 canonical
+  Resource id/version，不通过本地指针文件。
 - **CRR-06 — Runtime 状态与产品 View 分权。** 不透明会话状态只用于 resume；数据库 View 是聊天、
   审批、计费归因和刷新显示的产品事实。两者必须先持久化再绑定 runtime thread id。
 - **CRR-06A — resume 必须匹配 Runtime revision。** 钉死版本、process host 或工具拓扑发生不兼容
@@ -39,8 +40,8 @@ Codex app-server 是唯一 Agent Runtime；Wao 保留产品 View、WorkspaceReso
 - **CRR-07 — MCP 是唯一系统能力桥。** 真实媒体、导入、批量生产、预算与破坏性操作只经带当前 Turn
   凭据的 MCP；Capability Service 仍是业务实现，MCP 不复制逻辑。Runtime bearer 只证明能力调用权，
   绝不证明用户同意——计费与破坏性 writer 必须验证浏览器侧已持久化的同 Turn 决定。每次调用由同一
-  Session Manager 在执行前 flush、执行后 refresh；授权与 ownership 复验全部发生在副作用之前，
-  提交成功后的 refresh 失败可以阻断/恢复 Runtime，但绝不能把已成功的副作用伪报为工具失败。
+  Session Manager 直接授权调用，不做文件 flush/refresh；授权与 ownership 复验全部发生在副作用
+  之前。业务结果只从持久 View 返回，临时工作区状态不能把已成功的副作用伪报为工具失败。
   业务能力命名空间必须标记为 direct-only，不进入嵌套执行器。
 - **CRR-07A — 用户取消是正常终态。** 拒绝计费或破坏性审批时返回结构化 declined 且不标记协议错误；
   UI 显示"已停止"，模型不得解释为服务失败或建议重试。
@@ -49,9 +50,10 @@ Codex app-server 是唯一 Agent Runtime；Wao 保留产品 View、WorkspaceReso
   再证明 Project 恰好一个活跃、未取消、未 clear 且归属本次执行的 Turn。执行中不得要求 durable
   thread id——它只在状态 checkpoint 后作为恢复身份绑定，新线程的首个活跃 Turn 合法地没有该字段。
   placement 停止或轮换后旧 token 即使未过期也不能重放。
-- **CRR-08 — 空闲可停，但持久化是 sticky barrier。** 无活跃 Turn 时达到 idle timeout 才 capture、
-  保存状态并停止。原生 completion 必须同步登记 capture/checkpoint；下一 Turn、进程退出、ownership
-  丢失或 Manager 重启必须先排空持久化并确认产品 Turn 已结算，再允许新 writer 或 placement。
+- **CRR-08 — 空闲可停，但 Runtime 状态 checkpoint 是 sticky barrier。** 无活跃 Turn 时达到 idle
+  timeout 才保存不透明 Codex state/thread binding 并停止。原生 completion 必须同步登记状态
+  checkpoint；下一 Turn、进程退出、ownership 丢失或 Manager 重启必须先排空该 checkpoint 并确认
+  产品 Turn 已结算。scratch 直接销毁，不参与持久正确性。
 - **CRR-09 — 版本钉死，实验能力显式协商。** binary/协议版本与 smoke 一起升级；未知关键
   request/event 不得静默忽略。产品所需的实验方法必须在 initialize 显式声明并由真实 schema smoke
   校验存在；关闭该能力等同缺失必需能力。
@@ -64,16 +66,17 @@ Codex app-server 是唯一 Agent Runtime；Wao 保留产品 View、WorkspaceReso
 - **CRR-12 — 当前控制面单进程。** placement 与 MCP session 目前都是进程内对象，因此 Web 控制面
   只支持一个 Node 进程；媒体 Worker 可独立横向扩展。启用多 replica 前必须先增加按 owner 的请求
   路由与 session affinity，禁止把 ownership claim 误称为跨 replica 转发能力。
-- **CRR-13 — Runtime 路径不能成为产品链接。** materialization root、临时 home、绝对路径和
-  `file://` 只属于可销毁执行环境。对用户只输出规范化的项目相对路径，并交给 Canvas 的唯一定位
-  入口；拒绝绝对路径、scheme、反斜线与编码后的 traversal。
+- **CRR-13 — Runtime 路径不能成为产品链接。** materialization root、临时 home、scratch 相对路径、
+  绝对路径和 `file://` 只属于可销毁执行环境。用户可导航对象必须使用 canonical Resource identity
+  并交给 Canvas 的唯一定位入口；任何 Runtime 路径都不得投影为产品链接。
 
 ## 权威入口
 
 - Runtime 协议与适配：`src/lib/codex-runtime/runtime-adapter.ts`、`app-server-client.ts`
 - placement / ownership / idle / 恢复：`src/lib/codex-runtime/runtime-session-manager.ts`
 - 隔离与容器：`runtime-config.ts`、`Dockerfile.codex-runtime`
-- materialize / capture：`src/lib/assistant-runtime/runtime-persistence.ts`、`src/lib/codex-workspace/**`
+- 系统快照、scratch 与不透明状态 checkpoint：`src/lib/assistant-runtime/runtime-persistence.ts`、
+  `src/lib/codex-workspace/**`
 - 能力桥：`src/lib/wao-mcp/**`；模型网关：`src/lib/codex-model-gateway/**`
 
 ## 踩过的坑
@@ -102,3 +105,6 @@ Codex app-server 是唯一 Agent Runtime；Wao 保留产品 View、WorkspaceReso
   业务命名空间 direct-only，内部请求保持父请求关联，两层 timeout 只承担等待上限（CRR-07）。
 - 中文项目的最终答复遵循 locale，但流式推理摘要仍短暂显示英文 → 只约束"response"不足以覆盖全部
   可见输出 → 每 Turn locale context 显式覆盖回复、进度、计划说明与推理摘要。
+- Runtime 曾镜像完整资源树并在 MCP 前后 capture/refresh，媒体还用 `.resource` 指针表示云文件；
+  临时文件因此成了第二个状态解释者，文件漂移会阻断已就绪的云资源 → 删除资源镜像、指针与写回，
+  Runtime 只保留可销毁 scratch，所有持久事实直接经 Operation 读写（CRR-04/05/07/08）。

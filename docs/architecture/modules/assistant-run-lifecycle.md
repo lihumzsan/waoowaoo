@@ -35,7 +35,7 @@ View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 pl
   `taskId` 关联裁决；重试后旧成员保留在审计与聊天中，但不再进入当前运行投影、focus 或失败汇总。
   只有被同一 Resource 的新 Task 明确替代的成员才可移除，缺失目标不能静默隐藏。
 - **ARL-07 — 崩溃可恢复且终态 writer 唯一。** 有 live projector 的退出只由 projector 等待全部
-  消息快照后结算；Manager 只停止 placement 与 capture，不抢写第二终态。释放 ownership 或创建下一
+  消息快照后结算；Manager 只停止 placement 与保存不透明 Runtime state，不抢写第二终态。释放 ownership 或创建下一
   writer 前必须先观察终态已提交；结算失败保持失败并阻断 placement，不能被 catch 后当成功。
   只有已持久化 Runtime 状态与绑定才允许 resume；未形成 durable binding 时，新 Thread 在首个新
   Turn 前从产品 View 恰好一次注入历史。
@@ -62,9 +62,9 @@ View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 pl
 - **ARL-18 — 工具输出与长期 Task 展示分权。** projector 只把结构化结果作为业务输出；transport
   外壳与工具完成不能把异步提交解释成媒体成功。聊天保留本 Turn 的调用与错误，但不永久渲染项目
   Task 批次状态；资源与 Task 状态只由正式 View 展示。
-- **ARL-19 — 聊天附件只物化一次，不旁路专业生产。** 注册后唯一变成 ready Resource 指针。主 Agent
-  只能把路径与用途交给固定专业子 Agent，由后者在 Manifest 中声明精确引用；主 Agent 不得把附件
-  直接拼进媒体创建调用。
+- **ARL-19 — 聊天附件只物化一次，不旁路专业生产。** 注册后唯一变成 ready Resource。主 Agent
+  把 canonical id/version 与用途交给固定专业子 Agent，由后者在 generation items 中声明精确引用；
+  父 Agent 验证后调用对应媒体 Operation，不能按消息内容、路径或最近附件猜输入。
 
 ## 权威入口
 

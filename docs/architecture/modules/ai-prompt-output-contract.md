@@ -11,8 +11,8 @@ Codex app-server 是唯一通用 Agent Runtime。主 Agent 只接收产品边界
 
 **指令层级**——主 Agent：内置基础指令 → Runtime 全局指令面（自主委派授权）→ Wao 开发者指令 →
 MCP schema → Turn locale/context → 用户消息。专业子 Agent：内置基础指令 → 固定 custom agent 指令
-（worker 边界 + 唯一 outputKind schema + 核心 Skill + 一个专业 Skill）→ 主 Agent 分派的输入路径与
-一个独占输出路径。专业子 Agent 不拥有业务 MCP。
+（worker 边界 + 唯一 outputKind schema + 核心 Skill + 一个专业 Skill）→ 主 Agent 分派的 Resource
+引用与任务说明。专业子 Agent 不拥有业务 MCP。
 
 ## 不变量
 
@@ -23,16 +23,16 @@ MCP schema → Turn locale/context → 用户消息。专业子 Agent：内置�
 - **APO-03 — 固定子上下文。** 子 Agent 的角色和 Skill 集由 registry 决定并在载入时注入；
   description、用户措辞和模型输出不能改变 Skill 集。
 - **APO-04 — 结构来自协议。** 所有交互结构只消费原生 JSON-RPC item/event，不从正文解析。
-- **APO-05 — 专业输出是固定 JSON。** 固定子 Agent 是各类专业 JSON 的唯一 writer；registry 给每个
-  角色恰好一个 outputKind 和 strict schema。主 Agent 不得复制、修复或改写，只能引用路径。
-  checkpoint 与媒体提交复用同一 schema，不从 Skill 散文猜字段。
-- **APO-06 — 业务输入冻结。** 提交时按路径读取 ready 文本 Resource，冻结资源 id、内容版本、路径
-  与内容摘要，再把完整 Prompt、参数与引用冻结到 Task payload。
+- **APO-05 — 专业输出是固定 JSON final response。** 固定子 Agent 是各类专业 JSON 的唯一 writer；
+  registry 给每个角色恰好一个 outputKind 和 strict schema。主 Agent 不得复制、修复或改写，只验证
+  并提交；不从 Skill 散文或临时文件猜字段。
+- **APO-06 — 业务输入冻结。** 提交只接受 ready Resource 的 id + 内容版本，服务端验证 ownership 并
+  冻结当时路径与内容摘要，再把完整 Prompt、参数与引用冻结到 Task payload。
 - **APO-07 — 参数分权。** 子 Agent 拥有完整创作 Prompt 与叙事相关参数；系统拥有模型选择、Provider
   路由、能力校验、计费、审批、Task 和终态。子 Agent 只读取只读能力投影，能力为空时不得猜测或交付
-  可执行 Manifest。
-- **APO-08 — 缺能力显式失败。** 缺 custom agent、无效 Manifest、未知 event、缺 MCP capability 或
-  版本不兼容必须原地失败；禁止 fallback 到主 Agent 创作、直接媒体调用或服务端 Prompt 编译。
+  可执行 generation items。
+- **APO-08 — 缺能力显式失败。** 缺 custom agent、无效 generation batch、未知 event、缺 MCP
+  capability 或版本不兼容必须原地失败；禁止 fallback 到主 Agent 创作或服务端 Prompt 编译。
 - **APO-09 — 用户可见内容本地化。** UI 文案来自 i18n；Agent 输出遵循 Turn locale 或用户明确语言。
 - **APO-10 — 不用 Prompt 伪造媒体能力边界。** 指令与 Skill 不注入真人、公众人物、相似度或写实
   风格禁令。能力只读取声明式投影，执行时的 Provider 拒绝只通过统一 typed failure 返回，不得再
@@ -45,7 +45,7 @@ MCP schema → Turn locale/context → 用户消息。专业子 Agent：内置�
 - Runtime 协议：`src/lib/codex-runtime/**`
 - 主 Agent 指令与会话：`src/lib/assistant-runtime/**`（事件投影：`event-projector.ts`）
 - 固定角色、Skill 注入与全部 outputKind 契约：`src/lib/creative-skills/**`
-- Manifest 契约：`src/lib/workspace-resource/production-manifest.ts`
+- 媒体批量输入契约：`src/lib/workspace-resource/generation-request.ts`
 - 只读能力投影：`src/lib/codex-workspace/projector.ts`
 
 ## 踩过的坑

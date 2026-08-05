@@ -449,32 +449,6 @@ export class AssistantRuntimeService {
     return { threadId: command.threadId, turnId: command.turnId, status: 'interrupt_requested' }
   }
 
-  async flushWorkspaceForMcp(input: {
-    readonly userId: string
-    readonly projectId: string
-    readonly threadId: string
-    readonly runtimeTurnId: string
-  }): Promise<void> {
-    await this.manager.flushWorkspaceForMcp(
-      runtimeScope(input),
-      input.threadId,
-      input.runtimeTurnId,
-    )
-  }
-
-  async refreshWorkspaceAfterMcp(input: {
-    readonly userId: string
-    readonly projectId: string
-    readonly threadId: string
-    readonly runtimeTurnId: string
-  }): Promise<void> {
-    await this.manager.refreshWorkspaceAfterMcp(
-      runtimeScope(input),
-      input.threadId,
-      input.runtimeTurnId,
-    )
-  }
-
   async respondToServerRequest(command: AssistantRuntimeServerRequestCommand): Promise<void> {
     return await this.runProjectTransition(runtimeScope(command), async () => (
       await this.respondToServerRequestExclusive(command)

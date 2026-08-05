@@ -63,7 +63,7 @@ Task 与交互式 Agent 的唯一交点是一个稳定 batchId 的完成通知�
 ## 踩过的坑
 
 - 对外接受的批量上限与执行 receipt / 批次协议上限不一致，中间区段可报价获批却在提交后确定性
-  失败 → 两处各自声明上限 → 单一常量被 Manifest、Grant 提交与批次共同消费。
+  失败 → 两处各自声明上限 → 单一常量被 generation batch、Grant 提交与批次共同消费。
 - approved-plan 路径的未知确定性错误直接抛回 Temporal，而 direct 路径才走统一 retry policy；
   一个旧 Plan 因此每 30 秒无限重放事务 → 两条路径两套错误裁决 → 共用唯一 retry policy，
   领域契约与 schema 错误一律 non-retryable。

@@ -3,7 +3,6 @@ import path from 'node:path'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { getObjectBuffer, uploadObject } from '@/lib/storage'
 import type { MediaRef } from '@/lib/media/types'
-import { contentKindFromPath } from './path'
 
 const STORAGE_PREFIX = 'workspace-resources/v1'
 const MAX_TEXT_BYTES = 4 * 1024 * 1024
@@ -30,9 +29,6 @@ export function buildWorkspaceResourceContentKey(input: {
     throw new Error('WORKSPACE_RESOURCE_CONTENT_VERSION_INVALID')
   }
   const extension = path.posix.extname(input.workspacePath).toLowerCase()
-  if (contentKindFromPath(input.workspacePath) === 'pointer') {
-    throw new Error('WORKSPACE_RESOURCE_POINTER_CONTENT_NOT_STORED')
-  }
   if (!/^[a-f0-9]{64}$/u.test(input.sha256)) {
     throw new Error('WORKSPACE_RESOURCE_CONTENT_SHA256_INVALID')
   }

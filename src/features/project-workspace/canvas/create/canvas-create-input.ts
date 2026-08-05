@@ -3,7 +3,7 @@ import type { WorkspaceCanvasCreateRequest } from '../contracts/workspace-canvas
 /** Builds only the operation's public input; ratio/model defaults stay server-owned. */
 export function buildWorkspaceCanvasCreateOperationInput(
   request: WorkspaceCanvasCreateRequest,
-  outputPath: string,
+  parentFolderId: string | null,
 ): Readonly<Record<string, unknown>> {
   if (request.capability.mediaKind === 'voice') {
     return {
@@ -12,26 +12,25 @@ export function buildWorkspaceCanvasCreateOperationInput(
         description: request.prompt,
         previewText: request.voicePreviewText,
         language: 'Auto',
-        outputPath,
+        parentFolderId,
+        name: request.name || 'voice',
         count: request.count,
       },
     }
   }
 
   const common = {
-    kind: request.capability.requestKind,
-    outputPath,
+    itemId: 'canvas-primary',
+    name: request.name || request.capability.mediaKind,
+    parentFolderId,
     schemaId: request.capability.defaultSchemaId,
     prompt: request.prompt,
     count: request.count,
   }
-  if (request.capability.mediaKind === 'video' || request.capability.mediaKind === 'music') {
-    return {
-      request: {
-        ...common,
-        durationSeconds: request.durationSeconds,
-      },
-    }
-  }
-  return { request: common }
+  const item = request.capability.mediaKind === 'video'
+    ? { ...common, mediaType: 'video', durationSeconds: request.durationSeconds }
+    : request.capability.mediaKind === 'music'
+      ? { ...common, mediaType: 'audio', durationSeconds: request.durationSeconds }
+      : { ...common, mediaType: 'image', assetKind: null }
+  return { request: { kind: request.capability.requestKind, items: [item] } }
 }

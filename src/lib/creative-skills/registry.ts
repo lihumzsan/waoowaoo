@@ -31,7 +31,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
     id: 'long-form-production',
     version: '2.0.0',
     title: '长篇连续制作',
-    summary: '把长篇作品组织成可并行、可续跑的普通目录与连续性文档，并用 Production Manifest 批量提交媒体。',
+    summary: '把长篇作品组织成可并行、可续跑的生产单元与连续性事实，并通过直接媒体批次提交制作。',
     tags: ['long-form', 'series', 'continuity', 'production', 'batch', 'planning'],
   }),
   'creative-direction': defineSkill({
@@ -45,7 +45,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
     id: 'asset-development',
     version: '5.0.0',
     title: '资产范围与视觉设计',
-    summary: '从精确剧本筛选可复用资产，完成稳定设计、最终图片提示词与显式 4:3 Production Manifest；不执行媒体生产。',
+    summary: '从精确剧本筛选可复用资产，完成稳定设计、最终图片提示词与显式 4:3 生成批次；不执行媒体生产。',
     tags: ['asset', 'image', 'character', 'location', 'prop', 'reference', 'candidate'],
   }),
   'video-direction': defineSkill({

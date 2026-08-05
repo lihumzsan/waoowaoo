@@ -16,7 +16,7 @@ agent 和固定 Skill 集，Runtime 启动时把 Skill 正文只注入对应子 
 - **CS-01 — Skill identity 单一。** registry 是 Skill id、版本和磁盘正文的唯一声明；加载器只读取
   registry 中声明的文件。
 - **CS-02 — Worker 路由确定。** registry 穷尽 `workerKind → agentType → 固定 Skill 集 → 固定
-  outputKind → strict JSON schema → Workspace schemaId`。Skill description 只供解释，不参与
+  outputKind → strict JSON schema → 媒体 Operation 或可选保存 schemaId`。Skill description 只供解释，不参与
   正确性、隐式路由或 fallback。
 - **CS-03 — 主 Agent 零 Skill。** Wao Skill 不进入项目文件树、Runtime skills 目录、主 Agent 指令
   或工具 schema；Runtime 自带的原生 Skills 也全部禁用。不做每 Turn 的 Skill inventory 准入；
@@ -24,15 +24,14 @@ agent 和固定 Skill 集，Runtime 启动时把 Skill 正文只注入对应子 
 - **CS-04 — 子 Agent 固定注入。** 每个 custom agent 只收到"核心 Skill + 一个专业 Skill"的完整
   正文，不得发现或加载其他 Skill。子 Agent 的业务 MCP 必须使用合法 transport 配置并显式禁用——
   只写 `enabled=false` 而缺 transport 会让整个 agent role 被判为无效。
-- **CS-05 — 专业内容单 writer。** 被选定的子 Agent 独占其交付文件。主 Agent 只检查文件存在、路径
-  和提交前置条件，不复制、续写或改写专业内容。并行子 Agent 必须写互斥路径。
-- **CS-06 — 固定 JSON 文件交付。** 每个角色只写一个被分派的 `.json`，根 outputKind 和完整内容
-  必须通过同一 strict schema；checkpoint 原子校验并登记对应 schemaId。没有第二份 Markdown 正式
-  交付、Skill output 或 Worker Task。
-- **CS-07 — Manifest 是执行连接件。** 生产 Manifest 本身就是可执行 JSON，不存在"设计文档 + 另一份
-  执行 JSON"。它把完整最终 Prompt、创作身份、显式参数和 Placement 写在同一 schema；主 Agent 只有
-  一条新媒体生产入口。视频/音乐角色必须读取只读能力投影，不从示例或模型名猜能力。服务端只校验、
-  冻结和执行，不补写创作内容。
+- **CS-05 — 专业内容单 writer。** 被选定的子 Agent 独占本次专业结论并在最终响应返回；主 Agent
+  只验证、引用或直接提交，不复制、续写或改写。scratch 文件没有交付语义。
+- **CS-06 — 固定 JSON 最终响应。** 每个角色只返回一个根 outputKind 的 strict JSON；父 Agent 使用
+  同一 registry schema 验证。没有强制输出文件、checkpoint、第二份 Markdown、Skill output 或
+  Worker Task；明确需要长期文档时才显式保存为 Resource。
+- **CS-07 — 生成 items 是执行连接件。** 图片、视频和音乐角色返回可直接传给对应媒体 Operation 的
+  完整 items，包含最终 Prompt、创作身份、显式参数和 Resource 版本引用；主 Agent 不再先创建中间
+  Manifest。视频/音乐角色必须读取只读能力投影，服务端只校验、冻结和执行，不补写创作内容。
 - **CS-08 — 原生生命周期。** 创建、等待、中断和完成只消费原生 Subagent 事件并投影到现有 UI；
   不恢复旧 Worker 卡片或第二状态机。
 - **CS-09 — 语言由用户决定。** Skill 可以使用适合模型的知识语言，但用户可见文本和工作区交付遵循
@@ -51,16 +50,16 @@ agent 和固定 Skill 集，Runtime 启动时把 Skill 正文只注入对应子 
 | story | `wao_story` | core + story-development | `screenplay` |
 | long_form | `wao_long_form` | core + long-form-production | `long_form_plan` |
 | direction | `wao_direction` | core + creative-direction | `creative_direction` |
-| assets | `wao_assets` | core + asset-development | `asset_manifest` |
-| video | `wao_video` | core + video-direction | `video_prompt_set` |
-| music | `wao_music` | core + music-direction | `music_direction` |
+| assets | `wao_assets` | core + asset-development | `asset_generation_batch` |
+| video | `wao_video` | core + video-direction | `video_generation_batch` |
+| music | `wao_music` | core + music-direction | `audio_generation_batch` |
 
 ## 权威入口
 
 - Skill identity 与正文、Worker 路由、输出契约：`src/lib/creative-skills/**`
 - Runtime 配置物化与主 Agent 边界：`src/lib/assistant-runtime/runtime-persistence.ts`、
   `runtime-access.ts`
-- 专业交付落地：WorkspaceResource checkpoint；媒体提交：Production Manifest 入口
+- 专业交接：原生 Subagent final response；媒体提交：`create_image` / `create_audio` / `create_video`
 
 ## 踩过的坑
 
@@ -76,3 +75,6 @@ agent 和固定 Skill 集，Runtime 启动时把 Skill 正文只注入对应子 
 - 同一首版为 custom agent 写了 `enabled=false` 却没提供必需的 transport，Runtime 判为 invalid
   transport 并忽略整份 agent role，而只匹配配置字符串的 smoke 仍然通过 → 字符串 smoke 不是协议
   证据 → 使用可解析但禁用的空 transport，并由真实启动检查解析结果（CS-04）。
+- 固定 JSON 曾先写进 Runtime 文件，再经 checkpoint 变成 Resource，媒体还要二次读取 Manifest；
+  文件路径与 strict schema 因而成为重复协议，参数修复只覆盖其中一层 → 专业 JSON 改为 final response
+  内存交接，媒体 items 直接提交，只有明确保存文档才创建 Resource（CS-05/06/07）。

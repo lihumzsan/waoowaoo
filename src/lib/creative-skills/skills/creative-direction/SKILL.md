@@ -22,7 +22,7 @@ description: Establish one coherent visual, narrative, directing, editing, sound
 - `directing`：默认镜头行为、何时允许或禁止移动、构图、焦段/景别倾向、表演观察方式与镜头节奏。
 - `editing`：剪辑速度、切点语法、转场政策、时间跳跃方式，以及禁止的剪辑习惯。
 - `sound`：环境声、人声处理、听觉视点、与音乐的关系、动态范围和静默政策。
-- `assetPolicy`：角色、场景、道具、图形、字体、档案素材或反复母题的选择与处理方针。它不写逐项图片画幅、资产板版式或 Provider 参数；这些由 `asset-development` 专业子 Agent写入最终 Prompt 与 Production Manifest。
+- `assetPolicy`：角色、场景、道具、图形、字体、档案素材或反复母题的选择与处理方针。它不写逐项图片画幅、资产板版式或 Provider 参数；这些由 `asset-development` 专业子 Agent写入最终生成批次。
 
 铁律或禁止项必须写进拥有它的领域，禁止另建全局 `invariants` 或 `avoid` 形成第二套权威。
 
@@ -65,7 +65,7 @@ description: Establish one coherent visual, narrative, directing, editing, sound
 - 这四项是全部资产图与镜头共享的稳定风格锚点。只有“温暖”“梦幻”“电影感”等形容词而缺少任一项的 `visualStyle` 视为未完成。四项要素同样服从风格契合原则：它们把已选定的契合风格钉死为可复现的执行参数，不是引入额外风格花样的许可。
 - 参考图可以支持身份和结构，但不能静默改写项目方向。
 - 区分物理故事事实与风格化表达：场景真实存在的窗户、灯具属于资产事实；资产参考图怎样表现灯光属于 `visual.assetImageStyle`。
-- 固定资产板版式和逐项生成参数不属于 Direction，由资产专业子 Agent在最终生产文件中负责。
+- 固定资产板版式和逐项生成参数不属于 Direction，由资产专业子 Agent在最终结构化结果中负责。
 
 ## 叙事与导演政策
 

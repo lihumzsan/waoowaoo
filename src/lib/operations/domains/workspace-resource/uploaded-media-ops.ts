@@ -3,6 +3,7 @@ import { ApiError } from '@/lib/api-errors'
 import {
   materializeWorkspaceResourceInTransaction,
   reserveWorkspaceResourceInTransaction,
+  resolveGeneratedWorkspaceResourcePlacement,
 } from '@/lib/workspace-resource/persistence'
 import {
   buildUserUploadProvenance,
@@ -18,10 +19,8 @@ import { resolveProjectAssistantAttachmentRegistration } from '@/lib/project-age
 
 const registerUploadedMediaInputSchema = z.object({
   attachmentToken: z.string().min(1).max(PROJECT_ASSISTANT_ATTACHMENT_TOKEN_MAX_CHARS),
-  outputPath: z.string().trim().min(1).max(512)
-    .regex(/\.resource$/u, 'Uploaded media outputPath must end in .resource.')
-    .describe('Complete project-relative pointer path ending in .resource.'),
-  name: z.string().max(200).optional(),
+  parentFolderId: z.string().trim().min(1).max(32).nullable().optional(),
+  name: z.string().trim().min(1).max(200).optional(),
 }).strict()
 
 const registerUploadedMediaOutputSchema = z.object({
@@ -47,9 +46,9 @@ export function createWorkspaceResourceUploadedMediaOperations(): ProjectAgentOp
   return {
     register_uploaded_media: defineOperation({
       id: 'register_uploaded_media',
-      summary: 'Materialize one verified chat-uploaded image/audio as a ready Resource at an explicit workspace path.',
+      summary: 'Materialize one verified chat-uploaded image/audio as a ready Resource with server-owned placement.',
       intent: 'act',
-      toolContractRevision: 'register_uploaded_media/v2',
+      toolContractRevision: 'register_uploaded_media/v3',
       channels: { tool: true, api: true, mcp: true },
       effects: {
         writes: true,
@@ -91,10 +90,10 @@ export function createWorkspaceResourceUploadedMediaOperations(): ProjectAgentOp
         const schemaId = userUploadSchemaIdForMediaType(payload.mediaType)
         const existing = await tx.workspaceResource.findUnique({ where: { id: resourceId } })
         if (existing?.status === 'ready') {
-          if (existing.workspacePath !== input.outputPath || existing.deletedAt) {
+          if (existing.deletedAt) {
             throw new ApiError('CONFLICT', {
               code: 'UPLOADED_MEDIA_EXISTING_PLACEMENT_CONFLICT',
-              field: 'outputPath',
+              field: 'attachmentToken',
               existingWorkspacePath: existing.workspacePath,
             })
           }
@@ -106,11 +105,20 @@ export function createWorkspaceResourceUploadedMediaOperations(): ProjectAgentOp
             reused: true,
           })
         }
+        const outputPath = await resolveGeneratedWorkspaceResourcePlacement(tx, {
+          userId: ctx.userId,
+          projectId: ctx.projectId,
+          parentFolderId: input.parentFolderId,
+          name: input.name || payload.fileName,
+          resourceId,
+          mediaType: payload.mediaType,
+          schemaId,
+        })
         await reserveWorkspaceResourceInTransaction(tx, {
           resourceId,
           userId: ctx.userId,
           projectId: ctx.projectId,
-          outputPath: input.outputPath,
+          outputPath,
           mediaType: payload.mediaType,
           schemaId,
           sourceType: USER_UPLOAD_SOURCE_TYPE,
@@ -147,7 +155,7 @@ export function createWorkspaceResourceUploadedMediaOperations(): ProjectAgentOp
         })
         return registerUploadedMediaOutputSchema.parse({
           success: true,
-          resources: [{ resourceId, workspacePath: input.outputPath }],
+          resources: [{ resourceId, workspacePath: outputPath }],
           mediaType: payload.mediaType,
           schemaId,
           reused: false,

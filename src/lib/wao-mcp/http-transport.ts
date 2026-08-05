@@ -2,7 +2,6 @@ import { createHash, randomUUID } from 'node:crypto'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
 import { readJsonWithLimit } from '@/lib/http/body-limits'
-import { getAssistantRuntimeService } from '@/lib/assistant-runtime'
 import {
   AssistantRuntimeCapabilityTurnError,
   requireAssistantRuntimeCapabilityTurn,
@@ -206,24 +205,11 @@ async function startHttpSessionExclusive(params: {
       lifecycle: {
         before: async (context) => {
           await assertBoundRuntimeContext(params.scope, context)
-          await getAssistantRuntimeService().flushWorkspaceForMcp({
-            userId: context.userId,
-            projectId: context.projectId,
-            threadId: context.threadId,
-            runtimeTurnId: context.executionOwnerId,
-          })
         },
         assertAuthorized: async (context) => {
           await assertBoundRuntimeContext(params.scope, context)
         },
-        after: async (context) => {
-          await getAssistantRuntimeService().refreshWorkspaceAfterMcp({
-            userId: context.userId,
-            projectId: context.projectId,
-            threadId: context.threadId,
-            runtimeTurnId: context.executionOwnerId,
-          })
-        },
+        after: async () => {},
       },
     }),
     contextResolver: createBoundContextResolver(params.scope),
