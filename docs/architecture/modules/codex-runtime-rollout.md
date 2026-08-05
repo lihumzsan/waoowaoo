@@ -31,10 +31,11 @@ Codex app-server 是唯一 Agent Runtime；Wao 保留产品 View、WorkspaceReso
 - **CRR-06 — Runtime 状态与产品 View 分权。** 不透明会话状态只用于 resume；数据库 View 是聊天、
   审批、计费归因和刷新显示的产品事实。两者必须先持久化再绑定 runtime thread id。
 - **CRR-06A — resume 必须匹配 Runtime revision。** 钉死版本、process host 或工具拓扑发生不兼容
-  变化时只提升一个共享 revision；状态存储 key 与线程记录必须使用同一值。revision 不匹配时先完整
-  停止旧 Runtime，再原子清空旧绑定，新线程由产品 View 的既有消息 seed。同 revision 的普通重启、
-  空闲停止与崩溃仍 resume 原线程，禁止每 Turn 重建或保留新旧双轨。可 resume 时绝不重放产品消息；
-  不可 resume 时恰好一次注入历史，且不伪造旧工具终态。
+  变化时只允许一个共享 revision；该值必须由实际的固定开发指令、工具契约与 Runtime profile 契约
+  确定性派生，禁止依赖调用方手写版本后缀。状态存储 key 与线程记录必须使用同一值。revision 不匹配
+  时先完整停止旧 Runtime，再原子清空旧绑定，新线程由产品 View 的既有消息 seed。同 revision 的普通
+  重启、空闲停止与崩溃仍 resume 原线程，禁止每 Turn 重建或保留新旧双轨。可 resume 时绝不重放产品
+  消息；不可 resume 时恰好一次注入历史，且不伪造旧工具终态。
 - **CRR-07 — MCP 是唯一系统能力桥。** 真实媒体、导入、批量生产、预算与破坏性操作只经带当前 Turn
   凭据的 MCP；Capability Service 仍是业务实现，MCP 不复制逻辑。Runtime bearer 只证明能力调用权，
   绝不证明用户同意——计费与破坏性 writer 必须验证浏览器侧已持久化的同 Turn 决定。每次调用由同一

@@ -11,8 +11,15 @@ import {
   CODEX_RUNTIME_BEARER_ENV_KEY,
   resolveCodexModelGatewayRuntimeConfig,
 } from '@/lib/codex-model-gateway'
-import { ASSISTANT_RUNTIME_REVISION } from './runtime-revision'
-import { creativeWorkerRoutingInstructions } from '@/lib/creative-skills'
+import {
+  CREATIVE_SKILL_REGISTRY,
+  CREATIVE_WORKERS,
+  PRIMARY_AGENT_DISABLED_NATIVE_SKILL_IDS,
+  PRIMARY_AGENT_GLOBAL_INSTRUCTIONS,
+  creativeOutputJsonSchema,
+  creativeWorkerRoutingInstructions,
+} from '@/lib/creative-skills'
+import { deriveAssistantRuntimeRevision } from './runtime-revision'
 
 const MCP_PATH = '/api/internal/codex-runtime/mcp'
 // Codex defaults MCP tool calls to 60 seconds. Wao production calls can spend
@@ -21,6 +28,54 @@ const MCP_PATH = '/api/internal/codex-runtime/mcp'
 // same bounded lifetime as its project capability token; Wao still owns plan
 // validity, idempotency, cancellation, and execution state.
 const WAO_MCP_TOOL_TIMEOUT_SECONDS = WAO_RUNTIME_TOKEN_MAX_TTL_SECONDS
+
+export const ASSISTANT_RUNTIME_CODEX_VERSION = '0.146.0' as const
+
+export const ASSISTANT_RUNTIME_STATIC_CONTRACT = {
+  thread: {
+    approvalPolicy: 'on-request',
+    sandbox: 'workspace-write',
+    serviceName: 'wao-creative-agent',
+    personality: 'pragmatic',
+    ephemeral: false,
+  },
+  tools: {
+    webSearch: 'live',
+    features: {
+      skillSearch: false,
+      imageGeneration: false,
+      standaloneWebSearch: true,
+      remoteCompactionV2: false,
+      codeMode: {
+        enabled: true,
+        directOnlyToolNamespaces: ['wao'],
+      },
+      codeModeHost: {
+        enabled: true,
+        disableInProcessFallback: true,
+      },
+    },
+    waoMcp: {
+      required: true,
+      defaultToolsApprovalMode: 'approve',
+    },
+    modelProvider: {
+      wireApi: 'responses',
+      requiresOpenAiAuth: false,
+      supportsStandaloneWebSearch: true,
+    },
+  },
+  creativeRuntime: {
+    primaryAgentGlobalInstructions: PRIMARY_AGENT_GLOBAL_INSTRUCTIONS,
+    disabledNativeSkillIds: PRIMARY_AGENT_DISABLED_NATIVE_SKILL_IDS,
+    skills: CREATIVE_SKILL_REGISTRY,
+    workers: CREATIVE_WORKERS,
+    outputSchemas: Object.fromEntries(CREATIVE_WORKERS.map((worker) => [
+      worker.outputKind,
+      creativeOutputJsonSchema(worker.outputKind),
+    ])),
+  },
+} as const
 
 export type AssistantRuntimeAccess = {
   readonly environment: Readonly<Record<string, string>>
@@ -75,6 +130,13 @@ function runtimeInstructions(): string {
   ].join('\n')
 }
 
+export const ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS = runtimeInstructions()
+export const ASSISTANT_RUNTIME_REVISION = deriveAssistantRuntimeRevision({
+  codexVersion: ASSISTANT_RUNTIME_CODEX_VERSION,
+  developerInstructions: ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
+  staticContract: ASSISTANT_RUNTIME_STATIC_CONTRACT,
+})
+
 function runtimeSandboxMode(): 'workspace-write' {
   const driver = process.env.CODEX_RUNTIME_DRIVER
   if (driver === 'local' || driver === 'docker') return 'workspace-write'
@@ -89,49 +151,50 @@ function runtimeConfig(input: {
   readonly requestMaxRetries: number
   readonly streamMaxRetries: number
 }): RuntimeJsonObject {
+  const tools = ASSISTANT_RUNTIME_STATIC_CONTRACT.tools
   return {
     // Codex owns the search tool the model sees, and that ownership is what
     // makes a search legible: Codex creates one `webSearch` item per call with
     // the model's own query, so three searches render as three rows. The
     // provider behind it is Wao's gateway, which delegates to OpenAI hosted
     // research — the tool is native, the capability is not OpenRouter's.
-    web_search: 'live',
+    web_search: tools.webSearch,
     features: {
       // Wao's primary Agent has no native Skill or built-in image-production
       // escape hatch. Professional methods live only in fixed custom agents;
       // paid media crosses the Wao MCP manifest boundary.
-      skill_search: false,
-      image_generation: false,
+      skill_search: tools.features.skillSearch,
+      image_generation: tools.features.imageGeneration,
       // The custom provider answers search itself through /alpha/search. This
       // third switch is what installs the tool; provider capability and live
       // mode alone do not.
-      standalone_web_search: true,
+      standalone_web_search: tools.features.standaloneWebSearch,
       // Keep compaction local: Wao proxies Responses and standalone search,
       // not OpenAI's private remote-compaction endpoint.
-      remote_compaction_v2: false,
+      remote_compaction_v2: tools.features.remoteCompactionV2,
       // GPT-5.6 Sol/Terra select Codex's code-mode-only tool contract in their
       // official model metadata. The bundled process host must therefore be
       // available or those models fail closed without shell or Web Search.
       // Wao stays direct-model-only so business approval never crosses the
       // nested executor and still has one visible, product-owned protocol.
       code_mode: {
-        enabled: true,
-        direct_only_tool_namespaces: ['wao'],
+        enabled: tools.features.codeMode.enabled,
+        direct_only_tool_namespaces: [...tools.features.codeMode.directOnlyToolNamespaces],
       },
       code_mode_host: {
-        enabled: true,
-        disable_in_process_fallback: true,
+        enabled: tools.features.codeModeHost.enabled,
+        disable_in_process_fallback: tools.features.codeModeHost.disableInProcessFallback,
       },
     },
     mcp_servers: {
       wao: {
         url: input.mcpUrl,
         bearer_token_env_var: input.bearerTokenEnvironmentKey,
-        required: true,
+        required: tools.waoMcp.required,
         // Wao owns approval for its immutable production plan and quoted
         // budget. Codex approval remains enabled for shell/file permissions,
         // but must not add a second prompt in front of Wao MCP tools.
-        default_tools_approval_mode: 'approve',
+        default_tools_approval_mode: tools.waoMcp.defaultToolsApprovalMode,
         tool_timeout_sec: WAO_MCP_TOOL_TIMEOUT_SECONDS,
       },
     },
@@ -140,9 +203,9 @@ function runtimeConfig(input: {
         name: 'Wao Responses Gateway',
         base_url: input.modelGatewayUrl,
         env_key: input.bearerTokenEnvironmentKey,
-        wire_api: 'responses',
-        requires_openai_auth: false,
-        supports_standalone_web_search: true,
+        wire_api: tools.modelProvider.wireApi,
+        requires_openai_auth: tools.modelProvider.requiresOpenAiAuth,
+        supports_standalone_web_search: tools.modelProvider.supportsStandaloneWebSearch,
         request_max_retries: input.requestMaxRetries,
         stream_max_retries: input.streamMaxRetries,
       },
@@ -196,16 +259,17 @@ export async function resolveAssistantRuntimeModelConfiguration(
     streamMaxRetries: gateway.streamMaxRetries,
   })
   const sandbox = runtimeSandboxMode()
+  const threadContract = ASSISTANT_RUNTIME_STATIC_CONTRACT.thread
   const start = {
     model: gateway.runtimeModelId,
     modelProvider: gateway.modelProviderId,
-    approvalPolicy: 'on-request' as const,
+    approvalPolicy: threadContract.approvalPolicy,
     sandbox,
     config,
-    serviceName: 'wao-creative-agent',
-    developerInstructions: runtimeInstructions(),
-    personality: 'pragmatic' as const,
-    ephemeral: false,
+    serviceName: threadContract.serviceName,
+    developerInstructions: ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
+    personality: threadContract.personality,
+    ephemeral: threadContract.ephemeral,
   }
   return {
     modelKey: gateway.modelKey,
@@ -216,11 +280,11 @@ export async function resolveAssistantRuntimeModelConfiguration(
       resume: {
         model: gateway.runtimeModelId,
         modelProvider: gateway.modelProviderId,
-        approvalPolicy: 'on-request',
+        approvalPolicy: threadContract.approvalPolicy,
         sandbox,
         config,
-        developerInstructions: runtimeInstructions(),
-        personality: 'pragmatic',
+        developerInstructions: ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
+        personality: threadContract.personality,
       },
     },
   }

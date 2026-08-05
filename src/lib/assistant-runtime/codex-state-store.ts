@@ -10,7 +10,7 @@ import {
 import path from 'node:path'
 import { getObjectBuffer, uploadObject } from '@/lib/storage'
 import type { RuntimeSessionScope } from '@/lib/codex-runtime/runtime-session-manager'
-import { ASSISTANT_RUNTIME_REVISION } from './runtime-revision'
+import { ASSISTANT_RUNTIME_REVISION } from './runtime-access'
 
 const CODEX_STATE_STORAGE_PREFIX = 'agent-workspaces/v1'
 const CODEX_STATE_FILE_NAME = `codex-session-state.${ASSISTANT_RUNTIME_REVISION}.json`
