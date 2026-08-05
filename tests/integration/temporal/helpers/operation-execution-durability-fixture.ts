@@ -130,7 +130,7 @@ Promise<OperationExecutionDurabilityFixture> {
   })
   const seededInputs = await seedVideoInputs({ suffix, userId, projectId })
   const parsedInput = operation.inputSchema.safeParse({
-    parentFolderId: null,
+    folderPath: null,
     name: `Operation durability output ${suffix}`,
     videos: seededInputs.resources.map(({ resourceId, contentVersion }) => ({
       resourceId,

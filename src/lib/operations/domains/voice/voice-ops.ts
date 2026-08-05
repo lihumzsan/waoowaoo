@@ -33,7 +33,7 @@ import { ApiError } from '@/lib/api-errors'
 
 const voiceNewSchema = z.object({
   kind: z.literal('new'),
-  parentFolderId: z.string().trim().min(1).max(32).nullable().optional(),
+  folderPath: z.string().trim().min(1).max(512).nullable().optional(),
   name: z.string().trim().min(1).max(300),
   description: z.string().trim().min(1).max(4_000),
   previewText: z.string().trim().min(1).max(10_000),
@@ -139,7 +139,7 @@ async function planNewVoice(
     const workspacePath = await resolveGeneratedWorkspaceResourcePlacement(prisma, {
       userId: ctx.userId,
       projectId: ctx.projectId,
-      parentFolderId: request.parentFolderId,
+      folderPath: request.folderPath,
       name: request.name,
       resourceId,
       mediaType: 'audio',
@@ -401,7 +401,7 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
         },
       },
       confirmation: { kind: 'billable_media', required: true },
-      planContractRevision: 'voice-generation/v6',
+      planContractRevision: 'voice-generation/v7',
       inputSchema: generateVoiceInputSchema,
       outputSchema: generateVoiceOutputSchema,
       plan: async (ctx, input) => input.request.kind === 'retry'

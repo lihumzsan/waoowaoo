@@ -39,6 +39,8 @@ describe('WorkspaceResource Operation registry conformance', () => {
       expect(operation.channels, operationId).toEqual({ tool: true, api: true, mcp: true })
       expect(operation.confirmation).toMatchObject({ kind: 'billable_media', required: true })
       const published = JSON.stringify(operation.toolInputSchema)
+      expect(published, operationId).toContain('folderPath')
+      expect(published, operationId).not.toContain('parentFolderId')
       expect(published, operationId).not.toContain('outputPath')
       expect(published, operationId).not.toContain('modelKey')
       expect(published, operationId).not.toContain('generationOptions')
@@ -49,8 +51,29 @@ describe('WorkspaceResource Operation registry conformance', () => {
     const getResource = registry.get_resource
     if (!getResource) throw new Error('Required Resource read operation missing')
     const getResourceInput = JSON.stringify(getResource.toolInputSchema)
-    expect(getResourceInput).toContain('resourceId')
-    expect(getResourceInput).not.toContain('workspacePath')
+    expect(getResourceInput).toContain('path')
+    expect(getResourceInput).not.toContain('resourceId')
+    const pathFieldByOperation = {
+      create_folder: 'path',
+      move_resource: 'sourcePath',
+      delete_resource: 'path',
+    } as const
+    for (const [operationId, pathField] of Object.entries(pathFieldByOperation)) {
+      const operation = registry[operationId]
+      if (!operation) throw new Error(`Required path operation missing: ${operationId}`)
+      expect(operation.channels, operationId).toEqual({ tool: true, api: true, mcp: true })
+      const toolInput = JSON.stringify(operation.toolInputSchema)
+      expect(toolInput, operationId).toContain(`\"${pathField}\"`)
+      expect(toolInput, operationId).not.toContain('parentFolderId')
+      expect(toolInput, operationId).not.toContain('resourceId')
+    }
+    const deleteResource = registry.delete_resource
+    if (!deleteResource) throw new Error('delete_resource missing')
+    expect(deleteResource.inputSchema.safeParse({
+      resourceId: 'resource_approved',
+      workspacePath: '分集/第001集',
+    }).success).toBe(true)
+    expect(deleteResource.inputSchema.safeParse({ path: '分集/第001集' }).success).toBe(false)
   })
 
   it('accepts independent video items and caps their expanded Task count', () => {

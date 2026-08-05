@@ -109,10 +109,20 @@ export async function executeDirectTaskOperationViaTemporal(params: {
     params.registry,
     params.operationId,
   )
-  const prepared = prepareProjectAgentOperationInput({
+  const prepared = await prepareProjectAgentOperationInput({
     channel: params.channel,
     operation,
-    context: params.context,
+    context: {
+      request: null,
+      requestId: params.operationRequestId,
+      userId: params.userId,
+      projectId: params.projectId,
+      context: params.context,
+      source: params.source,
+      writer: null,
+      toolCallId: params.origin.kind === 'agent_turn' ? params.origin.callId : null,
+      activityId: null,
+    },
     input: params.input,
   })
   if (prepared.invocation) {

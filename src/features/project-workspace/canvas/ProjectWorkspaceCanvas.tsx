@@ -18,7 +18,11 @@ import {
 import { useTranslations } from 'next-intl'
 import { logWarn as _ulogWarn } from '@/lib/logging/core'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
-import { useProjectData, useWorkspaceResources } from '@/lib/query/hooks'
+import {
+  useProjectData,
+  useWorkspaceResourceByPath,
+  useWorkspaceResources,
+} from '@/lib/query/hooks'
 import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
 import {
   WORKSPACE_RESOURCE_ROOT_FOLDER_KEY,
@@ -253,7 +257,7 @@ function ProjectWorkspaceFolderCanvas({
   }, [])
   const uploadQueue = useCanvasUploadQueue({
     projectId,
-    parentFolderId: folder.folderKey === WORKSPACE_RESOURCE_ROOT_FOLDER_KEY ? null : folder.folderKey,
+    folderPath: folder.folderKey === WORKSPACE_RESOURCE_ROOT_FOLDER_KEY ? null : folder.workspacePath,
     onMaterialized: placeUploadedResource,
   })
   const {
@@ -631,12 +635,12 @@ function ProjectWorkspaceFolderCanvas({
     })
   }, [])
   const submitCanvasCreation = useCallback((draftId: string, request: WorkspaceCanvasCreateRequest) => {
-    const parentFolderId = folder.folderKey === WORKSPACE_RESOURCE_ROOT_FOLDER_KEY
+    const folderPath = folder.folderKey === WORKSPACE_RESOURCE_ROOT_FOLDER_KEY
       ? null
-      : folder.folderKey
+      : folder.workspacePath
     void operationAction.begin({
       operationId: request.capability.operationId,
-      input: buildWorkspaceCanvasCreateOperationInput(request, parentFolderId),
+      input: buildWorkspaceCanvasCreateOperationInput(request, folderPath),
       confirmation: 'billable_media',
       onAccepted: (plan) => {
         if (!plan) return
@@ -648,7 +652,7 @@ function ProjectWorkspaceFolderCanvas({
         } : current)
       },
     })
-  }, [folder.folderKey, operationAction, placePlannedResources])
+  }, [folder.folderKey, folder.workspacePath, operationAction, placePlannedResources])
   const selectionForCard = useCallback((card: WorkspaceResourceCardMemberView): WorkspaceCanvasSelection | null => {
     const node = flowNodes.find((candidate) => candidate.data.targetId === card.resource.resourceId)
     return node ? selectionForNode(node) : null
@@ -948,11 +952,9 @@ function ProjectWorkspaceCanvasContent(props: ProjectWorkspaceCanvasContentProps
     ancestors: [],
   })
   const [pendingLocateResourceId, setPendingLocateResourceId] = useState<string | null>(null)
-  const pathFocusQuery = useWorkspaceResources({
+  const pathFocusQuery = useWorkspaceResourceByPath({
     projectId,
-    prefix: null,
-    search: props.workspacePathFocusRequest?.workspacePath ?? null,
-    scope: 'subtree',
+    workspacePath: props.workspacePathFocusRequest?.workspacePath ?? null,
     enabled: Boolean(props.workspacePathFocusRequest),
     refreshToken: props.workspacePathFocusRequest?.requestId ?? null,
   })
@@ -965,9 +967,7 @@ function ProjectWorkspaceCanvasContent(props: ProjectWorkspaceCanvasContentProps
   useEffect(() => {
     const request = props.workspacePathFocusRequest
     if (!request || pathFocusQuery.isLoading || handledPathFocusRequestId.current === request.requestId) return
-    const resource = flattenResources(pathFocusQuery.data).find((entry) => (
-      entry.workspacePath === request.workspacePath
-    ))
+    const resource = pathFocusQuery.data
     handledPathFocusRequestId.current = request.requestId
     if (!resource) return
     if (resource.resourceKind === 'folder') {

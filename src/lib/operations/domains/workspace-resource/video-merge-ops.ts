@@ -19,7 +19,7 @@ import { stableArgsFingerprint } from '@/lib/project-agent/stable-args-hash'
 import { TASK_TYPE } from '@/lib/task/types'
 
 const mergeVideosInputSchema = z.object({
-  parentFolderId: z.string().trim().min(1).max(32).nullable().optional(),
+  folderPath: z.string().trim().min(1).max(512).nullable().optional(),
   name: z.string().trim().min(1).max(300),
   videos: z.array(z.object({
     resourceId: z.string().trim().min(1).max(32),
@@ -70,7 +70,7 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
       confirmation: { kind: 'none', required: false },
       assistantWriteAuthority: {
         kind: 'temporal_operation_execution',
-        contractRevision: 'merge_videos/v2',
+        contractRevision: 'merge_videos/v3',
         followUpPolicy: 'after_all_terminal',
       },
       inputSchema: mergeVideosInputSchema,
@@ -94,7 +94,7 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
         const outputPath = await resolveGeneratedWorkspaceResourcePlacement(prisma, {
           userId: ctx.userId,
           projectId: ctx.projectId,
-          parentFolderId: input.parentFolderId,
+          folderPath: input.folderPath,
           name: input.name,
           resourceId,
           mediaType: 'video',

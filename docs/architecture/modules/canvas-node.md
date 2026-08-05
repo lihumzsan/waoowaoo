@@ -52,7 +52,7 @@ Resource、Lineage 与 Task owner；Canvas 只拥有位置、视口、选择和�
 - **CN-14A — 表单只消费服务端能力边界。** 创建菜单与表单只消费 Operation registry 投影的能力
   目录；目录失败必须显式提供重试，不得静默表现为只剩上传。表单校验只改善即时反馈，最终输入仍由
   同一 Operation schema 裁决。
-- **CN-14B — 创建与上传显式落在当前文件夹。** 提交意图时冻结当前 `parentFolderId` 与名称，由服务端
+- **CN-14B — 创建与上传显式落在当前文件夹。** 提交意图时冻结当前 `folderPath` 与名称，由服务端
   派生并冻结最终路径；异步重试沿用已预留 Resource，切换文件夹不能把进行中的任务移到新目录。
 - **CN-15 — 选择与 Assistant 上下文各有唯一 UI owner。** 父级持有唯一 selection 与唯一 assistant
   context；后者只在显式动作时从 selection 复制，单纯选中不附加。不建立全局事件总线或第二份

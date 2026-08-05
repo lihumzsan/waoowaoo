@@ -64,12 +64,12 @@ function buildOperationExecutionToolError(params: {
 }): ProjectAgentToolError {
   const workspaceError = params.error instanceof WorkspaceResourcePlacementError
     ? {
-        code: params.error.code === 'WORKSPACE_RESOURCE_PARENT_FOLDER_NOT_FOUND'
+        code: params.error.code === 'WORKSPACE_RESOURCE_FOLDER_NOT_FOUND'
           ? 'INVALID_PARAMS' as const
           : 'CONFLICT' as const,
         details: {
-          field: params.error.code === 'WORKSPACE_RESOURCE_PARENT_FOLDER_NOT_FOUND'
-            ? 'parentFolderId'
+          field: params.error.code === 'WORKSPACE_RESOURCE_FOLDER_NOT_FOUND'
+            ? 'folderPath'
             : 'name',
           reasonCode: params.error.code,
           workspacePath: params.error.workspacePath,

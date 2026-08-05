@@ -92,10 +92,10 @@ export async function executeProjectAgentOperationFromApi(
 
   try {
     if (operation && isBillablePlannedOperation(operation)) {
-      const prepared = prepareProjectAgentOperationInput({
+      const prepared = await prepareProjectAgentOperationInput({
         channel: 'api',
         operation,
-        context: operationContext.context,
+        context: operationContext,
         input: params.input,
       })
       if (!prepared.invocation) {

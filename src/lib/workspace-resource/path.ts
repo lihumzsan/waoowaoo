@@ -1,14 +1,13 @@
 import path from 'node:path'
 import {
-  WORKSPACE_RESOURCE_ROOT_FOLDER_KEY,
+  isCanonicalWorkspaceResourcePath,
+  isWorkspaceResourceReservedRootName,
   isWorkspaceResourceSubtreePath,
   type WorkspaceResourceKind,
   type WorkspaceResourceMediaType,
 } from './contracts'
 
-const MAX_PATH_BYTES = 512
 const TEXT_EXTENSIONS = new Set(['.md', '.txt', '.json'])
-const RESERVED_ROOTS = new Set(['system', '.wao'])
 
 export class WorkspaceResourcePathError extends Error {
   constructor(readonly code: string, message: string) {
@@ -18,7 +17,7 @@ export class WorkspaceResourcePathError extends Error {
 }
 
 export type WorkspaceResourcePlacementErrorCode =
-  | 'WORKSPACE_RESOURCE_PARENT_FOLDER_NOT_FOUND'
+  | 'WORKSPACE_RESOURCE_FOLDER_NOT_FOUND'
   | 'WORKSPACE_RESOURCE_PATH_CONFLICT'
   | 'WORKSPACE_RESOURCE_TREE_PATH_CONFLICT'
 
@@ -33,29 +32,8 @@ export class WorkspaceResourcePlacementError extends Error {
 }
 
 function validateRelativePath(rawPath: string): string {
-  if (
-    rawPath === WORKSPACE_RESOURCE_ROOT_FOLDER_KEY
-    || rawPath !== rawPath.trim()
-    || rawPath !== rawPath.normalize('NFC')
-    || rawPath.startsWith('/')
-    || rawPath.endsWith('/')
-    || rawPath.includes('\\')
-    || /[\u0000-\u001f\u007f]/u.test(rawPath)
-    || Buffer.byteLength(rawPath, 'utf8') > MAX_PATH_BYTES
-  ) {
+  if (!isCanonicalWorkspaceResourcePath(rawPath)) {
     throw new WorkspaceResourcePathError('WORKSPACE_RESOURCE_PATH_INVALID', `Invalid resource path: ${rawPath}`)
-  }
-  const segments = rawPath.split('/')
-  if (
-    segments.length === 0
-    || segments.some((segment) => !segment || segment === '.' || segment === '..' || segment.startsWith('.'))
-    || RESERVED_ROOTS.has(segments[0] ?? '')
-    || path.posix.normalize(rawPath) !== rawPath
-  ) {
-    throw new WorkspaceResourcePathError(
-      'WORKSPACE_RESOURCE_PATH_OUTSIDE_PROJECT',
-      `Resource path must stay inside the user project tree: ${rawPath}`,
-    )
   }
   return rawPath
 }
@@ -65,6 +43,10 @@ export function validateWorkspaceResourceFilePath(rawPath: string): string {
 }
 
 export function validateWorkspaceResourceFolderPath(rawPath: string): string {
+  return validateRelativePath(rawPath)
+}
+
+export function validateWorkspaceResourcePath(rawPath: string): string {
   return validateRelativePath(rawPath)
 }
 
@@ -119,7 +101,7 @@ function safeGeneratedResourceStem(rawName: string, mediaType: Exclude<Workspace
     .slice(0, 96)
     .replace(/[. -]+$/u, '')
   const candidate = normalized || mediaType
-  return RESERVED_ROOTS.has(candidate) ? `media-${candidate}` : candidate
+  return isWorkspaceResourceReservedRootName(candidate) ? `media-${candidate}` : candidate
 }
 
 function safeDocumentStem(rawName: string): string {
@@ -134,7 +116,7 @@ function safeDocumentStem(rawName: string): string {
     .slice(0, 96)
     .replace(/[. -]+$/u, '')
   const candidate = normalized || 'document'
-  return RESERVED_ROOTS.has(candidate) ? `document-${candidate}` : candidate
+  return isWorkspaceResourceReservedRootName(candidate) ? `document-${candidate}` : candidate
 }
 
 export function buildGeneratedWorkspaceResourcePath(input: {

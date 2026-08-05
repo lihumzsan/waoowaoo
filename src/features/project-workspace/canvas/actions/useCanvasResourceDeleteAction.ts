@@ -54,8 +54,9 @@ export function useCanvasResourceDeleteAction(params: {
         throw new Error('WORKSPACE_CANVAS_DELETE_OPERATION_INVALID')
       }
       const resourceId = pending.operation.input.resourceId
+      const workspacePath = pending.operation.input.workspacePath
       await requestOperationMutationVoidWithError(
-        `/api/projects/${encodeURIComponent(projectId)}/resources/${encodeURIComponent(resourceId)}`,
+        `/api/projects/${encodeURIComponent(projectId)}/resources/${encodeURIComponent(resourceId)}?workspacePath=${encodeURIComponent(workspacePath)}`,
         {
           method: 'DELETE',
           headers: { 'Idempotency-Key': pending.requestId },

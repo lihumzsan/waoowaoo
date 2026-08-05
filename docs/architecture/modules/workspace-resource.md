@@ -31,9 +31,10 @@ Episode、Chapter、Scene、Shot、Canon 都是用户目录与文件内容，不
 - **WR-06 — 持久写入只有显式入口。** 文档只经 `save_project_document`，媒体只经对应创建、上传、
   合并 Operation，异步结果只经 terminal materializer。Runtime 不投影资源树、不 capture 文件、
   不根据目录差异写回数据库。
-- **WR-07 — Placement 由服务端拥有。** Agent-facing 生产工具只接收 canonical `parentFolderId` 与
-  用户可见名称；服务端以稳定 `resourceId` 派生最终路径并在 Plan 前验证父目录、schema 与冲突。
-  Agent 不创建目录、不传 outputPath，也不存在媒体后缀协议。
+- **WR-07 — Agent 只用项目相对路径寻址，Placement 仍由服务端拥有。** Agent 通过路径读取、建目录、
+  移动和选择目标文件夹；生产工具只接收 `folderPath + 用户可见名称`。服务端把路径精确解析为当前
+  Catalog 事实，以稳定 `resourceId` 派生最终文件路径，并在 Plan 前验证文件夹、schema 与冲突。
+  Agent 不传 outputPath、内部 Resource ID 或媒体后缀协议；Runtime 路径永远不是项目路径。
 - **WR-08 — 执行前冻结精确输入。** 调用方只提交 `resourceId + contentVersion + role + position`；
   服务端验证 Project 所有权并补充当时路径供显示与审计。执行、重试和 Lineage 都只消费冻结版本，
   不能在 Task 开始后重新按路径读取。
@@ -44,9 +45,10 @@ Episode、Chapter、Scene、Shot、Canon 都是用户目录与文件内容，不
   共享 schema 的批量 items；一次预检形成一个总报价和一个 Grant，再扇出 Task。不存在中间 Manifest
   文件或第二次“读取并提交”；成员有稳定 identity，部分失败只重跑失败成员。
 - **WR-11 — 移动、删除、恢复只有一套语义。** 文件移动只改自身路径；文件夹移动原子改写完整子树。
-  移动、软删除与恢复必须以 canonical `resourceId` 定位并在 Project 锁内解析当前路径——禁止拿旧
-  View 的 path 删除后来占用同一路径的另一个 Resource。活跃 Task 涉及的 Resource 不可移动或删除；
-  pending Resource 不可删除。恢复冲突时必须显式给新路径，禁止静默改名。
+  移动在 Project 锁内按当前路径解析并写入；Agent 的删除路径必须在审批前解析并冻结为
+  `resourceId + workspacePath`，执行按 ID 定位并校验路径未变，禁止审批后重新按路径寻找目标。
+  恢复以已删除 `resourceId` 选择精确删除批次，因为已删除路径不再唯一。活跃 Task 涉及的 Resource
+  不可移动或删除；pending Resource 不可删除；恢复冲突必须显式给新路径，禁止静默改名。
 - **WR-13 — 大项目按目录读取。** 列表与搜索用 cursor 分页和有界摘要，摘要来自版本行物化的预览
   列，列表路径零对象存储读取；完整正文只经单资源读取入口按需加载。规模上限必须明确失败，不能
   恢复静默截断。
@@ -76,9 +78,9 @@ Episode、Chapter、Scene、Shot、Canon 都是用户目录与文件内容，不
 
 ## 踩过的坑
 
-- 删除首版接受路径而非 canonical id；新增第二个删除入口后，旧 View 与并发移动之间可能误删占用
-  同一路径的另一个 Resource → path 是可变位置而不是删除 identity → 全链路传 `resourceId`，锁内
-  一次解析（WR-11）。
+- 删除首版把路径直接当 identity；旧 View 与并发移动之间可能误删后来占用同一路径的另一个 Resource
+  → path 是 Agent 的位置语言而不是删除 identity → 模型路径在审批前解析并冻结 ID 与当时路径，执行
+  只按 ID 定位且校验路径未变（WR-11）。
 - 文本版本最初只用 `resourceId + version` 作为对象 key，且在事务提交前上传；事务回滚后同版本不同
   内容的重试会覆盖对象，而数据库仍保留旧摘要 → 版本不可变性被对象覆盖打破 → 对象 key 包含内容
   SHA-256，宁可留下待回收的未引用对象。
@@ -94,9 +96,8 @@ Episode、Chapter、Scene、Shot、Canon 都是用户目录与文件内容，不
   Output Registry schema，失败返回有界字段 corrections。
 - 文件型 Manifest、Agent outputPath、必须 mkdir、`.resource` 媒体指针与 MCP 前后同步串成多级协议；
   任一层字段、路径或同步状态漂移都会在真实生产中表现为参数失败或“资源仍在同步”，此前修复只补
-  单个校验点所以换形式复发 → 删除整条文件/指针协议，公开输入只保留批量 items、父 Resource id、
-  名称与版本引用，服务端一次完成 placement、预检、报价和提交（WR-06/07/08/10/15）。
-- 删除文件/指针协议时仍保留 `system/project.json` 与 `get_resource(workspacePath)`；系统提示因此把
-  Runtime 临时路径伪装成 Resource identity，边界只能稳定拒绝并显示参数失败 → 上一版只删除 writer，
-  没删除竞争命名空间 → 能力改为每 Turn 从唯一 resolver 直接注入，`get_resource` 只接受
-  `resourceId`（WR-17）。
+  单个校验点所以换形式复发 → 删除整条文件/指针协议，公开输入只保留批量 items、目标文件夹路径、
+  名称与版本引用，服务端一次完成精确路径解析、placement、预检、报价和提交（WR-06/07/08/10/15）。
+- 删除文件/指针协议时仍保留 Runtime 内的 `system/project.json` 并把它和 Catalog 路径混为一谈；
+  边界只能稳定拒绝并显示参数失败 → 上一版只删除 writer，没删除竞争命名空间 → Runtime 永远只是
+  scratch，生产上下文直接注入，`get_resource(path)` 只解析 Catalog 的项目相对路径（WR-07/17）。

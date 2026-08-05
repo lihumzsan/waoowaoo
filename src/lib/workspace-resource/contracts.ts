@@ -1,5 +1,38 @@
 export const WORKSPACE_RESOURCE_ROOT_FOLDER_KEY = '@root' as const
 
+const WORKSPACE_RESOURCE_MAX_PATH_BYTES = 512
+const WORKSPACE_RESOURCE_RESERVED_ROOTS = new Set(['system', '.wao'])
+
+export function isWorkspaceResourceReservedRootName(value: string): boolean {
+  return WORKSPACE_RESOURCE_RESERVED_ROOTS.has(value)
+}
+
+/** Browser-safe grammar for every project-relative WorkspaceResource path. */
+export function isCanonicalWorkspaceResourcePath(value: unknown): value is string {
+  if (typeof value !== 'string') return false
+  if (
+    value === WORKSPACE_RESOURCE_ROOT_FOLDER_KEY
+    || value !== value.trim()
+    || value !== value.normalize('NFC')
+    || value.startsWith('/')
+    || value.endsWith('/')
+    || value.includes('\\')
+    || /[\u0000-\u001f\u007f]/u.test(value)
+    || new TextEncoder().encode(value).byteLength > WORKSPACE_RESOURCE_MAX_PATH_BYTES
+  ) {
+    return false
+  }
+  const segments = value.split('/')
+  return segments.length > 0
+    && !isWorkspaceResourceReservedRootName(segments[0] ?? '')
+    && segments.every((segment) => (
+      segment.length > 0
+      && segment !== '.'
+      && segment !== '..'
+      && !segment.startsWith('.')
+    ))
+}
+
 /**
  * Pure Catalog path relations. Server listing and client canvas projection
  * must share these instead of re-deriving parent/subtree semantics locally.
@@ -161,8 +194,6 @@ export interface WorkspaceResourceView {
   readonly projectId: string
   readonly resourceKind: WorkspaceResourceKind
   readonly workspacePath: string
-  /** Null means the fixed virtual root, which is never persisted as a Resource. */
-  readonly parentFolderId: string | null
   readonly ancestors: readonly WorkspaceResourceAncestorView[]
   readonly mediaType: WorkspaceResourceMediaType | null
   readonly schemaId: string
@@ -193,10 +224,6 @@ export interface WorkspaceResourceView {
 export interface WorkspaceResourceTreePage {
   readonly items: readonly WorkspaceResourceView[]
   readonly nextCursor: string | null
-}
-
-export interface WorkspaceResourcePlacement {
-  readonly outputPath: string
 }
 
 export interface WorkspaceResourceGenerationProvenance {

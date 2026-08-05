@@ -13,8 +13,8 @@ const finalPromptSchema = z.string().min(1).max(100_000)
 const resourceNameSchema = z.string().trim().min(1).max(300)
   .describe('User-visible resource name. The server derives the canonical WorkspaceResource path.')
 
-const parentFolderIdSchema = z.string().trim().min(1).max(32).nullable().optional()
-  .describe('Optional canonical destination folder Resource ID. Omit or use null for the project root.')
+const folderPathSchema = z.string().trim().min(1).max(512).nullable().optional()
+  .describe('Optional project-relative destination folder path. Omit or use null for the project root.')
 
 export const generationReferenceSchema = z.object({
   resourceId: z.string().trim().min(1).max(32)
@@ -29,7 +29,7 @@ export const generationReferenceSchema = z.object({
 const commonItemShape = {
   itemId: z.string().trim().min(1).max(191),
   name: resourceNameSchema,
-  parentFolderId: parentFolderIdSchema,
+  folderPath: folderPathSchema,
   prompt: finalPromptSchema,
   count: z.number().int().min(1).max(6).default(1),
 } as const

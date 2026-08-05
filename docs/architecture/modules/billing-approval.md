@@ -60,7 +60,7 @@ Task 并扣费。Web、MCP 与未来 CLI 调用同一 planning/submit service；
   统一向上取整一次。事前只检查"是否还有可用额度"，不得伪造预估报价来拒绝工作。供应商回报的成本
   只作为观测事实，永远不得成为扣费金额。
 - **BA-18 — 确定性 preflight 全部先于 Plan。** 模型选择、凭证与 endpoint 存在性、项目能力默认与
-  覆盖、option 兼容性、引用模态与数量、父 Resource/名称派生的 Placement 与输出数量，都必须在创建 Snapshot、报价、
+  覆盖、option 兼容性、引用模态与数量、目标文件夹路径/名称派生的 Placement 与输出数量，都必须在创建 Snapshot、报价、
   pending Resource 或 Task 之前完成。任何可由 registry 或本地配置判定的错误都返回结构化可纠正
   字段，不得让 Worker 或 Provider fence 成为第一位发现者。
 - **BA-19 — 限额付费活动只有一个席位裁判。** 容量与去重参与身份由同一 admission service 拥有，

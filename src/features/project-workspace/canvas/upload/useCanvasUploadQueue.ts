@@ -52,10 +52,10 @@ function requireMaterializedResource(value: unknown): { readonly resourceId: str
 
 export function useCanvasUploadQueue(params: {
   readonly projectId: string
-  readonly parentFolderId: string | null
+  readonly folderPath: string | null
   readonly onMaterialized: (item: CanvasUploadQueueItem, resourceId: string, reused: boolean) => void
 }) {
-  const { projectId, parentFolderId, onMaterialized } = params
+  const { projectId, folderPath, onMaterialized } = params
   const queryClient = useQueryClient()
   const [items, setItems] = useState<readonly CanvasUploadQueueItem[]>([])
 
@@ -87,7 +87,7 @@ export function useCanvasUploadQueue(params: {
           },
           body: JSON.stringify({
             attachmentToken,
-            parentFolderId,
+            folderPath,
             name: item.file.name,
           }),
         },
@@ -100,7 +100,7 @@ export function useCanvasUploadQueue(params: {
     } catch (error) {
       updateItem(item.id, (current) => ({ ...current, stage: 'failed_materialize', error }))
     }
-  }, [onMaterialized, parentFolderId, projectId, queryClient, updateItem])
+  }, [folderPath, onMaterialized, projectId, queryClient, updateItem])
 
   const upload = useCallback(async (item: CanvasUploadQueueItem) => {
     const validationCode = validateProjectAssistantMediaAttachmentFile(item.file)

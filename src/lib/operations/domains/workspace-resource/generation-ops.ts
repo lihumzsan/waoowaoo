@@ -81,7 +81,7 @@ import { AppError } from '@/lib/errors/app-error'
 import { describeUnknownError } from '@/lib/errors/normalize'
 
 const MAX_BATCH_ITEMS = OPERATION_EXECUTION_MAX_TASKS
-const MEDIA_GENERATION_PLAN_CONTRACT_REVISION = 'workspace-resource-generation-batch/v3'
+const MEDIA_GENERATION_PLAN_CONTRACT_REVISION = 'workspace-resource-generation-batch/v4'
 
 const workspaceResourceJsonValueSchema: z.ZodType<WorkspaceResourceJsonValue> = z.lazy(() => z.union([
   z.string(),
@@ -128,7 +128,7 @@ const rerunFailedItemsInputSchema = z.object({
 })
 
 const saveProjectDocumentInputSchema = z.object({
-  parentFolderId: z.string().trim().min(1).max(32).nullable().optional(),
+  folderPath: z.string().trim().min(1).max(512).nullable().optional(),
   name: z.string().trim().min(1).max(300),
   content: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('text'), text: z.string().max(4 * 1024 * 1024) }).strict(),
@@ -688,7 +688,7 @@ async function buildPlannedItem(input: {
   const workspacePath = await resolveGeneratedWorkspaceResourcePlacement(prisma, {
     userId: input.ctx.userId,
     projectId: input.ctx.projectId,
-    parentFolderId: input.item.parentFolderId,
+    folderPath: input.item.folderPath,
     name: input.item.name,
     resourceId,
     mediaType,
@@ -1173,7 +1173,7 @@ export function createWorkspaceResourceGenerationOperations(): ProjectAgentOpera
       summary: 'Explicitly save one text or structured document as a canonical project Resource. Runtime scratch and in-turn professional results are never saved implicitly.',
       intent: 'act',
       channels: { tool: true, api: true, mcp: true },
-      toolContractRevision: 'save_project_document/v1',
+      toolContractRevision: 'save_project_document/v2',
       effects: {
         writes: true,
         workspaceResourceImpact: 'workspace_resources',
@@ -1233,7 +1233,7 @@ export function createWorkspaceResourceGenerationOperations(): ProjectAgentOpera
         const outputPath = await resolveSavedWorkspaceDocumentPlacement(tx, {
           userId: ctx.userId,
           projectId: ctx.projectId,
-          parentFolderId: input.parentFolderId,
+          folderPath: input.folderPath,
           name: input.name,
           resourceId,
           contentKind: input.content.kind,

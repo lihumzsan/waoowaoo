@@ -292,6 +292,25 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
       if (toolInputSchema.additionalProperties !== false) {
         throw new Error(`PROJECT_AGENT_OPERATION_TOOL_INPUT_SCHEMA_ADDITIONAL_PROPERTIES_INVALID:${operationId}`)
       }
+      const canonicalizer = op.toolInputCanonicalizer
+      if (canonicalizer !== undefined) {
+        if (!canonicalizer || typeof canonicalizer !== 'object' || Array.isArray(canonicalizer)) {
+          throw new Error(`PROJECT_AGENT_OPERATION_TOOL_INPUT_CANONICALIZER_INVALID:${operationId}`)
+        }
+        const contract = canonicalizer as Record<string, unknown>
+        const inputSchema = contract.inputSchema
+        if (
+          typeof contract.canonicalize !== 'function'
+          || !inputSchema
+          || typeof inputSchema !== 'object'
+          || Array.isArray(inputSchema)
+          || typeof (inputSchema as Record<string, unknown>).safeParse !== 'function'
+        ) {
+          throw new Error(`PROJECT_AGENT_OPERATION_TOOL_INPUT_CANONICALIZER_INVALID:${operationId}`)
+        }
+      }
+    } else if (op.toolInputCanonicalizer !== undefined) {
+      throw new Error(`PROJECT_AGENT_OPERATION_TOOL_INPUT_CANONICALIZER_CHANNEL_INVALID:${operationId}`)
     }
   }
 }

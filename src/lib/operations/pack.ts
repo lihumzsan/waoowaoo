@@ -166,7 +166,7 @@ export function withOperationPack(
       toolInputSchema: channels.tool
         ? createProjectAgentToolInputSchema({
             operationId,
-            inputSchema: operation.inputSchema,
+            inputSchema: operation.toolInputCanonicalizer?.inputSchema ?? operation.inputSchema,
             explicitToolInputSchema: operation.toolInputSchema,
           })
         : createEmptyToolInputSchema(),

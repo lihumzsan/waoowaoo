@@ -73,6 +73,10 @@ export {
 } from './useWorkspaceResourceView'
 
 export {
+    useWorkspaceResourceByPath,
+} from './useWorkspaceResourceByPath'
+
+export {
     useAgentSessionView,
 } from './useAgentSessionView'
 

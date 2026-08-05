@@ -21,7 +21,7 @@ export async function deleteVoiceResourceInTransaction(
       schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
       deletedAt: null,
     },
-    select: { id: true },
+    select: { id: true, workspacePath: true },
   })
   if (!resource) {
     throw new ApiError('NOT_FOUND', { code: 'VOICE_RESOURCE_NOT_FOUND', field: 'target.assetId' })
@@ -30,6 +30,7 @@ export async function deleteVoiceResourceInTransaction(
     userId: input.userId,
     projectId: input.projectId,
     resourceId: resource.id,
+    workspacePath: resource.workspacePath,
   })
   return { success: true }
 }

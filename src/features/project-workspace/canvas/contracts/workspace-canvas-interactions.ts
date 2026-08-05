@@ -54,7 +54,10 @@ export interface WorkspaceCanvasDeleteOperationView {
   readonly kind: 'delete'
   readonly operationId: string
   readonly confirmation: 'destructive'
-  readonly input: { readonly resourceId: string }
+  readonly input: {
+    readonly resourceId: string
+    readonly workspacePath: string
+  }
   readonly approvalInputHash: string
 }
 

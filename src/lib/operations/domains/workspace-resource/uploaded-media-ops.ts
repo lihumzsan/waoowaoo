@@ -19,7 +19,7 @@ import { resolveProjectAssistantAttachmentRegistration } from '@/lib/project-age
 
 const registerUploadedMediaInputSchema = z.object({
   attachmentToken: z.string().min(1).max(PROJECT_ASSISTANT_ATTACHMENT_TOKEN_MAX_CHARS),
-  parentFolderId: z.string().trim().min(1).max(32).nullable().optional(),
+  folderPath: z.string().trim().min(1).max(512).nullable().optional(),
   name: z.string().trim().min(1).max(200).optional(),
 }).strict()
 
@@ -48,7 +48,7 @@ export function createWorkspaceResourceUploadedMediaOperations(): ProjectAgentOp
       id: 'register_uploaded_media',
       summary: 'Materialize one verified chat-uploaded image/audio as a ready Resource with server-owned placement.',
       intent: 'act',
-      toolContractRevision: 'register_uploaded_media/v3',
+      toolContractRevision: 'register_uploaded_media/v4',
       channels: { tool: true, api: true, mcp: true },
       effects: {
         writes: true,
@@ -108,7 +108,7 @@ export function createWorkspaceResourceUploadedMediaOperations(): ProjectAgentOp
         const outputPath = await resolveGeneratedWorkspaceResourcePlacement(tx, {
           userId: ctx.userId,
           projectId: ctx.projectId,
-          parentFolderId: input.parentFolderId,
+          folderPath: input.folderPath,
           name: input.name || payload.fileName,
           resourceId,
           mediaType: payload.mediaType,

@@ -32,6 +32,7 @@ import {
   validateWorkspaceResourceFolderPath,
   workspacePathAncestors,
 } from './path'
+import { resolveActiveWorkspaceResourceByPath } from './persistence'
 
 const DEFAULT_PAGE_SIZE = 100
 const MAX_PAGE_SIZE = 200
@@ -144,9 +145,15 @@ function projectActions(input: {
     kind: 'delete',
     enabled: input.resource.status !== 'pending',
     operationId: 'delete_resource',
-    input: { resourceId: input.resource.id },
+    input: {
+      resourceId: input.resource.id,
+      workspacePath: input.resource.workspacePath,
+    },
     href: null,
-    approvalInputHash: stableArgsFingerprint({ resourceId: input.resource.id }),
+    approvalInputHash: stableArgsFingerprint({
+      resourceId: input.resource.id,
+      workspacePath: input.resource.workspacePath,
+    }),
   }
   if (input.resource.resourceKind === 'folder') return [deleteAction]
   const downloadHref = previewUrl(input.current)
@@ -315,9 +322,6 @@ async function loadViews(
       if (folder) folderByPath.set(ancestorPath, folder)
     }
     const ancestors = projectAncestors(row.workspacePath, folderByPath)
-    const parentPath = parentWorkspacePath(row.workspacePath)
-    const parentFolderId = parentPath ? folderByPath.get(parentPath)?.id ?? null : null
-    if (parentPath && !parentFolderId) throw new Error(`WORKSPACE_RESOURCE_PARENT_FOLDER_MISSING:${row.id}`)
     const version = resourceKind === 'file' && row.currentVersion > 0
       ? versionByKey.get(`${row.id}:${String(row.currentVersion)}`)
       : undefined
@@ -359,7 +363,6 @@ async function loadViews(
       projectId: row.projectId,
       resourceKind,
       workspacePath: row.workspacePath,
-      parentFolderId,
       ancestors,
       mediaType,
       schemaId: row.schemaId,
@@ -523,4 +526,17 @@ export async function readWorkspaceResource(input: {
   const [view] = await loadViews([row], { includeContent: true })
   if (!view) throw new Error('WORKSPACE_RESOURCE_NOT_FOUND')
   return view
+}
+
+export async function readWorkspaceResourceByPath(input: {
+  readonly userId: string
+  readonly projectId: string
+  readonly workspacePath: string
+}): Promise<WorkspaceResourceView> {
+  const resource = await resolveActiveWorkspaceResourceByPath(prisma, input)
+  return await readWorkspaceResource({
+    userId: input.userId,
+    projectId: input.projectId,
+    resourceId: resource.resourceId,
+  })
 }
