@@ -3,7 +3,7 @@
   "FORBIDDEN": "没有权限访问",
   "NOT_FOUND": "资源不存在",
   "INSUFFICIENT_BALANCE": "平台余额不足，请充值后重试",
-  "PAID_BETA_SOLD_OUT": "本期公测席位已满，充值入口已经收工啦。",
+  "PAID_BETA_SOLD_OUT": "本期内测席位已满，充值入口已经收工啦。",
   "RATE_LIMIT": "请求过于频繁，请稍后重试",
   "MODEL_NOT_OPEN": "模型权限未开通。请前往 https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?LLM=%7B%7D&advancedActiveKey=model ，在模型管理页面点击右上角「一键开通所有模型」",
   "MODEL_NOT_REGISTERED": "模型未注册，请先在配置中添加可用模型",

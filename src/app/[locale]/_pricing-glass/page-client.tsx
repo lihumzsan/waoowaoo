@@ -13,7 +13,6 @@ import {
   useRecharge,
   usePlanPurchase,
   useCurrentPlan,
-  type CurrentPlanSummary,
 } from './shared'
 import { useWechatRecharge, WechatQrDialog } from './wechat-recharge'
 import { PlanPaymentDialog } from './plan-payment-dialog'
@@ -218,48 +217,6 @@ function PlanCard({
   )
 }
 
-/**
- * What the visitor already owns, shown before the plan grid.
- *
- * Someone with a running term needs to know that buying again extends it
- * rather than replacing it — without that, the page reads as a choice between
- * keeping what they have and paying again.
- */
-function CurrentPlanBanner({
-  current,
-  content,
-}: {
-  readonly current: CurrentPlanSummary | null
-  readonly content: GlassPricingContent
-}) {
-  const t = useTranslations('pricing.glass')
-  if (!current) return null
-  const plan = content.plans.find((entry) => entry.id === current.planId)
-  if (!plan) return null
-
-  return (
-    <section
-      className="glass-surface-soft mx-auto mt-8 flex max-w-3xl flex-wrap items-center justify-between gap-3 px-5 py-4"
-      style={{ borderRadius: 'var(--glass-radius-lg)' }}
-    >
-      <div className="min-w-0">
-        <p className="flex items-center gap-2 text-[13px] font-semibold text-[var(--glass-text-primary)]">
-          <AppIcon name="badgeCheck" className="h-4 w-4 shrink-0 text-[var(--glass-tone-success-fg)]" />
-          {t('currentPlanTitle', { plan: plan.label })}
-        </p>
-        <p className="glass-num mt-1 text-[12px] leading-5 text-[var(--glass-text-secondary)]">
-          {t('currentPlanDetail', {
-            date: current.currentPeriodEnd.slice(0, 10),
-            days: current.daysLeft,
-            credits: formatCny(current.balanceCredits),
-          })}
-        </p>
-      </div>
-      <p className="max-w-xs text-[12px] leading-5 text-[var(--glass-text-tertiary)]">{t('currentPlanStacks')}</p>
-    </section>
-  )
-}
-
 export default function PricingGlassPageClient({
   content,
   paidBetaCampaign,
@@ -285,13 +242,7 @@ export default function PricingGlassPageClient({
     <div className="glass-page min-h-screen pb-20">
       <main className="relative mx-auto max-w-[84rem] px-6 pt-14">
         <header className="flex flex-col items-center text-center">
-          <h1 className="text-[2.25rem] font-semibold leading-tight tracking-tight text-[var(--glass-text-primary)]">
-            {content.title}
-          </h1>
-          <p className="mt-3 max-w-2xl text-[15px] leading-7 text-[var(--glass-text-secondary)]">
-            {content.subtitle}
-          </p>
-          <section className="glass-surface-soft mt-6 w-full max-w-3xl rounded-3xl border border-[var(--glass-accent-from)]/25 px-5 py-4 text-left shadow-[0_16px_45px_-35px_rgba(47,123,255,0.9)] sm:px-6">
+          <section className="glass-surface-soft w-full max-w-3xl rounded-3xl border border-[var(--glass-accent-from)]/25 px-5 py-4 text-left shadow-[0_16px_45px_-35px_rgba(47,123,255,0.9)] sm:px-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--glass-accent-from)]">
@@ -304,14 +255,15 @@ export default function PricingGlassPageClient({
                   {beta('benefit')}
                 </p>
               </div>
-              <div className="shrink-0 rounded-2xl bg-[var(--glass-tone-info-bg)] px-4 py-3 text-center shadow-[var(--glass-tone-shadow)]">
-                <p className="glass-num text-[22px] font-bold text-[var(--glass-tone-info-fg)]">
+              <div className="flex shrink-0 flex-col items-center rounded-2xl bg-[var(--glass-tone-info-bg)] px-8 py-4 text-center shadow-[var(--glass-tone-shadow)]">
+                <p className="text-[12px] font-semibold text-[var(--glass-tone-info-fg)]">
+                  {paidBetaCampaign.paymentOpen ? beta('seatsLeftLabel') : beta('soldOut')}
+                </p>
+                <p className="glass-num mt-1 bg-gradient-to-br from-[var(--glass-accent-from)] to-[var(--glass-accent-to)] bg-clip-text text-[56px] font-bold leading-none tracking-tight text-transparent">
                   {paidBetaCampaign.paymentOpen ? paidBetaCampaign.remaining : 0}
                 </p>
-                <p className="mt-0.5 text-[11px] font-medium text-[var(--glass-tone-info-fg)]">
-                  {paidBetaCampaign.paymentOpen
-                    ? beta('remaining', { count: paidBetaCampaign.remaining })
-                    : beta('soldOut')}
+                <p className="mt-1.5 text-[11px] font-medium text-[var(--glass-tone-info-fg)]">
+                  {beta('seatCap', { capacity: paidBetaCampaign.capacity })}
                 </p>
               </div>
             </div>
@@ -323,8 +275,6 @@ export default function PricingGlassPageClient({
             <IntervalSwitch value={interval} onChange={setInterval} />
           </div>
         </header>
-
-        <CurrentPlanBanner current={currentPlan} content={content} />
 
         <div className="mt-10 grid items-start gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {content.plans.map((plan) => (

@@ -3,7 +3,7 @@
   "FORBIDDEN": "Access denied",
   "NOT_FOUND": "Resource not found",
   "INSUFFICIENT_BALANCE": "Your platform credit balance is insufficient. Add credits and retry.",
-  "PAID_BETA_SOLD_OUT": "This beta wave is full, so payments are now closed.",
+  "PAID_BETA_SOLD_OUT": "This private-beta wave is full, so payments are now closed.",
   "RATE_LIMIT": "Too many requests. Please retry later",
   "MODEL_NOT_OPEN": "Model permission is not activated. Go to https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?LLM=%7B%7D&advancedActiveKey=model and click \"Activate all models\" in the top-right of Model Management",
   "MODEL_NOT_REGISTERED": "Model is not registered. Add an available model in configuration first",

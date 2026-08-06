@@ -27,7 +27,7 @@
     "perMonth": "/ mo",
     "billedYearly": "¥{amount} paid once",
     "subscribe": "Buy this plan",
-    "paidBetaSoldOutCta": "This beta wave is full",
+    "paidBetaSoldOutCta": "This private-beta wave is full",
     "subscribeBusy": "Redirecting…",
     "firstMonthPromo": "First purchase ¥{amount}",
     "creditsPerMonth": "{credits} credits granted monthly",
@@ -56,9 +56,6 @@
     "rechargeSucceeded": "{credits} credits added",
     "currentPlanBadge": "Your plan",
     "planExtendCta": "Extend",
-    "currentPlanTitle": "Your plan · {plan}",
-    "currentPlanDetail": "Runs to {date} ({days} days left) · {credits} credits available",
-    "currentPlanStacks": "Buying again adds to the term you already have — nothing left over is lost.",
     "capacityVideos": "{count} premium clips",
     "capacityImages": "{count} images"
   }

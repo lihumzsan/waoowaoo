@@ -27,7 +27,7 @@
     "perMonth": "/ 月",
     "billedYearly": "一次性支付 ¥{amount}",
     "subscribe": "购买此套餐",
-    "paidBetaSoldOutCta": "本期公测席位已满",
+    "paidBetaSoldOutCta": "本期内测席位已满",
     "subscribeBusy": "正在跳转…",
     "firstMonthPromo": "首次购买仅 ¥{amount}",
     "creditsPerMonth": "每月发放 {credits} credits",
@@ -56,9 +56,6 @@
     "rechargeSucceeded": "已到账 {credits} credits",
     "currentPlanBadge": "当前套餐",
     "planExtendCta": "追加购买",
-    "currentPlanTitle": "当前套餐 · {plan}",
-    "currentPlanDetail": "有效期至 {date}（剩余 {days} 天）· 可用额度 {credits}",
-    "currentPlanStacks": "再次购买会在现有有效期上叠加，剩余时长不会作废。",
     "capacityVideos": "{count} 段顶级视频",
     "capacityImages": "{count} 张图片"
   }

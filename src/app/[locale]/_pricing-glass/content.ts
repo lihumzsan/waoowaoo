@@ -43,8 +43,6 @@ export interface GlassCapacityReference {
 
 export interface GlassPricingContent {
   readonly brand: string
-  readonly title: string
-  readonly subtitle: string
   readonly plans: readonly GlassPlan[]
   /** Unit prices behind the capacity claims, so the page can show its maths. */
   readonly capacityReference: GlassCapacityReference
@@ -99,8 +97,6 @@ export function buildGlassPricingContent(input: BuildGlassPricingInput): GlassPr
     capacityReference: catalog.capacityReference,
     creditUnitCny: catalog.creditUnitCny,
     brand: input.pricing.brand,
-    title: input.pricing.title,
-    subtitle: input.pricing.description,
     // Prices come from the billing catalog, never from the content file: the
     // page must not be able to advertise a cycle or amount that checkout would
     // not honour.
