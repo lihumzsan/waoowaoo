@@ -678,7 +678,7 @@ export class AssistantRuntimeService {
           input.preparedThread.model.projectProductionContext,
         ),
         model: input.preparedThread.model.runtimeModel,
-        approvalPolicy: 'on-request',
+        approvalPolicy: input.preparedThread.model.thread.start.approvalPolicy,
         sandboxPolicy: buildTurnSandboxPolicy(
           input.preparedThread.model.thread.start.sandbox,
         ),

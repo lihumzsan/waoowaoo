@@ -66,7 +66,10 @@ export function readCodexRuntimeConfig(
   return {
     ...base,
     driver,
-    image: requireImageDigest(environment.CODEX_RUNTIME_IMAGE),
+    image: requireImageReference(
+      environment.CODEX_RUNTIME_IMAGE,
+      environment.NODE_ENV === 'production',
+    ),
     networkName: requireNetworkName(environment.CODEX_RUNTIME_NETWORK),
     cpuLimit: requirePositiveNumber(environment.CODEX_RUNTIME_CPU_LIMIT, 'CODEX_RUNTIME_CPU_LIMIT_INVALID'),
     memoryBytes: requireInteger(
@@ -97,6 +100,7 @@ export function createRuntimeContainerAdapter(
     cpuLimit: config.cpuLimit,
     memoryBytes: config.memoryBytes,
     pidsLimit: config.pidsLimit,
+    immutableImageRequired: (params.processEnvironment ?? process.env).NODE_ENV === 'production',
     processEnvironment: params.processEnvironment ?? process.env,
     shutdownTimeoutMs: params.shutdownTimeoutMs,
   })
@@ -134,8 +138,12 @@ function requirePositiveNumber(value: string | undefined, code: string): number 
   return parsed
 }
 
-function requireImageDigest(value: string | undefined): string {
-  if (!value || !/^.+@sha256:[a-f0-9]{64}$/u.test(value) || value.endsWith(`@sha256:${'0'.repeat(64)}`)) {
+function requireImageReference(value: string | undefined, immutable: boolean): string {
+  if (!value || value !== value.trim() || /\s/u.test(value)) {
+    throw new Error('CODEX_RUNTIME_IMAGE_DIGEST_REQUIRED')
+  }
+  if (!immutable) return value
+  if (!/^.+@sha256:[a-f0-9]{64}$/u.test(value) || value.endsWith(`@sha256:${'0'.repeat(64)}`)) {
     throw new Error('CODEX_RUNTIME_IMAGE_DIGEST_REQUIRED')
   }
   return value

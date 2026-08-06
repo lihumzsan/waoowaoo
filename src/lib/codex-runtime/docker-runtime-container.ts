@@ -17,6 +17,7 @@ const SCOPE_LABEL = 'wao.codex-runtime.scope'
 const OWNER_LABEL = 'wao.codex-runtime.owner'
 const CONTAINER_WORKSPACE_DIRECTORY = '/workspace'
 const CONTAINER_CODEX_HOME_DIRECTORY = '/runtime/codex-home'
+const CONTAINER_RUNTIME_SKILLS_DIRECTORY = '/workspace/.agents/skills'
 const MIN_MEMORY_BYTES = 256 * 1024 * 1024
 
 export type DockerRuntimeContainerOptions = {
@@ -27,6 +28,7 @@ export type DockerRuntimeContainerOptions = {
   readonly cpuLimit: number
   readonly memoryBytes: number
   readonly pidsLimit: number
+  readonly immutableImageRequired: boolean
   readonly dockerCommand?: string
   readonly processEnvironment?: NodeJS.ProcessEnv
   readonly shutdownTimeoutMs?: number
@@ -75,6 +77,7 @@ export class DockerRuntimeContainerAdapter implements RuntimeContainerAdapter {
       request.materialization.hostCodexHomeDirectory,
       'CODEX_DOCKER_RUNTIME_HOME_INVALID',
     )
+    const runtimeSkillsDirectory = path.join(workspaceDirectory, '.agents', 'skills')
     const containerName = `wao-codex-${scopeId.slice(0, 20)}-${randomUUID().slice(0, 8)}`
     const environment = normalizeRuntimeScopedEnvironment(request.environment)
     const dockerProcessEnvironment = {
@@ -110,6 +113,11 @@ export class DockerRuntimeContainerAdapter implements RuntimeContainerAdapter {
       '/tmp:rw,nosuid,nodev,noexec,size=268435456',
       '--mount',
       buildBindMount(workspaceDirectory, CONTAINER_WORKSPACE_DIRECTORY, 'readwrite'),
+      // Wao Skills are repo-scoped so native Skill reads stay inside the
+      // Codex workspace policy. The nested read-only mount also prevents the
+      // model from changing registry-generated methods through workspace write.
+      '--mount',
+      buildBindMount(runtimeSkillsDirectory, CONTAINER_RUNTIME_SKILLS_DIRECTORY, 'readonly'),
       '--mount',
       buildBindMount(codexHomeDirectory, CONTAINER_CODEX_HOME_DIRECTORY, 'readwrite'),
       '--workdir',
@@ -185,10 +193,13 @@ export class DockerRuntimeContainerAdapter implements RuntimeContainerAdapter {
 }
 
 function validateOptions(options: DockerRuntimeContainerOptions): void {
-  if (!/^.+@sha256:[a-f0-9]{64}$/u.test(options.image)) {
+  if (!options.image || options.image !== options.image.trim() || /\s/u.test(options.image)) {
+    throw new Error('CODEX_DOCKER_RUNTIME_IMAGE_INVALID')
+  }
+  if (options.immutableImageRequired && !/^.+@sha256:[a-f0-9]{64}$/u.test(options.image)) {
     throw new Error('CODEX_DOCKER_RUNTIME_IMAGE_DIGEST_REQUIRED')
   }
-  if (options.image.endsWith(`@sha256:${'0'.repeat(64)}`)) {
+  if (options.immutableImageRequired && options.image.endsWith(`@sha256:${'0'.repeat(64)}`)) {
     throw new Error('CODEX_DOCKER_RUNTIME_IMAGE_DIGEST_PLACEHOLDER')
   }
   if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/u.test(options.networkName)) {

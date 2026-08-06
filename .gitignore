@@ -77,6 +77,7 @@ prisma/data/
 # uploads (user data)
 uploads/
 /data/
+/.runtime/
 
 certificates
 

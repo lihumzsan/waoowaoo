@@ -80,12 +80,15 @@ export class AssistantRuntimePersistence implements RuntimeSessionPersistence {
 
     const codexHome = scopeCodexHome(this.hostRoot, scope)
     await ensurePrivateDirectory(codexHome)
-    await materializeCreativeRuntimeConfiguration(codexHome)
 
     const disposableRoot = await mkdtemp(path.join(materializationsRoot, MATERIALIZATION_PREFIX))
     const workspace = path.join(disposableRoot, 'workspace')
     try {
       await ensurePrivateDirectory(workspace)
+      await materializeCreativeRuntimeConfiguration(
+        codexHome,
+        path.join(workspace, '.agents', 'skills'),
+      )
       return {
         hostWorkspaceDirectory: workspace,
         hostCodexHomeDirectory: codexHome,

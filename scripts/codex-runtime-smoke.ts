@@ -571,7 +571,7 @@ async function runAppServerSmoke(params: {
   for (const runtimeSkill of CREATIVE_RUNTIME_SKILLS) {
     const professionalSkillId = runtimeSkill.skillIds[1]
     const installedSkill = await readFile(
-      path.join(codexHome, 'skills', professionalSkillId, 'SKILL.md'),
+      path.join(cwd, '.agents', 'skills', professionalSkillId, 'SKILL.md'),
       'utf8',
     )
     assert.ok(installedSkill.includes(`name: ${professionalSkillId}`))
@@ -584,6 +584,10 @@ async function runAppServerSmoke(params: {
         `Runtime Skill ${professionalSkillId} embedded another professional domain: ${otherSkillId}`
       ))
     }
+    await assert.rejects(
+      access(path.join(codexHome, 'skills', professionalSkillId, 'SKILL.md')),
+      { code: 'ENOENT' },
+    )
   }
   const createManager = (home: string) => new LocalRuntimeManager({
     clientInfo: {
@@ -604,6 +608,12 @@ async function runAppServerSmoke(params: {
   let restoredManager: LocalRuntimeManager | null = null
   const runtimeKey = 'stage-0-smoke'
   const toolContract = ASSISTANT_RUNTIME_STATIC_CONTRACT.tools
+  const approvalPolicy = ASSISTANT_RUNTIME_STATIC_CONTRACT.thread.approvalPolicy
+  assert.equal(
+    approvalPolicy,
+    'never',
+    'Creative Runtime shell access must fail closed instead of requesting interactive approval.',
+  )
   const customProviderConfig = {
     web_search: toolContract.webSearch,
     features: {
@@ -655,7 +665,7 @@ async function runAppServerSmoke(params: {
       model: process.env.CODEX_RUNTIME_SMOKE_MODEL?.trim() || DEFAULT_MODEL,
       modelProvider: 'wao-runtime-smoke',
       cwd,
-      approvalPolicy: 'never',
+      approvalPolicy,
       sandbox: 'read-only',
       config: customProviderConfig,
       developerInstructions: ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
@@ -670,7 +680,7 @@ async function runAppServerSmoke(params: {
       threadId: probeThread.id,
       input: [{ type: 'text', text: 'Probe the installed runtime contract.' }],
       cwd,
-      approvalPolicy: 'never',
+      approvalPolicy,
       sandboxPolicy: { type: 'readOnly', networkAccess: false },
     })
     const [capturedRequest, completedProbeTurn] = await Promise.all([
@@ -685,7 +695,7 @@ async function runAppServerSmoke(params: {
       model: process.env.CODEX_RUNTIME_SMOKE_MODEL?.trim() || DEFAULT_MODEL,
       modelProvider: 'wao-runtime-smoke',
       cwd,
-      approvalPolicy: 'never',
+      approvalPolicy,
       sandbox: 'read-only',
       config: customProviderConfig,
       developerInstructions: ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
@@ -708,7 +718,7 @@ async function runAppServerSmoke(params: {
         threadId: thread.id,
         input: [{ type: 'text', text: 'Reply with exactly RUNTIME_SMOKE_OK.' }],
         cwd,
-        approvalPolicy: 'never',
+        approvalPolicy,
         sandboxPolicy: { type: 'readOnly', networkAccess: false },
       })
       const completedTurn = await completed
@@ -726,7 +736,7 @@ async function runAppServerSmoke(params: {
         threadId: thread.id,
         input: [{ type: 'text', text: persistenceMarker }],
         cwd,
-        approvalPolicy: 'never',
+        approvalPolicy,
         sandboxPolicy: { type: 'readOnly', networkAccess: false },
       })
       const completedTurn = await completed
@@ -748,7 +758,7 @@ async function runAppServerSmoke(params: {
       model: process.env.CODEX_RUNTIME_SMOKE_MODEL?.trim() || DEFAULT_MODEL,
       modelProvider: 'wao-runtime-smoke',
       cwd,
-      approvalPolicy: 'never',
+      approvalPolicy,
       sandbox: 'read-only',
       config: customProviderConfig,
     })

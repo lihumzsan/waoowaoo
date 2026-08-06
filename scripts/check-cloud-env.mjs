@@ -191,13 +191,8 @@ if (env.BILLING_MODE !== 'ENFORCE') {
   missing.push('BILLING_MODE=ENFORCE')
 }
 
-if (validationMode === 'production' && env.CODEX_RUNTIME_DRIVER !== 'docker') {
+if (env.CODEX_RUNTIME_DRIVER !== 'docker') {
   missing.push('CODEX_RUNTIME_DRIVER=docker')
-} else if (
-  validationMode === 'development'
-  && env.CODEX_RUNTIME_DRIVER !== 'local'
-) {
-  missing.push('CODEX_RUNTIME_DRIVER=local')
 }
 if (
   !isMissing(env.CODEX_RUNTIME_HOST_ROOT)

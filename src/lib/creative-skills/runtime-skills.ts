@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { readCreativeSkillResource } from './loader'
 import {
@@ -143,9 +143,22 @@ async function buildRuntimeSkill(skill: CreativeRuntimeSkillDefinition): Promise
   ].filter((value): value is string => value !== null).join('\n\n')
 }
 
-export async function materializeCreativeRuntimeConfiguration(codexHomeDirectory: string): Promise<void> {
-  const skillsDirectory = path.join(codexHomeDirectory, 'skills')
+export async function materializeCreativeRuntimeConfiguration(
+  codexHomeDirectory: string,
+  runtimeSkillsDirectory: string,
+): Promise<void> {
+  const skillsDirectory = runtimeSkillsDirectory
   await mkdir(skillsDirectory, { recursive: true, mode: 0o700 })
+  // Earlier runtimes installed Wao Skills in Codex home. That made native
+  // Skill reads look like workspace-external shell access under on-request
+  // approval. These registry-owned files are regenerated for every placement;
+  // remove only their exact old directories so there is one discoverable copy.
+  await Promise.all(CREATIVE_RUNTIME_SKILLS.map(async (skill) => {
+    await rm(
+      path.join(codexHomeDirectory, 'skills', skill.skillIds[1]),
+      { recursive: true, force: true },
+    )
+  }))
   await Promise.all(CREATIVE_RUNTIME_SKILLS.map(async (skill) => {
     const professionalSkillId = skill.skillIds[1]
     const skillDirectory = path.join(skillsDirectory, professionalSkillId)
@@ -158,7 +171,10 @@ export async function materializeCreativeRuntimeConfiguration(codexHomeDirectory
   }))
   const disabledSkills = PRIMARY_AGENT_DISABLED_NATIVE_SKILL_IDS.flatMap((skillId) => [
     '[[skills.config]]',
-    `path = ${tomlString(path.join(codexHomeDirectory, 'skills', '.system', skillId, 'SKILL.md'))}`,
+    // `~` resolves through this process's CODEX_HOME on both drivers. A host
+    // absolute path is invalid inside Docker and would silently leave the
+    // bundled system Skill enabled there.
+    `path = ${tomlString(path.join('~', 'skills', '.system', skillId, 'SKILL.md'))}`,
     'enabled = false',
     '',
   ])

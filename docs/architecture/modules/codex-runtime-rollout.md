@@ -24,9 +24,9 @@ Codex app-server 是唯一 Agent Runtime，并独占模型 Thread/history；Wao 
   磁盘与网络；Codex 只能写临时 Project workspace。开发可显式选择本地进程，但 production 不得
   自动降级，产品 edition 也不得自动决定 driver。
 - **CRR-04 — WorkspaceResource 才是项目持久事实。** Runtime 只物化空 scratch、关闭 agents 的固定配置
-  与 registry 生成的主 Agent Skills；不物化项目文件，不复制 Catalog 或对象内容，也不在 Turn 结束时
+  与 registry 生成、只读挂载的主 Agent Skills；不物化项目文件，不复制 Catalog 或对象内容，也不在 Turn 结束时
   capture 文件。项目生产事实由服务端每 Turn 直接附加给唯一 writer。Codex home 只拥有原生
-  Thread/history，不拥有 Resource；scratch、inode 和 Runtime 路径都不是产品权威。
+  Thread/history 与固定配置，不拥有 Resource 或 Skill 正文；scratch、inode 和 Runtime 路径都不是产品权威。
 - **CRR-05 — scratch 没有持久语义。** Runtime 可自由创建临时研究和工具文件，但这些文件不会被
   观察、上传或映射为 Resource。持久内容必须显式调用业务 Operation；媒体引用使用 canonical
   Resource id/version，不通过本地指针文件。
@@ -85,6 +85,11 @@ Codex app-server 是唯一 Agent Runtime，并独占模型 Thread/history；Wao 
 - Docker Runtime 首版 smoke 只验证镜像与 app-server 协议，没有在生产容器中执行内层沙箱命令；
   默认 seccomp/AppArmor 阻止 Bubblewrap 的嵌套 namespace，`on-request` 又把普通读取变成无沙箱审批重试 →
   Docker driver 显式使用无需放宽外层权限的 Landlock 后端，并以真实沙箱命令验收（CRR-03）。
+- Landlock 验收曾只证明内层沙箱可以读取 Skill 文件，没有驱动模型走真实原生 Skill 调用；Skill 位于
+  Codex home 时，`on-request` 仍把模型发起的读取解释为工作区外命令并要求人工确认 → syscall 可读不等于
+  真实调用无需审批 → registry 生成的 Skill 只在 workspace `.agents/skills` 暴露，由容器叠加只读挂载，
+  shell 权限使用 `never + workspace-write` 让越界原地失败而不产生无人能处理的审批请求
+  （CRR-03/04）。
 - 模型网关首版只验证"项目里恰好有一个活跃 Turn"，未证明请求来自当前 Runtime；旧容器 bearer 可在
   有效期内等待新 Turn 后重放 → 凭据没有绑定 placement 租约 → bearer nonce 与 ownership token
   完全相同（CRR-07B）。

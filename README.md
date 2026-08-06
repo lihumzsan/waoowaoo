@@ -147,14 +147,16 @@ npm install
 # 初始化数据库表结构（首次必须执行，跳过会导致启动后报错）
 npm run db:push
 
-# 启动本地数据库、Redis、完整 Temporal Server/namespace、Next.js 和开发 Worker。
-# 开发 Worker 会显式使用 local/unversioned，不会启动生产版 blue/green Worker。
+# 启动容器化的数据库、Redis、完整 Temporal Server/namespace、
+# 带热更新的 Next.js/Worker，以及与生产相同的按项目 Codex Docker Runtime。
+# 开发 Worker 仍显式使用 local/unversioned，不会启动生产版 blue/green Worker。
 npm run dev
 ```
 
 本地调试官方 Cloud 产品能力时，另复制 `.env.cloud.example` 为 `.env.cloud.local` 并运行
-`npm run dev:cloud`。它仍使用同一套本机开源 Temporal，不需要 Temporal Cloud 账户、TLS
-或 API key。
+`npm run dev:cloud`。两个开发命令都使用源码挂载和热更新；Docker 层只在依赖、基础镜像或 Codex
+版本变化时重建。Cloud 模式仍使用同一套本机开源 Temporal，不需要 Temporal Cloud
+账户、TLS 或 API key。`npm run dev:local` 只是显式的宿主机 Runtime 排障入口，不是发布验收路径。
 
 > [!WARNING]
 > 跳过 `npm run db:push` 会导致数据库表结构缺失；请务必在启动应用与 worker 前运行。

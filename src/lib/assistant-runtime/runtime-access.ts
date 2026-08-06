@@ -50,7 +50,11 @@ export const ASSISTANT_RUNTIME_CODEX_VERSION = '0.146.0' as const
 
 export const ASSISTANT_RUNTIME_STATIC_CONTRACT = {
   thread: {
-    approvalPolicy: 'on-request',
+    // The creative Runtime has no product-owned UI for shell escalation.
+    // Keep the workspace sandbox as the permission boundary and fail denied
+    // commands in place instead of surfacing an unfulfillable approval prompt.
+    // Billing and destructive business approval remain Wao MCP decisions.
+    approvalPolicy: 'never',
     sandbox: 'workspace-write',
     serviceName: 'wao-creative-agent',
     // 'none': the pragmatic preset injects a software-engineer persona into the
