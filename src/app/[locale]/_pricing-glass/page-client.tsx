@@ -17,6 +17,7 @@ import {
 import { useWechatRecharge, WechatQrDialog } from './wechat-recharge'
 import { PlanPaymentDialog } from './plan-payment-dialog'
 import type { PaidBetaCampaignView } from '@/lib/paid-beta/campaign'
+import { PublicBetaWaitlistForm } from './public-beta-waitlist'
 
 function cx(...v: readonly (string | false | null | undefined)[]) {
   return v.filter(Boolean).join(' ')
@@ -208,9 +209,11 @@ function PlanCard({
 export default function PricingGlassPageClient({
   content,
   paidBetaCampaign,
+  publicBetaWaitlistEnabled,
 }: {
   readonly content: GlassPricingContent
   readonly paidBetaCampaign: PaidBetaCampaignView
+  readonly publicBetaWaitlistEnabled: boolean
 }) {
   const t = useTranslations('pricing.glass')
   const beta = useTranslations('paidBeta')
@@ -256,7 +259,12 @@ export default function PricingGlassPageClient({
               </div>
             </div>
             {!paidBetaCampaign.paymentOpen ? (
-              <p className="mt-3 text-[12px] text-[var(--glass-text-tertiary)]">{beta('soldOutHint')}</p>
+              <>
+                <p className="mt-3 text-[12px] text-[var(--glass-text-tertiary)]">{beta('soldOutHint')}</p>
+                {publicBetaWaitlistEnabled && paidBetaCampaign.soldOut
+                  ? <PublicBetaWaitlistForm />
+                  : null}
+              </>
             ) : null}
           </section>
           <div className="mt-7">

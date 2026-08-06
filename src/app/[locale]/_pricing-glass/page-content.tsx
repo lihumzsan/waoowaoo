@@ -30,7 +30,11 @@ export async function PricingGlassPageContent({ params }: PricingGlassPageConten
   return (
     <>
       <Navbar reserveLayoutSpace={false} initialDeploymentFeatures={deploymentFeatures} />
-      <PricingGlassPageClient content={content} paidBetaCampaign={paidBetaCampaign} />
+      <PricingGlassPageClient
+        content={content}
+        paidBetaCampaign={paidBetaCampaign}
+        publicBetaWaitlistEnabled={deploymentFeatures.showPublicBetaWaitlist}
+      />
       <PublicFooter initialDeploymentFeatures={deploymentFeatures} />
     </>
   )

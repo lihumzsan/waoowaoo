@@ -51,6 +51,12 @@ export const AUTH_CAPTCHA_ISSUE_LIMIT: RateLimitConfig = {
     maxRequests: 20,
 }
 
+/** Public-beta reservation: one client source may register five numbers per hour. */
+export const PUBLIC_BETA_WAITLIST_LIMIT: RateLimitConfig = {
+    windowSeconds: 60 * 60,
+    maxRequests: 5,
+}
+
 // ============================================================
 // 核心逻辑
 // ============================================================

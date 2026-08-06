@@ -3,6 +3,7 @@
 import type { RefObject } from 'react'
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
+import { UserErrorActionLink } from '@/components/errors/UserErrorActionLink'
 import {
   MediaAttachmentChips,
   TextAttachmentChips,
@@ -218,6 +219,10 @@ export function WorkspaceAssistantComposer({
           {error.tone === 'info' || !error.technical ? null : (
             <p className="mt-0.5 break-all text-xs leading-4 opacity-75">{error.technical}</p>
           )}
+          <UserErrorActionLink
+            action={error.action}
+            className="mt-1.5 inline-flex font-semibold underline underline-offset-2"
+          />
         </div>
       ) : null}
     </div>

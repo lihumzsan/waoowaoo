@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
-import { ApiError } from '@/lib/api-errors'
+import { ApiError, normalizeError } from '@/lib/api-errors'
 import { AssistantRuntimeProjectBusyError } from '@/lib/assistant-runtime'
+import { InsufficientBalanceError } from '@/lib/billing'
 
 export type ProjectAgentCommandHttpBody = Record<string, unknown>
 
@@ -119,6 +120,7 @@ function readAgentTurnErrorCode(text: string): string | null {
 
 export function mapProjectAgentCommandError(error: unknown): ApiError {
   if (error instanceof ApiError) return error
+  if (error instanceof InsufficientBalanceError) return normalizeError(error)
   if (error instanceof AssistantRuntimeProjectBusyError) {
     return new ApiError('AGENT_THREAD_BUSY', {
       code: 'AGENT_THREAD_BUSY',

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { useTranslations } from 'next-intl'
 import { AssistantRuntimeProvider, ThreadPrimitive } from '@assistant-ui/react'
 import { AppIcon } from '@/components/ui/icons'
+import { UserErrorActionLink } from '@/components/errors/UserErrorActionLink'
 import { useAttachmentFilePicker } from '@/components/project-assistant/useAttachmentFilePicker'
 import {
   isAssistantRuntimeApprovalRequest,
@@ -126,7 +127,12 @@ function WorkspaceAssistantRunFailureNotice({
             {failure.technical}
           </div>
         ) : null}
-        {action ? (
+        {failure.action === 'recharge' ? (
+          <UserErrorActionLink
+            action={failure.action}
+            className="mt-1.5 inline-flex rounded-md border border-[var(--glass-tone-warning-fg)]/30 bg-white/70 px-2 py-1 text-xs font-medium text-[var(--glass-tone-warning-fg)] transition-colors hover:bg-white"
+          />
+        ) : action ? (
           <button
             type="button"
             disabled={action.pending}
@@ -999,6 +1005,7 @@ export default function WorkspaceAssistantPanel({
                                 technical: currentTurn?.requestId
                                   ? formatFailureReference(currentTurn.requestId)
                                   : null,
+                                action: null,
                               }}
                               action={continueAction ?? resendAction}
                             />

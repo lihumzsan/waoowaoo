@@ -14,6 +14,7 @@ export interface PaidBetaCampaignView {
   readonly occupied: number
   readonly paidMembers: number
   readonly remaining: number
+  readonly soldOut: boolean
   readonly paymentOpen: boolean
 }
 
@@ -80,6 +81,7 @@ export async function readPaidBetaCampaignView(
     occupied: counts.occupied,
     paidMembers: counts.paidMembers,
     remaining,
+    soldOut: remaining === 0,
     paymentOpen: active && remaining > 0,
   }
 }

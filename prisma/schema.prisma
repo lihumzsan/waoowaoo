@@ -498,6 +498,24 @@ model PaidBetaPaymentAttempt {
   @@map("paid_beta_payment_attempts")
 }
 
+/// One explicit request to be contacted when the public beta opens.
+/// `campaignId + phoneE164` is the canonical identity, so retries and
+/// concurrent submissions cannot create duplicate contact records.
+model PublicBetaWaitlistEntry {
+  id          String   @id @default(uuid())
+  campaignId  String   @db.VarChar(64)
+  phoneE164   String   @db.VarChar(32)
+  locale      String   @db.VarChar(8)
+  source      String   @db.VarChar(32)
+  consentedAt DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  @@unique([campaignId, phoneE164])
+  @@index([campaignId, createdAt])
+  @@map("public_beta_waitlist_entries")
+}
+
 /// A versioned per-user acknowledgement. New announcement versions remain
 /// independently deliverable without localStorage or device-specific state.
 model AnnouncementReceipt {

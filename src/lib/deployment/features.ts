@@ -8,6 +8,7 @@ export interface DeploymentFeatures {
   showRecharge: boolean
   showSubscription: boolean
   showBilling: boolean
+  showPublicBetaWaitlist: boolean
   showApiConfig: boolean
   showAccountSecurity: boolean
   showGoogleOAuth: boolean
@@ -27,6 +28,7 @@ const SELF_HOSTED_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   showRecharge: false,
   showSubscription: false,
   showBilling: false,
+  showPublicBetaWaitlist: false,
   showAccountSecurity: false,
   showGoogleOAuth: false,
   enablePhoneAuth: false,
@@ -43,6 +45,7 @@ const CLOUD_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   showRecharge: true,
   showSubscription: true,
   showBilling: true,
+  showPublicBetaWaitlist: true,
   showAccountSecurity: true,
   showGoogleOAuth: true,
   enablePhoneAuth: true,

@@ -54,6 +54,10 @@
 - **PS-15 — 站内公告按 registry identity 与版本投放。** placement、有效期、优先级和文案 key 只由
   registry 声明；`(user, announcement, version)` 是跨设备已读唯一事实。页面只消费服务端 pending
   View，不得用 localStorage、DOM 或组件私有布尔值建立第二套已读状态。新版必须递增 version。
+- **PS-16 — 公测预约是显式同意的独立联系事实。** 预约不得复用认证身份、付费席位或支付记录；
+  `(campaignId, phoneE164)` 是唯一 identity，只有服务端预约 service 可以写入。前后端必须由同一
+  deployment feature 裁决，且只有付费内测的权威 Campaign View 判定席位售罄后才能开放；API
+  只回传脱敏号码，不得把原始手机号写入日志或响应。
 
 ## 权威入口
 
@@ -62,6 +66,8 @@
   `src/lib/user-api/availability.ts` 统一裁决
 - 认证与账号初始化：`src/lib/auth/**`（`account-onboarding.ts` 是唯一账号 writer）
 - API 会话、管理员权限与错误边界：`src/lib/api-auth.ts`、`src/lib/auth/admin.ts`、`src/lib/errors/**`
+- 公测预约：`src/lib/public-beta/**`、`/api/public-beta/waitlist`；售罄事实来自
+  `src/lib/paid-beta/campaign.ts`
 - 部署启动边界：`docker-compose.yml`、`docker-entrypoint.sh`、`scripts/check-cloud-env.mjs`、
   `src/lib/storage/**`
 

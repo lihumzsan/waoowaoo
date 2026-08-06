@@ -289,6 +289,20 @@ export const ERROR_CATALOG = {
     ERROR_CATEGORY.BILLING,
     'This paid-beta wave is full',
   ),
+  PUBLIC_BETA_WAITLIST_INVALID_INPUT: defineErrorSpec(
+    'PUBLIC_BETA_WAITLIST_INVALID_INPUT',
+    400,
+    false,
+    ERROR_CATEGORY.VALIDATION,
+    'The public-beta waitlist input is invalid',
+  ),
+  PUBLIC_BETA_WAITLIST_NOT_OPEN: defineErrorSpec(
+    'PUBLIC_BETA_WAITLIST_NOT_OPEN',
+    409,
+    false,
+    ERROR_CATEGORY.VALIDATION,
+    'The public-beta waitlist is not open',
+  ),
   SENSITIVE_CONTENT: {
     httpStatus: 422,
     retryable: false,
