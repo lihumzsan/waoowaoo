@@ -4,6 +4,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { apiFetch } from '@/lib/api-fetch'
+import {
+  creditsToPaymentCny,
+  formatCredits,
+  paymentCnyToCredits,
+} from '@/lib/billing/credits'
 import { createClientApiError } from '@/lib/errors/client'
 import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
 
@@ -27,17 +32,28 @@ export interface RechargeState {
   loading: boolean
   busy: boolean
   status: { kind: 'error' | 'info'; text: string } | null
-  checkout: (credits: number) => void
-  estimate: (credits: number) => string | null
+  checkout: (amountCny: number) => void
+  estimateCredits: (amountCny: number) => string | null
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object'
 }
 
-function formatCurrencyAmount(value: number, currency: string): string {
-  if (currency === 'CNY') return `¥${value.toFixed(2)}`
-  return `${currency} ${value.toFixed(2)}`
+function rechargeAmountBounds(config: RechargeConfig): { minCny: number; maxCny: number } {
+  return {
+    minCny: creditsToPaymentCny(config.minCredits),
+    maxCny: creditsToPaymentCny(config.maxCredits),
+  }
+}
+
+function resolveRechargeCredits(amountCny: number, config: RechargeConfig): number | null {
+  try {
+    const credits = paymentCnyToCredits(amountCny)
+    return credits >= config.minCredits && credits <= config.maxCredits ? credits : null
+  } catch {
+    return null
+  }
 }
 
 export function useRecharge(): RechargeState {
@@ -76,17 +92,19 @@ export function useRecharge(): RechargeState {
   }, [resolveClientError, t])
 
   const checkout = useCallback(
-    (credits: number) => {
+    (amountCny: number) => {
       if (!config?.enabled) {
         setStatus({ kind: 'info', text: t('rechargeUnavailable') })
         return
       }
-      if (!Number.isFinite(credits) || credits < config.minCredits || credits > config.maxCredits) {
+      const credits = resolveRechargeCredits(amountCny, config)
+      if (credits === null) {
+        const bounds = rechargeAmountBounds(config)
         setStatus({
           kind: 'error',
-          text: t('creditRangeError', {
-            min: config.minCredits.toLocaleString(),
-            max: config.maxCredits.toLocaleString(),
+          text: t('rechargeAmountRangeError', {
+            min: bounds.minCny.toLocaleString(),
+            max: bounds.maxCny.toLocaleString(),
           }),
         })
         return
@@ -112,17 +130,16 @@ export function useRecharge(): RechargeState {
     [config, resolveClientError, t],
   )
 
-  const estimate = useCallback(
-    (credits: number) => {
-      if (!config || !Number.isFinite(credits) || credits <= 0) return null
-      return t('estimateAmount', {
-        amount: formatCurrencyAmount(credits, config.paymentCurrency),
-      })
+  const estimateCredits = useCallback(
+    (amountCny: number) => {
+      if (!config) return null
+      const credits = resolveRechargeCredits(amountCny, config)
+      return credits === null ? null : formatCredits(credits)
     },
-    [config, t],
+    [config],
   )
 
-  return { config, loading, busy, status, checkout, estimate }
+  return { config, loading, busy, status, checkout, estimateCredits }
 }
 
 /* ----------------------------------------------------------------- */
@@ -204,32 +221,39 @@ export function CustomRecharge({
 }) {
   const t = useTranslations('pricing.glass')
   const [value, setValue] = useState('')
-  const credits = Number(value)
-  const est = recharge.estimate(credits)
+  const amountCny = Number(value)
+  const estimatedCredits = recharge.estimateCredits(amountCny)
+  const bounds = recharge.config ? rechargeAmountBounds(recharge.config) : null
   const amountEntered = value.trim().length > 0
+  const amountValid = estimatedCredits !== null
   const anyBusy = recharge.busy || Boolean(wechat?.busy)
   return (
     <div className={className}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <label className="flex-1">
-          <span className="mb-2 block text-sm font-medium text-[var(--glass-text-primary)]">{t('customCreditLabel')}</span>
+          <span className="mb-2 block text-sm font-medium text-[var(--glass-text-primary)]">{t('customRechargeAmountLabel')}</span>
           <input
             type="number"
-            inputMode="numeric"
+            inputMode="decimal"
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            placeholder={recharge.config ? `${recharge.config.minCredits} – ${recharge.config.maxCredits}` : t('customCreditPlaceholder')}
+            placeholder={bounds ? `${bounds.minCny} – ${bounds.maxCny}` : t('customRechargeAmountPlaceholder')}
             className="glass-input-base px-4 py-3 text-sm"
-            min={recharge.config?.minCredits}
-            max={recharge.config?.maxCredits}
+            min={bounds?.minCny}
+            max={bounds?.maxCny}
+            step="0.1"
             disabled={!paymentOpen}
           />
         </label>
         {wechat?.available ? (
           <button
             type="button"
-            disabled={!paymentOpen || anyBusy || !amountEntered}
-            onClick={() => wechat.start(credits)}
+            disabled={!paymentOpen || anyBusy || !amountEntered || !amountValid}
+            onClick={() => {
+              if (!recharge.config) return
+              const credits = resolveRechargeCredits(amountCny, recharge.config)
+              if (credits !== null) wechat.start(credits)
+            }}
             className="glass-btn-base glass-btn-secondary h-12 px-5 text-sm disabled:cursor-not-allowed disabled:opacity-50"
           >
             {!paymentOpen ? t('paidBetaSoldOutCta') : wechat.busy ? t('checkoutBusy') : t('payWithWechat')}
@@ -238,7 +262,7 @@ export function CustomRecharge({
         <button
           type="button"
           disabled={!paymentOpen || anyBusy || !amountEntered}
-          onClick={() => recharge.checkout(credits)}
+          onClick={() => recharge.checkout(amountCny)}
           className="glass-btn-base glass-btn-primary h-12 px-6 text-sm disabled:cursor-not-allowed disabled:opacity-50"
         >
           {!paymentOpen
@@ -251,7 +275,7 @@ export function CustomRecharge({
         </button>
       </div>
       <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[var(--glass-text-tertiary)]">
-        {est && <span>{t('estimatePrefix', { amount: est })}</span>}
+        {estimatedCredits && <span>{t('creditsEstimate', { credits: estimatedCredits })}</span>}
         {recharge.config && <span>{t('unitValue')}</span>}
       </div>
       <RechargeStatus status={recharge.status} />

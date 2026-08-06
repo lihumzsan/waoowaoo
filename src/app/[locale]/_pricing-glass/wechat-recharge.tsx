@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { loadStripe } from '@stripe/stripe-js'
 import GlassModalShell from '@/components/ui/primitives/GlassModalShell'
 import { apiFetch } from '@/lib/api-fetch'
+import { creditsToPaymentCny } from '@/lib/billing/credits'
 import { createClientApiError } from '@/lib/errors/client'
 import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
 import type { RechargeConfig } from './shared'
@@ -26,7 +27,7 @@ const STATUS_POLL_TIMEOUT_MS = 10 * 60 * 1000
 
 export interface WechatQrPayment {
   readonly paymentIntentId: string
-  readonly imageDataUrl: string
+  readonly imageUrl: string
   readonly amountCny: number
   /** What the payment buys, so the dialog can say which it is. */
   readonly purpose: 'recharge' | 'plan'
@@ -54,18 +55,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Read the QR image out of a confirmed PaymentIntent.
+ * Read the sharpest available QR image out of a confirmed PaymentIntent.
  *
  * `wechat_pay_display_qr_code` is not in Stripe.js's published types, so it is
  * narrowed explicitly here rather than cast — a shape change should surface as
  * a missing QR, not as a runtime crash deep in the render.
  */
-function readQrImageDataUrl(nextAction: unknown): string | null {
+function readQrImageUrl(nextAction: unknown): string | null {
   if (!isRecord(nextAction)) return null
   const qr = nextAction.wechat_pay_display_qr_code
   if (!isRecord(qr)) return null
-  const url = qr.image_data_url
-  return typeof url === 'string' && url.trim() ? url : null
+  for (const field of ['image_url_svg', 'image_url_png', 'image_data_url'] as const) {
+    const url = qr[field]
+    if (typeof url === 'string' && url.trim()) return url
+  }
+  return null
 }
 
 function readIntentResponse(payload: unknown): {
@@ -123,9 +127,9 @@ export function useWechatRecharge(
         if (!config || !Number.isSafeInteger(credits) || credits < config.minCredits || credits > config.maxCredits) {
           setStatus({
             kind: 'error',
-            text: t('creditRangeError', {
-              min: config?.minCredits.toLocaleString() ?? '',
-              max: config?.maxCredits.toLocaleString() ?? '',
+            text: t('rechargeAmountRangeError', {
+              min: config ? creditsToPaymentCny(config.minCredits).toLocaleString() : '',
+              max: config ? creditsToPaymentCny(config.maxCredits).toLocaleString() : '',
             }),
           })
           return
@@ -161,12 +165,12 @@ export function useWechatRecharge(
           )
           if (confirmed.error) throw new Error(confirmed.error.message || 'WECHAT_CONFIRM_FAILED')
 
-          const imageDataUrl = readQrImageDataUrl(confirmed.paymentIntent?.next_action)
-          if (!imageDataUrl) throw new Error('WECHAT_QR_MISSING')
+          const imageUrl = readQrImageUrl(confirmed.paymentIntent?.next_action)
+          if (!imageUrl) throw new Error('WECHAT_QR_MISSING')
 
           setPayment({
             paymentIntentId: intent.paymentIntentId,
-            imageDataUrl,
+            imageUrl,
             amountCny: intent.amountCny,
             purpose: request.kind === 'plan' ? 'plan' : 'recharge',
             credits: request.kind === 'recharge' ? request.credits : null,
@@ -251,15 +255,7 @@ export function WechatQrDialog({
         <PaidBetaGroupAccess onDone={onClose} />
       ) : payment ? (
         <div className="flex flex-col items-center gap-4 py-2">
-          {/* A data: URI produced by Stripe. next/image would only add a
-              proxy round-trip to bytes we already hold, and cannot optimise
-              a QR code without risking the scan. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={payment.imageDataUrl}
-            alt={t('wechatQrAlt')}
-            className="h-56 w-56 rounded-xl bg-white p-3"
-          />
+          <WechatQrImage imageUrl={payment.imageUrl} />
           <p className="glass-num text-2xl font-semibold text-[var(--glass-text-primary)]">
             ¥{payment.amountCny.toFixed(2)}
           </p>
@@ -270,5 +266,21 @@ export function WechatQrDialog({
         </div>
       ) : null}
     </GlassModalShell>
+  )
+}
+
+export function WechatQrImage({ imageUrl }: { readonly imageUrl: string }) {
+  const t = useTranslations('pricing.glass')
+  return (
+    <div className="rounded-xl bg-white p-3">
+      {/* Stripe's SVG is preferred so high-DPI mobile screens remain sharp.
+          Plain img also keeps the provider URL/data URI untouched. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={imageUrl}
+        alt={t('wechatQrAlt')}
+        className="h-56 w-56 object-contain"
+      />
+    </div>
   )
 }

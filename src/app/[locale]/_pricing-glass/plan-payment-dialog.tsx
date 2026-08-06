@@ -7,7 +7,7 @@ import { AppIcon } from '@/components/ui/icons'
 import { WeChatIcon } from '@/components/ui/icons/WeChatIcon'
 import type { GlassPlan } from './content'
 import type { SubscriptionInterval } from '@/lib/billing/subscription-plans'
-import type { WechatRechargeState } from './wechat-recharge'
+import { WechatQrImage, type WechatRechargeState } from './wechat-recharge'
 import PaidBetaGroupAccess from '@/components/paid-beta/PaidBetaGroupAccess'
 
 /**
@@ -115,11 +115,7 @@ export function PlanPaymentDialog({
         <PaidBetaGroupAccess onDone={onClose} />
       ) : qr ? (
         <div className="flex flex-col items-center gap-4 py-2">
-          {/* A data: URI produced by Stripe. next/image would only add a proxy
-              round-trip to bytes we already hold, and cannot optimise a QR
-              code without risking the scan. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={qr.imageDataUrl} alt={t('wechatQrAlt')} className="h-56 w-56 rounded-xl bg-white p-3" />
+          <WechatQrImage imageUrl={qr.imageUrl} />
           <p className="glass-num text-2xl font-semibold text-[var(--glass-text-primary)]">
             ¥{qr.amountCny.toFixed(2)}
           </p>

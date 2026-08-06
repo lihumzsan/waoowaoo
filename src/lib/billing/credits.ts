@@ -89,3 +89,15 @@ export function creditsToPaymentMinorUnits(credits: number): number {
   // floating point rounding can reach the payment provider.
   return credits * 10
 }
+
+/** Whole credits bought by an exact CNY amount entered by the user. */
+export function paymentCnyToCredits(amountCny: number): number {
+  if (!Number.isFinite(amountCny) || amountCny <= 0) {
+    throw new CreditAmountError('payment amount must be a finite positive CNY amount', amountCny)
+  }
+  const amountFen = amountCny * 100
+  if (!Number.isSafeInteger(amountFen) || amountFen % 10 !== 0) {
+    throw new CreditAmountError('payment amount must resolve to a whole number of credits', amountCny)
+  }
+  return amountFen / 10
+}
