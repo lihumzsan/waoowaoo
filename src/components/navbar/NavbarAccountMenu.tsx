@@ -199,19 +199,6 @@ export default function NavbarAccountMenu({
         </Link>
       ))}
 
-      {/* 从 dock 收敛进来的资产中心入口 */}
-      <Link
-        href={{ pathname: '/workspace/asset-hub' }}
-        target="_blank"
-        rel="noopener noreferrer"
-        role="menuitem"
-        onClick={onClose}
-        className="glass-menu-item"
-      >
-        <AppIcon name="folderHeart" className="h-4 w-4 shrink-0" />
-        <span className="flex-1 text-left">{t('assetHub')}</span>
-      </Link>
-
       {/* 语言(唯一切换入口,内嵌展开) */}
       <LanguageSwitcher variant="menu-row" />
 
