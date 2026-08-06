@@ -1,4 +1,5 @@
 import { createScopedLogger } from '@/lib/logging/core'
+import { getErrorFailureClass, getErrorSpec } from '@/lib/errors/codes'
 import { normalizeAnyError } from '@/lib/errors/normalize'
 import type { ErrorFields } from '@/lib/logging/types'
 import type { GenerateResult } from '@/lib/ai-providers/runtime-types'
@@ -152,13 +153,14 @@ export async function wrapMediaProviderExecution<T>(
   } catch (error) {
     safeObserve(() => {
       const normalized = normalizeAnyError(error)
+      const spec = getErrorSpec(normalized.code)
       mediaLogger.error({
         action: 'media.provider.failed',
         message: `media provider failed (${context.modality}:${context.phase})`,
-        provider: context.provider ?? normalized.provider ?? undefined,
+        provider: context.provider ?? normalized.origin.provider,
         errorCode: normalized.code,
-        retryable: normalized.retryable,
-        failureClass: normalized.failureClass,
+        retryable: spec.retryable,
+        failureClass: getErrorFailureClass(normalized.code),
         durationMs: Date.now() - startedAt,
         details: {
           modality: context.modality,

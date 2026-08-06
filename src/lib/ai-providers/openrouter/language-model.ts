@@ -8,10 +8,19 @@ import { applyOpenRouterPromptCaching } from '@/lib/ai-providers/openrouter/prom
 import { createScopedLogger } from '@/lib/logging/core'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { AppError } from '@/lib/errors/app-error'
+import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
+import {
+  classifyOpenRouterMachineErrorCode,
+  isOpenRouterSensitiveRejection,
+  OPENROUTER_CONTENT_POLICY_REJECTION_MESSAGE,
+} from './error-normalization'
 
 const openRouterLanguageModelLogger = createScopedLogger({
   module: 'ai-provider.openrouter.language-model',
 })
+
+const OPENROUTER_REJECTED_RESPONSE_STATUSES = new Set([400, 401, 402, 403, 404, 413])
+const OPENROUTER_LANGUAGE_ERROR_FIELD_LIMIT = 1_000
 
 function readOptionalHeader(headers: Headers, name: string): string | undefined {
   const value = headers.get(name)?.trim()
@@ -39,6 +48,74 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null
+}
+
+function readLimitedString(value: unknown): string | null {
+  if (typeof value !== 'string' && typeof value !== 'number') return null
+  const normalized = String(value).trim()
+  return normalized ? normalized.slice(0, OPENROUTER_LANGUAGE_ERROR_FIELD_LIMIT) : null
+}
+
+type OpenRouterLanguageErrorEnvelope = {
+  readonly message: string
+  readonly errorType: string | null
+  readonly metadata: Record<string, unknown> | null
+}
+
+async function readOpenRouterLanguageErrorEnvelope(
+  response: Response,
+): Promise<OpenRouterLanguageErrorEnvelope | null> {
+  if (!OPENROUTER_REJECTED_RESPONSE_STATUSES.has(response.status)) return null
+  let body: unknown
+  try {
+    body = await response.clone().json() as unknown
+  } catch {
+    return null
+  }
+  const envelope = asRecord(body)
+  const error = asRecord(envelope?.error)
+  const message = readLimitedString(error?.message)
+  if (!error || !message) return null
+  const metadata = asRecord(error.metadata)
+  return {
+    message,
+    errorType: readLimitedString(metadata?.error_type)
+      ?? readLimitedString(error.type)
+      ?? readLimitedString(error.code),
+    metadata,
+  }
+}
+
+function throwOpenRouterLanguageSubmissionRejection(input: {
+  readonly response: Response
+  readonly envelope: OpenRouterLanguageErrorEnvelope
+}): never {
+  const sensitive = isOpenRouterSensitiveRejection(
+    input.envelope.errorType,
+    input.envelope.metadata,
+  )
+  const code = sensitive
+    ? 'SENSITIVE_CONTENT'
+    : classifyOpenRouterMachineErrorCode(input.envelope.errorType)
+      ?? (input.response.status === 401 || input.response.status === 403
+        ? 'PROVIDER_AUTH_INVALID'
+        : input.response.status === 402
+          ? 'PROVIDER_BILLING_REQUIRED'
+          : 'PROVIDER_SUBMISSION_REJECTED')
+  throw new ProviderSubmissionError(
+    code,
+    sensitive ? OPENROUTER_CONTENT_POLICY_REJECTION_MESSAGE : input.envelope.message,
+    {
+      disposition: 'rejected',
+      provider: 'openrouter',
+      details: {
+        providerStatus: input.response.status,
+        ...(input.envelope.errorType
+          ? { providerErrorType: input.envelope.errorType }
+          : {}),
+      },
+    },
+  )
 }
 
 async function readRequestBody(input: RequestInfo | URL, init?: RequestInit): Promise<Record<string, unknown>> {
@@ -82,6 +159,10 @@ function createOpenRouterLoggingFetch(input: AiProviderLanguageModelContext): ty
         openRouterSessionId: input.openRouterSessionId ?? null,
       },
     })
+    const errorEnvelope = await readOpenRouterLanguageErrorEnvelope(response)
+    if (errorEnvelope) {
+      throwOpenRouterLanguageSubmissionRejection({ response, envelope: errorEnvelope })
+    }
     return response
   }
 }

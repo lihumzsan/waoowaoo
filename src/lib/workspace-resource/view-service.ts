@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { stableArgsFingerprint } from '@/lib/project-agent/stable-args-hash'
+import { parseFailureRecord } from '@/lib/errors/failure'
 import { resolvePublicModelName } from '@/lib/ai-exec/model-presentation'
 import { readWorkspaceResourceTextContent } from './content-store'
 import type {
@@ -57,8 +58,7 @@ const resourceSelect = {
   memberIndex: true,
   alternativeGroupExecutionId: true,
   taskId: true,
-  errorCode: true,
-  errorMessage: true,
+  task: { select: { failure: true } },
   deletedAt: true,
   createdAt: true,
   updatedAt: true,
@@ -402,9 +402,10 @@ async function loadViews(
       inputSummaries: summariesByOutput.get(lineageKey) ?? [],
       actions: projectActions({ resource: row, current: version, mediaType }),
       taskId: row.taskId,
-      error: row.errorCode || row.errorMessage
-        ? { code: row.errorCode, message: row.errorMessage ?? row.errorCode ?? '' }
-        : null,
+      error: (() => {
+        const failure = parseFailureRecord(row.task?.failure)
+        return failure ? { code: failure.code } : null
+      })(),
       deletedAt: row.deletedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),

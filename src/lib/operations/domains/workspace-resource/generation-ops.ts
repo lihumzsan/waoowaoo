@@ -1154,8 +1154,6 @@ async function commitProductionPlan(
         },
         data: {
           status: 'pending',
-          errorCode: null,
-          errorMessage: null,
           operationId,
           operationExecutionId: authorization.operationExecutionId,
           inputHash: payload.resource.inputHash,

@@ -1,10 +1,8 @@
 import { createScopedLogger } from '@/lib/logging/core'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
-import { buildFalQueueUrl } from '@/lib/ai-providers/fal/base-url'
-import { fetchWithRetry, RETRY_POLICY } from '@/lib/retry'
-import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
 import { FAL_GPT_IMAGE_2_MODEL_ID } from '@/lib/ai-providers/fal/models'
+import { submitFalQueueRequest } from '@/lib/ai-providers/fal/submission'
 import type {
   GptImage2ImageSize,
   GptImage2NormalizedOptions,
@@ -109,24 +107,12 @@ export async function executeFalImageGeneration(input: AiProviderImageExecutionC
     })
   }
 
-  const submitResponse = await fetchWithRetry(buildFalQueueUrl(endpoint), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Key ${apiKey}`,
-    },
-    body: JSON.stringify(body),
-    policy: RETRY_POLICY.providerSubmit,
-    cache: 'no-store',
+  const requestId = await submitFalQueueRequest({
+    endpoint,
+    apiKey,
+    payload: body,
     scope: `fal:image:submit:${endpoint}`,
-    fetchFn: fetchWithProviderProxy,
   })
-
-  const submitData = (await submitResponse.json()) as { request_id?: unknown }
-  const requestId = typeof submitData.request_id === 'string' ? submitData.request_id : ''
-  if (!requestId) {
-    throw new Error('FAL 未返回 request_id')
-  }
 
   return {
     success: true,

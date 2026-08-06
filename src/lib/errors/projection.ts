@@ -35,6 +35,7 @@ export interface ModelErrorProjection {
   category: string
   retryable: boolean
   action: ModelErrorAction
+  details: Record<string, unknown>
 }
 
 const PUBLIC_DETAIL_KEYS = new Set([
@@ -157,7 +158,6 @@ function resolveUserAction(code: UnifiedErrorCode): UserErrorAction {
   ) return 'open_provider_settings'
   if (code === 'CONTEXT_BUDGET_EXCEEDED') return 'new_conversation'
   const spec = getErrorSpec(code)
-  if (code === 'PROVIDER_SUBMISSION_REJECTED') return 'revise_input'
   if (
     spec.category === ERROR_CATEGORY.VALIDATION
     && (spec.httpStatus === 400 || spec.httpStatus === 413 || spec.httpStatus === 415 || spec.httpStatus === 422)
@@ -214,7 +214,10 @@ export function projectErrorForUser(
   }
 }
 
-export function projectErrorForModel(codeInput: unknown): ModelErrorProjection {
+export function projectErrorForModel(
+  codeInput: unknown,
+  details?: Record<string, unknown> | null,
+): ModelErrorProjection {
   const code = resolveUnifiedErrorCode(codeInput) ?? 'INTERNAL_ERROR'
   const spec = getErrorSpec(code)
   return {
@@ -222,5 +225,6 @@ export function projectErrorForModel(codeInput: unknown): ModelErrorProjection {
     category: spec.category,
     retryable: spec.retryable,
     action: resolveModelAction(code),
+    details: projectModelErrorDetails(details),
   }
 }

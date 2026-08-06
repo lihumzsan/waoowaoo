@@ -4,6 +4,7 @@
  */
 import { prisma } from '../src/lib/prisma'
 import { resolveRedisRuntimeConfig } from '../src/lib/redis-config'
+import { parseFailureRecord } from '../src/lib/errors/failure'
 
 async function diagnoseProject(projectId: string) {
   console.log(`🔍 诊断项目: ${projectId}\n`)
@@ -84,9 +85,11 @@ async function diagnoseProject(projectId: string) {
     console.log(`     创建时间: ${task.createdAt}`)
     console.log(`     更新时间: ${task.updatedAt}`)
 
-    if (task.errorMessage || task.errorCode) {
-      console.log(`     ❌ 错误码: ${task.errorCode || 'N/A'}`)
-      console.log(`     ❌ 错误信息: ${task.errorMessage?.substring(0, 200) || 'N/A'}`)
+    const failure = parseFailureRecord(task.failure)
+    if (failure) {
+      console.log(`     ❌ 错误码: ${failure.code}`)
+      console.log(`     ❌ 错误信息: ${failure.message.substring(0, 200)}`)
+      console.log(`     ❌ 错误来源: ${failure.origin.system}`)
     }
 
     // 获取任务事件

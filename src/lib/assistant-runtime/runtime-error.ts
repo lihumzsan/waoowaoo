@@ -4,12 +4,14 @@ import {
   type ProviderCredentialMode,
 } from '@/lib/deployment/config'
 import type { UnifiedErrorCode } from '@/lib/errors/codes'
+import {
+  createFailureRecord,
+  projectProviderCredentialOwnership,
+  type FailureRecord,
+} from '@/lib/errors/failure'
 import { normalizeAnyError } from '@/lib/errors/normalize'
 
-export type AssistantRuntimeFailure = {
-  readonly errorCode: UnifiedErrorCode
-  readonly errorMessage: string | null
-}
+export type AssistantRuntimeFailure = FailureRecord
 
 const MAX_ERROR_MESSAGE_LENGTH = 2_000
 
@@ -40,19 +42,17 @@ function codexHttpStatusCode(info: RuntimeJsonObject): number | null {
   return null
 }
 
-function projectProviderCredentialOwnership(
-  code: UnifiedErrorCode,
-  providerCredentialMode: ProviderCredentialMode,
-): UnifiedErrorCode {
-  if (providerCredentialMode !== 'platform-key') return code
-  if (code === 'PROVIDER_AUTH_INVALID') return 'PLATFORM_PROVIDER_AUTH_INVALID'
-  if (code === 'PROVIDER_BILLING_REQUIRED') return 'PLATFORM_PROVIDER_BILLING_REQUIRED'
-  return code
+function codexProviderHttpErrorCode(status: number): UnifiedErrorCode {
+  if (status === 401 || status === 403) return 'PROVIDER_AUTH_INVALID'
+  if (status === 402) return 'PROVIDER_BILLING_REQUIRED'
+  return normalizeAnyError(
+    { status },
+    { fallbackCode: 'PROJECT_AGENT_RUNTIME_FAILED' },
+  ).code
 }
 
 function codexErrorCode(
   info: RuntimeJsonValue | undefined,
-  providerCredentialMode: ProviderCredentialMode,
 ): UnifiedErrorCode {
   if (typeof info === 'string') {
     switch (info) {
@@ -60,14 +60,9 @@ function codexErrorCode(
       case 'sessionBudgetExceeded':
         return 'CONTEXT_BUDGET_EXCEEDED'
       case 'usageLimitExceeded':
-        return projectProviderCredentialOwnership(
-          'PROVIDER_BILLING_REQUIRED',
-          providerCredentialMode,
-        )
+        return 'PROVIDER_BILLING_REQUIRED'
       case 'serverOverloaded':
-        return providerCredentialMode === 'platform-key'
-          ? 'PLATFORM_PROVIDER_UNAVAILABLE'
-          : 'EXTERNAL_ERROR'
+        return 'EXTERNAL_ERROR'
       case 'internalServerError':
         return 'EXTERNAL_ERROR'
       case 'cyberPolicy':
@@ -86,10 +81,7 @@ function codexErrorCode(
   if (isRecord(info)) {
     const httpStatus = codexHttpStatusCode(info)
     if (httpStatus !== null) {
-      return projectProviderCredentialOwnership(normalizeAnyError(
-        { status: httpStatus },
-        { context: 'worker', fallbackCode: 'PROJECT_AGENT_RUNTIME_FAILED' },
-      ).code, providerCredentialMode)
+      return codexProviderHttpErrorCode(httpStatus)
     }
     if (
       isRecord(info.httpConnectionFailed)
@@ -110,23 +102,31 @@ export function normalizeAssistantRuntimeFailure(
   options?: { readonly providerCredentialMode?: ProviderCredentialMode },
 ): AssistantRuntimeFailure | null {
   if (!isRecord(value)) return null
-  return {
-    errorCode: codexErrorCode(
-      value.codexErrorInfo,
-      options?.providerCredentialMode ?? getDeploymentConfig().providerCredentialMode,
-    ),
-    errorMessage: errorMessage(value),
-  }
+  const failure = createFailureRecord(
+    codexErrorCode(value.codexErrorInfo),
+    errorMessage(value),
+    { origin: { system: 'runtime', provider: 'codex', phase: 'turn' } },
+  )
+  return projectProviderCredentialOwnership(
+    failure,
+    options?.providerCredentialMode ?? getDeploymentConfig().providerCredentialMode,
+  )
 }
 
 export function assistantRuntimeFailureForStopReason(
   stopReason: string,
 ): AssistantRuntimeFailure {
   if (stopReason === 'runtime_protocol_error') {
-    return { errorCode: 'ASSISTANT_RUNTIME_PROTOCOL_ERROR', errorMessage: null }
+    return createFailureRecord('ASSISTANT_RUNTIME_PROTOCOL_ERROR', null, {
+      origin: { system: 'runtime', phase: 'turn' },
+    })
   }
   if (stopReason.includes('persistence')) {
-    return { errorCode: 'INTERNAL_ERROR', errorMessage: null }
+    return createFailureRecord('INTERNAL_ERROR', null, {
+      origin: { system: 'runtime', phase: 'persistence' },
+    })
   }
-  return { errorCode: 'PROJECT_AGENT_RUNTIME_FAILED', errorMessage: null }
+  return createFailureRecord('PROJECT_AGENT_RUNTIME_FAILED', null, {
+    origin: { system: 'runtime', phase: 'turn' },
+  })
 }

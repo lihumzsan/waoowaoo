@@ -187,7 +187,6 @@ export async function executeProjectAgentOperationFromApi(
       })
     }
     const normalized = normalizeAnyError(error, {
-      context: 'api',
       fallbackCode: 'EXTERNAL_ERROR',
     })
     throw new ApiError(normalized.code, {

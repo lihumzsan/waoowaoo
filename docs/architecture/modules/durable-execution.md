@@ -52,6 +52,9 @@ Task 与交互式 Agent 的唯一交点是一个稳定 batchId 的完成通知�
 - **DE-21 — Agent 发起的执行服从 Turn cancel fence。** 首次创建执行或业务写入时在同一事务锁定
   origin Turn；Turn 必须仍活跃且未请求取消。已完成的 execution 可精确 replay，取消先提交时
   不得启动新的持久执行。
+- **DE-22 — Temporal 失败只用一个版本化 codec。** Activity 把完整 FailureRecord 编码进唯一协议；
+  client 必须遍历 `WorkflowFailedError → ActivityFailure → ApplicationFailure` cause chain 并恢复同一
+  记录。Workflow wrapper、API 与 MCP 不得分别重建或猜测 code；协议缺失或畸形必须显式失败关闭。
 
 ## 权威入口
 
@@ -69,3 +72,6 @@ Task 与交互式 Agent 的唯一交点是一个稳定 batchId 的完成通知�
   领域契约与 schema 错误一律 non-retryable。
 - Turn interrupt 首版没有进入执行的事务边界，审批等待后晚到的执行可能在用户已停止时创建 Task
   → 取消与首次副作用没有共同 fence → 以 Project 锁串行决定（DE-21）。
+- Operation Activity 已携带 typed `ApplicationFailure`，但 client 原样抛最外层 `WorkflowFailedError`，
+  通用 normalizer 不遍历 cause chain，真实 Workspace 路径错误仍变成 Internal error → Operation、
+  Task 与 Scheduler 边界共用版本化 failure codec，client 只在该入口解码（DE-22）。

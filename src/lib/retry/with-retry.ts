@@ -1,6 +1,7 @@
 import { createScopedLogger } from '@/lib/logging/core'
+import { getErrorSpec } from '@/lib/errors/codes'
 import { normalizeAnyError } from '@/lib/errors/normalize'
-import type { NormalizedError } from '@/lib/errors/types'
+import type { FailureRecord } from '@/lib/errors/failure'
 import {
   computeRetryDelayMs,
   type RetryPolicy,
@@ -12,7 +13,7 @@ export type RetryAttemptContext = {
 }
 
 export type RetryFailureInfo = RetryAttemptContext & {
-  readonly error: NormalizedError
+  readonly error: FailureRecord
   readonly raw: unknown
   readonly nextDelayMs: number
   readonly scope: string
@@ -33,7 +34,7 @@ async function delay(ms: number): Promise<void> {
 }
 
 function shouldRetryFailure<T>(input: WithRetryInput<T>, info: RetryFailureInfo): boolean {
-  if (!info.error.retryable) return false
+  if (!getErrorSpec(info.error.code).retryable) return false
   if (info.attempt >= info.maxAttempts) return false
   if (!input.shouldRetry) return true
   return input.shouldRetry(info)
@@ -61,7 +62,7 @@ export async function withRetry<T>(input: WithRetryInput<T>): Promise<T> {
         action: retry ? 'retry.attempt_failed' : 'retry.exhausted',
         message: normalized.message,
         errorCode: normalized.code,
-        retryable: normalized.retryable,
+        retryable: getErrorSpec(normalized.code).retryable,
         details: {
           scope: input.scope,
           attempt,

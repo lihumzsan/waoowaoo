@@ -4,7 +4,7 @@ import { createScopedLogger } from '@/lib/logging/core'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { AppError } from '@/lib/errors/app-error'
 import type { UnifiedErrorCode } from '@/lib/errors/codes'
-import { FetchStatusError } from '@/lib/retry'
+import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
 import type {
   AiProviderVideoExecutionContext,
   GenerateResult,
@@ -262,16 +262,7 @@ function readRawRequestId(value: unknown): string | null {
 }
 
 function readRawAcceptedRequestId(value: unknown): string | null {
-  const record = asUnknownRecord(value)
-  const requestId = readRawRequestId(record)
-  const pollingUrl = readLimitedString(record?.polling_url)
-  const status = readLimitedString(record?.status)
-  return requestId
-    && pollingUrl
-    && status
-    && ['pending', 'in_progress', 'completed', 'failed', 'cancelled', 'expired'].includes(status)
-    ? requestId
-    : null
+  return readRawRequestId(value)
 }
 
 function readRawSubmitRejection(value: unknown): OpenRouterVideoSubmitRejection | null {
@@ -305,7 +296,9 @@ function formatSubmitRejection(rejection: OpenRouterVideoSubmitRejection): strin
 }
 
 function normalizeOpenRouterVideoSubmitValidationError(error: ResponseValidationError): string {
-  const acceptedRequestId = readRawAcceptedRequestId(error.rawValue)
+  const acceptedRequestId = error.statusCode === 202
+    ? readRawAcceptedRequestId(error.rawValue)
+    : null
   if (acceptedRequestId) return acceptedRequestId
 
   const rejection = readRawSubmitRejection(error.rawValue)
@@ -316,23 +309,26 @@ function normalizeOpenRouterVideoSubmitValidationError(error: ResponseValidation
   }
 
   const message = formatSubmitRejection(rejection)
+  const details = {
+    ...(rejection.code === null ? {} : { providerCode: rejection.code }),
+    ...(rejection.errorType ? { providerErrorType: rejection.errorType } : {}),
+  }
   if (isOpenRouterSensitiveRejection(rejection.errorType)) {
-    throw new AppError(
+    throw new ProviderSubmissionError(
       'SENSITIVE_CONTENT',
       OPENROUTER_CONTENT_POLICY_REJECTION_MESSAGE,
       {
+        disposition: 'rejected',
         provider: 'openrouter',
-        details: rejection.errorType ? { providerErrorType: rejection.errorType } : null,
+        details,
         cause: error,
       },
     )
   }
-  if (rejection.code !== null) {
-    throw new FetchStatusError(rejection.code, message)
-  }
-  throw new AppError('PROVIDER_SUBMISSION_REJECTED', message, {
+  throw new ProviderSubmissionError('PROVIDER_SUBMISSION_REJECTED', message, {
+    disposition: 'rejected',
     provider: 'openrouter',
-    details: rejection.errorType ? { providerErrorType: rejection.errorType } : null,
+    details,
     cause: error,
   })
 }

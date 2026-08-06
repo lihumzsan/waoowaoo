@@ -228,9 +228,17 @@ async function seedFinalFailureCheckpoint(
         attemptId: `${workflowId}:attempt:1`,
         attempt: 1,
         failure: {
-          errorCode: 'TASK_DURABILITY_EXPECTED_FINAL',
-          errorMessage: 'Deterministic terminal fixture failure',
-          errorDetails: null,
+          failure: {
+            version: 1,
+            code: 'PROVIDER_SUBMISSION_REJECTED',
+            message: 'Deterministic terminal fixture failure',
+            details: { reasonCode: 'TASK_DURABILITY_EXPECTED_FINAL' },
+            origin: {
+              system: 'provider',
+              provider: 'temporal-test-provider',
+              phase: 'submit',
+            },
+          },
           failureClass: 'PERMANENT_PROVIDER',
           retryDisposition: 'final',
         },

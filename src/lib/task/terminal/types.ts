@@ -1,4 +1,4 @@
-import type { UnifiedErrorCode } from '@/lib/errors/codes'
+import type { FailureRecord } from '@/lib/errors/failure'
 
 export type TaskTerminalFence =
   | { kind: 'attempt'; attempt: number }
@@ -18,9 +18,7 @@ export type TaskTerminalCommitIntent =
     })
   | (TaskTerminalBase & {
       kind: 'failed'
-      errorCode: UnifiedErrorCode
-      errorMessage: string
-      errorDetails?: Record<string, unknown> | null
+      failure: FailureRecord
       source: 'worker' | 'workflow' | 'timeout'
     })
   | (TaskTerminalBase & {

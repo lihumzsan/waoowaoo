@@ -1,9 +1,10 @@
 import { createScopedLogger } from '@/lib/logging/core'
-import { FetchStatusError, fetchWithRetry, RETRY_POLICY } from '@/lib/retry'
+import { FetchStatusError } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { buildFalQueueUrl } from './base-url'
 import { AppError } from '@/lib/errors/app-error'
 import { getErrorSpec, type UnifiedErrorCode } from '@/lib/errors/codes'
+import { submitFalQueueRequest } from './submission'
 
 const falLogger = createScopedLogger({ module: 'ai-provider.fal', provider: 'fal' })
 
@@ -22,38 +23,13 @@ interface FalQueueInput {
 }
 
 export async function submitFalTask(endpoint: string, input: FalQueueInput, apiKey: string): Promise<string> {
-  if (!apiKey) {
-    throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'fal' })
-  }
-
-  let response: Response
-  try {
-    response = await fetchWithRetry(buildFalQueueUrl(endpoint), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Key ${apiKey}`,
-      },
-      body: JSON.stringify(input),
-      policy: RETRY_POLICY.providerSubmit,
-      // Stryker disable next-line StringLiteral: retry scope is observability metadata, not provider behavior.
-      scope: `fal:submit:${endpoint}`,
-      fetchFn: fetchWithProviderProxy,
-    })
-  } catch (error) {
-    if (error instanceof FetchStatusError) {
-      const typed = toFalHttpAppError(error)
-      if (typed) throw typed
-    }
-    throw error
-  }
-
-  const data = await response.json() as { request_id?: unknown }
-  const requestId = typeof data.request_id === 'string' ? data.request_id : ''
-
-  if (!requestId) {
-    throw new Error('FAL未返回request_id')
-  }
+  const requestId = await submitFalQueueRequest({
+    endpoint,
+    apiKey,
+    payload: input,
+    // Stryker disable next-line StringLiteral: retry scope is observability metadata, not provider behavior.
+    scope: `fal:submit:${endpoint}`,
+  })
 
   // Stryker disable next-line StringLiteral,ObjectLiteral: observability text does not change the provider contract.
   falLogger.info({

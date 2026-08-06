@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
 import { projectErrorForModel } from '@/lib/errors/projection'
+import { parseFailureRecord } from '@/lib/errors/failure'
 import { listTaskLifecycleEvents } from '@/lib/task/publisher'
 import { getTaskById, queryTasks } from '@/lib/task/service'
 import { queryTaskTargetStates } from '@/lib/task/state-service'
@@ -94,10 +95,10 @@ export type GetTaskInput = z.infer<typeof getTaskInputSchema>
 
 function withTaskError(task: Awaited<ReturnType<typeof queryTasks>>[number]) {
   const publicTask: Partial<typeof task> = { ...task }
-  delete publicTask.errorCode
-  delete publicTask.errorMessage
+  delete publicTask.failure
+  const failure = parseFailureRecord(task.failure)
   const error = task.status === TASK_STATUS.FAILED
-    ? projectErrorForModel(task.errorCode)
+    ? projectErrorForModel(failure?.code, failure?.details)
     : null
   return {
     ...publicTask,

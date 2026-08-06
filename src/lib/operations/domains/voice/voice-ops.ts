@@ -365,7 +365,7 @@ async function commitVoice(ctx: ProjectAgentOperationContext, plan: OperationPla
         projectId: ctx.projectId,
         status: { in: ['failed', 'canceled'] },
       },
-      data: { status: 'pending', errorCode: null, errorMessage: null, operationId: 'generate_voice' },
+      data: { status: 'pending', operationId: 'generate_voice' },
     })
     if (updated.count !== metadata.resources.length) throw new Error('WORKSPACE_RESOURCE_RETRY_TARGET_CHANGED:generate_voice')
   }

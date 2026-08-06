@@ -735,8 +735,7 @@ export class AssistantRuntimeEventProjector {
     const projection: AssistantRuntimeTerminalProjection = {
       status: input.status,
       stopReason: input.stopReason,
-      errorCode: failure?.errorCode ?? null,
-      errorMessage: failure?.errorMessage ?? null,
+      failure,
       assistantMessage,
       usage: this.latestUsage
         ? {

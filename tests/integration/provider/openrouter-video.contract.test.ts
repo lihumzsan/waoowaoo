@@ -3,6 +3,7 @@ import {
   executeOpenRouterVideoGeneration,
   submitOpenRouterVideoTask,
 } from '@/lib/ai-providers/openrouter/video'
+import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
 import { startScenarioServer } from '../../helpers/fakes/scenario-server'
 
 const getProviderConfigMock = vi.hoisted(() => vi.fn())
@@ -69,7 +70,6 @@ describe('provider contract - OpenRouter video', () => {
         status: 202,
         body: {
           id: 'accepted-job-id',
-          polling_url: '/openrouter/videos/accepted-job-id',
           status: 'pending',
           error: { message: 'non-contract warning shape' },
         },
@@ -119,11 +119,47 @@ describe('provider contract - OpenRouter video', () => {
         aspectRatio: '16:9',
       },
     })).rejects.toMatchObject({
-      name: 'FetchStatusError',
-      status: 400,
-      responseText: expect.stringContaining('type=invalid_request'),
+      name: 'ProviderSubmissionError',
+      code: 'PROVIDER_SUBMISSION_REJECTED',
+      disposition: 'rejected',
+      details: {
+        providerCode: 400,
+        providerErrorType: 'invalid_request',
+      },
       message: expect.stringContaining('Reference images must use directly downloadable URLs'),
     })
+
+    expect(server!.getRequests('POST', '/openrouter/videos')).toHaveLength(1)
+  })
+
+  it('does not infer a submission disposition from a bare retryable HTTP status', async () => {
+    server!.defineScenario({
+      method: 'POST',
+      path: '/openrouter/videos',
+      mode: 'fatal_error',
+      submitResponse: {
+        status: 429,
+        body: { error: { code: 429, message: 'Rate limited' } },
+      },
+    })
+
+    try {
+      await submitOpenRouterVideoTask({
+        baseUrl: `${server!.baseUrl}/openrouter`,
+        apiKey: 'openrouter-video-key',
+        payload: {
+          model: 'bytedance/seedance-2.0-fast',
+          prompt: 'do not infer acceptance from HTTP status',
+          duration: 15,
+          resolution: '720p',
+          aspectRatio: '16:9',
+        },
+      })
+      throw new Error('Expected the submission to fail')
+    } catch (error) {
+      expect(error).not.toBeInstanceOf(ProviderSubmissionError)
+      expect(error).toMatchObject({ code: 'RATE_LIMIT' })
+    }
 
     expect(server!.getRequests('POST', '/openrouter/videos')).toHaveLength(1)
   })
@@ -158,7 +194,9 @@ describe('provider contract - OpenRouter video', () => {
         aspectRatio: '16:9',
       },
     })).rejects.toMatchObject({
+      name: 'ProviderSubmissionError',
       code: 'SENSITIVE_CONTENT',
+      disposition: 'rejected',
       provider: 'openrouter',
     })
 
@@ -172,7 +210,7 @@ describe('provider contract - OpenRouter video', () => {
       mode: 'malformed_response',
       submitResponse: {
         status: 202,
-        body: { id: 'possibly-accepted-job', status: 'pending' },
+        body: { status: 'pending' },
       },
     })
 

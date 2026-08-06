@@ -5,7 +5,7 @@ import type {
   RuntimeServerRequestResponse,
   RuntimeUserInput,
 } from '@/lib/codex-runtime/runtime-adapter'
-import type { UnifiedErrorCode } from '@/lib/errors/codes'
+import type { FailureRecord } from '@/lib/errors/failure'
 import type { LlmUsageFact } from '@/lib/billing/llm-usage'
 
 export const ASSISTANT_RUNTIME_ASSISTANT_ID = 'workspace-command' as const
@@ -157,8 +157,7 @@ export interface AssistantRuntimeEventSink {
 export type AssistantRuntimeTerminalProjection = {
   readonly status: 'completed' | 'failed' | 'interrupted'
   readonly stopReason: string
-  readonly errorCode: UnifiedErrorCode | null
-  readonly errorMessage: string | null
+  readonly failure: FailureRecord | null
   readonly assistantMessage: UIMessage | null
   readonly usage: LlmUsageFact | null
 }

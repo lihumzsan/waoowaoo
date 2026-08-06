@@ -10,9 +10,6 @@ export type TaskTargetTerminalProjection = {
   readonly type: TaskType
   readonly targetType: string
   readonly targetId: string
-  readonly errorCode?: string | null
-  readonly errorMessage?: string | null
-  readonly errorDetails?: Record<string, unknown> | null
 }
 
 export type TaskTargetTerminalProjectionResult = 'applied' | 'stale_owner' | 'success_materialized'

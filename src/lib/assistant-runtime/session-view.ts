@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client'
 import { safeValidateUIMessages, type UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
 import { buildAgentTurnAssistantMessageId } from '@/lib/agent-turn/stream-publisher'
-import { resolveUnifiedErrorCode } from '@/lib/errors/codes'
+import { parseFailureRecord } from '@/lib/errors/failure'
 import type { RuntimeJsonValue } from '@/lib/codex-runtime/runtime-adapter'
 import {
   parseProjectAgentPlanSnapshot,
@@ -43,7 +43,7 @@ function toTurnView(row: {
   readonly planJson: Prisma.JsonValue | null
   readonly assistantMessageId: string | null
   readonly stopReason: string | null
-  readonly errorCode: string | null
+  readonly failure: Prisma.JsonValue | null
   readonly cancelReason: string | null
   readonly startedAt: Date | null
   readonly finishedAt: Date | null
@@ -65,7 +65,7 @@ function toTurnView(row: {
       ? buildAgentTurnAssistantMessageId({ turnId: row.id, attempt: row.attempt })
       : null),
     stopReason: row.stopReason,
-    errorCode: row.errorCode ? resolveUnifiedErrorCode(row.errorCode) ?? 'INTERNAL_ERROR' : null,
+    errorCode: parseFailureRecord(row.failure)?.code ?? null,
     cancelReason: row.cancelReason,
     startedAt: row.startedAt?.toISOString() ?? null,
     finishedAt: row.finishedAt?.toISOString() ?? null,
@@ -225,7 +225,7 @@ export async function getAssistantRuntimeSessionView(
         status: task.status,
         terminal: TERMINAL_TASK_STATUSES.has(task.status),
         errorCode: task.status === 'failed'
-          ? resolveUnifiedErrorCode(task.errorCode) ?? 'INTERNAL_ERROR'
+          ? parseFailureRecord(task.failure)?.code ?? 'INTERNAL_ERROR'
           : null,
         createdAt: task.createdAt.toISOString(),
         finishedAt: task.finishedAt?.toISOString() ?? null,

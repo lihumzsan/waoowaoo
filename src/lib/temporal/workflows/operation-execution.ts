@@ -4,6 +4,10 @@ import {
   workflowInfo,
 } from '@temporalio/workflow'
 import {
+  encodeTemporalFailure,
+  temporalInvariantFailure,
+} from '../failure'
+import {
   OPERATION_EXECUTION_PROTOCOL,
   type OperationExecutionActivities,
   type OperationExecutionWorkflowInput,
@@ -21,7 +25,12 @@ const activities = proxyActivities<OperationExecutionActivities>({
 })
 
 function fail(code: string, ...details: unknown[]): never {
-  throw ApplicationFailure.nonRetryable(code, code, ...details)
+  const encoded = encodeTemporalFailure(temporalInvariantFailure(code, details))
+  throw ApplicationFailure.nonRetryable(
+    encoded.message,
+    encoded.type,
+    ...encoded.details,
+  )
 }
 
 function requireIdentity(value: unknown, code: string): void {

@@ -4,7 +4,14 @@ import type {
   ImageGenerationUsage,
   ImageStreamingResponseData,
 } from '@openrouter/sdk/models'
-import { BadRequestResponseError } from '@openrouter/sdk/models/errors'
+import {
+  BadRequestResponseError,
+  ForbiddenResponseError,
+  NotFoundResponseError,
+  PayloadTooLargeResponseError,
+  PaymentRequiredResponseError,
+  UnauthorizedResponseError,
+} from '@openrouter/sdk/models/errors'
 import { createScopedLogger } from '@/lib/logging/core'
 import { AppError } from '@/lib/errors/app-error'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
@@ -23,7 +30,7 @@ import {
   type OpenRouterImageOptions,
 } from './image-options'
 import { OPENROUTER_IMAGE_MODEL_IDS } from './models'
-import { ProviderPreAcceptRejectedError } from '@/lib/ai-exec/submission-error'
+import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
 import {
   classifyOpenRouterMachineErrorCode,
   OPENROUTER_CONTENT_POLICY_REJECTION_MESSAGE,
@@ -57,6 +64,35 @@ function resolveResponseMediaType(
 function isProviderAccountHardLimit(error: unknown): boolean {
   return error instanceof BadRequestResponseError
     && error.error.message.trim().toLowerCase() === 'billing hard limit has been reached.'
+}
+
+function isStructuredImageSubmissionRejection(error: unknown): boolean {
+  return error instanceof BadRequestResponseError
+    || error instanceof UnauthorizedResponseError
+    || error instanceof PaymentRequiredResponseError
+    || error instanceof ForbiddenResponseError
+    || error instanceof NotFoundResponseError
+    || error instanceof PayloadTooLargeResponseError
+}
+
+function throwStructuredImageSubmissionRejection(error: unknown): never {
+  try {
+    throwNormalizedOpenRouterSdkError(error)
+  } catch (normalized) {
+    const failure = normalized instanceof AppError
+      ? normalized
+      : new AppError('PROVIDER_SUBMISSION_REJECTED', 'OpenRouter rejected the image request', {
+          provider: 'openrouter',
+          details: error instanceof Error ? { diagnostic: error.message.slice(0, 1_000) } : null,
+          cause: error,
+        })
+    throw new ProviderSubmissionError(failure.code, failure.message, {
+      disposition: 'rejected',
+      provider: 'openrouter',
+      details: failure.details,
+      cause: error,
+    })
+  }
 }
 
 function createOpenRouterImageClient(input: {
@@ -143,19 +179,18 @@ async function projectStreamingImage(
     if (event.type === 'error') {
       const code = event.error.code?.trim() || 'unknown'
       const errorCode = classifyOpenRouterMachineErrorCode(code)
-      if (errorCode) {
-        throw new AppError(
-          errorCode,
-          errorCode === 'SENSITIVE_CONTENT'
-            ? OPENROUTER_CONTENT_POLICY_REJECTION_MESSAGE
-            : event.error.message,
-          {
-            provider: 'openrouter',
-            details: { providerErrorType: code },
-          },
-        )
-      }
-      throw new Error(`OPENROUTER_IMAGE_STREAM_ERROR: ${code}: ${event.error.message}`)
+      throw new ProviderSubmissionError(
+        errorCode ?? 'PROVIDER_SUBMISSION_REJECTED',
+        errorCode === 'SENSITIVE_CONTENT'
+          ? OPENROUTER_CONTENT_POLICY_REJECTION_MESSAGE
+          : event.error.message,
+        {
+          disposition: 'rejected',
+          provider: 'openrouter',
+          details: { providerErrorType: code },
+          origin: { system: 'provider', provider: 'openrouter', phase: 'result' },
+        },
+      )
     }
     throw new Error(`OPENROUTER_IMAGE_STREAM_EVENT_UNSUPPORTED: ${String(event.type)}`)
   }
@@ -210,11 +245,18 @@ export async function requestOpenRouterImage(input: {
       : projectBufferedImage(response, resolved.outputFormat)
   } catch (error) {
     if (isProviderAccountHardLimit(error)) {
-      throw new ProviderPreAcceptRejectedError(
-        'provider_account_limit',
+      throw new ProviderSubmissionError(
+        'PROVIDER_BILLING_REQUIRED',
         'OpenRouter upstream provider account reached its billing hard limit before accepting the image request',
-        { cause: error },
+        {
+          disposition: 'pre_accept_rejected',
+          provider: 'openrouter',
+          cause: error,
+        },
       )
+    }
+    if (isStructuredImageSubmissionRejection(error)) {
+      throwStructuredImageSubmissionRejection(error)
     }
     throwNormalizedOpenRouterSdkError(error)
   }

@@ -55,16 +55,16 @@ describe('provider result validation preserves execution-mode semantics', () => 
     }), { executionMode: 'vision' })).not.toThrow()
   })
 
-  it('allows Google sync safety and preserves stream empty-response failure', () => {
+  it('preserves Google safety as an explicit terminal rejection in every execution mode', () => {
     const safetyEmpty = result({
       text: '',
       termination: { kind: 'safety', rawReason: 'SAFETY' },
     })
     expect(() => validateGoogleLanguageModelResult(safetyEmpty, { executionMode: 'sync' }))
-      .not.toThrow()
+      .toThrow('Google blocked generation by policy')
     expect(() => validateGoogleLanguageModelResult(safetyEmpty, { executionMode: 'stream' }))
-      .toThrow('Google Gemini returned an empty text response')
+      .toThrow('Google blocked generation by policy')
     expect(() => validateGoogleLanguageModelResult(safetyEmpty, { executionMode: 'vision' }))
-      .not.toThrow()
+      .toThrow('Google blocked generation by policy')
   })
 })

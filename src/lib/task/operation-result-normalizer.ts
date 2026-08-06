@@ -1,6 +1,7 @@
 import { TASK_STATUS, TASK_TYPE } from './types'
 import type { OperationResultStatus, RecentOperationMedia, RecentOperationMediaType, RecentOperationResult } from './operation-result-types'
 import { projectErrorForModel } from '@/lib/errors/projection'
+import { parseFailureRecord } from '@/lib/errors/failure'
 
 export interface OperationResultTaskRow {
   id: string
@@ -10,7 +11,7 @@ export interface OperationResultTaskRow {
   targetId: string
   payload: unknown
   result: unknown
-  errorCode: string | null
+  failure: unknown
   operationId: string | null
   operationSource: string | null
   approvalGrantId: string | null
@@ -125,7 +126,7 @@ export function normalizeTaskOperationResult(task: OperationResultTaskRow): Rece
   const payload = isRecord(task.payload) ? task.payload : null
   const result = isRecord(task.result) ? task.result : null
   const model = readModel(payload, result)
-  const errorCode = task.errorCode?.trim() || readString(result, 'errorCode')
+  const failure = parseFailureRecord(task.failure)
 
   return {
     operationId,
@@ -141,7 +142,7 @@ export function normalizeTaskOperationResult(task: OperationResultTaskRow): Rece
     model,
     media: buildMedia(task.type, result),
     error: task.status === TASK_STATUS.FAILED
-      ? projectErrorForModel(errorCode)
+      ? projectErrorForModel(failure?.code, failure?.details)
       : null,
     submittedAt: task.queuedAt.toISOString(),
     completedAt: task.finishedAt?.toISOString() ?? null,

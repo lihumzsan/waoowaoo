@@ -6,6 +6,10 @@ import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import { withProviderProxyDispatcher } from '@/lib/http/outbound-proxy'
 import { GOOGLE_PROVIDER_PROXY_TARGET } from '@/lib/ai-providers/google/proxy-target'
 import { AppError } from '@/lib/errors/app-error'
+import {
+  captureGoogleSdkSubmission,
+  googleSafetyTerminalError,
+} from './submission'
 
 interface GoogleMusicPart {
   inlineData?: {
@@ -32,7 +36,7 @@ function getFinishReason(response: GoogleMusicResponse): string | undefined {
   return response.candidates?.[0]?.finishReason
 }
 
-function isSafetyFinishReason(reason: string | undefined): boolean {
+function isSafetyFinishReason(reason: string | undefined): reason is string {
   return reason === 'SAFETY'
     || reason === 'PROHIBITED_CONTENT'
     || reason === 'BLOCKLIST'
@@ -74,10 +78,7 @@ export function extractGoogleMusicResult(response: unknown): {
 
   const finishReason = getFinishReason(safe)
   if (isSafetyFinishReason(finishReason)) {
-    throw new AppError('SENSITIVE_CONTENT', 'Google blocked music generation by policy', {
-      provider: 'google',
-      details: { finishReason: finishReason ?? null },
-    })
+    throw googleSafetyTerminalError(finishReason)
   }
   throw new AppError('EMPTY_RESPONSE', 'Google returned no audio', { provider: 'google' })
 }
@@ -87,7 +88,7 @@ export async function executeGoogleMusicGeneration(input: AiProviderMusicExecuti
   const ai = new GoogleGenAI({ apiKey })
   const modelId = requireSelectedModelId(input.selection, 'google:music')
 
-  const response = await withRetry({
+  const response = await captureGoogleSdkSubmission(async () => await withRetry({
     scope: `google:music:generate:${modelId}`,
     policy: RETRY_POLICY.providerSubmit,
     run: async () => await withProviderProxyDispatcher(
@@ -97,7 +98,7 @@ export async function executeGoogleMusicGeneration(input: AiProviderMusicExecuti
         contents: [{ parts: [{ text: input.prompt }] }],
       }),
     ),
-  })
+  }))
 
   const result = extractGoogleMusicResult(response)
   return {

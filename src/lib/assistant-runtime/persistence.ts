@@ -6,6 +6,7 @@ import { safeValidateUIMessages, type UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
 import { buildAgentTurnAssistantMessageId } from '@/lib/agent-turn/stream-publisher'
 import { projectErrorForModel } from '@/lib/errors/projection'
+import { parseFailureRecord } from '@/lib/errors/failure'
 import { parseProjectAgentPlanSnapshot } from '@/lib/project-agent/plan'
 import type {
   AssistantRuntimeInteractionView,
@@ -632,8 +633,7 @@ export async function failAssistantRuntimeTurnStart(input: {
       data: {
         status: turn.cancelRequestId ? 'cancelled' : 'interrupted',
         stopReason: turn.cancelRequestId ? 'cancelled_before_binding' : input.reason,
-        errorCode: null,
-        errorMessage: null,
+        failure: Prisma.DbNull,
         finishedAt: new Date(),
       },
     })
@@ -671,8 +671,7 @@ export async function failAssistantRuntimeBoundTurnStart(input: {
       data: {
         status: turn.cancelRequestId ? 'cancelled' : 'interrupted',
         stopReason: turn.cancelRequestId ? 'cancelled_during_projection_start' : input.reason,
-        errorCode: null,
-        errorMessage: null,
+        failure: Prisma.DbNull,
         finishedAt: new Date(),
       },
     })
@@ -1243,8 +1242,7 @@ export async function settleAssistantRuntimeTurn(input: {
         status: input.projection.status,
         assistantMessageId: input.projection.assistantMessage?.id ?? null,
         stopReason: input.projection.stopReason,
-        errorCode: input.projection.errorCode,
-        errorMessage: input.projection.errorMessage,
+        failure: input.projection.failure ? toJson(input.projection.failure) : Prisma.DbNull,
         finishedAt: new Date(),
       },
     })
@@ -1478,8 +1476,7 @@ export async function markAssistantRuntimeProjectTurnsInterrupted(input: {
       data: {
         status: 'interrupted',
         stopReason: input.reason,
-        errorCode: null,
-        errorMessage: null,
+        failure: Prisma.DbNull,
         finishedAt: new Date(),
       },
     })
@@ -1520,7 +1517,7 @@ type FollowUpBatchWithTasks = Prisma.FollowUpBatchGetPayload<{
             targetType: true
             targetId: true
             result: true
-            errorCode: true
+            failure: true
           }
         }
       }
@@ -1542,7 +1539,10 @@ function buildFollowUpContent(batch: FollowUpBatchWithTasks): string {
       targetId: member.task.targetId,
       result: member.task.result,
       failure: member.task.status === 'failed'
-        ? projectErrorForModel(member.task.errorCode)
+        ? (() => {
+            const failure = parseFailureRecord(member.task.failure)
+            return projectErrorForModel(failure?.code, failure?.details)
+          })()
         : null,
     }))
   const content = [
@@ -1590,7 +1590,7 @@ async function readFollowUpBatch(batchId: string): Promise<FollowUpBatchWithTask
               targetType: true,
               targetId: true,
               result: true,
-              errorCode: true,
+              failure: true,
             },
           },
         },
@@ -1649,7 +1649,7 @@ export async function admitAssistantRuntimeTaskFollowUp(input: {
                 targetType: true,
                 targetId: true,
                 result: true,
-                errorCode: true,
+                failure: true,
               },
             },
           },

@@ -1,10 +1,8 @@
 import { createScopedLogger } from '@/lib/logging/core'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import type { AiProviderVideoExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
-import { buildFalQueueUrl } from '@/lib/ai-providers/fal/base-url'
-import { fetchWithRetry, RETRY_POLICY } from '@/lib/retry'
-import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
+import { submitFalQueueRequest } from '@/lib/ai-providers/fal/submission'
 import {
   FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID,
   FAL_KLING_O3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
@@ -543,24 +541,12 @@ export async function executeFalVideoGeneration(input: AiProviderVideoExecutionC
   const logger = createScopedLogger({ module: 'worker.fal-video', action: 'fal_video_generate' })
   logger.info({ message: 'FAL video generation request', details: { modelId, endpoint } })
 
-  const submitResponse = await fetchWithRetry(buildFalQueueUrl(endpoint), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Key ${apiKey}`,
-    },
-    body: JSON.stringify(payload),
-    policy: RETRY_POLICY.providerSubmit,
-    cache: 'no-store',
+  const requestId = await submitFalQueueRequest({
+    endpoint,
+    apiKey,
+    payload,
     scope: `fal:video:submit:${endpoint}`,
-    fetchFn: fetchWithProviderProxy,
   })
-
-  const submitData = (await submitResponse.json()) as { request_id?: unknown }
-  const requestId = typeof submitData.request_id === 'string' ? submitData.request_id : ''
-  if (!requestId) {
-    throw new Error('FAL 未返回 request_id')
-  }
   logger.info({ message: 'FAL video task submitted', details: { requestId } })
   return {
     success: true,

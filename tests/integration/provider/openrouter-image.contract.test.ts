@@ -8,7 +8,7 @@ import {
 } from '@/lib/ai-providers/openrouter/models'
 import { AiOptionValidationError, normalizeAiOptions } from '@/lib/ai-exec/normalize'
 import { startScenarioServer } from '../../helpers/fakes/scenario-server'
-import { ProviderPreAcceptRejectedError } from '@/lib/ai-exec/submission-error'
+import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
 
 const PNG_1X1_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
 const PNG_1X1_DATA_URL = `data:image/png;base64,${PNG_1X1_BASE64}`
@@ -252,6 +252,12 @@ describe('provider contract - OpenRouter image', () => {
         headers: { 'content-type': 'text/event-stream' },
         body: [
           `data: ${JSON.stringify({
+            type: 'image_generation.partial_image',
+            partial_image_index: 0,
+            b64_json: PNG_1X1_BASE64,
+          })}`,
+          '',
+          `data: ${JSON.stringify({
             type: 'error',
             error: {
               code: 'server_error',
@@ -273,7 +279,9 @@ describe('provider contract - OpenRouter image', () => {
       prompt: 'surface the stream failure',
       options: normalizeImageOptions({ aspectRatio: '1:1', resolution: '1K', quality: 'low' }),
     })).rejects.toMatchObject({
+      name: 'ProviderSubmissionError',
       code: 'EXTERNAL_ERROR',
+      disposition: 'rejected',
       provider: 'openrouter',
       message: 'Generation failed',
     })
@@ -312,7 +320,9 @@ describe('provider contract - OpenRouter image', () => {
       prompt: 'preserve the machine policy fact',
       options: normalizeImageOptions({ aspectRatio: '1:1', resolution: '1K', quality: 'low' }),
     })).rejects.toMatchObject({
+      name: 'ProviderSubmissionError',
       code: 'SENSITIVE_CONTENT',
+      disposition: 'rejected',
       provider: 'openrouter',
     })
 
@@ -342,7 +352,69 @@ describe('provider contract - OpenRouter image', () => {
       modelId: 'openai/gpt-image-2',
       prompt: 'route only after explicit rejection',
       options: normalizeImageOptions({ aspectRatio: '1:1', resolution: '1K', quality: 'low' }),
-    })).rejects.toBeInstanceOf(ProviderPreAcceptRejectedError)
+    })).rejects.toBeInstanceOf(ProviderSubmissionError)
+
+    expect(server!.getRequests('POST', '/openrouter/images')).toHaveLength(1)
+  })
+
+  it('types a structured initial 4xx response as an explicit rejection', async () => {
+    server!.defineScenario({
+      method: 'POST',
+      path: '/openrouter/images',
+      mode: 'fatal_error',
+      submitResponse: {
+        status: 400,
+        body: {
+          error: {
+            message: 'Input image URL is not directly downloadable.',
+            code: 400,
+            metadata: { error_type: 'invalid_request' },
+          },
+        },
+      },
+    })
+
+    await expect(requestOpenRouterImage({
+      baseUrl: `${server!.baseUrl}/openrouter`,
+      apiKey: 'openrouter-image-key',
+      modelId: 'openai/gpt-image-2',
+      prompt: 'surface a proven provider rejection',
+      options: normalizeImageOptions({ aspectRatio: '1:1', resolution: '1K', quality: 'low' }),
+    })).rejects.toMatchObject({
+      name: 'ProviderSubmissionError',
+      code: 'PROVIDER_SUBMISSION_REJECTED',
+      disposition: 'rejected',
+      provider: 'openrouter',
+      message: 'Input image URL is not directly downloadable.',
+    })
+
+    expect(server!.getRequests('POST', '/openrouter/images')).toHaveLength(1)
+  })
+
+  it('does not infer a disposition from a bare image rate-limit response', async () => {
+    server!.defineScenario({
+      method: 'POST',
+      path: '/openrouter/images',
+      mode: 'fatal_error',
+      submitResponse: {
+        status: 429,
+        body: { error: { message: 'Rate limited', code: 429 } },
+      },
+    })
+
+    try {
+      await requestOpenRouterImage({
+        baseUrl: `${server!.baseUrl}/openrouter`,
+        apiKey: 'openrouter-image-key',
+        modelId: 'openai/gpt-image-2',
+        prompt: 'keep HTTP-only rate limit ambiguous',
+        options: normalizeImageOptions({ aspectRatio: '1:1', resolution: '1K', quality: 'low' }),
+      })
+      throw new Error('Expected the submission to fail')
+    } catch (error) {
+      expect(error).not.toBeInstanceOf(ProviderSubmissionError)
+      expect(error).toMatchObject({ code: 'RATE_LIMIT' })
+    }
 
     expect(server!.getRequests('POST', '/openrouter/images')).toHaveLength(1)
   })

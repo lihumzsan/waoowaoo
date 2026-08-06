@@ -252,4 +252,50 @@ describe('Temporal Operation execution durability', () => {
       await removeOperationExecutionDurabilityFixture(fixture)
     }
   }, 60_000)
+
+  it('round-trips a typed workspace path failure through real Temporal wrappers', async () => {
+    const fixture = await createOperationExecutionDurabilityFixture()
+    const connected = await connectTemporalClient()
+    const command = {
+      ...fixture.command,
+      executionId: `${fixture.command.executionId}-missing-folder`,
+      operationRequestId: `${fixture.command.operationRequestId}-missing-folder`,
+      normalizedInput: {
+        ...fixture.command.normalizedInput as Record<string, unknown>,
+        folderPath: '../成片',
+      },
+    }
+    try {
+      worker = await startOperationExecutionDurabilityWorker({
+        faultExecutionId: 'no-ack-loss-for-missing-folder',
+      })
+      const client = new TemporalOperationExecutionClient(
+        connected.client.workflow,
+        worker.taskQueue,
+      )
+
+      await expect(client.execute(command)).rejects.toMatchObject({
+        code: 'INVALID_PARAMS',
+        failure: {
+          version: 1,
+          code: 'INVALID_PARAMS',
+          details: {
+            reasonCode: 'WORKSPACE_RESOURCE_PATH_INVALID',
+          },
+          origin: { system: 'application' },
+        },
+      })
+      await expect(prisma.task.count({
+        where: { operationRequestId: command.operationRequestId },
+      })).resolves.toBe(0)
+      await expect(prisma.workspaceResource.count({
+        where: { projectId: fixture.projectId, operationExecutionId: command.executionId },
+      })).resolves.toBe(0)
+    } finally {
+      await worker?.close()
+      worker = null
+      await connected.close()
+      await removeOperationExecutionDurabilityFixture(fixture)
+    }
+  }, 60_000)
 })

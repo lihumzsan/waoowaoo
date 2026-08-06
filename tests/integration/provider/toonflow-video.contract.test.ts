@@ -4,7 +4,6 @@ import {
   queryToonflowVideoStatus,
   submitToonflowVideoTask,
 } from '@/lib/ai-providers/toonflow/video'
-import { ProviderPreAcceptRejectedError } from '@/lib/ai-exec/submission-error'
 import { startScenarioServer } from '../../helpers/fakes/scenario-server'
 
 const getProviderConfigMock = vi.hoisted(() => vi.fn())
@@ -148,14 +147,15 @@ describe('provider contract - Toonflow video', () => {
     })
   })
 
-  it('classifies a typed pre-accept billing rejection without retrying the provider', async () => {
+  it('preserves the production balance rejection as a typed billing failure without resubmitting', async () => {
+    const providerMessage = '余额不足，当前余额不足以完成本次生成'
     server!.defineScenario({
       method: 'POST',
       path: '/toonflow/video/generateVideo',
       mode: 'fatal_error',
       submitResponse: {
-        status: 200,
-        body: { code: 402, msg: 'balance unavailable' },
+        status: 400,
+        body: { code: 400, message: providerMessage },
       },
     })
 
@@ -175,7 +175,66 @@ describe('provider contract - Toonflow video', () => {
           seed: -1,
         },
       },
-    })).rejects.toBeInstanceOf(ProviderPreAcceptRejectedError)
+    })).rejects.toMatchObject({
+      code: 'PROVIDER_BILLING_REQUIRED',
+      failure: {
+        code: 'PROVIDER_BILLING_REQUIRED',
+        message: providerMessage,
+        details: {
+          providerCode: 400,
+          httpStatus: 400,
+        },
+        origin: {
+          system: 'provider',
+          provider: 'toonflow',
+          phase: 'submit',
+        },
+      },
+    })
+
+    expect(server!.getRequests('POST', '/toonflow/video/generateVideo')).toHaveLength(1)
+  })
+
+  it('keeps an unknown provider rejection neutral while preserving bounded diagnostics', async () => {
+    const providerMessage = `policy rejected ${'x'.repeat(600)}`
+    server!.defineScenario({
+      method: 'POST',
+      path: '/toonflow/video/generateVideo',
+      mode: 'fatal_error',
+      submitResponse: {
+        status: 200,
+        body: { code: 400, msg: providerMessage },
+      },
+    })
+
+    await expect(submitToonflowVideoTask({
+      baseUrl: `${server!.baseUrl}/toonflow`,
+      apiKey: 'toonflow-video-key',
+      payload: {
+        model: 'Seedance 2.0',
+        prompt: 'submit once',
+        resolution: '480p',
+        duration: 4,
+        metadata: {
+          ratio: '16:9',
+          generate_audio: false,
+          references: [],
+          watermark: false,
+          seed: -1,
+        },
+      },
+    })).rejects.toMatchObject({
+      code: 'PROVIDER_SUBMISSION_REJECTED',
+      failure: {
+        code: 'PROVIDER_SUBMISSION_REJECTED',
+        message: providerMessage.slice(0, 512),
+        origin: {
+          system: 'provider',
+          provider: 'toonflow',
+          phase: 'submit',
+        },
+      },
+    })
 
     expect(server!.getRequests('POST', '/toonflow/video/generateVideo')).toHaveLength(1)
   })

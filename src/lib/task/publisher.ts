@@ -102,8 +102,8 @@ function normalizeLifecyclePayload(
   next.lifecycleType = lifecycleType
   next.intent = coerceTaskIntent(next.intent ?? payloadUi?.intent, taskType)
   if (lifecycleType === TASK_EVENT_TYPE.FAILED || lifecycleType === TASK_EVENT_TYPE.CANCELED) {
-    // Task.errorMessage remains diagnostic storage. Lifecycle events are
-    // replayed to browsers and tools, so terminal projections expose codes only.
+    // Task.failure remains the diagnostic fact. Lifecycle events are replayed
+    // to browsers and tools, so terminal projections expose codes only.
     delete next.message
     delete next.errorMessage
     if (lifecycleType === TASK_EVENT_TYPE.FAILED) {

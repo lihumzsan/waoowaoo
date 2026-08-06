@@ -1,6 +1,7 @@
 import { ApplicationFailure, Context, heartbeat } from '@temporalio/activity'
 import { WorkflowUpdateFailedError } from '@temporalio/client'
 import { ApiError } from '@/lib/api-errors'
+import { getErrorSpec } from '@/lib/errors/codes'
 import { normalizeAnyError } from '@/lib/errors/normalize'
 import { hashCanonicalJson } from '@/lib/operation-plan-contract/canonical-json'
 import { createAgentFollowUpBatchBinding } from '@/lib/agent-turn/follow-up-batch'
@@ -24,6 +25,11 @@ import { publishPersistedTaskEventById } from '@/lib/task/publisher'
 import { isTaskType } from '@/lib/task/types'
 import { buildOperationExecutionWorkflowId, buildTaskWorkflowId } from '@/lib/temporal/identity'
 import {
+  encodeTemporalFailure,
+  temporalInvariantFailure,
+} from '@/lib/temporal/failure'
+import type { FailureRecord } from '@/lib/errors/failure'
+import {
   OPERATION_EXECUTION_MAX_TASKS,
   type DirectTaskOperationExecutionCommand,
   type ExecuteOperationActivityInput,
@@ -34,7 +40,16 @@ import { assertOperationExecutionEnvelope } from '../operation-execution/identit
 import { schedulePersistedTask, TemporalTaskCommandUnconfirmedError } from '../task-client'
 
 function failNonRetryable(code: string, ...details: unknown[]): never {
-  throw ApplicationFailure.nonRetryable(code, code, ...details)
+  throwFailureNonRetryable(temporalInvariantFailure(code, details))
+}
+
+function throwFailureNonRetryable(failure: FailureRecord): never {
+  const encoded = encodeTemporalFailure(failure)
+  throw ApplicationFailure.nonRetryable(
+    encoded.message,
+    encoded.type,
+    ...encoded.details,
+  )
 }
 
 function deterministicScheduleFailure(error: unknown): string | null {
@@ -60,10 +75,11 @@ function throwByOperationExecutionRetryPolicy(error: unknown): never {
   const deterministicCode = deterministicScheduleFailure(error)
   if (deterministicCode) return failNonRetryable(deterministicCode)
   if (error instanceof TemporalTaskCommandUnconfirmedError) throw error
-  if (error instanceof ApiError) return failNonRetryable(error.message)
-  const normalized = normalizeAnyError(error, { context: 'worker' })
-  if (normalized.retryable) throw error
-  return failNonRetryable(normalized.code, normalized.message, normalized.details)
+  const failure = normalizeAnyError(error, {
+    origin: { system: 'temporal', phase: 'operation-execution' },
+  })
+  if (getErrorSpec(failure.code).retryable && !(error instanceof ApiError)) throw error
+  return throwFailureNonRetryable(failure)
 }
 
 function requireActivityIdentity(input: ExecuteOperationActivityInput): void {

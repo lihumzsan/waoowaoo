@@ -3,14 +3,28 @@ import {
   InsufficientBalanceError,
   type BillingOperationErrorCode,
 } from '@/lib/billing/errors'
-import { getPrismaErrorCode, isLikelyPrismaDisconnectError, isPrismaRetryableCode } from '@/lib/prisma-error'
-import { DEFAULT_ERROR_CODE, getErrorFailureClass, getErrorSpec, resolveUnifiedErrorCode, type UnifiedErrorCode } from './codes'
-import type { ErrorContext, NormalizedError, NormalizedErrorDetails } from './types'
+import {
+  getPrismaErrorCode,
+  isLikelyPrismaDisconnectError,
+  isPrismaRetryableCode,
+} from '@/lib/prisma-error'
+import {
+  DEFAULT_ERROR_CODE,
+  resolveUnifiedErrorCode,
+  type UnifiedErrorCode,
+} from './codes'
+import {
+  createFailureRecord,
+  parseFailureRecord,
+  type FailureDetails,
+  type FailureOrigin,
+  type FailureRecord,
+} from './failure'
 
 export type NormalizeOptions = {
-  context?: ErrorContext
   fallbackCode?: UnifiedErrorCode
   details?: Record<string, unknown> | null
+  origin?: FailureOrigin
 }
 
 type ErrorLike = {
@@ -20,6 +34,24 @@ type ErrorLike = {
   message?: unknown
   details?: unknown
   provider?: unknown
+  failure?: unknown
+  cause?: unknown
+}
+
+function findCarriedFailure(value: unknown): FailureRecord | null {
+  let current: unknown = value
+  const seen = new Set<unknown>()
+  for (let depth = 0; depth < 12; depth += 1) {
+    const direct = parseFailureRecord(current)
+    if (direct) return direct
+    if (!current || typeof current !== 'object' || seen.has(current)) return null
+    seen.add(current)
+    const record = current as ErrorLike
+    const carried = parseFailureRecord(record.failure)
+    if (carried) return carried
+    current = record.cause
+  }
+  return null
 }
 
 function toMessage(value: unknown): string {
@@ -27,32 +59,16 @@ function toMessage(value: unknown): string {
   if (value instanceof Error && value.message.trim()) return value.message.trim()
   try {
     const serialized = JSON.stringify(value)
-    if (typeof serialized === 'string') return serialized
-    return ''
+    return typeof serialized === 'string' ? serialized : ''
   } catch {
     return ''
   }
 }
 
-/**
- * Human-readable description of an unknown thrown value. Plain objects are
- * serialized whole (bounded) so provider error payloads thrown as raw JSON
- * survive into logs and persisted error messages instead of "[object Object]".
- */
+/** Bounded internal description for unknown thrown values. */
 export function describeUnknownError(value: unknown): string {
   const message = toMessage(value)
-  return (message || String(value)).slice(0, 4000)
-}
-
-function toLowerMessage(value: unknown): string {
-  return toMessage(value).toLowerCase()
-}
-
-function containsAny(haystack: string, needles: string[]) {
-  for (const needle of needles) {
-    if (haystack.includes(needle)) return true
-  }
-  return false
+  return (message || String(value)).slice(0, 4_000)
 }
 
 function readHttpStatus(value: unknown): number | null {
@@ -60,9 +76,8 @@ function readHttpStatus(value: unknown): number | null {
     ? value
     : typeof value === 'string' && /^\d{3}$/.test(value.trim())
       ? Number.parseInt(value.trim(), 10)
-      : NaN
-  if (!Number.isInteger(raw) || raw < 100 || raw > 599) return null
-  return raw
+      : Number.NaN
+  return Number.isInteger(raw) && raw >= 100 && raw <= 599 ? raw : null
 }
 
 function codeFromHttpStatus(status: number): UnifiedErrorCode {
@@ -70,6 +85,7 @@ function codeFromHttpStatus(status: number): UnifiedErrorCode {
   if (status === 403) return 'FORBIDDEN'
   if (status === 404) return 'NOT_FOUND'
   if (status === 409) return 'CONFLICT'
+  if (status === 413) return 'PAYLOAD_TOO_LARGE'
   if (status === 422) return 'INVALID_PARAMS'
   if (status === 429) return 'RATE_LIMIT'
   if (status === 504) return 'GENERATION_TIMEOUT'
@@ -78,36 +94,33 @@ function codeFromHttpStatus(status: number): UnifiedErrorCode {
   return DEFAULT_ERROR_CODE
 }
 
-function providerCodeFromHttpStatus(status: number): UnifiedErrorCode {
-  if (status === 401 || status === 403) return 'PROVIDER_AUTH_INVALID'
-  if (status === 402) return 'PROVIDER_BILLING_REQUIRED'
-  return codeFromHttpStatus(status)
-}
-
 function isModelNotOpenCode(code: unknown): boolean {
   if (typeof code !== 'string') return false
   const normalized = code.trim().toUpperCase()
   return normalized === 'MODELNOTOPEN' || normalized === 'MODEL_NOT_OPEN'
 }
 
-function buildNormalizedError(
+function failureOrigin(
+  provider: string | null,
+  explicit: FailureOrigin | undefined,
+): FailureOrigin {
+  if (explicit) return explicit
+  return provider
+    ? { system: 'provider', provider }
+    : { system: 'application' }
+}
+
+function buildFailure(
   code: UnifiedErrorCode,
-  message?: string,
-  details: NormalizedErrorDetails = null,
-  provider?: string | null,
-): NormalizedError {
-  const spec = getErrorSpec(code)
-  return {
-    code,
-    message: message?.trim() || spec.defaultMessage,
-    httpStatus: spec.httpStatus,
-    retryable: spec.retryable,
-    category: spec.category,
-    failureClass: getErrorFailureClass(code),
-    userMessageKey: spec.userMessageKey,
+  message: string,
+  details: FailureDetails,
+  provider: string | null,
+  origin: FailureOrigin | undefined,
+): FailureRecord {
+  return createFailureRecord(code, message, {
     details,
-    provider: provider || null,
-  }
+    origin: failureOrigin(provider, origin),
+  })
 }
 
 function inferCodeFromPrismaCode(prismaCode: string): UnifiedErrorCode {
@@ -122,6 +135,7 @@ function codeFromBillingOperation(errorCode: BillingOperationErrorCode): Unified
     case 'BILLING_ADJUSTMENT_IDEMPOTENCY_CONFLICT':
     case 'BILLING_FREEZE_NOT_PENDING':
     case 'BILLING_FREEZE_OWNERSHIP_MISMATCH':
+    case 'BILLING_BALANCE_DEBIT_CONFLICT':
     case 'BILLING_IDEMPOTENT_ALREADY_CONFIRMED':
     case 'BILLING_IDEMPOTENT_IN_PROGRESS':
     case 'BILLING_IDEMPOTENT_ROLLED_BACK':
@@ -139,6 +153,7 @@ function codeFromBillingOperation(errorCode: BillingOperationErrorCode): Unified
     case 'BILLING_UNKNOWN_VIDEO_RESOLUTION':
       return 'INVALID_PARAMS'
     case 'BILLING_CAPABILITY_PRICE_NOT_FOUND':
+    case 'BILLING_BALANCE_NOT_FOUND':
     case 'BILLING_CONFIRM_FAILED':
     case 'BILLING_FREEZE_EXPAND_FAILED':
     case 'BILLING_FREEZE_FAILED':
@@ -152,98 +167,122 @@ function codeFromBillingOperation(errorCode: BillingOperationErrorCode): Unified
   }
 }
 
-export function normalizeAnyError(input: unknown, options: NormalizeOptions = {}): NormalizedError {
-  const fallbackCode = options.fallbackCode || DEFAULT_ERROR_CODE
+export function normalizeAnyError(
+  input: unknown,
+  options: NormalizeOptions = {},
+): FailureRecord {
+  const carried = findCarriedFailure(input)
+  if (carried) return carried
   const errorLike = (input || {}) as ErrorLike
+
+  const fallbackCode = options.fallbackCode || DEFAULT_ERROR_CODE
   const message = toMessage(errorLike.message ?? input)
-  const lowerMessage = toLowerMessage(message)
-  const provider = typeof errorLike.provider === 'string' ? errorLike.provider : null
+  const provider = typeof errorLike.provider === 'string'
+    ? errorLike.provider.trim() || null
+    : null
 
   if (input instanceof TypeError) {
-    if (lowerMessage === 'terminated' || containsAny(lowerMessage, ['aborted', 'socket hang up'])) {
-      return buildNormalizedError(
+    const lower = message.toLowerCase()
+    if (lower === 'terminated' || lower.includes('aborted') || lower.includes('socket hang up')) {
+      return buildFailure(
         'NETWORK_ERROR',
         message || 'Network request terminated',
-        options.details,
+        options.details ?? null,
         provider,
+        options.origin,
       )
     }
   }
 
   const prismaCode = getPrismaErrorCode(input)
   if (prismaCode) {
-    return buildNormalizedError(
+    return buildFailure(
       inferCodeFromPrismaCode(prismaCode),
       message || `Database request failed (${prismaCode})`,
-      {
-        prismaCode,
-        ...(options.details || {}),
-      },
+      { prismaCode, ...(options.details || {}) },
       provider,
+      options.origin,
     )
   }
 
   if (isLikelyPrismaDisconnectError(input)) {
-    return buildNormalizedError(
+    return buildFailure(
       'EXTERNAL_ERROR',
       message || 'Database connection unavailable',
-      options.details,
+      options.details ?? null,
       provider,
+      options.origin,
     )
   }
 
   if (input instanceof InsufficientBalanceError) {
-    return buildNormalizedError('INSUFFICIENT_BALANCE', message || input.message, {
-      required: input.required,
-      available: input.available,
-      ...(options.details || {}),
-    })
+    return buildFailure(
+      'INSUFFICIENT_BALANCE',
+      message || input.message,
+      {
+        required: input.required,
+        available: input.available,
+        ...(options.details || {}),
+      },
+      null,
+      options.origin,
+    )
   }
 
   if (input instanceof BillingOperationError) {
-    return buildNormalizedError(
+    return buildFailure(
       codeFromBillingOperation(input.code),
       message || input.message,
-      options.details,
+      options.details ?? null,
+      null,
+      options.origin,
     )
   }
 
   const resolvedCode = resolveUnifiedErrorCode(errorLike.code)
   if (resolvedCode) {
-    return buildNormalizedError(resolvedCode, message, {
-      ...(typeof errorLike.details === 'object' && errorLike.details ? (errorLike.details as Record<string, unknown>) : {}),
-      ...(options.details || {}),
-    }, provider)
+    return buildFailure(
+      resolvedCode,
+      message,
+      {
+        ...(errorLike.details && typeof errorLike.details === 'object' && !Array.isArray(errorLike.details)
+          ? errorLike.details as Record<string, unknown>
+          : {}),
+        ...(options.details || {}),
+      },
+      provider,
+      options.origin,
+    )
   }
 
   if (isModelNotOpenCode(errorLike.code)) {
-    return buildNormalizedError('MODEL_NOT_OPEN', message, options.details, provider)
+    return buildFailure(
+      'MODEL_NOT_OPEN',
+      message,
+      options.details ?? null,
+      provider,
+      options.origin,
+    )
   }
 
   const httpStatus = readHttpStatus(errorLike.status)
     ?? readHttpStatus(errorLike.statusCode)
     ?? readHttpStatus(errorLike.code)
   if (httpStatus !== null) {
-    const code = options.context === 'worker'
-      ? providerCodeFromHttpStatus(httpStatus)
-      : codeFromHttpStatus(httpStatus)
-    return buildNormalizedError(code, message, options.details, provider)
+    return buildFailure(
+      codeFromHttpStatus(httpStatus),
+      message,
+      options.details ?? null,
+      provider,
+      options.origin,
+    )
   }
 
-  return buildNormalizedError(fallbackCode, message || getErrorSpec(fallbackCode).defaultMessage, options.details, provider)
-}
-
-export function normalizeTaskError(
-  code: string | null | undefined,
-  message: string | null | undefined,
-  details: Record<string, unknown> | null = null,
-): NormalizedError | null {
-  if (!code && !message) return null
-
-  const resolvedTaskCode = resolveUnifiedErrorCode(code)
-  if (resolvedTaskCode) {
-    return buildNormalizedError(resolvedTaskCode, undefined, details)
-  }
-
-  return buildNormalizedError(DEFAULT_ERROR_CODE, undefined, details)
+  return buildFailure(
+    fallbackCode,
+    message,
+    options.details ?? null,
+    provider,
+    options.origin,
+  )
 }

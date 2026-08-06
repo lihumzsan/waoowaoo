@@ -13,6 +13,7 @@ import {
   workflowInfo,
 } from '@temporalio/workflow'
 import type { WorkflowConcurrencyConfig } from '@/lib/workflow-concurrency'
+import { encodeTemporalFailure, temporalInvariantFailure } from '../failure'
 import {
   USER_TASK_SCHEDULER_UPDATE_NAME,
   type ScheduledTaskReceipt,
@@ -69,7 +70,8 @@ const schedulerActivities = proxyActivities<UserTaskSchedulerActivities>({
 })
 
 function fail(code: string, ...details: unknown[]): never {
-  throw ApplicationFailure.nonRetryable(code, code, ...details)
+  const encoded = encodeTemporalFailure(temporalInvariantFailure(code, details))
+  throw ApplicationFailure.nonRetryable(encoded.message, encoded.type, ...encoded.details)
 }
 
 function requireNonEmpty(value: string, code: string): void {

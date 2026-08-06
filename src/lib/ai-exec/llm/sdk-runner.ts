@@ -1,4 +1,6 @@
 import { generateText, streamText, type ModelMessage } from 'ai'
+import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
+import { AppError } from '@/lib/errors/app-error'
 import { createAiLanguageModel, validateAiLanguageModelResult } from '@/lib/ai-exec/language-model'
 import {
   emitStreamChunk,
@@ -55,9 +57,24 @@ function projectAndValidate(input: AiSdkRunnerInput, result: AiSdkLanguageModelR
     modelId: input.selection.modelId,
     result,
   })
-  validateAiLanguageModelResult(input.selection.provider, projected, {
-    executionMode: input.modality === 'vision' ? 'vision' : input.executionMode,
-  })
+  try {
+    validateAiLanguageModelResult(input.selection.provider, projected, {
+      executionMode: input.modality === 'vision' ? 'vision' : input.executionMode,
+    })
+  } catch (error) {
+    if (!(error instanceof AppError)) throw error
+    throw new ProviderSubmissionError(error.code, error.message, {
+      disposition: 'rejected',
+      provider: input.selection.provider,
+      details: error.details,
+      origin: {
+        system: 'provider',
+        provider: input.selection.provider,
+        phase: 'result',
+      },
+      cause: error,
+    })
+  }
   return projected
 }
 

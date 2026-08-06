@@ -120,13 +120,14 @@ export function normalizeError(error: unknown): ApiError {
     return error
   }
 
-  const normalized = normalizeAnyError(error, { context: 'api' })
+  const normalized = normalizeAnyError(error)
+  const spec = getErrorSpec(normalized.code)
   const details = {
     ...(normalized.details || {}),
-    retryable: normalized.retryable,
-    category: normalized.category,
-    userMessageKey: normalized.userMessageKey,
-    provider: normalized.provider || undefined,
+    retryable: spec.retryable,
+    category: spec.category,
+    userMessageKey: spec.userMessageKey,
+    provider: normalized.origin.provider,
     message: normalized.message,
   }
 

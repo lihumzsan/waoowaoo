@@ -4,10 +4,6 @@ import type { ProjectAgentToolError, ProjectAgentToolErrorCode } from '@/lib/ope
 import { getErrorSpec } from '@/lib/errors/codes'
 import { normalizeAnyError } from '@/lib/errors/normalize'
 import { projectErrorForModel, projectModelErrorDetails } from '@/lib/errors/projection'
-import {
-  WorkspaceResourcePathError,
-  WorkspaceResourcePlacementError,
-} from '@/lib/workspace-resource/path'
 
 const logger = createScopedLogger({ module: 'assistant.tool' })
 
@@ -73,40 +69,18 @@ function buildOperationExecutionToolError(params: {
   error: unknown
   operationId: string
 }): ProjectAgentToolError {
-  const workspaceError = params.error instanceof WorkspaceResourcePlacementError
-    ? {
-        code: params.error.code === 'WORKSPACE_RESOURCE_FOLDER_NOT_FOUND'
-          ? 'INVALID_PARAMS' as const
-          : 'CONFLICT' as const,
-        details: {
-          field: params.error.code === 'WORKSPACE_RESOURCE_FOLDER_NOT_FOUND'
-            ? 'folderPath'
-            : 'name',
-          reasonCode: params.error.code,
-          workspacePath: params.error.workspacePath,
-        },
-      }
-      : params.error instanceof WorkspaceResourcePathError
-      ? {
-          code: 'INVALID_PARAMS' as const,
-          details: {
-            reasonCode: params.error.code,
-          },
-        }
-      : null
-  const normalized = workspaceError ?? (params.error instanceof ApiError
+  const normalized = params.error instanceof ApiError
     ? {
         code: params.error.code,
         details: params.error.details ?? null,
       }
     : normalizeAnyError(params.error, {
-        context: 'worker',
         fallbackCode: 'INTERNAL_ERROR',
-      }))
+      })
   const safeDetails = projectModelErrorDetails(normalized.details)
   const reasonCode = readSafeReasonCode(normalized.details)
     ?? readSafeReasonCode(safeDetails)
-  const failure = projectErrorForModel(normalized.code)
+  const failure = projectErrorForModel(normalized.code, normalized.details)
   return buildToolError({
     code: 'OPERATION_EXECUTION_FAILED',
     message: getErrorSpec(failure.code).defaultMessage,

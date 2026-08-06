@@ -6,6 +6,7 @@ import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
 import { normalizeVideoReferenceImages } from '@/lib/video-generation/reference-images'
 import { AppError } from '@/lib/errors/app-error'
+import { throwArkSubmissionError } from './error'
 
 export interface ArkVideoTaskRequest {
   model: string
@@ -285,18 +286,23 @@ export async function arkCreateVideoTask(
   const url = `${baseUrl.replace(/\/+$/, '')}/contents/generations/tasks`
 
   _ulogInfo(`${logPrefix} 创建视频任务, 模型: ${request.model}`)
-  const response = await fetchWithRetry(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(request),
-    policy: RETRY_POLICY.providerSubmit,
-    timeoutMs,
-    scope: 'ark:video:create',
-    fetchFn: fetchWithProviderProxy,
-  })
+  let response: Response
+  try {
+    response = await fetchWithRetry(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(request),
+      policy: RETRY_POLICY.providerSubmit,
+      timeoutMs,
+      scope: 'ark:video:create',
+      fetchFn: fetchWithProviderProxy,
+    })
+  } catch (error: unknown) {
+    throwArkSubmissionError(error)
+  }
 
   const data = (await response.json()) as { id?: unknown; [key: string]: unknown }
   const taskId = typeof data.id === 'string' ? data.id : ''

@@ -101,8 +101,7 @@ model ProjectAgentTurn {
   runtimeTurnId      String?                @unique @db.VarChar(191)
   assistantMessageId String?                @db.VarChar(191)
   stopReason         String?                @db.VarChar(64)
-  errorCode          String?                @db.VarChar(128)
-  errorMessage       String?                @db.Text
+  failure            Json?
   cancelRequestId    String?                @db.VarChar(128)
   cancelReason       String?                @db.Text
   startedAt          DateTime?
@@ -586,8 +585,7 @@ model Task {
   payload              Json?
   executionFingerprint String?   @db.VarChar(64)
   result               Json?
-  errorCode            String?
-  errorMessage         String?   @db.Text
+  failure              Json?
   billingInfo          Json?
   billedAt             DateTime?
   queuedAt             DateTime  @default(now())
@@ -951,8 +949,6 @@ model WorkspaceResource {
   operationExecutionId        String?
   alternativeGroupExecutionId String?
   toolCallId                  String?                    @db.VarChar(191)
-  errorCode                   String?                    @db.VarChar(128)
-  errorMessage                String?                    @db.Text
   materializedAt              DateTime?
   deletedAt                   DateTime?
   createdAt                   DateTime                   @default(now())

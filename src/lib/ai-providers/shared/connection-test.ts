@@ -12,7 +12,7 @@ import type {
 } from '@/lib/ai-providers/runtime-types'
 
 export function connectionTestFailureMessageKey(error: unknown): AiProviderConnectionTestMessageKey {
-  const normalized = normalizeAnyError(error, { context: 'worker', fallbackCode: 'EXTERNAL_ERROR' })
+  const normalized = normalizeAnyError(error, { fallbackCode: 'EXTERNAL_ERROR' })
   if (normalized.code === 'PROVIDER_AUTH_INVALID' || normalized.code === 'MODEL_NOT_OPEN') {
     return 'connectionTest.authInvalid'
   }

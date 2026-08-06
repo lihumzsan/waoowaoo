@@ -4,6 +4,21 @@ import {
   AssistantRuntimeEventProjector,
   projectAssistantRuntimeToolOutput,
 } from '@/lib/assistant-runtime/event-projector'
+import type { UnifiedErrorCode } from '@/lib/errors/codes'
+
+function expectedRuntimeFailure(code: UnifiedErrorCode, message: string) {
+  return {
+    version: 1,
+    code,
+    message,
+    details: null,
+    origin: {
+      system: 'runtime',
+      provider: 'codex',
+      phase: 'turn',
+    },
+  }
+}
 
 describe('Codex runtime terminal error projection', () => {
   it('projects canonical MCP structured output instead of the transport envelope', () => {
@@ -69,10 +84,10 @@ describe('Codex runtime terminal error projection', () => {
         responseStreamDisconnected: { httpStatusCode: null },
       },
       additionalDetails: null,
-    })).toEqual({
-      errorCode: 'NETWORK_ERROR',
-      errorMessage: 'stream disconnected before completion',
-    })
+    })).toEqual(expectedRuntimeFailure(
+      'NETWORK_ERROR',
+      'stream disconnected before completion',
+    ))
   })
 
   it('classifies a provider protocol rejection without parsing its message', () => {
@@ -80,10 +95,10 @@ describe('Codex runtime terminal error projection', () => {
       message: 'Provider returned error',
       codexErrorInfo: 'badRequest',
       additionalDetails: 'messages.2 rejected',
-    })).toEqual({
-      errorCode: 'ASSISTANT_PROVIDER_REQUEST_INVALID',
-      errorMessage: 'Provider returned error',
-    })
+    })).toEqual(expectedRuntimeFailure(
+      'ASSISTANT_PROVIDER_REQUEST_INVALID',
+      'Provider returned error',
+    ))
   })
 
   it('classifies the pinned provider billing fact without parsing its message', () => {
@@ -91,10 +106,10 @@ describe('Codex runtime terminal error projection', () => {
       message: 'provider-specific billing copy',
       codexErrorInfo: 'usageLimitExceeded',
       additionalDetails: null,
-    }, { providerCredentialMode: 'user-key' })).toEqual({
-      errorCode: 'PROVIDER_BILLING_REQUIRED',
-      errorMessage: 'provider-specific billing copy',
-    })
+    }, { providerCredentialMode: 'user-key' })).toEqual(expectedRuntimeFailure(
+      'PROVIDER_BILLING_REQUIRED',
+      'provider-specific billing copy',
+    ))
   })
 
   it('attributes provider billing to the platform when the platform owns the key', () => {
@@ -102,10 +117,10 @@ describe('Codex runtime terminal error projection', () => {
       message: 'provider-specific billing copy',
       codexErrorInfo: 'usageLimitExceeded',
       additionalDetails: null,
-    }, { providerCredentialMode: 'platform-key' })).toEqual({
-      errorCode: 'PLATFORM_PROVIDER_BILLING_REQUIRED',
-      errorMessage: 'provider-specific billing copy',
-    })
+    }, { providerCredentialMode: 'platform-key' })).toEqual(expectedRuntimeFailure(
+      'PLATFORM_PROVIDER_BILLING_REQUIRED',
+      'provider-specific billing copy',
+    ))
   })
 
   it('attributes a normalized Provider outage to the platform key owner', () => {
@@ -113,10 +128,10 @@ describe('Codex runtime terminal error projection', () => {
       message: 'slow_down',
       codexErrorInfo: 'serverOverloaded',
       additionalDetails: null,
-    }, { providerCredentialMode: 'platform-key' })).toEqual({
-      errorCode: 'PLATFORM_PROVIDER_UNAVAILABLE',
-      errorMessage: 'slow_down',
-    })
+    }, { providerCredentialMode: 'platform-key' })).toEqual(expectedRuntimeFailure(
+      'PLATFORM_PROVIDER_UNAVAILABLE',
+      'slow_down',
+    ))
   })
 
   it('normalizes an upstream HTTP status carried by a structured Codex error', () => {
@@ -126,10 +141,10 @@ describe('Codex runtime terminal error projection', () => {
         responseTooManyFailedAttempts: { httpStatusCode: 402 },
       },
       additionalDetails: null,
-    }, { providerCredentialMode: 'platform-key' })).toEqual({
-      errorCode: 'PLATFORM_PROVIDER_BILLING_REQUIRED',
-      errorMessage: 'upstream request failed',
-    })
+    }, { providerCredentialMode: 'platform-key' })).toEqual(expectedRuntimeFailure(
+      'PLATFORM_PROVIDER_BILLING_REQUIRED',
+      'upstream request failed',
+    ))
   })
 
   it('normalizes provider authentication from the structured upstream status', () => {
@@ -139,10 +154,10 @@ describe('Codex runtime terminal error projection', () => {
         httpConnectionFailed: { httpStatusCode: 401 },
       },
       additionalDetails: null,
-    }, { providerCredentialMode: 'platform-key' })).toEqual({
-      errorCode: 'PLATFORM_PROVIDER_AUTH_INVALID',
-      errorMessage: 'provider request rejected',
-    })
+    }, { providerCredentialMode: 'platform-key' })).toEqual(expectedRuntimeFailure(
+      'PLATFORM_PROVIDER_AUTH_INVALID',
+      'provider request rejected',
+    ))
   })
 
   it('keeps retry notifications non-terminal and persists the final typed failure', async () => {
@@ -202,8 +217,7 @@ describe('Codex runtime terminal error projection', () => {
     await expect(projector.terminal).resolves.toMatchObject({
       status: 'failed',
       stopReason: 'runtime_failed',
-      errorCode: 'NETWORK_ERROR',
-      errorMessage: 'stream disconnected',
+      failure: expectedRuntimeFailure('NETWORK_ERROR', 'stream disconnected'),
     })
   })
 })

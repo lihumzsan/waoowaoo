@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { falAsyncTaskProvider } from '@/lib/ai-providers/fal/async-task'
 import { queryFalStatus, submitFalTask } from '@/lib/ai-providers/fal/queue'
+import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
+import { FetchStatusError } from '@/lib/retry'
 import { startScenarioServer } from '../../helpers/fakes/scenario-server'
 
 describe('provider contract - fal queue', () => {
@@ -62,15 +64,102 @@ describe('provider contract - fal queue', () => {
       ],
     })
 
-    await expect(submitFalTask(
-      'fal-ai/nano-banana-pro',
-      { prompt: 'retry submit' },
-      'fal-key-retry',
-    )).rejects.toMatchObject({ status: 503 })
+    let captured: unknown = null
+    try {
+      await submitFalTask(
+        'fal-ai/nano-banana-pro',
+        { prompt: 'retry submit' },
+        'fal-key-retry',
+      )
+    } catch (error) {
+      captured = error
+    }
+
+    expect(captured).toBeInstanceOf(FetchStatusError)
+    expect(captured).not.toBeInstanceOf(ProviderSubmissionError)
+    expect(captured).toMatchObject({ status: 503 })
 
     const requests = server!.getRequests('POST', '/fal/fal-ai/nano-banana-pro')
     expect(requests).toHaveLength(1)
     expect(requests[0]?.headers.authorization).toBe('Key fal-key-retry')
+  })
+
+  it('types only structured provider machine rejections at submit time', async () => {
+    const cases = [
+      {
+        id: 'validation',
+        status: 422,
+        body: { detail: [{ type: 'missing', msg: 'Field required' }] },
+        code: 'PROVIDER_SUBMISSION_REJECTED',
+        providerCode: 'missing',
+      },
+      {
+        id: 'policy',
+        status: 422,
+        body: { detail: [{ type: 'content_policy_violation', msg: 'Reference rejected' }] },
+        code: 'SENSITIVE_CONTENT',
+        providerCode: 'content_policy_violation',
+      },
+      {
+        id: 'auth',
+        status: 401,
+        body: { error: { code: 'invalid_api_key', message: 'Invalid API key' } },
+        code: 'PROVIDER_AUTH_INVALID',
+        providerCode: 'invalid_api_key',
+      },
+      {
+        id: 'billing',
+        status: 402,
+        body: { error: { code: 'insufficient_balance', message: 'Balance exhausted' } },
+        code: 'PROVIDER_BILLING_REQUIRED',
+        providerCode: 'insufficient_balance',
+      },
+    ] as const
+
+    for (const testCase of cases) {
+      const endpoint = `fal-ai/submit-${testCase.id}`
+      server!.defineScenario({
+        method: 'POST',
+        path: `/fal/${endpoint}`,
+        mode: 'fatal_error',
+        submitResponse: { status: testCase.status, body: testCase.body },
+      })
+
+      await expect(submitFalTask(endpoint, { prompt: 'submit once' }, 'fal-key')).rejects.toMatchObject({
+        code: testCase.code,
+        disposition: 'rejected',
+        failure: {
+          details: {
+            providerCode: testCase.providerCode,
+            httpStatus: testCase.status,
+          },
+          origin: { system: 'provider', provider: 'fal', phase: 'submit' },
+        },
+      })
+      expect(server!.getRequests('POST', `/fal/${endpoint}`)).toHaveLength(1)
+    }
+  })
+
+  it('does not infer a submission disposition from HTTP 429 or 5xx alone', async () => {
+    for (const status of [429, 503] as const) {
+      const endpoint = `fal-ai/http-${String(status)}`
+      server!.defineScenario({
+        method: 'POST',
+        path: `/fal/${endpoint}`,
+        mode: 'fatal_error',
+        submitResponse: { status, body: { message: 'request failed without a machine code' } },
+      })
+
+      let captured: unknown = null
+      try {
+        await submitFalTask(endpoint, { prompt: 'submit once' }, 'fal-key')
+      } catch (error) {
+        captured = error
+      }
+      expect(captured).toBeInstanceOf(FetchStatusError)
+      expect(captured).not.toBeInstanceOf(ProviderSubmissionError)
+      expect(captured).toMatchObject({ status })
+    }
   })
 
   it('throws transient status failure so the worker poll loop can retry explicitly', async () => {
@@ -221,7 +310,7 @@ describe('provider contract - fal queue', () => {
     for (let index = 0; index < 3; index += 1) {
       await expect(
         submitFalTask('fal-ai/nano-banana-pro', { prompt: 'bad response' }, 'fal-key-4'),
-      ).rejects.toThrow('FAL未返回request_id')
+      ).rejects.toThrow('FAL_SUBMIT_RESPONSE_REQUEST_ID_MISSING')
     }
   })
 

@@ -12,6 +12,13 @@ import {
   setHandler,
   workflowInfo,
 } from '@temporalio/workflow'
+import { getErrorFailureClass, getErrorSpec } from '../../errors/codes'
+import { createFailureRecord, parseFailureRecord } from '../../errors/failure'
+import {
+  decodeTemporalFailure,
+  encodeTemporalFailure,
+  temporalInvariantFailure,
+} from '../failure'
 import {
   TASK_WORKFLOW_UPDATE_NAME,
   type CommitTaskTerminalInput,
@@ -91,7 +98,8 @@ type SettledAttempt =
     }
 
 function fail(code: string, ...details: unknown[]): never {
-  throw ApplicationFailure.nonRetryable(code, code, ...details)
+  const encoded = encodeTemporalFailure(temporalInvariantFailure(code, details))
+  throw ApplicationFailure.nonRetryable(encoded.message, encoded.type, ...encoded.details)
 }
 
 function requireNonEmpty(value: string, code: string): void {
@@ -127,19 +135,31 @@ function findFailureCause<T extends Error>(
 }
 
 function infrastructureAttemptFailure(error: ActivityFailure): TaskAttemptFailure {
-  if (findFailureCause(error, TimeoutFailure)) {
+  const transported = decodeTemporalFailure(error)
+  if (transported) {
     return {
-      errorCode: 'GENERATION_TIMEOUT',
-      errorMessage: 'Task Activity timed out',
-      errorDetails: null,
+      failure: transported,
+      failureClass: getErrorFailureClass(transported.code),
+      retryDisposition: getErrorSpec(transported.code).retryable ? 'retryable' : 'final',
+    }
+  }
+  if (findFailureCause(error, TimeoutFailure)) {
+    const failure = createFailureRecord('GENERATION_TIMEOUT', 'Task Activity timed out', {
+      origin: { system: 'temporal', phase: 'task-activity' },
+    })
+    return {
+      failure,
       failureClass: 'TRANSIENT_PROVIDER',
       retryDisposition: 'retryable',
     }
   }
+  const failure = createFailureRecord(
+    'WORKER_EXECUTION_ERROR',
+    'Task Activity failed after infrastructure retries',
+    { origin: { system: 'temporal', phase: 'task-activity' } },
+  )
   return {
-    errorCode: 'TASK_ACTIVITY_FAILED',
-    errorMessage: 'Task Activity failed after infrastructure retries',
-    errorDetails: null,
+    failure,
     failureClass: 'TRANSIENT_PROVIDER',
     retryDisposition: 'retryable',
   }
@@ -443,11 +463,13 @@ async function runTaskWorkflow(input: TaskWorkflowInput): Promise<TaskWorkflowRe
         attemptResult = {
           kind: 'failed',
           failure: {
-            errorCode: deadlineExpired ? 'GENERATION_TIMEOUT' : 'TASK_ACTIVITY_CANCELLED',
-            errorMessage: deadlineExpired
-              ? 'Task execution deadline exceeded'
-              : 'Task Activity was canceled by the execution system',
-            errorDetails: null,
+            failure: createFailureRecord(
+              deadlineExpired ? 'GENERATION_TIMEOUT' : 'WORKER_EXECUTION_ERROR',
+              deadlineExpired
+                ? 'Task execution deadline exceeded'
+                : 'Task Activity was canceled by the execution system',
+              { origin: { system: 'temporal', phase: 'task-activity' } },
+            ),
             failureClass: 'TRANSIENT_PROVIDER',
             retryDisposition: 'retryable',
           },
@@ -499,8 +521,8 @@ async function runTaskWorkflow(input: TaskWorkflowInput): Promise<TaskWorkflowRe
     if (!failure || typeof failure !== 'object') {
       fail('TASK_ATTEMPT_FAILURE_INVALID')
     }
-    requireNonEmpty(failure.errorCode, 'TASK_ATTEMPT_ERROR_CODE_INVALID')
-    requireNonEmpty(failure.errorMessage, 'TASK_ATTEMPT_ERROR_MESSAGE_INVALID')
+    const canonicalFailure = parseFailureRecord(failure.failure)
+    if (!canonicalFailure) fail('TASK_ATTEMPT_FAILURE_RECORD_INVALID')
     if (failure.retryDisposition !== 'retryable' && failure.retryDisposition !== 'final') {
       fail('TASK_ATTEMPT_RETRY_DISPOSITION_INVALID')
     }
@@ -544,10 +566,8 @@ async function runTaskWorkflow(input: TaskWorkflowInput): Promise<TaskWorkflowRe
         workflowId: input.workflowId,
         taskId: input.taskId,
         attempt: view.attempt,
-        errorCode: failure.errorCode,
-        errorMessage: failure.errorMessage,
-        errorDetails: failure.errorDetails,
-        source: failure.errorCode === 'GENERATION_TIMEOUT' ? 'timeout' : 'worker',
+        failure: canonicalFailure,
+        source: canonicalFailure.code === 'GENERATION_TIMEOUT' ? 'timeout' : 'worker',
       },
       'failed',
     )

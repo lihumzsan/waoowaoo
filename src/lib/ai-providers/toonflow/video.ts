@@ -1,10 +1,10 @@
 import { AppError } from '@/lib/errors/app-error'
+import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
 import type {
   AiProviderVideoExecutionContext,
   GenerateResult,
 } from '@/lib/ai-providers/runtime-types'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
-import { ProviderPreAcceptRejectedError } from '@/lib/ai-exec/submission-error'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import {
   FetchStatusError,
@@ -25,6 +25,8 @@ const TOONFLOW_SUBMIT_TIMEOUT_MS = 5 * 60_000
 const TOONFLOW_STATUS_TIMEOUT_MS = 60_000
 const TOONFLOW_RIGHTS_RESTRICTION_REASON =
   'The request failed because the output video may be related to copyright restrictions.'
+const TOONFLOW_DIAGNOSTIC_MAX_LENGTH = 512
+const TOONFLOW_INSUFFICIENT_BALANCE_PATTERN = /^余额不足(?:[，,。：:].*)?$/u
 
 const toonflowLogger = createScopedLogger({
   module: 'ai-provider.toonflow',
@@ -82,6 +84,11 @@ function readString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+function readDiagnosticMessage(envelope: Record<string, unknown> | null): string {
+  const raw = readString(envelope?.message) || readString(envelope?.msg)
+  return raw.slice(0, TOONFLOW_DIAGNOSTIC_MAX_LENGTH)
+}
+
 function readNumericCode(value: unknown): number | null {
   if (typeof value === 'number' && Number.isInteger(value)) return value
   if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
@@ -107,46 +114,64 @@ function classifyToonflowError(input: {
   code: number | null
   status?: number
   phase: 'submit' | 'poll'
+  diagnosticMessage?: string
   cause?: unknown
 }): Error {
   const code = input.code ?? input.status ?? null
-  if (code === 402 && input.phase === 'submit') {
-    return new ProviderPreAcceptRejectedError(
-      'provider_account_limit',
-      'Toonflow account balance is insufficient',
-      { cause: input.cause },
-    )
+  const diagnosticMessage = input.diagnosticMessage?.trim().slice(
+    0,
+    TOONFLOW_DIAGNOSTIC_MAX_LENGTH,
+  ) || undefined
+  const details = {
+    providerCode: input.code,
+    httpStatus: input.status ?? null,
+  }
+  const origin = {
+    system: 'provider' as const,
+    provider: 'toonflow',
+    phase: input.phase,
+  }
+  const createProviderError = (errorCode: UnifiedErrorCode): AppError => {
+    if (
+      input.phase === 'submit'
+      && input.code !== null
+      && errorCode !== 'EXTERNAL_ERROR'
+    ) {
+      return new ProviderSubmissionError(errorCode, diagnosticMessage || getErrorSpec(errorCode).defaultMessage, {
+        disposition: getErrorSpec(errorCode).retryable ? 'retryable_rejected' : 'rejected',
+        provider: 'toonflow',
+        details,
+        origin,
+        cause: input.cause,
+      })
+    }
+    return new AppError(errorCode, diagnosticMessage, {
+      details,
+      origin,
+      cause: input.cause,
+    })
+  }
+  if (
+    input.phase === 'submit'
+    && input.code === 400
+    && diagnosticMessage
+    && TOONFLOW_INSUFFICIENT_BALANCE_PATTERN.test(diagnosticMessage)
+  ) {
+    return createProviderError('PROVIDER_BILLING_REQUIRED')
   }
   if (code === 401 || code === 403) {
-    return new AppError('PROVIDER_AUTH_INVALID', undefined, {
-      provider: 'toonflow',
-      cause: input.cause,
-    })
+    return createProviderError('PROVIDER_AUTH_INVALID')
   }
   if (code === 402) {
-    return new AppError('PROVIDER_BILLING_REQUIRED', undefined, {
-      provider: 'toonflow',
-      cause: input.cause,
-    })
+    return createProviderError('PROVIDER_BILLING_REQUIRED')
   }
   if (code === 429) {
-    return new AppError('QUOTA_EXCEEDED', undefined, {
-      provider: 'toonflow',
-      cause: input.cause,
-    })
+    return createProviderError('QUOTA_EXCEEDED')
   }
   if (code !== null && code >= 400 && code < 500) {
-    return new AppError('PROVIDER_SUBMISSION_REJECTED', undefined, {
-      provider: 'toonflow',
-      details: { providerStatus: code },
-      cause: input.cause,
-    })
+    return createProviderError('PROVIDER_SUBMISSION_REJECTED')
   }
-  return new AppError('EXTERNAL_ERROR', undefined, {
-    provider: 'toonflow',
-    details: code === null ? null : { providerStatus: code },
-    cause: input.cause,
-  })
+  return createProviderError('EXTERNAL_ERROR')
 }
 
 function throwToonflowFetchError(error: unknown, phase: 'submit' | 'poll'): never {
@@ -160,6 +185,7 @@ function throwToonflowFetchError(error: unknown, phase: 'submit' | 'poll'): neve
       code: readNumericCode(envelope?.code),
       status: error.status,
       phase,
+      diagnosticMessage: readDiagnosticMessage(envelope),
       cause: error,
     })
   }
@@ -366,7 +392,13 @@ export async function submitToonflowVideoTask(input: {
   })
   const envelope = asRecord(raw)
   const code = readNumericCode(envelope?.code)
-  if (code !== 200) throw classifyToonflowError({ code, phase: 'submit' })
+  if (code !== 200) {
+    throw classifyToonflowError({
+      code,
+      phase: 'submit',
+      diagnosticMessage: readDiagnosticMessage(envelope),
+    })
+  }
   return requireCanonicalTaskCode(envelope?.data)
 }
 
@@ -384,7 +416,13 @@ export async function queryToonflowVideoStatus(input: {
   })
   const envelope = asRecord(raw)
   const code = readNumericCode(envelope?.code)
-  if (code !== 200) throw classifyToonflowError({ code, phase: 'poll' })
+  if (code !== 200) {
+    throw classifyToonflowError({
+      code,
+      phase: 'poll',
+      diagnosticMessage: readDiagnosticMessage(envelope),
+    })
+  }
   const data = asRecord(envelope?.data)
   const returnedTaskCode = readString(data?.id)
   if (returnedTaskCode !== input.taskCode) {

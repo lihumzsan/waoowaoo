@@ -216,7 +216,7 @@ export interface WorkspaceResourceView {
   /** Server-owned action projection. Canvas must not infer capabilities. */
   readonly actions: readonly WorkspaceResourceActionView[]
   readonly taskId: string | null
-  readonly error: { readonly code: string | null; readonly message: string } | null
+  readonly error: { readonly code: string } | null
   readonly deletedAt: string | null
   readonly createdAt: string
   readonly updatedAt: string

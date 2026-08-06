@@ -33,8 +33,8 @@ Provider 差异只停留在 `ai-providers` 的实现、`ai-exec` 的统一执行
 - **PG-06 — 提交与查询重试分离。** 每个逻辑 invocation 在同一 attempt 只能发送一次。不可能触达
   Provider 的本地 preflight 必须在 fence 之外完成；成功后先 claim fence，再执行唯一一次可能发出
   请求的调用。断连、超时、无法证明是否受理的响应进入 `outcome_unknown`，禁止自动重提；纯本地
-  校验失败不得伪装成 Provider 拒绝。已分类的 typed 错误必须原样穿过 handler，调用层不得重新
-  包装成通用可重试错误。
+  校验失败不得伪装成 Provider 拒绝。fence 只消费 adapter 明确声明的 submission disposition，
+  禁止从 HTTP 状态、异常 retryable 或 message 猜测“未受理”；typed failure 必须原样穿过 handler。
 - **PG-06C — request identity 排除临时传输凭据。** durable request hash 包含媒体对象的
   origin/path、顺序与全部非媒体 canonical option，但必须剥除签名 URL 的 query/hash——签名和过期
   时间只授权本次传输，不是业务输入。wire request 仍使用本次新签发的完整 URL。
@@ -69,8 +69,10 @@ Provider 差异只停留在 `ai-providers` 的实现、`ai-exec` 的统一执行
   每一次 redirect 都 fail closed，实际 socket lookup 必须再次执行同一 policy（防 DNS rebinding）。
   禁止 hostname-only 内网例外、普通 fetch 旁路或只检查首跳。
 - **PG-19 — Provider 边界产出 typed failure。** adapter 在最了解协议的位置把鉴权、欠费/配额、
-  限流、内容策略、超时与畸形结果映射为统一 registry code；异步失败结果必须携带 code。禁止用
-  Provider message 子串猜业务语义。原始响应只进受限内部诊断。
+  限流、内容策略、超时与畸形结果映射为统一 registry code；异步失败结果必须携带 code。优先使用
+  结构化字段；仅当某个 Provider 没有独立 code 且 adapter 能严格、有界地识别其稳定文案协议时，
+  允许在该 adapter 私有解析，未知文案必须保留为未知拒绝。禁止共享 message classifier；原始响应
+  只进受限内部诊断。
 - **PG-20 — 同一模态共享一次 preflight。** planner 与执行层调用同一 option normalizer；planner
   还要在 Plan 前验证所选 provider 的凭证与连接配置。已冻结 option 到 adapter 前不得再补默认或
   删除未知字段。敏感内容拒绝是 permanent 业务事实，不能坍缩成内部错误或被跨工具绕过。
@@ -109,5 +111,11 @@ Provider 差异只停留在 `ai-providers` 的实现、`ai-exec` 的统一执行
   `PROVIDER_SUBMISSION_REJECTED`，既谎报发生阶段又遮住版权限制等真实永久失败 → adapter 直接消费
   结构化 `failReason`，映射稳定 typed code；未知的已接受失败保持 `GENERATION_FAILED`，绝不伪装成
   提交拒绝或自动重提（PG-04/06/19）。
+- Provider POST 的 5xx/429 曾被 fence 按 HTTP 状态猜成“明确未受理”，但这些状态不能证明供应商
+  没创建任务，存在重复生成和扣费风险 → adapter 明确产出 disposition，普通异常一律
+  `outcome_unknown`，fence 不再推断（PG-06）。
+- Toonflow 真实欠费响应使用通用 `code=400`，欠费事实只在稳定 `message` 中；旧 adapter 不读取，
+  Worker 又用默认文案覆盖 → Toonflow adapter 私有严格解析该协议，完整失败事实写穿 checkpoint，
+  共享层不按自然语言分类（PG-19）。
 - LLM adapter 曾把完整响应体、随后又把完整响应头写进例行 INFO 日志 → 把无界 Provider 元数据
   复制进日志，第一轮修复只覆盖 body → 只记录 URL、状态、session identity 与显式允许的诊断字段。

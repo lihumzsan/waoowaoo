@@ -1,4 +1,5 @@
 import { AppError } from '@/lib/errors/app-error'
+import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import type { AiProviderMusicExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
@@ -39,79 +40,85 @@ function readMurekaErrorCode(value: unknown): string | null {
     || null
 }
 
-function classifyMurekaError(code: string | null, status?: number):
-  | 'PROVIDER_AUTH_INVALID'
-  | 'PROVIDER_BILLING_REQUIRED'
-  | 'RATE_LIMIT'
-  | 'SENSITIVE_CONTENT'
-  | 'PROVIDER_SUBMISSION_REJECTED'
-  | 'EXTERNAL_ERROR' {
-  const normalizedCode = code?.toLowerCase() ?? ''
-  if (
-    status === 401 || status === 403
-    || normalizedCode === '401' || normalizedCode === '403'
-    || normalizedCode === 'unauthorized' || normalizedCode === 'forbidden'
-  ) {
-    return 'PROVIDER_AUTH_INVALID'
-  }
-  if (
-    status === 402
-    || normalizedCode === '402'
-    || normalizedCode === 'insufficient_balance'
-    || normalizedCode === 'insufficient_credit'
-    || normalizedCode === 'payment_required'
-  ) {
-    return 'PROVIDER_BILLING_REQUIRED'
-  }
-  if (
-    status === 429 || normalizedCode === '429'
-    || normalizedCode === 'rate_limit' || normalizedCode === 'rate_limit_exceeded'
-  ) return 'RATE_LIMIT'
-  if (
-    normalizedCode === 'sensitive_content'
-    || normalizedCode === 'content_policy_violation'
-    || normalizedCode === 'moderation_blocked'
-  ) {
-    return 'SENSITIVE_CONTENT'
-  }
-  if (status !== undefined && status >= 500) return 'EXTERNAL_ERROR'
-  return 'PROVIDER_SUBMISSION_REJECTED'
+type MurekaSubmissionFailure = {
+  readonly code:
+    | 'PROVIDER_AUTH_INVALID'
+    | 'PROVIDER_BILLING_REQUIRED'
+    | 'RATE_LIMIT'
+    | 'SENSITIVE_CONTENT'
+    | 'PROVIDER_SUBMISSION_REJECTED'
+  readonly disposition: 'rejected' | 'retryable_rejected'
 }
 
-function murekaAppError(input: {
-  readonly message: string
-  readonly code?: string | null
+function classifyMurekaMachineCode(code: string | null): MurekaSubmissionFailure | null {
+  const normalizedCode = code?.trim().toLowerCase().replace(/[\s-]+/gu, '_') ?? ''
+  switch (normalizedCode) {
+    case 'authentication_error':
+    case 'authorization_error':
+    case 'invalid_api_key':
+    case 'unauthorized':
+    case 'forbidden':
+      return { code: 'PROVIDER_AUTH_INVALID', disposition: 'rejected' }
+    case 'insufficient_balance':
+    case 'insufficient_credit':
+    case 'payment_required':
+      return { code: 'PROVIDER_BILLING_REQUIRED', disposition: 'rejected' }
+    case 'rate_limit':
+    case 'rate_limit_exceeded':
+      return { code: 'RATE_LIMIT', disposition: 'retryable_rejected' }
+    case 'sensitive_content':
+    case 'content_policy_violation':
+    case 'moderation_blocked':
+      return { code: 'SENSITIVE_CONTENT', disposition: 'rejected' }
+    case 'bad_request':
+    case 'invalid_argument':
+    case 'invalid_request':
+    case 'invalid_request_error':
+    case 'validation_error':
+      return { code: 'PROVIDER_SUBMISSION_REJECTED', disposition: 'rejected' }
+    default:
+      return null
+  }
+}
+
+function throwMurekaSubmissionFailure(input: {
+  readonly payload: unknown
   readonly status?: number
   readonly cause?: unknown
-}): AppError {
-  return new AppError(classifyMurekaError(input.code ?? null, input.status), input.message, {
-    provider: 'mureka',
-    details: input.status === undefined ? null : { providerStatus: input.status },
-    cause: input.cause,
-  })
+}): void {
+  const machineCode = readMurekaErrorCode(input.payload)
+  const failure = classifyMurekaMachineCode(machineCode)
+  if (!failure || !machineCode) return
+  throw new ProviderSubmissionError(
+    failure.code,
+    (readMurekaHttpErrorMessage(input.payload) ?? machineCode).slice(0, 512),
+    {
+      disposition: failure.disposition,
+      provider: 'mureka',
+      details: {
+        providerCode: machineCode,
+        httpStatus: input.status ?? null,
+      },
+      cause: input.cause,
+    },
+  )
 }
 
 function throwMurekaFetchError(error: unknown): never {
   if (error instanceof FetchStatusError) {
-    let payload: unknown = error.responseText
+    let payload: unknown = null
     try {
       payload = JSON.parse(error.responseText) as unknown
     } catch {}
-    throw murekaAppError({
-      message: readMurekaHttpErrorMessage(payload) ?? error.message,
-      code: readMurekaErrorCode(payload),
-      status: error.status,
-      cause: error,
-    })
+    throwMurekaSubmissionFailure({ payload, status: error.status, cause: error })
   }
   throw error
 }
 
 function requireMurekaPrompt(prompt: string): string {
-  // Deterministic pre-submission validation must throw typed AppErrors: the
-  // provider fence treats plain Errors from execute() as an ambiguous
-  // submission outcome, which both hides the real reason and forbids the
-  // immediate corrected retry this input error allows.
+  // The shared media preflight performs this check before the durable fence.
+  // Keep the adapter assertion for direct callers; it is not evidence that a
+  // claimed provider invocation was unaccepted.
   if (!prompt.trim()) {
     throw new AppError('INVALID_PARAMS', 'Music prompt is required', { provider: 'mureka' })
   }
@@ -152,7 +159,9 @@ async function postMurekaJson(input: {
   } catch (error) {
     throwMurekaFetchError(error)
   }
-  return await response.json() as unknown
+  const payload = await response.json() as unknown
+  throwMurekaSubmissionFailure({ payload, status: response.status })
+  return payload
 }
 
 async function uploadMurekaSoundtrackVideo(input: {
@@ -180,11 +189,10 @@ async function uploadMurekaSoundtrackVideo(input: {
     throwMurekaFetchError(error)
   }
   const data = await response.json() as { id?: unknown }
+  throwMurekaSubmissionFailure({ payload: data, status: response.status })
   const fileId = readEntityId(data.id)
   if (!fileId) {
-    throw new AppError('EXTERNAL_ERROR', 'Mureka upload response did not include a file id', {
-      provider: 'mureka',
-    })
+    throw new Error('MUREKA_UPLOAD_RESPONSE_FILE_ID_MISSING')
   }
   return fileId
 }
@@ -235,9 +243,7 @@ export async function executeMurekaMusicGeneration(input: AiProviderMusicExecuti
     }) as { id?: unknown }
     const taskId = readEntityId(task.id)
     if (!taskId) {
-      throw new AppError('EXTERNAL_ERROR', 'Mureka soundtrack response did not include a task id', {
-        provider: 'mureka',
-      })
+      throw new Error('MUREKA_SOUNDTRACK_RESPONSE_TASK_ID_MISSING')
     }
     return {
       success: true,
@@ -261,9 +267,7 @@ export async function executeMurekaMusicGeneration(input: AiProviderMusicExecuti
   }) as { id?: unknown }
   const taskId = readEntityId(task.id)
   if (!taskId) {
-    throw new AppError('EXTERNAL_ERROR', 'Mureka instrumental response did not include a task id', {
-      provider: 'mureka',
-    })
+    throw new Error('MUREKA_INSTRUMENTAL_RESPONSE_TASK_ID_MISSING')
   }
   return {
     success: true,

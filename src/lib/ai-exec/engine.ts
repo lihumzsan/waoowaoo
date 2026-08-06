@@ -533,7 +533,6 @@ async function executeTaskAwareLlmCompletion(input: {
     execute: input.execute,
     resultPolicy: {
       parse: parseStoredAiLlmExecutionResult,
-      isKnownRejectionError: (error) => !toAppError(error, { context: 'worker' }).retryable,
     },
   })
 }
@@ -574,7 +573,7 @@ export async function executeAiTextStep(input: AiStepExecutionInput): Promise<Ai
       }),
     })
   } catch (error) {
-    throw toAppError(error, { context: 'worker' })
+    throw toAppError(error)
   }
 }
 
@@ -615,6 +614,6 @@ export async function executeAiVisionStep(input: AiVisionStepExecutionInput): Pr
       }),
     })
   } catch (error) {
-    throw toAppError(error, { context: 'worker' })
+    throw toAppError(error)
   }
 }

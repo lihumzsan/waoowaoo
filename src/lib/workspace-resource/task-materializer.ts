@@ -77,8 +77,6 @@ export async function materializeWorkspaceResourceTaskTerminalInTransaction(
     readonly kind: 'completed' | 'failed' | 'canceled'
     readonly task: TerminalTask
     readonly result: Record<string, unknown> | null
-    readonly errorCode: string | null
-    readonly errorMessage: string | null
   },
 ): Promise<Record<string, unknown> | null> {
   const definition = getTaskDefinition(input.task.type)
@@ -91,15 +89,10 @@ export async function materializeWorkspaceResourceTaskTerminalInTransaction(
     throw new Error(`WORKSPACE_RESOURCE_TASK_TARGET_INVALID:${input.task.targetType}`)
   }
   if (input.kind !== 'completed') {
-    if (input.kind === 'failed' && (!input.errorCode || !input.errorMessage)) {
-      throw new Error(`WORKSPACE_RESOURCE_TASK_FAILURE_REQUIRED:${input.task.id}`)
-    }
     await settleWorkspaceResourceFailureInTransaction(tx, {
       resourceId: input.task.targetId,
       userId: input.task.userId,
       status: input.kind === 'canceled' ? 'canceled' : 'failed',
-      errorCode: input.kind === 'canceled' ? null : input.errorCode,
-      errorMessage: input.kind === 'canceled' ? null : input.errorMessage,
     })
     return { resourceId: input.task.targetId, resourceStatus: input.kind === 'canceled' ? 'canceled' : 'failed' }
   }

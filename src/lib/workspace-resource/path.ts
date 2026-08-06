@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { AppError } from '@/lib/errors/app-error'
 import {
   isCanonicalWorkspaceResourcePath,
   isWorkspaceResourceReservedRootName,
@@ -9,9 +10,11 @@ import {
 
 const TEXT_EXTENSIONS = new Set(['.md', '.txt', '.json'])
 
-export class WorkspaceResourcePathError extends Error {
-  constructor(readonly code: string, message: string) {
-    super(message)
+export class WorkspaceResourcePathError extends AppError {
+  constructor(readonly reasonCode: string, message: string) {
+    super('INVALID_PARAMS', message, {
+      details: { reasonCode },
+    })
     this.name = 'WorkspaceResourcePathError'
   }
 }
@@ -21,12 +24,19 @@ export type WorkspaceResourcePlacementErrorCode =
   | 'WORKSPACE_RESOURCE_PATH_CONFLICT'
   | 'WORKSPACE_RESOURCE_TREE_PATH_CONFLICT'
 
-export class WorkspaceResourcePlacementError extends Error {
+export class WorkspaceResourcePlacementError extends AppError {
   constructor(
-    readonly code: WorkspaceResourcePlacementErrorCode,
+    readonly reasonCode: WorkspaceResourcePlacementErrorCode,
     readonly workspacePath: string,
   ) {
-    super(`${code}:${workspacePath}`)
+    const folderMissing = reasonCode === 'WORKSPACE_RESOURCE_FOLDER_NOT_FOUND'
+    super(folderMissing ? 'INVALID_PARAMS' : 'CONFLICT', `${reasonCode}:${workspacePath}`, {
+      details: {
+        reasonCode,
+        field: folderMissing ? 'folderPath' : 'name',
+        workspacePath,
+      },
+    })
     this.name = 'WorkspaceResourcePlacementError'
   }
 }

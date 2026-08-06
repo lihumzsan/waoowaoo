@@ -37,7 +37,9 @@ Task 是长运行执行的唯一业务事实。执行许可（attempt、retry、
 - **TL-22 — 执行平面不可用时提交失败关闭。** 无法确认执行已被持久接受时，调用方不得宣称 Task
   已提交；禁止 fire-and-forget、旁路队列或周期扫描兜底。
 - **TL-23 — 失败、重试、取消是三种事实。** 仍可重试时只投影 retrying；最终失败只持久化 registry
-  code 与内部诊断；用户取消只写 canceled 且 error 字段必须为空。消费者不得从文案反解状态。
+  code、内部诊断、受限 details 与 origin 组成的同一 FailureRecord；Task 是该事实唯一 owner，Resource
+  只保存生命周期并通过当前 taskId 读取失败。用户取消只写 canceled 且 failure 必须为空；公开出口
+  只能投影 allow-list details，消费者不得从文案反解状态。
 - **TL-24 — Worker 只执行冻结计划。** payload 携带 planner 已验证的模型、canonical 参数与精确
   Resource 版本。handler 不读当前项目配置、不补 capability 默认、不换模型、不静默丢弃已冻结字段。
 
@@ -61,3 +63,6 @@ Task 是长运行执行的唯一业务事实。执行许可（attempt、retry、
 - 终态 materializer 曾在成功/失败/取消三条路径都先解析完整领域 payload；契约一分歧，
   Provider 尚未调用的确定性失败也无法收口，Temporal 反复重试同一个不可能成功的终态 →
   失败与取消只消费 registry、target 与 canonical error，完整 payload 只属于成功路径。
+- Task 与 WorkspaceResource 曾各存一份 errorCode/errorMessage，Worker 又在持久化前覆盖 Provider
+  原因；新增 reader 每次只接一部分字段，同一失败换入口反复丢失 → Task 独占完整 FailureRecord，
+  checkpoint、Temporal 与 follow-up 原样传递，Resource 只经 taskId 投影（TL-23）。

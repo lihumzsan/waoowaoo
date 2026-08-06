@@ -9,12 +9,16 @@ import {
 import { Prisma } from '@prisma/client'
 import { withTextUsageCollection, type TextUsageEntry } from '@/lib/billing/runtime-usage'
 import { getUserWorkflowConcurrencyConfig } from '@/lib/config-service'
+import {
+  createFailureRecord,
+  parseFailureRecord,
+} from '@/lib/errors/failure'
 import { normalizeAnyError } from '@/lib/errors/normalize'
-import { getErrorSpec, resolveUnifiedErrorCode } from '@/lib/errors/codes'
-import { projectPublicErrorDetails } from '@/lib/errors/projection'
+import { getErrorFailureClass } from '@/lib/errors/codes'
 import { withLogContext } from '@/lib/logging/context'
 import { createScopedLogger } from '@/lib/logging/core'
 import { getTemporalClient } from '@/lib/temporal/client'
+import { encodeTemporalFailure, temporalInvariantFailure } from '@/lib/temporal/failure'
 import { buildTaskWorkflowId, buildUserTaskSchedulerWorkflowId } from '@/lib/temporal/identity'
 import { prisma } from '@/lib/prisma'
 import { getTaskDefinition } from '@/lib/task/definition'
@@ -112,7 +116,8 @@ interface TaskActivityHeartbeat {
 type TaskIdentity = Pick<TaskWorkflowInput, 'workflowId' | 'taskId' | 'userId' | 'taskType'>
 
 function failNonRetryable(code: string, ...details: unknown[]): never {
-  throw ApplicationFailure.nonRetryable(code, code, ...details)
+  const encoded = encodeTemporalFailure(temporalInvariantFailure(code, details))
+  throw ApplicationFailure.nonRetryable(encoded.message, encoded.type, ...encoded.details)
 }
 
 function requireNonEmpty(value: string, code: string): string {
@@ -301,19 +306,13 @@ function parseAttemptFailureCheckpoint(
     return failNonRetryable('TASK_ATTEMPT_FAILURE_CHECKPOINT_DIVERGED')
   }
   const parsed = failure as Record<string, unknown>
+  const parsedFailure = parseFailureRecord(parsed.failure)
   if (
-    typeof parsed.errorCode !== 'string' ||
-    !parsed.errorCode.trim() ||
-    typeof parsed.errorMessage !== 'string' ||
-    !parsed.errorMessage.trim() ||
+    !parsedFailure ||
     (parsed.retryDisposition !== 'retryable' && parsed.retryDisposition !== 'final') ||
     (parsed.failureClass !== 'TRANSIENT_PROVIDER' &&
       parsed.failureClass !== 'PERMANENT_PROVIDER' &&
-      parsed.failureClass !== 'OUTPUT_VALIDATION') ||
-    (parsed.errorDetails !== null &&
-      (!parsed.errorDetails ||
-        typeof parsed.errorDetails !== 'object' ||
-        Array.isArray(parsed.errorDetails)))
+      parsed.failureClass !== 'OUTPUT_VALIDATION')
   ) {
     return failNonRetryable('TASK_ATTEMPT_FAILURE_CHECKPOINT_INVALID')
   }
@@ -323,9 +322,7 @@ function parseAttemptFailureCheckpoint(
     attemptId: expected.attemptId,
     attempt: expected.attempt,
     failure: {
-      errorCode: parsed.errorCode,
-      errorMessage: parsed.errorMessage,
-      errorDetails: parsed.errorDetails as Record<string, unknown> | null,
+      failure: parsedFailure,
       failureClass: parsed.failureClass,
       retryDisposition: parsed.retryDisposition,
     },
@@ -762,26 +759,26 @@ export async function runTaskAttempt(input: RunTaskAttemptInput): Promise<RunTas
           return { kind: 'canceled', reason: error.message }
         }
       }
-      const normalized = normalizeAnyError(error, { context: 'worker' })
+      const failureRecord = normalizeAnyError(error, {
+        origin: { system: 'temporal', phase: 'task-attempt' },
+      })
+      const failureClass = getErrorFailureClass(failureRecord.code)
       logger.error({
         action: 'task.attempt.failed',
         message: 'task attempt returned a classified failure',
         taskId: input.taskId,
-        errorCode: normalized.code,
-        retryable: normalized.retryable,
+        errorCode: failureRecord.code,
         details: { attempt },
         error: error instanceof Error
           ? { name: error.name, message: error.message, stack: error.stack }
           : { message: String(error) },
       })
       const failure: TaskAttemptFailure = {
-        errorCode: normalized.code,
-        errorMessage: getErrorSpec(normalized.code).defaultMessage,
-        errorDetails: projectPublicErrorDetails(normalized.details),
-        failureClass: normalized.failureClass,
+        failure: failureRecord,
+        failureClass,
         retryDisposition: shouldRetryTaskFailure({
           taskType: input.taskType,
-          failureClass: normalized.failureClass,
+          failureClass,
         })
           ? 'retryable'
           : 'final',
@@ -865,17 +862,14 @@ export async function commitTaskTerminal(
   }
   if (input.kind === 'failed') {
     requirePositiveInt(input.attempt, 'TASK_ATTEMPT_INVALID')
-    requireNonEmpty(input.errorCode, 'TASK_TERMINAL_ERROR_CODE_INVALID')
-    requireNonEmpty(input.errorMessage, 'TASK_TERMINAL_ERROR_MESSAGE_INVALID')
-    const errorCode = resolveUnifiedErrorCode(input.errorCode) ?? 'INTERNAL_ERROR'
+    const failure = parseFailureRecord(input.failure)
+    if (!failure) failNonRetryable('TASK_TERMINAL_FAILURE_INVALID')
     const result = await commitBusinessTaskTerminal({
       kind: 'failed',
       taskId: input.taskId,
       fence: { kind: 'attempt', attempt: input.attempt },
       source: input.source,
-      errorCode,
-      errorMessage: input.errorMessage,
-      errorDetails: input.errorDetails,
+      failure,
       eventPayload: { stage: 'failed', runtime: 'temporal' },
     })
     return await terminalReceiptFromCommit(input.taskId, 'failed', result)
@@ -950,12 +944,17 @@ export async function commitTaskWorkflowFailure(
         taskId: input.task.taskId,
         fence: { kind: 'active' },
         source: 'workflow',
-        errorCode: 'WORKER_EXECUTION_ERROR',
-        errorMessage: 'Task Workflow failed before returning a terminal result',
-        errorDetails: {
-          schedulerWorkflowId: input.schedulerWorkflowId,
-          enqueueId: input.enqueueId,
-        },
+        failure: createFailureRecord(
+          'WORKER_EXECUTION_ERROR',
+          'Task Workflow failed before returning a terminal result',
+          {
+            origin: { system: 'temporal', phase: 'task-workflow' },
+            details: {
+              schedulerWorkflowId: input.schedulerWorkflowId,
+              enqueueId: input.enqueueId,
+            },
+          },
+        ),
         eventPayload: {
           stage: 'failed',
           runtime: 'temporal',

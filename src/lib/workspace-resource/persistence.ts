@@ -587,8 +587,6 @@ export async function materializeWorkspaceResourceInTransaction(
       taskId: input.provenance.taskId,
       operationExecutionId: input.provenance.operationExecutionId,
       toolCallId: input.provenance.toolCallId,
-      errorCode: null,
-      errorMessage: null,
     },
   })
   if (updated.count !== 1) throw new Error(`WORKSPACE_RESOURCE_MATERIALIZATION_CONFLICT:${resource.id}`)
@@ -676,7 +674,7 @@ export async function appendWorkspaceResourceUserContentInTransaction(
     })
     const updated = await tx.workspaceResource.updateMany({
       where: { id: resource.id, currentVersion: input.expectedContentVersion, deletedAt: null },
-      data: { currentVersion: nextVersion, status: 'ready', materializedAt: new Date(), errorCode: null, errorMessage: null },
+      data: { currentVersion: nextVersion, status: 'ready', materializedAt: new Date() },
     })
     if (updated.count !== 1) throw new Error('WORKSPACE_RESOURCE_CONTENT_VERSION_CONFLICT')
   return { resourceId: resource.id, contentVersion: nextVersion }
@@ -732,8 +730,6 @@ export async function settleWorkspaceResourceFailureInTransaction(
     readonly resourceId: string
     readonly userId: string
     readonly status: 'failed' | 'canceled'
-    readonly errorCode: string | null
-    readonly errorMessage: string | null
   },
 ): Promise<void> {
   const resource = await tx.workspaceResource.findUnique({ where: { id: input.resourceId } })
@@ -745,8 +741,6 @@ export async function settleWorkspaceResourceFailureInTransaction(
     where: { id: resource.id },
     data: {
       status: input.status,
-      errorCode: input.status === 'failed' ? input.errorCode : null,
-      errorMessage: input.status === 'failed' ? input.errorMessage?.slice(0, 2_000) ?? null : null,
     },
   })
 }
