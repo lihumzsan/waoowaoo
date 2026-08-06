@@ -63,7 +63,7 @@ export interface WorkspaceCanvasResourcePreviewView {
   readonly name: string
   readonly status: WorkspaceResourceStatus
   readonly mediaType: WorkspaceResourceMediaType
-  readonly error: { readonly code: string | null; readonly message: string } | null
+  readonly error: { readonly code: string } | null
 }
 
 export type WorkspaceCanvasResourceSummaryView =
