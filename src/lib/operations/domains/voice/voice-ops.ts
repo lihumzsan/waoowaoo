@@ -7,6 +7,7 @@ import {
   workspaceResourceDisplayName,
 } from '@/lib/workspace-resource/path'
 import {
+  createWorkspaceResourceFolderInTransaction,
   reserveWorkspaceResourceInTransaction,
   resolveGeneratedWorkspaceResourcePlacement,
 } from '@/lib/workspace-resource/persistence'
@@ -36,7 +37,8 @@ import { ApiError } from '@/lib/api-errors'
 
 const voiceNewSchema = z.object({
   kind: z.literal('new'),
-  folderPath: z.string().trim().min(1).max(512).nullable().optional(),
+  folderPath: z.string().trim().min(1).max(512).nullable().optional()
+    .describe('Optional project-relative destination folder. Missing folders are created atomically with the voice Resources.'),
   name: z.string().trim().min(1).max(300),
   description: z.string().trim().min(1).max(4_000),
   previewText: z.string().trim().min(1).max(10_000),
@@ -82,6 +84,7 @@ const voicePlanMetadataSchema = z.object({
   resources: z.array(z.object({
     resourceId: z.string().min(1),
     workspacePath: z.string().min(1),
+    folderPath: z.string().min(1).nullable(),
     memberIndex: z.number().int().nonnegative(),
     taskPlanId: z.string().min(1),
   }).strict()).min(1),
@@ -152,6 +155,7 @@ async function planNewVoice(
     return {
       resourceId,
       workspacePath,
+      folderPath: request.folderPath ?? null,
       memberIndex,
       taskPlanId: `generate_voice:${resourceId}`,
     }
@@ -306,6 +310,7 @@ async function planRetryVoice(
       resources: resources.map((resource) => ({
         resourceId: resource.resourceId,
         workspacePath: resource.workspacePath,
+        folderPath: null,
         memberIndex: resource.memberIndex,
         taskPlanId: resource.taskPlanId,
       })),
@@ -318,6 +323,18 @@ async function commitVoice(ctx: ProjectAgentOperationContext, plan: OperationPla
   if (!authorization) throw new Error('OPERATION_EXECUTION_AUTHORIZATION_REQUIRED')
   const metadata = voicePlanMetadataSchema.parse(plan.metadata)
   if (!metadata.retry) {
+    const folderPaths = new Set(metadata.resources.flatMap((resource) => (
+      resource.folderPath ? [resource.folderPath] : []
+    )))
+    for (const folderPath of folderPaths) {
+      await createWorkspaceResourceFolderInTransaction(authorization.transaction, {
+        userId: ctx.userId,
+        projectId: ctx.projectId,
+        workspacePath: folderPath,
+        sourceType: 'operation_output_folder',
+        sourceId: null,
+      })
+    }
     for (const resource of metadata.resources) {
       const task = plan.tasks.find((candidate) => candidate.id === resource.taskPlanId)
       if (!task) throw new Error(`VOICE_PLAN_TASK_MISSING:${resource.taskPlanId}`)
@@ -421,7 +438,7 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
         },
       },
       confirmation: { kind: 'billable_media', required: true },
-      planContractRevision: 'voice-generation/v8',
+      planContractRevision: 'voice-generation/v9',
       inputSchema: generateVoiceInputSchema,
       outputSchema: generateVoiceOutputSchema,
       plan: async (ctx, input) => input.request.kind === 'retry'

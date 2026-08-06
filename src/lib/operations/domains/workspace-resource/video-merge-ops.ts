@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { WorkspaceResourceInputRef } from '@/lib/workspace-resource/contracts'
 import { buildWorkspaceResourceId } from '@/lib/workspace-resource/identity'
 import {
+  createWorkspaceResourceFolderInTransaction,
   reserveWorkspaceResourceInTransaction,
   resolveGeneratedWorkspaceResourcePlacement,
   resolveWorkspaceResourceInputs,
@@ -20,7 +21,8 @@ import { stableArgsFingerprint } from '@/lib/project-agent/stable-args-hash'
 import { TASK_TYPE } from '@/lib/task/types'
 
 const mergeVideosInputSchema = z.object({
-  folderPath: z.string().trim().min(1).max(512).nullable().optional(),
+  folderPath: z.string().trim().min(1).max(512).nullable().optional()
+    .describe('Optional project-relative destination folder. Missing folders are created atomically with the merged video Resource.'),
   name: z.string().trim().min(1).max(300),
   videos: z.array(z.object({
     resourceId: z.string().trim().min(1).max(32),
@@ -71,7 +73,7 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
       confirmation: { kind: 'none', required: false },
       assistantWriteAuthority: {
         kind: 'temporal_operation_execution',
-        contractRevision: 'merge_videos/v4',
+        contractRevision: 'merge_videos/v5',
         followUpPolicy: 'after_all_terminal',
       },
       inputSchema: mergeVideosInputSchema,
@@ -141,6 +143,15 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
           dedupeKey: `merge_videos:${resourceId}:${inputHash}`,
           locale: resolveOperationLocale(ctx.context),
           onTaskCreatedInTransaction: async (tx, task) => {
+            if (input.folderPath) {
+              await createWorkspaceResourceFolderInTransaction(tx, {
+                userId: ctx.userId,
+                projectId: ctx.projectId,
+                workspacePath: input.folderPath,
+                sourceType: 'operation_output_folder',
+                sourceId: null,
+              })
+            }
             await validateWorkspaceResourceInputReferencesInTransaction(tx, {
               userId: ctx.userId,
               projectId: ctx.projectId,

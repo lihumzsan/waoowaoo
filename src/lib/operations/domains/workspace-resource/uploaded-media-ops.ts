@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
 import {
+  createWorkspaceResourceFolderInTransaction,
   materializeWorkspaceResourceInTransaction,
   reserveWorkspaceResourceInTransaction,
   resolveGeneratedWorkspaceResourcePlacement,
@@ -19,7 +20,8 @@ import { resolveProjectAssistantAttachmentRegistration } from '@/lib/project-age
 
 const registerUploadedMediaInputSchema = z.object({
   attachmentToken: z.string().min(1).max(PROJECT_ASSISTANT_ATTACHMENT_TOKEN_MAX_CHARS),
-  folderPath: z.string().trim().min(1).max(512).nullable().optional(),
+  folderPath: z.string().trim().min(1).max(512).nullable().optional()
+    .describe('Optional project-relative destination folder. Missing folders are created atomically with the uploaded Resource.'),
   name: z.string().trim().min(1).max(200).optional(),
 }).strict()
 
@@ -48,7 +50,7 @@ export function createWorkspaceResourceUploadedMediaOperations(): ProjectAgentOp
       id: 'register_uploaded_media',
       summary: 'Materialize one verified chat-uploaded image/audio as a ready Resource with server-owned placement.',
       intent: 'act',
-      toolContractRevision: 'register_uploaded_media/v5',
+      toolContractRevision: 'register_uploaded_media/v6',
       channels: { tool: true, api: true, mcp: true },
       effects: {
         writes: true,
@@ -103,6 +105,15 @@ export function createWorkspaceResourceUploadedMediaOperations(): ProjectAgentOp
             mediaType: payload.mediaType,
             schemaId,
             reused: true,
+          })
+        }
+        if (input.folderPath) {
+          await createWorkspaceResourceFolderInTransaction(tx, {
+            userId: ctx.userId,
+            projectId: ctx.projectId,
+            workspacePath: input.folderPath,
+            sourceType: 'operation_output_folder',
+            sourceId: null,
           })
         }
         const outputPath = await resolveGeneratedWorkspaceResourcePlacement(tx, {

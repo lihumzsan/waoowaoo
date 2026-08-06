@@ -169,6 +169,36 @@ export type ReserveWorkspaceResourceInput = {
   readonly taskId?: string | null
 }
 
+async function validateWorkspaceResourceFolderPlacement(
+  client: WorkspaceResourceClient,
+  input: {
+    readonly userId: string
+    readonly projectId: string
+    readonly folderPath?: string | null
+  },
+): Promise<string | null> {
+  if (!input.folderPath) return null
+  const folderPath = validateWorkspaceResourceFolderPath(input.folderPath)
+  const paths = [...workspacePathAncestors(folderPath), folderPath]
+  const occupied = await client.workspaceResource.findMany({
+    where: {
+      projectId: input.projectId,
+      userId: input.userId,
+      activePath: { in: paths },
+      deletedAt: null,
+    },
+    select: { activePath: true, resourceKind: true },
+  })
+  const conflict = occupied.find((resource) => resource.resourceKind !== 'folder')
+  if (conflict) {
+    throw new WorkspaceResourcePlacementError(
+      'WORKSPACE_RESOURCE_TREE_PATH_CONFLICT',
+      conflict.activePath ?? folderPath,
+    )
+  }
+  return folderPath
+}
+
 export async function resolveGeneratedWorkspaceResourcePlacement(
   client: WorkspaceResourceClient,
   input: {
@@ -187,29 +217,9 @@ export async function resolveGeneratedWorkspaceResourcePlacement(
   if (schema.resourceKind !== 'file' || schema.mediaType !== input.mediaType) {
     throw new Error(`WORKSPACE_RESOURCE_SCHEMA_MEDIA_MISMATCH:${input.schemaId}:${input.mediaType}`)
   }
-  const folderPath = input.folderPath
-    ? validateWorkspaceResourceFolderPath(input.folderPath)
-    : null
-  const parent = folderPath
-    ? await client.workspaceResource.findFirst({
-        where: {
-          projectId: input.projectId,
-          userId: input.userId,
-          activePath: folderPath,
-          resourceKind: 'folder',
-          deletedAt: null,
-        },
-        select: { workspacePath: true },
-      })
-    : null
-  if (folderPath && !parent) {
-    throw new WorkspaceResourcePlacementError(
-      'WORKSPACE_RESOURCE_FOLDER_NOT_FOUND',
-      folderPath,
-    )
-  }
+  const folderPath = await validateWorkspaceResourceFolderPlacement(client, input)
   const workspacePath = buildGeneratedWorkspaceResourcePath({
-    parentPath: parent?.workspacePath ?? null,
+    parentPath: folderPath,
     name: input.name,
     mediaType: input.mediaType,
     alternativeIndex: input.alternativeIndex,
@@ -241,26 +251,9 @@ export async function resolveSavedWorkspaceDocumentPlacement(
   if (schema.resourceKind !== 'file' || schema.mediaType !== 'text') {
     throw new Error(`WORKSPACE_RESOURCE_SCHEMA_MEDIA_MISMATCH:${input.schemaId}:text`)
   }
-  const folderPath = input.folderPath
-    ? validateWorkspaceResourceFolderPath(input.folderPath)
-    : null
-  const parent = folderPath
-    ? await client.workspaceResource.findFirst({
-        where: {
-          projectId: input.projectId,
-          userId: input.userId,
-          activePath: folderPath,
-          resourceKind: 'folder',
-          deletedAt: null,
-        },
-        select: { workspacePath: true },
-      })
-    : null
-  if (folderPath && !parent) {
-    throw new WorkspaceResourcePlacementError('WORKSPACE_RESOURCE_FOLDER_NOT_FOUND', folderPath)
-  }
+  const folderPath = await validateWorkspaceResourceFolderPlacement(client, input)
   const workspacePath = buildSavedWorkspaceDocumentPath({
-    parentPath: parent?.workspacePath ?? null,
+    parentPath: folderPath,
     name: input.name,
     contentKind: input.contentKind,
   })

@@ -203,6 +203,7 @@
       "document": "docs/architecture/modules/ai-prompt-output-contract.md",
       "title": "Agent 指令、Skill 与输出契约",
       "sourcePaths": [
+        "src/lib/ai-prompts/templates/project-agent/system/project-agent-system.txt",
         "src/lib/assistant-runtime",
         "src/lib/codex-runtime/runtime-adapter.ts",
         "src/lib/codex-runtime/app-server-client.ts",

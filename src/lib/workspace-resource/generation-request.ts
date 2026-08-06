@@ -14,7 +14,7 @@ const resourceNameSchema = z.string().trim().min(1).max(300)
   .describe('User-visible resource name. The server derives the canonical WorkspaceResource path.')
 
 const folderPathSchema = z.string().trim().min(1).max(512).nullable().optional()
-  .describe('Optional project-relative destination folder path. Omit or use null for the project root.')
+  .describe('Optional project-relative destination folder path. Omit or use null for the project root; missing folders are created atomically with the output Resources.')
 
 export const generationReferenceSchema = z.object({
   resourceId: z.string().trim().min(1).max(32)

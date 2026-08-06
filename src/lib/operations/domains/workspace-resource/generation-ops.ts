@@ -41,6 +41,7 @@ import {
   workspaceResourceDisplayName,
 } from '@/lib/workspace-resource/path'
 import {
+  createWorkspaceResourceFolderInTransaction,
   materializeWorkspaceResourceInTransaction,
   reserveWorkspaceResourceInTransaction,
   resolveGeneratedWorkspaceResourcePlacement,
@@ -83,7 +84,7 @@ import { AppError } from '@/lib/errors/app-error'
 import { describeUnknownError } from '@/lib/errors/normalize'
 
 const MAX_BATCH_ITEMS = OPERATION_EXECUTION_MAX_TASKS
-const MEDIA_GENERATION_PLAN_CONTRACT_REVISION = 'workspace-resource-generation-batch/v6'
+const MEDIA_GENERATION_PLAN_CONTRACT_REVISION = 'workspace-resource-generation-batch/v7'
 
 const workspaceResourceJsonValueSchema: z.ZodType<WorkspaceResourceJsonValue> = z.lazy(() => z.union([
   z.string(),
@@ -130,7 +131,8 @@ const rerunFailedItemsInputSchema = z.object({
 })
 
 const saveProjectDocumentInputSchema = z.object({
-  folderPath: z.string().trim().min(1).max(512).nullable().optional(),
+  folderPath: z.string().trim().min(1).max(512).nullable().optional()
+    .describe('Optional project-relative destination folder. Missing folders are created atomically with the saved document.'),
   name: z.string().trim().min(1).max(300),
   content: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('text'), text: z.string().max(4 * 1024 * 1024) }).strict(),
@@ -166,6 +168,7 @@ type NewMediaRequest =
 type PlannedResource = {
   readonly resourceId: string
   readonly workspacePath: string
+  readonly folderPath: string | null
   readonly mediaType: Exclude<WorkspaceResourceMediaType, 'text'>
   readonly schemaId: string
   readonly memberIndex: number
@@ -180,6 +183,7 @@ const productionPlanMetadataSchema = z.object({
   resources: z.array(z.object({
     resourceId: z.string().min(1),
     workspacePath: z.string().min(1),
+    folderPath: z.string().min(1).nullable(),
     mediaType: z.enum(['image', 'audio', 'video']),
     schemaId: z.string().min(1),
     memberIndex: z.number().int().nonnegative(),
@@ -831,6 +835,7 @@ async function buildPlannedItem(input: {
     resource: {
       resourceId,
       workspacePath,
+      folderPath: input.item.folderPath ?? null,
       mediaType,
       schemaId,
       memberIndex: input.memberIndex,
@@ -1049,6 +1054,7 @@ async function loadFailedTasks(
       resource: {
         resourceId: resource.id,
         workspacePath: resource.workspacePath,
+        folderPath: null,
         mediaType,
         schemaId: resource.schemaId,
         memberIndex: resource.memberIndex ?? 0,
@@ -1098,6 +1104,18 @@ async function commitProductionPlan(
   if (!authorization) throw new Error('OPERATION_EXECUTION_AUTHORIZATION_REQUIRED')
   const metadata = productionPlanMetadataSchema.parse(plan.metadata)
   if (!metadata.retry) {
+    const folderPaths = new Set(metadata.resources.flatMap((resource) => (
+      resource.folderPath ? [resource.folderPath] : []
+    )))
+    for (const folderPath of folderPaths) {
+      await createWorkspaceResourceFolderInTransaction(authorization.transaction, {
+        userId: ctx.userId,
+        projectId: ctx.projectId,
+        workspacePath: folderPath,
+        sourceType: 'operation_output_folder',
+        sourceId: null,
+      })
+    }
     for (const resource of metadata.resources) {
       const task = plan.tasks.find((candidate) => candidate.id === resource.taskPlanId)
       if (!task) throw new Error(`WORKSPACE_RESOURCE_PLAN_TASK_MISSING:${resource.taskPlanId}`)
@@ -1226,7 +1244,7 @@ export function createWorkspaceResourceGenerationOperations(): ProjectAgentOpera
       summary: 'Explicitly save one text or structured document as a canonical project Resource. Runtime scratch and in-turn professional results are never saved implicitly.',
       intent: 'act',
       channels: { tool: true, api: true, mcp: true },
-      toolContractRevision: 'save_project_document/v4',
+      toolContractRevision: 'save_project_document/v5',
       effects: {
         writes: true,
         workspaceResourceImpact: 'workspace_resources',
@@ -1283,6 +1301,15 @@ export function createWorkspaceResourceGenerationOperations(): ProjectAgentOpera
           requestId: requestIdentity(ctx, 'save_project_document', input),
           memberIndex: 0,
         })
+        if (input.folderPath) {
+          await createWorkspaceResourceFolderInTransaction(tx, {
+            userId: ctx.userId,
+            projectId: ctx.projectId,
+            workspacePath: input.folderPath,
+            sourceType: 'operation_output_folder',
+            sourceId: null,
+          })
+        }
         const outputPath = await resolveSavedWorkspaceDocumentPlacement(tx, {
           userId: ctx.userId,
           projectId: ctx.projectId,
