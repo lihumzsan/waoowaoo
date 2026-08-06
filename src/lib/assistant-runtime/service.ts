@@ -683,7 +683,7 @@ export class AssistantRuntimeService {
           input.preparedThread.model.thread.start.sandbox,
         ),
         summary: 'concise',
-        personality: 'pragmatic',
+        personality: 'none',
         collaborationMode: {
           mode: 'default',
           settings: {

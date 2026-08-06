@@ -44,7 +44,9 @@ export const ASSISTANT_RUNTIME_STATIC_CONTRACT = {
     approvalPolicy: 'on-request',
     sandbox: 'workspace-write',
     serviceName: 'wao-creative-agent',
-    personality: 'pragmatic',
+    // 'none': the pragmatic preset injects a software-engineer persona into the
+    // Codex base prompt; tone is owned solely by our developer instructions.
+    personality: 'none',
     ephemeral: false,
   },
   tools: {
