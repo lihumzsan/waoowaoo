@@ -40,6 +40,7 @@ function toTurnView(row: {
   readonly sourceId: string
   readonly status: string
   readonly attempt: number
+  readonly planJson: Prisma.JsonValue | null
   readonly assistantMessageId: string | null
   readonly stopReason: string | null
   readonly errorCode: string | null
@@ -49,13 +50,17 @@ function toTurnView(row: {
   readonly createdAt: Date
   readonly updatedAt: Date
 }): AssistantRuntimeSessionTurnView {
+  const status = parseTurnStatus(row.status)
   return {
     turnId: row.id,
     requestId: row.requestId,
     sourceKind: parseSourceKind(row.sourceKind),
     sourceId: row.sourceId,
-    status: parseTurnStatus(row.status),
+    status,
     attempt: row.attempt,
+    plan: status === 'running' || status === 'waiting_approval'
+      ? parseProjectAgentPlanSnapshot(row.planJson)
+      : null,
     assistantMessageId: row.assistantMessageId ?? (row.startedAt
       ? buildAgentTurnAssistantMessageId({ turnId: row.id, attempt: row.attempt })
       : null),
@@ -253,7 +258,6 @@ export async function getAssistantRuntimeSessionView(
       thread: {
         threadId: thread.id,
         messages,
-        plan: parseProjectAgentPlanSnapshot(thread.planJson),
         createdAt: thread.createdAt.toISOString(),
         updatedAt: thread.updatedAt.toISOString(),
       },

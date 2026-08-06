@@ -23,10 +23,13 @@ View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 pl
   是独立 source identity，但与用户 start 共用同一 native Thread 准备、绑定与 Turn 启动入口。
 - **ARL-03 — 产品 View 独立持久。** 所有对话与交互事实由 projector 写入数据库；刷新不读 Runtime
   本地格式。一个 Turn 在每次已接受 steer 处冻结当前 assistant segment，后续输出进入递增 segment，
-  因此顺序始终是"已发生内容 → 用户追加 → 后续内容"。
+  因此顺序始终是"已发生内容 → 用户追加 → 后续内容"。原生 Plan 是产生它的 Turn 投影，只能写入
+  匹配的 Turn 并在该 Turn 活跃时进入当前 View；不得提升为 Thread 当前状态或跨 Turn 继承。
 - **ARL-04 — 原生请求原生响应。** server request 以 `(turnId, runtimeRequestId)` 唯一；审批卡与
   选择卡只响应该 request。创建、决定、取消与回写共享 Project/Thread/Turn 锁。重复响应幂等；
-  clear/cancel 后晚到的响应不得重新产生 waiting 状态或文件副作用。
+  clear/cancel 后晚到的响应不得重新产生 waiting 状态或文件副作用。普通业务选择只有 Wao MCP
+  decision tool 一个入口，并经 app-server 的 MCP elicitation 请求承载；原生 request-user-input 不得
+  成为第二条产品 Choice 协议。
 - **ARL-05 — 两类审批同一 UI、不同权威。** shell/patch/sandbox 权限响应 Runtime request；付费媒体
   响应 Wao 的 Snapshot/预算授权。UI 可统一展示，但不能互相授权。两层 timeout 都必须显式覆盖有界
   用户决策窗口，内层短于能力凭据寿命——不能让任一默认值与审批竞争。
@@ -104,3 +107,6 @@ View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 pl
 - Runtime 恢复曾把数据库消息重新注入新 Thread；失败 Turn 的最新用户消息尚未投影时，恢复上下文会
   回到更早约束 → 产品 View 被误作模型 history writer → Product Thread 在首个 Turn 前绑定，后续只
   resume 持久 Codex Thread，View 永不参与模型历史恢复（ARL-07）。
+- Codex 切换曾把 `turn/plan/updated` 写回旧版 Thread 级计划本，停止后的 Plan 因而残留并可能被下一
+  Turn 误认；旧实现只替换了事件来源，没有重新核对事实 scope → Plan 改由精确 Turn identity 写入，
+  终态不再进入当前 View（ARL-03）。

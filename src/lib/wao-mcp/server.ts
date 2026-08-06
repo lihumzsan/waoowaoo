@@ -10,15 +10,23 @@ import { normalizeOperationExecutionToolError } from '@/lib/adapters/operation-e
 import type { JsonObject } from '@/lib/operations/types'
 import type {
   WaoMcpCallContextResolver,
+  WaoMcpElicitationRequest,
+  WaoMcpElicitationResult,
   WaoMcpOperationExecutor,
   WaoMcpOperationExecutorResult,
 } from './contracts'
-import { createWaoMcpOperationCatalog } from './operation-catalog'
 import { WAO_RUNTIME_TOKEN_MAX_TTL_SECONDS } from './runtime-token'
+import { createWaoMcpToolRegistry } from './tool-registry'
+import {
+  buildWaoMcpUserDecisionElicitation,
+  parseWaoMcpUserDecisionInput,
+  projectWaoMcpUserDecisionResult,
+} from './user-decision'
 
 // MCP server-to-client requests have their own 60 second SDK default, separate
-// from Codex's per-tool timeout. A billing elicitation is a user decision, so
-// keep it alive within (but safely below) the capability token lifetime.
+// from Codex's per-tool timeout. A Wao approval or product decision belongs to
+// the user, so keep it alive within (but safely below) the capability token
+// lifetime.
 const WAO_MCP_ELICITATION_TIMEOUT_MS = (
   WAO_RUNTIME_TOKEN_MAX_TTL_SECONDS - 5 * 60
 ) * 1_000
@@ -80,9 +88,9 @@ function projectExecutorResult(
 export function createWaoMcpServer(
   params: CreateWaoMcpServerParams,
 ): Server {
-  const catalog = createWaoMcpOperationCatalog()
+  const catalog = createWaoMcpToolRegistry()
   const entryByName = new Map(
-    catalog.map((entry) => [entry.operationId, entry] as const),
+    catalog.map((entry) => [entry.name, entry] as const),
   )
   const server = new Server(
     {
@@ -92,7 +100,7 @@ export function createWaoMcpServer(
     {
       capabilities: { tools: {} },
       instructions:
-        'Wao creative production tools. Tool schemas and descriptions come from the canonical Operation registry.',
+        'Wao project tools. Production schemas come from the canonical Operation registry; user decisions use the single Wao interaction contract.',
     },
   )
 
@@ -109,14 +117,14 @@ export function createWaoMcpServer(
       const entry = entryByName.get(request.params.name)
       if (!entry) {
         return errorResult(
-          'WAO_MCP_OPERATION_NOT_ALLOWED',
-          'This operation is not available through Wao MCP.',
+          'WAO_MCP_TOOL_NOT_ALLOWED',
+          'This tool is not available through Wao MCP.',
         )
       }
 
       try {
         const context = await params.contextResolver.resolve({
-          operationId: entry.operationId,
+          toolName: entry.name,
           requestId: extra.requestId,
           sessionId: extra.sessionId?.trim() || null,
           signal: extra.signal,
@@ -127,43 +135,65 @@ export function createWaoMcpServer(
             'This tool call is not bound to an active Wao turn.',
           )
         }
+        const elicit = async (
+          elicitation: WaoMcpElicitationRequest,
+        ): Promise<WaoMcpElicitationResult> => {
+          // Keep the server request related to this tools/call request.
+          // Streamable HTTP routes related requests over the active POST
+          // response; Server.elicitInput has no parent request identity here
+          // and therefore targets a standalone SSE stream that the Codex MCP
+          // client does not keep open.
+          const result = await extra.sendRequest({
+            method: 'elicitation/create',
+            params: {
+              ...elicitation,
+              mode: 'form',
+            },
+          }, ElicitResultSchema, {
+            signal: extra.signal,
+            timeout: WAO_MCP_ELICITATION_TIMEOUT_MS,
+            maxTotalTimeout: WAO_MCP_ELICITATION_TIMEOUT_MS,
+          })
+          return {
+            action: result.action,
+            ...(isRecord(result.content)
+              ? { content: result.content }
+              : {}),
+          }
+        }
+        if (entry.kind === 'user_decision') {
+          const input = parseWaoMcpUserDecisionInput(request.params.arguments ?? {})
+          return projectExecutorResult(projectWaoMcpUserDecisionResult(
+            input,
+            await elicit(buildWaoMcpUserDecisionElicitation(input)),
+          ))
+        }
         return projectExecutorResult(
           await params.executor.execute({
-            operationId: entry.operationId,
+            operationId: entry.operation.operationId,
             input: request.params.arguments ?? {},
             context,
             signal: extra.signal,
-            elicit: async (elicitation) => {
-              // Keep the server request related to this tools/call request.
-              // Streamable HTTP routes related requests over the active POST
-              // response; Server.elicitInput has no parent request identity
-              // here and therefore targets a standalone SSE stream that the
-              // Codex MCP client does not keep open.
-              const result = await extra.sendRequest({
-                method: 'elicitation/create',
-                params: {
-                  ...elicitation,
-                  mode: 'form',
-                },
-              }, ElicitResultSchema, {
-                signal: extra.signal,
-                timeout: WAO_MCP_ELICITATION_TIMEOUT_MS,
-                maxTotalTimeout: WAO_MCP_ELICITATION_TIMEOUT_MS,
-              })
-              return {
-                action: result.action,
-                ...(isRecord(result.content)
-                  ? { content: result.content }
-                  : {}),
-              }
-            },
+            elicit,
           }),
         )
       } catch (error) {
         extra.signal.throwIfAborted()
+        if (entry.kind === 'user_decision') {
+          const code = error instanceof Error
+            && error.message === 'WAO_MCP_USER_DECISION_INPUT_INVALID'
+            ? error.message
+            : 'WAO_MCP_USER_DECISION_FAILED'
+          return errorResult(
+            code,
+            code === 'WAO_MCP_USER_DECISION_INPUT_INVALID'
+              ? 'The user decision request is invalid. Correct its fields and call the tool again.'
+              : 'The user decision could not be completed.',
+          )
+        }
         const projected = normalizeOperationExecutionToolError({
           error,
-          operationId: entry.operationId,
+          operationId: entry.operation.operationId,
         })
         return projectExecutorResult({
           structuredContent: {

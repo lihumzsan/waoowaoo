@@ -749,11 +749,7 @@ export class AssistantRuntimeService {
           turnId: identity.turnId,
           runtimeRequestId: requestId,
         }),
-        onPlan: async (plan) => await replaceAssistantRuntimePlan({
-          scope: input.scope,
-          threadId: identity.threadId,
-          plan,
-        }),
+        onPlan: async (plan) => await replaceAssistantRuntimePlan({ identity, plan }),
         onMessageSnapshot: async (message) => await persistAssistantRuntimeMessageSnapshot({
           identity,
           message,

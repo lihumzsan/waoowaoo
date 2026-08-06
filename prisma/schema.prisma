@@ -71,7 +71,6 @@ model ProjectAssistantThread {
   runtimeThreadId String?            @unique @db.VarChar(191)
   clearRequestId  String?            @db.VarChar(128)
   messagesJson    Json
-  planJson        Json?
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   project         Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -98,6 +97,7 @@ model ProjectAgentTurn {
   executionOwnerId   String?                @db.VarChar(191)
   userMessageJson    Json?
   contextJson        Json
+  planJson           Json?
   runtimeTurnId      String?                @unique @db.VarChar(191)
   assistantMessageId String?                @db.VarChar(191)
   stopReason         String?                @db.VarChar(64)

@@ -17,8 +17,9 @@ import type {
   RuntimeEvent,
   RuntimeJsonObject,
 } from '@/lib/codex-runtime/runtime-adapter'
-import { createWaoMcpOperationCatalog } from '@/lib/wao-mcp/operation-catalog'
 import { createWaoMcpServer } from '@/lib/wao-mcp/server'
+import { createWaoMcpToolRegistry } from '@/lib/wao-mcp/tool-registry'
+import { WAO_MCP_USER_DECISION_TOOL_NAME } from '@/lib/wao-mcp/user-decision'
 import type { WaoMcpOperationExecutorResult } from '@/lib/wao-mcp/contracts'
 import { AssistantRuntimePersistence } from '@/lib/assistant-runtime/runtime-persistence'
 import {
@@ -164,6 +165,14 @@ function assertRuntimeContractRequest(request: RuntimeJsonObject): void {
     ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS.includes('# Professional Wao Skills'),
     'The live model request did not load the canonical project Agent prompt.',
   )
+  assert.ok(
+    serialized.includes('wao.request_user_decision'),
+    'The live model request did not name the Wao-owned user decision tool.',
+  )
+  assert.ok(
+    !serialized.includes('native user-input request'),
+    'The live model request retained the deleted native Choice instruction.',
+  )
   for (const runtimeSkill of CREATIVE_RUNTIME_SKILLS) {
     const professionalSkillId = runtimeSkill.skillIds[1]
     assert.ok(
@@ -253,8 +262,13 @@ async function runMcpSmoke(): Promise<void> {
   let completedCalls = 0
   let sessionClosed = false
   const elicitationObserved = createSignal()
+  const decisionElicitationObserved = createSignal()
   const approvalReleased = createSignal()
-  const operationIds = createWaoMcpOperationCatalog().map((entry) => entry.operationId)
+  const registry = createWaoMcpToolRegistry()
+  const toolNames = registry.map((entry) => entry.name)
+  const operationIds = registry.flatMap((entry) => (
+    entry.kind === 'operation' ? [entry.operation.operationId] : []
+  ))
   assert.ok(!operationIds.some((operationId) => operationId === 'web_search'), (
     'Wao MCP must not register a second search entry beside native Web Search.'
   ))
@@ -262,6 +276,10 @@ async function runMcpSmoke(): Promise<void> {
   for (const operationId of ['create_image', 'create_audio', 'create_video']) {
     assert.ok(operationIds.includes(operationId), `Direct media operation missing from Wao MCP: ${operationId}`)
   }
+  assert.ok(
+    toolNames.includes(WAO_MCP_USER_DECISION_TOOL_NAME),
+    'Wao MCP user decision tool is missing from the exhaustive registry.',
+  )
   const server = createWaoMcpServer({
     contextResolver: {
       resolve: async ({ requestId }) => ({
@@ -335,6 +353,19 @@ async function runMcpSmoke(): Promise<void> {
   client.setRequestHandler(ElicitRequestSchema, async (request) => {
     assert.equal(request.params.mode, 'form')
     assert.equal(request.params.requestedSchema.type, 'object')
+    if (Object.hasOwn(request.params.requestedSchema.properties, 'optionId')) {
+      const option = requireObject(
+        request.params.requestedSchema.properties.optionId,
+        'decision option schema',
+      )
+      assert.equal(option.type, 'string')
+      assert.ok(Array.isArray(option.oneOf))
+      decisionElicitationObserved.resolve()
+      return {
+        action: 'accept',
+        content: { optionId: 'direction_b' },
+      }
+    }
     elicitationObserved.resolve()
     await approvalReleased.promise
     return {
@@ -350,7 +381,7 @@ async function runMcpSmoke(): Promise<void> {
     const listed = await client.listTools()
     assert.deepEqual(
       listed.tools.map((tool) => tool.name),
-      operationIds,
+      toolNames,
     )
     let toolCallSettled = false
     const pendingResult = client.callTool({
@@ -380,6 +411,40 @@ async function runMcpSmoke(): Promise<void> {
     assert.equal(result.isError, undefined)
     assert.deepEqual(calls, ['create_image'])
     assert.equal(completedCalls, 1)
+    const decisionResult = await client.callTool({
+      name: WAO_MCP_USER_DECISION_TOOL_NAME,
+      arguments: {
+        header: 'Direction',
+        question: 'Which direction should the project use?',
+        options: [
+          {
+            id: 'direction_a',
+            label: 'Direction A',
+            description: 'Use a restrained documentary treatment.',
+          },
+          {
+            id: 'direction_b',
+            label: 'Direction B',
+            description: 'Use a cinematic narrative treatment.',
+          },
+        ],
+        otherLabel: 'Another direction',
+      },
+    })
+    await decisionElicitationObserved.promise
+    assert.equal(decisionResult.isError, undefined)
+    assert.deepEqual(decisionResult.structuredContent, {
+      ok: true,
+      data: {
+        outcome: 'selected',
+        selection: {
+          kind: 'option',
+          optionId: 'direction_b',
+          label: 'Direction B',
+        },
+      },
+    })
+    assert.deepEqual(calls, ['create_image'])
     await clientTransport.terminateSession()
     assert.equal(sessionClosed, true)
   } finally {
@@ -699,7 +764,7 @@ async function main(): Promise<void> {
     )
     process.stdout.write(`${JSON.stringify({
       ok: true,
-      mcp: createWaoMcpOperationCatalog().map((entry) => entry.operationId),
+      mcp: createWaoMcpToolRegistry().map((entry) => entry.name),
       appServer,
     }, null, 2)}\n`)
   } finally {

@@ -139,8 +139,11 @@ export function projectAssistantRuntimeToolOutput(item: RuntimeJsonObject): Runt
 
 function normalizePlan(params: RuntimeJsonObject): RuntimeJsonValue {
   const plan = Array.isArray(params.plan) ? params.plan : []
+  const explanation = typeof params.explanation === 'string'
+    ? params.explanation.trim()
+    : ''
   return {
-    explanation: typeof params.explanation === 'string' ? params.explanation : null,
+    explanation: explanation || null,
     plan: plan.flatMap((entry): RuntimeJsonValue[] => {
       if (!isRecord(entry)) return []
       const step = readString(entry, 'step')

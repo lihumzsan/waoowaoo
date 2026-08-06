@@ -9,9 +9,14 @@ import {
   isAssistantRuntimeApprovalRequest,
   isAssistantRuntimeInputRequest,
   readAssistantRuntimeMcpElicitation,
-  readAssistantRuntimeUserInputQuestions,
   type AssistantRuntimePendingInteractionView,
 } from '@/lib/assistant-runtime/view-contract'
+import {
+  isWaoMcpUserDecisionRequestedSchema,
+  WAO_MCP_USER_DECISION_OPTION_FIELD,
+  WAO_MCP_USER_DECISION_OTHER_FIELD,
+  WAO_MCP_USER_DECISION_OTHER_OPTION_ID,
+} from '@/lib/wao-mcp/user-decision'
 import {
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_ACCEPT,
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES,
@@ -184,10 +189,6 @@ function runtimePermissionApprovalFacts(
 
 type RuntimeRequestContent =
   | {
-      readonly kind: 'questions'
-      readonly questions: ReturnType<typeof readAssistantRuntimeUserInputQuestions>
-    }
-  | {
       readonly kind: 'elicitation'
       readonly elicitation: ReturnType<typeof readAssistantRuntimeMcpElicitation>
     }
@@ -197,12 +198,6 @@ function parseRuntimeRequestContent(
   interaction: AssistantRuntimePendingInteractionView,
 ): RuntimeRequestContent {
   try {
-    if (interaction.method === 'item/tool/requestUserInput') {
-      return {
-        kind: 'questions',
-        questions: readAssistantRuntimeUserInputQuestions(interaction),
-      }
-    }
     if (interaction.method === 'mcpServer/elicitation/request') {
       return {
         kind: 'elicitation',
@@ -303,87 +298,9 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
     )
   }
 
-  if (content.kind === 'questions') {
-    const ready = content.questions.every((question) => {
-      const value = values[question.id]
-      return typeof value === 'string' && value.trim().length > 0
-    })
-    return (
-      <div className="space-y-3 rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-sm text-[var(--glass-text-primary)]">
-        {content.questions.map((question) => (
-          <fieldset key={question.id} className="space-y-2">
-            <legend className="font-semibold">{question.header}</legend>
-            <p className="text-xs leading-5 text-[var(--glass-text-secondary)]">
-              {question.question}
-            </p>
-            {question.options ? (
-              <div className="grid gap-2">
-                {question.options.map((option) => {
-                  const selected = values[question.id] === option.label
-                  return (
-                    <button
-                      key={option.label}
-                      type="button"
-                      disabled={submitting}
-                      className={`rounded-xl border px-3 py-2 text-left transition-colors ${selected ? 'border-neutral-900 bg-neutral-50' : 'border-[var(--glass-stroke-base)] bg-white hover:bg-neutral-100'}`}
-                      onClick={() => {
-                        setValues((current) => ({ ...current, [question.id]: option.label }))
-                        setError(false)
-                      }}
-                    >
-                      <span className="block font-medium">{option.label}</span>
-                      {option.description ? (
-                        <span className="mt-0.5 block text-xs text-[var(--glass-text-secondary)]">
-                          {option.description}
-                        </span>
-                      ) : null}
-                    </button>
-                  )
-                })}
-              </div>
-            ) : null}
-            {question.isOther || !question.options ? (
-              <input
-                type={question.isSecret ? 'password' : 'text'}
-                value={typeof values[question.id] === 'string' ? String(values[question.id]) : ''}
-                disabled={submitting}
-                className="w-full rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 py-2 outline-none focus:border-neutral-700"
-                onChange={(event) => {
-                  setValues((current) => ({ ...current, [question.id]: event.target.value }))
-                  setError(false)
-                }}
-              />
-            ) : null}
-          </fieldset>
-        ))}
-        {error ? (
-          <div role="alert" className="text-xs text-[var(--glass-tone-warning-fg)]">
-            {t('cards.interactionSubmitErrorFallback')}
-          </div>
-        ) : null}
-        <button
-          type="button"
-          disabled={!ready || submitting}
-          className="w-full rounded-xl bg-neutral-900 px-3 py-2 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
-          onClick={() => {
-            submit({
-              answers: Object.fromEntries(
-                content.questions.map((question) => [
-                  question.id,
-                  { answers: [String(values[question.id]).trim()] },
-                ]),
-              ),
-            })
-          }}
-        >
-          {submitting ? t('cards.interactionSubmitting') : t('cards.confirmContinue')}
-        </button>
-      </div>
-    )
-  }
-
   const elicitation = content.elicitation
   const schema = elicitation.requestedSchema
+  const isWaoUserDecision = isWaoMcpUserDecisionRequestedSchema(schema)
   const properties = schema && isRecord(schema.properties)
     ? Object.entries(schema.properties)
     : []
@@ -404,6 +321,14 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
     })
   )
   const formReady = schemaSupported && properties.every(([key, property]) => {
+    if (
+      isWaoUserDecision
+      && key === WAO_MCP_USER_DECISION_OTHER_FIELD
+      && values[WAO_MCP_USER_DECISION_OPTION_FIELD] === WAO_MCP_USER_DECISION_OTHER_OPTION_ID
+    ) {
+      const otherText = values[WAO_MCP_USER_DECISION_OTHER_FIELD]
+      return typeof otherText === 'string' && otherText.trim().length > 0
+    }
     if (!required.has(key)) return true
     if (!isRecord(property)) return false
     const value = values[key]
@@ -421,6 +346,11 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
     const result: Record<string, unknown> = {}
     for (const [key, property] of properties) {
       if (!isRecord(property)) continue
+      if (
+        isWaoUserDecision
+        && key === WAO_MCP_USER_DECISION_OTHER_FIELD
+        && values[WAO_MCP_USER_DECISION_OPTION_FIELD] !== WAO_MCP_USER_DECISION_OTHER_OPTION_ID
+      ) continue
       const value = values[key]
       if (property.type === 'boolean') {
         result[key] = value === true
@@ -463,6 +393,47 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
               ? property.description
               : null
             const enumOptions = runtimeEnumOptions(property)
+            if (
+              isWaoUserDecision
+              && key === WAO_MCP_USER_DECISION_OTHER_FIELD
+              && values[WAO_MCP_USER_DECISION_OPTION_FIELD] !== WAO_MCP_USER_DECISION_OTHER_OPTION_ID
+            ) return null
+            if (
+              isWaoUserDecision
+              && key === WAO_MCP_USER_DECISION_OPTION_FIELD
+              && enumOptions.length > 0
+            ) {
+              return (
+                <fieldset key={key} className="space-y-2">
+                  <legend className="font-semibold">{label}</legend>
+                  {description ? (
+                    <p className="whitespace-pre-line text-xs leading-5 text-[var(--glass-text-secondary)]">
+                      {description}
+                    </p>
+                  ) : null}
+                  <div className="grid gap-2">
+                    {enumOptions.map((option) => {
+                      const selected = values[key] === option.value
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          aria-pressed={selected}
+                          disabled={submitting}
+                          className={`rounded-xl border px-3 py-2 text-left font-medium transition-colors ${selected ? 'border-neutral-900 bg-neutral-50' : 'border-[var(--glass-stroke-base)] bg-white hover:bg-neutral-100'}`}
+                          onClick={() => {
+                            setValues((current) => ({ ...current, [key]: option.value }))
+                            setError(false)
+                          }}
+                        >
+                          {option.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </fieldset>
+              )
+            }
             if (property.type === 'boolean') {
               return (
                 <label key={key} className="flex items-start gap-2">
@@ -520,7 +491,7 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
               <label key={key} className="block space-y-1">
                 <span className="block font-medium">{label}</span>
                 {description ? (
-                  <span className="block text-xs text-[var(--glass-text-secondary)]">
+                  <span className="block whitespace-pre-line text-xs text-[var(--glass-text-secondary)]">
                     {description}
                   </span>
                 ) : null}
@@ -582,7 +553,11 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
             _meta: null,
           })}
         >
-          {submitting ? t('cards.interactionSubmitting') : t('cards.confirmContinue')}
+          {submitting
+            ? t('cards.interactionSubmitting')
+            : isWaoUserDecision
+              ? t('cards.submitDecision')
+              : t('cards.confirmContinue')}
         </button>
         <button
           type="button"
@@ -590,7 +565,7 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
           className="rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 py-2 font-medium hover:bg-neutral-100 disabled:opacity-50"
           onClick={() => submit({ action: 'decline', content: null, _meta: null })}
         >
-          {t('cards.cancelAction')}
+          {isWaoUserDecision ? t('cards.cancelDecision') : t('cards.cancelAction')}
         </button>
       </div>
     </div>
@@ -1000,9 +975,9 @@ export default function WorkspaceAssistantPanel({
                     </div>
                   ) : null}
                   <div className="relative">
-                    {assistantRuntime.view?.thread?.plan ? (
+                    {assistantRuntime.view?.currentTurn?.plan ? (
                       <WorkspaceAssistantPlanCard
-                        plan={assistantRuntime.view.thread.plan}
+                        plan={assistantRuntime.view.currentTurn.plan}
                         isRunActive={assistantRuntime.view.currentTurn?.status === 'running'}
                       />
                     ) : null}

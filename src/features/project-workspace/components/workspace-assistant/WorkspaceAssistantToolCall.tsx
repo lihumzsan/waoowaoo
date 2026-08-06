@@ -165,6 +165,7 @@ function resolveNativeToolTitle(toolName: string, t: AssistantAgentTranslator): 
     case 'file_change': return t('runtime.native.fileChange')
     case 'web_search': return t('runtime.native.webSearch')
     case 'view_image': return t('runtime.native.viewImage')
+    case 'wao.request_user_decision': return t('runtime.native.userDecision')
     default: return null
   }
 }

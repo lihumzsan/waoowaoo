@@ -71,7 +71,7 @@ export interface WaoMcpCallContextResolver {
    * themselves business execution identities.
    */
   resolve(params: {
-    readonly operationId: string
+    readonly toolName: string
     /** MCP logical request correlation, unique only within its runtime scope. */
     readonly requestId: string | number
     readonly sessionId: string | null
