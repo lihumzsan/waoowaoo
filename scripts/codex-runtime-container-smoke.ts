@@ -31,6 +31,9 @@ function requirePositiveInteger(name: string): number {
 }
 
 async function main(): Promise<void> {
+  if (typeof process.getuid === 'function' && process.getuid() === 0) {
+    throw new Error('CODEX_CONTAINER_SMOKE_ROOT_FORBIDDEN:run as the Web process user')
+  }
   const hostRoot = requireEnvironment('CODEX_RUNTIME_HOST_ROOT')
   const image = requireEnvironment('CODEX_RUNTIME_IMAGE')
   const scopeKey = `container-smoke-${randomUUID()}`
