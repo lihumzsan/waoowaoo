@@ -22,6 +22,7 @@ export type ProjectProductionCapabilities = {
   readonly music: {
     readonly modelKey: string
     readonly promptMaxCharacters: number
+    readonly promptTargetCharacters: number
     readonly durationSecondsOptions: readonly number[]
     readonly durationSecondsRange: {
       readonly min: number
@@ -33,7 +34,7 @@ export type ProjectProductionCapabilities = {
 }
 
 export type ProjectProductionContext = {
-  readonly schemaVersion: 2
+  readonly schemaVersion: 3
   readonly version: string
   readonly project: {
     readonly projectId: string
@@ -100,12 +101,17 @@ function resolveProductionCapabilities(config: ProjectModelConfig): ProjectProdu
       Number.isInteger(duration) && duration > 0
     )),
   )).sort((left, right) => left - right)
+  const promptMaxCharacters = Math.min(music?.promptMaxChars ?? 100_000, 100_000)
   const musicCapabilities = config.musicModel
     && music
     && (durationSecondsRange !== null || durationSecondsOptions.length > 0)
-    ? {
+      ? {
         modelKey: config.musicModel,
-        promptMaxCharacters: Math.min(music.promptMaxChars ?? 100_000, 100_000),
+        promptMaxCharacters,
+        promptTargetCharacters: Math.max(
+          1,
+          Math.min(500, Math.floor(promptMaxCharacters * 0.6)),
+        ),
         durationSecondsOptions,
         durationSecondsRange,
         vocalModeOptions: music.vocalModeOptions ?? [],
@@ -139,7 +145,7 @@ export async function readProjectProductionContext(input: {
   ])
   if (!project) throw new ProjectProductionContextError()
   const value: Omit<ProjectProductionContext, 'version'> = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     project: {
       projectId: project.id,
       name: project.name,

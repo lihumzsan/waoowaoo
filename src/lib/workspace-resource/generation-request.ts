@@ -90,6 +90,7 @@ export const imageGenerationItemSchema = z.object({
 export const audioGenerationItemSchema = z.object({
   ...commonItemShape,
   mediaType: z.literal('audio'),
+  prompt: finalPromptSchema.describe('Complete final provider-ready music prompt. Keep it within the injected productionCapabilities.music.promptTargetCharacters; the server rejects promptMaxCharacters and never appends option text.'),
   schemaId: z.enum(WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.audio),
   references: z.array(generationReferenceSchema.extend({
     channel: z.enum(['context', 'video']),

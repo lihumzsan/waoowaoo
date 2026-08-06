@@ -973,9 +973,9 @@ async function loadFailedTasks(
     }
     const mediaType = resource.mediaType as PlannedResource['mediaType']
     schemaForMedia(mediaType, resource.schemaId)
-    const prompt = resource.prompt?.trim()
+    const prompt = resource.prompt
     const modelKey = resource.modelKey?.trim()
-    if (!prompt || !modelKey) {
+    if (!prompt?.trim() || !modelKey) {
       throw new ApiError('WORKSPACE_RESOURCE_RETRY_FROZEN_INPUT_MISSING', { resourceId })
     }
     const generationOptions = workspaceResourceGenerationOptionsSchema.parse(resource.generationOptions ?? {})

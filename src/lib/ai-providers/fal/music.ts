@@ -5,7 +5,6 @@ import { buildFalQueueUrl } from '@/lib/ai-providers/fal/base-url'
 import { FAL_LYRIA_3_PRO_MODEL_ID } from '@/lib/ai-providers/fal/models'
 import { RETRY_POLICY, fetchWithRetry } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
-import { compileMusicPrompt } from '@/lib/ai-providers/shared/music-prompt'
 
 interface FalMusicSubmitResponse {
   request_id?: unknown
@@ -43,7 +42,7 @@ export async function executeFalMusicGeneration(input: AiProviderMusicExecutionC
     throw new Error(`FAL_MUSIC_MODEL_UNSUPPORTED:${modelId}`)
   }
 
-  const prompt = compileMusicPrompt(input.prompt, options)
+  const prompt = input.prompt
   if (!prompt.trim()) throw new Error('FAL_MUSIC_PROMPT_REQUIRED')
   const negativePrompt = readTrimmedString(options.negativePrompt)
 

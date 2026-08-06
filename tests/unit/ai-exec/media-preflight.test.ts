@@ -12,7 +12,7 @@ const MUREKA_SELECTION = {
 } as const
 
 describe('media generation preflight', () => {
-  it('checks the final compiled music prompt before provider execution', () => {
+  it('checks the exact frozen music prompt before provider execution', () => {
     const options = {
       durationSeconds: 60,
       vocalMode: 'instrumental',
@@ -24,7 +24,7 @@ describe('media generation preflight', () => {
     expect(normalizeMediaOptionsForSelection({
       selection: MUREKA_SELECTION,
       modality: 'music',
-      prompt: 'A low-frequency pulse with sparse bowed metal.',
+      prompt: 'x'.repeat(1024),
       options,
     })).toMatchObject(options)
 
@@ -32,10 +32,10 @@ describe('media generation preflight', () => {
       normalizeMediaOptionsForSelection({
         selection: MUREKA_SELECTION,
         modality: 'music',
-        prompt: 'x'.repeat(980),
+        prompt: 'x'.repeat(1025),
         options,
       })
-      throw new Error('Expected the compiled provider prompt to exceed its limit')
+      throw new Error('Expected the frozen provider prompt to exceed its limit')
     } catch (error) {
       expect(error).toBeInstanceOf(AiOptionValidationError)
       expect(error).toMatchObject({

@@ -28,7 +28,7 @@ JSON 专业结果，并把同一 items 直接提交给 `create_audio`。系统�
   独立用户意图和授权。
 - **AP-07 — 音乐输入是显式 generation item 字段。** 主 Agent 的音乐结果写完整最终 Prompt、时长、
   演唱模式与精确引用；格式、模型和 provider option 由服务端 registry/config 决定并在 Plan 前校验。
-  Planner 不拼接 Prompt，只校验并逐字冻结；handler 只消费冻结结果。
+  Planner 不拼接 Prompt，只校验并逐字冻结；handler 与 provider adapter 只消费冻结结果，不得追加参数文案。
 
 ## 权威入口
 
@@ -45,3 +45,7 @@ JSON 专业结果，并把同一 items 直接提交给 `create_audio`。系统�
   Resource，最终输出是普通 video Resource。
 - 音乐模型能力曾以少数固定秒数枚举表达，业务层无法为任意时间线声明明确请求 → 能力被抄成第二份
   枚举 → registry 唯一声明连续区间，短目标统一请求下限后本地确定性贴合，超上限拒绝（AP-03）。
+- 音乐 Prompt 已由 Skill 写成完整结果，Provider 共享 helper 仍在冻结后追加 genre、mood、时长等文案，
+  1021 字符的合法输入因此被扩成 1147 字符并遭拒 → 上一版只约束了 Planner 与 handler，没有把
+  adapter 纳入单 writer 边界 → 删除服务端编译器，adapter 原样发送冻结 Prompt，并向 Skill 注入远低于
+  Provider 硬上限的保守目标预算（AP-07）。

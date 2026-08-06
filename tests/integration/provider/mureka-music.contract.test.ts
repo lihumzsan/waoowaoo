@@ -49,10 +49,11 @@ describe('provider contract - Mureka music', () => {
       },
     })
 
+    const prompt = 'restrained industrial ambience'
     await expect(executeMurekaMusicGeneration({
       userId: 'user-1',
       selection: MUREKA_SELECTION,
-      prompt: 'restrained industrial ambience',
+      prompt,
       options: {
         durationSeconds: 60,
         vocalMode: 'instrumental',
@@ -65,7 +66,9 @@ describe('provider contract - Mureka music', () => {
       externalId: 'MUREKA:MUSIC:instrumental:1436211',
     })
 
-    expect(server!.getRequests('POST', '/v1/instrumental/generate')).toHaveLength(1)
+    const requests = server!.getRequests('POST', '/v1/instrumental/generate')
+    expect(requests).toHaveLength(1)
+    expect(JSON.parse(requests[0]?.bodyText || '{}')).toMatchObject({ prompt })
   })
 
   it('preserves the documented HTTP authentication error as a typed rejection', async () => {

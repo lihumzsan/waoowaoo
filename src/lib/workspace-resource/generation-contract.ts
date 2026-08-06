@@ -24,7 +24,8 @@ const frozenResourceSchema = z.object({
   mediaType: z.enum(['image', 'audio', 'video']),
   schemaId: z.string().trim().min(1).max(96),
   inputHash: z.string().length(64),
-  prompt: z.string().trim().min(1).max(100_000),
+  prompt: z.string().min(1).max(100_000)
+    .refine((value) => value.trim().length > 0, 'Prompt must contain non-whitespace content.'),
   modelKey: z.string().trim().min(1).max(191),
   inputs: z.array(workspaceResourceInputRefSchema).max(16),
   // Shared task envelope must accept the largest declared image capability.

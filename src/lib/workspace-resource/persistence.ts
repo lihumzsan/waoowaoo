@@ -278,6 +278,9 @@ export async function reserveWorkspaceResourceInTransaction(
     throw new Error(`WORKSPACE_RESOURCE_SCHEMA_MEDIA_MISMATCH:${input.schemaId}:${input.mediaType}`)
   }
   await requireParentFolder(tx, { projectId: input.projectId, userId: input.userId, workspacePath })
+  if (input.prompt !== undefined && input.prompt !== null && !input.prompt.trim()) {
+    throw new Error('WORKSPACE_RESOURCE_PROMPT_EMPTY')
+  }
   const resourceId = input.resourceId?.trim() || createWorkspaceResourceId()
   const existing = await tx.workspaceResource.findUnique({ where: { id: resourceId } })
   if (existing) {
@@ -310,7 +313,7 @@ export async function reserveWorkspaceResourceInTransaction(
       sourceType: input.sourceType?.trim() || null,
       sourceId: input.sourceId?.trim() || null,
       memberIndex: input.memberIndex ?? null,
-      prompt: input.prompt?.trim() || null,
+      prompt: input.prompt ?? null,
       modelKey: input.modelKey?.trim() || null,
       generationOptions: jsonValue(input.generationOptions ?? null),
       operationId: input.operationId?.trim() || null,

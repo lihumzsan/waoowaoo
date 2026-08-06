@@ -6,9 +6,6 @@ import { FetchStatusError, RETRY_POLICY, fetchWithRetry } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { buildMurekaUrl } from './base-url'
 import { MUREKA_9_MODEL_ID, MUREKA_MUSIC_PROMPT_MAX_CHARS } from './models'
-import { compileMusicPrompt } from '@/lib/ai-providers/shared/music-prompt'
-
-type MurekaMusicOptions = NonNullable<AiProviderMusicExecutionContext['options']>
 
 function readTrimmedString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -110,26 +107,25 @@ function throwMurekaFetchError(error: unknown): never {
   throw error
 }
 
-function requireMurekaPrompt(prompt: string, options: MurekaMusicOptions): string {
-  const composed = compileMusicPrompt(prompt, options)
+function requireMurekaPrompt(prompt: string): string {
   // Deterministic pre-submission validation must throw typed AppErrors: the
   // provider fence treats plain Errors from execute() as an ambiguous
   // submission outcome, which both hides the real reason and forbids the
   // immediate corrected retry this input error allows.
-  if (!composed.trim()) {
+  if (!prompt.trim()) {
     throw new AppError('INVALID_PARAMS', 'Music prompt is required', { provider: 'mureka' })
   }
-  if (composed.length > MUREKA_MUSIC_PROMPT_MAX_CHARS) {
+  if (prompt.length > MUREKA_MUSIC_PROMPT_MAX_CHARS) {
     throw new AppError(
       'MUSIC_PROMPT_TOO_LONG',
-      `Music prompt is ${String(composed.length)} characters; the model accepts at most ${String(MUREKA_MUSIC_PROMPT_MAX_CHARS)}`,
+      `Music prompt is ${String(prompt.length)} characters; the model accepts at most ${String(MUREKA_MUSIC_PROMPT_MAX_CHARS)}`,
       {
         provider: 'mureka',
-        details: { requested: composed.length, allowed: MUREKA_MUSIC_PROMPT_MAX_CHARS },
+        details: { requested: prompt.length, allowed: MUREKA_MUSIC_PROMPT_MAX_CHARS },
       },
     )
   }
-  return composed
+  return prompt
 }
 
 async function postMurekaJson(input: {
@@ -202,7 +198,7 @@ export async function executeMurekaMusicGeneration(input: AiProviderMusicExecuti
     throw new AppError('INVALID_PARAMS', `Mureka music model is unsupported: ${modelId}`, { provider: 'mureka' })
   }
 
-  const prompt = requireMurekaPrompt(input.prompt, options)
+  const prompt = requireMurekaPrompt(input.prompt)
   const referenceVideoUrl = readTrimmedString(options.referenceVideoUrl)
 
   if (referenceVideoUrl) {

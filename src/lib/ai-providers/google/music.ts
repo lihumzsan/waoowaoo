@@ -6,7 +6,6 @@ import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import { withProviderProxyDispatcher } from '@/lib/http/outbound-proxy'
 import { GOOGLE_PROVIDER_PROXY_TARGET } from '@/lib/ai-providers/google/proxy-target'
 import { AppError } from '@/lib/errors/app-error'
-import { compileMusicPrompt } from '@/lib/ai-providers/shared/music-prompt'
 
 interface GoogleMusicPart {
   inlineData?: {
@@ -84,7 +83,6 @@ export function extractGoogleMusicResult(response: unknown): {
 }
 
 export async function executeGoogleMusicGeneration(input: AiProviderMusicExecutionContext): Promise<GenerateResult> {
-  const options = input.options ?? {}
   const { apiKey } = await getProviderConfig(input.userId, input.selection.provider)
   const ai = new GoogleGenAI({ apiKey })
   const modelId = requireSelectedModelId(input.selection, 'google:music')
@@ -96,7 +94,7 @@ export async function executeGoogleMusicGeneration(input: AiProviderMusicExecuti
       GOOGLE_PROVIDER_PROXY_TARGET,
       async () => await ai.models.generateContent({
         model: modelId,
-        contents: [{ parts: [{ text: compileMusicPrompt(input.prompt, options) }] }],
+        contents: [{ parts: [{ text: input.prompt }] }],
       }),
     ),
   })
