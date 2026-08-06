@@ -10,11 +10,22 @@ export const WAO_MCP_USER_DECISION_TOOL_NAME = 'request_user_decision' as const
 export const WAO_MCP_USER_DECISION_OPTION_FIELD = 'optionId' as const
 export const WAO_MCP_USER_DECISION_OTHER_FIELD = 'otherText' as const
 export const WAO_MCP_USER_DECISION_OTHER_OPTION_ID = '__wao_other__' as const
+export const WAO_MCP_USER_DECISION_META_KEY = 'wao.dev/user-decision-presentation' as const
 
+const optionIdSchema = z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/u)
+const optionDescriptionSchema = z.string().trim().min(1).max(240)
 const optionSchema = z.object({
-  id: z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/u),
+  id: optionIdSchema,
   label: z.string().trim().min(1).max(80),
-  description: z.string().trim().min(1).max(240),
+  description: optionDescriptionSchema,
+}).strict()
+
+const presentationSchema = z.object({
+  protocol: z.literal('wao_user_decision_presentation_v1'),
+  options: z.array(z.object({
+    id: optionIdSchema,
+    description: optionDescriptionSchema,
+  }).strict()).min(2).max(4),
 }).strict()
 
 const inputSchema = z.object({
@@ -46,6 +57,7 @@ const inputSchema = z.object({
 })
 
 export type WaoMcpUserDecisionInput = z.infer<typeof inputSchema>
+export type WaoMcpUserDecisionPresentation = z.infer<typeof presentationSchema>
 
 export const WAO_MCP_USER_DECISION_TOOL: Tool = {
   name: WAO_MCP_USER_DECISION_TOOL_NAME,
@@ -148,15 +160,21 @@ export function buildWaoMcpUserDecisionElicitation(
   return {
     mode: 'form',
     message: input.question,
+    _meta: {
+      [WAO_MCP_USER_DECISION_META_KEY]: {
+        protocol: 'wao_user_decision_presentation_v1',
+        options: input.options.map((option) => ({
+          id: option.id,
+          description: option.description,
+        })),
+      },
+    },
     requestedSchema: {
       type: 'object',
       properties: {
         [WAO_MCP_USER_DECISION_OPTION_FIELD]: {
           type: 'string',
           title: input.header,
-          description: input.options
-            .map((option) => `${option.label}: ${option.description}`)
-            .join('\n'),
           oneOf,
         },
         ...(input.otherLabel
@@ -269,4 +287,38 @@ export function isWaoMcpUserDecisionRequestedSchema(
   return otherProperty === undefined
     ? !hasOtherOption
     : hasOtherOption && isRecord(otherProperty) && otherProperty.type === 'string'
+}
+
+export function readWaoMcpUserDecisionPresentation(input: {
+  readonly requestedSchema: Record<string, unknown> | null
+  readonly meta: Record<string, unknown> | null
+}): WaoMcpUserDecisionPresentation | null {
+  if (!isWaoMcpUserDecisionRequestedSchema(input.requestedSchema)) return null
+  const parsed = presentationSchema.safeParse(
+    input.meta?.[WAO_MCP_USER_DECISION_META_KEY],
+  )
+  if (!parsed.success || !input.requestedSchema || !isRecord(input.requestedSchema.properties)) {
+    throw new Error('WAO_MCP_USER_DECISION_PRESENTATION_INVALID')
+  }
+  const optionProperty = input.requestedSchema.properties[WAO_MCP_USER_DECISION_OPTION_FIELD]
+  if (!isRecord(optionProperty) || !Array.isArray(optionProperty.oneOf)) {
+    throw new Error('WAO_MCP_USER_DECISION_PRESENTATION_INVALID')
+  }
+  const optionIds = optionProperty.oneOf.flatMap((entry) => (
+    isRecord(entry)
+    && typeof entry.const === 'string'
+    && entry.const !== WAO_MCP_USER_DECISION_OTHER_OPTION_ID
+      ? [entry.const]
+      : []
+  ))
+  const presentationIds = parsed.data.options.map((option) => option.id)
+  if (
+    new Set(optionIds).size !== optionIds.length
+    || new Set(presentationIds).size !== presentationIds.length
+    || optionIds.length !== presentationIds.length
+    || optionIds.some((optionId) => !presentationIds.includes(optionId))
+  ) {
+    throw new Error('WAO_MCP_USER_DECISION_PRESENTATION_INVALID')
+  }
+  return parsed.data
 }

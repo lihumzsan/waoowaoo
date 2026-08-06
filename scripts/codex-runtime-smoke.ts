@@ -19,7 +19,10 @@ import type {
 } from '@/lib/codex-runtime/runtime-adapter'
 import { createWaoMcpServer } from '@/lib/wao-mcp/server'
 import { createWaoMcpToolRegistry } from '@/lib/wao-mcp/tool-registry'
-import { WAO_MCP_USER_DECISION_TOOL_NAME } from '@/lib/wao-mcp/user-decision'
+import {
+  WAO_MCP_USER_DECISION_META_KEY,
+  WAO_MCP_USER_DECISION_TOOL_NAME,
+} from '@/lib/wao-mcp/user-decision'
 import type { WaoMcpOperationExecutorResult } from '@/lib/wao-mcp/contracts'
 import { AssistantRuntimePersistence } from '@/lib/assistant-runtime/runtime-persistence'
 import {
@@ -362,6 +365,20 @@ async function runMcpSmoke(): Promise<void> {
       )
       assert.equal(option.type, 'string')
       assert.ok(Array.isArray(option.oneOf))
+      assert.equal(option.description, undefined)
+      assert.deepEqual(request.params._meta?.[WAO_MCP_USER_DECISION_META_KEY], {
+        protocol: 'wao_user_decision_presentation_v1',
+        options: [
+          {
+            id: 'direction_a',
+            description: 'Use a restrained documentary treatment.',
+          },
+          {
+            id: 'direction_b',
+            description: 'Use a cinematic narrative treatment.',
+          },
+        ],
+      })
       decisionElicitationCount += 1
       if (decisionElicitationCount === 1) {
         decisionElicitationObserved.resolve()

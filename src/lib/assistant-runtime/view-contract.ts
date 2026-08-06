@@ -137,6 +137,7 @@ export function isAssistantRuntimeInputRequest(
 export type AssistantRuntimeMcpElicitation = {
   readonly mode: 'form' | 'url'
   readonly message: string
+  readonly meta: Record<string, unknown> | null
   readonly requestedSchema: Record<string, unknown> | null
   readonly url: string | null
 }
@@ -147,6 +148,10 @@ export function readAssistantRuntimeMcpElicitation(
   if (interaction.method !== 'mcpServer/elicitation/request' || !isRecord(interaction.params)) {
     throw new Error('ASSISTANT_RUNTIME_MCP_ELICITATION_INVALID')
   }
+  const meta = interaction.params._meta
+  if (meta !== undefined && !isRecord(meta)) {
+    throw new Error('ASSISTANT_RUNTIME_MCP_ELICITATION_INVALID')
+  }
   const mode = interaction.params.mode
   if (mode === 'form') {
     if (!isRecord(interaction.params.requestedSchema)) {
@@ -155,6 +160,7 @@ export function readAssistantRuntimeMcpElicitation(
     return {
       mode,
       message: requireString(interaction.params.message, 'ASSISTANT_RUNTIME_MCP_ELICITATION_INVALID'),
+      meta: meta ?? null,
       requestedSchema: interaction.params.requestedSchema,
       url: null,
     }
@@ -175,6 +181,7 @@ export function readAssistantRuntimeMcpElicitation(
     return {
       mode,
       message: requireString(interaction.params.message, 'ASSISTANT_RUNTIME_MCP_ELICITATION_INVALID'),
+      meta: meta ?? null,
       requestedSchema: null,
       url: url.toString(),
     }

@@ -12,7 +12,8 @@ import {
   type AssistantRuntimePendingInteractionView,
 } from '@/lib/assistant-runtime/view-contract'
 import {
-  isWaoMcpUserDecisionRequestedSchema,
+  readWaoMcpUserDecisionPresentation,
+  type WaoMcpUserDecisionPresentation,
   WAO_MCP_USER_DECISION_OPTION_FIELD,
   WAO_MCP_USER_DECISION_OTHER_FIELD,
   WAO_MCP_USER_DECISION_OTHER_OPTION_ID,
@@ -191,6 +192,7 @@ type RuntimeRequestContent =
   | {
       readonly kind: 'elicitation'
       readonly elicitation: ReturnType<typeof readAssistantRuntimeMcpElicitation>
+      readonly userDecisionPresentation: WaoMcpUserDecisionPresentation | null
     }
   | { readonly kind: 'invalid' }
 
@@ -199,9 +201,14 @@ function parseRuntimeRequestContent(
 ): RuntimeRequestContent {
   try {
     if (interaction.method === 'mcpServer/elicitation/request') {
+      const elicitation = readAssistantRuntimeMcpElicitation(interaction)
       return {
         kind: 'elicitation',
-        elicitation: readAssistantRuntimeMcpElicitation(interaction),
+        elicitation,
+        userDecisionPresentation: readWaoMcpUserDecisionPresentation({
+          requestedSchema: elicitation.requestedSchema,
+          meta: elicitation.meta,
+        }),
       }
     }
   } catch {
@@ -300,7 +307,8 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
 
   const elicitation = content.elicitation
   const schema = elicitation.requestedSchema
-  const isWaoUserDecision = isWaoMcpUserDecisionRequestedSchema(schema)
+  const userDecisionPresentation = content.userDecisionPresentation
+  const isWaoUserDecision = userDecisionPresentation !== null
   const properties = schema && isRecord(schema.properties)
     ? Object.entries(schema.properties)
     : []
@@ -427,27 +435,38 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
               return (
                 <fieldset key={key} className="space-y-2">
                   <legend className="font-semibold">{label}</legend>
-                  {description ? (
+                  {description && !isWaoUserDecision ? (
                     <p className="whitespace-pre-line text-xs leading-5 text-[var(--glass-text-secondary)]">
                       {description}
                     </p>
                   ) : null}
                   <div className="grid gap-2">
-                    {decisionOptions.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        disabled={submitting}
-                        className="rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 py-2 text-left font-medium transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
-                        onClick={() => submit({
-                          action: 'accept',
-                          content: { [WAO_MCP_USER_DECISION_OPTION_FIELD]: option.value },
-                          _meta: null,
-                        })}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
+                    {decisionOptions.map((option) => {
+                      const presentationOption = userDecisionPresentation.options.find(
+                        (candidate) => candidate.id === option.value,
+                      )
+                      if (!presentationOption) {
+                        throw new Error('WAO_MCP_USER_DECISION_PRESENTATION_INVALID')
+                      }
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          disabled={submitting}
+                          className="rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 py-2 text-left font-medium transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          onClick={() => submit({
+                            action: 'accept',
+                            content: { [WAO_MCP_USER_DECISION_OPTION_FIELD]: option.value },
+                            _meta: null,
+                          })}
+                        >
+                          <span className="block font-semibold">{option.label}</span>
+                          <span className="mt-1 block text-xs font-normal leading-5 text-[var(--glass-text-secondary)]">
+                            {presentationOption.description}
+                          </span>
+                        </button>
+                      )
+                    })}
                     {otherDecisionLabel ? (
                       <div className="relative">
                         <input
