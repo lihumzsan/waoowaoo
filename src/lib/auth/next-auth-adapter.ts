@@ -11,6 +11,11 @@ interface AuthUserRecord {
   image: string | null
 }
 
+interface GoogleAccountImageInput {
+  providerAccountId: string
+  image: string
+}
+
 function normalizeOAuthEmail(email: string): string {
   const normalized = email.trim().toLowerCase()
   if (!normalized) {
@@ -30,6 +35,33 @@ function toAdapterUser(user: AuthUserRecord): AdapterUser {
     emailVerified: user.emailVerified,
     image: user.image,
   }
+}
+
+export async function syncLinkedGoogleAccountImage(input: GoogleAccountImageInput): Promise<void> {
+  const account = await prisma.account.findUnique({
+    where: {
+      provider_providerAccountId: {
+        provider: 'google',
+        providerAccountId: input.providerAccountId,
+      },
+    },
+    select: {
+      userId: true,
+      user: {
+        select: { image: true },
+      },
+    },
+  })
+
+  if (!account) {
+    throw new Error('GOOGLE_ACCOUNT_LINK_MISSING')
+  }
+  if (account.user.image === input.image) return
+
+  await prisma.user.update({
+    where: { id: account.userId },
+    data: { image: input.image },
+  })
 }
 
 export function createAuthAdapter(): Adapter {

@@ -1,6 +1,7 @@
 'use client'
 
-import type { CSSProperties, RefObject } from 'react'
+import Image from 'next/image'
+import { useState, type CSSProperties, type RefObject } from 'react'
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { Link } from '@/i18n/navigation'
@@ -21,6 +22,7 @@ interface NavbarAccountMenuProps {
   style: CSSProperties | null
   userName: string
   userEmail: string | null
+  userImage: string | null
   balance: NavbarUserBalance | null
   creditsUnit: string
   showBilling: boolean
@@ -35,8 +37,34 @@ interface NavbarAccountMenuProps {
   onSignOut: () => void
 }
 
-export function NavbarUserAvatar({ name, size = 'sm' }: { name: string; size?: 'sm' | 'md' }) {
+export function NavbarUserAvatar({
+  name,
+  image,
+  size = 'sm',
+}: {
+  name: string
+  image: string | null
+  size?: 'sm' | 'md'
+}) {
+  const [failedImage, setFailedImage] = useState<string | null>(null)
   const sizeClass = size === 'md' ? 'h-9 w-9 text-sm' : 'h-7 w-7 text-xs'
+
+  if (image && failedImage !== image) {
+    const pixels = size === 'md' ? 36 : 28
+    return (
+      <Image
+        aria-hidden="true"
+        src={image}
+        alt=""
+        width={pixels}
+        height={pixels}
+        sizes={`${pixels}px`}
+        className={`${sizeClass} shrink-0 rounded-full object-cover shadow-[inset_0_1px_0_rgba(255,255,255,0.4)]`}
+        onError={() => setFailedImage(image)}
+      />
+    )
+  }
+
   return (
     <span
       aria-hidden="true"
@@ -53,6 +81,7 @@ export default function NavbarAccountMenu({
   style,
   userName,
   userEmail,
+  userImage,
   balance,
   creditsUnit,
   showBilling,
@@ -80,7 +109,7 @@ export default function NavbarAccountMenu({
     >
       {/* 账户头部:头像 + 名称 + 邮箱 */}
       <div className="flex items-center gap-3 rounded-xl px-2.5 py-2.5">
-        <NavbarUserAvatar name={userName} size="md" />
+        <NavbarUserAvatar name={userName} image={userImage} size="md" />
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold text-[var(--glass-text-primary)]">{userName}</div>
           {userEmail ? (

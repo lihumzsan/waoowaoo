@@ -95,6 +95,7 @@ export default function Navbar({
   const showDownloadLogs = deploymentFeatures?.showDownloadLogs === true
   const userName = session?.user?.name ?? t('profile')
   const userEmail = session?.user?.email ?? null
+  const userImage = session?.user?.image ?? null
   const creditsUnit = t('account.creditsUnit')
   const settingsMenuItems = buildNavbarSettingsMenuItems(deploymentFeatures, {
     apiConfig: t('settingsMenu.apiConfig'),
@@ -301,7 +302,7 @@ export default function Navbar({
                     title={userName}
                     aria-label={userName}
                   >
-                    <NavbarUserAvatar name={userName} />
+                    <NavbarUserAvatar name={userName} image={userImage} />
                   </button>
                 </div>
                 {!mounted ? (
@@ -362,6 +363,7 @@ export default function Navbar({
           style={settingsMenuStyle}
           userName={userName}
           userEmail={userEmail}
+          userImage={userImage}
           balance={balance}
           creditsUnit={creditsUnit}
           showBilling={showBilling}

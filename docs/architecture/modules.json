@@ -236,6 +236,7 @@
         "src/app",
         "src/components",
         "src/lib/api-auth.ts",
+        "src/lib/auth.ts",
         "src/lib/auth",
         "src/lib/deployment",
         "src/lib/errors",

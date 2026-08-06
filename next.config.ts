@@ -88,6 +88,12 @@ const nextConfig: NextConfig = {
   // Next 15 的 allowedDevOrigins 是顶层配置，不属于 experimental
   logging: false,
   devIndicators: false,
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: '**.googleusercontent.com' },
+      { protocol: 'https', hostname: '**.ggpht.com' },
+    ],
+  },
   outputFileTracingExcludes: {
     '/*': globalFunctionTraceExcludes,
     '/api/*': globalFunctionTraceExcludes,
