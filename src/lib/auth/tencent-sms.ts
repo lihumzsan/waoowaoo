@@ -14,6 +14,7 @@ export interface TencentSmsConfig {
 
 export interface TencentSmsSendResult {
   requestId: string | null
+  serialNo: string | null
 }
 
 export class TencentSmsRejectedError extends Error {
@@ -112,5 +113,6 @@ export async function sendTencentVerificationSms(input: {
 
   return {
     requestId: response.RequestId ?? null,
+    serialNo: status.SerialNo ?? null,
   }
 }

@@ -5,13 +5,16 @@ import { PHONE_AUTH_RESULT_CODES, type PhoneAuthResultCode } from '@/lib/auth/ph
 import { maskPhoneNumber, normalizePhoneNumber } from '@/lib/auth/phone-number'
 import {
   sendTencentVerificationSms,
+  type TencentSmsSendResult,
   TencentSmsConfigurationError,
   TencentSmsDestinationUnavailableError,
   TencentSmsRejectedError,
 } from '@/lib/auth/tencent-sms'
+import { rememberTencentSmsDeliveryAttempt } from '@/lib/auth/tencent-sms-delivery'
 import { getDeploymentConfig } from '@/lib/deployment/config'
 import { getDeploymentFeatures } from '@/lib/deployment/features'
 import { logAuthAction } from '@/lib/logging/semantic'
+import { createScopedLogger } from '@/lib/logging/core'
 import { prisma } from '@/lib/prisma'
 import { getPrismaErrorCode } from '@/lib/prisma-error'
 import { redis } from '@/lib/redis'
@@ -20,6 +23,11 @@ const PHONE_CODE_TTL_SECONDS = 5 * 60
 const PHONE_SEND_COOLDOWN_SECONDS = 60
 const PHONE_DAILY_SEND_LIMIT = 10
 const PHONE_CODE_MAX_ATTEMPTS = 5
+
+const smsLogger = createScopedLogger({
+  module: 'auth',
+  provider: 'tencent-sms',
+})
 
 const RESERVE_CHALLENGE_SCRIPT = `
 local dailyCount = tonumber(redis.call('GET', KEYS[3]) or '0')
@@ -223,8 +231,9 @@ export async function sendPhoneVerificationCode(rawPhoneNumber: unknown): Promis
     challengeId,
   })
 
+  let sendResult: TencentSmsSendResult
   try {
-    await sendTencentVerificationSms({
+    sendResult = await sendTencentVerificationSms({
       phoneNumber,
       code,
       challengeId,
@@ -276,13 +285,22 @@ export async function sendPhoneVerificationCode(rawPhoneNumber: unknown): Promis
     throw new PhoneVerificationError(PHONE_AUTH_RESULT_CODES.providerUnavailable)
   }
 
-  logAuthAction(
-    'LOGIN',
-    'SMS verification code sent',
-    { success: true, provider: 'tencent-sms' },
-    undefined,
-    maskPhoneNumber(phoneNumber),
-  )
+  const deliveryTrackingEnabled = await rememberTencentSmsDeliveryAttempt({
+    serialNo: sendResult.serialNo,
+    phoneNumber,
+  })
+  smsLogger.event({
+    level: 'INFO',
+    audit: true,
+    action: 'LOGIN',
+    message: 'SMS verification code sent',
+    providerRequestId: sendResult.serialNo ?? undefined,
+    details: {
+      success: true,
+      deliveryTrackingEnabled,
+      username: maskPhoneNumber(phoneNumber),
+    },
+  })
   return {
     phoneNumber,
     retryAfterSeconds: PHONE_SEND_COOLDOWN_SECONDS,

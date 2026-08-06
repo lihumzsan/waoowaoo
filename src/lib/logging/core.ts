@@ -102,6 +102,7 @@ function write(level: LogLevel, event: Omit<LogEvent, 'ts' | 'level' | 'service'
     action: event.action || context.action,
     message: event.message,
     requestId: event.requestId || context.requestId,
+    providerRequestId: event.providerRequestId || context.providerRequestId,
     taskId: event.taskId || context.taskId,
     taskAttempt: event.taskAttempt ?? context.taskAttempt,
     threadId: event.threadId || context.threadId,
@@ -137,6 +138,7 @@ function logWithLevel(level: LogLevel, context: Partial<LogContext> | undefined,
     module: context?.module,
     action: context?.action,
     requestId: context?.requestId,
+    providerRequestId: context?.providerRequestId,
     taskId: context?.taskId,
     taskAttempt: context?.taskAttempt,
     threadId: context?.threadId,
@@ -156,6 +158,7 @@ type ScopedLogInput = {
   action?: string
   module?: string
   requestId?: string
+  providerRequestId?: string
   taskId?: string
   taskAttempt?: number
   threadId?: string
@@ -188,6 +191,7 @@ function mergeScopedEvent(
     module: input.module || baseContext.module,
     action: input.action || baseContext.action,
     requestId: input.requestId || baseContext.requestId,
+    providerRequestId: input.providerRequestId || baseContext.providerRequestId,
     taskId: input.taskId || baseContext.taskId,
     taskAttempt: input.taskAttempt ?? baseContext.taskAttempt,
     threadId: input.threadId || baseContext.threadId,
@@ -218,6 +222,7 @@ function logScoped(level: LogLevel, baseContext: Partial<SemanticContext>, args:
     module: baseContext.module,
     action: baseContext.action,
     requestId: baseContext.requestId,
+    providerRequestId: baseContext.providerRequestId,
     taskId: baseContext.taskId,
     taskAttempt: baseContext.taskAttempt,
     threadId: baseContext.threadId,
