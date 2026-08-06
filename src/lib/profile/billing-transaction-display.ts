@@ -3,7 +3,16 @@ import { getProfileTransactionKindTranslationKey, type ProfileTransactionKindTra
 
 export type ProfileTranslationParams = Record<string, string | number | Date>
 
+export type ProfileBillingServiceTranslationKey =
+  | 'apiTypes.text'
+  | 'apiTypes.image'
+  | 'apiTypes.video'
+  | 'apiTypes.music'
+  | 'apiTypes.voice'
+  | 'apiTypes.other'
+
 export type ProfileBillingDetailTranslationKey =
+  | ProfileBillingServiceTranslationKey
   | 'billingDetail.image'
   | 'billingDetail.imageWithRes'
   | 'billingDetail.video'
@@ -18,14 +27,10 @@ export type ProfileBillingDetailTranslationKey =
   | 'billingDetail.audioIncluded'
 
 export type ProfileBillingDetailPart =
-  | {
+  {
     kind: 'translation'
     key: ProfileBillingDetailTranslationKey
     params: ProfileTranslationParams
-  }
-  | {
-    kind: 'text'
-    text: string
   }
 
 export type ProfileTransactionScopeInput = {
@@ -59,6 +64,32 @@ function readNumber(value: unknown): number | null {
 function readBoolean(value: unknown): boolean | null {
   if (typeof value === 'boolean') return value
   return null
+}
+
+export function getProfileBillingServiceTranslationKey(
+  apiType: unknown,
+  unit?: unknown,
+): ProfileBillingServiceTranslationKey | null {
+  const normalizedApiType = readString(apiType)
+  switch (normalizedApiType) {
+    case 'text':
+      return 'apiTypes.text'
+    case 'image':
+      return 'apiTypes.image'
+    case 'video':
+      return 'apiTypes.video'
+    case 'music':
+      return 'apiTypes.music'
+    case 'voice':
+      return 'apiTypes.voice'
+  }
+
+  const normalizedUnit = readString(unit)
+  if (normalizedUnit === 'token') return 'apiTypes.text'
+  if (normalizedUnit === 'image') return 'apiTypes.image'
+  if (normalizedUnit === 'video') return 'apiTypes.video'
+  if (normalizedUnit === 'character') return 'apiTypes.voice'
+  return normalizedApiType ? 'apiTypes.other' : null
 }
 
 function toPositiveCount(value: unknown): number | null {
@@ -101,8 +132,12 @@ export function buildProfileBillingDetailParts(meta: Record<string, unknown> | n
 
   const quantity = toPositiveCount(meta.quantity)
   const unit = readString(meta.unit)
-  const model = readString(meta.model)
   const parts: ProfileBillingDetailPart[] = []
+  const serviceTypeKey = getProfileBillingServiceTranslationKey(meta.apiType, unit)
+
+  if (serviceTypeKey) {
+    parts.push({ kind: 'translation', key: serviceTypeKey, params: {} })
+  }
 
   if (unit === 'image' && quantity !== null) {
     const imageSpec = buildImageSpec(meta)
@@ -160,10 +195,6 @@ export function buildProfileBillingDetailParts(meta: Record<string, unknown> | n
 
   if (readBoolean(meta.generateAudio) === true) {
     parts.push({ kind: 'translation', key: 'billingDetail.audioIncluded', params: {} })
-  }
-
-  if (model) {
-    parts.push({ kind: 'text', text: model })
   }
 
   return parts

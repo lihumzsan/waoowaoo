@@ -121,7 +121,7 @@ const PUBLIC_BILLING_META_KEYS = [
   'receiptUrl',
 ] as const
 
-/** Final public billing projection; internal provider and pricing metadata stay private. */
+/** Final public billing projection; internal model and pricing identities stay private. */
 export function projectPublicBillingMeta(
   meta: Record<string, unknown> | null,
 ): Record<string, unknown> | null {
@@ -131,18 +131,6 @@ export function projectPublicBillingMeta(
   for (const key of PUBLIC_BILLING_META_KEYS) {
     const value = meta[key]
     if (value !== undefined && value !== null) projected[key] = value
-  }
-
-  const model = typeof meta.model === 'string'
-    ? resolvePublicModelName(meta.model)
-    : null
-  if (model) projected.model = model
-
-  if (Array.isArray(meta.actualModels)) {
-    const actualModels = meta.actualModels
-      .map((value) => typeof value === 'string' ? resolvePublicModelName(value) : null)
-      .filter((value): value is string => Boolean(value))
-    if (actualModels.length > 0) projected.actualModels = actualModels
   }
 
   return Object.keys(projected).length > 0 ? projected : null
@@ -334,7 +322,6 @@ export async function getProjectCostDetails(projectId: string) {
     id: item.id,
     projectId: item.projectId,
     apiType: item.apiType,
-    model: resolvePublicModelName(item.model) ?? item.model,
     action: item.action,
     quantity: item.quantity,
     unit: item.unit,
@@ -404,7 +391,6 @@ export async function getUserCostDetails(
     id: item.id,
     projectId: item.projectId,
     apiType: item.apiType,
-    model: resolvePublicModelName(item.model) ?? item.model,
     action: item.action,
     quantity: item.quantity,
     unit: item.unit,

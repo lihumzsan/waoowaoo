@@ -107,7 +107,7 @@ export default function ProfileTransactionsTable({
             key={`${item.id}-detail-${index}`}
             className="glass-num inline-flex items-center rounded-full bg-[var(--glass-tone-surface)] px-2 py-0.5 text-[11px] font-medium text-[var(--glass-tone-neutral-fg)] shadow-[var(--glass-tone-shadow)]"
           >
-            {part.kind === 'translation' ? t(part.key, part.params) : part.text}
+            {t(part.key, part.params)}
           </span>
         ))}
         {hidden > 0 ? (

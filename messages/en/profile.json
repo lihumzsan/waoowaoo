@@ -57,7 +57,7 @@
   "recordCount": "{count} records",
   "totalCost": "Total {amount}",
   "userCharge": "User charge (credits)",
-  "model": "Model",
+  "generationType": "Generation Type",
   "usage": "Usage",
   "previousPage": "Previous",
   "nextPage": "Next",
@@ -147,8 +147,10 @@
   "apiTypes": {
     "image": "Image Generation",
     "video": "Video Generation",
-    "text": "LLM",
-    "music": "Music Generation"
+    "text": "Text Generation",
+    "music": "Music Generation",
+    "voice": "Voice Generation",
+    "other": "AI Service"
   },
   "actionTypes": {
     "assistant_run": "LLM generation",

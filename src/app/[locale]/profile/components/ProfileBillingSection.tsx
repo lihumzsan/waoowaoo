@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useFormatter, useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
+import { getProfileBillingServiceTranslationKey } from '@/lib/profile/billing-transaction-display'
 import ProfileTransactionsTable, { type ProfileTransactionItem } from './ProfileTransactionsTable'
 
 export type ProfileProjectCostSummary = {
@@ -16,7 +17,6 @@ export type ProfileProjectCostDetail = {
   id: string
   action: string
   apiType: string
-  model: string
   quantity: number
   unit: string
   cost: number
@@ -71,6 +71,11 @@ export default function ProfileBillingSection({
   const renderAction = (action: string): string => {
     const key = `actionTypes.${action.replaceAll('.', '_')}`
     return t.has(key) ? t(key) : action
+  }
+
+  const renderServiceType = (apiType: string, unit: string): string => {
+    const key = getProfileBillingServiceTranslationKey(apiType, unit) ?? 'apiTypes.other'
+    return t(key)
   }
 
   const refresh = () => {
@@ -154,7 +159,7 @@ export default function ProfileBillingSection({
                             <thead>
                               <tr>
                                 <th>{t('transactionOperation')}</th>
-                                <th>{t('model')}</th>
+                                <th>{t('generationType')}</th>
                                 <th>{t('usage')}</th>
                                 <th className="text-right">{t('userCharge')}</th>
                                 <th className="text-right">{t('createdAt')}</th>
@@ -164,7 +169,7 @@ export default function ProfileBillingSection({
                               {details.map((detail) => (
                                 <tr key={detail.id}>
                                   <td>{renderAction(detail.action)}</td>
-                                  <td className="max-w-[220px] truncate" title={detail.model}>{detail.model}</td>
+                                  <td>{renderServiceType(detail.apiType, detail.unit)}</td>
                                   <td className="glass-num">
                                     {detail.unit === 'token'
                                       ? t('billingDetail.tokens', { count: detail.quantity })

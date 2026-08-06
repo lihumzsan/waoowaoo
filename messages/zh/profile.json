@@ -57,7 +57,7 @@
   "recordCount": "{count} 条记录",
   "totalCost": "总计 {amount}",
   "userCharge": "用户费用（积分）",
-  "model": "模型",
+  "generationType": "生成类型",
   "usage": "用量",
   "previousPage": "上一页",
   "nextPage": "下一页",
@@ -147,8 +147,10 @@
   "apiTypes": {
     "image": "图片生成",
     "video": "视频生成",
-    "text": "LLM",
-    "music": "音乐生成"
+    "text": "文本生成",
+    "music": "音乐生成",
+    "voice": "语音生成",
+    "other": "AI 服务"
   },
   "actionTypes": {
     "assistant_run": "LLM 生成",
