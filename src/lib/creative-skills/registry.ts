@@ -22,10 +22,10 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'story-development': defineSkill({
     id: 'story-development',
-    version: '4.0.1',
+    version: '5.0.0',
     title: '故事与剧本开发',
-    summary: '剧本创作与修改方法；只处理故事和剧本文本，不登记生产资产。',
-    tags: ['story', 'script', 'screenplay', 'writing'],
+    summary: '忠实且真正好看的剧本创作方法：人物因果、节奏档位、开场与对白纪律；只处理故事文本，不登记生产资产。',
+    tags: ['story', 'script', 'screenplay', 'writing', 'hook', 'pacing'],
   }),
   'long-form-production': defineSkill({
     id: 'long-form-production',
