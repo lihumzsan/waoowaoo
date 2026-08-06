@@ -82,6 +82,9 @@ Codex app-server 是唯一 Agent Runtime，并独占模型 Thread/history；Wao 
 - 容器 driver 首版把外层容器当成唯一沙箱，向 Turn 声明完全访问权限；同 UID 的 shell 因而能读取
   bearer 并直连内部模型网关 → 两层隔离被当成一层 → 本地与容器都启用受限写权限并关闭 shell 网络
   （CRR-03/CRR-07B）。
+- Docker Runtime 首版 smoke 只验证镜像与 app-server 协议，没有在生产容器中执行内层沙箱命令；
+  默认 seccomp/AppArmor 阻止 Bubblewrap 的嵌套 namespace，`on-request` 又把普通读取变成无沙箱审批重试 →
+  Docker driver 显式使用无需放宽外层权限的 Landlock 后端，并以真实沙箱命令验收（CRR-03）。
 - 模型网关首版只验证"项目里恰好有一个活跃 Turn"，未证明请求来自当前 Runtime；旧容器 bearer 可在
   有效期内等待新 Turn 后重放 → 凭据没有绑定 placement 租约 → bearer nonce 与 ownership token
   完全相同（CRR-07B）。
