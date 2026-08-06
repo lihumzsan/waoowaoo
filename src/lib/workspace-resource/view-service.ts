@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { stableArgsFingerprint } from '@/lib/project-agent/stable-args-hash'
+import { resolvePublicModelName } from '@/lib/ai-exec/model-presentation'
 import { readWorkspaceResourceTextContent } from './content-store'
 import type {
   WorkspaceResourceActionView,
@@ -391,7 +392,7 @@ async function loadViews(
       current,
       summary,
       prompt: row.prompt,
-      modelKey: row.modelKey,
+      modelName: resolvePublicModelName(row.modelKey),
       generationOptions: jsonProjection(row.generationOptions),
       operationId: row.operationId,
       memberIndex: row.memberIndex,

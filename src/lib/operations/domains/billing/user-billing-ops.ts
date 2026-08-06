@@ -3,7 +3,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { BILLING_CURRENCY } from '@/lib/billing/currency'
 import { toMoneyNumber } from '@/lib/billing/money'
-import { getUserCostSummary } from '@/lib/billing'
+import { getUserCostSummary, projectPublicBillingMeta } from '@/lib/billing'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { resolveBillingTransactionTargets } from './transaction-targets'
 import {
@@ -175,10 +175,11 @@ export function createUserBillingOperations(): ProjectAgentOperationRegistryDraf
             ...item,
             amount: resolveDisplayAmount(item.type, toMoneyNumber(item.amount), billingMeta),
             balanceAfter: toMoneyNumber(item.balanceAfter),
+            description: null,
             action,
             projectId,
             projectName: projectId ? (projectMap.get(projectId) ?? null) : null,
-            billingMeta,
+            billingMeta: projectPublicBillingMeta(billingMeta),
             target: task ? (targetByTaskId.get(task.id) ?? null) : null,
             operationId: task?.operationId ?? null,
             operationRequestId: task?.operationRequestId ?? null,

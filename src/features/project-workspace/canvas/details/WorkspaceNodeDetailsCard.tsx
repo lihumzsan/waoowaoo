@@ -43,7 +43,7 @@ export function WorkspaceNodeDetailsCard({
   if (node.data.kind !== 'resourceCard') return null
   const resource = node.data.resourceDetails.resource
   const prompt = resource.prompt
-  const modelKey = resource.modelKey
+  const modelName = resource.modelName
   const inputs = node.data.resourceDetails.inputSummaries
   const width = Math.max(node.data.width, DETAILS_CARD_MIN_WIDTH)
   const anchor = internalNode?.internals.positionAbsolute ?? node.position
@@ -65,7 +65,7 @@ export function WorkspaceNodeDetailsCard({
           <WorkspaceNodeDetailsPanel
             card={node.data.resourceDetails}
             prompt={prompt}
-            modelKey={modelKey}
+            modelName={modelName}
             inputs={inputs}
             actions={actions}
           />

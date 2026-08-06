@@ -5,6 +5,7 @@ import type { ApiType, UsageUnit } from './cost'
 import { BillingOperationError } from './errors'
 import { toMoneyNumber } from './money'
 import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
+import { resolvePublicModelName } from '@/lib/ai-exec/model-presentation'
 
 interface RecordParams {
   projectId: string
@@ -47,15 +48,10 @@ export function buildBillingMetaRecord(params: {
   apiType: string
   metadata?: Record<string, unknown>
 }): Record<string, unknown> {
-  // 尝试从 model composite ID 提取短名 "provider:xxx::model" → "model"
-  const modelShort = params.model.includes('::')
-    ? (params.model.split('::').pop() ?? params.model)
-    : params.model
-
   const meta: Record<string, unknown> = {
     quantity: params.quantity,
     unit: params.unit,
-    model: modelShort,
+    model: resolvePublicModelName(params.model),
     apiType: params.apiType,
   }
 
@@ -96,10 +92,60 @@ export function buildBillingMetaRecord(params: {
     Array.isArray(params.metadata?.actualModels) &&
     (params.metadata.actualModels as unknown[]).length > 0
   ) {
-    meta.actualModels = params.metadata.actualModels
+    const actualModels = (params.metadata.actualModels as unknown[])
+      .map((value) => typeof value === 'string' ? resolvePublicModelName(value) : null)
+      .filter((value): value is string => Boolean(value))
+    if (actualModels.length > 0) meta.actualModels = actualModels
   }
 
   return meta
+}
+
+const PUBLIC_BILLING_META_KEYS = [
+  'quantity',
+  'unit',
+  'apiType',
+  'resolution',
+  'duration',
+  'generateAudio',
+  'generationMode',
+  'quality',
+  'size',
+  'aspectRatio',
+  'inputTokens',
+  'outputTokens',
+  'cachedInputTokens',
+  'chargedCost',
+  'freezeAmount',
+  'refundedAmount',
+  'receiptUrl',
+] as const
+
+/** Final public billing projection; internal provider and pricing metadata stay private. */
+export function projectPublicBillingMeta(
+  meta: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (!meta) return null
+
+  const projected: Record<string, unknown> = {}
+  for (const key of PUBLIC_BILLING_META_KEYS) {
+    const value = meta[key]
+    if (value !== undefined && value !== null) projected[key] = value
+  }
+
+  const model = typeof meta.model === 'string'
+    ? resolvePublicModelName(meta.model)
+    : null
+  if (model) projected.model = model
+
+  if (Array.isArray(meta.actualModels)) {
+    const actualModels = meta.actualModels
+      .map((value) => typeof value === 'string' ? resolvePublicModelName(value) : null)
+      .filter((value): value is string => Boolean(value))
+    if (actualModels.length > 0) projected.actualModels = actualModels
+  }
+
+  return Object.keys(projected).length > 0 ? projected : null
 }
 
 export function buildBillingMeta(params: Parameters<typeof buildBillingMetaRecord>[0]): string {
@@ -285,8 +331,16 @@ export async function getProjectCostDetails(projectId: string) {
     },
   }))
   const recentRecords = recentRecordsRaw.map((item) => ({
-    ...item,
+    id: item.id,
+    projectId: item.projectId,
+    apiType: item.apiType,
+    model: resolvePublicModelName(item.model) ?? item.model,
+    action: item.action,
+    quantity: item.quantity,
+    unit: item.unit,
     cost: toMoneyNumber(item.cost),
+    chargedCredits: item.chargedCredits,
+    createdAt: item.createdAt,
   }))
 
   return {
@@ -347,8 +401,16 @@ export async function getUserCostDetails(
   ])
 
   const records = recordsRaw.map((item) => ({
-    ...item,
+    id: item.id,
+    projectId: item.projectId,
+    apiType: item.apiType,
+    model: resolvePublicModelName(item.model) ?? item.model,
+    action: item.action,
+    quantity: item.quantity,
+    unit: item.unit,
     cost: toMoneyNumber(item.cost),
+    chargedCredits: item.chargedCredits,
+    createdAt: item.createdAt,
   }))
 
   return {

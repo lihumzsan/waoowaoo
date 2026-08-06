@@ -296,13 +296,13 @@ function VideoPlayerSlot({
 export function WorkspaceNodeDetailsPanel({
   card,
   prompt,
-  modelKey,
+  modelName,
   inputs,
   actions,
 }: {
   readonly card: WorkspaceResourceCardView
   readonly prompt: string | null
-  readonly modelKey: string | null
+  readonly modelName: string | null
   readonly inputs: readonly WorkspaceResourceInputSummary[]
   readonly actions: WorkspaceNodeDetailsActions
 }) {
@@ -471,7 +471,7 @@ export function WorkspaceNodeDetailsPanel({
           title={labels('generationPrompt')}
           trailing={(
             <span className="flex min-w-0 items-center gap-2">
-              {modelKey ? <ModelKeyLine label={labels('generationModel')} modelKey={modelKey} /> : null}
+              {modelName ? <ModelNameLine label={labels('generationModel')} modelName={modelName} /> : null}
               <button
                 type="button"
                 aria-label={actionLabels('copyPrompt')}
@@ -497,13 +497,13 @@ export function WorkspaceNodeDetailsPanel({
             </p>
           </div>
         </SectionShell>
-      ) : modelKey ? (
+      ) : modelName ? (
         <SectionShell title={labels('generationModel')}>
-          <p className={`${SELECTABLE_TEXT_CLASS} break-all font-mono text-xs text-slate-700`}>{modelKey}</p>
+          <p className={`${SELECTABLE_TEXT_CLASS} break-all text-xs text-slate-700`}>{modelName}</p>
         </SectionShell>
       ) : null}
 
-      {!prompt && !modelKey && inputs.length === 0 && !isTextResource ? (
+      {!prompt && !modelName && inputs.length === 0 && !isTextResource ? (
         <p className={`${SELECTABLE_TEXT_CLASS} px-1 py-2 text-xs text-[var(--glass-text-tertiary)]`}>
           {t('empty')}
         </p>
@@ -527,14 +527,14 @@ export function WorkspaceNodeDetailsPanel({
   )
 }
 
-function ModelKeyLine({ label, modelKey }: { readonly label: string; readonly modelKey: string }) {
+function ModelNameLine({ label, modelName }: { readonly label: string; readonly modelName: string }) {
   return (
     <p
       className={`${SELECTABLE_TEXT_CLASS} min-w-0 truncate text-right text-[10px] leading-4 text-[var(--glass-text-tertiary)]`}
-      title={modelKey}
+      title={modelName}
     >
       <span className="mr-1.5 font-semibold uppercase tracking-wide">{label}</span>
-      <span className="font-mono">{modelKey}</span>
+      <span>{modelName}</span>
     </p>
   )
 }
