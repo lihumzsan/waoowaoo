@@ -12,7 +12,22 @@ const PROJECT_AGENT_SYSTEM_PROMPT_PATH = path.join(
   'project-agent-system.txt',
 )
 
+const PROJECT_AGENT_BASE_PROMPT_PATH = path.join(
+  process.cwd(),
+  'src',
+  'lib',
+  'ai-prompts',
+  'templates',
+  'project-agent',
+  'system',
+  'project-agent-base.txt',
+)
+
 const CREATIVE_SKILL_ROUTING_PLACEHOLDER = '{creative_skill_routing}'
+
+export function buildProjectAgentBasePrompt(): string {
+  return fs.readFileSync(PROJECT_AGENT_BASE_PROMPT_PATH, 'utf8').trim()
+}
 
 export function buildProjectAgentSystemPrompt(
   creativeSkillRouting: readonly string[],

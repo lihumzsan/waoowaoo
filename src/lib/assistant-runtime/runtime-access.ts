@@ -18,7 +18,10 @@ import {
   creativeSkillRoutingInstructions,
   creativeOutputJsonSchema,
 } from '@/lib/creative-skills'
-import { buildProjectAgentSystemPrompt } from '@/lib/ai-prompts/project-agent-system'
+import {
+  buildProjectAgentBasePrompt,
+  buildProjectAgentSystemPrompt,
+} from '@/lib/ai-prompts/project-agent-system'
 import {
   formatProjectProductionContext,
   readProjectProductionContext,
@@ -36,6 +39,12 @@ const WAO_MCP_TOOL_TIMEOUT_SECONDS = WAO_RUNTIME_TOKEN_MAX_TTL_SECONDS
 export const ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS = buildProjectAgentSystemPrompt(
   creativeSkillRoutingInstructions(),
 )
+
+// The custom base replaces Codex's built-in coding-agent base prompt. It keeps
+// the load-bearing channel, formatting, update, and autonomy contract verbatim
+// and drops the Codex identity plus coding-only rules (apply_patch/git editing
+// constraints, review mindset, frontend design).
+export const ASSISTANT_RUNTIME_BASE_INSTRUCTIONS = buildProjectAgentBasePrompt()
 
 export const ASSISTANT_RUNTIME_CODEX_VERSION = '0.146.0' as const
 
@@ -242,6 +251,7 @@ export async function resolveAssistantRuntimeModelConfiguration(
     sandbox,
     config,
     serviceName: threadContract.serviceName,
+    baseInstructions: ASSISTANT_RUNTIME_BASE_INSTRUCTIONS,
     developerInstructions: ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
     personality: threadContract.personality,
     ephemeral: threadContract.ephemeral,
@@ -258,6 +268,7 @@ export async function resolveAssistantRuntimeModelConfiguration(
         approvalPolicy: threadContract.approvalPolicy,
         sandbox,
         config,
+        baseInstructions: ASSISTANT_RUNTIME_BASE_INSTRUCTIONS,
         developerInstructions: ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
         personality: threadContract.personality,
       },
