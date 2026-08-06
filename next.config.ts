@@ -100,6 +100,9 @@ const nextConfig: NextConfig = {
     '/api/**/*': globalFunctionTraceExcludes,
   },
   ...(allowedDevOrigins.length > 0 ? { allowedDevOrigins } : {}),
+  async rewrites() {
+    return [{ source: '/favicon.ico', destination: '/logo.ico' }]
+  },
   async headers() {
     return [{ source: '/(.*)', headers: securityHeaders }]
   },

@@ -4,9 +4,8 @@ import { routing } from './src/i18n/routing';
 export default createMiddleware(routing);
 
 export const config = {
-    // 匹配所有路径，除了 api、_next/static、_next/image、favicon.ico 等
+    // Public metadata routes and static assets must stay at the host root.
     matcher: [
-        // 匹配所有路径
-        '/((?!api|m|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|webp|svg|gif|ico|mp4|mov|webm|mp3|wav|m4a)).*)'
+        '/((?!api|m|_next/static|_next/image|favicon\\.ico|robots\\.txt|sitemap\\.xml|.*\\.(?:png|jpg|jpeg|webp|svg|gif|ico|mp4|mov|webm|mp3|wav|m4a)).*)'
     ]
 };
