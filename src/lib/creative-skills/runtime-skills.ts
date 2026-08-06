@@ -39,13 +39,6 @@ export const CREATIVE_RUNTIME_SKILL_REGISTRY: Readonly<
     skillIds: ['creative-core', 'story-development'],
     executionFacts: null,
   }),
-  long_form: defineRuntimeSkill({
-    kind: 'long_form',
-    title: '长篇连续制作',
-    description: '组织长篇连续性事实、制作单元与依赖，并形成 long_form_plan 专业结果。',
-    skillIds: ['creative-core', 'long-form-production'],
-    executionFacts: 'Point to results owned by other professional domains; never author their prompts.',
-  }),
   direction: defineRuntimeSkill({
     kind: 'direction',
     title: '创作方向',

@@ -15,10 +15,10 @@ function defineSkill(
 export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeSkillDefinition>> = {
   'creative-core': defineSkill({
     id: 'creative-core',
-    version: '1.4.1',
+    version: '1.5.0',
     title: '创作核心',
-    summary: '主 Agent 专业创作共用的事实边界、目标忠实性、假设管理、剧本时间线纪律、通用时长估算与交付自检。',
-    tags: ['core', 'creative', 'reasoning', 'quality', 'duration'],
+    summary: '主 Agent 专业创作共用的事实边界、目标忠实性、假设管理、续作状态锚定、剧本时间线纪律、通用时长估算与交付自检。',
+    tags: ['core', 'creative', 'reasoning', 'quality', 'duration', 'continuity'],
   }),
   'story-development': defineSkill({
     id: 'story-development',
@@ -26,13 +26,6 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
     title: '故事与剧本开发',
     summary: '忠实且真正好看的剧本创作方法：人物因果、节奏档位、开场与对白纪律；只处理故事文本，不登记生产资产。',
     tags: ['story', 'script', 'screenplay', 'writing', 'hook', 'pacing'],
-  }),
-  'long-form-production': defineSkill({
-    id: 'long-form-production',
-    version: '2.0.1',
-    title: '长篇连续制作',
-    summary: '把长篇作品组织成可并行、可续跑的生产单元与连续性事实，并通过直接媒体批次提交制作。',
-    tags: ['long-form', 'series', 'continuity', 'production', 'batch', 'planning'],
   }),
   'creative-direction': defineSkill({
     id: 'creative-direction',
@@ -43,7 +36,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'asset-development': defineSkill({
     id: 'asset-development',
-    version: '5.1.1',
+    version: '5.2.0',
     title: '资产范围与视觉设计',
     summary: '从精确剧本筛选可复用资产，完成稳定设计与最终图片提示词；生成画幅由服务端资产策略决定。',
     tags: ['asset', 'image', 'character', 'location', 'prop', 'reference', 'candidate'],

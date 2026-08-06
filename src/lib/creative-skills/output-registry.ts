@@ -34,42 +34,6 @@ export const screenplayOutputSchema = z.object({
   openQuestions: textList(64, 2_000),
 }).strict()
 
-const professionalDeliverableSchema = z.discriminatedUnion('domainKind', [
-  z.object({ domainKind: z.literal('story'), outputKind: z.literal('screenplay') }).strict(),
-  z.object({ domainKind: z.literal('direction'), outputKind: z.literal('creative_direction') }).strict(),
-  z.object({ domainKind: z.literal('assets'), outputKind: z.literal('asset_generation_batch') }).strict(),
-  z.object({ domainKind: z.literal('video'), outputKind: z.literal('video_generation_batch') }).strict(),
-  z.object({ domainKind: z.literal('music'), outputKind: z.literal('audio_generation_batch') }).strict(),
-])
-
-export const longFormPlanOutputSchema = z.object({
-  schemaVersion: z.literal(2),
-  outputKind: z.literal('long_form_plan'),
-  overview: z.string().trim().min(1).max(12_000),
-  continuityFacts: z.array(z.object({
-    key: z.string().trim().min(1).max(191),
-    fact: z.string().trim().min(1).max(8_000),
-    sourcePaths: textList(64, 512),
-  }).strict()).max(4_096),
-  productionUnits: z.array(z.object({
-    unitId: z.string().trim().min(1).max(191),
-    title: z.string().trim().min(1).max(300),
-    goal: z.string().trim().min(1).max(8_000),
-    sourcePaths: textList(64, 512),
-    entryState: z.string().trim().min(1).max(8_000),
-    exitState: z.string().trim().min(1).max(8_000),
-    dependencies: textList(64, 191),
-    deliverables: z.array(professionalDeliverableSchema).max(64),
-  }).strict()).min(1).max(1_024),
-  assumptions: textList(64, 2_000),
-  warnings: textList(64, 2_000),
-}).strict().superRefine((plan, context) => {
-  const unitIds = new Set(plan.productionUnits.map((unit) => unit.unitId))
-  if (unitIds.size !== plan.productionUnits.length) {
-    context.addIssue({ code: 'custom', path: ['productionUnits'], message: 'unitId values must be unique.' })
-  }
-})
-
 export const creativeDirectionOutputSchema = creativeDirectionSchema.safeExtend({
   schemaVersion: z.literal(1),
   outputKind: z.literal('creative_direction'),
@@ -79,7 +43,6 @@ export const creativeDirectionOutputSchema = creativeDirectionSchema.safeExtend(
 
 export const CREATIVE_OUTPUT_SCHEMAS = {
   screenplay: screenplayOutputSchema,
-  long_form_plan: longFormPlanOutputSchema,
   creative_direction: creativeDirectionOutputSchema,
   asset_generation_batch: assetGenerationBatchOutputSchema,
   video_generation_batch: videoGenerationBatchOutputSchema,
@@ -88,7 +51,6 @@ export const CREATIVE_OUTPUT_SCHEMAS = {
 
 export const creativeOutputSchema = z.discriminatedUnion('outputKind', [
   screenplayOutputSchema,
-  longFormPlanOutputSchema,
   creativeDirectionOutputSchema,
   assetGenerationBatchOutputSchema,
   videoGenerationBatchOutputSchema,
@@ -99,7 +61,6 @@ export type CreativeOutput = z.infer<typeof creativeOutputSchema>
 
 export const CREATIVE_DOMAIN_OUTPUT_KIND = {
   story: 'screenplay',
-  long_form: 'long_form_plan',
   direction: 'creative_direction',
   assets: 'asset_generation_batch',
   video: 'video_generation_batch',
@@ -129,14 +90,6 @@ export const CREATIVE_OUTPUT_REGISTRY: Readonly<Record<CreativeOutputKind, Creat
     savedDocumentSchemaId: WORKSPACE_RESOURCE_SCHEMA.SCREENPLAY,
     mediaOperationId: null,
     schema: screenplayOutputSchema,
-  }),
-  long_form_plan: defineOutput({
-    outputKind: 'long_form_plan',
-    domainKind: 'long_form',
-    professionalSkillId: 'long-form-production',
-    savedDocumentSchemaId: WORKSPACE_RESOURCE_SCHEMA.LONG_FORM_PLAN,
-    mediaOperationId: null,
-    schema: longFormPlanOutputSchema,
   }),
   creative_direction: defineOutput({
     outputKind: 'creative_direction',

@@ -19,6 +19,7 @@ description: Scope reusable production assets and define stable visible designs 
 - 通过筛选的资产中，主角级且风格空间大的视觉身份——换一种设计方向就会改变整部作品观感的核心角色、标志性生物或核心形象——其设计方向属于可对齐决策，在批次冻结前交由主 Agent 按其对齐契约处理；配角、功能性资产以及方向已由剧本、用户输入或 Creative Direction 确定的资产不触发对齐。
 - 同一个专业结果完成筛选、稳定身份设计与最终 Prompt；不输出第二套候选状态或再拼接另一版 Prompt。
 - `canonicalName + assetKind` 表达稳定创作身份；不得发明系统 ID、使用数组位置或新增含糊的 `other` 类型。实际媒体身份由输出 WorkspaceResource 路径与 resourceId 拥有。
+- 资产是基础身份设计，不是任意时刻的状态快照。剧情产生持续的新状态（重伤、换装、剃发、损毁）且后续生成需要独立引用时，创建新版本或新资产表达新状态，不改写原资产的既有解释。
 
 ## 风格消费边界
 

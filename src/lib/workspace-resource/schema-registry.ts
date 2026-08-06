@@ -11,6 +11,9 @@ export const WORKSPACE_RESOURCE_SCHEMA = {
   GENERIC_IMAGE: 'generic.image',
   GENERIC_VIDEO: 'generic.video',
   SCREENPLAY: 'project.screenplay',
+  // Historical read-only identity: the long_form domain was removed and
+  // continuity now flows through delivered screenplays and batch exit states.
+  // Existing Resources remain readable without a destructive data migration.
   LONG_FORM_PLAN: 'project.long_form_plan',
   CREATIVE_DIRECTION: 'project.creative_direction',
   // Stable persisted schema IDs; names now describe optional saved documents,
@@ -161,6 +164,7 @@ const DEDICATED_ORIGIN_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new 
 
 const RETIRED_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new Set([
   WORKSPACE_RESOURCE_SCHEMA.LEGACY_STYLE,
+  WORKSPACE_RESOURCE_SCHEMA.LONG_FORM_PLAN,
 ])
 
 /**
@@ -171,7 +175,6 @@ const RETIRED_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new Set([
  */
 const CREATIVE_OUTPUT_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new Set([
   WORKSPACE_RESOURCE_SCHEMA.SCREENPLAY,
-  WORKSPACE_RESOURCE_SCHEMA.LONG_FORM_PLAN,
   WORKSPACE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
   WORKSPACE_RESOURCE_SCHEMA.ASSET_GENERATION_BATCH,
   WORKSPACE_RESOURCE_SCHEMA.VIDEO_GENERATION_BATCH,

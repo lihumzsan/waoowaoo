@@ -1,7 +1,6 @@
 export const CREATIVE_SKILL_IDS = [
   'creative-core',
   'story-development',
-  'long-form-production',
   'creative-direction',
   'asset-development',
   'video-direction',
@@ -12,7 +11,6 @@ export type CreativeSkillId = (typeof CREATIVE_SKILL_IDS)[number]
 
 export const CREATIVE_DOMAIN_KINDS = [
   'story',
-  'long_form',
   'direction',
   'assets',
   'video',
@@ -23,7 +21,6 @@ export type CreativeDomainKind = (typeof CREATIVE_DOMAIN_KINDS)[number]
 
 export const CREATIVE_OUTPUT_KINDS = [
   'screenplay',
-  'long_form_plan',
   'creative_direction',
   'asset_generation_batch',
   'video_generation_batch',
