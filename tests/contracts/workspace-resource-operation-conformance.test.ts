@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { buildWorkspaceCanvasCreateOperationInput } from '@/features/project-workspace/canvas/create/canvas-create-input'
-import { readCanvasActionCatalogView } from '@/lib/operations/canvas-action-catalog'
 import { createProjectAgentOperationRegistryForApi } from '@/lib/operations/registry'
 import { OPERATION_EXECUTION_MAX_TASKS } from '@/lib/temporal/operation-execution/contracts'
 import { parseWorkspaceResourceGenerationTaskPayload } from '@/lib/workspace-resource/generation-contract'
@@ -245,23 +243,5 @@ describe('WorkspaceResource Operation registry conformance', () => {
       },
       imageModel: 'openrouter::openai/gpt-image-2', count: 1, generationOptions: {},
     })).not.toThrow()
-  })
-
-  it('keeps every server-declared Canvas creation action valid against its live Operation schema', () => {
-    const registry = createProjectAgentOperationRegistryForApi()
-    for (const capability of readCanvasActionCatalogView().creation) {
-      const operation = registry[capability.operationId]
-      if (!operation || operation.resourceContract.kind !== 'resource') throw new Error(`Canvas operation missing: ${capability.operationId}`)
-      const input = buildWorkspaceCanvasCreateOperationInput({
-        capability,
-        name: 'Canvas resource',
-        prompt: 'Create one coherent project resource.',
-        count: capability.alternatives.min,
-        durationSeconds: capability.inputLimits.durationSeconds?.min ?? null,
-        voicePreviewText: 'This is the voice preview.',
-        position: { x: 0, y: 0 },
-      }, null)
-      expect(operation.inputSchema.safeParse(input).success, capability.operationId).toBe(true)
-    }
   })
 })

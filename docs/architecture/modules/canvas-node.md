@@ -45,14 +45,11 @@ Resource、Lineage 与 Task owner；Canvas 只拥有位置、视口、选择和�
 - **CN-13 — 新批次只调整一次整体视口。** 持久批次 identity 是自动定位的唯一请求身份；至少一个
   目标物化后只执行一次整体 fitView。同批成员的状态变化、查询刷新与顺序变化都不得再次移动视口；
   用户操作立即终止动画。禁止按"第一个 running 节点"轮换或用 timer 恢复跟随。
-- **CN-14 — 直接动作只复用正式 Operation。** 卡片 retry、variant、编辑、创建与上传必须从最终
-  Action View 构造精确 scope，经同一 plan/grant/execute 通道写入；UI 不插入假 Resource、不改本地
-  生命周期，只把成功 ACK 或变更通知当作 Query 失效信号。付费动作一次用户意图持有稳定幂等键，
-  且只批准当前展示的完整计划。
-- **CN-14A — 表单只消费服务端能力边界。** 创建菜单与表单只消费 Operation registry 投影的能力
-  目录；目录失败必须显式提供重试，不得静默表现为只剩上传。表单校验只改善即时反馈，最终输入仍由
-  同一 Operation schema 裁决。
-- **CN-14B — 创建与上传显式落在当前文件夹。** 提交意图时冻结当前 `folderPath` 与名称，由服务端
+- **CN-14 — 直接动作只复用正式 Operation。** 卡片 retry、variant 与编辑必须从最终 Action View
+  构造精确 scope；上传必须经正式上传与物化 Operation。UI 不插入假 Resource、不改本地生命周期，
+  只把成功 ACK 或变更通知当作 Query 失效信号。付费动作一次用户意图持有稳定幂等键，且只批准当前
+  展示的完整计划。
+- **CN-14B — 上传显式落在当前文件夹。** 提交意图时冻结当前 `folderPath` 与名称，由服务端
   派生并冻结最终路径；异步重试沿用已预留 Resource，切换文件夹不能把进行中的任务移到新目录。
 - **CN-15 — 选择与 Assistant 上下文各有唯一 UI owner。** 父级持有唯一 selection 与唯一 assistant
   context；后者只在显式动作时从 selection 复制，单纯选中不附加。不建立全局事件总线或第二份
@@ -65,9 +62,6 @@ Resource、Lineage 与 Task owner；Canvas 只拥有位置、视口、选择和�
 - **CN-18 — 大规模必须保持 Canvas 语义。** 树与搜索使用稳定 cursor 分页并启用视口虚拟化，不因
   规模退化为普通列表。完整替换布局只能在当前目录全部分页完成后执行，避免用首页删除未加载节点的
   布局。列表投影只消费有界摘要。
-- **CN-20 — 创建只消费 Operation capability。** 表单的 operation、媒体 kind、数量与时长边界和
-  默认 schema 全部由服务端 registry 投影；浏览器不能按 operation 名、数组顺序或旧字段猜 schema。
-
 ## 权威入口
 
 - 节点 registry 与投影编排：`src/features/project-workspace/canvas/**`
@@ -90,9 +84,6 @@ Resource、Lineage 与 Task owner；Canvas 只拥有位置、视口、选择和�
 - 图片预览按钮从初版就 stopPropagation，但包装层同时拥有内建 element selection 与业务点击入口，
   打开大图会同时唤起详情；第一轮只加 interaction marker，仍依赖包装层保留子元素语义，人工复验
   确认无效 → 存在两条 selection 入口 → 显式关闭 element selection，只保留唯一 controlled writer。
-- 创建菜单改为"点击外部关闭"后，确认弹窗位于草稿 DOM 之外，全局 pointer capture 先删草稿而正式
-  pending Resource 尚未接手，出现确定性空窗 → 静态接线验证无法反证跨 portal 的真实指针顺序 →
-  草稿在 plan/确认/执行与 Query 交接期间不可 dismiss。
 - 资源树切换后仍使用的一个查询 Operation 被误删，卡片状态刷新确定性返回"Operation not found"
   → 删除旧读取包时没有枚举实际消费者 → 该查询归入 Task Operation 包并保持 API-only。
 - 列表查询曾为每个文本/JSON 读取对象存储全文，数千项时即使虚拟化也无法控制 I/O → 列表路径承担了

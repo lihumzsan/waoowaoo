@@ -76,7 +76,6 @@
         "src/lib/query",
         "src/app/[locale]/workspace/[projectId]",
         "src/app/api/projects/[projectId]/canvas-layout",
-        "src/lib/operations/canvas-action-catalog.ts",
         "messages/en/workspace.json",
         "messages/zh/workspace.json",
         "messages/en/project-workflow.json",

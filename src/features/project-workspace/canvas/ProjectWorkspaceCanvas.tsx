@@ -59,7 +59,6 @@ import type { WorkspaceCanvasFolderNodeData, WorkspaceCanvasNodeRecord } from '.
 import { collectWorkspaceNodeRuntimeTargets, resolveWorkspaceCanvasNodeData } from './workspace-node-runtime'
 import type {
   WorkspaceAssistantDraftRequest,
-  WorkspaceCanvasCreateRequest,
   WorkspaceCanvasPathFocusRequest,
   WorkspaceCanvasResourceOperationView,
   WorkspaceCanvasSelection,
@@ -69,14 +68,12 @@ import { useCanvasOperationAction } from './actions/useCanvasOperationAction'
 import { useCanvasResourceDeleteAction } from './actions/useCanvasResourceDeleteAction'
 import { CanvasOperationConfirmationModal } from './actions/CanvasOperationConfirmationModal'
 import { WorkspaceResourcePreviewModal } from './preview/WorkspaceResourcePreviewModal'
-import { useCanvasActions } from '@/lib/query/hooks/useCanvasActions'
-import { WorkspaceCanvasCreateDock } from './create/WorkspaceCanvasCreateDock'
 import { workspaceNodeId } from './workspace-canvas-node-ids'
 import { useCanvasUploadQueue, type CanvasUploadQueueItem } from './upload/useCanvasUploadQueue'
 import { CanvasUploadQueue } from './upload/CanvasUploadQueue'
+import { WorkspaceCanvasUploadDock } from './upload/WorkspaceCanvasUploadDock'
 import { CanvasViewportControls } from './controls/CanvasViewportControls'
 import { CanvasFolderNavigation } from './controls/CanvasFolderNavigation'
-import { buildWorkspaceCanvasCreateOperationInput } from './create/canvas-create-input'
 import { useCanvasUploadBridge } from './upload/useCanvasUploadBridge'
 
 const EMPTY_SAVED_NODE_LAYOUTS: readonly CanvasNodeLayout[] = []
@@ -183,12 +180,6 @@ function ProjectWorkspaceFolderCanvas({
   const { projectId } = useWorkspaceProvider()
   const { data: projectData } = useProjectData(projectId)
   const projectAspectRatio = projectData?.videoRatio ?? null
-  const {
-    data: canvasActions,
-    isLoading: canvasActionsLoading,
-    isError: canvasActionsFailed,
-    refetch: retryCanvasActions,
-  } = useCanvasActions(projectId)
   const folderQuery = useWorkspaceResources({
     projectId,
     prefix: folder.workspacePath || null,
@@ -213,13 +204,12 @@ function ProjectWorkspaceFolderCanvas({
     enabled: Boolean(normalizedSearch),
   })
   const searchResults = useMemo(() => flattenResources(searchQuery.data), [searchQuery.data])
-  const [createDraft, setCreateDraft] = useState<{
+  const [uploadDraft, setUploadDraft] = useState<{
     readonly id: string
-    readonly position: WorkspaceCanvasCreateRequest['position']
-    readonly handoffTargetNodeIds: readonly string[] | null
+    readonly position: { readonly x: number; readonly y: number }
   } | null>(null)
-  const closeCreateDraft = useCallback((draftId: string) => {
-    setCreateDraft((current) => current?.id === draftId ? null : current)
+  const closeUploadDraft = useCallback((draftId: string) => {
+    setUploadDraft((current) => current?.id === draftId ? null : current)
   }, [])
   const reactFlow = useReactFlow<WorkspaceCanvasFlowNode>()
   const canvasRef = useRef<HTMLDivElement | null>(null)
@@ -550,18 +540,10 @@ function ProjectWorkspaceFolderCanvas({
     canvasRef.current?.focus()
     onSelectionChange(null)
     if (event.detail !== 2) return
-    if (operationAction.busy || deleteAction.busy || createDraft?.handoffTargetNodeIds) return
     notifyCanvasUserInteraction()
     const flow = reactFlow.screenToFlowPosition({ x: event.clientX, y: event.clientY })
-    setCreateDraft({ id: crypto.randomUUID(), position: flow, handoffTargetNodeIds: null })
-  }, [createDraft?.handoffTargetNodeIds, deleteAction.busy, notifyCanvasUserInteraction, onSelectionChange, operationAction.busy, reactFlow])
-  useEffect(() => {
-    const targetNodeIds = createDraft?.handoffTargetNodeIds
-    if (!createDraft || !targetNodeIds || targetNodeIds.length === 0) return
-    const projectedNodeIds = new Set(projectedNodes.map((node) => node.id))
-    if (!targetNodeIds.every((nodeId) => projectedNodeIds.has(nodeId))) return
-    closeCreateDraft(createDraft.id)
-  }, [closeCreateDraft, createDraft, projectedNodes, projectionNodeSignature])
+    setUploadDraft({ id: crypto.randomUUID(), position: flow })
+  }, [notifyCanvasUserInteraction, onSelectionChange, reactFlow])
   const handleMoveStart = useCallback((event: MouseEvent | TouchEvent | null) => {
     if (event) notifyCanvasUserInteraction()
   }, [notifyCanvasUserInteraction])
@@ -627,40 +609,6 @@ function ProjectWorkspaceFolderCanvas({
       confirmation: operation.confirmation,
     })
   }, [deleteAction, operationAction, selectedNode])
-  const placePlannedResources = useCallback((request: WorkspaceCanvasCreateRequest, targetIds: readonly string[]) => {
-    const uniqueTargetIds = [...new Set(targetIds)]
-    setUserNodePositions((current) => {
-      const next = new Map(current)
-      uniqueTargetIds.forEach((targetId, index) => {
-        const nodeId = workspaceNodeId.resourceCard(targetId)
-        pendingPlacementNodeIdsRef.current.add(nodeId)
-        next.set(nodeId, {
-          x: request.position.x + (index % 3) * 36,
-          y: request.position.y + Math.floor(index / 3) * 36,
-        })
-      })
-      return next
-    })
-  }, [])
-  const submitCanvasCreation = useCallback((draftId: string, request: WorkspaceCanvasCreateRequest) => {
-    const folderPath = folder.folderKey === WORKSPACE_RESOURCE_ROOT_FOLDER_KEY
-      ? null
-      : folder.workspacePath
-    void operationAction.begin({
-      operationId: request.capability.operationId,
-      input: buildWorkspaceCanvasCreateOperationInput(request, folderPath),
-      confirmation: 'billable_media',
-      onAccepted: (plan) => {
-        if (!plan) return
-        const targetIds = [...new Set(plan.tasks.map((task) => task.targetId))]
-        placePlannedResources(request, targetIds)
-        setCreateDraft((current) => current?.id === draftId ? {
-          ...current,
-          handoffTargetNodeIds: targetIds.map((targetId) => workspaceNodeId.resourceCard(targetId)),
-        } : current)
-      },
-    })
-  }, [folder.folderKey, folder.workspacePath, operationAction, placePlannedResources])
   const selectionForCard = useCallback((card: WorkspaceResourceCardMemberView): WorkspaceCanvasSelection | null => {
     const node = flowNodes.find((candidate) => candidate.data.targetId === card.resource.resourceId)
     return node ? selectionForNode(node) : null
@@ -821,25 +769,15 @@ function ProjectWorkspaceFolderCanvas({
               </span>
             </Panel>
           ) : null}
-          {createDraft ? (
-            <ViewportPortal key={createDraft.id}>
-              <WorkspaceCanvasCreateDock
-                position={createDraft.position}
-                capabilities={canvasActions?.creation ?? []}
-                loading={canvasActionsLoading}
-                loadFailed={canvasActionsFailed}
-                projectAspectRatio={projectAspectRatio}
-                dismissible={
-                  !operationAction.busy
-                  && createDraft.handoffTargetNodeIds === null
-                }
-                onRetryCapabilities={() => { void retryCanvasActions() }}
-                onSubmit={(request) => submitCanvasCreation(createDraft.id, request)}
+          {uploadDraft ? (
+            <ViewportPortal key={uploadDraft.id}>
+              <WorkspaceCanvasUploadDock
+                position={uploadDraft.position}
                 onUpload={() => {
-                  openUploadPicker(createDraft.position)
-                  closeCreateDraft(createDraft.id)
+                  openUploadPicker(uploadDraft.position)
+                  closeUploadDraft(uploadDraft.id)
                 }}
-                onClose={() => closeCreateDraft(createDraft.id)}
+                onClose={() => closeUploadDraft(uploadDraft.id)}
               />
             </ViewportPortal>
           ) : null}
