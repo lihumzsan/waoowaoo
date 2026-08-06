@@ -28,9 +28,10 @@
   bootstrap 进程。禁止另建自研 console 扫描脚本。
 - **LG-07 — 语义 action 由所属生命周期契约拥有。** 关键 action 必须与其唯一生命周期 owner 同步
   演进；禁止用源码字符串或文件存在性脚本冒充运行协议 oracle。
-- **LG-08 — 用户 reference 与内部 cause 分离。** 对外只携带可公开的 request/task/turn identity
-  供用户报障；原始 cause、Provider detail 与 stack 只进服务端日志或既有持久诊断字段。不得为了
-  可观测性把内部 message 复制回 toast、模型历史或公开响应。
+- **LG-08 — 用户、Assistant 与内部投影分离。** 公开 UI 只携带可公开的 request/task/turn identity
+  与本地化字段；原始 cause、Provider detail 与 stack 只进服务端日志或持久失败事实。Assistant 可
+  获得同一 FailureRecord 的脱敏原生 name/message/code/status/request id 与阶段，不得获得 secret、
+  stack、业务原文或未脱敏 metadata。
 
 ## 权威入口
 

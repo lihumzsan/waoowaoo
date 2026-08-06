@@ -24,8 +24,8 @@ Provider 差异只停留在 `ai-providers` 的实现、`ai-exec` 的统一执行
   `ai-providers/<provider>/` 内。
 - **PG-03 — Provider 隔离。** provider 专属常量、option 和条件分支只留在自身目录内；跨 provider
   分支属于 registry/engine 的职责。
-- **PG-04 — 异步协议完整。** external id、轮询状态、成功结果、失败原因和 `retryable | permanent`
-  分类必须由共享 discriminated union 与唯一 normalizer 归一。`failed` 缺 disposition、未知
+- **PG-04 — 异步协议完整。** external id、轮询状态、成功结果、原生失败原因和明确的副作用终态
+  分类必须由共享 discriminated union 与唯一 normalizer 归一。`failed` 缺完整 FailureRecord、未知
   provider 状态、失败被映射成完成，都必须原地失败。网络异常直接抛出并恢复同一 external id，
   不得伪装成 provider 终态。
 - **PG-05 — 精确模型、零自动降级。** 不支持的模型、能力、输出、账户额度或 provider 故障必须在
@@ -68,11 +68,12 @@ Provider 差异只停留在 `ai-providers` 的实现、`ai-exec` 的统一执行
 - **PG-18 — 外部下载只有一个 SSRF-safe 出口。** scheme、凭据、私网/保留地址、DNS 全部结果与
   每一次 redirect 都 fail closed，实际 socket lookup 必须再次执行同一 policy（防 DNS rebinding）。
   禁止 hostname-only 内网例外、普通 fetch 旁路或只检查首跳。
-- **PG-19 — Provider 边界产出 typed failure。** adapter 在最了解协议的位置把鉴权、欠费/配额、
-  限流、内容策略、超时与畸形结果映射为统一 registry code；异步失败结果必须携带 code。优先使用
+- **PG-19 — Provider 边界保留原生失败并追加 typed interpretation。** adapter 在最了解协议的位置
+  保存原生响应，再把鉴权、欠费/配额、限流、内容策略、超时与畸形结果映射为统一 registry code；
+  code 只用于产品解释，不能授权提交重放。异步失败结果必须携带完整 FailureRecord。优先使用
   结构化字段；仅当某个 Provider 没有独立 code 且 adapter 能严格、有界地识别其稳定文案协议时，
-  允许在该 adapter 私有解析，未知文案必须保留为未知拒绝。禁止共享 message classifier；原始响应
-  只进受限内部诊断。
+  允许在该 adapter 私有解析，未知文案必须保留原生 identity。禁止共享 message classifier；原始响应
+  进入脱敏 FailureRecord 与内部诊断。
 - **PG-20 — 同一模态共享一次 preflight。** planner 与执行层调用同一 option normalizer；planner
   还要在 Plan 前验证所选 provider 的凭证与连接配置。已冻结 option 到 adapter 前不得再补默认或
   删除未知字段。敏感内容拒绝是 permanent 业务事实，不能坍缩成内部错误或被跨工具绕过。

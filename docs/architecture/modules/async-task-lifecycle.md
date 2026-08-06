@@ -18,8 +18,9 @@ Task 是长运行执行的唯一业务事实。执行许可（attempt、retry、
   也不得在 commit 后带外启动执行。
 - **TL-05 — attempt 只有一个 owner。** business attempt 由 Workflow 创建并投影到 Task。DB
   status、lease、heartbeat 新鲜度或队列 job 都无权另行 claim attempt。
-- **TL-06 — 基础设施 retry 不消耗 business attempt。** 同一 attempt identity 复用。只有确定且
-  已归一化的失败经 registry policy 裁决后才推进下一次 business attempt；仍可重试时不得写
+- **TL-06 — 基础设施 retry 不消耗 business attempt。** 同一 attempt identity 复用。只有封闭
+  operation registry 与已提交的副作用事实允许重放时才推进下一次 business attempt；错误码、
+  文案和异常类型没有授权重放的能力；仍可重试时不得写
   Task/Resource/Billing 最终失败。
 - **TL-08 — Provider 调用有独立幂等 fence。** ledger 冻结 logical identity、输入指纹、route、
   external id 与结果。只有明确未受理、或 Provider 支持同一幂等身份时才允许重提；受理结果不明
@@ -36,8 +37,8 @@ Task 是长运行执行的唯一业务事实。执行许可（attempt、retry、
   replay 必须幂等。Task result 是交接输入，不是第二领域数据库。
 - **TL-22 — 执行平面不可用时提交失败关闭。** 无法确认执行已被持久接受时，调用方不得宣称 Task
   已提交；禁止 fire-and-forget、旁路队列或周期扫描兜底。
-- **TL-23 — 失败、重试、取消是三种事实。** 仍可重试时只投影 retrying；最终失败只持久化 registry
-  code、内部诊断、受限 details 与 origin 组成的同一 FailureRecord；Task 是该事实唯一 owner，Resource
+- **TL-23 — 失败、重试、取消是三种事实。** 仍可重试时只投影 retrying；最终失败只持久化原生证据、
+  产品解释、context 与恢复事实组成的同一 FailureRecord；Task 是该事实唯一 owner，Resource
   只保存生命周期并通过当前 taskId 读取失败。用户取消只写 canceled 且 failure 必须为空；公开出口
   只能投影 allow-list details，消费者不得从文案反解状态。
 - **TL-24 — Worker 只执行冻结计划。** payload 携带 planner 已验证的模型、canonical 参数与精确
@@ -66,7 +67,6 @@ Task 是长运行执行的唯一业务事实。执行许可（attempt、retry、
 - Task 与 WorkspaceResource 曾各存一份 errorCode/errorMessage，Worker 又在持久化前覆盖 Provider
   原因；新增 reader 每次只接一部分字段，同一失败换入口反复丢失 → Task 独占完整 FailureRecord，
   checkpoint、Temporal 与 follow-up 原样传递，Resource 只经 taskId 投影（TL-23）。
-- COS 曾返回 `UserNetworkTooSlow`，但 S3 adapter 没有把该 Provider identity 归一化为可重试网络失败；
-  通用 retry 因 fallback `INTERNAL_ERROR` 不可重试而在第一次上传后终止，已经付费生成的媒体无法物化且
-  用户冻结额度只能回滚 → 外部存储 adapter 显式归一化低速、超时、限流与 5xx，基础设施 retry 在
-  同一 business attempt 内复用已生成结果（TL-06/23）。
+- COS 曾返回 `UserNetworkTooSlow`，v1 先把未知异常降成 INTERNAL_ERROR，再用 code retryability 停止
+  上传；为该名字补白名单仍无法覆盖下一个未知错误 → 同 key 对象写由 operation 幂等契约重放，原生
+  COS 证据不经语义转换并随 FailureRecord 到达 Assistant（TL-06/23、FG-01/03）。

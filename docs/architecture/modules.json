@@ -104,7 +104,7 @@
         "src/lib/task/execution/handlers/workspace-resource-video-merge.ts",
         "src/lib/task/execution/handlers/workspace-resource-voice.ts",
         "src/lib/voice/voice-resource-service.ts",
-        "src/lib/video-compose/video-merge-ffmpeg.ts",
+        "src/lib/video-compose",
         "src/types/project.ts",
         "scripts/media-mapping.ts",
         "scripts/media-restore-dry-run.ts",
@@ -192,6 +192,7 @@
         ".env.cloud.example",
         "src/lib/user-api/runtime-config.ts",
         "src/lib/llm-observe",
+        "src/lib/image-cache.ts",
         "src/lib/media",
         "scripts/check-outbound-image-runtime-sample.ts",
         "scripts/check-outbound-image-success-rate.ts"
@@ -229,6 +230,24 @@
       ]
     },
     {
+      "id": "failure-governance",
+      "document": "docs/architecture/modules/failure-governance.md",
+      "title": "原生失败证据与重放裁决",
+      "sourcePaths": [
+        "src/lib/errors",
+        "src/lib/retry",
+        "src/lib/external-operation",
+        "src/lib/storage",
+        "src/lib/api-errors.ts",
+        "src/lib/adapters/operation-error-normalizer.ts",
+        "src/lib/media-process.ts",
+        "scripts/diagnose-project.ts",
+        "scripts/task-error-stats.ts",
+        "scripts/check-failure-governance.ts",
+        "prisma/migrations/20260807130000_failure_record_v2"
+      ]
+    },
+    {
       "id": "product-shell",
       "document": "docs/architecture/modules/product-shell.md",
       "title": "产品外壳、身份与本地化",
@@ -239,8 +258,6 @@
         "src/lib/auth.ts",
         "src/lib/auth",
         "src/lib/deployment",
-        "src/lib/errors",
-        "src/lib/storage",
         "src/lib/home",
         "src/lib/announcements",
         "src/lib/public-beta",
