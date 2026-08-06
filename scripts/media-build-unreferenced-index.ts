@@ -25,7 +25,7 @@ function nowStamp() {
 
 async function listStorageObjects(): Promise<{ storageType: 's3'; rows: StorageEntry[] }> {
   const config = loadS3StorageConfig()
-  const client = new S3Client(toS3ClientConfig(config))
+  const client = new S3Client(toS3ClientConfig(config, config.endpoint))
   const rows: StorageEntry[] = []
   for await (const page of paginateListObjectsV2({ client }, {
     Bucket: config.bucket,

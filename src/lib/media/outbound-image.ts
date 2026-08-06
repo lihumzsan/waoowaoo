@@ -193,7 +193,9 @@ function guessContentType(input: string, contentTypeHeader: string | null, buffe
 
 async function signStorageKey(storageKey: string): Promise<string> {
   const { getSignedObjectUrl, toFetchableUrl } = await getStorageHelpers()
-  return toFetchableUrl(await getSignedObjectUrl(storageKey, SIGNED_URL_TTL_SECONDS))
+  return toFetchableUrl(await getSignedObjectUrl(storageKey, {
+    expiresInSeconds: SIGNED_URL_TTL_SECONDS,
+  }))
 }
 
 async function toFetchableAbsoluteUrl(value: string): Promise<string> {

@@ -165,8 +165,11 @@ Visit [http://localhost:13000](http://localhost:13000) (Method 1 & 2) or [http:/
 > When running the app directly, do not skip `npm run db:push`. It synchronizes the Prisma schema before the application and workers start.
 >
 > Pre-create the object-storage bucket and grant the configured credentials permission to check
-> the bucket and read, write, and delete objects. `S3_ENDPOINT` must be an HTTPS endpoint reachable
-> by external AI providers. Local development uses a development bucket too, so no ngrok,
+> the bucket and read, write, and delete objects. `S3_ENDPOINT` is the HTTPS endpoint for reads,
+> signing, and control operations and must be reachable by external AI providers.
+> `S3_UPLOAD_ENDPOINT` is the PUT endpoint for the same bucket and may explicitly use a
+> cross-region acceleration endpoint; set it equal to `S3_ENDPOINT` when acceleration is not needed.
+> Local development uses a development bucket too, so no ngrok,
 > cloudflared, local-file storage, or Docker MinIO is required. AWS S3, Cloudflare R2, Tencent COS,
 > and Alibaba OSS share the same `S3_*` configuration. GCS requires its XML API and HMAC credentials.
 > Azure Blob does not implement S3 and is not directly supported.

@@ -4,9 +4,7 @@ import { withRetry } from '@/lib/retry'
 import { S3StorageProvider } from '@/lib/storage/providers/s3'
 import type {
   DeleteObjectsResult,
-  GetObjectStreamParams,
   ObjectMetadata,
-  ObjectStreamResult,
   StorageProvider,
 } from '@/lib/storage/types'
 import { DEFAULT_SIGNED_URL_EXPIRES_SECONDS } from '@/lib/storage/utils'
@@ -85,19 +83,23 @@ export async function getObjectMetadata(key: string): Promise<ObjectMetadata> {
   })
 }
 
-export async function getObjectStream(params: GetObjectStreamParams): Promise<ObjectStreamResult> {
-  return await withRetry({
-    operation: EXTERNAL_OPERATION.STORAGE_READ,
-    run: async () => await getStorageProvider().getObjectStream(params),
-  })
+export type SignedObjectUrlOptions = {
+  readonly expiresInSeconds?: number
+  readonly responseCacheControl?: string
 }
 
-export async function getSignedObjectUrl(key: string, expiresInSeconds: number = DEFAULT_SIGNED_URL_EXPIRES_SECONDS): Promise<string> {
+export async function getSignedObjectUrl(
+  key: string,
+  options: SignedObjectUrlOptions = {},
+): Promise<string> {
   return await withRetry({
     operation: EXTERNAL_OPERATION.STORAGE_SIGN,
     run: async () => await getStorageProvider().getSignedObjectUrl({
       key,
-      expiresInSeconds,
+      expiresInSeconds: options.expiresInSeconds ?? DEFAULT_SIGNED_URL_EXPIRES_SECONDS,
+      ...(options.responseCacheControl
+        ? { responseCacheControl: options.responseCacheControl }
+        : {}),
     }),
   })
 }

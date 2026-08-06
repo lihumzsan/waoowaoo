@@ -130,7 +130,9 @@ export async function resolveOwnedMediaForGeneration(
     })
   }
 
-  const url = await getSignedObjectUrl(media.storageKey, DEFAULT_SIGNED_URL_EXPIRES_SECONDS)
+  const url = await getSignedObjectUrl(media.storageKey, {
+    expiresInSeconds: DEFAULT_SIGNED_URL_EXPIRES_SECONDS,
+  })
   let parsedUrl: URL
   try {
     parsedUrl = new URL(url)

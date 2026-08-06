@@ -6,6 +6,7 @@ const DEFAULT_S3_REGION = 'us-east-1'
 
 export type S3StorageConfig = {
   readonly endpoint: string
+  readonly uploadEndpoint: string
   readonly region: string
   readonly bucket: string
   readonly forcePathStyle: boolean
@@ -16,25 +17,25 @@ export type S3StorageConfig = {
   }
 }
 
-function parseHttpsEndpoint(rawEndpoint: string): string {
+function parseHttpsEndpoint(name: string, rawEndpoint: string): string {
   let endpoint: URL
   try {
     endpoint = new URL(rawEndpoint)
   } catch {
-    throw new StorageConfigError('S3_ENDPOINT must be a valid absolute URL')
+    throw new StorageConfigError(`${name} must be a valid absolute URL`)
   }
 
   if (endpoint.protocol !== 'https:') {
-    throw new StorageConfigError('S3_ENDPOINT must use HTTPS')
+    throw new StorageConfigError(`${name} must use HTTPS`)
   }
   if (endpoint.username || endpoint.password) {
-    throw new StorageConfigError('S3_ENDPOINT must not contain credentials')
+    throw new StorageConfigError(`${name} must not contain credentials`)
   }
   if (endpoint.search || endpoint.hash) {
-    throw new StorageConfigError('S3_ENDPOINT must not contain query parameters or a fragment')
+    throw new StorageConfigError(`${name} must not contain query parameters or a fragment`)
   }
   if (endpoint.pathname !== '/' && endpoint.pathname !== '') {
-    throw new StorageConfigError('S3_ENDPOINT must not contain a path')
+    throw new StorageConfigError(`${name} must not contain a path`)
   }
 
   return endpoint.origin
@@ -51,7 +52,8 @@ function parseBooleanEnv(name: string, defaultValue: boolean): boolean {
 export function loadS3StorageConfig(): S3StorageConfig {
   const sessionToken = process.env.S3_SESSION_TOKEN?.trim()
   return {
-    endpoint: parseHttpsEndpoint(requireEnv('S3_ENDPOINT')),
+    endpoint: parseHttpsEndpoint('S3_ENDPOINT', requireEnv('S3_ENDPOINT')),
+    uploadEndpoint: parseHttpsEndpoint('S3_UPLOAD_ENDPOINT', requireEnv('S3_UPLOAD_ENDPOINT')),
     region: process.env.S3_REGION?.trim() || DEFAULT_S3_REGION,
     bucket: requireEnv('S3_BUCKET'),
     forcePathStyle: parseBooleanEnv('S3_FORCE_PATH_STYLE', false),
@@ -63,9 +65,9 @@ export function loadS3StorageConfig(): S3StorageConfig {
   }
 }
 
-export function toS3ClientConfig(config: S3StorageConfig): S3ClientConfig {
+export function toS3ClientConfig(config: S3StorageConfig, endpoint: string): S3ClientConfig {
   return {
-    endpoint: config.endpoint,
+    endpoint,
     region: config.region,
     forcePathStyle: config.forcePathStyle,
     credentials: config.credentials,

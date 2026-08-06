@@ -1,49 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getObjectStream } from '@/lib/storage'
+import { getSignedObjectUrl } from '@/lib/storage'
 import { authorizeMediaObjectRead } from '@/lib/media/storage-access-policy'
 import { apiHandler } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
 /**
- * MediaObject bytes are immutable (versions freeze content), so browsers may
- * cache aggressively. `private` keeps shared/CDN caches out — the scoped
- * authorization above stays the only distribution gate.
+ * The redirect must expire before the signed URL. `private` keeps shared/CDN
+ * caches out, so this route remains the only authorization gate while the
+ * browser downloads immutable bytes directly from object storage.
  */
-const MEDIA_CACHE_CONTROL = 'private, max-age=31536000, immutable'
+const MEDIA_SIGNED_URL_EXPIRES_SECONDS = 60 * 60
+const MEDIA_CACHE_MAX_AGE_SECONDS = 55 * 60
+const MEDIA_CACHE_CONTROL = `private, max-age=${MEDIA_CACHE_MAX_AGE_SECONDS}, immutable`
 
 function buildEtag(media: { sha256?: string | null; id: string; updatedAt?: string | Date | null }) {
   if (media.sha256) return `"${media.sha256}"`
   return `W/"media-${media.id}-${media.updatedAt || '0'}"`
 }
 
-function readErrorStatus(error: unknown): number | null {
-  const statusCode = (error as { $metadata?: { httpStatusCode?: unknown } } | null)?.$metadata?.httpStatusCode
-  if (typeof statusCode === 'number') return statusCode
-
-  const code = (error as { code?: unknown; name?: unknown } | null)?.code
-  if (code === 'ENOENT') return 404
-
-  const name = (error as { name?: unknown } | null)?.name
-  if (name === 'NoSuchKey' || name === 'NotFound') return 404
-  if (name === 'InvalidRange') return 416
-
-  return null
-}
-
-function storageErrorResponse(error: unknown): Response {
-  const status = readErrorStatus(error)
-  if (status === 404) {
-    return NextResponse.json({ error: 'Media not found in storage' }, { status: 404 })
-  }
-  if (status === 416) {
-    return NextResponse.json({ error: 'Requested range not satisfiable' }, { status: 416 })
-  }
-  return NextResponse.json({ error: 'Failed to fetch media' }, { status: 502 })
-}
-
 export const GET = apiHandler(async (
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: Promise<{ publicId: string }> },
 ) => {
   const { publicId } = await context.params
@@ -54,51 +31,17 @@ export const GET = apiHandler(async (
     return NextResponse.json({ error: 'Media storage key missing' }, { status: 500 })
   }
 
-  const etag = buildEtag({
-    id: media.id,
-    sha256: media.sha256,
-    updatedAt: media.updatedAt || null,
+  const signedUrl = await getSignedObjectUrl(media.storageKey, {
+    expiresInSeconds: MEDIA_SIGNED_URL_EXPIRES_SECONDS,
+    responseCacheControl: MEDIA_CACHE_CONTROL,
   })
 
-  const ifNoneMatch = request.headers.get('if-none-match')
-  if (ifNoneMatch && ifNoneMatch === etag) {
-    return new NextResponse(null, {
-      status: 304,
-      headers: {
-        ETag: etag,
-        'Cache-Control': MEDIA_CACHE_CONTROL,
-      },
-    })
-  }
-
-  const range = request.headers.get('range')
-
-  const object = await getObjectStream({
-    key: media.storageKey,
-    range,
-  }).catch(storageErrorResponse)
-
-  if (object instanceof Response) {
-    return object
-  }
-
-  const contentType = media.mimeType || object.contentType || 'application/octet-stream'
-
-  const headers = new Headers()
-  headers.set('Content-Type', contentType)
-  headers.set('Cache-Control', MEDIA_CACHE_CONTROL)
-  headers.set('ETag', etag)
-  if (object.contentLength != null) headers.set('Content-Length', String(object.contentLength))
-  if (object.contentRange) headers.set('Content-Range', object.contentRange)
-  if (object.acceptRanges) {
-    headers.set('Accept-Ranges', object.acceptRanges)
-  } else if (contentType.startsWith('video/') || contentType.startsWith('audio/')) {
-    headers.set('Accept-Ranges', 'bytes')
-  }
-
-  return new Response(object.body, {
-    status: object.statusCode,
-    headers,
+  return new NextResponse(null, {
+    status: 307,
+    headers: {
+      Location: signedUrl,
+      'Cache-Control': MEDIA_CACHE_CONTROL,
+    },
   })
 })
 

@@ -162,7 +162,9 @@ npm run dev
 > 跳过 `npm run db:push` 会导致数据库表结构缺失；请务必在启动应用与 worker 前运行。
 >
 > 对象存储桶必须预先创建，并允许当前凭据执行 bucket 检查以及对象读、写、删操作。
-> `S3_ENDPOINT` 必须是外部 AI Provider 可访问的 HTTPS endpoint；本地开发同样使用开发桶，
+> `S3_ENDPOINT` 是对象读取、签名与控制操作的 HTTPS endpoint，必须能被外部 AI Provider 访问；
+> `S3_UPLOAD_ENDPOINT` 是同一桶的 PUT endpoint，可显式填写跨地域加速地址；不需要加速时填写与
+> `S3_ENDPOINT` 相同的地址。本地开发同样使用开发桶，
 > 不需要 ngrok、cloudflared、本地文件存储或 Docker MinIO。AWS S3、Cloudflare R2、
 > 腾讯云 COS 与阿里云 OSS 只需切换同一组 `S3_*` 配置；GCS 需使用 XML API + HMAC 凭据。
 > Azure Blob 不是 S3 协议，本版本不直接支持。
