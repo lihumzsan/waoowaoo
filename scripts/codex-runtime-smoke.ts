@@ -263,6 +263,8 @@ async function runMcpSmoke(): Promise<void> {
   let sessionClosed = false
   const elicitationObserved = createSignal()
   const decisionElicitationObserved = createSignal()
+  const decisionCancellationObserved = createSignal()
+  let decisionElicitationCount = 0
   const approvalReleased = createSignal()
   const registry = createWaoMcpToolRegistry()
   const toolNames = registry.map((entry) => entry.name)
@@ -360,10 +362,17 @@ async function runMcpSmoke(): Promise<void> {
       )
       assert.equal(option.type, 'string')
       assert.ok(Array.isArray(option.oneOf))
-      decisionElicitationObserved.resolve()
+      decisionElicitationCount += 1
+      if (decisionElicitationCount === 1) {
+        decisionElicitationObserved.resolve()
+        return {
+          action: 'accept',
+          content: { optionId: 'direction_b' },
+        }
+      }
+      decisionCancellationObserved.resolve()
       return {
-        action: 'accept',
-        content: { optionId: 'direction_b' },
+        action: 'decline',
       }
     }
     elicitationObserved.resolve()
@@ -411,25 +420,26 @@ async function runMcpSmoke(): Promise<void> {
     assert.equal(result.isError, undefined)
     assert.deepEqual(calls, ['create_image'])
     assert.equal(completedCalls, 1)
+    const userDecisionArguments = {
+      header: 'Direction',
+      question: 'Which direction should the project use?',
+      options: [
+        {
+          id: 'direction_a',
+          label: 'Direction A',
+          description: 'Use a restrained documentary treatment.',
+        },
+        {
+          id: 'direction_b',
+          label: 'Direction B',
+          description: 'Use a cinematic narrative treatment.',
+        },
+      ],
+      otherLabel: 'Another direction',
+    }
     const decisionResult = await client.callTool({
       name: WAO_MCP_USER_DECISION_TOOL_NAME,
-      arguments: {
-        header: 'Direction',
-        question: 'Which direction should the project use?',
-        options: [
-          {
-            id: 'direction_a',
-            label: 'Direction A',
-            description: 'Use a restrained documentary treatment.',
-          },
-          {
-            id: 'direction_b',
-            label: 'Direction B',
-            description: 'Use a cinematic narrative treatment.',
-          },
-        ],
-        otherLabel: 'Another direction',
-      },
+      arguments: userDecisionArguments,
     })
     await decisionElicitationObserved.promise
     assert.equal(decisionResult.isError, undefined)
@@ -442,6 +452,19 @@ async function runMcpSmoke(): Promise<void> {
           optionId: 'direction_b',
           label: 'Direction B',
         },
+      },
+    })
+    const cancellationResult = await client.callTool({
+      name: WAO_MCP_USER_DECISION_TOOL_NAME,
+      arguments: userDecisionArguments,
+    })
+    await decisionCancellationObserved.promise
+    assert.equal(cancellationResult.isError, undefined)
+    assert.deepEqual(cancellationResult.structuredContent, {
+      ok: true,
+      data: {
+        outcome: 'cancelled',
+        action: 'decline',
       },
     })
     assert.deepEqual(calls, ['create_image'])

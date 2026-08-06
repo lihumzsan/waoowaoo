@@ -304,6 +304,17 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
   const properties = schema && isRecord(schema.properties)
     ? Object.entries(schema.properties)
     : []
+  const otherDecisionProperty = isWaoUserDecision
+    ? properties.find(([key]) => key === WAO_MCP_USER_DECISION_OTHER_FIELD)?.[1]
+    : null
+  const otherDecisionLabel = isRecord(otherDecisionProperty)
+    && typeof otherDecisionProperty.title === 'string'
+    && otherDecisionProperty.title.trim()
+    ? otherDecisionProperty.title
+    : null
+  const otherDecisionValue = typeof values[WAO_MCP_USER_DECISION_OTHER_FIELD] === 'string'
+    ? values[WAO_MCP_USER_DECISION_OTHER_FIELD]
+    : ''
   const required = new Set(
     schema && Array.isArray(schema.required)
       ? schema.required.filter((key): key is string => typeof key === 'string')
@@ -321,14 +332,6 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
     })
   )
   const formReady = schemaSupported && properties.every(([key, property]) => {
-    if (
-      isWaoUserDecision
-      && key === WAO_MCP_USER_DECISION_OTHER_FIELD
-      && values[WAO_MCP_USER_DECISION_OPTION_FIELD] === WAO_MCP_USER_DECISION_OTHER_OPTION_ID
-    ) {
-      const otherText = values[WAO_MCP_USER_DECISION_OTHER_FIELD]
-      return typeof otherText === 'string' && otherText.trim().length > 0
-    }
     if (!required.has(key)) return true
     if (!isRecord(property)) return false
     const value = values[key]
@@ -346,11 +349,6 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
     const result: Record<string, unknown> = {}
     for (const [key, property] of properties) {
       if (!isRecord(property)) continue
-      if (
-        isWaoUserDecision
-        && key === WAO_MCP_USER_DECISION_OTHER_FIELD
-        && values[WAO_MCP_USER_DECISION_OPTION_FIELD] !== WAO_MCP_USER_DECISION_OTHER_OPTION_ID
-      ) continue
       const value = values[key]
       if (property.type === 'boolean') {
         result[key] = value === true
@@ -368,10 +366,34 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
     }
     return result
   }
+  const submitCustomDecision = (): void => {
+    const answer = otherDecisionValue.trim()
+    if (!answer || submitting) return
+    submit({
+      action: 'accept',
+      content: {
+        [WAO_MCP_USER_DECISION_OPTION_FIELD]: WAO_MCP_USER_DECISION_OTHER_OPTION_ID,
+        [WAO_MCP_USER_DECISION_OTHER_FIELD]: answer,
+      },
+      _meta: null,
+    })
+  }
 
   return (
-    <div className="space-y-3 rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-sm text-[var(--glass-text-primary)]">
-      <p className="leading-5">{elicitation.message}</p>
+    <div className="relative space-y-3 rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-sm text-[var(--glass-text-primary)]">
+      {isWaoUserDecision ? (
+        <button
+          type="button"
+          aria-label={t('cards.cancelDecision')}
+          title={t('cards.cancelDecision')}
+          disabled={submitting}
+          className="absolute right-2.5 top-2.5 rounded-full p-1.5 text-[var(--glass-text-secondary)] transition-colors hover:bg-neutral-100 hover:text-[var(--glass-text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => submit({ action: 'decline', content: null, _meta: null })}
+        >
+          <AppIcon name="close" className="h-4 w-4" />
+        </button>
+      ) : null}
+      <p className={`leading-5 ${isWaoUserDecision ? 'pr-8' : ''}`}>{elicitation.message}</p>
       {elicitation.mode === 'url' && elicitation.url ? (
         <a
           href={elicitation.url}
@@ -393,16 +415,15 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
               ? property.description
               : null
             const enumOptions = runtimeEnumOptions(property)
-            if (
-              isWaoUserDecision
-              && key === WAO_MCP_USER_DECISION_OTHER_FIELD
-              && values[WAO_MCP_USER_DECISION_OPTION_FIELD] !== WAO_MCP_USER_DECISION_OTHER_OPTION_ID
-            ) return null
+            if (isWaoUserDecision && key === WAO_MCP_USER_DECISION_OTHER_FIELD) return null
             if (
               isWaoUserDecision
               && key === WAO_MCP_USER_DECISION_OPTION_FIELD
               && enumOptions.length > 0
             ) {
+              const decisionOptions = enumOptions.filter(
+                (option) => option.value !== WAO_MCP_USER_DECISION_OTHER_OPTION_ID,
+              )
               return (
                 <fieldset key={key} className="space-y-2">
                   <legend className="font-semibold">{label}</legend>
@@ -412,24 +433,60 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
                     </p>
                   ) : null}
                   <div className="grid gap-2">
-                    {enumOptions.map((option) => {
-                      const selected = values[key] === option.value
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          aria-pressed={selected}
+                    {decisionOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        disabled={submitting}
+                        className="rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 py-2 text-left font-medium transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
+                        onClick={() => submit({
+                          action: 'accept',
+                          content: { [WAO_MCP_USER_DECISION_OPTION_FIELD]: option.value },
+                          _meta: null,
+                        })}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                    {otherDecisionLabel ? (
+                      <div className="relative">
+                        <input
+                          type="text"
+                          minLength={isRecord(otherDecisionProperty) && typeof otherDecisionProperty.minLength === 'number'
+                            ? otherDecisionProperty.minLength
+                            : undefined}
+                          maxLength={isRecord(otherDecisionProperty) && typeof otherDecisionProperty.maxLength === 'number'
+                            ? otherDecisionProperty.maxLength
+                            : undefined}
+                          value={otherDecisionValue}
+                          placeholder={otherDecisionLabel}
                           disabled={submitting}
-                          className={`rounded-xl border px-3 py-2 text-left font-medium transition-colors ${selected ? 'border-neutral-900 bg-neutral-50' : 'border-[var(--glass-stroke-base)] bg-white hover:bg-neutral-100'}`}
-                          onClick={() => {
-                            setValues((current) => ({ ...current, [key]: option.value }))
+                          className="w-full rounded-xl border border-[var(--glass-stroke-base)] bg-white py-2 pl-3 pr-11 outline-none focus:border-neutral-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          onChange={(event) => {
+                            setValues((current) => ({
+                              ...current,
+                              [WAO_MCP_USER_DECISION_OTHER_FIELD]: event.target.value,
+                            }))
                             setError(false)
                           }}
+                          onKeyDown={(event) => {
+                            if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
+                            event.preventDefault()
+                            submitCustomDecision()
+                          }}
+                        />
+                        <button
+                          type="button"
+                          aria-label={t('cards.sendDecision')}
+                          title={t('cards.sendDecision')}
+                          disabled={submitting || !otherDecisionValue.trim()}
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg bg-neutral-900 p-1.5 text-white transition-colors hover:bg-neutral-700 disabled:cursor-not-allowed disabled:bg-neutral-300"
+                          onClick={submitCustomDecision}
                         >
-                          {option.label}
+                          <AppIcon name="arrowRight" className="h-4 w-4" />
                         </button>
-                      )
-                    })}
+                      </div>
+                    ) : null}
                   </div>
                 </fieldset>
               )
@@ -542,32 +599,30 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
           {t('cards.interactionSubmitErrorFallback')}
         </div>
       ) : null}
-      <div className="flex gap-2">
-        <button
-          type="button"
-          disabled={submitting || (elicitation.mode === 'form' && !formReady)}
-          className="flex-1 rounded-xl bg-neutral-900 px-3 py-2 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
-          onClick={() => submit({
-            action: 'accept',
-            content: elicitation.mode === 'form' ? formContent() : null,
-            _meta: null,
-          })}
-        >
-          {submitting
-            ? t('cards.interactionSubmitting')
-            : isWaoUserDecision
-              ? t('cards.submitDecision')
-              : t('cards.confirmContinue')}
-        </button>
-        <button
-          type="button"
-          disabled={submitting}
-          className="rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 py-2 font-medium hover:bg-neutral-100 disabled:opacity-50"
-          onClick={() => submit({ action: 'decline', content: null, _meta: null })}
-        >
-          {isWaoUserDecision ? t('cards.cancelDecision') : t('cards.cancelAction')}
-        </button>
-      </div>
+      {!isWaoUserDecision ? (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={submitting || (elicitation.mode === 'form' && !formReady)}
+            className="flex-1 rounded-xl bg-neutral-900 px-3 py-2 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={() => submit({
+              action: 'accept',
+              content: elicitation.mode === 'form' ? formContent() : null,
+              _meta: null,
+            })}
+          >
+            {submitting ? t('cards.interactionSubmitting') : t('cards.confirmContinue')}
+          </button>
+          <button
+            type="button"
+            disabled={submitting}
+            className="rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 py-2 font-medium hover:bg-neutral-100 disabled:opacity-50"
+            onClick={() => submit({ action: 'decline', content: null, _meta: null })}
+          >
+            {t('cards.cancelAction')}
+          </button>
+        </div>
+      ) : null}
     </div>
   )
 }
