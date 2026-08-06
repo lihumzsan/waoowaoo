@@ -80,15 +80,15 @@ function IntervalSwitch({
 /**
  * The capacity block is the card's real differentiator.
  *
- * "9,000 credits" means nothing to someone choosing a plan; "about 134 images
- * or 29 clips" is the comparison they are actually making, so it gets the
+ * "9,000 credits" means nothing to someone choosing a plan; the corresponding
+ * number of clips is the comparison they are actually making, so it gets the
  * visual weight that a feature list repeated across all five cards does not
  * deserve.
  */
 function PlanCapacity({ plan }: { readonly plan: GlassPlan }) {
   const t = useTranslations('pricing.glass')
   return (
-    <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-[var(--glass-bg-muted)] px-3.5 py-4">
+    <div className="mt-4 rounded-2xl bg-[var(--glass-bg-muted)] px-3.5 py-4">
       <div className="min-w-0">
         <AppIcon
           name="video"
@@ -98,18 +98,6 @@ function PlanCapacity({ plan }: { readonly plan: GlassPlan }) {
         <p className="mt-3 text-[12px] leading-5 text-[var(--glass-text-primary)]">
           <span className="glass-num font-semibold">
             {t('capacityVideos', { count: formatCny(plan.monthlyVideos) })}
-          </span>
-        </p>
-      </div>
-      <div className="min-w-0">
-        <AppIcon
-          name="image"
-          className="h-4 w-4 text-[var(--glass-accent-from)]"
-          aria-hidden="true"
-        />
-        <p className="mt-3 text-[12px] leading-5 text-[var(--glass-text-primary)]">
-          <span className="glass-num font-semibold">
-            {t('capacityImages', { count: formatCny(plan.monthlyImages) })}
           </span>
         </p>
       </div>
@@ -304,7 +292,6 @@ export default function PricingGlassPageClient({
             duration: content.capacityReference.videoDurationSeconds,
             resolution: content.capacityReference.videoResolution,
             videoCredits: content.capacityReference.videoCredits,
-            imageCredits: content.capacityReference.imageCredits,
           })}
         </p>
 
