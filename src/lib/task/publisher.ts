@@ -312,6 +312,12 @@ export function buildTaskLifecycleEventPayload(params: {
     ),
     coveragePayload: params.coveragePayload ?? params.payload ?? null,
   })
+  if (normalizedType === TASK_EVENT_TYPE.CREATED) {
+    if (!params.affectedResources) {
+      throw new Error(`TASK_CREATED_AFFECTED_RESOURCES_REQUIRED:${params.taskId}`)
+    }
+    return { ...normalizedPayload, affectedResources: [...params.affectedResources] }
+  }
   if (!isTaskTerminalEventType(normalizedType)) {
     if (params.affectedResources !== undefined) {
       throw new Error(`TASK_NON_TERMINAL_AFFECTED_RESOURCES_FORBIDDEN:${params.taskId}`)
