@@ -41,7 +41,8 @@
     "waitlistConsentRequired": "Confirm that you agree to receive the public-beta notice",
     "waitlistFailed": "We could not reserve your place. Try again later.",
     "subscribeBusy": "Redirecting…",
-    "firstMonthPromo": "First purchase ¥{amount}",
+    "firstPurchaseBadge": "First-purchase price",
+    "originalPrice": "List price ¥{amount}",
     "creditsPerMonth": "{credits} credits granted monthly",
     "oneOffTitle": "Just want credits? Top up instead",
     "yearlySaveHint": "2 months free",
@@ -68,6 +69,6 @@
     "rechargeSucceeded": "{credits} credits added",
     "currentPlanBadge": "Your plan",
     "planExtendCta": "Extend",
-    "capacityVideos": "{count} premium clips"
+    "capacityVideos": "About {count} premium clips"
   }
 }

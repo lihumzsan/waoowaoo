@@ -41,7 +41,8 @@
     "waitlistConsentRequired": "请确认同意接收公测通知",
     "waitlistFailed": "预约失败，请稍后重试",
     "subscribeBusy": "正在跳转…",
-    "firstMonthPromo": "首次购买仅 ¥{amount}",
+    "firstPurchaseBadge": "首次购买价",
+    "originalPrice": "原价 ¥{amount}",
     "creditsPerMonth": "每月发放 {credits} credits",
     "oneOffTitle": "只想买额度？直接充值",
     "yearlySaveHint": "省 2 个月",
@@ -68,6 +69,6 @@
     "rechargeSucceeded": "已到账 {credits} credits",
     "currentPlanBadge": "当前套餐",
     "planExtendCta": "追加购买",
-    "capacityVideos": "{count} 段顶级视频"
+    "capacityVideos": "约 {count} 段顶级视频"
   }
 }

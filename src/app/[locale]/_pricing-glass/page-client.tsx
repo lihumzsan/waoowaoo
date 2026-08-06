@@ -125,6 +125,10 @@ function PlanCard({
   const t = useTranslations('pricing.glass')
   const priced = plan.intervals[interval]
   const featured = plan.featured
+  const promoPriceCny = interval === 'month' ? plan.firstMonthPromoCny : null
+  const headlinePriceCny = promoPriceCny ?? (
+    interval === 'year' ? priced.monthlyEquivalentCny : priced.periodPriceCny
+  )
 
   return (
     <article
@@ -156,7 +160,7 @@ function PlanCard({
           though only some of them carry a promo or a yearly total. */}
       <div className="mt-5 flex items-baseline gap-1.5">
         <span className="glass-num text-[2rem] font-semibold leading-none tracking-[-0.035em] text-[var(--glass-text-primary)]">
-          ¥{formatCny(interval === 'year' ? priced.monthlyEquivalentCny : priced.periodPriceCny)}
+          ¥{formatCny(headlinePriceCny)}
         </span>
         <span className="text-[12px] text-[var(--glass-text-tertiary)]">{t('perMonth')}</span>
       </div>
@@ -172,10 +176,15 @@ function PlanCard({
               </span>
             ) : null}
           </>
-        ) : plan.firstMonthPromoCny !== null ? (
-          <span className="glass-num rounded-full bg-[var(--glass-tone-success-bg)] px-1.5 py-0.5 font-semibold text-[var(--glass-tone-success-fg)] shadow-[var(--glass-tone-shadow)]">
-            {t('firstMonthPromo', { amount: formatCny(plan.firstMonthPromoCny) })}
-          </span>
+        ) : promoPriceCny !== null ? (
+          <>
+            <span className="rounded-full bg-[var(--glass-tone-success-bg)] px-1.5 py-0.5 font-semibold text-[var(--glass-tone-success-fg)] shadow-[var(--glass-tone-shadow)]">
+              {t('firstPurchaseBadge')}
+            </span>
+            <span className="glass-num text-[var(--glass-text-tertiary)] line-through">
+              {t('originalPrice', { amount: formatCny(priced.periodPriceCny) })}
+            </span>
+          </>
         ) : null}
       </div>
 
@@ -247,14 +256,8 @@ export default function PricingGlassPageClient({
                 </p>
               </div>
               <div className="flex shrink-0 flex-col items-center rounded-2xl bg-[var(--glass-tone-info-bg)] px-8 py-4 text-center shadow-[var(--glass-tone-shadow)]">
-                <p className="text-[12px] font-semibold text-[var(--glass-tone-info-fg)]">
-                  {paidBetaCampaign.paymentOpen ? beta('seatsLeftLabel') : beta('soldOut')}
-                </p>
-                <p className="glass-num mt-1 bg-gradient-to-br from-[var(--glass-accent-from)] to-[var(--glass-accent-to)] bg-clip-text text-[56px] font-bold leading-none tracking-tight text-transparent">
+                <p className="glass-num bg-gradient-to-br from-[var(--glass-accent-from)] to-[var(--glass-accent-to)] bg-clip-text text-[56px] font-bold leading-none tracking-tight text-transparent">
                   {paidBetaCampaign.paymentOpen ? paidBetaCampaign.remaining : 0}
-                </p>
-                <p className="mt-1.5 text-[11px] font-medium text-[var(--glass-tone-info-fg)]">
-                  {beta('seatCap', { capacity: paidBetaCampaign.capacity })}
                 </p>
               </div>
             </div>
