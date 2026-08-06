@@ -256,8 +256,8 @@ export default function PricingGlassPageClient({
                 </p>
               </div>
               <div className="flex shrink-0 flex-col items-center rounded-2xl bg-[var(--glass-tone-info-bg)] px-8 py-4 text-center shadow-[var(--glass-tone-shadow)]">
-                <p className="glass-num bg-gradient-to-br from-[var(--glass-accent-from)] to-[var(--glass-accent-to)] bg-clip-text text-[56px] font-bold leading-none tracking-tight text-transparent">
-                  {paidBetaCampaign.paymentOpen ? paidBetaCampaign.remaining : 0}
+                <p className="bg-gradient-to-br from-[var(--glass-accent-from)] to-[var(--glass-accent-to)] bg-clip-text text-[16px] font-bold leading-6 tracking-tight text-transparent">
+                  {beta('seatCapacity', { capacity: paidBetaCampaign.capacity })}
                 </p>
               </div>
             </div>

@@ -2,6 +2,7 @@
   "eyebrow": "限时付费内测",
   "headline": "任意充值，登上首期内测小船 🚀",
   "benefit": "任意充值即可解锁用户群，和ceo以及开发团队们来场 1v1 灵感碰撞 ✨",
+  "seatCapacity": "首期内测仅有 {capacity} 个名额",
   "soldOutHint": "100 位灵感搭子已经集合完毕，下一期见啦。",
   "paymentSuccessTitle": "付款成功，找到组织啦 🎉",
   "paymentSuccessBody": "扫码加入内测用户群，和ceo以及开发团队们来场 1v1 灵感碰撞 ✨",

@@ -2,6 +2,7 @@
   "eyebrow": "Limited paid private beta",
   "headline": "Top up anything and join our first private-beta wave 🚀",
   "benefit": "Any purchase unlocks the community group and a 1:1 idea jam with our CEO and developers ✨",
+  "seatCapacity": "Only {capacity} spots in the first private beta",
   "soldOutHint": "All 100 idea people are aboard. See you in the next wave.",
   "paymentSuccessTitle": "Payment received — welcome aboard 🎉",
   "paymentSuccessBody": "Scan to join the private-beta group and have a 1:1 idea jam with our CEO and developers ✨",
