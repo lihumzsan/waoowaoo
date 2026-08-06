@@ -25,6 +25,10 @@ import {
   isPublicDeploymentFeatures,
   type PublicDeploymentFeatures,
 } from '@/lib/deployment/public-client'
+import {
+  DEFAULT_USER_TIME_ZONE,
+  resolveBrowserUserTimeZone,
+} from '@/lib/user-time-zone'
 
 type DeploymentPayload = {
   features?: PublicDeploymentFeatures
@@ -97,6 +101,7 @@ export default function ProfilePage() {
   const [projectCosts, setProjectCosts] = useState<ProfileProjectCostSummary[]>([])
   const [totalProjectCost, setTotalProjectCost] = useState(0)
   const [paymentNotice, setPaymentNotice] = useState<string | null>(null)
+  const [userTimeZone, setUserTimeZone] = useState(DEFAULT_USER_TIME_ZONE)
   const isSigningOutRef = useRef(false)
   const activeSection = deploymentFeatures
     && !isProfileSectionEnabled(urlSection, deploymentFeatures)
@@ -105,6 +110,10 @@ export default function ProfilePage() {
   const checkoutSucceeded = searchParams.get('payment') === 'success'
     || searchParams.get('plan') === 'success'
   const checkoutSessionId = checkoutSucceeded ? searchParams.get('session_id') : null
+
+  useEffect(() => {
+    setUserTimeZone(resolveBrowserUserTimeZone())
+  }, [])
 
   const handleSignOut = useCallback(async () => {
     isSigningOutRef.current = true
@@ -317,6 +326,7 @@ export default function ProfilePage() {
               <ProfileOverviewSection
                 balance={balance}
                 transactions={transactions}
+                timeZone={userTimeZone}
                 showUpgrade={showRecharge}
                 paymentNotice={paymentNotice}
                 onViewAllTransactions={() => handleSectionChange('billing')}
@@ -326,6 +336,7 @@ export default function ProfilePage() {
                 transactions={transactions}
                 projectCosts={projectCosts}
                 totalProjectCost={totalProjectCost}
+                timeZone={userTimeZone}
                 currency={balance?.currency}
                 onLoadProjectDetails={loadProjectCostDetails}
                 onRefresh={() => {

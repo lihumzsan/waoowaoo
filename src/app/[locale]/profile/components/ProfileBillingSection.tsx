@@ -27,6 +27,7 @@ interface ProfileBillingSectionProps {
   transactions: readonly ProfileTransactionItem[]
   projectCosts: readonly ProfileProjectCostSummary[]
   totalProjectCost: number
+  timeZone: string
   currency?: string
   onRefresh: () => void
   onLoadProjectDetails: (projectId: string) => Promise<readonly ProfileProjectCostDetail[]>
@@ -36,6 +37,7 @@ export default function ProfileBillingSection({
   transactions,
   projectCosts,
   totalProjectCost,
+  timeZone,
   currency,
   onRefresh,
   onLoadProjectDetails,
@@ -184,6 +186,7 @@ export default function ProfileBillingSection({
                                       day: '2-digit',
                                       hour: '2-digit',
                                       minute: '2-digit',
+                                      timeZone,
                                     })}
                                   </td>
                                 </tr>
@@ -205,7 +208,11 @@ export default function ProfileBillingSection({
         <h2 className="mb-4 text-lg font-semibold tracking-tight text-[var(--glass-text-primary)]">
           {t('accountTransactions')}
         </h2>
-        <ProfileTransactionsTable items={transactions} currency={currency} />
+        <ProfileTransactionsTable
+          items={transactions}
+          currency={currency}
+          timeZone={timeZone}
+        />
       </section>
     </div>
   )

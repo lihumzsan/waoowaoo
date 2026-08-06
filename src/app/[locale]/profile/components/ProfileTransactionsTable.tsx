@@ -53,9 +53,11 @@ function readReceiptUrl(meta: Record<string, unknown> | null | undefined): strin
 export default function ProfileTransactionsTable({
   items,
   currency,
+  timeZone,
 }: {
   items: readonly ProfileTransactionItem[]
   currency?: string
+  timeZone: string
 }) {
   const t = useTranslations('profile')
   const format = useFormatter()
@@ -171,6 +173,7 @@ export default function ProfileTransactionsTable({
                   day: '2-digit',
                   hour: '2-digit',
                   minute: '2-digit',
+                  timeZone,
                 })}
               </td>
             </tr>

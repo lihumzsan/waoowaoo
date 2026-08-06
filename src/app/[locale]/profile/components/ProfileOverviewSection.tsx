@@ -75,6 +75,7 @@ function formatDay(iso: string): string {
 interface ProfileOverviewSectionProps {
   balance: ProfileBalanceSummary | null
   transactions: readonly ProfileTransactionItem[]
+  timeZone: string
   showUpgrade: boolean
   /** Stripe 回跳后的支付结果提示,由 page 拥有。 */
   paymentNotice: string | null
@@ -84,6 +85,7 @@ interface ProfileOverviewSectionProps {
 export default function ProfileOverviewSection({
   balance,
   transactions,
+  timeZone,
   showUpgrade,
   paymentNotice,
   onViewAllTransactions,
@@ -250,7 +252,11 @@ export default function ProfileOverviewSection({
             <AppIcon name="arrowRight" className="h-3.5 w-3.5" />
           </button>
         </div>
-        <ProfileTransactionsTable items={transactions.slice(0, 5)} currency={balance?.currency} />
+        <ProfileTransactionsTable
+          items={transactions.slice(0, 5)}
+          currency={balance?.currency}
+          timeZone={timeZone}
+        />
       </section>
     </div>
   )
