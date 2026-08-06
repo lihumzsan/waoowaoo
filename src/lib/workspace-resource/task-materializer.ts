@@ -92,6 +92,7 @@ export async function materializeWorkspaceResourceTaskTerminalInTransaction(
     await settleWorkspaceResourceFailureInTransaction(tx, {
       resourceId: input.task.targetId,
       userId: input.task.userId,
+      projectId: input.task.projectId,
       status: input.kind === 'canceled' ? 'canceled' : 'failed',
     })
     return { resourceId: input.task.targetId, resourceStatus: input.kind === 'canceled' ? 'canceled' : 'failed' }
@@ -112,6 +113,7 @@ export async function materializeWorkspaceResourceTaskTerminalInTransaction(
   const materialized = await materializeWorkspaceResourceInTransaction(tx, {
     resourceId: payload.resourceId,
     userId: input.task.userId,
+    projectId: input.task.projectId,
     mediaType: payload.mediaType,
     schemaId: payload.schemaId,
     content: { kind: 'media', mediaId },

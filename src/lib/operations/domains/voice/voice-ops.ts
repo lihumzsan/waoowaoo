@@ -7,9 +7,11 @@ import {
   workspaceResourceDisplayName,
 } from '@/lib/workspace-resource/path'
 import {
+  bindWorkspaceResourceTasksInTransaction,
   createWorkspaceResourceFolderInTransaction,
   reserveWorkspaceResourceInTransaction,
   resolveGeneratedWorkspaceResourcePlacement,
+  retryWorkspaceResourcesInTransaction,
 } from '@/lib/workspace-resource/persistence'
 import { WORKSPACE_RESOURCE_SCHEMA } from '@/lib/workspace-resource/schema-registry'
 import { buildWorkspaceResourceLifecycleProjection } from '@/lib/workspace-resource/task-runtime-envelope'
@@ -358,16 +360,25 @@ async function commitVoice(ctx: ProjectAgentOperationContext, plan: OperationPla
       })
     }
   } else {
-    const updated = await authorization.transaction.workspaceResource.updateMany({
-      where: {
-        id: { in: metadata.resources.map((resource) => resource.resourceId) },
-        userId: ctx.userId,
-        projectId: ctx.projectId,
-        status: { in: ['failed', 'canceled'] },
-      },
-      data: { status: 'pending', operationId: 'generate_voice' },
+    await retryWorkspaceResourcesInTransaction(authorization.transaction, {
+      userId: ctx.userId,
+      projectId: ctx.projectId,
+      resources: metadata.resources.map((resource) => {
+        const task = plan.tasks.find((candidate) => candidate.id === resource.taskPlanId)
+        if (!task) throw new Error(`VOICE_PLAN_TASK_MISSING:${resource.taskPlanId}`)
+        const payload = parseWorkspaceResourceGenerationTaskPayload(task.payload)
+        return {
+          resourceId: resource.resourceId,
+          operationId: 'generate_voice',
+          operationExecutionId: authorization.operationExecutionId,
+          inputHash: payload.resource.inputHash,
+          prompt: payload.resource.prompt,
+          modelKey: payload.resource.modelKey,
+          generationOptions: payload.generationOptions,
+          toolCallId: ctx.toolCallId?.trim() || null,
+        }
+      }),
     })
-    if (updated.count !== metadata.resources.length) throw new Error('WORKSPACE_RESOURCE_RETRY_TARGET_CHANGED:generate_voice')
   }
   const submitted = await submitPlannedOperationTasks({ ctx, operationId: 'generate_voice' })
   const results = plan.tasks.map((task) => {
@@ -375,15 +386,15 @@ async function commitVoice(ctx: ProjectAgentOperationContext, plan: OperationPla
     if (!result) throw new Error(`VOICE_TASK_RESULT_MISSING:${task.id}`)
     return result
   })
-  for (const resource of metadata.resources) {
-    const result = submitted.get(resource.taskPlanId)
-    if (!result) throw new Error(`VOICE_TASK_RESULT_MISSING:${resource.taskPlanId}`)
-    const updated = await authorization.transaction.workspaceResource.updateMany({
-      where: { id: resource.resourceId, status: 'pending' },
-      data: { taskId: result.taskId },
-    })
-    if (updated.count !== 1) throw new Error(`VOICE_TASK_BINDING_CONFLICT:${resource.resourceId}`)
-  }
+  await bindWorkspaceResourceTasksInTransaction(authorization.transaction, {
+    userId: ctx.userId,
+    projectId: ctx.projectId,
+    bindings: metadata.resources.map((resource) => {
+      const result = submitted.get(resource.taskPlanId)
+      if (!result) throw new Error(`VOICE_TASK_RESULT_MISSING:${resource.taskPlanId}`)
+      return { resourceId: resource.resourceId, taskId: result.taskId }
+    }),
+  })
   const first = results[0]
   if (!first) throw new Error('VOICE_OPERATION_PLAN_EMPTY')
   return generateVoiceOutputSchema.parse({

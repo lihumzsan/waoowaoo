@@ -36,6 +36,7 @@ import {
   workspacePathAncestors,
 } from './path'
 import { resolveActiveWorkspaceResourceByPath } from './persistence'
+import { readWorkspaceResourceRevision } from './projection-revision'
 
 const DEFAULT_PAGE_SIZE = 100
 const MAX_PAGE_SIZE = 200
@@ -451,6 +452,7 @@ export async function listWorkspaceResourceTreePage(input: {
   readonly deleted?: boolean
   readonly scope?: WorkspaceResourceTreeScope
 }): Promise<WorkspaceResourceTreePage> {
+  const revision = await readWorkspaceResourceRevision(input)
   const limit = requireLimit(input.limit)
   const cursor = decodeCursor(input.cursor)
   const search = input.search?.trim() || null
@@ -495,6 +497,7 @@ export async function listWorkspaceResourceTreePage(input: {
       nextCursor: afterCursor.length > limit && last
         ? encodeCursor({ workspacePath: last.workspacePath, id: last.id })
         : null,
+      revision,
     }
   }
   const rows = await prisma.workspaceResource.findMany({
@@ -513,6 +516,7 @@ export async function listWorkspaceResourceTreePage(input: {
     nextCursor: rows.length > limit && last
       ? encodeCursor({ workspacePath: last.workspacePath, id: last.id })
       : null,
+    revision,
   }
 }
 

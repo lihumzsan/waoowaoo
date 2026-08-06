@@ -205,31 +205,32 @@ model ProjectAssistantMessageCommand {
 }
 
 model Project {
-  id                       String                           @id @default(uuid())
-  name                     String
-  description              String?                          @db.Text
-  userId                   String
-  analysisModel            String?
-  imageModel               String?
-  videoModel               String?
-  musicModel               String?
-  videoRatio               String?
-  characterModel           String?
-  locationModel            String?
-  editModel                String?
-  videoResolution          String                           @default("720p")
-  capabilityOverrides      String?                          @db.LongText
-  imageResolution          String                           @default("2K")
-  createdAt                DateTime                         @default(now())
-  updatedAt                DateTime                         @default(now()) @updatedAt
-  lastAccessedAt           DateTime?
-  user                     User                             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  usageCosts               UsageCost[]
-  assistantThreads         ProjectAssistantThread[]
-  assistantMessageCommands ProjectAssistantMessageCommand[]
-  mutationBatches          MutationBatch[]
-  workspaceResources       WorkspaceResource[]
-  canvasLayouts            ProjectCanvasLayout[]
+  id                        String                           @id @default(uuid())
+  name                      String
+  description               String?                          @db.Text
+  userId                    String
+  workspaceResourceRevision Int                              @default(0)
+  analysisModel             String?
+  imageModel                String?
+  videoModel                String?
+  musicModel                String?
+  videoRatio                String?
+  characterModel            String?
+  locationModel             String?
+  editModel                 String?
+  videoResolution           String                           @default("720p")
+  capabilityOverrides       String?                          @db.LongText
+  imageResolution           String                           @default("2K")
+  createdAt                 DateTime                         @default(now())
+  updatedAt                 DateTime                         @default(now()) @updatedAt
+  lastAccessedAt            DateTime?
+  user                      User                             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usageCosts                UsageCost[]
+  assistantThreads          ProjectAssistantThread[]
+  assistantMessageCommands  ProjectAssistantMessageCommand[]
+  mutationBatches           MutationBatch[]
+  workspaceResources        WorkspaceResource[]
+  canvasLayouts             ProjectCanvasLayout[]
 
   @@index([userId])
   @@map("projects")

@@ -144,6 +144,7 @@ export function createWorkspaceResourceUploadedMediaOperations(): ProjectAgentOp
         await materializeWorkspaceResourceInTransaction(tx, {
           resourceId,
           userId: ctx.userId,
+          projectId: ctx.projectId,
           mediaType: payload.mediaType,
           schemaId,
           content: { kind: 'media', mediaId: registration.media.id },

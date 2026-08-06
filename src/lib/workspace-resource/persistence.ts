@@ -28,6 +28,7 @@ import {
   WORKSPACE_RESOURCE_FOLDER_SCHEMA_ID,
   requireWorkspaceResourceSchema,
 } from './schema-registry'
+import { advanceWorkspaceResourceRevisionInTransaction } from './projection-revision'
 
 export type WorkspaceResourceMaterializationContent =
   | { readonly kind: 'text'; readonly text: string }
@@ -324,7 +325,85 @@ export async function reserveWorkspaceResourceInTransaction(
       toolCallId: input.toolCallId?.trim() || null,
     },
   })
+  await advanceWorkspaceResourceRevisionInTransaction(tx, input)
   return { resourceId, workspacePath }
+}
+
+export async function retryWorkspaceResourcesInTransaction(
+  tx: Prisma.TransactionClient,
+  input: {
+    readonly userId: string
+    readonly projectId: string
+    readonly resources: readonly {
+      readonly resourceId: string
+      readonly operationId: string
+      readonly operationExecutionId: string | null
+      readonly inputHash: string
+      readonly prompt: string
+      readonly modelKey: string
+      readonly generationOptions: WorkspaceResourceJsonValue
+      readonly toolCallId: string | null
+    }[]
+  },
+): Promise<void> {
+  if (input.resources.length === 0) throw new Error('WORKSPACE_RESOURCE_RETRY_TARGETS_REQUIRED')
+  await lockOwnedProject(tx, input.projectId, input.userId)
+  for (const resource of input.resources) {
+    const updated = await tx.workspaceResource.updateMany({
+      where: {
+        id: resource.resourceId,
+        userId: input.userId,
+        projectId: input.projectId,
+        status: { in: ['failed', 'canceled'] },
+        deletedAt: null,
+      },
+      data: {
+        status: 'pending',
+        operationId: resource.operationId,
+        operationExecutionId: resource.operationExecutionId,
+        inputHash: resource.inputHash,
+        prompt: resource.prompt,
+        modelKey: resource.modelKey,
+        generationOptions: jsonValue(resource.generationOptions),
+        toolCallId: resource.toolCallId,
+      },
+    })
+    if (updated.count !== 1) {
+      throw new Error(`WORKSPACE_RESOURCE_RETRY_TARGET_CHANGED:${resource.resourceId}`)
+    }
+  }
+  await advanceWorkspaceResourceRevisionInTransaction(tx, input)
+}
+
+export async function bindWorkspaceResourceTasksInTransaction(
+  tx: Prisma.TransactionClient,
+  input: {
+    readonly userId: string
+    readonly projectId: string
+    readonly bindings: readonly {
+      readonly resourceId: string
+      readonly taskId: string
+    }[]
+  },
+): Promise<void> {
+  if (input.bindings.length === 0) throw new Error('WORKSPACE_RESOURCE_TASK_BINDINGS_REQUIRED')
+  await lockOwnedProject(tx, input.projectId, input.userId)
+  for (const binding of input.bindings) {
+    const updated = await tx.workspaceResource.updateMany({
+      where: {
+        id: binding.resourceId,
+        userId: input.userId,
+        projectId: input.projectId,
+        status: 'pending',
+        deletedAt: null,
+      },
+      data: { taskId: binding.taskId },
+    })
+    if (updated.count !== 1) {
+      throw new Error(`WORKSPACE_RESOURCE_TASK_BINDING_CONFLICT:${binding.resourceId}`)
+    }
+  }
+  await advanceWorkspaceResourceRevisionInTransaction(tx, input)
 }
 
 export async function createWorkspaceResourceFolderInTransaction(
@@ -384,6 +463,9 @@ export async function createWorkspaceResourceFolderInTransaction(
     if (pathToCreate === workspacePath) leafId = resourceId
   }
   if (!leafId) throw new Error('WORKSPACE_RESOURCE_FOLDER_CREATE_RESULT_MISSING')
+  if (createdCount > 0) {
+    await advanceWorkspaceResourceRevisionInTransaction(tx, input)
+  }
   return { resourceId: leafId, workspacePath, createdCount }
 }
 
@@ -485,6 +567,7 @@ export async function materializeWorkspaceResourceInTransaction(
   input: {
     readonly resourceId: string
     readonly userId: string
+    readonly projectId: string
     readonly mediaType: WorkspaceResourceMediaType
     readonly schemaId: string
     readonly content: WorkspaceResourceMaterializationContent
@@ -493,8 +576,15 @@ export async function materializeWorkspaceResourceInTransaction(
     readonly provenance: ResourceProvenance
   },
 ): Promise<{ readonly resourceId: string; readonly contentVersion: number }> {
+  await lockOwnedProject(tx, input.projectId, input.userId)
   const resource = await tx.workspaceResource.findUnique({ where: { id: input.resourceId } })
-  if (!resource || resource.userId !== input.userId || resource.deletedAt || resource.resourceKind !== 'file') {
+  if (
+    !resource
+    || resource.userId !== input.userId
+    || resource.projectId !== input.projectId
+    || resource.deletedAt
+    || resource.resourceKind !== 'file'
+  ) {
     throw new Error(`WORKSPACE_RESOURCE_NOT_OWNED:${input.resourceId}`)
   }
   if (resource.mediaType !== input.mediaType || resource.schemaId !== input.schemaId) {
@@ -590,6 +680,10 @@ export async function materializeWorkspaceResourceInTransaction(
     },
   })
   if (updated.count !== 1) throw new Error(`WORKSPACE_RESOURCE_MATERIALIZATION_CONFLICT:${resource.id}`)
+  await advanceWorkspaceResourceRevisionInTransaction(tx, {
+    projectId: resource.projectId,
+    userId: input.userId,
+  })
   return { resourceId: resource.id, contentVersion: nextContentVersion }
 }
 
@@ -598,14 +692,18 @@ export async function materializeWorkspaceResourceMediaInTransaction(
   input: {
     readonly resourceId: string
     readonly userId: string
+    readonly projectId: string
     readonly mediaId: string
     readonly inputs: readonly WorkspaceResourceInputRef[]
     readonly sourceTurnId?: string | null
     readonly provenance: ResourceProvenance
   },
 ): Promise<{ readonly resourceId: string; readonly contentVersion: number }> {
+  await lockOwnedProject(tx, input.projectId, input.userId)
   const resource = await tx.workspaceResource.findUnique({ where: { id: input.resourceId } })
-  if (!resource?.mediaType) throw new Error(`WORKSPACE_RESOURCE_NOT_OWNED:${input.resourceId}`)
+  if (resource?.projectId !== input.projectId || !resource.mediaType) {
+    throw new Error(`WORKSPACE_RESOURCE_NOT_OWNED:${input.resourceId}`)
+  }
   return await materializeWorkspaceResourceInTransaction(tx, {
     ...input,
     mediaType: resource.mediaType as WorkspaceResourceMediaType,
@@ -677,6 +775,7 @@ export async function appendWorkspaceResourceUserContentInTransaction(
       data: { currentVersion: nextVersion, status: 'ready', materializedAt: new Date() },
     })
     if (updated.count !== 1) throw new Error('WORKSPACE_RESOURCE_CONTENT_VERSION_CONFLICT')
+    await advanceWorkspaceResourceRevisionInTransaction(tx, input)
   return { resourceId: resource.id, contentVersion: nextVersion }
 }
 
@@ -705,6 +804,7 @@ export async function createWorkspaceResourceUserFileInTransaction(
   const materialized = await materializeWorkspaceResourceInTransaction(tx, {
     resourceId: reserved.resourceId,
     userId: input.userId,
+    projectId: input.projectId,
     mediaType: 'text',
     schemaId: input.schemaId,
     content: input.content,
@@ -729,19 +829,30 @@ export async function settleWorkspaceResourceFailureInTransaction(
   input: {
     readonly resourceId: string
     readonly userId: string
+    readonly projectId: string
     readonly status: 'failed' | 'canceled'
   },
 ): Promise<void> {
+  await lockOwnedProject(tx, input.projectId, input.userId)
   const resource = await tx.workspaceResource.findUnique({ where: { id: input.resourceId } })
-  if (!resource || resource.userId !== input.userId || resource.resourceKind !== 'file') {
+  if (
+    !resource
+    || resource.userId !== input.userId
+    || resource.projectId !== input.projectId
+    || resource.resourceKind !== 'file'
+  ) {
     throw new Error('WORKSPACE_RESOURCE_NOT_OWNED')
   }
-  if (resource.status === 'ready') return
+  if (resource.status === 'ready' || resource.status === input.status) return
   await tx.workspaceResource.update({
     where: { id: resource.id },
     data: {
       status: input.status,
     },
+  })
+  await advanceWorkspaceResourceRevisionInTransaction(tx, {
+    projectId: resource.projectId,
+    userId: input.userId,
   })
 }
 
@@ -818,6 +929,7 @@ export async function moveWorkspaceResourceInTransaction(
       },
     })
   }
+  await advanceWorkspaceResourceRevisionInTransaction(tx, input)
   return { resourceId: root.id, workspacePath: destinationPath, movedCount: subtree.length }
 }
 
@@ -873,6 +985,7 @@ export async function softDeleteWorkspaceResourceInTransaction(
     data: { activePath: null, deletedAt },
   })
   if (result.count !== resources.length) throw new Error('WORKSPACE_RESOURCE_DELETE_CONFLICT')
+  await advanceWorkspaceResourceRevisionInTransaction(tx, input)
   return result.count
 }
 
@@ -925,5 +1038,6 @@ export async function restoreWorkspaceResourceInTransaction(
         },
       })
     }
+    await advanceWorkspaceResourceRevisionInTransaction(tx, input)
   return { resourceId: root.id, workspacePath: destinationPath, restoredCount: cohort.length }
 }

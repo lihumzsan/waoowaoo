@@ -94,6 +94,7 @@ async function seedSourceVideos(input: {
       await materializeWorkspaceResourceInTransaction(tx, {
         resourceId,
         userId: input.userId,
+        projectId: input.projectId,
         mediaType: 'video',
         schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
         content: { kind: 'media', mediaId: mediaObject.id },

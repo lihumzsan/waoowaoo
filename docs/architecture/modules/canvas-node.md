@@ -39,7 +39,8 @@ Resource、Lineage 与 Task owner；Canvas 只拥有位置、视口、选择和�
   View 必须显式失败，不得回退成 id。
 - **CN-08 — 同步与异步写入都精确交接 Query。** 只通过注册的受影响资源列表发布可 replay 事实：
   提交事件只公布已持久化的 pending Resource，终态事件只公布已结算事实。客户端只 invalidate 正式
-  Query，禁止从 TaskType、target、operation output 或本地 baseline 猜更新。
+  Query，禁止从 TaskType、target、operation output 或本地 baseline 猜更新。易失通知只优化延迟；
+  正式 Resource View 的持久 revision 是在线完整性的唯一校验水位。
 - **CN-10 — 连线只表达真实 Lineage。** 边必须来自持久的输入→输出 Lineage，且两端都已作为当前
   Canvas 的可见节点出现。推荐顺序、空间邻近、同批成员或共享目录都不能产生可见边。
 - **CN-13 — 新批次只调整一次整体视口。** 持久批次 identity 是自动定位的唯一请求身份；至少一个

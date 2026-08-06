@@ -225,6 +225,8 @@ export interface WorkspaceResourceView {
 export interface WorkspaceResourceTreePage {
   readonly items: readonly WorkspaceResourceView[]
   readonly nextCursor: string | null
+  /** Lower-bound revision read before this page was projected. */
+  readonly revision: number
 }
 
 export interface WorkspaceResourceGenerationProvenance {

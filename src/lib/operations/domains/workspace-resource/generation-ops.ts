@@ -41,12 +41,14 @@ import {
   workspaceResourceDisplayName,
 } from '@/lib/workspace-resource/path'
 import {
+  bindWorkspaceResourceTasksInTransaction,
   createWorkspaceResourceFolderInTransaction,
   materializeWorkspaceResourceInTransaction,
   reserveWorkspaceResourceInTransaction,
   resolveGeneratedWorkspaceResourcePlacement,
   resolveSavedWorkspaceDocumentPlacement,
   resolveWorkspaceResourceInputs,
+  retryWorkspaceResourcesInTransaction,
 } from '@/lib/workspace-resource/persistence'
 import {
   WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA,
@@ -1140,20 +1142,15 @@ async function commitProductionPlan(
       })
     }
   } else {
-    for (const resource of metadata.resources) {
-      const task = plan.tasks.find((candidate) => candidate.id === resource.taskPlanId)
-      if (!task) throw new Error(`WORKSPACE_RESOURCE_PLAN_TASK_MISSING:${resource.taskPlanId}`)
-      const payload = parseWorkspaceResourceGenerationTaskPayload(task.payload)
-      const updated = await authorization.transaction.workspaceResource.updateMany({
-        where: {
-          id: resource.resourceId,
-          userId: ctx.userId,
-          projectId: ctx.projectId,
-          status: { in: ['failed', 'canceled'] },
-          deletedAt: null,
-        },
-        data: {
-          status: 'pending',
+    await retryWorkspaceResourcesInTransaction(authorization.transaction, {
+      userId: ctx.userId,
+      projectId: ctx.projectId,
+      resources: metadata.resources.map((resource) => {
+        const task = plan.tasks.find((candidate) => candidate.id === resource.taskPlanId)
+        if (!task) throw new Error(`WORKSPACE_RESOURCE_PLAN_TASK_MISSING:${resource.taskPlanId}`)
+        const payload = parseWorkspaceResourceGenerationTaskPayload(task.payload)
+        return {
+          resourceId: resource.resourceId,
           operationId,
           operationExecutionId: authorization.operationExecutionId,
           inputHash: payload.resource.inputHash,
@@ -1161,10 +1158,9 @@ async function commitProductionPlan(
           modelKey: payload.resource.modelKey,
           generationOptions: payload.generationOptions,
           toolCallId: ctx.toolCallId?.trim() || null,
-        },
-      })
-      if (updated.count !== 1) throw new Error(`WORKSPACE_RESOURCE_RETRY_TARGET_CHANGED:${resource.resourceId}`)
-    }
+        }
+      }),
+    })
   }
   const submitted = await submitPlannedOperationTasks({ ctx, operationId })
   const results = plan.tasks.map((task) => {
@@ -1174,15 +1170,15 @@ async function commitProductionPlan(
   })
   const first = results[0]
   if (!first) throw new Error('WORKSPACE_RESOURCE_PLAN_EMPTY')
-  for (const resource of metadata.resources) {
-    const submittedTask = submitted.get(resource.taskPlanId)
-    if (!submittedTask) throw new Error(`WORKSPACE_RESOURCE_TASK_RESULT_MISSING:${resource.taskPlanId}`)
-    const updated = await authorization.transaction.workspaceResource.updateMany({
-      where: { id: resource.resourceId, userId: ctx.userId, projectId: ctx.projectId, status: 'pending' },
-      data: { taskId: submittedTask.taskId },
-    })
-    if (updated.count !== 1) throw new Error(`WORKSPACE_RESOURCE_TASK_BINDING_CONFLICT:${resource.resourceId}`)
-  }
+  await bindWorkspaceResourceTasksInTransaction(authorization.transaction, {
+    userId: ctx.userId,
+    projectId: ctx.projectId,
+    bindings: metadata.resources.map((resource) => {
+      const submittedTask = submitted.get(resource.taskPlanId)
+      if (!submittedTask) throw new Error(`WORKSPACE_RESOURCE_TASK_RESULT_MISSING:${resource.taskPlanId}`)
+      return { resourceId: resource.resourceId, taskId: submittedTask.taskId }
+    }),
+  })
   return mediaOutputSchema.parse({
     ...first,
     taskIds: results.map((result) => result.taskId),
@@ -1344,6 +1340,7 @@ export function createWorkspaceResourceGenerationOperations(): ProjectAgentOpera
         const materialized = await materializeWorkspaceResourceInTransaction(tx, {
           resourceId: reserved.resourceId,
           userId: ctx.userId,
+          projectId: ctx.projectId,
           mediaType: 'text',
           schemaId,
           content,

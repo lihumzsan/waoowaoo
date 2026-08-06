@@ -70,6 +70,10 @@ Episode、Chapter、Scene、Shot、Canon 都是用户目录与文件内容，不
   resolver 派生，并由服务端每 Turn 直接附加给主 Agent。它不是 workspace 文件、Skill 副本或 Agent
   可写配置。缺必需能力时对应值为空，主 Agent 必须停止而非猜测；提交时仍由同一服务端事实校验并
   冻结真实执行参数。
+- **WR-18 — Resource 投影有唯一持久水位。** Project 级单调 revision 与每次 Resource 创建、内容或
+  生命周期更新、移动、删除和恢复在同一事务推进，并且只有 persistence owner 可写。正式 View 暴露
+  自己读取到的下界 revision；在线通知只优化延迟，客户端以服务端持久水位校验正式 Query 是否落后，
+  不得把 Pub/Sub 到达、连接仍为 OPEN、历史消息或本地 timer 当作投影完整性的证明。
 
 ## 权威入口
 
@@ -114,3 +118,7 @@ Episode、Chapter、Scene、Shot、Canon 都是用户目录与文件内容，不
 - 删除文件/指针协议时仍保留 Runtime 内的 `system/project.json` 并把它和 Catalog 路径混为一谈；
   边界只能稳定拒绝并显示参数失败 → 上一版只删除 writer，没删除竞争命名空间 → Runtime 永远只是
   scratch，生产上下文直接注入，`get_resource(path)` 只解析 Catalog 的项目相对路径（WR-07/17）。
+- Canvas 的资源刷新先后补过 target 映射、终态 replay、连接 CLOSED 重建和 Created 影响范围，但在线
+  连接仍把易失 Pub/Sub 当成完整性交接；消息静默丢失且连接保持 OPEN 时只能靠手动刷新恢复 → 上一版
+  每次只补一个通知分支，没有给正式 Resource View 持久水位 → 所有 Resource writer 同事务推进唯一
+  revision，心跳只比较水位并失效正式 Query（WR-18）。

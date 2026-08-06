@@ -17,11 +17,15 @@ import {
   EMPTY_WORKSPACE_SSE_CURSOR,
   isWorkspaceSseEvent,
   parseWorkspaceSseCursor,
+  parseWorkspaceSseHeartbeat,
   serializeWorkspaceSseCursor,
+  WORKSPACE_SSE_CONTROL_EVENT_TYPE,
+  WORKSPACE_SSE_HEARTBEAT_TIMEOUT_MS,
   type WorkspaceSseCursor,
 } from '@/lib/sse/protocol'
 import { useToast } from '@/contexts/ToastContext'
 import { useTranslations } from 'next-intl'
+import { syncWorkspaceResourceRevision } from '../resource-change-sync'
 
 type UseSSEOptions = {
   projectId?: string | null
@@ -73,6 +77,7 @@ export function useSSE({ projectId, enabled = true, onEvent }: UseSSEOptions) {
   const reconnectAttemptRef = useRef(0)
   const reconnectTimerRef = useRef<number | null>(null)
   const stabilityTimerRef = useRef<number | null>(null)
+  const heartbeatDeadlineTimerRef = useRef<number | null>(null)
   const cursorRef = useRef<WorkspaceSseCursor>({ ...EMPTY_WORKSPACE_SSE_CURSOR })
   const [snapshotResyncGeneration, setSnapshotResyncGeneration] = useState(0)
   const [connectionState, setConnectionState] = useState<'connecting' | 'connected' | 'reconnecting'>('connecting')
@@ -150,6 +155,16 @@ export function useSSE({ projectId, enabled = true, onEvent }: UseSSEOptions) {
       }, delayMs)
     }
 
+    const armHeartbeatDeadline = () => {
+      if (heartbeatDeadlineTimerRef.current !== null) {
+        window.clearTimeout(heartbeatDeadlineTimerRef.current)
+      }
+      heartbeatDeadlineTimerRef.current = window.setTimeout(() => {
+        heartbeatDeadlineTimerRef.current = null
+        scheduleResync('heartbeat timed out')
+      }, WORKSPACE_SSE_HEARTBEAT_TIMEOUT_MS)
+    }
+
     const handleEvent = (event: MessageEvent) => {
       try {
         handleParsedEvent(JSON.parse(event.data || '{}'), event.lastEventId || undefined)
@@ -157,6 +172,29 @@ export function useSSE({ projectId, enabled = true, onEvent }: UseSSEOptions) {
         _ulogError('[useSSE] failed to parse event', error)
         // 立即重连会撞上 bootstrap 重发的同一条毒事件,形成自激循环;必须退避。
         scheduleResync('event handling failed')
+      }
+    }
+
+    const handleHeartbeat = (event: MessageEvent) => {
+      try {
+        const heartbeat = parseWorkspaceSseHeartbeat(JSON.parse(event.data || '{}'))
+        armHeartbeatDeadline()
+        if (heartbeat.workspaceResourceRevision === null) return
+        void syncWorkspaceResourceRevision({
+          queryClient,
+          projectId,
+          serverRevision: heartbeat.workspaceResourceRevision,
+        })
+          .catch((error: unknown) => {
+            _ulogWarn('[useSSE] workspace resource revision sync failed', {
+              projectId,
+              serverRevision: heartbeat.workspaceResourceRevision,
+              error: error instanceof Error ? error.message : String(error),
+            })
+          })
+      } catch (error) {
+        _ulogError('[useSSE] invalid heartbeat', error)
+        scheduleResync('heartbeat handling failed')
       }
     }
 
@@ -174,8 +212,12 @@ export function useSSE({ projectId, enabled = true, onEvent }: UseSSEOptions) {
       source.addEventListener(type, handler)
       listeners.push({ type, handler })
     }
+    const heartbeatHandler: EventListener = (event) => handleHeartbeat(event as MessageEvent)
+    source.addEventListener(WORKSPACE_SSE_CONTROL_EVENT_TYPE.HEARTBEAT, heartbeatHandler)
+    listeners.push({ type: WORKSPACE_SSE_CONTROL_EVENT_TYPE.HEARTBEAT, handler: heartbeatHandler })
     source.onopen = () => {
       setConnectionState('connected')
+      armHeartbeatDeadline()
       if (reconnectToastRef.current) {
         dismissToast(reconnectToastRef.current)
         reconnectToastRef.current = null
@@ -209,10 +251,14 @@ export function useSSE({ projectId, enabled = true, onEvent }: UseSSEOptions) {
         window.clearTimeout(stabilityTimerRef.current)
         stabilityTimerRef.current = null
       }
+      if (heartbeatDeadlineTimerRef.current !== null) {
+        window.clearTimeout(heartbeatDeadlineTimerRef.current)
+        heartbeatDeadlineTimerRef.current = null
+      }
       source.close()
       sourceRef.current = null
     }
-  }, [connection, dismissToast, enabled, handleParsedEvent, projectId, requestSnapshotResync, showToast, tErrors])
+  }, [connection, dismissToast, enabled, handleParsedEvent, projectId, queryClient, requestSnapshotResync, showToast, tErrors])
 
   useEffect(() => () => {
     if (reconnectToastRef.current) {
