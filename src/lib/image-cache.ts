@@ -1,4 +1,7 @@
 import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
+import { fetchSafeOutboundMedia } from '@/lib/media/outbound-fetch'
+import { withRetry } from '@/lib/retry'
 import { toFetchableUrl } from '@/lib/storage'
 import { LRUCache } from 'lru-cache'
 import { MAX_IMAGE_BYTES, readResponseBufferWithLimit } from '@/lib/http/body-limits'
@@ -109,19 +112,29 @@ async function downloadImageAsBase64(imageUrl: string, logPrefix: string): Promi
     _ulogInfo(`${logPrefix} 开始下载: ${imageUrl.substring(0, 80)}...`)
 
     try {
-        const response = await fetch(toFetchableUrl(imageUrl), {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (compatible; ImageDownloader/1.0)'
-            }
+        const downloaded = await withRetry({
+            operation: EXTERNAL_OPERATION.MEDIA_DOWNLOAD,
+            scope: 'media:cached-image-download',
+            run: async () => {
+                const response = await fetchSafeOutboundMedia(toFetchableUrl(imageUrl), {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (compatible; ImageDownloader/1.0)'
+                    }
+                })
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+                }
+
+                return {
+                    buffer: await readResponseBufferWithLimit(response, MAX_IMAGE_BYTES, 'cached image'),
+                    contentType: response.headers.get('content-type') || 'image/png',
+                }
+            },
         })
-
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-        }
-
-        const buffer = await readResponseBufferWithLimit(response, MAX_IMAGE_BYTES, 'cached image')
+        const buffer = downloaded.buffer
         const base64 = buffer.toString('base64')
-        const contentType = response.headers.get('content-type') || 'image/png'
+        const contentType = downloaded.contentType
 
         const duration = Date.now() - startTime
         totalDownloadTime += duration

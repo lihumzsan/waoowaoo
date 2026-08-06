@@ -43,9 +43,7 @@ export const toonflowAsyncTaskProvider: AsyncTaskProviderRegistration = {
     }
     return normalizeAsyncPollResult({
       status: 'failed',
-      failureDisposition: result.failureDisposition,
-      errorCode: result.errorCode,
-      error: result.error,
+      failure: result.failure,
     })
   },
 }

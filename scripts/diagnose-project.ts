@@ -87,9 +87,9 @@ async function diagnoseProject(projectId: string) {
 
     const failure = parseFailureRecord(task.failure)
     if (failure) {
-      console.log(`     ❌ 错误码: ${failure.code}`)
-      console.log(`     ❌ 错误信息: ${failure.message.substring(0, 200)}`)
-      console.log(`     ❌ 错误来源: ${failure.origin.system}`)
+      console.log(`     ❌ 错误码: ${failure.interpretation.code}`)
+      console.log(`     ❌ 原始错误: ${failure.native.message.substring(0, 200)}`)
+      console.log(`     ❌ 错误来源: ${failure.context.system}`)
     }
 
     // 获取任务事件

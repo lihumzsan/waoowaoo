@@ -3,7 +3,8 @@ import { ResponseValidationError } from '@openrouter/sdk/models/errors'
 import { createScopedLogger } from '@/lib/logging/core'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { AppError } from '@/lib/errors/app-error'
-import type { UnifiedErrorCode } from '@/lib/errors/codes'
+import type { FailureRecord } from '@/lib/errors/failure'
+import { createProviderAsyncTaskFailure } from '@/lib/ai-providers/shared/async-task-status'
 import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
 import type {
   AiProviderVideoExecutionContext,
@@ -31,12 +32,10 @@ type OpenRouterVideoRequest = VideoGenerationRequest
 
 export type OpenRouterVideoPollResult = {
   status: 'pending' | 'completed' | 'failed'
-  failureDisposition?: 'retryable' | 'permanent'
   videoUrl?: string
   resultUrl?: string
   downloadHeaders?: Record<string, string>
-  error?: string
-  errorCode?: UnifiedErrorCode
+  failure?: FailureRecord
 }
 
 const OPENROUTER_VIDEO_SUBMIT_TIMEOUT_MS = 5 * 60_000
@@ -394,9 +393,12 @@ export async function queryOpenRouterVideoStatus(input: {
     if (!videoUrl) {
       return {
         status: 'failed',
-        failureDisposition: 'retryable',
-        errorCode: 'EMPTY_RESPONSE',
-        error: 'OPENROUTER_VIDEO_COMPLETED_WITHOUT_URL',
+        failure: createProviderAsyncTaskFailure({
+          provider: 'openrouter',
+          code: 'EMPTY_RESPONSE',
+          message: 'OPENROUTER_VIDEO_COMPLETED_WITHOUT_URL',
+          cause: response,
+        }),
       }
     }
     return {
@@ -415,9 +417,12 @@ export async function queryOpenRouterVideoStatus(input: {
     const message = response.error?.trim() || `OpenRouter video generation ${status}`
     return {
       status: 'failed',
-      failureDisposition: 'retryable',
-      errorCode: 'EXTERNAL_ERROR',
-      error: message,
+      failure: createProviderAsyncTaskFailure({
+        provider: 'openrouter',
+        code: 'EXTERNAL_ERROR',
+        message,
+        cause: response,
+      }),
     }
   }
 

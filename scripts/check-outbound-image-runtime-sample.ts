@@ -97,7 +97,7 @@ function classifyFailure(task: {
   events: Array<{ payload: AnyJson | null }>
 }): FailureType {
   const failure = parseFailureRecord(task.failure)
-  const code = failure?.code ?? ''
+  const code = failure?.interpretation.code ?? ''
   const normalizeRe = /normalize|video_frame_normalize|normalizeReferenceImagesForGeneration|reference image normalize failed|outbound image input is empty|relative_path_rejected/i
   const modelRe = /generation failed|provider|upstream|rate limit|timed out|timeout|sensitive/i
 
@@ -110,7 +110,7 @@ function classifyFailure(task: {
 
   const values: string[] = []
   if (code) values.push(code)
-  if (failure?.message) values.push(failure.message)
+  if (failure?.native.message) values.push(failure.native.message)
   if (task.result) {
     for (const hit of findStringMatches(task.result, () => true)) {
       values.push(hit.value)
@@ -256,7 +256,7 @@ async function main() {
     if (task.status === 'failed') {
       failedCount += 1
       const failure = parseFailureRecord(task.failure)
-      const code = failure?.code ?? 'UNKNOWN'
+      const code = failure?.interpretation.code ?? 'UNKNOWN'
       failedByCode[code] = (failedByCode[code] || 0) + 1
       const failureType = classifyFailure({
         failure: task.failure,

@@ -1,6 +1,8 @@
 import net, { type LookupFunction } from 'node:net'
 import { lookup } from 'node:dns/promises'
 import { Agent, type Dispatcher } from 'undici'
+import { createFailureRecord, type FailureRecord } from '@/lib/errors/failure'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 
 const DEFAULT_MAX_REDIRECTS = 3
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
@@ -25,12 +27,31 @@ export type OutboundMediaSecurityErrorCode =
 export class OutboundMediaSecurityError extends Error {
   readonly code: OutboundMediaSecurityErrorCode
   readonly url: string
+  override readonly cause?: unknown
+  readonly failure: FailureRecord
 
-  constructor(code: OutboundMediaSecurityErrorCode, url: string, message: string) {
-    super(message)
+  constructor(
+    code: OutboundMediaSecurityErrorCode,
+    url: string,
+    message: string,
+    cause?: unknown,
+  ) {
+    super(message, { cause })
     this.name = 'OutboundMediaSecurityError'
     this.code = code
     this.url = url
+    this.cause = cause
+    this.failure = createFailureRecord('INVALID_PARAMS', message, {
+      cause: {
+        name: this.name,
+        message,
+        code,
+        cause,
+      },
+      details: { reasonCode: code },
+      context: { system: 'application', phase: 'outbound-media-policy' },
+      operation: EXTERNAL_OPERATION.MEDIA_DOWNLOAD_POLICY,
+    })
   }
 }
 
@@ -228,6 +249,7 @@ async function resolvePublicAddresses(hostname: string, family?: number): Promis
       'OUTBOUND_MEDIA_DNS_FAILED',
       hostname,
       `outbound media DNS lookup failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+      error,
     )
   }
   let addresses = normalizeLookupAddresses(result)

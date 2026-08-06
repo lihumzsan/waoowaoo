@@ -40,11 +40,13 @@ export type WaoMcpHttpBindingErrorCode =
 
 export class WaoMcpHttpBindingError extends Error {
   readonly code: WaoMcpHttpBindingErrorCode
+  override readonly cause?: unknown
 
-  constructor(code: WaoMcpHttpBindingErrorCode) {
-    super(`WAO_MCP_HTTP_${code}`)
+  constructor(code: WaoMcpHttpBindingErrorCode, cause?: unknown) {
+    super(`WAO_MCP_HTTP_${code}`, { cause })
     this.name = 'WaoMcpHttpBindingError'
     this.code = code
+    this.cause = cause
   }
 }
 
@@ -317,12 +319,12 @@ async function resolveActiveRuntimeTurnBinding(
   } catch (error) {
     if (!(error instanceof AssistantRuntimeCapabilityTurnError)) throw error
     if (error.code === 'ACTIVE_TURN_AMBIGUOUS') {
-      throw new WaoMcpHttpBindingError('ACTIVE_TURN_AMBIGUOUS')
+      throw new WaoMcpHttpBindingError('ACTIVE_TURN_AMBIGUOUS', error)
     }
     if (error.code === 'ACTIVE_TURN_IDENTITY_INVALID') {
-      throw new WaoMcpHttpBindingError('ACTIVE_TURN_IDENTITY_INVALID')
+      throw new WaoMcpHttpBindingError('ACTIVE_TURN_IDENTITY_INVALID', error)
     }
-    throw new WaoMcpHttpBindingError('ACTIVE_TURN_NOT_FOUND')
+    throw new WaoMcpHttpBindingError('ACTIVE_TURN_NOT_FOUND', error)
   }
   if (!isRecord(turn.contextJson)) {
     throw new WaoMcpHttpBindingError('ACTIVE_TURN_CONTEXT_INVALID')

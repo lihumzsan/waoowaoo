@@ -4,6 +4,7 @@ import {
   resolveUnifiedErrorCode,
   type UnifiedErrorCode,
 } from './codes'
+import type { FailureRecord, NativeFailureEvidence } from './failure'
 
 export type UserErrorAction =
   | 'contact_support'
@@ -36,6 +37,29 @@ export interface ModelErrorProjection {
   retryable: boolean
   action: ModelErrorAction
   details: Record<string, unknown>
+}
+
+function sanitizeDiagnosticText(value: string): string {
+  return value
+    .replace(/(https?:\/\/[^\s?#]+)\?[^\s]*/gi, '$1?[redacted]')
+    .replace(/([?&](?:token|signature|credential|key|secret)=)[^&\s]*/gi, '$1[redacted]')
+    .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+/gi, 'Bearer [redacted]')
+    .replace(/\b(api[-_]?key|password|secret|token)\s*[:=]\s*[^\s,;]+/gi, '$1=[redacted]')
+    .slice(0, 2_000)
+}
+
+function projectNativeFailureEvidence(
+  native: NativeFailureEvidence,
+): Record<string, unknown> {
+  return {
+    name: native.name,
+    message: sanitizeDiagnosticText(native.message),
+    code: native.code,
+    statusCode: native.statusCode,
+    requestId: native.requestId,
+    metadata: native.metadata,
+    cause: native.cause ? projectNativeFailureEvidence(native.cause) : null,
+  }
 }
 
 const PUBLIC_DETAIL_KEYS = new Set([
@@ -169,7 +193,10 @@ function resolveUserAction(code: UnifiedErrorCode): UserErrorAction {
   return null
 }
 
-function resolveModelAction(code: UnifiedErrorCode): ModelErrorAction {
+function resolveModelAction(
+  code: UnifiedErrorCode,
+  taskReplay: FailureRecord['recovery']['taskReplay'],
+): ModelErrorAction {
   if (
     code === 'TASK_NOT_READY'
     || code === 'PLATFORM_PROVIDER_AUTH_INVALID'
@@ -195,7 +222,7 @@ function resolveModelAction(code: UnifiedErrorCode): ModelErrorAction {
   ) return 'revise_input'
   // A terminal Task failure never authorizes a new paid Operation. Retryable
   // is exposed as a fact, while the model is instructed to inform the user.
-  if (spec.retryable) return 'inform_user'
+  if (taskReplay === 'safe') return 'inform_user'
   return 'stop'
 }
 
@@ -215,16 +242,40 @@ export function projectErrorForUser(
 }
 
 export function projectErrorForModel(
-  codeInput: unknown,
-  details?: Record<string, unknown> | null,
+  failure: FailureRecord | null | undefined,
 ): ModelErrorProjection {
-  const code = resolveUnifiedErrorCode(codeInput) ?? 'INTERNAL_ERROR'
+  const code = failure?.interpretation.code ?? 'INTERNAL_ERROR'
   const spec = getErrorSpec(code)
+  const taskReplay = failure?.recovery.taskReplay ?? 'forbidden'
+  const productDetails = projectModelErrorDetails(failure?.interpretation.details)
   return {
     code,
     category: spec.category,
-    retryable: spec.retryable,
-    action: resolveModelAction(code),
-    details: projectModelErrorDetails(details),
+    retryable: taskReplay === 'safe',
+    action: resolveModelAction(code, taskReplay),
+    details: failure
+      ? {
+          ...productDetails,
+          native: projectNativeFailureEvidence(failure.native),
+          context: {
+            system: failure.context.system,
+            provider: failure.context.provider ?? null,
+            phase: failure.context.phase ?? null,
+            operation: failure.recovery.operation,
+            frames: failure.frames.map((frame) => ({
+              system: frame.system,
+              provider: frame.provider ?? null,
+              phase: frame.phase ?? null,
+              operation: frame.operation ?? null,
+              ...(frame.message ? { message: sanitizeDiagnosticText(frame.message) } : {}),
+            })),
+          },
+          recovery: {
+            effect: failure.recovery.effect,
+            taskReplay: failure.recovery.taskReplay,
+            attempts: failure.recovery.attempts,
+          },
+        }
+      : productDetails,
   }
 }

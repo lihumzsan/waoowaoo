@@ -246,16 +246,22 @@ describe('Temporal Task terminal and follow-up durability', () => {
       ])
 
       expect(firstFinalTask).toEqual(firstCommittedTask)
-      expect(firstFinalTask.failure).toEqual({
-        version: 1,
-        code: 'PROVIDER_SUBMISSION_REJECTED',
-        message: 'Deterministic terminal fixture failure',
-        details: { reasonCode: 'TASK_DURABILITY_EXPECTED_FINAL' },
-        origin: {
+      expect(firstFinalTask.failure).toMatchObject({
+        version: 2,
+        native: {
+          message: 'Deterministic terminal fixture failure',
+          code: 'PROVIDER_SUBMISSION_REJECTED',
+        },
+        interpretation: {
+          code: 'PROVIDER_SUBMISSION_REJECTED',
+          details: { reasonCode: 'TASK_DURABILITY_EXPECTED_FINAL' },
+        },
+        context: {
           system: 'provider',
           provider: 'temporal-test-provider',
           phase: 'submit',
         },
+        recovery: { operation: null, taskReplay: 'forbidden' },
       })
       expect(firstTerminalEvents).toEqual([{ id: firstTerminalReceipt.terminalEventId }])
       expect(followUpTurns).toHaveLength(1)

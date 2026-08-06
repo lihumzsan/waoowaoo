@@ -184,13 +184,11 @@ export async function executeProjectAgentOperationFromApi(
       throw new ApiError('EXTERNAL_ERROR', {
         code: 'DATABASE_SCHEMA_MISMATCH',
         field: missingColumn,
-      })
+      }, { cause: error })
     }
     const normalized = normalizeAnyError(error, {
       fallbackCode: 'EXTERNAL_ERROR',
     })
-    throw new ApiError(normalized.code, {
-      code: 'OPERATION_EXECUTION_FAILED',
-    })
+    throw ApiError.fromFailure(normalized, error)
   }
 }

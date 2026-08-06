@@ -45,17 +45,15 @@ export const falAsyncTaskProvider: AsyncTaskProviderRegistration = {
     const { apiKey } = await context.getProviderConfig(context.userId, 'fal')
     const result = await queryFalStatus(parsed.endpoint, parsed.requestId, apiKey)
     if (result.failed) {
-      if (!result.errorCode || !result.failureDisposition) {
+      if (!result.failure) {
         throw new Error('FAL_FAILED_STATUS_CLASSIFICATION_REQUIRED')
       }
       return normalizeAsyncPollResult({
         status: 'failed',
-        errorCode: result.errorCode,
-        failureDisposition: result.failureDisposition,
+        failure: result.failure,
         resultUrl: result.resultUrl,
         imageUrl: result.resultUrl,
         videoUrl: result.resultUrl,
-        error: result.error,
       })
     }
     const pending = !result.failed && !result.completed
@@ -67,7 +65,6 @@ export const falAsyncTaskProvider: AsyncTaskProviderRegistration = {
       resultUrl: result.resultUrl,
       imageUrl: result.resultUrl,
       videoUrl: result.resultUrl,
-      error: result.error,
     })
   },
   cancel: async ({ parsed, context }) => {

@@ -69,18 +69,13 @@ function buildOperationExecutionToolError(params: {
   error: unknown
   operationId: string
 }): ProjectAgentToolError {
-  const normalized = params.error instanceof ApiError
-    ? {
-        code: params.error.code,
-        details: params.error.details ?? null,
-      }
-    : normalizeAnyError(params.error, {
-        fallbackCode: 'INTERNAL_ERROR',
-      })
-  const safeDetails = projectModelErrorDetails(normalized.details)
-  const reasonCode = readSafeReasonCode(normalized.details)
+  const normalized = normalizeAnyError(params.error, {
+    fallbackCode: 'INTERNAL_ERROR',
+  })
+  const safeDetails = projectModelErrorDetails(normalized.interpretation.details)
+  const reasonCode = readSafeReasonCode(normalized.interpretation.details)
     ?? readSafeReasonCode(safeDetails)
-  const failure = projectErrorForModel(normalized.code, normalized.details)
+  const failure = projectErrorForModel(normalized)
   return buildToolError({
     code: 'OPERATION_EXECUTION_FAILED',
     message: getErrorSpec(failure.code).defaultMessage,

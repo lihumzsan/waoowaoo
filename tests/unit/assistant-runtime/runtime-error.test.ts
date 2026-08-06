@@ -8,15 +8,21 @@ import type { UnifiedErrorCode } from '@/lib/errors/codes'
 
 function expectedRuntimeFailure(code: UnifiedErrorCode, message: string) {
   return {
-    version: 1,
-    code,
-    message,
-    details: null,
-    origin: {
+    version: 2,
+    native: { message },
+    interpretation: { code, details: null },
+    context: {
       system: 'runtime',
       provider: 'codex',
       phase: 'turn',
     },
+    recovery: {
+      operation: null,
+      effect: 'unknown',
+      taskReplay: 'forbidden',
+      attempts: 1,
+    },
+    frames: [],
   }
 }
 
@@ -84,7 +90,7 @@ describe('Codex runtime terminal error projection', () => {
         responseStreamDisconnected: { httpStatusCode: null },
       },
       additionalDetails: null,
-    })).toEqual(expectedRuntimeFailure(
+    })).toMatchObject(expectedRuntimeFailure(
       'NETWORK_ERROR',
       'stream disconnected before completion',
     ))
@@ -95,7 +101,7 @@ describe('Codex runtime terminal error projection', () => {
       message: 'Provider returned error',
       codexErrorInfo: 'badRequest',
       additionalDetails: 'messages.2 rejected',
-    })).toEqual(expectedRuntimeFailure(
+    })).toMatchObject(expectedRuntimeFailure(
       'ASSISTANT_PROVIDER_REQUEST_INVALID',
       'Provider returned error',
     ))
@@ -106,7 +112,7 @@ describe('Codex runtime terminal error projection', () => {
       message: 'provider-specific billing copy',
       codexErrorInfo: 'usageLimitExceeded',
       additionalDetails: null,
-    }, { providerCredentialMode: 'user-key' })).toEqual(expectedRuntimeFailure(
+    }, { providerCredentialMode: 'user-key' })).toMatchObject(expectedRuntimeFailure(
       'PROVIDER_BILLING_REQUIRED',
       'provider-specific billing copy',
     ))
@@ -117,7 +123,7 @@ describe('Codex runtime terminal error projection', () => {
       message: 'provider-specific billing copy',
       codexErrorInfo: 'usageLimitExceeded',
       additionalDetails: null,
-    }, { providerCredentialMode: 'platform-key' })).toEqual(expectedRuntimeFailure(
+    }, { providerCredentialMode: 'platform-key' })).toMatchObject(expectedRuntimeFailure(
       'PLATFORM_PROVIDER_BILLING_REQUIRED',
       'provider-specific billing copy',
     ))
@@ -128,7 +134,7 @@ describe('Codex runtime terminal error projection', () => {
       message: 'slow_down',
       codexErrorInfo: 'serverOverloaded',
       additionalDetails: null,
-    }, { providerCredentialMode: 'platform-key' })).toEqual(expectedRuntimeFailure(
+    }, { providerCredentialMode: 'platform-key' })).toMatchObject(expectedRuntimeFailure(
       'PLATFORM_PROVIDER_UNAVAILABLE',
       'slow_down',
     ))
@@ -141,7 +147,7 @@ describe('Codex runtime terminal error projection', () => {
         responseTooManyFailedAttempts: { httpStatusCode: 402 },
       },
       additionalDetails: null,
-    }, { providerCredentialMode: 'platform-key' })).toEqual(expectedRuntimeFailure(
+    }, { providerCredentialMode: 'platform-key' })).toMatchObject(expectedRuntimeFailure(
       'PLATFORM_PROVIDER_BILLING_REQUIRED',
       'upstream request failed',
     ))
@@ -154,7 +160,7 @@ describe('Codex runtime terminal error projection', () => {
         httpConnectionFailed: { httpStatusCode: 401 },
       },
       additionalDetails: null,
-    }, { providerCredentialMode: 'platform-key' })).toEqual(expectedRuntimeFailure(
+    }, { providerCredentialMode: 'platform-key' })).toMatchObject(expectedRuntimeFailure(
       'PLATFORM_PROVIDER_AUTH_INVALID',
       'provider request rejected',
     ))

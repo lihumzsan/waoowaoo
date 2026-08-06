@@ -1,5 +1,6 @@
 import { createScopedLogger } from '@/lib/logging/core'
-import { RETRY_POLICY, withRetry } from '@/lib/retry'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
+import { withRetry } from '@/lib/retry'
 import { S3StorageProvider } from '@/lib/storage/providers/s3'
 import type {
   DeleteObjectsResult,
@@ -16,7 +17,6 @@ const storageLogger = createScopedLogger({
   module: 'storage.provider',
 })
 
-const UPLOAD_MAX_RETRIES = 3
 let providerSingleton: StorageProvider | null = null
 
 export function getStorageProvider(): StorageProvider {
@@ -38,17 +38,13 @@ export function generateUniqueKey(prefix: string, ext: string = 'png'): string {
 export async function uploadObject(
   body: Buffer,
   key: string,
-  retryAttempts: number = UPLOAD_MAX_RETRIES,
   contentType?: string,
 ): Promise<string> {
   const provider = getStorageProvider()
 
   const result = await withRetry({
+    operation: EXTERNAL_OPERATION.STORAGE_PUT_SAME_OBJECT,
     scope: 'storage:upload',
-    policy: {
-      ...RETRY_POLICY.storage,
-      maxAttempts: Math.max(1, Math.floor(retryAttempts)),
-    },
     run: async () => {
       return await provider.uploadObject({ key, body, contentType })
     },
@@ -58,11 +54,17 @@ export async function uploadObject(
 }
 
 export async function deleteObject(key: string): Promise<void> {
-  await getStorageProvider().deleteObject(key)
+  await withRetry({
+    operation: EXTERNAL_OPERATION.STORAGE_DELETE,
+    run: async () => await getStorageProvider().deleteObject(key),
+  })
 }
 
 export async function deleteObjects(keys: string[]): Promise<DeleteObjectsResult> {
-  return await getStorageProvider().deleteObjects(keys)
+  return await withRetry({
+    operation: EXTERNAL_OPERATION.STORAGE_DELETE,
+    run: async () => await getStorageProvider().deleteObjects(keys),
+  })
 }
 
 export function extractStorageKey(input: string | null | undefined): string | null {
@@ -70,21 +72,33 @@ export function extractStorageKey(input: string | null | undefined): string | nu
 }
 
 export async function getObjectBuffer(key: string): Promise<Buffer> {
-  return await getStorageProvider().getObjectBuffer(key)
+  return await withRetry({
+    operation: EXTERNAL_OPERATION.STORAGE_READ,
+    run: async () => await getStorageProvider().getObjectBuffer(key),
+  })
 }
 
 export async function getObjectMetadata(key: string): Promise<ObjectMetadata> {
-  return await getStorageProvider().getObjectMetadata(key)
+  return await withRetry({
+    operation: EXTERNAL_OPERATION.STORAGE_READ,
+    run: async () => await getStorageProvider().getObjectMetadata(key),
+  })
 }
 
 export async function getObjectStream(params: GetObjectStreamParams): Promise<ObjectStreamResult> {
-  return await getStorageProvider().getObjectStream(params)
+  return await withRetry({
+    operation: EXTERNAL_OPERATION.STORAGE_READ,
+    run: async () => await getStorageProvider().getObjectStream(params),
+  })
 }
 
 export async function getSignedObjectUrl(key: string, expiresInSeconds: number = DEFAULT_SIGNED_URL_EXPIRES_SECONDS): Promise<string> {
-  return await getStorageProvider().getSignedObjectUrl({
-    key,
-    expiresInSeconds,
+  return await withRetry({
+    operation: EXTERNAL_OPERATION.STORAGE_SIGN,
+    run: async () => await getStorageProvider().getSignedObjectUrl({
+      key,
+      expiresInSeconds,
+    }),
   })
 }
 
@@ -99,16 +113,12 @@ export function getSignedUrls(keys: string[], expiresInSeconds: number = DEFAULT
 export async function downloadAndUploadImage(
   imageUrl: string,
   key: string,
-  retryAttempts: number = UPLOAD_MAX_RETRIES,
 ): Promise<string> {
   const sharp = (await import('sharp')).default
 
-  return await withRetry({
-    scope: 'storage:download-image',
-    policy: {
-      ...RETRY_POLICY.storage,
-      maxAttempts: Math.max(1, Math.floor(retryAttempts)),
-    },
+  const downloaded = await withRetry({
+    operation: EXTERNAL_OPERATION.MEDIA_DOWNLOAD,
+    scope: 'media:download-image',
     run: async () => {
       const response = await fetchSafeOutboundMedia(toFetchableUrl(imageUrl))
       if (!response.ok) {
@@ -126,23 +136,20 @@ export async function downloadAndUploadImage(
       }
 
       const jpgKey = key.replace(/\.(png|webp)$/i, '.jpg')
-      return await uploadObject(processed, jpgKey, 1, 'image/jpeg')
+      return { body: processed, key: jpgKey }
     },
   })
+  return await uploadObject(downloaded.body, downloaded.key, 'image/jpeg')
 }
 
 export async function downloadAndUploadVideo(
   videoUrl: string,
   key: string,
-  retryAttempts: number = UPLOAD_MAX_RETRIES,
   requestHeaders?: Record<string, string>,
 ): Promise<string> {
-  return await withRetry({
-    scope: 'storage:download-video',
-    policy: {
-      ...RETRY_POLICY.storage,
-      maxAttempts: Math.max(1, Math.floor(retryAttempts)),
-    },
+  const downloaded = await withRetry({
+    operation: EXTERNAL_OPERATION.MEDIA_DOWNLOAD,
+    scope: 'media:download-video',
     run: async () => {
       const response = await fetchSafeOutboundMedia(toFetchableUrl(videoUrl), {
         headers: {
@@ -157,9 +164,10 @@ export async function downloadAndUploadVideo(
 
       const buffer = await readResponseBufferWithLimit(response, MAX_VIDEO_BYTES, 'storage video download')
       const contentType = response.headers.get('content-type')?.split(';')[0]?.trim() || 'video/mp4'
-      return await uploadObject(buffer, key, 1, contentType)
+      return { body: buffer, contentType }
     },
   })
+  return await uploadObject(downloaded.body, key, downloaded.contentType)
 }
 
 export * from './signed-urls'

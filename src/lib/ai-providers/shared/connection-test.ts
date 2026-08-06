@@ -13,14 +13,15 @@ import type {
 
 export function connectionTestFailureMessageKey(error: unknown): AiProviderConnectionTestMessageKey {
   const normalized = normalizeAnyError(error, { fallbackCode: 'EXTERNAL_ERROR' })
-  if (normalized.code === 'PROVIDER_AUTH_INVALID' || normalized.code === 'MODEL_NOT_OPEN') {
+  const code = normalized.interpretation.code
+  if (code === 'PROVIDER_AUTH_INVALID' || code === 'MODEL_NOT_OPEN') {
     return 'connectionTest.authInvalid'
   }
-  if (normalized.code === 'RATE_LIMIT' || normalized.code === 'QUOTA_EXCEEDED') {
+  if (code === 'RATE_LIMIT' || code === 'QUOTA_EXCEEDED') {
     return 'connectionTest.rateLimited'
   }
-  if (normalized.code === 'GENERATION_TIMEOUT') return 'connectionTest.timeout'
-  if (normalized.code === 'NETWORK_ERROR') return 'connectionTest.networkError'
+  if (code === 'GENERATION_TIMEOUT') return 'connectionTest.timeout'
+  if (code === 'NETWORK_ERROR') return 'connectionTest.networkError'
   return 'connectionTest.providerError'
 }
 

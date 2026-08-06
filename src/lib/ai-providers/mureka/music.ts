@@ -1,9 +1,10 @@
 import { AppError } from '@/lib/errors/app-error'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import type { AiProviderMusicExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
-import { FetchStatusError, RETRY_POLICY, fetchWithRetry } from '@/lib/retry'
+import { FetchStatusError, fetchWithRetry } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { buildMurekaUrl } from './base-url'
 import { MUREKA_9_MODEL_ID, MUREKA_MUSIC_PROMPT_MAX_CHARS } from './models'
@@ -47,7 +48,7 @@ type MurekaSubmissionFailure = {
     | 'RATE_LIMIT'
     | 'SENSITIVE_CONTENT'
     | 'PROVIDER_SUBMISSION_REJECTED'
-  readonly disposition: 'rejected' | 'retryable_rejected'
+  readonly disposition: 'rejected'
 }
 
 function classifyMurekaMachineCode(code: string | null): MurekaSubmissionFailure | null {
@@ -65,7 +66,7 @@ function classifyMurekaMachineCode(code: string | null): MurekaSubmissionFailure
       return { code: 'PROVIDER_BILLING_REQUIRED', disposition: 'rejected' }
     case 'rate_limit':
     case 'rate_limit_exceeded':
-      return { code: 'RATE_LIMIT', disposition: 'retryable_rejected' }
+      return { code: 'RATE_LIMIT', disposition: 'rejected' }
     case 'sensitive_content':
     case 'content_policy_violation':
     case 'moderation_blocked':
@@ -151,7 +152,7 @@ async function postMurekaJson(input: {
         Authorization: `Bearer ${input.apiKey}`,
       },
       body: JSON.stringify(input.payload),
-      policy: RETRY_POLICY.providerSubmit,
+      operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
       cache: 'no-store',
       scope: input.scope,
       fetchFn: fetchWithProviderProxy,
@@ -180,7 +181,7 @@ async function uploadMurekaSoundtrackVideo(input: {
         Authorization: `Bearer ${input.apiKey}`,
       },
       body: form,
-      policy: RETRY_POLICY.providerSubmit,
+      operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
       cache: 'no-store',
       scope: 'mureka:music:upload',
       fetchFn: fetchWithProviderProxy,

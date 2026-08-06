@@ -119,7 +119,7 @@ async function preflightVoiceGeneration(
         code: 'VOICE_GENERATION_OPTION_INVALID',
         field: error.field ?? 'language',
         reason: error.reason ?? error.failure,
-      })
+      }, { cause: error })
     }
     throw error
   }

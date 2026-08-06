@@ -89,12 +89,18 @@ export interface PhoneAuthUser {
 export class PhoneVerificationError extends Error {
   readonly code: PhoneAuthResultCode
   readonly retryAfterSeconds: number | null
+  override readonly cause?: unknown
 
-  constructor(code: PhoneAuthResultCode, retryAfterSeconds: number | null = null) {
-    super(code)
+  constructor(
+    code: PhoneAuthResultCode,
+    retryAfterSeconds: number | null = null,
+    cause?: unknown,
+  ) {
+    super(code, { cause })
     this.name = 'PhoneVerificationError'
     this.code = code
     this.retryAfterSeconds = retryAfterSeconds
+    this.cause = cause
   }
 }
 
@@ -253,7 +259,11 @@ export async function sendPhoneVerificationCode(rawPhoneNumber: unknown): Promis
         undefined,
         maskPhoneNumber(phoneNumber),
       )
-      throw new PhoneVerificationError(PHONE_AUTH_RESULT_CODES.destinationUnavailable)
+      throw new PhoneVerificationError(
+        PHONE_AUTH_RESULT_CODES.destinationUnavailable,
+        null,
+        error,
+      )
     }
     if (error instanceof TencentSmsConfigurationError) {
       await compensateRejectedChallenge(keys, challengeId)
@@ -272,7 +282,7 @@ export async function sendPhoneVerificationCode(rawPhoneNumber: unknown): Promis
         undefined,
         maskPhoneNumber(phoneNumber),
       )
-      throw new PhoneVerificationError(PHONE_AUTH_RESULT_CODES.providerRejected)
+      throw new PhoneVerificationError(PHONE_AUTH_RESULT_CODES.providerRejected, null, error)
     }
 
     logAuthAction(
@@ -282,7 +292,7 @@ export async function sendPhoneVerificationCode(rawPhoneNumber: unknown): Promis
       undefined,
       maskPhoneNumber(phoneNumber),
     )
-    throw new PhoneVerificationError(PHONE_AUTH_RESULT_CODES.providerUnavailable)
+    throw new PhoneVerificationError(PHONE_AUTH_RESULT_CODES.providerUnavailable, null, error)
   }
 
   const deliveryTrackingEnabled = await rememberTencentSmsDeliveryAttempt({
@@ -389,7 +399,7 @@ export async function authorizePhoneIdentity(input: {
       throw new ApiError('CONFLICT', {
         code: 'PHONE_AUTH_IDENTITY_CONFLICT',
         message: 'PHONE_AUTH_IDENTITY_CONFLICT',
-      })
+      }, { cause: error })
     }
     return concurrentUser
   }

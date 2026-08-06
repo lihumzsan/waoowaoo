@@ -436,13 +436,14 @@ const runOpenAIHostedSearch: OpenAIHostedSearchRunner = async ({
   }
   // An aborted stream simply stops yielding, leaving an empty output that is
   // indistinguishable from a model that answered without evidence. They are
-  // opposite facts — one is worth retrying, the other never is — so a run that
+  // opposite facts — one is a transport failure, the other a completed invalid
+  // response — so a run that
   // never reached `response.completed` fails as the transport fault it is.
   if (!completed) {
     throw new WebSearchError('WEB_SEARCH_REQUEST_FAILED', {
       provider: WEB_SEARCH_PROVIDER_ID,
       reason: 'hosted research stream ended before completion',
-    }, { retryable: true })
+    })
   }
   return { outputText, output, usage }
 }
@@ -450,8 +451,9 @@ const runOpenAIHostedSearch: OpenAIHostedSearchRunner = async ({
 /**
  * Maps provider failures onto the four public error codes. The split that
  * matters: a missing or rejected credential is `WEB_SEARCH_UNAVAILABLE`
- * (configuration is wrong, retrying will not help), while rate limits, network
- * faults and 5xx are retryable request failures. A user abort must not be
+ * (configuration is wrong), while rate limits, network faults and 5xx are
+ * request failures. This mapper describes the response; it does not authorize
+ * replay. A user abort must not be
  * reported as a provider fault, and the timeout signal is checked before the
  * abort so a slow search is not mislabelled as a cancellation.
  */
@@ -479,7 +481,7 @@ function mapProviderError(input: {
     return new WebSearchError('WEB_SEARCH_REQUEST_FAILED', {
       provider: WEB_SEARCH_PROVIDER_ID,
       reason: 'hosted search timed out',
-    }, { cause: input.error, retryable: true })
+    }, { cause: input.error })
   }
   const status = statusFromError(input.error)
   if (
@@ -494,7 +496,7 @@ function mapProviderError(input: {
       reason: 'provider rejected configured credentials',
     }, { cause: input.error })
   }
-  const retryable = input.error instanceof RateLimitError
+  const transient = input.error instanceof RateLimitError
     || input.error instanceof APIConnectionError
     || input.error instanceof APIConnectionTimeoutError
     || status === 429
@@ -502,8 +504,8 @@ function mapProviderError(input: {
   return new WebSearchError('WEB_SEARCH_REQUEST_FAILED', {
     provider: WEB_SEARCH_PROVIDER_ID,
     ...(status === null ? {} : { status }),
-    reason: retryable ? 'provider request failed temporarily' : 'provider request failed',
-  }, { cause: input.error, retryable })
+    reason: transient ? 'provider request failed temporarily' : 'provider request failed',
+  }, { cause: input.error })
 }
 
 function logTruncation(input: {
@@ -553,7 +555,7 @@ export function createOpenAIWebSearchProvider(input: {
     search: async (request, options) => {
       // Caller cancellation and the research timeout are separate facts that
       // must stay distinguishable: `mapProviderError` reports the first as an
-      // abort and the second as a retryable failure.
+      // abort and the second as a provider transport failure.
       const timeoutSignal = AbortSignal.timeout(OPENAI_WEB_SEARCH_TIMEOUT_MS)
       const signal = AbortSignal.any([options.signal, timeoutSignal])
       let result: OpenAIHostedSearchRunResult

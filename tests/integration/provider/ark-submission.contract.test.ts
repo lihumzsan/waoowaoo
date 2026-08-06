@@ -65,8 +65,10 @@ describe('provider contract - Ark submission disposition', () => {
         code: testCase.code,
         disposition: 'rejected',
         failure: {
-          details: { httpStatus: testCase.status },
-          origin: { system: 'provider', provider: 'ark', phase: 'submit' },
+          native: { name: 'FetchStatusError', statusCode: testCase.status },
+          interpretation: { details: { httpStatus: testCase.status } },
+          frames: [{ system: 'provider', provider: 'ark', phase: 'submit' }],
+          recovery: { operation: 'provider.submit', taskReplay: 'forbidden' },
         },
       })
     }

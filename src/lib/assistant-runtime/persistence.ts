@@ -1541,7 +1541,7 @@ function buildFollowUpContent(batch: FollowUpBatchWithTasks): string {
       failure: member.task.status === 'failed'
         ? (() => {
             const failure = parseFailureRecord(member.task.failure)
-            return projectErrorForModel(failure?.code, failure?.details)
+            return projectErrorForModel(failure)
           })()
         : null,
     }))

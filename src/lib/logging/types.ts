@@ -26,7 +26,6 @@ export interface LogContext {
 export interface SemanticContext extends LogContext {
   errorCode?: string
   retryable?: boolean
-  failureClass?: string
   durationMs?: number
 }
 
@@ -49,7 +48,6 @@ export interface LogEvent {
   userId?: string
   errorCode?: string
   retryable?: boolean
-  failureClass?: string
   durationMs?: number
   provider?: string
   details?: Record<string, unknown> | unknown[] | null

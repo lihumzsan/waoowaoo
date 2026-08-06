@@ -178,17 +178,20 @@ describe('provider contract - Toonflow video', () => {
     })).rejects.toMatchObject({
       code: 'PROVIDER_BILLING_REQUIRED',
       failure: {
-        code: 'PROVIDER_BILLING_REQUIRED',
-        message: providerMessage,
-        details: {
-          providerCode: 400,
-          httpStatus: 400,
+        native: {
+          name: 'FetchStatusError',
+          message: expect.stringContaining(providerMessage),
+          statusCode: 400,
         },
-        origin: {
-          system: 'provider',
-          provider: 'toonflow',
-          phase: 'submit',
+        interpretation: {
+          code: 'PROVIDER_BILLING_REQUIRED',
+          details: {
+            providerCode: 400,
+            httpStatus: 400,
+          },
         },
+        frames: [{ system: 'provider', provider: 'toonflow', phase: 'submit' }],
+        recovery: { operation: 'provider.submit', taskReplay: 'forbidden' },
       },
     })
 
@@ -226,13 +229,18 @@ describe('provider contract - Toonflow video', () => {
     })).rejects.toMatchObject({
       code: 'PROVIDER_SUBMISSION_REJECTED',
       failure: {
-        code: 'PROVIDER_SUBMISSION_REJECTED',
-        message: providerMessage.slice(0, 512),
-        origin: {
+        native: {
+          name: 'ProviderSubmissionError',
+          message: providerMessage.slice(0, 512),
+        },
+        interpretation: { code: 'PROVIDER_SUBMISSION_REJECTED' },
+        context: {
           system: 'provider',
           provider: 'toonflow',
           phase: 'submit',
+          operation: 'provider.submit',
         },
+        recovery: { operation: 'provider.submit', taskReplay: 'forbidden' },
       },
     })
 
@@ -340,13 +348,15 @@ describe('provider contract - Toonflow video', () => {
       taskCode: 'cgt-task-rights-789',
     })
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       status: 'failed',
-      failureDisposition: 'permanent',
-      errorCode: 'CONTENT_RIGHTS_RESTRICTION',
-      error: 'CONTENT_RIGHTS_RESTRICTION',
+      failure: {
+        native: { message: providerFailReason },
+        interpretation: { code: 'CONTENT_RIGHTS_RESTRICTION' },
+        recovery: { taskReplay: 'forbidden' },
+      },
     })
-    expect(JSON.stringify(result)).not.toContain(providerFailReason)
+    expect(JSON.stringify(result)).toContain(providerFailReason)
     expect(server!.getRequests('POST', '/toonflow/video/getVideoStatus')).toHaveLength(1)
   })
 })

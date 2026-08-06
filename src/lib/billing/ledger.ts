@@ -310,6 +310,7 @@ function requirePositiveFreezeAmount(amount: number): number {
       'BILLING_INVALID_FREEZE_AMOUNT',
       'freeze amount must be a positive whole number of credits',
       { amount },
+      error,
     )
   }
 }
@@ -572,7 +573,7 @@ export async function freezeBalance(
             expectedUserId: userId,
             actualTaskId: existing.taskId,
             expectedTaskId: options.taskId ?? null,
-          })
+          }, error)
         }
         return existing.status === 'pending'
           && existingAmount === normalizedAmount
@@ -601,7 +602,7 @@ export async function freezeBalance(
       userId,
       amount: normalizedAmount,
       idempotencyKey: options?.idempotencyKey ?? null,
-    })
+    }, error)
   }
 }
 
@@ -753,7 +754,12 @@ export async function confirmChargeWithRecord(
     if (error instanceof Error) {
       throw new BillingOperationError('BILLING_CONFIRM_FAILED', error.message, { freezeId }, error)
     }
-    throw new BillingOperationError('BILLING_CONFIRM_FAILED', `confirm charge failed: ${describeUnknownError(error)}`, { freezeId })
+    throw new BillingOperationError(
+      'BILLING_CONFIRM_FAILED',
+      `confirm charge failed: ${describeUnknownError(error)}`,
+      { freezeId },
+      error,
+    )
   }
 }
 
@@ -952,7 +958,12 @@ export async function increasePendingFreezeAmount(freezeId: string, delta: numbe
     if (error instanceof Error) {
       throw new BillingOperationError('BILLING_FREEZE_EXPAND_FAILED', error.message, { freezeId, delta: normalizedDelta }, error)
     }
-    throw new BillingOperationError('BILLING_FREEZE_EXPAND_FAILED', `increase freeze failed: ${describeUnknownError(error)}`, { freezeId, delta: normalizedDelta })
+    throw new BillingOperationError(
+      'BILLING_FREEZE_EXPAND_FAILED',
+      `increase freeze failed: ${describeUnknownError(error)}`,
+      { freezeId, delta: normalizedDelta },
+      error,
+    )
   }
 }
 

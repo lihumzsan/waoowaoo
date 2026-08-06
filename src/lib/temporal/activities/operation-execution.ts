@@ -1,7 +1,5 @@
 import { ApplicationFailure, Context, heartbeat } from '@temporalio/activity'
 import { WorkflowUpdateFailedError } from '@temporalio/client'
-import { ApiError } from '@/lib/api-errors'
-import { getErrorSpec } from '@/lib/errors/codes'
 import { normalizeAnyError } from '@/lib/errors/normalize'
 import { hashCanonicalJson } from '@/lib/operation-plan-contract/canonical-json'
 import { createAgentFollowUpBatchBinding } from '@/lib/agent-turn/follow-up-batch'
@@ -76,9 +74,8 @@ function throwByOperationExecutionRetryPolicy(error: unknown): never {
   if (deterministicCode) return failNonRetryable(deterministicCode)
   if (error instanceof TemporalTaskCommandUnconfirmedError) throw error
   const failure = normalizeAnyError(error, {
-    origin: { system: 'temporal', phase: 'operation-execution' },
+    context: { system: 'temporal', phase: 'operation-execution' },
   })
-  if (getErrorSpec(failure.code).retryable && !(error instanceof ApiError)) throw error
   return throwFailureNonRetryable(failure)
 }
 

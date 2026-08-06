@@ -22,16 +22,19 @@ export type OwnedMediaOutboundErrorCode =
 export class OwnedMediaOutboundError extends Error {
   readonly code: OwnedMediaOutboundErrorCode
   readonly input: string
+  override readonly cause?: unknown
 
   constructor(input: {
     code: OwnedMediaOutboundErrorCode
     mediaInput: string
     message: string
+    cause?: unknown
   }) {
-    super(input.message)
+    super(input.message, { cause: input.cause })
     this.name = 'OwnedMediaOutboundError'
     this.code = input.code
     this.input = input.mediaInput
+    this.cause = input.cause
   }
 }
 
@@ -78,6 +81,7 @@ export async function resolveOwnedMediaForGeneration(
       code: 'OWNED_MEDIA_STORAGE_METADATA_FAILED',
       mediaInput: normalizedInput,
       message: `${options.label} metadata read failed for ${media.storageKey}: ${storageErrorSummary(error)}`,
+      cause: error,
     })
   }
 

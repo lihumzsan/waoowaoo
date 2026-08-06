@@ -2,6 +2,8 @@ import { downloadAndUploadImage, downloadAndUploadVideo, generateUniqueKey, toFe
 import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import { decodeBase64WithLimit, MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, readResponseBufferWithLimit } from '@/lib/http/body-limits'
 import { fetchSafeOutboundMedia } from '@/lib/media/outbound-fetch'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
+import { withRetry } from '@/lib/retry'
 
 export interface ProcessMediaOptions {
   source: string | Buffer
@@ -48,27 +50,33 @@ export async function processMediaResult(options: ProcessMediaOptions): Promise<
       const base64Data = source.substring(base64Start + 8)
       const maxBytes = type === 'image' ? MAX_IMAGE_BYTES : type === 'audio' ? MAX_AUDIO_BYTES : MAX_VIDEO_BYTES
       const buffer = decodeBase64WithLimit(base64Data, maxBytes, `${type} result`)
-      return await uploadObject(buffer, key, undefined, contentType)
+      return await uploadObject(buffer, key, contentType)
     }
 
     if (type === 'image') {
       // Normalize to JPEG and fail fast on non-2xx downloads to avoid storing broken images.
-      return await downloadAndUploadImage(source, key, 3)
+      return await downloadAndUploadImage(source, key)
     }
 
     if (type === 'video') {
-      return await downloadAndUploadVideo(source, key, 3, downloadHeaders)
+      return await downloadAndUploadVideo(source, key, downloadHeaders)
     }
 
-    const response = await fetchSafeOutboundMedia(toFetchableUrl(source), {
-      headers: downloadHeaders,
+    const buffer = await withRetry({
+      operation: EXTERNAL_OPERATION.MEDIA_DOWNLOAD,
+      scope: 'media:audio-result-download',
+      run: async () => {
+        const response = await fetchSafeOutboundMedia(toFetchableUrl(source), {
+          headers: downloadHeaders,
+        })
+        if (!response.ok) {
+          throw new Error(`Failed to download ${type}: ${response.status} ${response.statusText}`)
+        }
+        return await readResponseBufferWithLimit(response, MAX_AUDIO_BYTES, 'audio result')
+      },
     })
-    if (!response.ok) {
-      throw new Error(`Failed to download ${type}: ${response.status} ${response.statusText}`)
-    }
-    const buffer = await readResponseBufferWithLimit(response, MAX_AUDIO_BYTES, 'audio result')
-    return await uploadObject(buffer, key, undefined, contentType)
+    return await uploadObject(buffer, key, contentType)
   }
 
-  return await uploadObject(source, key, undefined, contentType)
+  return await uploadObject(source, key, contentType)
 }

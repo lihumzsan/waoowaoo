@@ -105,7 +105,7 @@ export function normalizeFailedError(task: {
   const failure = parseFailureRecord(task.failure)
   if (!failure) return null
   return {
-    code: failure.code,
+    code: failure.interpretation.code,
   }
 }
 

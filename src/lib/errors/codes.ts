@@ -9,14 +9,6 @@ export const ERROR_CATEGORY = {
 
 export type ErrorCategory = (typeof ERROR_CATEGORY)[keyof typeof ERROR_CATEGORY]
 
-export const ERROR_FAILURE_CLASS = {
-  TRANSIENT_PROVIDER: 'TRANSIENT_PROVIDER',
-  PERMANENT_PROVIDER: 'PERMANENT_PROVIDER',
-  OUTPUT_VALIDATION: 'OUTPUT_VALIDATION',
-} as const
-
-export type ErrorFailureClass = (typeof ERROR_FAILURE_CLASS)[keyof typeof ERROR_FAILURE_CLASS]
-
 function defineErrorSpec<const Code extends string>(
   code: Code,
   httpStatus: number,
@@ -411,19 +403,4 @@ export function resolveUnifiedErrorCode(code: unknown): UnifiedErrorCode | null 
 
 export function getErrorSpec(code: UnifiedErrorCode) {
   return ERROR_CATALOG[code]
-}
-
-export function getErrorFailureClass(code: UnifiedErrorCode): ErrorFailureClass {
-  if (
-    code === 'EMPTY_RESPONSE'
-    || code === 'MODEL_OUTPUT_TRUNCATED'
-    || code === 'PARSE_ERROR'
-    || code === 'MODEL_OUTPUT_SCHEMA_INVALID'
-    || code === 'PLAN_VALIDATION_FAILED'
-  ) {
-    return ERROR_FAILURE_CLASS.OUTPUT_VALIDATION
-  }
-  return ERROR_CATALOG[code].retryable
-    ? ERROR_FAILURE_CLASS.TRANSIENT_PROVIDER
-    : ERROR_FAILURE_CLASS.PERMANENT_PROVIDER
 }

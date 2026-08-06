@@ -89,7 +89,7 @@ export function googleSafetyTerminalError(finishReason: string): ProviderSubmiss
       disposition: 'rejected',
       provider: 'google',
       details: { finishReason },
-      origin: { system: 'provider', provider: 'google', phase: 'result' },
+      context: { system: 'provider', provider: 'google', phase: 'result' },
     },
   )
 }

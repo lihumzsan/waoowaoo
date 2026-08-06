@@ -47,7 +47,7 @@ export async function storeWorkspaceResourceContent(input: {
   if (bytes.byteLength > MAX_TEXT_BYTES) throw new Error('WORKSPACE_RESOURCE_CONTENT_TOO_LARGE')
   const digest = sha256(bytes)
   const key = buildWorkspaceResourceContentKey({ ...input, sha256: digest })
-  await uploadObject(bytes, key, 1, contentType(input.workspacePath))
+  await uploadObject(bytes, key, contentType(input.workspacePath))
   return await ensureMediaObjectFromStorageKey(key, {
     sha256: digest,
     mimeType: contentType(input.workspacePath),

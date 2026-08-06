@@ -1,6 +1,7 @@
 import { GoogleGenAI, HarmBlockThreshold, HarmCategory } from '@google/genai'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
-import { RETRY_POLICY, withRetry } from '@/lib/retry'
+import { withRetry } from '@/lib/retry'
 import type { AiProviderImageExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 import {
   assertAllowedGoogleImageOptions,
@@ -40,8 +41,8 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
   if (modelId === 'gemini-3-pro-image-preview-batch') {
     const { submitGeminiBatch } = await import('@/lib/ai-providers/google/batch')
     const result = await captureGoogleSdkSubmission(async () => await withRetry({
+      operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
       scope: `google:image:batch:${modelId}`,
-      policy: RETRY_POLICY.providerSubmit,
       run: async () => await submitGeminiBatch(apiKey, input.prompt, {
         referenceImages,
         ...(options.aspectRatio ? { aspectRatio: options.aspectRatio } : {}),
@@ -59,8 +60,8 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
 
   if (modelId.startsWith('imagen-')) {
     const response = await captureGoogleSdkSubmission(async () => await withRetry({
+      operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
       scope: `google:image:imagen:${modelId}`,
-      policy: RETRY_POLICY.providerSubmit,
       run: async () => await withProviderProxyDispatcher(
         GOOGLE_PROVIDER_PROXY_TARGET,
         async () => await ai.models.generateImages({
@@ -102,8 +103,8 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
   ]
 
   const response = await captureGoogleSdkSubmission(async () => await withRetry({
+    operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
     scope: `google:image:gemini:${modelId}`,
-    policy: RETRY_POLICY.providerSubmit,
     run: async () => await withProviderProxyDispatcher(
       GOOGLE_PROVIDER_PROXY_TARGET,
       async () => await ai.models.generateContent({

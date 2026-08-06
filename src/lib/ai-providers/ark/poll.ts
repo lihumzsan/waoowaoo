@@ -4,7 +4,7 @@ import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { getErrorMessage } from '@/lib/ai-providers/shared/helpers'
 import { describeUnknownError } from '@/lib/errors/normalize'
 import { AppError } from '@/lib/errors/app-error'
-import { getErrorSpec } from '@/lib/errors/codes'
+import { createProviderAsyncTaskFailure } from '@/lib/ai-providers/shared/async-task-status'
 import { readArkErrorCode, toArkPollHttpError } from './error'
 
 interface UnknownRecord {
@@ -82,7 +82,15 @@ export async function querySeedanceVideoStatus(
         }
       }
 
-      return { status: 'failed', failureDisposition: 'retryable', errorCode: 'EMPTY_RESPONSE', error: 'No video URL in response' }
+      return {
+        status: 'failed',
+        failure: createProviderAsyncTaskFailure({
+          provider: 'ark',
+          code: 'EMPTY_RESPONSE',
+          message: 'No video URL in response',
+          cause: queryData,
+        }),
+      }
     }
 
     if (status === 'failed') {
@@ -94,14 +102,25 @@ export async function querySeedanceVideoStatus(
       const errorCode = readArkErrorCode(queryData.error) ?? 'EXTERNAL_ERROR'
       return {
         status: 'failed',
-        failureDisposition: getErrorSpec(errorCode).retryable ? 'retryable' : 'permanent',
-        errorCode,
-        error: errorMessage,
+        failure: createProviderAsyncTaskFailure({
+          provider: 'ark',
+          code: errorCode,
+          message: errorMessage,
+          cause: queryData.error,
+        }),
       }
     }
 
     if (status === 'cancelled' || status === 'canceled') {
-      return { status: 'failed', failureDisposition: 'retryable', errorCode: 'EXTERNAL_ERROR', error: `Ark task ${status}` }
+      return {
+        status: 'failed',
+        failure: createProviderAsyncTaskFailure({
+          provider: 'ark',
+          code: 'EXTERNAL_ERROR',
+          message: `Ark task ${status}`,
+          cause: queryData,
+        }),
+      }
     }
 
     if (status === 'queued' || status === 'running') return { status: 'pending' }

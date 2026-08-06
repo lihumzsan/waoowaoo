@@ -165,7 +165,6 @@ export async function handleWorkspaceResourceVideoMergeTask(
         artifact: `workspace-resource-video-merge:${payload.resource.resourceId}`,
         extension: 'mp4',
       }),
-      1,
       'video/mp4',
     )
     const media = await ensureMediaObjectFromStorageKey(storageKey, {

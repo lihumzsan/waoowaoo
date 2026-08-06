@@ -190,7 +190,7 @@ async function prepareAssetHubImageUpload(
     : `global-${type}-${assetId}-upload`
   const imageKey = generateUniqueKey(keyPrefix, 'jpg')
   try {
-    await uploadObject(processed, imageKey, undefined, 'image/jpeg')
+    await uploadObject(processed, imageKey, 'image/jpeg')
     if (type === 'character') {
       if (!appearance || appearanceIndex === null) throw new ApiError('NOT_FOUND')
       return {

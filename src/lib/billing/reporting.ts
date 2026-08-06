@@ -232,6 +232,7 @@ export async function recordUsageFact(
         'BILLING_USAGE_REPLAY_DIVERGED',
         'usage fact replay diverged from the persisted identity',
         { usageId },
+        error,
       )
     }
   }

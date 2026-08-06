@@ -140,7 +140,6 @@ export async function handleWorkspaceResourceAudioTask(context: TaskExecutionCon
       artifact: 'music:primary',
       extension: extensionFromAudioMimeType(audio.mimeType),
     }),
-    1,
     audio.mimeType,
   )
   const media = await ensureMediaObjectFromStorageKey(storageKey, {

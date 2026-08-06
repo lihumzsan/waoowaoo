@@ -110,7 +110,7 @@ describe('provider contract - Mureka music', () => {
       { machineCode: 'insufficient_balance', code: 'PROVIDER_BILLING_REQUIRED', disposition: 'rejected' },
       { machineCode: 'sensitive_content', code: 'SENSITIVE_CONTENT', disposition: 'rejected' },
       { machineCode: 'invalid_request', code: 'PROVIDER_SUBMISSION_REJECTED', disposition: 'rejected' },
-      { machineCode: 'rate_limit_exceeded', code: 'RATE_LIMIT', disposition: 'retryable_rejected' },
+      { machineCode: 'rate_limit_exceeded', code: 'RATE_LIMIT', disposition: 'rejected' },
     ] as const
 
     for (const testCase of cases) {
@@ -134,8 +134,10 @@ describe('provider contract - Mureka music', () => {
         disposition: testCase.disposition,
         provider: 'mureka',
         failure: {
-          details: { providerCode: testCase.machineCode },
-          origin: { system: 'provider', provider: 'mureka', phase: 'submit' },
+          native: { name: 'FetchStatusError' },
+          interpretation: { details: { providerCode: testCase.machineCode } },
+          frames: [{ system: 'provider', provider: 'mureka', phase: 'submit' }],
+          recovery: { operation: 'provider.submit', taskReplay: 'forbidden' },
         },
       })
     }

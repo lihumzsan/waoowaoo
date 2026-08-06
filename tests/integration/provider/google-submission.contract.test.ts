@@ -24,8 +24,10 @@ describe('provider contract - Google submission disposition', () => {
         code: testCase.code,
         disposition: 'rejected',
         failure: {
-          details: { httpStatus: testCase.status },
-          origin: { system: 'provider', provider: 'google', phase: 'submit' },
+          native: { name: 'ApiError', statusCode: testCase.status },
+          interpretation: { details: { httpStatus: testCase.status } },
+          frames: [{ system: 'provider', provider: 'google', phase: 'submit' }],
+          recovery: { operation: 'provider.submit', taskReplay: 'forbidden' },
         },
       })
     }

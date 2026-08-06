@@ -1,12 +1,17 @@
 import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
-import { projectErrorForModel } from '@/lib/errors/projection'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
+import { getErrorSpec } from '@/lib/errors/codes'
+import {
+  projectErrorForUser,
+  projectPublicErrorDetails,
+} from '@/lib/errors/projection'
 import { parseFailureRecord } from '@/lib/errors/failure'
 import { listTaskLifecycleEvents } from '@/lib/task/publisher'
 import { getTaskById, queryTasks } from '@/lib/task/service'
 import { queryTaskTargetStates } from '@/lib/task/state-service'
 import { cancelTemporalTask } from '@/lib/temporal/task-client'
-import { RETRY_POLICY, withRetry } from '@/lib/retry'
+import { withRetry } from '@/lib/retry'
 import {
   isTaskType,
   TASK_STATUS,
@@ -97,8 +102,18 @@ function withTaskError(task: Awaited<ReturnType<typeof queryTasks>>[number]) {
   const publicTask: Partial<typeof task> = { ...task }
   delete publicTask.failure
   const failure = parseFailureRecord(task.failure)
-  const error = task.status === TASK_STATUS.FAILED
-    ? projectErrorForModel(failure?.code, failure?.details)
+  const userProjection = task.status === TASK_STATUS.FAILED
+    ? projectErrorForUser(
+        failure?.interpretation.code,
+        failure?.native.requestId ?? null,
+      )
+    : null
+  const error = userProjection
+    ? {
+        ...userProjection,
+        category: getErrorSpec(userProjection.code).category,
+        details: projectPublicErrorDetails(failure?.interpretation.details),
+      }
     : null
   return {
     ...publicTask,
@@ -138,8 +153,8 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
       outputSchema: z.unknown(),
       execute: async (ctx, input) => ({
         states: await withRetry({
+          operation: EXTERNAL_OPERATION.DATABASE_READ,
           scope: 'prisma:get_task_status',
-          policy: RETRY_POLICY.prisma,
           run: async () => await queryTaskTargetStates({
             projectId: ctx.projectId,
             userId: ctx.userId,

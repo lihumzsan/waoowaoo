@@ -1,4 +1,6 @@
 import { AppError } from '@/lib/errors/app-error'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
+import { createProviderAsyncTaskFailure } from '@/lib/ai-providers/shared/async-task-status'
 import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
 import type {
   AiProviderVideoExecutionContext,
@@ -8,7 +10,6 @@ import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selectio
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import {
   FetchStatusError,
-  RETRY_POLICY,
   fetchWithRetry,
 } from '@/lib/retry'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
@@ -69,9 +70,7 @@ type ToonflowVideoPollResult =
   | { status: 'completed'; videoUrl: string }
   | {
     status: 'failed'
-    failureDisposition: 'retryable' | 'permanent'
-    errorCode: UnifiedErrorCode
-    error: string
+    failure: ReturnType<typeof createProviderAsyncTaskFailure>
   }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -126,7 +125,7 @@ function classifyToonflowError(input: {
     providerCode: input.code,
     httpStatus: input.status ?? null,
   }
-  const origin = {
+  const context = {
     system: 'provider' as const,
     provider: 'toonflow',
     phase: input.phase,
@@ -138,16 +137,16 @@ function classifyToonflowError(input: {
       && errorCode !== 'EXTERNAL_ERROR'
     ) {
       return new ProviderSubmissionError(errorCode, diagnosticMessage || getErrorSpec(errorCode).defaultMessage, {
-        disposition: getErrorSpec(errorCode).retryable ? 'retryable_rejected' : 'rejected',
+        disposition: 'rejected',
         provider: 'toonflow',
         details,
-        origin,
+        context,
         cause: input.cause,
       })
     }
     return new AppError(errorCode, diagnosticMessage, {
       details,
-      origin,
+      context,
       cause: input.cause,
     })
   }
@@ -201,7 +200,8 @@ async function postToonflowJson(input: {
 }): Promise<unknown> {
   let response: Response
   try {
-    response = await fetchWithRetry(buildToonflowUrl(input.baseUrl, input.path), {
+    const url = buildToonflowUrl(input.baseUrl, input.path)
+    const request: RequestInit = {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${input.apiKey}`,
@@ -209,15 +209,24 @@ async function postToonflowJson(input: {
       },
       body: JSON.stringify(input.payload),
       cache: 'no-store',
-      timeoutMs: input.phase === 'submit'
-        ? TOONFLOW_SUBMIT_TIMEOUT_MS
-        : TOONFLOW_STATUS_TIMEOUT_MS,
-      policy: input.phase === 'submit'
-        ? RETRY_POLICY.providerSubmit
-        : RETRY_POLICY.mediaPoll,
-      scope: `toonflow:video:${input.phase}`,
-      fetchFn: fetchWithProviderProxy,
-    })
+    }
+    if (input.phase === 'submit') {
+      response = await fetchWithRetry(url, {
+        ...request,
+        timeoutMs: TOONFLOW_SUBMIT_TIMEOUT_MS,
+        operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
+        scope: 'toonflow:video:submit',
+        fetchFn: fetchWithProviderProxy,
+      })
+    } else {
+      response = await fetchWithProviderProxy(url, {
+        ...request,
+        signal: AbortSignal.timeout(TOONFLOW_STATUS_TIMEOUT_MS),
+      })
+      if (!response.ok) {
+        throw new FetchStatusError(response.status, await response.text())
+      }
+    }
   } catch (error) {
     throwToonflowFetchError(error, input.phase)
   }
@@ -439,12 +448,11 @@ export async function queryToonflowVideoStatus(input: {
   if (status === 'failed') {
     const providerFailReason = readString(data?.failReason)
     const errorCode = classifyToonflowTerminalFailure(providerFailReason)
-    const retryable = getErrorSpec(errorCode).retryable
     toonflowLogger.error({
       action: 'toonflow.video.generation_failed',
       message: 'Toonflow accepted video generation ended in failed state',
       errorCode,
-      retryable,
+      retryable: false,
       details: {
         taskCode: input.taskCode,
         providerFailReason: providerFailReason.slice(0, 512) || null,
@@ -453,9 +461,12 @@ export async function queryToonflowVideoStatus(input: {
     })
     return {
       status: 'failed',
-      failureDisposition: retryable ? 'retryable' : 'permanent',
-      errorCode,
-      error: errorCode,
+      failure: createProviderAsyncTaskFailure({
+        provider: 'toonflow',
+        code: errorCode,
+        message: providerFailReason || errorCode,
+        cause: envelope,
+      }),
     }
   }
   throw new Error(`TOONFLOW_VIDEO_STATUS_UNKNOWN:${status || '<missing>'}`)

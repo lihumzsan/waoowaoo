@@ -112,7 +112,6 @@ function write(level: LogLevel, event: Omit<LogEvent, 'ts' | 'level' | 'service'
     userId: event.userId || context.userId,
     errorCode: event.errorCode,
     retryable: event.retryable,
-    failureClass: event.failureClass,
     durationMs: event.durationMs,
     provider: event.provider || context.provider,
     details: event.details ?? null,
@@ -169,7 +168,6 @@ type ScopedLogInput = {
   provider?: string
   errorCode?: string
   retryable?: boolean
-  failureClass?: string
   durationMs?: number
   details?: Record<string, unknown> | unknown[] | null
   error?: ErrorFields
@@ -202,7 +200,6 @@ function mergeScopedEvent(
     provider: input.provider || baseContext.provider,
     errorCode: input.errorCode || baseContext.errorCode,
     retryable: input.retryable ?? baseContext.retryable,
-    failureClass: input.failureClass || baseContext.failureClass,
     durationMs: input.durationMs ?? baseContext.durationMs,
     details: input.details ?? null,
     error: input.error,
@@ -233,7 +230,6 @@ function logScoped(level: LogLevel, baseContext: Partial<SemanticContext>, args:
     provider: baseContext.provider,
     errorCode: baseContext.errorCode,
     retryable: baseContext.retryable,
-    failureClass: baseContext.failureClass,
     durationMs: baseContext.durationMs,
     details,
     error,

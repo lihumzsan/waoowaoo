@@ -129,11 +129,13 @@ describe('provider contract - fal queue', () => {
         code: testCase.code,
         disposition: 'rejected',
         failure: {
-          details: {
+          native: { name: 'FetchStatusError', statusCode: testCase.status },
+          interpretation: { details: {
             providerCode: testCase.providerCode,
             httpStatus: testCase.status,
-          },
-          origin: { system: 'provider', provider: 'fal', phase: 'submit' },
+          } },
+          frames: [{ system: 'provider', provider: 'fal', phase: 'submit' }],
+          recovery: { operation: 'provider.submit', taskReplay: 'forbidden' },
         },
       })
       expect(server!.getRequests('POST', `/fal/${endpoint}`)).toHaveLength(1)
@@ -239,13 +241,15 @@ describe('provider contract - fal queue', () => {
     })
 
     const result = await queryFalStatus('fal-ai/veo3.1/fast/image-to-video', 'req_failed', 'fal-key-3')
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       status: 'FAILED',
       completed: false,
       failed: true,
-      failureDisposition: 'permanent',
-      errorCode: 'SENSITIVE_CONTENT',
-      error: 'content moderation failed',
+      failure: {
+        native: { message: 'content moderation failed' },
+        interpretation: { code: 'SENSITIVE_CONTENT' },
+        recovery: { taskReplay: 'forbidden' },
+      },
     })
   })
 
@@ -281,14 +285,16 @@ describe('provider contract - fal queue', () => {
       },
     })
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       status: 'failed',
-      failureDisposition: 'permanent',
-      errorCode: 'PROVIDER_BILLING_REQUIRED',
       resultUrl: undefined,
       imageUrl: undefined,
       videoUrl: undefined,
-      error: 'insufficient balance',
+      failure: {
+        native: { message: 'insufficient balance' },
+        interpretation: { code: 'PROVIDER_BILLING_REQUIRED' },
+        recovery: { taskReplay: 'forbidden' },
+      },
     })
   })
 
@@ -335,13 +341,15 @@ describe('provider contract - fal queue', () => {
     })
 
     const result = await queryFalStatus('fal-ai/nano-banana-pro', 'req_no_media', 'fal-key-5')
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       status: 'COMPLETED',
       completed: true,
       failed: true,
-      failureDisposition: 'retryable',
-      errorCode: 'EMPTY_RESPONSE',
-      error: 'FAL任务完成但未返回媒体URL',
+      failure: {
+        native: { message: 'FAL任务完成但未返回媒体URL' },
+        interpretation: { code: 'EMPTY_RESPONSE' },
+        recovery: { operation: 'provider.terminal.result', taskReplay: 'forbidden' },
+      },
     })
   })
 })

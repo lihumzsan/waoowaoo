@@ -90,7 +90,7 @@ function throwStructuredImageSubmissionRejection(error: unknown): never {
       disposition: 'rejected',
       provider: 'openrouter',
       details: failure.details,
-      cause: error,
+      cause: normalized,
     })
   }
 }
@@ -188,7 +188,7 @@ async function projectStreamingImage(
           disposition: 'rejected',
           provider: 'openrouter',
           details: { providerErrorType: code },
-          origin: { system: 'provider', provider: 'openrouter', phase: 'result' },
+          context: { system: 'provider', provider: 'openrouter', phase: 'result' },
         },
       )
     }

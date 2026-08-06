@@ -1,8 +1,9 @@
 import { GoogleGenAI } from '@google/genai'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import type { AiProviderMusicExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
-import { RETRY_POLICY, withRetry } from '@/lib/retry'
+import { withRetry } from '@/lib/retry'
 import { withProviderProxyDispatcher } from '@/lib/http/outbound-proxy'
 import { GOOGLE_PROVIDER_PROXY_TARGET } from '@/lib/ai-providers/google/proxy-target'
 import { AppError } from '@/lib/errors/app-error'
@@ -89,8 +90,8 @@ export async function executeGoogleMusicGeneration(input: AiProviderMusicExecuti
   const modelId = requireSelectedModelId(input.selection, 'google:music')
 
   const response = await captureGoogleSdkSubmission(async () => await withRetry({
+    operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
     scope: `google:music:generate:${modelId}`,
-    policy: RETRY_POLICY.providerSubmit,
     run: async () => await withProviderProxyDispatcher(
       GOOGLE_PROVIDER_PROXY_TARGET,
       async () => await ai.models.generateContent({

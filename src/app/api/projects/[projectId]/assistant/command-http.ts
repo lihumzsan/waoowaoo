@@ -37,13 +37,13 @@ export async function readProjectAgentCommandHttpBody(
         code: error.message,
         field: 'body',
         message: 'request body must be a JSON object',
-      })
+      }, { cause: error })
     }
     throw new ApiError('INVALID_PARAMS', {
       code: 'BODY_PARSE_FAILED',
       field: 'body',
       message: 'request body must be valid JSON',
-    })
+    }, { cause: error })
   }
 }
 

@@ -22,7 +22,7 @@ async function main() {
 
   const counts = new Map<string, number>()
   for (const row of rows) {
-    const code = parseFailureRecord(row.failure)?.code ?? 'UNKNOWN'
+    const code = parseFailureRecord(row.failure)?.interpretation.code ?? 'UNKNOWN'
     counts.set(code, (counts.get(code) ?? 0) + 1)
   }
   const total = rows.length

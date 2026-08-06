@@ -1,5 +1,5 @@
 import { getInternalBaseUrl } from '@/lib/env'
-import { RETRY_POLICY, type RetryPolicy } from './policy'
+import type { ExternalOperationId } from '@/lib/external-operation/registry'
 import { withRetry } from './with-retry'
 
 export class FetchStatusError extends Error {
@@ -16,10 +16,12 @@ export class FetchStatusError extends Error {
 
 export class FetchTimeoutError extends Error {
   readonly code = 'NETWORK_ERROR'
+  override readonly cause?: unknown
 
-  constructor(timeoutMs: number) {
+  constructor(timeoutMs: number, cause?: unknown) {
     super(`Fetch request timed out after ${timeoutMs}ms`)
     this.name = 'FetchTimeoutError'
+    this.cause = cause
   }
 }
 
@@ -48,7 +50,7 @@ async function fetchWithTimeout(
     })
   } catch (error: unknown) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new FetchTimeoutError(timeoutMs)
+      throw new FetchTimeoutError(timeoutMs, error)
     }
     throw error
   } finally {
@@ -57,24 +59,24 @@ async function fetchWithTimeout(
 }
 
 export type FetchWithRetryOptions = RequestInit & {
+  readonly operation: ExternalOperationId
   readonly timeoutMs?: number
-  readonly policy?: RetryPolicy
   readonly scope?: string
   readonly fetchFn?: typeof fetch
 }
 
-export async function fetchWithRetry(url: string, options: FetchWithRetryOptions = {}): Promise<Response> {
+export async function fetchWithRetry(url: string, options: FetchWithRetryOptions): Promise<Response> {
   const {
     timeoutMs = 60_000,
-    policy = RETRY_POLICY.mediaFetch,
+    operation,
     scope = `fetch:${url}`,
     fetchFn = fetch,
     ...requestOptions
   } = options
 
   return await withRetry({
+    operation,
     scope,
-    policy,
     run: async () => {
       const response = await fetchWithTimeout(url, requestOptions, timeoutMs, fetchFn)
       if (!response.ok) {

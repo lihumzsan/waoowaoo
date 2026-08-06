@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import { addBalance } from '@/lib/billing'
 import { freezeBalance } from '@/lib/billing/ledger'
 import { createAgentFollowUpBatchBinding } from '@/lib/agent-turn/follow-up-batch'
+import { createFailureRecord } from '@/lib/errors/failure'
 import type { WorkspaceResourceInputRef } from '@/lib/workspace-resource/contracts'
 import { buildWorkspaceResourceId } from '@/lib/workspace-resource/identity'
 import {
@@ -229,18 +230,18 @@ async function seedFinalFailureCheckpoint(
         attemptId: `${workflowId}:attempt:1`,
         attempt: 1,
         failure: {
-          failure: {
-            version: 1,
-            code: 'PROVIDER_SUBMISSION_REJECTED',
-            message: 'Deterministic terminal fixture failure',
-            details: { reasonCode: 'TASK_DURABILITY_EXPECTED_FINAL' },
-            origin: {
+          failure: createFailureRecord(
+            'PROVIDER_SUBMISSION_REJECTED',
+            'Deterministic terminal fixture failure',
+            {
+              details: { reasonCode: 'TASK_DURABILITY_EXPECTED_FINAL' },
+              context: {
               system: 'provider',
               provider: 'temporal-test-provider',
               phase: 'submit',
+              },
             },
-          },
-          failureClass: 'PERMANENT_PROVIDER',
+          ) as unknown as Prisma.InputJsonObject,
           retryDisposition: 'final',
         },
       } satisfies Prisma.InputJsonValue,

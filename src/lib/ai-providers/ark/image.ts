@@ -1,8 +1,9 @@
 import { logInfo as _ulogInfo } from '@/lib/logging/core'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import type { AiProviderImageExecutionContext } from '@/lib/ai-providers/runtime-types'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
-import { fetchWithRetry, RETRY_POLICY } from '@/lib/retry'
+import { fetchWithRetry } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { AppError } from '@/lib/errors/app-error'
 import { throwArkSubmissionError } from './error'
@@ -60,7 +61,7 @@ export async function arkImageGeneration(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify(request),
-      policy: RETRY_POLICY.providerSubmit,
+      operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
       timeoutMs,
       scope: 'ark:image',
       fetchFn: fetchWithProviderProxy,

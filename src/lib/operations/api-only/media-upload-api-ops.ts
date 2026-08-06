@@ -151,7 +151,7 @@ async function prepareUserMediaUpload(request: Request): Promise<PreparedUserUpl
   }
   // Content-addressed key: identical bytes overwrite an identical object, so
   // this upload never orphans a second copy and retries are idempotent.
-  await uploadObject(normalized.stored, storageKey, undefined, accepted.mimeType)
+  await uploadObject(normalized.stored, storageKey, accepted.mimeType)
   return prepared
 }
 

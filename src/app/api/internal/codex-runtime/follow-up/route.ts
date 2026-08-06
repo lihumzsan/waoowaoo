@@ -32,7 +32,6 @@ export const POST = apiHandler(async (request) => {
       {
         ok: false,
         code: 'ASSISTANT_RUNTIME_INTERNAL_AUTH_UNAVAILABLE',
-        retryable: false,
       },
       500,
     )
@@ -42,7 +41,6 @@ export const POST = apiHandler(async (request) => {
       {
         ok: false,
         code: 'ASSISTANT_RUNTIME_INTERNAL_AUTHENTICATION_FAILED',
-        retryable: false,
       },
       401,
     )
@@ -56,7 +54,6 @@ export const POST = apiHandler(async (request) => {
       {
         ok: false,
         code: 'ASSISTANT_RUNTIME_FOLLOW_UP_REQUEST_INVALID',
-        retryable: false,
       },
       400,
     )
@@ -69,7 +66,7 @@ export const POST = apiHandler(async (request) => {
     const code = error instanceof AssistantRuntimeTaskFollowUpHttpError
       ? error.code
       : 'ASSISTANT_RUNTIME_FOLLOW_UP_REQUEST_INVALID'
-    return json({ ok: false, code, retryable: false }, 400)
+    return json({ ok: false, code }, 400)
   }
 
   try {
@@ -81,7 +78,6 @@ export const POST = apiHandler(async (request) => {
         {
           ok: false,
           code: 'ASSISTANT_RUNTIME_PROJECT_BUSY',
-          retryable: true,
         },
         409,
       )
@@ -91,7 +87,6 @@ export const POST = apiHandler(async (request) => {
         {
           ok: false,
           code: 'ASSISTANT_RUNTIME_FOLLOW_UP_REQUEST_ABORTED',
-          retryable: true,
         },
         499,
       )
@@ -100,7 +95,6 @@ export const POST = apiHandler(async (request) => {
       {
         ok: false,
         code: 'ASSISTANT_RUNTIME_FOLLOW_UP_FAILED',
-        retryable: true,
       },
       500,
     )

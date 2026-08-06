@@ -80,11 +80,11 @@ export const POST = apiHandler(async (request: NextRequest) => {
     }
   } catch (error) {
     if (isPaidBetaPaymentUnavailableError(error)) {
-      throw new ApiError('PAID_BETA_SOLD_OUT')
+      throw new ApiError('PAID_BETA_SOLD_OUT', undefined, { cause: error })
     }
     if (isPaymentConfigurationError(error)) {
       const code = readPaymentConfigurationErrorCode(error)
-      throw new ApiError('MISSING_CONFIG', { code, message: code })
+      throw new ApiError('MISSING_CONFIG', { code, message: code }, { cause: error })
     }
     throw error
   }

@@ -48,7 +48,7 @@ function codexProviderHttpErrorCode(status: number): UnifiedErrorCode {
   return normalizeAnyError(
     { status },
     { fallbackCode: 'PROJECT_AGENT_RUNTIME_FAILED' },
-  ).code
+  ).interpretation.code
 }
 
 function codexErrorCode(
@@ -105,7 +105,10 @@ export function normalizeAssistantRuntimeFailure(
   const failure = createFailureRecord(
     codexErrorCode(value.codexErrorInfo),
     errorMessage(value),
-    { origin: { system: 'runtime', provider: 'codex', phase: 'turn' } },
+    {
+      cause: value,
+      context: { system: 'runtime', provider: 'codex', phase: 'turn' },
+    },
   )
   return projectProviderCredentialOwnership(
     failure,
@@ -118,15 +121,15 @@ export function assistantRuntimeFailureForStopReason(
 ): AssistantRuntimeFailure {
   if (stopReason === 'runtime_protocol_error') {
     return createFailureRecord('ASSISTANT_RUNTIME_PROTOCOL_ERROR', null, {
-      origin: { system: 'runtime', phase: 'turn' },
+      context: { system: 'runtime', phase: 'turn' },
     })
   }
   if (stopReason.includes('persistence')) {
     return createFailureRecord('INTERNAL_ERROR', null, {
-      origin: { system: 'runtime', phase: 'persistence' },
+      context: { system: 'runtime', phase: 'persistence' },
     })
   }
   return createFailureRecord('PROJECT_AGENT_RUNTIME_FAILED', null, {
-    origin: { system: 'runtime', phase: 'turn' },
+    context: { system: 'runtime', phase: 'turn' },
   })
 }

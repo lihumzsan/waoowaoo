@@ -110,7 +110,6 @@ async function startFollowUpAdmissionServer(): Promise<FollowUpAdmissionServer> 
         writeJson(response, 401, {
           ok: false,
           code: 'ASSISTANT_RUNTIME_INTERNAL_AUTHENTICATION_FAILED',
-          retryable: false,
         })
         return
       }
@@ -146,7 +145,6 @@ async function startFollowUpAdmissionServer(): Promise<FollowUpAdmissionServer> 
         writeJson(response, 500, {
           ok: false,
           code: 'ASSISTANT_RUNTIME_FOLLOW_UP_FAILED',
-          retryable: true,
         })
       } else {
         response.destroy()

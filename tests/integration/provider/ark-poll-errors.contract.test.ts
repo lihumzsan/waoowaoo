@@ -32,11 +32,16 @@ describe('provider contract - Ark async failure classification', () => {
     await expect(querySeedanceVideoStatus('job-1', {
       apiKey: 'ark-key',
       baseUrl: 'https://ark.example/api/v3',
-    })).resolves.toEqual({
+    })).resolves.toMatchObject({
       status: 'failed',
-      failureDisposition: 'permanent',
-      errorCode: 'PROVIDER_BILLING_REQUIRED',
-      error: 'AccountOverdueError: provider account requires payment',
+      failure: {
+        native: {
+          code: 'AccountOverdueError',
+          message: 'AccountOverdueError: provider account requires payment',
+        },
+        interpretation: { code: 'PROVIDER_BILLING_REQUIRED' },
+        recovery: { taskReplay: 'forbidden' },
+      },
     })
   })
 
@@ -54,7 +59,9 @@ describe('provider contract - Ark async failure classification', () => {
     })).rejects.toMatchObject({
       code: 'PROVIDER_BILLING_REQUIRED',
       provider: 'ark',
-      retryable: false,
+      failure: {
+        native: { statusCode: 403 },
+      },
     })
   })
 })

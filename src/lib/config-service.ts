@@ -345,7 +345,10 @@ export async function buildImageBillingPayload(input: {
     })
   } catch (err) {
     const message = describeUnknownError(err)
-    throw Object.assign(new Error(message), { code: 'IMAGE_MODEL_CAPABILITY_NOT_CONFIGURED', message })
+    throw Object.assign(
+      new Error(message, { cause: err }),
+      { code: 'IMAGE_MODEL_CAPABILITY_NOT_CONFIGURED', message },
+    )
   }
 
   const generationOptions = buildImageRuntimeGenerationOptions({
@@ -383,7 +386,10 @@ export function buildImageBillingPayloadFromUserConfig(input: {
     })
   } catch (err) {
     const message = describeUnknownError(err)
-    throw Object.assign(new Error(message), { code: 'IMAGE_MODEL_CAPABILITY_NOT_CONFIGURED', message })
+    throw Object.assign(
+      new Error(message, { cause: err }),
+      { code: 'IMAGE_MODEL_CAPABILITY_NOT_CONFIGURED', message },
+    )
   }
 
   const generationOptions = buildImageRuntimeGenerationOptions({

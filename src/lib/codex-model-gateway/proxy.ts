@@ -158,7 +158,7 @@ export async function proxyCodexResponsesRequest(params: {
     await assertLlmSpendableBalance(scope.userId)
   } catch (error) {
     if (error instanceof InsufficientBalanceError) {
-      throw new CodexModelGatewayError('BILLING_BALANCE_INSUFFICIENT', 429)
+      throw new CodexModelGatewayError('BILLING_BALANCE_INSUFFICIENT', 429, error)
     }
     throw error
   }

@@ -67,7 +67,7 @@ function projectAndValidate(input: AiSdkRunnerInput, result: AiSdkLanguageModelR
       disposition: 'rejected',
       provider: input.selection.provider,
       details: error.details,
-      origin: {
+      context: {
         system: 'provider',
         provider: input.selection.provider,
         phase: 'result',

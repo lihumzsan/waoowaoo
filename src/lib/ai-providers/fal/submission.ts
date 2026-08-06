@@ -1,8 +1,9 @@
 import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import { getErrorSpec, type UnifiedErrorCode } from '@/lib/errors/codes'
 import { AppError } from '@/lib/errors/app-error'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
-import { FetchStatusError, fetchWithRetry, RETRY_POLICY } from '@/lib/retry'
+import { FetchStatusError, fetchWithRetry } from '@/lib/retry'
 import { buildFalQueueUrl } from './base-url'
 
 const FAL_SUBMIT_DIAGNOSTIC_MAX_LENGTH = 512
@@ -138,7 +139,7 @@ export async function submitFalQueueRequest(input: {
         Authorization: `Key ${input.apiKey}`,
       },
       body: JSON.stringify(input.payload),
-      policy: RETRY_POLICY.providerSubmit,
+      operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
       cache: 'no-store',
       scope: input.scope,
       fetchFn: fetchWithProviderProxy,

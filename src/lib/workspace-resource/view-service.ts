@@ -405,7 +405,7 @@ async function loadViews(
       taskId: row.taskId,
       error: (() => {
         const failure = parseFailureRecord(row.task?.failure)
-        return failure ? { code: failure.code } : null
+        return failure ? { code: failure.interpretation.code } : null
       })(),
       deletedAt: row.deletedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),

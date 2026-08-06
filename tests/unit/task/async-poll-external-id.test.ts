@@ -1,24 +1,33 @@
 import { describe, expect, it } from 'vitest'
 import { formatExternalId, parseExternalId } from '@/lib/ai-exec/async-poll'
 import { normalizeAsyncPollResult } from '@/lib/ai-providers/async-task-types'
+import { createProviderAsyncTaskFailure } from '@/lib/ai-providers/shared/async-task-status'
+import type { FailureRecord } from '@/lib/errors/failure'
 
 describe('async poll externalId contract', () => {
-  it('requires an explicit disposition and typed code only for failed provider terminals', () => {
-    expect(() => normalizeAsyncPollResult({ status: 'failed', error: 'terminal' }))
-      .toThrow('ASYNC_PROVIDER_FAILURE_DISPOSITION_REQUIRED')
-    expect(() => normalizeAsyncPollResult({ status: 'pending', failureDisposition: 'retryable' }))
-      .toThrow('ASYNC_PROVIDER_NON_FAILURE_DISPOSITION_FORBIDDEN')
-    expect(() => normalizeAsyncPollResult({ status: 'failed', failureDisposition: 'permanent', error: 'safety' }))
-      .toThrow('ASYNC_PROVIDER_FAILURE_CODE_REQUIRED')
+  it('requires the canonical failure record only for failed provider terminals', () => {
+    const failure = createProviderAsyncTaskFailure({
+      provider: 'test', code: 'EXTERNAL_ERROR', message: 'native terminal failure',
+      cause: { name: 'ProviderError', message: 'native terminal failure', code: 'P-42' },
+    })
+    expect(() => normalizeAsyncPollResult({ status: 'failed' }))
+      .toThrow('ASYNC_PROVIDER_FAILURE_RECORD_REQUIRED')
+    expect(() => normalizeAsyncPollResult({ status: 'pending', failure }))
+      .toThrow('ASYNC_PROVIDER_NON_FAILURE_RECORD_FORBIDDEN')
+    expect(() => normalizeAsyncPollResult({
+      status: 'failed',
+      failure: { version: 2 } as unknown as FailureRecord,
+    })).toThrow('ASYNC_PROVIDER_FAILURE_RECORD_REQUIRED')
     expect(normalizeAsyncPollResult({
       status: 'failed',
-      failureDisposition: 'permanent',
-      errorCode: 'EXTERNAL_ERROR',
-      error: 'safety',
+      failure,
     })).toMatchObject({
       status: 'failed',
-      failureDisposition: 'permanent',
-      errorCode: 'EXTERNAL_ERROR',
+      failure: {
+        native: { code: 'P-42' },
+        interpretation: { code: 'EXTERNAL_ERROR' },
+        recovery: { operation: 'provider.terminal.result', taskReplay: 'forbidden' },
+      },
     })
   })
 

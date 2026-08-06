@@ -350,7 +350,7 @@ export async function commitTaskTerminal(
           ...(completedOutput?.result ?? {}),
           ...(materializedOutput ?? {}),
           billing: nextBillingInfo,
-          ...(failure ? { errorCode: failure.code } : {}),
+          ...(failure ? { errorCode: failure.interpretation.code } : {}),
           terminalSource:
             intent.kind === 'completed' ? 'worker' : intent.source,
         }),

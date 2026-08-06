@@ -50,14 +50,17 @@ export type CodexModelGatewayErrorCode =
 export class CodexModelGatewayError extends Error {
   readonly code: CodexModelGatewayErrorCode
   readonly httpStatus: number
+  override readonly cause?: unknown
 
   constructor(
     code: CodexModelGatewayErrorCode,
     httpStatus: number,
+    cause?: unknown,
   ) {
-    super(`CODEX_MODEL_GATEWAY_${code}`)
+    super(`CODEX_MODEL_GATEWAY_${code}`, { cause })
     this.name = 'CodexModelGatewayError'
     this.code = code
     this.httpStatus = httpStatus
+    this.cause = cause
   }
 }

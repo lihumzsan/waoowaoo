@@ -12,7 +12,7 @@ import {
   setHandler,
   workflowInfo,
 } from '@temporalio/workflow'
-import { getErrorFailureClass, getErrorSpec } from '../../errors/codes'
+import { EXTERNAL_OPERATION } from '../../external-operation/registry'
 import { createFailureRecord, parseFailureRecord } from '../../errors/failure'
 import {
   decodeTemporalFailure,
@@ -139,28 +139,31 @@ function infrastructureAttemptFailure(error: ActivityFailure): TaskAttemptFailur
   if (transported) {
     return {
       failure: transported,
-      failureClass: getErrorFailureClass(transported.code),
-      retryDisposition: getErrorSpec(transported.code).retryable ? 'retryable' : 'final',
+      retryDisposition: transported.recovery.taskReplay === 'safe' ? 'retryable' : 'final',
     }
   }
   if (findFailureCause(error, TimeoutFailure)) {
     const failure = createFailureRecord('GENERATION_TIMEOUT', 'Task Activity timed out', {
-      origin: { system: 'temporal', phase: 'task-activity' },
+      cause: error,
+      context: { system: 'temporal', phase: 'task-activity' },
+      operation: EXTERNAL_OPERATION.TEMPORAL_TASK_ACTIVITY,
     })
     return {
       failure,
-      failureClass: 'TRANSIENT_PROVIDER',
       retryDisposition: 'retryable',
     }
   }
   const failure = createFailureRecord(
     'WORKER_EXECUTION_ERROR',
     'Task Activity failed after infrastructure retries',
-    { origin: { system: 'temporal', phase: 'task-activity' } },
+    {
+      cause: error,
+      context: { system: 'temporal', phase: 'task-activity' },
+      operation: EXTERNAL_OPERATION.TEMPORAL_TASK_ACTIVITY,
+    },
   )
   return {
     failure,
-    failureClass: 'TRANSIENT_PROVIDER',
     retryDisposition: 'retryable',
   }
 }
@@ -468,9 +471,11 @@ async function runTaskWorkflow(input: TaskWorkflowInput): Promise<TaskWorkflowRe
               deadlineExpired
                 ? 'Task execution deadline exceeded'
                 : 'Task Activity was canceled by the execution system',
-              { origin: { system: 'temporal', phase: 'task-activity' } },
+              {
+                context: { system: 'temporal', phase: 'task-activity' },
+                operation: EXTERNAL_OPERATION.TEMPORAL_TASK_ACTIVITY,
+              },
             ),
-            failureClass: 'TRANSIENT_PROVIDER',
             retryDisposition: 'retryable',
           },
         }
@@ -567,7 +572,7 @@ async function runTaskWorkflow(input: TaskWorkflowInput): Promise<TaskWorkflowRe
         taskId: input.taskId,
         attempt: view.attempt,
         failure: canonicalFailure,
-        source: canonicalFailure.code === 'GENERATION_TIMEOUT' ? 'timeout' : 'worker',
+        source: canonicalFailure.interpretation.code === 'GENERATION_TIMEOUT' ? 'timeout' : 'worker',
       },
       'failed',
     )

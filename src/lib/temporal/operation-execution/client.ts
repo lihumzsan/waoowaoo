@@ -46,7 +46,8 @@ export class TemporalOperationExecutionCommandUnconfirmedError extends Error {
 function operationWorkflowFailure(error: WorkflowFailedError): AppError {
   const failure = decodeTemporalFailure(error)
     ?? createFailureRecord('INTERNAL_ERROR', 'Temporal workflow failed without a canonical failure', {
-      origin: { system: 'temporal', phase: 'operation-execution' },
+      cause: error,
+      context: { system: 'temporal', phase: 'operation-execution' },
       details: { reasonCode: 'TEMPORAL_FAILURE_PROTOCOL_MISSING' },
     })
   return AppError.fromFailure(failure, error)

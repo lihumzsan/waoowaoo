@@ -277,12 +277,15 @@ describe('Temporal Operation execution durability', () => {
       await expect(client.execute(command)).rejects.toMatchObject({
         code: 'INVALID_PARAMS',
         failure: {
-          version: 1,
-          code: 'INVALID_PARAMS',
-          details: {
-            reasonCode: 'WORKSPACE_RESOURCE_PATH_INVALID',
+          version: 2,
+          interpretation: {
+            code: 'INVALID_PARAMS',
+            details: {
+              reasonCode: 'WORKSPACE_RESOURCE_PATH_INVALID',
+            },
           },
-          origin: { system: 'application' },
+          context: { system: 'application' },
+          native: { message: expect.any(String) },
         },
       })
       await expect(prisma.task.count({

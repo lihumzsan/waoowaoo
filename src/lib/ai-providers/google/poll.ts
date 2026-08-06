@@ -1,4 +1,7 @@
-import type { ProviderAsyncTaskStatus } from '@/lib/ai-providers/shared/async-task-status'
+import {
+  createProviderAsyncTaskFailure,
+  type ProviderAsyncTaskStatus,
+} from '@/lib/ai-providers/shared/async-task-status'
 import { logInternal } from '@/lib/logging/semantic'
 import { withProviderProxyDispatcher } from '@/lib/http/outbound-proxy'
 import { GOOGLE_PROVIDER_PROXY_TARGET } from '@/lib/ai-providers/google/proxy-target'
@@ -69,7 +72,13 @@ export async function queryGeminiBatchStatus(batchName: string, apiKey: string):
         }
       }
 
-      return { status: 'failed', failureDisposition: 'retryable', errorCode: 'EMPTY_RESPONSE', error: 'No image data in batch result' }
+      return {
+        status: 'failed',
+        failure: createProviderAsyncTaskFailure({
+          provider: 'google', code: 'EMPTY_RESPONSE', message: 'No image data in batch result',
+          cause: batchJob,
+        }),
+      }
     }
 
     if (
@@ -78,7 +87,13 @@ export async function queryGeminiBatchStatus(batchName: string, apiKey: string):
       || state === 'JOB_STATE_EXPIRED'
       || state === 'JOB_STATE_PARTIALLY_SUCCEEDED'
     ) {
-      return { status: 'failed', failureDisposition: 'retryable', errorCode: 'EXTERNAL_ERROR', error: `Gemini Batch failed: ${state}` }
+      return {
+        status: 'failed',
+        failure: createProviderAsyncTaskFailure({
+          provider: 'google', code: 'EXTERNAL_ERROR', message: `Gemini Batch failed: ${state}`,
+          cause: batchJob,
+        }),
+      }
     }
 
     if (
@@ -95,7 +110,13 @@ export async function queryGeminiBatchStatus(batchName: string, apiKey: string):
     const status = getErrorStatus(error)
     logInternal('GeminiBatch', 'ERROR', 'Query error', { batchName, error: message, status })
     if (status === 404) {
-      return { status: 'failed', failureDisposition: 'retryable', errorCode: 'NOT_FOUND', error: 'Batch task not found' }
+      return {
+        status: 'failed',
+        failure: createProviderAsyncTaskFailure({
+          provider: 'google', code: 'NOT_FOUND', message: 'Batch task not found',
+          cause: error,
+        }),
+      }
     }
     throw error
   }
@@ -139,13 +160,25 @@ export async function queryGoogleVideoStatus(operationName: string, apiKey: stri
         || (typeof errRecord?.statusMessage === 'string' && errRecord.statusMessage)
         || 'Veo 任务失败'
       logInternal('Veo', 'ERROR', `${logPrefix} 操作级错误`, { operationName, error: op.error })
-      return { status: 'failed', failureDisposition: 'retryable', errorCode: 'EXTERNAL_ERROR', error: message }
+      return {
+        status: 'failed',
+        failure: createProviderAsyncTaskFailure({
+          provider: 'google', code: 'EXTERNAL_ERROR', message,
+          cause: op.error,
+        }),
+      }
     }
 
     const response = op.response
     if (!response) {
       logInternal('Veo', 'ERROR', `${logPrefix} done=true 但 response 为空`, { operationName })
-      return { status: 'failed', failureDisposition: 'retryable', errorCode: 'EMPTY_RESPONSE', error: 'Veo 任务完成但响应体为空' }
+      return {
+        status: 'failed',
+        failure: createProviderAsyncTaskFailure({
+          provider: 'google', code: 'EMPTY_RESPONSE', message: 'Veo 任务完成但响应体为空',
+          cause: op,
+        }),
+      }
     }
 
     const responseRecord = asRecord(response) || {}
@@ -163,9 +196,12 @@ export async function queryGoogleVideoStatus(operationName: string, apiKey: stri
       })
       return {
         status: 'failed',
-        failureDisposition: 'permanent',
-        errorCode: 'SENSITIVE_CONTENT',
-        error: `Veo 视频被安全策略过滤 (${raiFilteredCount} 个视频被过滤, 原因: ${reasons})`,
+        failure: createProviderAsyncTaskFailure({
+          provider: 'google',
+          code: 'SENSITIVE_CONTENT',
+          message: `Veo 视频被安全策略过滤 (${raiFilteredCount} 个视频被过滤, 原因: ${reasons})`,
+          cause: response,
+        }),
       }
     }
 
@@ -186,7 +222,13 @@ export async function queryGoogleVideoStatus(operationName: string, apiKey: stri
         operationName,
         firstVideo: JSON.stringify(first, null, 2),
       })
-      return { status: 'failed', failureDisposition: 'retryable', errorCode: 'EMPTY_RESPONSE', error: 'Veo 视频对象存在但缺少 URI' }
+      return {
+        status: 'failed',
+        failure: createProviderAsyncTaskFailure({
+          provider: 'google', code: 'EMPTY_RESPONSE', message: 'Veo 视频对象存在但缺少 URI',
+          cause: first,
+        }),
+      }
     }
 
     logInternal('Veo', 'ERROR', `${logPrefix} 无 generatedVideos`, {
@@ -196,7 +238,13 @@ export async function queryGoogleVideoStatus(operationName: string, apiKey: stri
       raiFilteredCount: raiFilteredCount ?? 'N/A',
       raiFilteredReasons: raiFilteredReasons ?? 'N/A',
     })
-    return { status: 'failed', failureDisposition: 'retryable', errorCode: 'EMPTY_RESPONSE', error: 'Veo 任务完成但未返回视频 (generatedVideos 为空)' }
+    return {
+      status: 'failed',
+      failure: createProviderAsyncTaskFailure({
+        provider: 'google', code: 'EMPTY_RESPONSE', message: 'Veo 任务完成但未返回视频 (generatedVideos 为空)',
+        cause: response,
+      }),
+    }
   } catch (error: unknown) {
     const message = getErrorMessage(error)
     logInternal('Veo', 'ERROR', `${logPrefix} 查询异常`, { operationName, error: message })

@@ -4,6 +4,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getErrorSpec, type UnifiedErrorCode } from '@/lib/errors/codes'
 import { normalizeAnyError } from '@/lib/errors/normalize'
 import { projectErrorForUser, projectPublicErrorDetails } from '@/lib/errors/projection'
+import {
+  createFailureRecord,
+  type FailureRecord,
+} from '@/lib/errors/failure'
 
 type RouteParamValue = string | string[] | undefined
 type RouteParams = Record<string, RouteParamValue>
@@ -90,6 +94,7 @@ async function extractRouteContext<TParams extends RouteParams>(
 export type ApiErrorCode = UnifiedErrorCode
 
 export class ApiError extends Error {
+  readonly failure: FailureRecord
   code: ApiErrorCode
   status: number
   details?: Record<string, unknown>
@@ -97,7 +102,11 @@ export class ApiError extends Error {
   category: string
   userMessageKey: string
 
-  constructor(code: ApiErrorCode, details?: Record<string, unknown>) {
+  constructor(
+    code: ApiErrorCode,
+    details?: Record<string, unknown>,
+    options?: { readonly cause?: unknown },
+  ) {
     const spec = getErrorSpec(code)
     const message =
       typeof details?.message === 'string' && details.message.trim()
@@ -106,12 +115,33 @@ export class ApiError extends Error {
 
     super(message)
     this.name = 'ApiError'
+    this.failure = createFailureRecord(code, message, {
+      cause: options?.cause ?? { name: 'ApiError', message, code },
+      details: details ?? null,
+      context: { system: 'application', phase: 'api' },
+    })
     this.code = code
     this.status = spec.httpStatus
     this.details = details
     this.retryable = spec.retryable
     this.category = spec.category
     this.userMessageKey = spec.userMessageKey
+  }
+
+  static fromFailure(failure: FailureRecord, cause?: unknown): ApiError {
+    const error = new ApiError(
+      failure.interpretation.code,
+      failure.interpretation.details ?? undefined,
+      { cause },
+    )
+    Object.defineProperty(error, 'failure', {
+      configurable: true,
+      enumerable: true,
+      value: failure,
+      writable: false,
+    })
+    error.message = failure.native.message
+    return error
   }
 }
 
@@ -121,17 +151,7 @@ export function normalizeError(error: unknown): ApiError {
   }
 
   const normalized = normalizeAnyError(error)
-  const spec = getErrorSpec(normalized.code)
-  const details = {
-    ...(normalized.details || {}),
-    retryable: spec.retryable,
-    category: spec.category,
-    userMessageKey: spec.userMessageKey,
-    provider: normalized.origin.provider,
-    message: normalized.message,
-  }
-
-  return new ApiError(normalized.code, details)
+  return ApiError.fromFailure(normalized, error)
 }
 
 export function apiHandler<TParams extends RouteParams>(handler: ApiHandler<TParams>): ApiHandler<TParams> {

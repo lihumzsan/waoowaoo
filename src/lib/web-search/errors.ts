@@ -3,7 +3,8 @@
  *
  * `UNAVAILABLE` means the capability is not configured or the credential was
  * rejected — retrying changes nothing and the caller should say so plainly.
- * `REQUEST_FAILED` is a transport-level fault that may carry `retryable`.
+ * `REQUEST_FAILED` is a transport-level fault. This error vocabulary never
+ * grants execution replay; callers preserve it as diagnostic evidence only.
  * `RESPONSE_INVALID` means the provider answered but without usable evidence.
  * `ABORTED` is the user's own cancellation and is never a provider fault.
  */
@@ -18,18 +19,16 @@ export type WebSearchErrorCode = (typeof WEB_SEARCH_ERROR_CODES)[number]
 
 export class WebSearchError extends Error {
   readonly code: WebSearchErrorCode
-  readonly retryable: boolean
   readonly details: Readonly<Record<string, string | number | boolean | null>>
 
   constructor(
     code: WebSearchErrorCode,
     details: Readonly<Record<string, string | number | boolean | null>> = {},
-    options?: ErrorOptions & { retryable?: boolean },
+    options?: ErrorOptions,
   ) {
     super(code, options)
     this.name = 'WebSearchError'
     this.code = code
-    this.retryable = options?.retryable === true
     this.details = details
   }
 }

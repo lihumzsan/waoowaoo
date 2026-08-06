@@ -37,12 +37,14 @@ export const POST = apiHandler(async (request: NextRequest) => {
     return NextResponse.json({ success: true, ...receipt })
   } catch (error) {
     if (error instanceof PublicBetaWaitlistError) {
-      if (error.code === 'unavailable') throw new ApiError('NOT_FOUND')
+      if (error.code === 'unavailable') {
+        throw new ApiError('NOT_FOUND', undefined, { cause: error })
+      }
       if (error.code === 'invalid_input') {
-        throw new ApiError('PUBLIC_BETA_WAITLIST_INVALID_INPUT')
+        throw new ApiError('PUBLIC_BETA_WAITLIST_INVALID_INPUT', undefined, { cause: error })
       }
       if (error.code === 'not_open') {
-        throw new ApiError('PUBLIC_BETA_WAITLIST_NOT_OPEN')
+        throw new ApiError('PUBLIC_BETA_WAITLIST_NOT_OPEN', undefined, { cause: error })
       }
     }
     throw error

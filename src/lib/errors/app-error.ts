@@ -7,22 +7,22 @@ import {
   type NormalizeOptions,
 } from './normalize'
 import {
+  augmentFailureRecord,
   createFailureRecord,
+  type FailureContext,
   type FailureDetails,
-  type FailureOrigin,
   type FailureRecord,
 } from './failure'
 
 export class AppError extends Error {
   readonly failure: FailureRecord
   readonly code: UnifiedErrorCode
-  readonly retryable: boolean
   readonly provider: string | null
   readonly details: FailureDetails
   readonly httpStatus: number
   readonly category: string
   readonly userMessageKey: string
-  readonly cause?: unknown
+  override readonly cause?: unknown
 
   constructor(
     code: UnifiedErrorCode,
@@ -30,26 +30,37 @@ export class AppError extends Error {
     options?: {
       details?: FailureDetails
       provider?: string | null
-      origin?: FailureOrigin
+      context?: FailureContext
       cause?: unknown
+      operation?: FailureContext['operation']
     },
   ) {
     const spec = getErrorSpec(code)
-    const origin = options?.origin ?? {
+    const context = options?.context ?? {
       system: options?.provider ? 'provider' as const : 'application' as const,
       ...(options?.provider ? { provider: options.provider } : {}),
     }
-    const failure = createFailureRecord(code, message, {
-      details: options?.details,
-      origin,
-    })
-    super(failure.message)
+    const suppliedMessage = message ?? spec.defaultMessage
+    const failure = options?.cause === undefined
+      ? createFailureRecord(code, suppliedMessage, {
+          cause: { name: new.target.name, message: suppliedMessage, code },
+          details: options?.details,
+          context,
+          operation: options?.operation,
+        })
+      : augmentFailureRecord(normalizeAnyError(options.cause), {
+          code,
+          details: options.details,
+          context,
+          operation: options.operation,
+          message: suppliedMessage,
+        })
+    super(suppliedMessage)
     this.name = 'AppError'
     this.failure = failure
-    this.code = failure.code
-    this.retryable = spec.retryable
-    this.provider = failure.origin.provider ?? null
-    this.details = failure.details
+    this.code = failure.interpretation.code
+    this.provider = options?.provider ?? context.provider ?? failure.context.provider ?? null
+    this.details = failure.interpretation.details
     this.httpStatus = spec.httpStatus
     this.category = spec.category
     this.userMessageKey = spec.userMessageKey
@@ -57,11 +68,22 @@ export class AppError extends Error {
   }
 
   static fromFailure(failure: FailureRecord, cause?: unknown): AppError {
-    return new AppError(failure.code, failure.message, {
-      details: failure.details,
-      origin: failure.origin,
-      cause,
+    const appError = new AppError(
+      failure.interpretation.code,
+      failure.native.message,
+      {
+        details: failure.interpretation.details,
+        context: failure.context,
+        cause,
+      },
+    )
+    Object.defineProperty(appError, 'failure', {
+      configurable: true,
+      enumerable: true,
+      value: failure,
+      writable: false,
     })
+    return appError
   }
 }
 

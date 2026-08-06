@@ -4,7 +4,7 @@ import {
   type FailureRecord,
 } from '../errors/failure'
 
-export const TEMPORAL_FAILURE_PROTOCOL = 'wao.failure.v1' as const
+export const TEMPORAL_FAILURE_PROTOCOL = 'wao.failure.v2' as const
 
 type TemporalFailureEnvelope = {
   readonly protocol: typeof TEMPORAL_FAILURE_PROTOCOL
@@ -18,7 +18,7 @@ export function encodeTemporalFailure(failure: FailureRecord): {
 } {
   return {
     type: TEMPORAL_FAILURE_PROTOCOL,
-    message: failure.message,
+    message: failure.native.message,
     details: [{ protocol: TEMPORAL_FAILURE_PROTOCOL, failure }],
   }
 }
@@ -28,7 +28,7 @@ export function temporalInvariantFailure(
   details: readonly unknown[] = [],
 ): FailureRecord {
   return createFailureRecord('INTERNAL_ERROR', reasonCode, {
-    origin: { system: 'temporal', phase: 'protocol' },
+    context: { system: 'temporal', phase: 'protocol' },
     details: {
       reasonCode,
       ...(details.length > 0 ? { protocolDetails: [...details] } : {}),

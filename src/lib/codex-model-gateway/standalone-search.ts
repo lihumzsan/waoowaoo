@@ -235,7 +235,7 @@ export async function proxyCodexStandaloneSearchRequest(input: {
     await assertLlmSpendableBalance(scope.userId)
   } catch (error) {
     if (error instanceof InsufficientBalanceError) {
-      throw new CodexModelGatewayError('BILLING_BALANCE_INSUFFICIENT', 429)
+      throw new CodexModelGatewayError('BILLING_BALANCE_INSUFFICIENT', 429, error)
     }
     throw error
   }
@@ -276,6 +276,7 @@ export async function proxyCodexStandaloneSearchRequest(input: {
       throw new CodexModelGatewayError(
         error.code === 'WEB_SEARCH_UNAVAILABLE' ? 'PROVIDER_CONFIG_UNAVAILABLE' : 'PROVIDER_SEARCH_RESPONSE_INVALID',
         error.code === 'WEB_SEARCH_UNAVAILABLE' ? 503 : 502,
+        error,
       )
     }
     throw error

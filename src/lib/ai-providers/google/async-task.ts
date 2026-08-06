@@ -40,11 +40,9 @@ export const geminiBatchAsyncTaskProvider: AsyncTaskProviderRegistration = {
     const result = await queryGeminiBatchStatus(parsed.requestId, apiKey)
     return normalizeAsyncPollResult({
       status: result.status,
-      failureDisposition: result.failureDisposition,
-      ...(result.status === 'failed' ? { errorCode: result.errorCode } : {}),
+      ...(result.status === 'failed' ? { failure: result.failure } : {}),
       imageUrl: result.imageUrl,
       resultUrl: result.imageUrl,
-      error: result.error,
     })
   },
 }
@@ -59,14 +57,12 @@ export const googleVideoAsyncTaskProvider: AsyncTaskProviderRegistration = {
     const result = await queryGoogleVideoStatus(parsed.requestId, apiKey)
     return normalizeAsyncPollResult({
       status: result.status,
-      failureDisposition: result.failureDisposition,
-      ...(result.status === 'failed' ? { errorCode: result.errorCode } : {}),
+      ...(result.status === 'failed' ? { failure: result.failure } : {}),
       videoUrl: result.videoUrl,
       resultUrl: result.videoUrl,
       downloadHeaders: result.videoUrl
         ? { 'x-goog-api-key': apiKey }
         : undefined,
-      error: result.error,
     })
   },
 }

@@ -127,14 +127,20 @@ describe('provider contract - fal queue result and failure boundaries', () => {
         submitResponse: { status: 200, body: testCase.body, headers: testCase.headers },
       })
       const result = await queryFalStatus('fal-ai/model', `request-${testCase.id}`, 'key')
-      expect(result).toEqual(testCase.expected ? {
-        status: 'COMPLETED', completed: true, failed: false, resultUrl: testCase.expected,
-      } : {
-        status: 'COMPLETED', completed: true, failed: true,
-        failureDisposition: 'retryable',
-        errorCode: 'EMPTY_RESPONSE',
-        error: 'FAL任务完成但未返回媒体URL',
-      })
+      if (testCase.expected) {
+        expect(result).toEqual({
+          status: 'COMPLETED', completed: true, failed: false, resultUrl: testCase.expected,
+        })
+      } else {
+        expect(result).toMatchObject({
+          status: 'COMPLETED', completed: true, failed: true,
+          failure: {
+            native: { message: 'FAL任务完成但未返回媒体URL' },
+            interpretation: { code: 'EMPTY_RESPONSE' },
+            recovery: { operation: 'provider.terminal.result', taskReplay: 'forbidden' },
+          },
+        })
+      }
     }
   })
 
@@ -176,15 +182,19 @@ describe('provider contract - fal queue result and failure boundaries', () => {
         mode: 'fatal_error',
         submitResponse: { status: 422, body: testCase.body },
       })
-      await expect(queryFalStatus('fal-ai/model', `request-${testCase.id}`, 'key')).resolves.toEqual({
+      await expect(queryFalStatus('fal-ai/model', `request-${testCase.id}`, 'key')).resolves.toMatchObject({
         status: 'COMPLETED',
         completed: true,
         failed: true,
-        failureDisposition: 'permanent',
-        errorCode: testCase.id === 'policy'
-          ? 'SENSITIVE_CONTENT'
-          : 'PROVIDER_SUBMISSION_REJECTED',
-        error: testCase.error,
+        failure: {
+          native: { name: 'FetchStatusError', statusCode: 422 },
+          interpretation: {
+            code: testCase.id === 'policy'
+              ? 'SENSITIVE_CONTENT'
+              : 'PROVIDER_SUBMISSION_REJECTED',
+          },
+          recovery: { taskReplay: 'forbidden' },
+        },
       })
     }
   })
@@ -229,13 +239,15 @@ describe('provider contract - fal queue result and failure boundaries', () => {
         mode: 'fatal_error',
         submitResponse: { status: 200, body: { status: 'FAILED', error } },
       })
-      await expect(queryFalStatus('fal-ai/model', `request-${id}`, 'key')).resolves.toEqual({
+      await expect(queryFalStatus('fal-ai/model', `request-${id}`, 'key')).resolves.toMatchObject({
         status: 'FAILED',
         completed: false,
         failed: true,
-        failureDisposition: 'retryable',
-        errorCode: 'EXTERNAL_ERROR',
-        error: '任务失败',
+        failure: {
+          native: { message: '任务失败' },
+          interpretation: { code: 'EXTERNAL_ERROR' },
+          recovery: { taskReplay: 'forbidden' },
+        },
       })
     }
   })

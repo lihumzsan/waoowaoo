@@ -65,7 +65,7 @@ function toTurnView(row: {
       ? buildAgentTurnAssistantMessageId({ turnId: row.id, attempt: row.attempt })
       : null),
     stopReason: row.stopReason,
-    errorCode: parseFailureRecord(row.failure)?.code ?? null,
+    errorCode: parseFailureRecord(row.failure)?.interpretation.code ?? null,
     cancelReason: row.cancelReason,
     startedAt: row.startedAt?.toISOString() ?? null,
     finishedAt: row.finishedAt?.toISOString() ?? null,
@@ -225,7 +225,7 @@ export async function getAssistantRuntimeSessionView(
         status: task.status,
         terminal: TERMINAL_TASK_STATUSES.has(task.status),
         errorCode: task.status === 'failed'
-          ? parseFailureRecord(task.failure)?.code ?? 'INTERNAL_ERROR'
+          ? parseFailureRecord(task.failure)?.interpretation.code ?? 'INTERNAL_ERROR'
           : null,
         createdAt: task.createdAt.toISOString(),
         finishedAt: task.finishedAt?.toISOString() ?? null,

@@ -1,4 +1,3 @@
-import type { ErrorFailureClass } from '@/lib/errors/codes'
 import type { FailureRecord } from '@/lib/errors/failure'
 import type { TaskSchedulerClass } from '@/lib/task/definition'
 import type { TaskType } from '@/lib/task/types'
@@ -98,7 +97,6 @@ export interface ReportTaskRetryInput {
 
 export interface TaskAttemptFailure {
   failure: FailureRecord
-  failureClass: ErrorFailureClass
   retryDisposition: 'retryable' | 'final'
 }
 

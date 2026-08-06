@@ -27,7 +27,8 @@ import {
   waitForAsyncProviderResult,
   type AsyncProviderWaitCallbacks,
 } from '@/lib/ai-exec/async-wait'
-import { ProviderPermanentFailureError, ProviderTerminalFailureError } from '@/lib/ai-exec/provider-errors'
+import { ProviderTaskFailureError } from '@/lib/ai-exec/provider-errors'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import { resolveReasoningEffort } from '@/lib/ai-exec/reasoning-effort'
 import {
   createMediaProviderRequestIdentity,
@@ -38,7 +39,7 @@ import {
 import {
   executeTaskDurableInvocation,
   executeTaskProviderInvocation,
-  markTaskProviderInvocationRetryable,
+  markTaskProviderInvocationReplayAuthorized,
   type TaskProviderInvocation,
   type TaskProviderInvocationRoute,
 } from '@/lib/task/provider-invocation'
@@ -354,31 +355,25 @@ export async function executeMediaGeneration(
         cause: error,
       })
       // 顺序契约（PG-06A 排队超时补偿）：先持久化“旧 external id 作废”
-      // （checkpoint submitted → retryable_rejected），再尽力取消 provider 侧任务；
+      // （checkpoint submitted → replay_authorized），再尽力取消 provider 侧任务；
       // 新提交只能由下一 attempt 经 durable fence 重新授权。此处崩溃最坏留下
       // 一个已被作废、无人消费的孤儿 provider job，不会出现双活身份。
       if (taskId && invocation) {
-        await markTaskProviderInvocationRetryable({ taskId, invocation, error: queueError })
+        await markTaskProviderInvocationReplayAuthorized({ taskId, invocation, error: queueError })
+        const replayAuthorized = new AppError('GENERATION_QUEUE_TIMEOUT', error.message, {
+          provider: selection.provider,
+          details: { externalId, queuedMs: error.queuedMs, queueTimeoutMs: error.queueTimeoutMs },
+          operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT_REPLAY_AUTHORIZED,
+          cause: queueError,
+        })
+        await cancelAsyncProviderTaskBestEffort({ externalId, userId: input.userId })
+        throw replayAuthorized
       }
       await cancelAsyncProviderTaskBestEffort({ externalId, userId: input.userId })
       throw queueError
     }
-    if (error instanceof ProviderTerminalFailureError) {
-      if (taskId && invocation) {
-        await markTaskProviderInvocationRetryable({ taskId, invocation, error })
-      }
-      throw new AppError(error.code, error.message, {
-        provider: selection.provider,
-        details: { externalId },
-        cause: error,
-      })
-    }
-    if (error instanceof ProviderPermanentFailureError) {
-      throw new AppError(error.code, error.message, {
-        provider: selection.provider,
-        details: { externalId },
-        cause: error,
-      })
+    if (error instanceof ProviderTaskFailureError) {
+      throw AppError.fromFailure(error.failure, error)
     }
     throw error
   }
@@ -495,21 +490,6 @@ export function taskAiInvocationKey(input: {
   // identity. Including it here would let a replay submit the same external
   // request under a fresh durable fence.
   return `ai:${input.modality}:${action}:${stepId}:${input.meta.stepIndex}`
-}
-
-export async function markTaskAiInvocationRetryable(input: {
-  readonly modality: 'llm' | 'vision'
-  readonly action?: string
-  readonly meta?: { readonly stepId: string; readonly stepAttempt?: number; readonly stepIndex: number }
-  readonly error: unknown
-}): Promise<void> {
-  const taskId = getLogContext().taskId
-  if (!taskId) return
-  await markTaskProviderInvocationRetryable({
-    taskId,
-    invocation: { key: taskAiInvocationKey(input) },
-    error: input.error,
-  })
 }
 
 async function executeTaskAwareLlmCompletion(input: {

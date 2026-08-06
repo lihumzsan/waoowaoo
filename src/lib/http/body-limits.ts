@@ -91,7 +91,7 @@ export async function readFormDataWithLimit(
       code: 'FORMDATA_PARSE_FAILED',
       field: 'body',
       message: 'request body must be valid multipart/form-data',
-    })
+    }, { cause: error })
   }
 }
 

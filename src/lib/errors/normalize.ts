@@ -3,6 +3,7 @@ import {
   InsufficientBalanceError,
   type BillingOperationErrorCode,
 } from '@/lib/billing/errors'
+import type { ExternalOperationId } from '@/lib/external-operation/registry'
 import {
   getPrismaErrorCode,
   isLikelyPrismaDisconnectError,
@@ -14,28 +15,30 @@ import {
   type UnifiedErrorCode,
 } from './codes'
 import {
+  augmentFailureRecord,
   createFailureRecord,
   parseFailureRecord,
-  type FailureDetails,
-  type FailureOrigin,
+  type FailureContext,
   type FailureRecord,
 } from './failure'
 
 export type NormalizeOptions = {
-  fallbackCode?: UnifiedErrorCode
-  details?: Record<string, unknown> | null
-  origin?: FailureOrigin
+  readonly fallbackCode?: UnifiedErrorCode
+  readonly details?: Record<string, unknown> | null
+  readonly context?: FailureContext
+  readonly operation?: ExternalOperationId
+  readonly attempts?: number
 }
 
 type ErrorLike = {
-  code?: unknown
-  status?: unknown
-  statusCode?: unknown
-  message?: unknown
-  details?: unknown
-  provider?: unknown
-  failure?: unknown
-  cause?: unknown
+  readonly code?: unknown
+  readonly status?: unknown
+  readonly statusCode?: unknown
+  readonly message?: unknown
+  readonly details?: unknown
+  readonly provider?: unknown
+  readonly failure?: unknown
+  readonly cause?: unknown
 }
 
 function findCarriedFailure(value: unknown): FailureRecord | null {
@@ -67,6 +70,8 @@ function toMessage(value: unknown): string {
 
 /** Bounded internal description for unknown thrown values. */
 export function describeUnknownError(value: unknown): string {
+  const carried = findCarriedFailure(value)
+  if (carried) return carried.native.message
   const message = toMessage(value)
   return (message || String(value)).slice(0, 4_000)
 }
@@ -98,29 +103,6 @@ function isModelNotOpenCode(code: unknown): boolean {
   if (typeof code !== 'string') return false
   const normalized = code.trim().toUpperCase()
   return normalized === 'MODELNOTOPEN' || normalized === 'MODEL_NOT_OPEN'
-}
-
-function failureOrigin(
-  provider: string | null,
-  explicit: FailureOrigin | undefined,
-): FailureOrigin {
-  if (explicit) return explicit
-  return provider
-    ? { system: 'provider', provider }
-    : { system: 'application' }
-}
-
-function buildFailure(
-  code: UnifiedErrorCode,
-  message: string,
-  details: FailureDetails,
-  provider: string | null,
-  origin: FailureOrigin | undefined,
-): FailureRecord {
-  return createFailureRecord(code, message, {
-    details,
-    origin: failureOrigin(provider, origin),
-  })
 }
 
 function inferCodeFromPrismaCode(prismaCode: string): UnifiedErrorCode {
@@ -167,122 +149,107 @@ function codeFromBillingOperation(errorCode: BillingOperationErrorCode): Unified
   }
 }
 
+function inferInterpretation(input: unknown, fallbackCode: UnifiedErrorCode): UnifiedErrorCode {
+  const errorLike = (input || {}) as ErrorLike
+  const message = toMessage(errorLike.message ?? input)
+  if (input instanceof TypeError) {
+    const lower = message.toLowerCase()
+    if (lower === 'terminated' || lower.includes('aborted') || lower.includes('socket hang up')) {
+      return 'NETWORK_ERROR'
+    }
+  }
+  const prismaCode = getPrismaErrorCode(input)
+  if (prismaCode) return inferCodeFromPrismaCode(prismaCode)
+  if (isLikelyPrismaDisconnectError(input)) return 'EXTERNAL_ERROR'
+  if (input instanceof InsufficientBalanceError) return 'INSUFFICIENT_BALANCE'
+  if (input instanceof BillingOperationError) return codeFromBillingOperation(input.code)
+  const resolvedCode = resolveUnifiedErrorCode(errorLike.code)
+  if (resolvedCode) return resolvedCode
+  if (isModelNotOpenCode(errorLike.code)) return 'MODEL_NOT_OPEN'
+  const httpStatus = readHttpStatus(errorLike.status)
+    ?? readHttpStatus(errorLike.statusCode)
+    ?? readHttpStatus(errorLike.code)
+  return httpStatus === null ? fallbackCode : codeFromHttpStatus(httpStatus)
+}
+
+function inferredDetails(input: unknown): Record<string, unknown> | null {
+  const errorLike = (input || {}) as ErrorLike
+  const details = errorLike.details && typeof errorLike.details === 'object' && !Array.isArray(errorLike.details)
+    ? errorLike.details as Record<string, unknown>
+    : {}
+  const prismaCode = getPrismaErrorCode(input)
+  if (input instanceof InsufficientBalanceError) {
+    return { ...details, required: input.required, available: input.available }
+  }
+  return prismaCode ? { ...details, prismaCode } : Object.keys(details).length > 0 ? details : null
+}
+
 export function normalizeAnyError(
   input: unknown,
   options: NormalizeOptions = {},
 ): FailureRecord {
   const carried = findCarriedFailure(input)
-  if (carried) return carried
+  if (carried) {
+    return augmentFailureRecord(carried, {
+      details: options.details,
+      context: options.context,
+      operation: options.operation,
+      attempts: options.attempts,
+    })
+  }
   const errorLike = (input || {}) as ErrorLike
-
-  const fallbackCode = options.fallbackCode || DEFAULT_ERROR_CODE
-  const message = toMessage(errorLike.message ?? input)
   const provider = typeof errorLike.provider === 'string'
     ? errorLike.provider.trim() || null
     : null
+  const context = options.context ?? (provider
+    ? { system: 'provider' as const, provider }
+    : { system: 'application' as const })
+  const fallbackCode = options.fallbackCode ?? DEFAULT_ERROR_CODE
+  const code = inferInterpretation(input, fallbackCode)
+  const message = toMessage(errorLike.message ?? input) || getErrorSpecMessage(code)
+  return createFailureRecord(code, message, {
+    cause: input,
+    details: {
+      ...(inferredDetails(input) ?? {}),
+      ...(options.details ?? {}),
+    },
+    context,
+    operation: options.operation,
+    attempts: options.attempts,
+  })
+}
 
-  if (input instanceof TypeError) {
-    const lower = message.toLowerCase()
-    if (lower === 'terminated' || lower.includes('aborted') || lower.includes('socket hang up')) {
-      return buildFailure(
-        'NETWORK_ERROR',
-        message || 'Network request terminated',
-        options.details ?? null,
-        provider,
-        options.origin,
-      )
+function getErrorSpecMessage(code: UnifiedErrorCode): string {
+  // Kept local to avoid treating a product copy string as native evidence when
+  // the thrown value already supplied a diagnostic message.
+  return code === 'INTERNAL_ERROR' ? 'Unexpected internal failure' : code
+}
+
+class FailureCarrierError extends Error {
+  readonly failure: FailureRecord
+  readonly cause: unknown
+
+  constructor(failure: FailureRecord, cause: unknown) {
+    super(failure.native.message)
+    this.name = 'FailureCarrierError'
+    this.failure = failure
+    this.cause = cause
+  }
+}
+
+/** Preserve the original error class whenever possible while carrying v2. */
+export function attachFailureToThrown(input: unknown, failure: FailureRecord): unknown {
+  if (input && typeof input === 'object' && Object.isExtensible(input)) {
+    const descriptor = Object.getOwnPropertyDescriptor(input, 'failure')
+    if (!descriptor || descriptor.writable || descriptor.set || descriptor.configurable) {
+      Object.defineProperty(input, 'failure', {
+        configurable: true,
+        enumerable: false,
+        value: failure,
+        writable: true,
+      })
+      return input
     }
   }
-
-  const prismaCode = getPrismaErrorCode(input)
-  if (prismaCode) {
-    return buildFailure(
-      inferCodeFromPrismaCode(prismaCode),
-      message || `Database request failed (${prismaCode})`,
-      { prismaCode, ...(options.details || {}) },
-      provider,
-      options.origin,
-    )
-  }
-
-  if (isLikelyPrismaDisconnectError(input)) {
-    return buildFailure(
-      'EXTERNAL_ERROR',
-      message || 'Database connection unavailable',
-      options.details ?? null,
-      provider,
-      options.origin,
-    )
-  }
-
-  if (input instanceof InsufficientBalanceError) {
-    return buildFailure(
-      'INSUFFICIENT_BALANCE',
-      message || input.message,
-      {
-        required: input.required,
-        available: input.available,
-        ...(options.details || {}),
-      },
-      null,
-      options.origin,
-    )
-  }
-
-  if (input instanceof BillingOperationError) {
-    return buildFailure(
-      codeFromBillingOperation(input.code),
-      message || input.message,
-      options.details ?? null,
-      null,
-      options.origin,
-    )
-  }
-
-  const resolvedCode = resolveUnifiedErrorCode(errorLike.code)
-  if (resolvedCode) {
-    return buildFailure(
-      resolvedCode,
-      message,
-      {
-        ...(errorLike.details && typeof errorLike.details === 'object' && !Array.isArray(errorLike.details)
-          ? errorLike.details as Record<string, unknown>
-          : {}),
-        ...(options.details || {}),
-      },
-      provider,
-      options.origin,
-    )
-  }
-
-  if (isModelNotOpenCode(errorLike.code)) {
-    return buildFailure(
-      'MODEL_NOT_OPEN',
-      message,
-      options.details ?? null,
-      provider,
-      options.origin,
-    )
-  }
-
-  const httpStatus = readHttpStatus(errorLike.status)
-    ?? readHttpStatus(errorLike.statusCode)
-    ?? readHttpStatus(errorLike.code)
-  if (httpStatus !== null) {
-    return buildFailure(
-      codeFromHttpStatus(httpStatus),
-      message,
-      options.details ?? null,
-      provider,
-      options.origin,
-    )
-  }
-
-  return buildFailure(
-    fallbackCode,
-    message,
-    options.details ?? null,
-    provider,
-    options.origin,
-  )
+  return new FailureCarrierError(failure, input)
 }

@@ -14,7 +14,7 @@ import {
   parseFailureRecord,
 } from '@/lib/errors/failure'
 import { normalizeAnyError } from '@/lib/errors/normalize'
-import { getErrorFailureClass } from '@/lib/errors/codes'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import { withLogContext } from '@/lib/logging/context'
 import { createScopedLogger } from '@/lib/logging/core'
 import { getTemporalClient } from '@/lib/temporal/client'
@@ -37,10 +37,7 @@ import {
 import {
   loadReadyFollowUpBatchIdsForTerminal,
 } from '@/lib/agent-turn/follow-up-batch'
-import {
-  AssistantRuntimeTaskFollowUpHttpError,
-  requestAssistantRuntimeTaskFollowUp,
-} from '@/lib/assistant-runtime/task-follow-up-http'
+import { requestAssistantRuntimeTaskFollowUp } from '@/lib/assistant-runtime/task-follow-up-http'
 import { TASK_EVENT_TYPE, TASK_STATUS, type TaskExecutionData } from '@/lib/task/types'
 import { executeTaskHandler } from '@/lib/task/execution/registry'
 import { projectTaskProgress } from '@/lib/task/execution/progress'
@@ -309,10 +306,7 @@ function parseAttemptFailureCheckpoint(
   const parsedFailure = parseFailureRecord(parsed.failure)
   if (
     !parsedFailure ||
-    (parsed.retryDisposition !== 'retryable' && parsed.retryDisposition !== 'final') ||
-    (parsed.failureClass !== 'TRANSIENT_PROVIDER' &&
-      parsed.failureClass !== 'PERMANENT_PROVIDER' &&
-      parsed.failureClass !== 'OUTPUT_VALIDATION')
+    (parsed.retryDisposition !== 'retryable' && parsed.retryDisposition !== 'final')
   ) {
     return failNonRetryable('TASK_ATTEMPT_FAILURE_CHECKPOINT_INVALID')
   }
@@ -323,7 +317,6 @@ function parseAttemptFailureCheckpoint(
     attempt: expected.attempt,
     failure: {
       failure: parsedFailure,
-      failureClass: parsed.failureClass,
       retryDisposition: parsed.retryDisposition,
     },
   }
@@ -750,7 +743,9 @@ export async function runTaskAttempt(input: RunTaskAttemptInput): Promise<RunTas
         throw new CancelledFailure(
           'Task Activity cancellation acknowledged',
           [],
-          error instanceof Error ? error : undefined,
+          error instanceof Error
+            ? error
+            : new Error('Task Activity failed with a non-Error value', { cause: error }),
         )
       }
       if (error instanceof TaskTerminatedError) {
@@ -760,14 +755,13 @@ export async function runTaskAttempt(input: RunTaskAttemptInput): Promise<RunTas
         }
       }
       const failureRecord = normalizeAnyError(error, {
-        origin: { system: 'temporal', phase: 'task-attempt' },
+        context: { system: 'temporal', phase: 'task-attempt' },
       })
-      const failureClass = getErrorFailureClass(failureRecord.code)
       logger.error({
         action: 'task.attempt.failed',
         message: 'task attempt returned a classified failure',
         taskId: input.taskId,
-        errorCode: failureRecord.code,
+        errorCode: failureRecord.interpretation.code,
         details: { attempt },
         error: error instanceof Error
           ? { name: error.name, message: error.message, stack: error.stack }
@@ -775,10 +769,8 @@ export async function runTaskAttempt(input: RunTaskAttemptInput): Promise<RunTas
       })
       const failure: TaskAttemptFailure = {
         failure: failureRecord,
-        failureClass,
         retryDisposition: shouldRetryTaskFailure({
-          taskType: input.taskType,
-          failureClass,
+          failure: failureRecord,
         })
           ? 'retryable'
           : 'final',
@@ -948,7 +940,7 @@ export async function commitTaskWorkflowFailure(
           'WORKER_EXECUTION_ERROR',
           'Task Workflow failed before returning a terminal result',
           {
-            origin: { system: 'temporal', phase: 'task-workflow' },
+            context: { system: 'temporal', phase: 'task-workflow' },
             details: {
               schedulerWorkflowId: input.schedulerWorkflowId,
               enqueueId: input.enqueueId,
@@ -1134,12 +1126,12 @@ export async function notifyTaskFollowUp(input: NotifyTaskFollowUpInput): Promis
   try {
     await requestAssistantRuntimeTaskFollowUp(input.batchId)
   } catch (error) {
-    if (error instanceof AssistantRuntimeTaskFollowUpHttpError) {
-      if (error.retryable) {
-        throw ApplicationFailure.retryable(error.code, error.code, input.batchId)
-      }
-      return failNonRetryable(error.code, input.batchId, error.httpStatus)
-    }
-    throw error
+    const failure = normalizeAnyError(error, {
+      context: { system: 'runtime', phase: 'task-follow-up-delivery' },
+      operation: EXTERNAL_OPERATION.ASSISTANT_FOLLOW_UP_DELIVERY,
+      details: { batchId: input.batchId },
+    })
+    const encoded = encodeTemporalFailure(failure)
+    throw ApplicationFailure.retryable(encoded.message, encoded.type, ...encoded.details)
   }
 }

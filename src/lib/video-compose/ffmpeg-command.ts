@@ -66,7 +66,7 @@ export async function runFfmpegCommand(command: FfmpegBinaryName, args: readonly
     }
   } catch (error) {
     if (isTimeoutTermination(error)) {
-      throw new Error(`FFMPEG_COMMAND_TIMEOUT:${stage}:${timeoutMs}`)
+      throw new Error(`FFMPEG_COMMAND_TIMEOUT:${stage}:${timeoutMs}`, { cause: error })
     }
     throw error
   }
