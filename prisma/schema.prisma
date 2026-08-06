@@ -273,23 +273,23 @@ model UsageCost {
 }
 
 model User {
-  id            String          @id @default(uuid())
-  name          String          @unique(map: "User_name_key")
-  email         String?
-  emailVerified DateTime?
-  image         String?
-  password      String?
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @default(now()) @updatedAt
-  accounts      Account[]
-  projects      Project[]
-  sessions      Session[]
-  usageCosts    UsageCost[]
-  llmBillingMeter LlmBillingMeter?
-  balance       UserBalance?
-  subscription  Subscription?
-  preferences   UserPreference?
-  paidBetaSeats PaidBetaSeat[]
+  id                   String                @id @default(uuid())
+  name                 String                @unique(map: "User_name_key")
+  email                String?
+  emailVerified        DateTime?
+  image                String?
+  password             String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @default(now()) @updatedAt
+  accounts             Account[]
+  projects             Project[]
+  sessions             Session[]
+  usageCosts           UsageCost[]
+  llmBillingMeter      LlmBillingMeter?
+  balance              UserBalance?
+  subscription         Subscription?
+  preferences          UserPreference?
+  paidBetaSeats        PaidBetaSeat[]
   announcementReceipts AnnouncementReceipt[]
 
   // 资产中心
@@ -459,16 +459,16 @@ model PaidBetaCampaign {
 /// is the canonical participant identity, so repeat purchases never consume a
 /// second seat.
 model PaidBetaSeat {
-  id         String           @id @default(uuid())
-  campaignId String           @db.VarChar(64)
+  id         String                   @id @default(uuid())
+  campaignId String                   @db.VarChar(64)
   userId     String
-  status     String           @db.VarChar(16)
+  status     String                   @db.VarChar(16)
   paidAt     DateTime?
   releasedAt DateTime?
-  createdAt  DateTime         @default(now())
-  updatedAt  DateTime         @default(now()) @updatedAt
-  campaign   PaidBetaCampaign @relation(fields: [campaignId], references: [id], onDelete: Restrict)
-  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime                 @default(now())
+  updatedAt  DateTime                 @default(now()) @updatedAt
+  campaign   PaidBetaCampaign         @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  user       User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   attempts   PaidBetaPaymentAttempt[]
 
   @@unique([campaignId, userId])
