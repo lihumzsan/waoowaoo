@@ -229,7 +229,7 @@ export function createUserBillingOperations(): ProjectAgentOperationRegistryDraf
 
         const byProjectWithNames = costSummary.byProject.map((p) => ({
           projectId: p.projectId,
-          projectName: projectMap.get(p.projectId) || '未知项目',
+          projectName: projectMap.get(p.projectId) ?? null,
           totalCost: p._sum.cost || 0,
           recordCount: p._count,
         }))

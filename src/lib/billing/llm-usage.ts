@@ -1,8 +1,8 @@
-import type { Prisma } from '@prisma/client'
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
-import type { AiLlmUsage } from '@/lib/ai-registry/types'
-import { recordUsageFact } from './reporting'
+import { usdToCredits } from '@/lib/ai-registry/pricing-currency'
+import { retailCreditsFromCostCny } from '@/lib/ai-registry/pricing-retail'
+import { calcTextToolCalls, calcTextWithCache } from './cost'
 
 export const llmUsageFactSchema = z
   .object({
@@ -11,6 +11,7 @@ export const llmUsageFactSchema = z
     inputTokens: z.number().int().nonnegative(),
     outputTokens: z.number().int().nonnegative(),
     cachedInputTokens: z.number().int().nonnegative(),
+    cacheWriteTokens: z.number().int().nonnegative().optional(),
     requestCount: z.number().int().nonnegative(),
     /** Server-side tool calls the provider bills per call on top of tokens. */
     toolCalls: z.number().int().nonnegative().default(0),
@@ -20,7 +21,7 @@ export const llmUsageFactSchema = z
 export type LlmUsageFact = z.infer<typeof llmUsageFactSchema>
 
 export function buildLlmUsageFactId(
-  scope: 'agent-turn' | 'web-search',
+  scope: 'openrouter-generation' | 'web-search',
   identityParts: readonly (string | number)[],
 ): string {
   const canonicalIdentity = identityParts
@@ -33,57 +34,19 @@ export function buildLlmUsageFactId(
   return `llm-usage:v1:${scope}:${digest}`
 }
 
-function normalizeTokenCount(value: number | undefined): number {
-  return Number.isFinite(value) ? Math.max(0, Math.floor(value ?? 0)) : 0
+/** Cloud OpenRouter returns its exact USD charge on every completed response. */
+export function priceReportedOpenRouterUsage(costUsd: number): number {
+  return retailCreditsFromCostCny(usdToCredits(costUsd), 'text')
 }
 
-export function projectAiLlmUsage(params: {
-  phase: 'context_compaction'
-  modelKey: string
-  usage: AiLlmUsage
-}): LlmUsageFact {
-  return llmUsageFactSchema.parse({
-    phase: params.phase,
-    modelKey: params.modelKey,
-    inputTokens: normalizeTokenCount(params.usage.promptTokens),
-    outputTokens: normalizeTokenCount(params.usage.completionTokens),
-    cachedInputTokens: normalizeTokenCount(params.usage.cachedInputTokens),
-    requestCount: 1,
-  })
-}
-
-export async function recordLlmUsageFact(
-  tx: Prisma.TransactionClient,
-  params: {
-    usageId: string
-    projectId: string
-    userId: string
-    action: string
-    usage: LlmUsageFact
-    metadata?: Record<string, unknown>
-  },
-): Promise<void> {
-  const usage = llmUsageFactSchema.parse(params.usage)
-  const quantity = usage.inputTokens + usage.outputTokens
-  if (quantity === 0 && usage.requestCount === 0 && usage.toolCalls === 0) return
-  await recordUsageFact(tx, {
-    usageId: params.usageId,
-    projectId: params.projectId,
-    userId: params.userId,
-    action: params.action,
-    apiType: 'text',
-    model: usage.modelKey,
-    quantity,
-    unit: 'token',
-    cost: 0,
-    metadata: {
-      usagePhase: usage.phase,
-      requestCount: usage.requestCount,
-      actualInputTokens: usage.inputTokens,
-      actualOutputTokens: usage.outputTokens,
-      actualCachedInputTokens: usage.cachedInputTokens,
-      actualToolCalls: usage.toolCalls,
-      ...params.metadata,
-    },
-  })
+/** Hosted OpenAI search has no response cost field, so its catalog is canonical. */
+export function priceCatalogLlmUsage(usageValue: LlmUsageFact): number {
+  const usage = llmUsageFactSchema.parse(usageValue)
+  const tokenCost = calcTextWithCache(
+    usage.modelKey,
+    usage.inputTokens,
+    usage.outputTokens,
+    { cachedInputTokens: usage.cachedInputTokens },
+  )
+  return Number((tokenCost + calcTextToolCalls(usage.modelKey, usage.toolCalls)).toFixed(6))
 }

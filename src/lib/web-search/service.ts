@@ -42,9 +42,9 @@ export function resolveWebSearchModel(
       reason: `${OPENAI_WEB_SEARCH_MODEL_ENV} must be a bare OpenAI model id, not a routed model key`,
     })
   }
-  // Usage settles daily against the pricing catalog, so an unpriced override
-  // would not fail here — it would fail every affected user's settlement hours
-  // after the money was already spent. Refuse it while it is still free.
+  // Usage settles from the pricing catalog after the response, so an unpriced
+  // override would fail only after the Provider has already been paid. Refuse
+  // it while the request is still free.
   if (!findBuiltinPricingCatalogEntry('text', 'openai', configured)) {
     throw new WebSearchError('WEB_SEARCH_UNAVAILABLE', {
       provider: 'openai',

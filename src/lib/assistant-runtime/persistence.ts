@@ -4,7 +4,6 @@ import { assertLlmSpendableBalance } from '@/lib/billing/llm-balance-gate'
 import { Prisma, type ProjectAgentTurn, type ProjectAssistantThread } from '@prisma/client'
 import { safeValidateUIMessages, type UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
-import { recordAgentTurnUsageFactsInTransaction } from '@/lib/agent-turn/usage'
 import { buildAgentTurnAssistantMessageId } from '@/lib/agent-turn/stream-publisher'
 import { projectErrorForModel } from '@/lib/errors/projection'
 import { parseProjectAgentPlanSnapshot } from '@/lib/project-agent/plan'
@@ -1222,14 +1221,6 @@ export async function settleAssistantRuntimeTurn(input: {
         where: { id: turn.id },
         data: { assistantMessageId: projectedMessageId },
       })
-      await recordAgentTurnUsageFactsInTransaction({
-        tx,
-        turnId: turn.id,
-        attempt: turn.attempt,
-        projectId: turn.projectId,
-        userId: turn.userId,
-        usageFacts: input.projection.usage ? [input.projection.usage] : [],
-      })
       return
     }
     const messages = await parseMessages(thread.messagesJson)
@@ -1256,14 +1247,6 @@ export async function settleAssistantRuntimeTurn(input: {
         errorMessage: input.projection.errorMessage,
         finishedAt: new Date(),
       },
-    })
-    await recordAgentTurnUsageFactsInTransaction({
-      tx,
-      turnId: turn.id,
-      attempt: turn.attempt,
-      projectId: turn.projectId,
-      userId: turn.userId,
-      usageFacts: input.projection.usage ? [input.projection.usage] : [],
     })
   })
 }

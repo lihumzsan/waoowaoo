@@ -2,10 +2,12 @@ import { readRequestBufferWithLimit } from '@/lib/http/body-limits'
 import { createScopedLogger } from '@/lib/logging/core'
 import {
   buildLlmUsageFactId,
-  recordLlmUsageFact,
+  priceCatalogLlmUsage,
   type LlmUsageFact,
 } from '@/lib/billing/llm-usage'
-import { prisma } from '@/lib/prisma'
+import { settleRealtimeLlmUsage } from '@/lib/billing/llm-realtime-settlement'
+import { assertLlmSpendableBalance } from '@/lib/billing/llm-balance-gate'
+import { InsufficientBalanceError } from '@/lib/billing/errors'
 import { isWebSearchError, searchWeb, type WebSearchUsage } from '@/lib/web-search'
 import {
   CODEX_MODEL_GATEWAY_ASSISTANT_ID,
@@ -147,17 +149,17 @@ async function recordSearchUsage(input: {
     toolCalls: input.usage.toolCalls,
   }
   try {
-    await prisma.$transaction(async (tx) => {
-      await recordLlmUsageFact(tx, {
-        // Identity is this search, not the Turn: a Turn may research several
-        // times and a Turn-scoped id would drop every cost after the first.
-        usageId: buildLlmUsageFactId('web-search', [input.turnId, input.requestId]),
-        projectId: input.projectId,
-        userId: input.userId,
-        action: 'assistant.web_search',
-        usage: fact,
-        metadata: { turnId: input.turnId, requestId: input.requestId },
-      })
+    await settleRealtimeLlmUsage({
+      // Identity is this search, not the Turn: a Turn may research several
+      // times and a Turn-scoped id would drop every cost after the first.
+      usageId: buildLlmUsageFactId('web-search', [input.turnId, input.requestId]),
+      projectId: input.projectId,
+      userId: input.userId,
+      action: 'assistant.web_search',
+      usage: fact,
+      exactRetailCredits: priceCatalogLlmUsage(fact),
+      pricingSource: 'catalog_usage',
+      metadata: { turnId: input.turnId, requestId: input.requestId },
     })
   } catch (error) {
     searchLogger.error({
@@ -229,6 +231,14 @@ export async function proxyCodexStandaloneSearchRequest(input: {
     assistantId: CODEX_MODEL_GATEWAY_ASSISTANT_ID,
   } as const
   const activeTurn = await requireCodexModelGatewayActiveTurn(scope, input.scope.nonce)
+  try {
+    await assertLlmSpendableBalance(scope.userId)
+  } catch (error) {
+    if (error instanceof InsufficientBalanceError) {
+      throw new CodexModelGatewayError('BILLING_BALANCE_INSUFFICIENT', 429)
+    }
+    throw error
+  }
   const contentType = input.request.headers.get('content-type')?.toLowerCase() ?? ''
   if (!contentType.startsWith('application/json')) {
     throw new CodexModelGatewayError('REQUEST_BODY_INVALID', 400)

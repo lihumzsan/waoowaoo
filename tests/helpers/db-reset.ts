@@ -41,6 +41,7 @@ export async function resetBillingState() {
   await prisma.usageCost.deleteMany()
   await prisma.subscriptionGrant.deleteMany()
   await prisma.subscription.deleteMany()
+  await prisma.llmBillingMeter.deleteMany()
   await resetAgentTurnState()
   await resetWorkspaceResourceState()
   await resetTaskExecutionState()
@@ -80,5 +81,6 @@ export async function resetSystemState() {
   await prisma.userBalance.deleteMany()
   await prisma.balanceFreeze.deleteMany()
   await prisma.balanceTransaction.deleteMany()
+  await prisma.llmBillingMeter.deleteMany()
   await prisma.user.deleteMany()
 }

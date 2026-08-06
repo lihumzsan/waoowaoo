@@ -64,7 +64,10 @@ const INTEGER_RETAIL_RATE_API_TYPES: ReadonlySet<PricingApiType> = new Set<Prici
  */
 export const MINIMUM_RETAIL_MARGIN = 0.18
 
-function toRetailAmount(costCny: number, apiType: PricingApiType): number {
+export function retailCreditsFromCostCny(costCny: number, apiType: PricingApiType): number {
+  if (!Number.isFinite(costCny) || costCny < 0) {
+    throw new Error('PRICING_RETAIL_INVALID_COST')
+  }
   const credits = costCny * RETAIL_MARKUP_BY_API_TYPE[apiType] * CREDITS_PER_CNY
   if (!INTEGER_RETAIL_RATE_API_TYPES.has(apiType)) {
     return Number(credits.toFixed(6))
@@ -81,7 +84,7 @@ export function retailFromCost(
     return {
       mode: 'flat',
       ...(cost.unit ? { unit: cost.unit } : {}),
-      flatAmount: toRetailAmount(cost.flatAmount ?? 0, apiType),
+      flatAmount: retailCreditsFromCostCny(cost.flatAmount ?? 0, apiType),
     }
   }
   return {
@@ -89,7 +92,7 @@ export function retailFromCost(
     ...(cost.unit ? { unit: cost.unit } : {}),
     tiers: (cost.tiers ?? []).map((tier) => ({
       when: { ...tier.when },
-      amount: toRetailAmount(tier.amount, apiType),
+      amount: retailCreditsFromCostCny(tier.amount, apiType),
     })),
   }
 }

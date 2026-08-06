@@ -248,19 +248,23 @@ model Session {
 }
 
 model UsageCost {
-  id        String   @id @default(uuid())
-  projectId String
-  userId    String
-  apiType   String
-  model     String
-  action    String
-  quantity  Int
-  unit      String
-  cost      Int
-  metadata  String?  @db.Text
-  createdAt DateTime @default(now())
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String   @id @default(uuid())
+  projectId      String
+  userId         String
+  apiType        String
+  model          String
+  action         String
+  quantity       Int
+  unit           String
+  /// Exact retail usage in credits. LLM rows keep six decimal places while
+  /// the balance ledger remains integer-only.
+  cost           Decimal  @db.Decimal(18, 6)
+  /// Whole credits actually removed from the balance when this fact settled.
+  chargedCredits Int      @default(0)
+  metadata       String?  @db.Text
+  createdAt      DateTime @default(now())
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([apiType])
   @@index([createdAt])
@@ -282,6 +286,7 @@ model User {
   projects      Project[]
   sessions      Session[]
   usageCosts    UsageCost[]
+  llmBillingMeter LlmBillingMeter?
   balance       UserBalance?
   subscription  Subscription?
   preferences   UserPreference?
@@ -367,6 +372,22 @@ model UserBalance {
   user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_balances")
+}
+
+/// Per-user rounding carry for realtime LLM settlement. Provider generations
+/// settle one by one, but the integer credit ledger only moves when cumulative
+/// exact retail usage crosses a whole-credit boundary.
+model LlmBillingMeter {
+  userId                     String   @id
+  prepaidMicrocredits        BigInt   @default(0)
+  totalRetailMicrocredits    BigInt   @default(0)
+  totalChargedCredits        Int      @default(0)
+  totalUncoveredMicrocredits BigInt   @default(0)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @default(now()) @updatedAt
+  user                       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("llm_billing_meters")
 }
 
 /// One user's subscription. A user has at most one; changing plan updates this

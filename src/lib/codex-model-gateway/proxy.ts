@@ -9,6 +9,9 @@ import {
 import { resolveCodexModelGatewayUpstream } from './selection'
 import { requireCodexModelGatewayActiveTurn } from './active-turn-guard'
 import { projectCodexProviderResponse } from './error-projection'
+import { assertLlmSpendableBalance } from '@/lib/billing/llm-balance-gate'
+import { InsufficientBalanceError } from '@/lib/billing/errors'
+import { attachOpenRouterRealtimeBilling } from './openrouter-realtime-billing'
 
 const CODEX_MODEL_REQUEST_MAX_BYTES = 16 * 1024 * 1024
 
@@ -151,6 +154,14 @@ export async function proxyCodexResponsesRequest(params: {
     assistantId: CODEX_MODEL_GATEWAY_ASSISTANT_ID,
   }
   const activeTurn = await requireCodexModelGatewayActiveTurn(scope, params.scope.nonce)
+  try {
+    await assertLlmSpendableBalance(scope.userId)
+  } catch (error) {
+    if (error instanceof InsufficientBalanceError) {
+      throw new CodexModelGatewayError('BILLING_BALANCE_INSUFFICIENT', 429)
+    }
+    throw error
+  }
   const upstream = await resolveCodexModelGatewayUpstream(scope)
   const body = await readAndValidateBody({
     request: params.request,
@@ -190,6 +201,7 @@ export async function proxyCodexResponsesRequest(params: {
     })
     throw new CodexModelGatewayError('PROVIDER_REQUEST_FAILED', 500)
   }
+  const headerGenerationId = response.headers.get('x-generation-id')
   const projection = await projectCodexProviderResponse(response)
   if (projection.failureKind) {
     gatewayLogger.warn({
@@ -207,5 +219,13 @@ export async function proxyCodexResponsesRequest(params: {
       },
     })
   }
-  return projection.response
+  if (projection.failureKind) return projection.response
+  return attachOpenRouterRealtimeBilling({
+    response: projection.response,
+    headerGenerationId,
+    userId: scope.userId,
+    projectId: scope.projectId,
+    turnId: activeTurn.turnId,
+    modelKey: upstream.modelKey,
+  })
 }

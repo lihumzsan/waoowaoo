@@ -8,7 +8,10 @@ import AccountSecurityTab from './components/AccountSecurityTab'
 import ApiConfigTab from './components/ApiConfigTab'
 import ProfileSidebar, { type ProfileSectionItem } from './components/ProfileSidebar'
 import ProfileOverviewSection, { type ProfileBalanceSummary } from './components/ProfileOverviewSection'
-import ProfileBillingSection from './components/ProfileBillingSection'
+import ProfileBillingSection, {
+  type ProfileProjectCostDetail,
+  type ProfileProjectCostSummary,
+} from './components/ProfileBillingSection'
 import { type ProfileTransactionItem } from './components/ProfileTransactionsTable'
 import { BrandPageLoading } from '@/components/ui/BrandLoading'
 import { AppIcon } from '@/components/ui/icons'
@@ -32,6 +35,15 @@ type TransactionsPayload = {
   transactions?: ProfileTransactionItem[]
 }
 
+type ProjectCostsPayload = {
+  total?: number
+  byProject?: ProfileProjectCostSummary[]
+}
+
+type ProjectCostDetailsPayload = {
+  records?: ProfileProjectCostDetail[]
+}
+
 function isDeploymentPayload(value: unknown): value is DeploymentPayload {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
@@ -41,6 +53,14 @@ function isBalancePayload(value: unknown): value is ProfileBalanceSummary {
 }
 
 function isTransactionsPayload(value: unknown): value is TransactionsPayload {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isProjectCostsPayload(value: unknown): value is ProjectCostsPayload {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isProjectCostDetailsPayload(value: unknown): value is ProjectCostDetailsPayload {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
@@ -74,6 +94,8 @@ export default function ProfilePage() {
   const [deploymentLoadFailed, setDeploymentLoadFailed] = useState(false)
   const [balance, setBalance] = useState<ProfileBalanceSummary | null>(null)
   const [transactions, setTransactions] = useState<ProfileTransactionItem[]>([])
+  const [projectCosts, setProjectCosts] = useState<ProfileProjectCostSummary[]>([])
+  const [totalProjectCost, setTotalProjectCost] = useState(0)
   const [paymentNotice, setPaymentNotice] = useState<string | null>(null)
   const isSigningOutRef = useRef(false)
   const activeSection = deploymentFeatures
@@ -163,11 +185,49 @@ export default function ProfilePage() {
     }
   }, [showError, t])
 
+  const loadProjectCosts = useCallback(async () => {
+    try {
+      const response = await apiFetch('/api/user/costs')
+      if (!response.ok) throw await readClientApiError(response)
+      const payload: unknown = await response.json()
+      if (
+        !isProjectCostsPayload(payload)
+        || typeof payload.total !== 'number'
+        || !Array.isArray(payload.byProject)
+      ) {
+        throw new Error('PROJECT_COSTS_RESPONSE_INVALID')
+      }
+      setTotalProjectCost(payload.total)
+      setProjectCosts(payload.byProject)
+    } catch (error) {
+      showError(error, t('projectCostsLoadFailed'))
+    }
+  }, [showError, t])
+
+  const loadProjectCostDetails = useCallback(async (
+    projectId: string,
+  ): Promise<readonly ProfileProjectCostDetail[]> => {
+    try {
+      const query = new URLSearchParams({ projectId, pageSize: '100' })
+      const response = await apiFetch(`/api/user/costs/details?${query.toString()}`)
+      if (!response.ok) throw await readClientApiError(response)
+      const payload: unknown = await response.json()
+      if (!isProjectCostDetailsPayload(payload) || !Array.isArray(payload.records)) {
+        throw new Error('PROJECT_COST_DETAILS_RESPONSE_INVALID')
+      }
+      return payload.records
+    } catch (error) {
+      showError(error, t('projectCostDetailsLoadFailed'))
+      return []
+    }
+  }, [showError, t])
+
   useEffect(() => {
     if (!session || deploymentFeatures?.showBilling !== true) return
     void loadBalance()
     void loadTransactions()
-  }, [session, deploymentFeatures, loadBalance, loadTransactions])
+    void loadProjectCosts()
+  }, [session, deploymentFeatures, loadBalance, loadTransactions, loadProjectCosts])
 
   useEffect(() => {
     const paymentStatus = searchParams.get('payment')
@@ -264,10 +324,14 @@ export default function ProfilePage() {
             ) : activeSection === 'billing' && showBilling ? (
               <ProfileBillingSection
                 transactions={transactions}
+                projectCosts={projectCosts}
+                totalProjectCost={totalProjectCost}
                 currency={balance?.currency}
+                onLoadProjectDetails={loadProjectCostDetails}
                 onRefresh={() => {
                   void loadBalance()
                   void loadTransactions()
+                  void loadProjectCosts()
                 }}
               />
             ) : (

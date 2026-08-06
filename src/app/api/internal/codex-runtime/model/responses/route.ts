@@ -50,6 +50,9 @@ export async function POST(request: Request): Promise<Response> {
     return await proxyCodexResponsesRequest({ request, scope })
   } catch (error) {
     if (error instanceof CodexModelGatewayError) {
+      if (error.code === 'BILLING_BALANCE_INSUFFICIENT') {
+        return errorResponse(429, 'usage_not_included')
+      }
       if (
         error.code === 'ASSISTANT_MODEL_NOT_CONFIGURED'
         || error.code === 'ASSISTANT_MODEL_UNSUPPORTED'

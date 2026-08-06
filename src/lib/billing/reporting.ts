@@ -19,6 +19,7 @@ interface PureRecordParams extends RecordParams {
   quantity: number
   unit: UsageUnit
   cost: number
+  chargedCredits?: number
   balanceAfter: number
   freezeId?: string
   taskType?: string | null
@@ -107,8 +108,8 @@ export function buildBillingMeta(params: Parameters<typeof buildBillingMetaRecor
 
 /**
  * 用量事实 writer（唯一的 UsageCost 写入点）。
- * 只记录用量，不产生任何 BalanceTransaction：没有资金事件的消耗
- * （如当前免费的 assistant run）走这里，资金流水只属于账本生命周期。
+ * 这里只写用量事实，不直接创建 BalanceTransaction；需要资金事件的调用方
+ * 必须在同一事务内先经账本唯一入口扣减，再把实际扣减额一并写入事实。
  */
 export async function recordUsageFact(
   txOrPrisma: Prisma.TransactionClient | typeof prisma,
@@ -122,6 +123,7 @@ export async function recordUsageFact(
     | 'quantity'
     | 'unit'
     | 'cost'
+    | 'chargedCredits'
     | 'metadata'
   > & {
     usageId?: string
@@ -163,6 +165,7 @@ export async function recordUsageFact(
     quantity: params.quantity,
     unit: params.unit,
     cost: params.cost,
+    chargedCredits: params.chargedCredits ?? 0,
     metadata,
   }
   try {
@@ -188,6 +191,7 @@ export async function recordUsageFact(
       existing.quantity !== data.quantity ||
       existing.unit !== data.unit ||
       toMoneyNumber(existing.cost) !== toMoneyNumber(data.cost) ||
+      existing.chargedCredits !== data.chargedCredits ||
       existing.metadata !== data.metadata
     ) {
       throw new BillingOperationError(
@@ -204,7 +208,10 @@ export async function recordUsageCostOnly(
   txOrPrisma: Prisma.TransactionClient | typeof prisma,
   params: PureRecordParams,
 ): Promise<void> {
-  const hasProject = await recordUsageFact(txOrPrisma, params)
+  const hasProject = await recordUsageFact(txOrPrisma, {
+    ...params,
+    chargedCredits: params.cost,
+  })
   if (!hasProject) {
     _ulogInfo(`[计费] 跳过 UsageCost 记录 (projectId=${params.projectId})，仅记录流水`)
   }
@@ -320,17 +327,23 @@ export async function getUserCostSummary(userId: string) {
   }
 }
 
-export async function getUserCostDetails(userId: string, page = 1, pageSize = 20) {
+export async function getUserCostDetails(
+  userId: string,
+  page = 1,
+  pageSize = 20,
+  projectId?: string,
+) {
   const skip = (page - 1) * pageSize
+  const where = { userId, ...(projectId ? { projectId } : {}) }
 
   const [recordsRaw, total] = await Promise.all([
     prisma.usageCost.findMany({
-      where: { userId },
+      where,
       orderBy: { createdAt: 'desc' },
       skip,
       take: pageSize,
     }),
-    prisma.usageCost.count({ where: { userId } }),
+    prisma.usageCost.count({ where }),
   ])
 
   const records = recordsRaw.map((item) => ({

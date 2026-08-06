@@ -16,9 +16,11 @@ Task 并扣费。Web、MCP 与未来 CLI 调用同一 planning/submit service；
 - **BA-01 — 价格唯一且只有一份表示。** 价格目录、模型/参数和输入数量经 billing policy 计算；
   模型、UI、MCP schema 与客户端不得自行估价。不存在第二份 JSON、文档或脚本副本；校验脚本必须
   加载与计费同一个运行时目录。
-- **BA-01A — 成本与零售是同一条目的两面。** 每个条目同时声明供应商成本与用户零售价；手写零售价
-  必须与成本同 mode、同 unit、同 tier 顺序与条件。计费只解析零售价，成本只服务毛利报表。注册期
-  必须校验每个价格点在最深折扣下仍高于最低毛利线，不满足即启动失败。
+- **BA-01A — 成本与零售由同一零售策略连接。** 目录化能力的每个条目同时声明供应商成本与用户零售
+  价；手写零售价必须与成本同 mode、同 unit、同 tier 顺序与条件。只有 Provider 在完成事件中明确
+  回报的本次动态金额可以作为瞬时计价输入，且必须立即经过同一零售策略；不得持久化或向用户展示
+  Provider 成本，也不得把它不经零售策略直接作为用户扣费。注册期必须校验每个目录价格点在最深
+  折扣下仍高于最低毛利线，不满足即启动失败。
 - **BA-01B — 同一产品能力跨 provider 同价。** 同一模型经不同 provider 提供时成本可以不同，
   零售价必须由共享声明拥有并完全一致。
 - **BA-01C — 可选模型必须有价。** 模型 identity 分布在能力、价格、API 配置与平台预设多张表，
@@ -27,8 +29,9 @@ Task 并扣费。Web、MCP 与未来 CLI 调用同一 planning/submit service；
 - **BA-01D — 计价单位必须是真实计价基准。** 按 token 计价的模型不得把"每百万 token 单价"注册成
   整次金额。价格档位必须能由报价时已冻结的输入穷尽解析；无法表达的计价基准必须缺档并 fail
   closed，不得声明近似档位。
-- **BA-02 — 计划先于副作用。** 付费前完成权限、模型、参数、资源引用、服务端 Placement、输出数量
-  与路径冲突校验；PlanSnapshot 创建前不得提交 Provider 或创建 pending Resource。
+- **BA-02 — 计划先于副作用。** 付费前完成权限、模型、参数、资源引用、服务端 Placement、输出数量、
+  路径语法与现有树冲突校验；PlanSnapshot 创建前不得提交 Provider、创建目录或 pending Resource。
+  缺失目标目录只可在授权后的 Resource/Task 提交事务中由唯一 folder writer 原子补齐。
 - **BA-03 — 冻结同一输入。** Snapshot 冻结实际读取的资源 id + 内容版本 + 路径、Operation
   revision、模型参数、服务端派生 Placement 与 quote。执行快照就是该 Snapshot，不建立第二份冻结。
 - **BA-05 — 授权精确。** Grant 只授权一个 Snapshot，或明确金额/范围/期限的预算。shell/patch
@@ -55,12 +58,13 @@ Task 并扣费。Web、MCP 与未来 CLI 调用同一 planning/submit service；
 - **BA-16 — 每期发放只有一个幂等写入者。** 发放身份是 `(订阅, 期次)`；重投回调、重放 Activity
   与并发 sweep 只发放一次。发放替换而非累加，上期余额在同一事务作废并落流水。套餐只能从我们在
   下单时写入的 metadata 读取，禁止从支付平台的价格 id 或金额反推。
-- **BA-17 — LLM 后付、按日聚合、事前只做门禁。** 模型价格跑完才知道，不进入 plan/quote/freeze
-  链路。用量如实记录，按"用户 × 自然日"聚合为一次扣费，只结算已完整过去的日期，小数全天累计后
-  统一向上取整一次。事前只检查"是否还有可用额度"，不得伪造预估报价来拒绝工作。供应商回报的成本
-  只作为观测事实，永远不得成为扣费金额。
+- **BA-17 — LLM 后付、逐调用实时结算、事前只做门禁。** 模型价格跑完才知道，不进入
+  plan/quote/freeze 链路。每个完成的 Provider generation 或搜索请求拥有独立幂等 identity，并在同一
+  事务写精确用户零售价、用户级小数结转和整数余额扣减；余额只在累计用户价跨越整数积分时移动，
+  不得逐调用向上取整。事前只检查"是否还有可用额度"，不得伪造预估报价来拒绝工作。结算故障不得
+  把已经完成的模型结果伪装成 Provider 失败并触发重复调用，但必须产生资金审计告警。
 - **BA-18 — 确定性 preflight 全部先于 Plan。** 模型选择、凭证与 endpoint 存在性、项目能力默认与
-  覆盖、option 兼容性、引用模态与数量、目标文件夹路径/名称派生的 Placement 与输出数量，都必须在创建 Snapshot、报价、
+  覆盖、option 兼容性、引用模态与数量、目标文件夹路径/名称派生的 Placement、现有树冲突与输出数量，都必须在创建 Snapshot、报价、
   pending Resource 或 Task 之前完成。任何可由 registry 或本地配置判定的错误都返回结构化可纠正
   字段，不得让 Worker 或 Provider fence 成为第一位发现者。
 - **BA-19 — 限额付费活动只有一个席位裁判。** 容量与去重参与身份由同一 admission service 拥有，
@@ -74,12 +78,17 @@ Task 并扣费。Web、MCP 与未来 CLI 调用同一 planning/submit service；
 | --- | --- |
 | 价格条目、派生与毛利保险丝 | `src/lib/ai-registry/pricing-*.ts` |
 | quote、冻结、结算、退回、两池裁决 | `src/lib/billing/**` |
+| LLM 完成用量捕获与实时结算 | `src/lib/codex-model-gateway/**` → `src/lib/billing/llm-realtime-settlement.ts` |
 | PlanSnapshot 与 request identity | `src/lib/operations/planning.ts`、`operation-plan-snapshot.ts` |
 | Grant 与执行重验证 | approval routes + `operation-plan-revalidation.ts` |
 | Task/批次原子提交 | `src/lib/task/approved-plan-submitter.ts`、`transactional-create.ts` |
 
 ## 踩过的坑
 
+- LLM 曾只有一个未接生产调度的日结 service，同时把多个 Provider generation 折叠成 Turn 级零费用
+  用量行；代码存在被误当成"已经上线"，真实调用既不实时扣费也没有稳定 generation identity → 上一
+  版防线只定义了离线算法，没有枚举生产触发入口 → 删除日结 writer，完成事件以 generation/request
+  identity 原子进入唯一实时结算入口（BA-17）。
 - 按每百万 token 计价的视频模型被注册成 `per_call` 整次金额，4 秒和 15 秒同价，真实成本 ¥9.94
   实收 ¥46（超收 4.6 倍，5 秒时 9 倍）。项目同时实现了完整 token 估算契约却零消费者 → 旧防线
   只断言"计算函数返回目录里的数"，与目录同源，无法反证单位语义错误 → 现在计价单位必须能由冻结
