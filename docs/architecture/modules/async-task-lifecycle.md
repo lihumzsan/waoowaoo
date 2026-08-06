@@ -66,3 +66,7 @@ Task 是长运行执行的唯一业务事实。执行许可（attempt、retry、
 - Task 与 WorkspaceResource 曾各存一份 errorCode/errorMessage，Worker 又在持久化前覆盖 Provider
   原因；新增 reader 每次只接一部分字段，同一失败换入口反复丢失 → Task 独占完整 FailureRecord，
   checkpoint、Temporal 与 follow-up 原样传递，Resource 只经 taskId 投影（TL-23）。
+- COS 曾返回 `UserNetworkTooSlow`，但 S3 adapter 没有把该 Provider identity 归一化为可重试网络失败；
+  通用 retry 因 fallback `INTERNAL_ERROR` 不可重试而在第一次上传后终止，已经付费生成的媒体无法物化且
+  用户冻结额度只能回滚 → 外部存储 adapter 显式归一化低速、超时、限流与 5xx，基础设施 retry 在
+  同一 business attempt 内复用已生成结果（TL-06/23）。

@@ -9,6 +9,7 @@ import {
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { loadS3StorageConfig, toS3ClientConfig, type S3StorageConfig } from '@/lib/storage/s3-config'
+import { normalizeS3OperationError } from '@/lib/storage/errors'
 import type {
   DeleteObjectsResult,
   GetObjectStreamParams,
@@ -104,12 +105,16 @@ export class S3StorageProvider implements StorageProvider {
 
   async uploadObject(params: UploadObjectParams): Promise<UploadObjectResult> {
     const key = normalizeKey(params.key)
-    await this.client.send(new PutObjectCommand({
-      Bucket: this.config.bucket,
-      Key: key,
-      Body: params.body,
-      ...(params.contentType ? { ContentType: params.contentType } : {}),
-    }))
+    try {
+      await this.client.send(new PutObjectCommand({
+        Bucket: this.config.bucket,
+        Key: key,
+        Body: params.body,
+        ...(params.contentType ? { ContentType: params.contentType } : {}),
+      }))
+    } catch (error) {
+      throw normalizeS3OperationError(error, 'upload')
+    }
     return { key }
   }
 

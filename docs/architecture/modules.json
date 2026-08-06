@@ -240,6 +240,7 @@
         "src/lib/auth",
         "src/lib/deployment",
         "src/lib/errors",
+        "src/lib/storage",
         "src/lib/home",
         "src/lib/announcements",
         "src/lib/public-beta",
