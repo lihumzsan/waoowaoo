@@ -17,6 +17,7 @@ export type ProjectProductionCapabilities = {
     readonly maxReferenceVideos: number
     readonly maxReferenceFiles: number
     readonly referenceAudioRequiresVisual: boolean
+    readonly minReferenceAudioDurationMs: number | null
     readonly supportedInputModes: readonly VideoInputMode[]
   } | null
   readonly music: {
@@ -34,7 +35,7 @@ export type ProjectProductionCapabilities = {
 }
 
 export type ProjectProductionContext = {
-  readonly schemaVersion: 3
+  readonly schemaVersion: 4
   readonly version: string
   readonly project: {
     readonly projectId: string
@@ -83,6 +84,7 @@ function resolveProductionCapabilities(config: ProjectModelConfig): ProjectProdu
         maxReferenceVideos: video.maxReferenceVideos ?? 0,
         maxReferenceFiles: video.maxReferenceFiles ?? 0,
         referenceAudioRequiresVisual: video.referenceAudioRequiresVisual === true,
+        minReferenceAudioDurationMs: video.minReferenceAudioDurationMs ?? null,
         supportedInputModes: video.supportedInputModes ?? [],
       }
     : null
@@ -145,7 +147,7 @@ export async function readProjectProductionContext(input: {
   ])
   if (!project) throw new ProjectProductionContextError()
   const value: Omit<ProjectProductionContext, 'version'> = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     project: {
       projectId: project.id,
       name: project.name,

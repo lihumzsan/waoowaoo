@@ -19,6 +19,7 @@ import {
   WAO_MCP_USER_DECISION_OTHER_FIELD,
   WAO_MCP_USER_DECISION_OTHER_OPTION_ID,
 } from '@/lib/wao-mcp/user-decision'
+import { isWaoMcpApprovalRequestMeta } from '@/lib/wao-mcp/approval-contract'
 import {
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_ACCEPT,
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES,
@@ -315,6 +316,7 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
   const schema = elicitation.requestedSchema
   const userDecisionPresentation = content.userDecisionPresentation
   const isWaoUserDecision = userDecisionPresentation !== null
+  const isWaoApproval = isWaoMcpApprovalRequestMeta(elicitation.meta)
   const properties = schema && isRecord(schema.properties)
     ? Object.entries(schema.properties)
     : []
@@ -345,7 +347,7 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
         && runtimeEnumOptions(property.items).length > 0
     })
   )
-  const formReady = schemaSupported && properties.every(([key, property]) => {
+  const formReady = schemaSupported && (isWaoApproval || properties.every(([key, property]) => {
     if (!required.has(key)) return true
     if (!isRecord(property)) return false
     const value = values[key]
@@ -358,7 +360,7 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
         && (property.type !== 'integer' || Number.isInteger(parsed))
     }
     return typeof value === 'string' && value.trim().length > 0
-  })
+  }))
   const formContent = (): Record<string, unknown> => {
     const result: Record<string, unknown> = {}
     for (const [key, property] of properties) {
@@ -422,6 +424,7 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
         <div className="space-y-3">
           {properties.map(([key, property]) => {
             if (!isRecord(property)) return null
+            if (isWaoApproval && key === 'confirmed') return null
             const label = typeof property.title === 'string' && property.title.trim()
               ? property.title
               : key
@@ -632,7 +635,9 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
             className="flex-1 rounded-xl bg-neutral-900 px-3 py-2 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
             onClick={() => submit({
               action: 'accept',
-              content: elicitation.mode === 'form' ? formContent() : null,
+              content: isWaoApproval
+                ? { confirmed: true }
+                : elicitation.mode === 'form' ? formContent() : null,
               _meta: null,
             })}
           >

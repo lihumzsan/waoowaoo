@@ -1,6 +1,7 @@
 import { generateVoice } from '@/lib/ai-exec/engine'
 import { parseWorkspaceResourceGenerationTaskPayload } from '@/lib/workspace-resource/generation-contract'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
+import { probeMediaBufferDurationMs } from '@/lib/media/probe-duration'
 import { uploadObject } from '@/lib/storage'
 import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import { extensionFromAudioMimeType, loadGeneratedAudio } from '../artifacts/audio'
@@ -64,19 +65,25 @@ export async function handleWorkspaceResourceVoiceTask(context: TaskExecutionCon
     label: 'generated voice',
     errorPrefix: 'VOICE_GENERATE',
   })
+  const extension = extensionFromAudioMimeType(audio.mimeType)
+  const durationMs = await probeMediaBufferDurationMs({
+    buffer: audio.buffer,
+    extension,
+    stage: 'workspace_resource_voice_probe_duration',
+  })
   const storageKey = await uploadObject(
     audio.buffer,
     buildTaskArtifactStorageKey({
       taskId: data.taskId,
       artifact: 'voice:primary',
-      extension: extensionFromAudioMimeType(audio.mimeType),
+      extension,
     }),
     audio.mimeType,
   )
   const media = await ensureMediaObjectFromStorageKey(storageKey, {
     mimeType: audio.mimeType,
     sizeBytes: audio.buffer.byteLength,
-    durationMs: null,
+    durationMs,
   })
 
   return {
@@ -87,6 +94,7 @@ export async function handleWorkspaceResourceVoiceTask(context: TaskExecutionCon
     voiceModel: providerRoute.modelKey,
     provider: providerRoute.provider,
     actualCharacters: Array.from(previewText).length,
+    durationMs,
     metadata: generated.metadata || {},
   }
 }

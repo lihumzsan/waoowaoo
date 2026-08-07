@@ -36,6 +36,11 @@ import {
 } from '@/lib/ai-exec/media-preflight'
 import { AiOptionValidationError } from '@/lib/ai-exec/normalize'
 import { ApiError } from '@/lib/api-errors'
+import {
+  VOICE_PREVIEW_TARGET_MAX_SECONDS,
+  VOICE_PREVIEW_TARGET_MIN_SECONDS,
+  voicePreviewTargetIssue,
+} from '@/lib/voice/preview-contract'
 
 const voiceNewSchema = z.object({
   kind: z.literal('new'),
@@ -43,7 +48,8 @@ const voiceNewSchema = z.object({
     .describe('Optional project-relative destination folder. Missing folders are created atomically with the voice Resources.'),
   name: z.string().trim().min(1).max(300),
   description: z.string().trim().min(1).max(4_000),
-  previewText: z.string().trim().min(1).max(10_000),
+  previewText: z.string().trim().min(1).max(10_000)
+    .describe(`A phonetically varied sample targeting approximately ${String(VOICE_PREVIEW_TARGET_MIN_SECONDS)}-${String(VOICE_PREVIEW_TARGET_MAX_SECONDS)} seconds. This exact text is billed by character count.`),
   language: z.enum(VOICE_DESIGN_LANGUAGE_OPTIONS),
   count: z.number().int().min(1).max(6).default(1),
 }).strict()
@@ -63,6 +69,16 @@ const generateVoiceInputSchema = z.object({
       path: ['request', 'resourceIds'],
       message: 'resourceIds must be unique',
     })
+  }
+  if (value.request.kind === 'new') {
+    const issue = voicePreviewTargetIssue(value.request)
+    if (issue) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['request', 'previewText'],
+        message: issue,
+      })
+    }
   }
 })
 

@@ -53,8 +53,8 @@ import type {
 import {
   issueWaoMcpApprovalGrant,
   requireWaoMcpBrowserApproval,
-  WAO_MCP_APPROVAL_META_KEY,
 } from './approval-proof'
+import { WAO_MCP_APPROVAL_META_KEY } from './approval-contract'
 
 const logger = createScopedLogger({ module: 'wao-mcp.production-executor' })
 

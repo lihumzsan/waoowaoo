@@ -114,6 +114,14 @@ export const videoGenerationItemSchema = z.object({
   durationSeconds: z.number().int().min(1).max(CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS),
 }).strict()
 
+export const videoGenerationRevisionItemSchema = z.object({
+  resourceId: z.string().trim().min(1).max(32)
+    .describe('Exact failed or canceled video Resource to regenerate in place. Its canonical identity, name, path, and schema are preserved.'),
+  prompt: finalPromptSchema,
+  references: z.array(videoGenerationReferenceSchema).max(16).optional(),
+  durationSeconds: z.number().int().min(1).max(CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS),
+}).strict()
+
 function validateGenerationItems(
   value: { readonly items: readonly { readonly itemId: string; readonly count: number }[] },
   context: z.RefinementCtx,
@@ -150,6 +158,16 @@ export const videoGenerationBatchSchema = z.object({
   ...batchCommonShape,
   items: z.array(videoGenerationItemSchema).min(1).max(OPERATION_EXECUTION_MAX_TASKS),
 }).strict().superRefine(validateGenerationItems)
+
+export const videoGenerationRevisionBatchSchema = z.object({
+  kind: z.literal('revise_failed'),
+  items: z.array(videoGenerationRevisionItemSchema).min(1).max(OPERATION_EXECUTION_MAX_TASKS),
+  maxBudgetCredits: z.number().finite().positive().optional(),
+}).strict().superRefine((batch, context) => {
+  if (new Set(batch.items.map((item) => item.resourceId)).size !== batch.items.length) {
+    context.addIssue({ code: 'custom', path: ['items'], message: 'resourceId values must be unique.' })
+  }
+})
 
 export type GenerationItem =
   | z.infer<typeof imageGenerationItemSchema>

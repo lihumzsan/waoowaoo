@@ -1,23 +1,6 @@
 import { writeFile } from 'node:fs/promises'
 import { runFfmpegCommand } from './ffmpeg-command'
 
-export async function probeMediaDurationSeconds(filePath: string): Promise<number> {
-  const result = await runFfmpegCommand('ffprobe', [
-    '-v',
-    'error',
-    '-show_entries',
-    'format=duration',
-    '-of',
-    'default=noprint_wrappers=1:nokey=1',
-    filePath,
-  ], { stage: 'workspace_resource_video_merge_probe_duration' })
-  const duration = Number.parseFloat(result.stdout.trim())
-  if (!Number.isFinite(duration) || duration <= 0) {
-    throw new Error('WORKSPACE_RESOURCE_VIDEO_MERGE_DURATION_INVALID')
-  }
-  return duration
-}
-
 export async function probeVideoDimensions(filePath: string): Promise<{
   readonly width: number
   readonly height: number

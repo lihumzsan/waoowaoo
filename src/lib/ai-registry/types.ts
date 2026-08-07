@@ -274,6 +274,7 @@ export interface VideoCapabilities {
   maxReferenceVideos?: number
   maxReferenceFiles?: number
   referenceAudioRequiresVisual?: boolean
+  minReferenceAudioDurationMs?: number
   fieldI18n?: CapabilityFieldI18nMap
 }
 
@@ -350,6 +351,7 @@ const VIDEO_ALLOWED_FIELDS = new Set<keyof VideoCapabilities>([
   'maxReferenceVideos',
   'maxReferenceFiles',
   'referenceAudioRequiresVisual',
+  'minReferenceAudioDurationMs',
   'fieldI18n',
 ])
 
@@ -761,6 +763,17 @@ function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unk
       code: 'CAPABILITY_FIELD_INVALID',
       field: 'capabilities.video.referenceAudioRequiresVisual',
       message: 'referenceAudioRequiresVisual must be boolean',
+    })
+  }
+
+  if (
+    raw.minReferenceAudioDurationMs !== undefined
+    && (!Number.isInteger(raw.minReferenceAudioDurationMs) || (raw.minReferenceAudioDurationMs as number) <= 0)
+  ) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.video.minReferenceAudioDurationMs',
+      message: 'minReferenceAudioDurationMs must be a positive integer',
     })
   }
 

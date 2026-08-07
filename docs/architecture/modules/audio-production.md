@@ -49,3 +49,6 @@ JSON 专业结果，并把同一 items 直接提交给 `create_audio`。系统�
   1021 字符的合法输入因此被扩成 1147 字符并遭拒 → 上一版只约束了 Planner 与 handler，没有把
   adapter 纳入单 writer 边界 → 删除服务端编译器，adapter 原样发送冻结 Prompt，并向 Skill 注入远低于
   Provider 硬上限的保守目标预算（AP-07）。
+- 音色首版只保存了音频对象却把真实时长写成 null，视频预检又只校验引用角色与数量，1.728 秒试听因而在
+  报价授权后才被 Provider 拒绝并诱导额外付费重做 → 上一版防线没有把冻结媒体事实纳入能力约束 → 音色
+  Worker 测量并持久化时长，视频 Planner 按模型 registry 对精确 ResourceVersion 在 Plan 前校验（AP-03/04）。

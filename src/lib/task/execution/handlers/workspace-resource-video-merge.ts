@@ -13,11 +13,13 @@ import {
   muxVideoMergeSourceAudio,
   renderVideoMergeClipAudio,
 } from '@/lib/video-compose/video-merge-audio'
-import { createFfmpegCommandRunner } from '@/lib/video-compose/ffmpeg-command'
+import {
+  createFfmpegCommandRunner,
+  probeMediaDurationSeconds,
+} from '@/lib/video-compose/ffmpeg-command'
 import {
   concatVideoClips,
   normalizeVideoClip,
-  probeMediaDurationSeconds,
   probeVideoDimensions,
 } from '@/lib/video-compose/video-merge-ffmpeg'
 import { reportTaskProgress } from '../progress'
@@ -74,7 +76,9 @@ export async function handleWorkspaceResourceVideoMergeTask(
       sourcePaths.push(sourcePath)
     }
     const dimensions = await probeVideoDimensions(sourcePaths[0] ?? '')
-    const durations = await Promise.all(sourcePaths.map(probeMediaDurationSeconds))
+    const durations = await Promise.all(sourcePaths.map(async (sourcePath) => (
+      await probeMediaDurationSeconds(sourcePath, 'workspace_resource_video_merge_probe_duration')
+    )))
     const totalDurationSeconds = durations.reduce((sum, duration) => sum + duration, 0)
     const normalizedPaths: string[] = []
     const audioPaths: string[] = []
@@ -113,7 +117,10 @@ export async function handleWorkspaceResourceVideoMergeTask(
       outputPath: stitchedPath,
       durationSeconds: totalDurationSeconds,
     })
-    const stitchedDurationSeconds = await probeMediaDurationSeconds(stitchedPath)
+    const stitchedDurationSeconds = await probeMediaDurationSeconds(
+      stitchedPath,
+      'workspace_resource_video_merge_probe_duration',
+    )
     const mainAudioPath = path.join(workspaceDir, 'audio.wav')
     await concatVideoMergeAudioClips({
       runCommand: createFfmpegCommandRunner({
