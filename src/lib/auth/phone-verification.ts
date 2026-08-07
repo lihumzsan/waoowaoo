@@ -1,16 +1,15 @@
 import { createHmac, randomInt, randomUUID } from 'node:crypto'
 import { ApiError } from '@/lib/api-errors'
-import { createAuthUser,  } from '@/lib/auth/account-onboarding'
+import { createAuthUser } from '@/lib/auth/account-onboarding'
+import {
+  AliyunSmsConfigurationError,
+  AliyunSmsDestinationUnavailableError,
+  AliyunSmsRejectedError,
+  sendAliyunVerificationSms,
+  type AliyunSmsSendResult,
+} from '@/lib/auth/aliyun-sms'
 import { PHONE_AUTH_RESULT_CODES, type PhoneAuthResultCode } from '@/lib/auth/phone-auth-contract'
 import { maskPhoneNumber, normalizePhoneNumber } from '@/lib/auth/phone-number'
-import {
-  sendTencentVerificationSms,
-  type TencentSmsSendResult,
-  TencentSmsConfigurationError,
-  TencentSmsDestinationUnavailableError,
-  TencentSmsRejectedError,
-} from '@/lib/auth/tencent-sms'
-import { rememberTencentSmsDeliveryAttempt } from '@/lib/auth/tencent-sms-delivery'
 import { getDeploymentConfig } from '@/lib/deployment/config'
 import { getDeploymentFeatures } from '@/lib/deployment/features'
 import { logAuthAction } from '@/lib/logging/semantic'
@@ -26,7 +25,7 @@ const PHONE_CODE_MAX_ATTEMPTS = 5
 
 const smsLogger = createScopedLogger({
   module: 'auth',
-  provider: 'tencent-sms',
+  provider: 'aliyun-sms',
 })
 
 const RESERVE_CHALLENGE_SCRIPT = `
@@ -237,22 +236,22 @@ export async function sendPhoneVerificationCode(rawPhoneNumber: unknown): Promis
     challengeId,
   })
 
-  let sendResult: TencentSmsSendResult
+  let sendResult: AliyunSmsSendResult
   try {
-    sendResult = await sendTencentVerificationSms({
+    sendResult = await sendAliyunVerificationSms({
       phoneNumber,
       code,
       challengeId,
     })
   } catch (error) {
-    if (error instanceof TencentSmsDestinationUnavailableError) {
+    if (error instanceof AliyunSmsDestinationUnavailableError) {
       await compensateRejectedChallenge(keys, challengeId)
       logAuthAction(
         'LOGIN',
         'SMS destination unavailable',
         {
           success: false,
-          provider: 'tencent-sms',
+          provider: 'aliyun-sms',
           destinationId: error.destinationId,
           reason: error.reason,
         },
@@ -265,17 +264,17 @@ export async function sendPhoneVerificationCode(rawPhoneNumber: unknown): Promis
         error,
       )
     }
-    if (error instanceof TencentSmsConfigurationError) {
+    if (error instanceof AliyunSmsConfigurationError) {
       await compensateRejectedChallenge(keys, challengeId)
     }
-    if (error instanceof TencentSmsRejectedError) {
+    if (error instanceof AliyunSmsRejectedError) {
       await compensateRejectedChallenge(keys, challengeId)
       logAuthAction(
         'LOGIN',
         'SMS provider rejected',
         {
           success: false,
-          provider: 'tencent-sms',
+          provider: 'aliyun-sms',
           providerCode: error.providerCode,
           requestId: error.requestId,
         },
@@ -288,26 +287,21 @@ export async function sendPhoneVerificationCode(rawPhoneNumber: unknown): Promis
     logAuthAction(
       'LOGIN',
       'SMS provider unavailable',
-      { success: false, provider: 'tencent-sms' },
+      { success: false, provider: 'aliyun-sms' },
       undefined,
       maskPhoneNumber(phoneNumber),
     )
     throw new PhoneVerificationError(PHONE_AUTH_RESULT_CODES.providerUnavailable, null, error)
   }
 
-  const deliveryTrackingEnabled = await rememberTencentSmsDeliveryAttempt({
-    serialNo: sendResult.serialNo,
-    phoneNumber,
-  })
   smsLogger.event({
     level: 'INFO',
     audit: true,
     action: 'LOGIN',
     message: 'SMS verification code sent',
-    providerRequestId: sendResult.serialNo ?? undefined,
+    providerRequestId: sendResult.bizId ?? sendResult.requestId ?? undefined,
     details: {
       success: true,
-      deliveryTrackingEnabled,
       username: maskPhoneNumber(phoneNumber),
     },
   })
