@@ -17,7 +17,7 @@ import { CREDITS_PER_CNY } from './credits'
  * rather than a single number.
  */
 
-export type SubscriptionPlanId = 'starter' | 'creator' | 'pro' | 'studio' | 'flagship'
+export type SubscriptionPlanId = 'lite' | 'starter' | 'creator' | 'pro' | 'studio' | 'flagship'
 
 export type SubscriptionInterval = 'month' | 'year'
 
@@ -51,6 +51,14 @@ export interface SubscriptionPlanDefinition {
 }
 
 export const SUBSCRIPTION_PLANS: readonly SubscriptionPlanDefinition[] = [
+  {
+    id: 'lite',
+    monthlyPriceCny: 79,
+    yearlyPriceCny: 790,
+    monthlyCredits: 800,
+    featured: false,
+    firstMonthPromoCny: null,
+  },
   {
     id: 'starter',
     monthlyPriceCny: 199,

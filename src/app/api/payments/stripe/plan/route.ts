@@ -8,10 +8,14 @@ import { resolveCheckoutLocale, resolveCheckoutPublicOrigin } from '@/lib/paymen
 import { createPlanPurchaseSession } from '@/lib/payments/stripe-plan-purchase'
 import { isPaymentConfigurationError, readPaymentConfigurationErrorCode } from '@/lib/payments/config-errors'
 import { isPaidBetaPaymentUnavailableError } from '@/lib/paid-beta/campaign'
+import {
+  subscriptionIntervalSchema,
+  subscriptionPlanIdSchema,
+} from '@/lib/billing/subscription-plan-schema'
 
 const planPurchaseSchema = z.object({
-  planId: z.enum(['starter', 'creator', 'pro', 'studio', 'flagship']),
-  interval: z.enum(['month', 'year']),
+  planId: subscriptionPlanIdSchema,
+  interval: subscriptionIntervalSchema,
 })
 
 /**

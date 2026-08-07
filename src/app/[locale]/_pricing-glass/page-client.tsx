@@ -83,7 +83,7 @@ function IntervalSwitch({
  *
  * "9,000 credits" means nothing to someone choosing a plan; the corresponding
  * number of clips is the comparison they are actually making, so it gets the
- * visual weight that a feature list repeated across all five cards does not
+ * visual weight that a feature list repeated across every card does not
  * deserve.
  */
 function PlanCapacity({ plan }: { readonly plan: GlassPlan }) {
@@ -156,7 +156,7 @@ function PlanCard({
         {plan.tagline}
       </p>
 
-      {/* Fixed heights on the price rows keep all five cards aligned even
+      {/* Fixed heights on the price rows keep all cards aligned even
           though only some of them carry a promo or a yearly total. */}
       <div className="mt-5 flex items-baseline gap-1.5">
         <span className="glass-num text-[2rem] font-semibold leading-none tracking-[-0.035em] text-[var(--glass-text-primary)]">
@@ -275,7 +275,7 @@ export default function PricingGlassPageClient({
           </div>
         </header>
 
-        <div className="mt-10 grid items-start gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <div className="mt-10 grid items-start gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           {content.plans.map((plan) => (
             <PlanCard
               key={plan.id}

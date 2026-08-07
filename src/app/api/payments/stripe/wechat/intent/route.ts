@@ -10,6 +10,10 @@ import {
 } from '@/lib/payments/stripe-wechat-intent'
 import { isPaymentConfigurationError, readPaymentConfigurationErrorCode } from '@/lib/payments/config-errors'
 import { isPaidBetaPaymentUnavailableError } from '@/lib/paid-beta/campaign'
+import {
+  subscriptionIntervalSchema,
+  subscriptionPlanIdSchema,
+} from '@/lib/billing/subscription-plan-schema'
 
 /**
  * Either a credit top-up or a plan term — both are one-off WeChat payments and
@@ -19,8 +23,8 @@ const wechatIntentSchema = z.union([
   z.object({ kind: z.literal('recharge'), credits: z.number().int().positive() }),
   z.object({
     kind: z.literal('plan'),
-    planId: z.enum(['starter', 'creator', 'pro', 'studio', 'flagship']),
-    interval: z.enum(['month', 'year']),
+    planId: subscriptionPlanIdSchema,
+    interval: subscriptionIntervalSchema,
   }),
 ])
 
