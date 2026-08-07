@@ -77,7 +77,7 @@ describe('provider contract - OpenRouter image', () => {
     }
   })
 
-  it('streams the dedicated image API exactly once and projects only the completed image', async () => {
+  it('streams a text-to-image request exactly once and projects only the completed image', async () => {
     server!.defineScenario({
       method: 'POST',
       path: '/openrouter/images',
@@ -116,9 +116,8 @@ describe('provider contract - OpenRouter image', () => {
       baseUrl: `${server!.baseUrl}/openrouter`,
       apiKey: 'openrouter-image-key',
       modelId: 'openai/gpt-image-2',
-      prompt: 'paint this as a watercolor scene',
+      prompt: 'paint a watercolor city scene',
       options: normalizeImageOptions({
-        referenceImages: [PNG_1X1_DATA_URL],
         aspectRatio: '9:16',
         resolution: '1K',
         quality: 'high',
@@ -143,6 +142,72 @@ describe('provider contract - OpenRouter image', () => {
     expect(requests[0]?.headers['content-type']).toBe('application/json')
     expect(JSON.parse(requests[0]?.bodyText || '{}')).toEqual({
       model: 'openai/gpt-image-2',
+      prompt: 'paint a watercolor city scene',
+      n: 1,
+      size: '1088x1920',
+      quality: 'high',
+      output_format: 'webp',
+      background: 'opaque',
+      output_compression: 60,
+      stream: true,
+      provider: {
+        only: ['openai'],
+        allow_fallbacks: false,
+        options: { openai: { moderation: 'low' } },
+      },
+    })
+    expect(requests[0]?.headers.accept).toBe('text/event-stream')
+  })
+
+  it('uses the buffered Images API when GPT Image 2 receives reference images', async () => {
+    server!.defineScenario({
+      method: 'POST',
+      path: '/openrouter/images',
+      mode: 'success',
+      submitResponse: {
+        status: 200,
+        body: {
+          created: 1_785_406_500,
+          data: [{ b64_json: PNG_1X1_BASE64, media_type: 'image/webp' }],
+          usage: {
+            prompt_tokens: 100,
+            completion_tokens: 4075,
+            total_tokens: 4175,
+            cost: 0.165,
+          },
+        },
+      },
+    })
+
+    const result = await requestOpenRouterImage({
+      baseUrl: `${server!.baseUrl}/openrouter`,
+      apiKey: 'openrouter-image-key',
+      modelId: 'openai/gpt-image-2',
+      prompt: 'paint this as a watercolor scene',
+      options: normalizeImageOptions({
+        referenceImages: [PNG_1X1_DATA_URL],
+        aspectRatio: '9:16',
+        resolution: '1K',
+        quality: 'high',
+        outputFormat: 'webp',
+        background: 'opaque',
+        outputCompression: 60,
+        moderation: 'low',
+      }),
+    })
+
+    expect(result).toEqual({
+      success: true,
+      imageBase64: PNG_1X1_BASE64,
+      imageUrl: `data:image/webp;base64,${PNG_1X1_BASE64}`,
+      metadata: {
+        openRouterUsage: { inputTokens: 100, outputTokens: 4075, totalTokens: 4175 },
+      },
+    })
+    const requests = server!.getRequests('POST', '/openrouter/images')
+    expect(requests).toHaveLength(1)
+    expect(JSON.parse(requests[0]?.bodyText || '{}')).toEqual({
+      model: 'openai/gpt-image-2',
       prompt: 'paint this as a watercolor scene',
       n: 1,
       size: '1088x1920',
@@ -154,14 +219,14 @@ describe('provider contract - OpenRouter image', () => {
       }],
       background: 'opaque',
       output_compression: 60,
-      stream: true,
+      stream: false,
       provider: {
         only: ['openai'],
         allow_fallbacks: false,
         options: { openai: { moderation: 'low' } },
       },
     })
-    expect(requests[0]?.headers.accept).toBe('text/event-stream')
+    expect(requests[0]?.headers.accept).not.toBe('text/event-stream')
   })
 
   it('uses the same dedicated Image API for Nano Banana without provider failover', async () => {

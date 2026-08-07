@@ -92,6 +92,10 @@ export async function resolveOpenRouterImageInput(input: {
     quality,
     outputFormat,
     referenceImagesCount: referenceImages.length,
-    stream: true,
+    // OpenRouter advertises streaming at the model endpoint level, but the
+    // pinned OpenAI image endpoint rejects streaming when input_references
+    // turns the request into image editing. Keep SSE for text-to-image only;
+    // reference-image requests use the same dedicated Images API buffered.
+    stream: referenceImages.length === 0,
   }
 }
