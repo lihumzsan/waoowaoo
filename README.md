@@ -47,6 +47,7 @@
 # 下载 docker-compose.yml
 curl -O https://raw.githubusercontent.com/saturndec/waoowaoo/main/docker-compose.yml
 curl -O https://raw.githubusercontent.com/saturndec/waoowaoo/main/.env.example
+curl -O https://raw.githubusercontent.com/saturndec/waoowaoo/main/scripts/temporal/worker-rollout.sh
 cp .env.example .env
 
 # 编辑 .env：为所有空白密钥生成独立随机值，并让 MYSQL_PASSWORD、
@@ -57,13 +58,16 @@ cp .env.example .env
 # APP_IMAGE 必须指向同一个digest，不能保留 .env.example 中的全零占位值。
 # TEMPORAL_WORKER_BLUE_BUILD_ID 必须是该发布唯一、非 local 的 identity。
 
-# 启动所有服务
+# 首次只通过 rollout 入口启动 blue Worker 并建立 Current Version；随后启动 Web。
+chmod 0755 worker-rollout.sh
+sh ./worker-rollout.sh bootstrap blue
 docker compose up -d
 ```
 
 Web 与 Temporal Worker 使用同一个不可变应用镜像，但运行在独立容器中。正式 Worker
 slot只拉取上述digest，不从本地`build: context`构建。Web 进程不会托管 Workflow；Worker
-进程也不接受 HTTP 流量。
+进程也不接受 HTTP 流量。Worker slot 使用独立 Compose profile，普通
+`docker compose up` 不会创建、替换或停止它们。
 
 > [!WARNING]
 > 下面的 `down/up` 或直接替换唯一 Worker 会让仍然 PINNED 到旧版本的 Workflow 停止。
@@ -81,7 +85,8 @@ TEMPORAL_WORKER_GREEN_REPLICAS=1
 
 下载同版本的 rollout 守卫并提升候选版本。命令会先在启动任何候选容器之前拒绝选中
 Current slot 或可变镜像，再等待新 Worker 注册全部 task queue，调用 Temporal
-`set-current-version`，并确认旧 Current Worker 仍在运行：
+`set-current-version`，迁移历史上被错误 pinned 的持续 Scheduler，并确认旧 Current Worker
+仍在运行：
 
 ```bash
 curl -o temporal-worker-rollout.sh \
@@ -90,7 +95,18 @@ chmod 0755 temporal-worker-rollout.sh
 sh ./temporal-worker-rollout.sh promote green
 ```
 
-随后才把 `APP_IMAGE` 改为新不可变镜像并更新 Web。旧 blue Worker 必须继续运行，直到：
+若生产环境不使用默认 `.env`、Compose 文件或 project name，所有 rollout 命令必须通过
+Compose 标准环境变量绑定到同一项目，例如：
+
+```bash
+COMPOSE_ENV_FILES=<production-env> \
+COMPOSE_FILE=docker-compose.yml:<production-overlay> \
+COMPOSE_PROJECT_NAME=<production-project> \
+sh ./temporal-worker-rollout.sh status
+```
+
+随后才把 `APP_IMAGE` 改为新不可变镜像并用普通 `docker compose up -d` 更新 Web；该命令
+不会管理 Worker profile。旧 blue Worker 必须继续运行，直到：
 
 ```bash
 sh ./temporal-worker-rollout.sh status
@@ -104,8 +120,8 @@ sh ./temporal-worker-rollout.sh status
 sh ./temporal-worker-rollout.sh retire blue
 ```
 
-下一次发布交换 blue/green。`retire` 会拒绝 Current Version、未 drained 的版本以及未在
-`.env` 持久设为 0 的 slot，因此旧 pinned Worker 不会被普通更新误删。
+下一次发布交换 blue/green。`retire` 会拒绝 Current Version、仍绑定运行中 Workflow、未
+drained 的版本以及未在 `.env` 持久设为 0 的 slot，因此旧 pinned Worker 不会被普通更新误删。
 
 ### 方式二：克隆仓库 + 构建并发布不可变镜像
 
@@ -120,7 +136,8 @@ docker push <registry>/<repository>:<release-tag>
 # 不要把可变 tag 交给 Compose。把 APP_IMAGE、TEMPORAL_WORKER_BLUE_IMAGE、
 # TEMPORAL_WORKER_GREEN_IMAGE 全部设为
 # 同一个 <registry>/<repository>@sha256:<64位digest>；inactive slot 首次也必须填写。
-# 按上面的说明补齐其他 .env 密钥后启动。正式 Compose 只 pull，不从 context 构建。
+# 按上面的说明补齐其他 .env 密钥。正式 Compose 只 pull，不从 context 构建。
+sh scripts/temporal/worker-rollout.sh bootstrap blue
 docker compose up -d
 ```
 

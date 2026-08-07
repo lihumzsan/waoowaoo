@@ -41,6 +41,7 @@ host-side repository script:
 # Download docker-compose.yml
 curl -O https://raw.githubusercontent.com/saturndec/waoowaoo/main/docker-compose.yml
 curl -O https://raw.githubusercontent.com/saturndec/waoowaoo/main/.env.example
+curl -O https://raw.githubusercontent.com/saturndec/waoowaoo/main/scripts/temporal/worker-rollout.sh
 cp .env.example .env
 
 # Edit .env: generate a distinct random value for every blank secret. Keep
@@ -51,14 +52,17 @@ cp .env.example .env
 # APP_IMAGE must use that same digest; do not retain the all-zero placeholder.
 # TEMPORAL_WORKER_BLUE_BUILD_ID must be a unique, non-local release identity.
 
-# Start all services
+# Establish the first Current Version through the rollout entry, then start Web.
+chmod 0755 worker-rollout.sh
+sh ./worker-rollout.sh bootstrap blue
 docker compose up -d
 ```
 
 Web and Temporal Worker containers use the same immutable application image but
 run as separate processes and failure domains. Production Worker slots only
 pull that digest and never build from a local context. Web never hosts Workflows,
-and a Worker never accepts HTTP traffic.
+and a Worker never accepts HTTP traffic. Worker slots use a dedicated Compose
+profile, so an ordinary `docker compose up` cannot create, replace, or stop them.
 
 > [!WARNING]
 > Do not replace the only Worker with `docker compose down/up`, and never use
@@ -79,7 +83,8 @@ TEMPORAL_WORKER_GREEN_REPLICAS=1
 Download the rollout guard from the same release and promote the candidate. It
 rejects a selected Current slot or mutable image before starting any candidate
 container, waits for every task queue poller, calls Temporal
-`set-current-version`, and verifies that the previous Current Worker is still running:
+`set-current-version`, migrates legacy continuous Schedulers that were incorrectly
+pinned, and verifies that the previous Current Worker is still running:
 
 ```bash
 curl -o temporal-worker-rollout.sh \
@@ -88,8 +93,20 @@ chmod 0755 temporal-worker-rollout.sh
 sh ./temporal-worker-rollout.sh promote green
 ```
 
-Only then point `APP_IMAGE` at the new immutable Web image. Keep the old blue
-Worker running. Check its drainage state with:
+If production uses a non-default env file, Compose file set, or project name,
+bind every rollout command to that same project with Compose's standard
+environment variables:
+
+```bash
+COMPOSE_ENV_FILES=<production-env> \
+COMPOSE_FILE=docker-compose.yml:<production-overlay> \
+COMPOSE_PROJECT_NAME=<production-project> \
+sh ./temporal-worker-rollout.sh status
+```
+
+Only then point `APP_IMAGE` at the new immutable Web image and update Web with a
+normal `docker compose up -d`; that command does not manage the Worker profile.
+Keep the old blue Worker running. Check its drainage state with:
 
 ```bash
 sh ./temporal-worker-rollout.sh status
@@ -103,8 +120,8 @@ sh ./temporal-worker-rollout.sh retire blue
 ```
 
 Swap blue and green on the next release. `retire` rejects the Current Version,
-an undrained version, or a slot whose desired replica count is not persistently
-zero.
+a build that still owns a running Workflow, an undrained version, or a slot whose
+desired replica count is not persistently zero.
 
 ### Method 2: Clone, Build, and Publish an Immutable Image
 
@@ -120,6 +137,7 @@ docker push <registry>/<repository>:<release-tag>
 # the same <registry>/<repository>@sha256:<64-hex-digest>. Production Compose
 # only pulls that release image; it does not build Web or Worker from context.
 # Fill the remaining .env secrets as described above.
+sh scripts/temporal/worker-rollout.sh bootstrap blue
 docker compose up -d
 ```
 

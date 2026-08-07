@@ -355,10 +355,10 @@ services:
     ports:
       - "127.0.0.1:${TEMPORAL_UI_HOST_PORT:-18080}:8080"
 
-  # The first deployment is activated only when the Worker Deployment has no
-  # Current Version. Later releases must use the explicit blue/green rollout
-  # command; restarting Compose can never silently promote a candidate.
-  temporal-initialize-worker-version:
+  # App startup verifies that an explicit Worker rollout already established a
+  # Current Version. This service never changes routing; bootstrap and later
+  # promotions are owned only by scripts/temporal/worker-rollout.sh.
+  temporal-verify-worker-version:
     image: temporalio/admin-tools:1.31.2
     restart: "no"
     logging: *default-logging
@@ -369,14 +369,9 @@ services:
       TEMPORAL_ADDRESS: temporal:7233
       TEMPORAL_NAMESPACE: "${TEMPORAL_NAMESPACE:-waoowaoo}"
       TEMPORAL_WORKER_DEPLOYMENT_NAME: "${TEMPORAL_WORKER_DEPLOYMENT_NAME:-waoowaoo}"
-      TEMPORAL_INITIAL_WORKER_BUILD_ID: "${TEMPORAL_WORKER_BLUE_BUILD_ID:-}"
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
-        : "$${TEMPORAL_INITIAL_WORKER_BUILD_ID:?Set TEMPORAL_WORKER_BLUE_BUILD_ID in .env}"
-        case "$$TEMPORAL_INITIAL_WORKER_BUILD_ID" in
-          local|LOCAL) echo "Production Worker build ID cannot be local" >&2; exit 1 ;;
-        esac
         attempt=1
         while [ "$$attempt" -le 60 ]; do
           deployment_json=$$(
@@ -388,22 +383,13 @@ services:
           )
           if printf '%s\n' "$$deployment_json" \
             | grep -Eq '"currentVersionBuildID"[[:space:]]*:[[:space:]]*"[^"]+"'; then
-            echo "Temporal Worker Deployment already has a Current Version; bootstrap made no routing change."
-            exit 0
-          fi
-          if temporal worker deployment set-current-version \
-            --deployment-name "$$TEMPORAL_WORKER_DEPLOYMENT_NAME" \
-            --build-id "$$TEMPORAL_INITIAL_WORKER_BUILD_ID" \
-            --namespace "$$TEMPORAL_NAMESPACE" \
-            --address "$$TEMPORAL_ADDRESS" \
-            --yes >/dev/null 2>&1; then
-            echo "Activated initial Temporal Worker build '$$TEMPORAL_INITIAL_WORKER_BUILD_ID'."
+            echo "Temporal Worker Deployment has an explicit Current Version."
             exit 0
           fi
           attempt=$$((attempt + 1))
           sleep 2
         done
-        echo "Initial Temporal Worker did not register all required task queues" >&2
+        echo "Temporal Worker Deployment has no Current Version; run temporal:worker:rollout bootstrap first" >&2
         exit 1
 
   temporal-admin:
@@ -447,12 +433,13 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
-      temporal-initialize-worker-version:
+      temporal-verify-worker-version:
         condition: service_completed_successfully
     command: ["sh", "-c", "npm run storage:init && exec npm run start:next"]
 
   temporal-worker-blue:
     <<: *temporal-worker-service
+    profiles: ["temporal-worker-rollout"]
     image: "${TEMPORAL_WORKER_BLUE_IMAGE:-ghcr.io/saturndec/waoowaoo@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
     environment:
       <<: *app-environment
@@ -466,6 +453,7 @@ services:
 
   temporal-worker-green:
     <<: *temporal-worker-service
+    profiles: ["temporal-worker-rollout"]
     image: "${TEMPORAL_WORKER_GREEN_IMAGE:-ghcr.io/saturndec/waoowaoo@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
     environment:
       <<: *app-environment

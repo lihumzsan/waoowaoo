@@ -12,7 +12,6 @@ import { getTemporalRuntimeConfig } from './config'
 import { buildTaskWorkflowId, buildUserTaskSchedulerWorkflowId } from './identity'
 import {
   TASK_WORKFLOW_UPDATE_NAME,
-  TEMPORAL_WORKFLOW_TYPE,
   USER_TASK_SCHEDULER_UPDATE_NAME,
   type PersistedTaskReference,
   type ScheduledTaskReceipt,
@@ -28,6 +27,7 @@ import {
   type UserTaskSchedulerView,
   type UserTaskSchedulerWorkflowInput,
 } from './task/contracts'
+import { TEMPORAL_WORKFLOW } from './workflow-registry'
 
 const SCHEDULER_BOOTSTRAP_SLOT_LIMITS = {
   analysis: 1,
@@ -286,7 +286,7 @@ export class TemporalTaskClient {
     const { request, updateId } = scheduleRequest(reference)
     const schedulerWorkflowId = request.task.schedulerWorkflowId
     const startOperation = new WithStartWorkflowOperation<UserTaskSchedulerWorkflow>(
-      TEMPORAL_WORKFLOW_TYPE.USER_TASK_SCHEDULER,
+      TEMPORAL_WORKFLOW.USER_TASK_SCHEDULER.type,
       {
         workflowId: schedulerWorkflowId,
         workflowIdConflictPolicy: WorkflowIdConflictPolicy.USE_EXISTING,
@@ -325,7 +325,7 @@ export class TemporalTaskClient {
   }): Promise<TemporalTaskCancelReceipt> {
     const command = cancelRequest(input)
     const startOperation = new WithStartWorkflowOperation<UserTaskSchedulerWorkflow>(
-      TEMPORAL_WORKFLOW_TYPE.USER_TASK_SCHEDULER,
+      TEMPORAL_WORKFLOW.USER_TASK_SCHEDULER.type,
       {
         workflowId: command.schedulerWorkflowId,
         workflowIdConflictPolicy: WorkflowIdConflictPolicy.USE_EXISTING,

@@ -10,8 +10,8 @@ import { isTaskType } from '@/lib/task/types'
 import { getTemporalClient } from '../client'
 import { getTemporalRuntimeConfig } from '../config'
 import { buildOperationExecutionWorkflowId } from '../identity'
-import { TEMPORAL_WORKFLOW_TYPE } from '../task/contracts'
 import { decodeTemporalFailure } from '../failure'
+import { TEMPORAL_WORKFLOW } from '../workflow-registry'
 import {
   OPERATION_EXECUTION_MAX_TASKS,
   type OperationExecutionCommand,
@@ -185,7 +185,7 @@ export class TemporalOperationExecutionClient {
     let result: unknown
     try {
       const handle = await this.workflowClient.start<OperationExecutionWorkflow>(
-        TEMPORAL_WORKFLOW_TYPE.OPERATION_EXECUTION,
+        TEMPORAL_WORKFLOW.OPERATION_EXECUTION.type,
         {
           workflowId,
           workflowIdReusePolicy: WorkflowIdReusePolicy.REJECT_DUPLICATE,

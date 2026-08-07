@@ -10,6 +10,7 @@ import {
   log,
   proxyActivities,
   setHandler,
+  setWorkflowOptions,
   workflowInfo,
 } from '@temporalio/workflow'
 import { EXTERNAL_OPERATION } from '../../external-operation/registry'
@@ -31,6 +32,7 @@ import {
   type TaskWorkflowResult,
   type TaskWorkflowView,
 } from '../task/contracts'
+import { TEMPORAL_WORKFLOW } from '../workflow-registry'
 
 const cancelTask = defineUpdate<TaskWorkflowView, [TaskCancelRequest]>(
   TASK_WORKFLOW_UPDATE_NAME.CANCEL,
@@ -635,3 +637,8 @@ export async function taskWorkflow(input: TaskWorkflowInput): Promise<TaskWorkfl
     return result
   }
 }
+
+setWorkflowOptions(
+  { versioningBehavior: TEMPORAL_WORKFLOW.TASK.versioningBehavior },
+  taskWorkflow,
+)

@@ -41,9 +41,10 @@ Task 与交互式 Agent 的唯一交点是一个稳定 batchId 的完成通知�
   阻止尚未发生的执行。Provider 补偿独立重试，不能反向阻塞终态、容量释放或 follow-up。
 - **DE-16 — 执行平面不可用时长任务失败关闭。** 无法进入 Temporal 时返回 stable typed
   infrastructure code，不退回同步执行、旁路队列或 fire-and-forget。
-- **DE-17 — 正式 Worker 使用不可变发布身份。** 生产 build id 不可为可变值，Worker 版本化开启
-  且默认 pinned，镜像按 digest 固定。蓝绿切换必须先注册候选、显式 promote、等旧版本 drained
-  后再 retire；普通重启不隐式提升候选。
+- **DE-17 — 正式 Worker 使用不可变身份和穷尽版本策略。** 生产 build id 与镜像必须不可变；每种
+  Workflow 由同一 registry 声明生命周期和版本行为，有限执行 pinned，持续执行 auto-upgrade。
+  持续执行的变更必须可重放既有 history。蓝绿切换只可由唯一入口显式 bootstrap/promote，
+  旧版本仍拥有执行或未 drained 时不可 retire；普通应用部署不得管理 Worker 槽位或改变路由。
 - **DE-19 — migration 只前进。** 已发布 migration 字节不变；不兼容的 schema 或 Workflow payload
   必须在发布前排空对应实例。部分 schema 或未知来源 fail closed。
 - **DE-20 — 持久控制面有复杂度预算。** 新增 timer、lease、claim、reconciler、execution receipt
@@ -75,3 +76,6 @@ Task 与交互式 Agent 的唯一交点是一个稳定 batchId 的完成通知�
 - Operation Activity 已携带 typed `ApplicationFailure`，但 client 原样抛最外层 `WorkflowFailedError`，
   通用 normalizer 不遍历 cause chain，真实 Workspace 路径错误仍变成 Internal error → Operation、
   Task 与 Scheduler 边界共用版本化 failure codec，client 只在该入口解码（DE-22）。
+- Worker 首版把全部 Workflow 默认 pinned，蓝绿退役保护又只存在于 rollout 脚本；持续 Scheduler
+  永远不能自然 drained，普通 Compose 部署绕过脚本停掉旧槽位后，已冻结额度的 Task 无法开始 →
+  生命周期版本策略进入穷尽 registry，应用部署隔离 Worker，退役同时校验实际绑定执行（DE-17）。
