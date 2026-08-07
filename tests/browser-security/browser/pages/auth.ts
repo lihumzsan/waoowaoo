@@ -18,6 +18,7 @@ export async function registerSecurityUser(page: Page, input: {
   await page.getByRole('tab', { name: '注册', exact: true }).click()
   await page.getByLabel('用户名').fill(input.username)
   await page.getByLabel('密码', { exact: true }).fill(input.password)
+  await page.getByLabel('确认密码', { exact: true }).fill(input.password)
   await page.getByRole('button', { name: '注册并登录', exact: true }).click()
   await expect(page).toHaveURL(/\/zh\/home(?:[/?#]|$)/, { timeout: 30_000 })
   await expectSecurityAuthenticatedUser(page, input.username)

@@ -7,6 +7,8 @@ import {
 
 interface PhoneNumberInputProps {
   inputId: string
+  inputName?: string
+  autoComplete?: string
   destinationSelectId: string
   destinationLabel: string
   phoneLabel: string
@@ -19,6 +21,8 @@ interface PhoneNumberInputProps {
 
 export default function PhoneNumberInput({
   inputId,
+  inputName = 'phoneNumber',
+  autoComplete = 'tel-national',
   destinationSelectId,
   destinationLabel,
   phoneLabel,
@@ -62,10 +66,10 @@ export default function PhoneNumberInput({
         </div>
         <input
           id={inputId}
-          name="phoneNumber"
+          name={inputName}
           type="tel"
           inputMode="tel"
-          autoComplete="tel-national"
+          autoComplete={autoComplete}
           value={phoneNumber}
           onChange={(event) => onPhoneNumberChange(event.target.value)}
           required

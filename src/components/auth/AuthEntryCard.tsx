@@ -64,6 +64,7 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
   const [captchaError, setCaptchaError] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [passwordConfirmation, setPasswordConfirmation] = useState('')
   const [authMode, setAuthMode] = useState<PasswordAuthMode>('login')
   const [pendingAction, setPendingAction] = useState<PendingAction>(null)
   const [resendSeconds, setResendSeconds] = useState(0)
@@ -272,6 +273,10 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
       setError(t('passwordTooShort', { minimum: AUTH_PASSWORD_MIN_LENGTH }))
       return
     }
+    if (authMode === 'register' && password !== passwordConfirmation) {
+      setError(t('passwordMismatch'))
+      return
+    }
 
     setPendingAction('submit')
     setError('')
@@ -303,6 +308,7 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
     if (pendingAction || mode === authMode) return
     setAuthMode(mode)
     setPassword('')
+    setPasswordConfirmation('')
     setError('')
     setNotice('')
   }
@@ -419,11 +425,18 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
           ) : null}
 
           {features.enablePasswordAuth ? (
-            <form onSubmit={handlePasswordSubmit} className="space-y-4">
+            <form
+              key={authMode}
+              onSubmit={handlePasswordSubmit}
+              autoComplete="on"
+              className="space-y-4"
+            >
               <div>
                 {features.passwordAuthIdentity === 'phone' ? (
                   <PhoneNumberInput
                     inputId="passwordPhoneNumber"
+                    inputName="username"
+                    autoComplete="username"
                     destinationSelectId="passwordPhoneDestination"
                     destinationLabel={t('phoneDestination')}
                     phoneLabel={t('phoneNumber')}
@@ -477,6 +490,26 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
                   inputClassName="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 pr-12 text-base text-black outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
                 />
               </div>
+
+              {authMode === 'register' ? (
+                <div>
+                  <label htmlFor="passwordConfirmation" className="mb-2 block text-[13px] font-medium text-slate-700">
+                    {t('confirmPassword')}
+                  </label>
+                  <PasswordInput
+                    id="passwordConfirmation"
+                    name="passwordConfirmation"
+                    autoComplete="new-password"
+                    value={passwordConfirmation}
+                    onChange={setPasswordConfirmation}
+                    required
+                    placeholder={t('confirmPasswordPlaceholder')}
+                    showLabel={t('showPassword')}
+                    hideLabel={t('hidePassword')}
+                    inputClassName="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 pr-12 text-base text-black outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+              ) : null}
 
               <button
                 type="submit"
