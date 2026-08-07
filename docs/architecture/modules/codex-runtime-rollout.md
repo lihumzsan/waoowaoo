@@ -89,8 +89,12 @@ Codex app-server 是唯一 Agent Runtime，并独占模型 Thread/history；Wao 
 - Landlock 验收曾只证明内层沙箱可以读取 Skill 文件，没有驱动模型走真实原生 Skill 调用；Skill 位于
   Codex home 时，`on-request` 仍把模型发起的读取解释为工作区外命令并要求人工确认 → syscall 可读不等于
   真实调用无需审批 → registry 生成的 Skill 只在 workspace `.agents/skills` 暴露，由容器叠加只读挂载，
-  shell 权限使用 `never + workspace-write` 让越界原地失败而不产生无人能处理的审批请求
+  shell 类权限使用 granular 拒绝让越界原地失败而不产生无人能处理的审批请求
   （CRR-03/04）。
+- 为消除 shell 审批曾把整个 Runtime approval policy 设为 `never`；Codex 同时自动拒绝 MCP elicitation，
+  所有计费操作因此在报价后立即表现为用户拒绝且没有可响应交互 → 命令审批和业务审批不是同一权限类 →
+  granular policy 只允许 MCP elicitation，shell、规则、Skill 与权限升级继续 fail-closed，并以真实计费
+  交互验收（CRR-03/07）。
 - 模型网关首版只验证"项目里恰好有一个活跃 Turn"，未证明请求来自当前 Runtime；旧容器 bearer 可在
   有效期内等待新 Turn 后重放 → 凭据没有绑定 placement 租约 → bearer nonce 与 ownership token
   完全相同（CRR-07B）。

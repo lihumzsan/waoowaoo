@@ -86,7 +86,15 @@ async function main(): Promise<void> {
       assert.equal(skill.scope, 'repo')
       assert.equal(skill.path, `/workspace/.agents/skills/${skill.name}/SKILL.md`)
     }
-    assert.equal(ASSISTANT_RUNTIME_STATIC_CONTRACT.thread.approvalPolicy, 'never')
+    assert.deepEqual(ASSISTANT_RUNTIME_STATIC_CONTRACT.thread.approvalPolicy, {
+      granular: {
+        sandbox_approval: false,
+        rules: false,
+        skill_approval: false,
+        request_permissions: false,
+        mcp_elicitations: true,
+      },
+    })
     const thread = await handle.runtime.startThread({
       cwd: handle.runtimeWorkspaceDirectory,
       approvalPolicy: ASSISTANT_RUNTIME_STATIC_CONTRACT.thread.approvalPolicy,
