@@ -19,6 +19,14 @@ const CONTAINER_WORKSPACE_DIRECTORY = '/workspace'
 const CONTAINER_CODEX_HOME_DIRECTORY = '/runtime/codex-home'
 const CONTAINER_RUNTIME_SKILLS_DIRECTORY = '/workspace/.agents/skills'
 const MIN_MEMORY_BYTES = 256 * 1024 * 1024
+const BWRAP_DOCKER_CAPABILITIES = [
+  'SETGID',
+  'SETUID',
+  'SYS_CHROOT',
+  'SYS_ADMIN',
+  'NET_ADMIN',
+  'SYS_PTRACE',
+] as const
 
 export type DockerRuntimeContainerOptions = {
   readonly image: string
@@ -107,8 +115,18 @@ export class DockerRuntimeContainerAdapter implements RuntimeContainerAdapter {
       '--read-only',
       '--cap-drop',
       'ALL',
+      // Codex 0.146 creates a second Linux sandbox with setuid bubblewrap.
+      // Keep app-server non-root and grant only the capabilities required to
+      // construct that inner namespace; the inner Codex seccomp policy remains
+      // the command boundary required by CRR-03.
+      ...BWRAP_DOCKER_CAPABILITIES.flatMap((capability) => [
+        '--cap-add',
+        capability,
+      ]),
       '--security-opt',
-      'no-new-privileges=true',
+      'seccomp=unconfined',
+      '--security-opt',
+      'apparmor=unconfined',
       '--tmpfs',
       '/tmp:rw,nosuid,nodev,noexec,size=268435456',
       '--mount',

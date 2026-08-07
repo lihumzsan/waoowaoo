@@ -98,19 +98,32 @@ async function main(): Promise<void> {
     const sampleSkillId = expectedSkillIds[0]
     assert.ok(sampleSkillId)
     const sampleSkillPath = `/workspace/.agents/skills/${sampleSkillId}/SKILL.md`
+    const sandboxProbeName = `.codex-sandbox-smoke-${randomUUID()}`
     await execFileAsync('docker', [
       'exec',
       handle.identity,
+      'codex',
+      'sandbox',
+      'linux',
+      '--permissions-profile',
+      'workspace-write',
+      '--',
       'sh',
       '-ec',
       [
+        'test "$(id -u)" = "1000"',
         'test -r "$1"',
         'test ! -e "$HOME/skills/$2/SKILL.md"',
+        'probe="/workspace/$3"',
+        'printf ok > "$probe"',
+        'test "$(cat "$probe")" = "ok"',
+        'rm "$probe"',
         'if sh -c \'printf x >> "$1"\' sh "$1" 2>/dev/null; then exit 1; fi',
       ].join('\n'),
       'sh',
       sampleSkillPath,
       sampleSkillId,
+      sandboxProbeName,
     ])
 
     process.stdout.write(`${JSON.stringify({
@@ -121,6 +134,7 @@ async function main(): Promise<void> {
       sandbox: ASSISTANT_RUNTIME_STATIC_CONTRACT.thread.sandbox,
       skills: installedSkills.map((skill) => `${skill.name}@${skill.path}`),
       readonlySkillMount: true,
+      nestedCodexSandbox: true,
     }, null, 2)}\n`)
   } finally {
     if (handle) await handle.stop('force').catch(() => undefined)
