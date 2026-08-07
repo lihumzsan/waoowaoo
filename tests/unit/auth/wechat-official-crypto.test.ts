@@ -17,6 +17,13 @@ const OFFICIAL_VECTOR = {
   plaintext: '{"ToUserName":"gh_97417a04a28d","FromUserName":"o9AgO5Kd5ggOC-bXrbNODIiE3bGY","CreateTime":1714112445,"MsgType":"event","Event":"debug_demo","debug_str":"hello world"}',
 } as const
 
+const OFFICIAL_PLAINTEXT_SIGNATURE_VECTOR = {
+  token: 'AAAAA',
+  timestamp: '1714037059',
+  nonce: '486452656',
+  signature: '899cf89e464efb63f54ddac96b0a0a235f53aa78',
+} as const
+
 describe('WeChat official-account safe-mode protocol', () => {
   it('verifies and decrypts the official WeChat protocol vector', () => {
     expect(verifyWechatSignature({
@@ -36,5 +43,16 @@ describe('WeChat official-account safe-mode protocol', () => {
         encodingAesKey: OFFICIAL_VECTOR.encodingAesKey,
       },
     })).toBe(OFFICIAL_VECTOR.plaintext)
+  })
+
+  it('verifies the official plaintext URL-validation signature vector', () => {
+    expect(verifyWechatSignature({
+      expected: OFFICIAL_PLAINTEXT_SIGNATURE_VECTOR.signature,
+      parts: [
+        OFFICIAL_PLAINTEXT_SIGNATURE_VECTOR.token,
+        OFFICIAL_PLAINTEXT_SIGNATURE_VECTOR.timestamp,
+        OFFICIAL_PLAINTEXT_SIGNATURE_VECTOR.nonce,
+      ],
+    })).toBe(true)
   })
 })

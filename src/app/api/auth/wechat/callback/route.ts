@@ -28,23 +28,32 @@ function textResponse(body: string, status = 200, contentType = 'text/plain; cha
 export const GET = apiHandler(async (request: NextRequest) => {
   try {
     const config = readWechatOfficialConfig()
-    const signature = request.nextUrl.searchParams.get('msg_signature') || ''
     const timestamp = request.nextUrl.searchParams.get('timestamp') || ''
     const nonce = request.nextUrl.searchParams.get('nonce') || ''
-    const encryptedEcho = request.nextUrl.searchParams.get('echostr') || ''
+    const echo = request.nextUrl.searchParams.get('echostr') || ''
+    if (!timestamp || !nonce || !echo) return textResponse('invalid callback', 400)
+
+    const encryptedSignature = request.nextUrl.searchParams.get('msg_signature') || ''
+    if (encryptedSignature) {
+      if (!verifyWechatSignature({
+        expected: encryptedSignature,
+        parts: [config.token, timestamp, nonce, echo],
+      })) {
+        return textResponse('invalid callback', 400)
+      }
+      return textResponse(decryptWechatMessage({ encrypted: echo, config }))
+    }
+
+    const plaintextSignature = request.nextUrl.searchParams.get('signature') || ''
     if (
-      !signature
-      || !timestamp
-      || !nonce
-      || !encryptedEcho
+      !plaintextSignature
       || !verifyWechatSignature({
-        expected: signature,
-        parts: [config.token, timestamp, nonce, encryptedEcho],
+        expected: plaintextSignature,
+        parts: [config.token, timestamp, nonce],
       })
     ) {
       return textResponse('invalid callback', 400)
     }
-    const echo = decryptWechatMessage({ encrypted: encryptedEcho, config })
     return textResponse(echo)
   } catch (error) {
     if (error instanceof WechatOfficialError) return textResponse('invalid callback', 400)
