@@ -9,6 +9,8 @@ import {
 const WECHAT_API_BASE_URL = 'https://api.weixin.qq.com'
 const WECHAT_QR_IMAGE_BASE_URL = 'https://mp.weixin.qq.com/cgi-bin/showqrcode'
 const ACCESS_TOKEN_SAFETY_SECONDS = 300
+const WECHAT_QR_IMAGE_MAX_BYTES = 512 * 1024
+const WECHAT_QR_IMAGE_MIME_TYPE = 'image/jpeg'
 
 interface AccessTokenPayload {
   access_token: string
@@ -142,13 +144,91 @@ async function requestTemporaryQr(scene: string, forceRefresh: boolean): Promise
   return qr
 }
 
+function providerUnavailable(cause?: unknown): never {
+  throw new WechatOfficialError(WECHAT_OFFICIAL_RESULT_CODES.providerUnavailable, cause)
+}
+
+async function readWechatQrImage(response: Response): Promise<Buffer> {
+  if (!response.ok) providerUnavailable()
+  const contentType = response.headers.get('content-type')
+    ?.split(';', 1)[0]
+    ?.trim()
+    .toLowerCase()
+  if (contentType !== 'image/jpeg' && contentType !== 'image/jpg') {
+    providerUnavailable()
+  }
+
+  const declaredLengthHeader = response.headers.get('content-length')
+  if (declaredLengthHeader !== null) {
+    const declaredLength = Number(declaredLengthHeader)
+    if (
+      !Number.isSafeInteger(declaredLength)
+      || declaredLength <= 0
+      || declaredLength > WECHAT_QR_IMAGE_MAX_BYTES
+    ) {
+      providerUnavailable()
+    }
+  }
+  if (!response.body) providerUnavailable()
+
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let totalBytes = 0
+  try {
+    while (true) {
+      const result = await reader.read()
+      if (result.done) break
+      totalBytes += result.value.byteLength
+      if (totalBytes > WECHAT_QR_IMAGE_MAX_BYTES) {
+        await reader.cancel()
+        providerUnavailable()
+      }
+      chunks.push(result.value)
+    }
+  } catch (error) {
+    if (error instanceof WechatOfficialError) throw error
+    providerUnavailable(error)
+  } finally {
+    reader.releaseLock()
+  }
+
+  const image = Buffer.concat(chunks)
+  if (
+    image.length < 4
+    || image[0] !== 0xff
+    || image[1] !== 0xd8
+    || image[2] !== 0xff
+  ) {
+    providerUnavailable()
+  }
+  return image
+}
+
+async function requestWechatQrImageDataUrl(ticket: string): Promise<string> {
+  let response: Response
+  try {
+    response = await fetch(
+      `${WECHAT_QR_IMAGE_BASE_URL}?ticket=${encodeURIComponent(ticket)}`,
+      {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(8_000),
+      },
+    )
+  } catch (error) {
+    providerUnavailable(error)
+  }
+  const image = await readWechatQrImage(response)
+  return `data:${WECHAT_QR_IMAGE_MIME_TYPE};base64,${image.toString('base64')}`
+}
+
 export async function createWechatTemporaryQr(scene: string): Promise<{
   imageUrl: string
   expiresInSeconds: number
 }> {
   const qr = await requestTemporaryQr(scene, false)
+  const imageUrl = await requestWechatQrImageDataUrl(qr.ticket)
   return {
-    imageUrl: `${WECHAT_QR_IMAGE_BASE_URL}?ticket=${encodeURIComponent(qr.ticket)}`,
+    imageUrl,
     expiresInSeconds: qr.expire_seconds,
   }
 }

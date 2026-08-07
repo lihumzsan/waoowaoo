@@ -40,6 +40,7 @@ function readAttemptPayload(value: unknown): AttemptPayload | null {
     typeof attempt.attemptId !== 'string'
     || typeof attempt.browserToken !== 'string'
     || typeof attempt.qrImageUrl !== 'string'
+    || !attempt.qrImageUrl.startsWith('data:image/jpeg;base64,')
     || typeof attempt.expiresAt !== 'string'
   ) {
     return null
@@ -247,7 +248,7 @@ export default function WechatOfficialAuthButton({
   const qrContent = (
     <div className="flex min-h-72 flex-col items-center justify-center text-center">
       {attempt ? (
-        // eslint-disable-next-line @next/next/no-img-element -- WeChat returns a short-lived provider QR URL.
+        // eslint-disable-next-line @next/next/no-img-element -- The API returns a short-lived validated QR data URL.
         <img
           src={attempt.qrImageUrl}
           alt={t('wechatQrAlt')}
