@@ -21,13 +21,15 @@ const passwordProvider = deploymentFeatures.enablePasswordAuth
       id: 'credentials',
       name: 'password',
       credentials: {
-        username: { label: 'Username', type: 'text' },
+        identity: { label: 'Identity', type: 'text' },
         password: { label: 'Password', type: 'password' },
+        mode: { label: 'Mode', type: 'text' },
       },
       async authorize(credentials) {
         return await authorizePasswordIdentity({
-          username: credentials?.username,
+          identity: credentials?.identity,
           password: credentials?.password,
+          mode: credentials?.mode,
         })
       },
     })

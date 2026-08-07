@@ -2,7 +2,7 @@ import type { DeploymentFeatures } from './features'
 
 export type PublicDeploymentFeatures = DeploymentFeatures
 
-const DEPLOYMENT_FEATURE_KEYS: Array<keyof PublicDeploymentFeatures> = [
+const BOOLEAN_DEPLOYMENT_FEATURE_KEYS = [
   'showOfficialPublicPages',
   'showPricingPage',
   'showLegalPages',
@@ -18,7 +18,7 @@ const DEPLOYMENT_FEATURE_KEYS: Array<keyof PublicDeploymentFeatures> = [
   'showDownloadLogs',
   'showUpdateCheck',
   'showBetaBadge',
-]
+] as const satisfies ReadonlyArray<keyof PublicDeploymentFeatures>
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -26,7 +26,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function isPublicDeploymentFeatures(value: unknown): value is PublicDeploymentFeatures {
   if (!isRecord(value)) return false
-  return DEPLOYMENT_FEATURE_KEYS.every((key) => typeof value[key] === 'boolean')
+  if (!BOOLEAN_DEPLOYMENT_FEATURE_KEYS.every((key) => typeof value[key] === 'boolean')) {
+    return false
+  }
+  return value.passwordAuthIdentity === 'username' || value.passwordAuthIdentity === 'phone'
 }
 
 export async function fetchPublicDeploymentFeatures(): Promise<PublicDeploymentFeatures | null> {

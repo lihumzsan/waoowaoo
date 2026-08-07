@@ -1,6 +1,8 @@
 import type { DeploymentConfig } from './config'
 import { isUserProviderCredentialMode } from './config'
 
+export type PasswordAuthIdentity = 'username' | 'phone'
+
 export interface DeploymentFeatures {
   showOfficialPublicPages: boolean
   showPricingPage: boolean
@@ -14,6 +16,7 @@ export interface DeploymentFeatures {
   showGoogleOAuth: boolean
   enablePhoneAuth: boolean
   enablePasswordAuth: boolean
+  passwordAuthIdentity: PasswordAuthIdentity
   showDownloadLogs: boolean
   showUpdateCheck: boolean
   showBetaBadge: boolean
@@ -33,6 +36,7 @@ const SELF_HOSTED_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   showGoogleOAuth: false,
   enablePhoneAuth: false,
   enablePasswordAuth: true,
+  passwordAuthIdentity: 'username',
   showDownloadLogs: false,
   showUpdateCheck: true,
   showBetaBadge: false,
@@ -48,8 +52,9 @@ const CLOUD_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   showPublicBetaWaitlist: true,
   showAccountSecurity: true,
   showGoogleOAuth: true,
-  enablePhoneAuth: true,
-  enablePasswordAuth: false,
+  enablePhoneAuth: false,
+  enablePasswordAuth: true,
+  passwordAuthIdentity: 'phone',
   showDownloadLogs: false,
   showUpdateCheck: false,
   showBetaBadge: true,
