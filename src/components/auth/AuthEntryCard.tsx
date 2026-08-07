@@ -320,7 +320,13 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
     <div className="glass-page min-h-screen">
       <Navbar />
       <main className="flex min-h-[calc(100vh-4rem)] items-start justify-center px-4 py-8 sm:items-center sm:py-12">
-        <section className="w-full max-w-[420px] rounded-[1.75rem] border border-white/80 bg-white/90 px-5 py-7 text-black shadow-[0_24px_72px_rgba(15,23,42,0.10)] backdrop-blur-xl sm:px-8 sm:py-8">
+        <section className={`w-full rounded-[1.75rem] border border-white/80 bg-white/90 px-5 py-7 text-black shadow-[0_24px_72px_rgba(15,23,42,0.10)] backdrop-blur-xl sm:px-8 sm:py-8 ${features.showWechatOfficialAuth
+          ? 'max-w-[900px]'
+          : 'max-w-[420px]'}`}>
+          <div className={features.showWechatOfficialAuth
+            ? 'grid gap-8 md:grid-cols-[minmax(0,1fr)_minmax(300px,0.82fr)] md:gap-0'
+            : ''}>
+            <div className={features.showWechatOfficialAuth ? 'min-w-0 md:pr-8' : ''}>
           <header className="mb-7 text-center">
             <h1 className="text-[1.75rem] font-bold tracking-[-0.025em] sm:text-[2rem]">
               {features.enablePasswordAuth
@@ -329,7 +335,11 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
             </h1>
             <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-slate-500">
               {features.enablePasswordAuth
-                ? authMode === 'login' ? t('loginSubtitle') : t('registerSubtitle')
+                ? authMode === 'login'
+                  ? features.showWechatOfficialAuth
+                    ? t('loginSubtitleWithWechat')
+                    : t('loginSubtitle')
+                  : t('registerSubtitle')
                 : t('subtitle')}
             </p>
           </header>
@@ -536,7 +546,7 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
             </p>
           ) : null}
 
-          {features.showWechatOfficialAuth || features.showGoogleOAuth ? (
+          {features.showGoogleOAuth ? (
             <>
               {hasPrimaryAuth ? (
                 <div className="my-5 flex items-center gap-3">
@@ -545,22 +555,11 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
                   <div className="h-px flex-1 bg-slate-200" />
                 </div>
               ) : null}
-              <div className="space-y-3">
-                {features.showWechatOfficialAuth ? (
-                  <WechatOfficialAuthButton
-                    mode="login"
-                    onAuthenticated={finishAuthentication}
-                    disabled={pendingAction !== null}
-                  />
-                ) : null}
-                {features.showGoogleOAuth ? (
-                  <GoogleSignInButton
-                    label={t('continueWithGoogle')}
-                    loadingLabel={t('googleButtonLoading')}
-                    onError={() => setError(t('googleLoginError'))}
-                  />
-                ) : null}
-              </div>
+              <GoogleSignInButton
+                label={t('continueWithGoogle')}
+                loadingLabel={t('googleButtonLoading')}
+                onError={() => setError(t('googleLoginError'))}
+              />
             </>
           ) : null}
 
@@ -580,6 +579,18 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
             >
               {t('backToHome')}
             </Link>
+          </div>
+            </div>
+
+            {features.showWechatOfficialAuth ? (
+              <aside className="border-t border-slate-200 pt-8 md:border-l md:border-t-0 md:pl-8 md:pt-0">
+                <WechatOfficialAuthButton
+                  mode="login"
+                  presentation="panel"
+                  onAuthenticated={finishAuthentication}
+                />
+              </aside>
+            ) : null}
           </div>
         </section>
       </main>

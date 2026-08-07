@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { signIn } from 'next-auth/react'
 import { useLocale, useTranslations } from 'next-intl'
 import { WeChatIcon } from '@/components/ui/icons/WeChatIcon'
@@ -13,6 +13,7 @@ interface WechatOfficialAuthButtonProps {
   mode: AttemptMode
   onAuthenticated: () => void | Promise<void>
   disabled?: boolean
+  presentation?: 'button' | 'panel'
 }
 
 interface AttemptPayload {
@@ -111,29 +112,26 @@ export default function WechatOfficialAuthButton({
   mode,
   onAuthenticated,
   disabled = false,
+  presentation = 'button',
 }: WechatOfficialAuthButtonProps) {
   const t = useTranslations('auth')
   const locale = useLocale()
   const abortRef = useRef<AbortController | null>(null)
   const expiryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const autoStartedRef = useRef(false)
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [attempt, setAttempt] = useState<AttemptPayload | null>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [hasError, setHasError] = useState(false)
 
-  const clearExpiryTimer = () => {
+  const clearExpiryTimer = useCallback(() => {
     if (!expiryTimerRef.current) return
     clearTimeout(expiryTimerRef.current)
     expiryTimerRef.current = null
-  }
-
-  useEffect(() => () => {
-    abortRef.current?.abort()
-    if (expiryTimerRef.current) clearTimeout(expiryTimerRef.current)
   }, [])
 
-  const close = () => {
+  const close = useCallback(() => {
     abortRef.current?.abort()
     abortRef.current = null
     clearExpiryTimer()
@@ -142,9 +140,9 @@ export default function WechatOfficialAuthButton({
     setAttempt(null)
     setStatus(null)
     setHasError(false)
-  }
+  }, [clearExpiryTimer])
 
-  const completeAuthentication = async (current: AttemptPayload) => {
+  const completeAuthentication = useCallback(async (current: AttemptPayload) => {
     setStatus(t('wechatCompleting'))
     setHasError(false)
     const result = await signIn('wechat-official', {
@@ -156,9 +154,12 @@ export default function WechatOfficialAuthButton({
     setStatus(t('wechatSuccess'))
     await onAuthenticated()
     close()
-  }
+  }, [close, onAuthenticated, t])
 
-  const listenForApproval = async (current: AttemptPayload, signal: AbortSignal) => {
+  const listenForApproval = useCallback(async (
+    current: AttemptPayload,
+    signal: AbortSignal,
+  ) => {
     const response = await apiFetch('/api/auth/wechat/events', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -187,9 +188,9 @@ export default function WechatOfficialAuthButton({
       return true
     })
     if (!reachedTerminalState) throw new Error('WECHAT_OFFICIAL_STREAM_ENDED')
-  }
+  }, [clearExpiryTimer, completeAuthentication, t])
 
-  const start = async () => {
+  const start = useCallback(async () => {
     if (loading || disabled) return
     abortRef.current?.abort()
     clearExpiryTimer()
@@ -230,6 +231,73 @@ export default function WechatOfficialAuthButton({
       setStatus(t('wechatUnavailable'))
       setHasError(true)
     }
+  }, [clearExpiryTimer, disabled, listenForApproval, loading, locale, mode, t])
+
+  useEffect(() => () => {
+    abortRef.current?.abort()
+    clearExpiryTimer()
+  }, [clearExpiryTimer])
+
+  useEffect(() => {
+    if (presentation !== 'panel' || disabled || autoStartedRef.current) return
+    autoStartedRef.current = true
+    void start()
+  }, [disabled, presentation, start])
+
+  const qrContent = (
+    <div className="flex min-h-72 flex-col items-center justify-center text-center">
+      {attempt ? (
+        // eslint-disable-next-line @next/next/no-img-element -- WeChat returns a short-lived provider QR URL.
+        <img
+          src={attempt.qrImageUrl}
+          alt={t('wechatQrAlt')}
+          width={240}
+          height={240}
+          className="h-60 w-60 rounded-2xl bg-white p-2 shadow-sm"
+        />
+      ) : (
+        <div className="flex h-60 w-60 items-center justify-center rounded-2xl bg-[var(--glass-bg-muted)] px-6 text-sm text-[var(--glass-text-secondary)]">
+          {loading ? t('wechatLoading') : t('wechatUnavailable')}
+        </div>
+      )}
+      <p
+        role={hasError ? 'alert' : 'status'}
+        className={`mt-4 w-full rounded-xl px-4 py-3 text-sm ${hasError
+          ? 'bg-[var(--glass-tone-surface)] text-[var(--glass-tone-danger-fg)]'
+          : 'bg-emerald-50 text-emerald-800'}`}
+      >
+        {status || t('wechatLoading')}
+      </p>
+      {hasError ? (
+        <button
+          type="button"
+          disabled={disabled || loading}
+          onClick={() => { void start() }}
+          className="mt-3 inline-flex h-10 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-800 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#07C160] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {t('wechatRetry')}
+        </button>
+      ) : null}
+    </div>
+  )
+
+  if (presentation === 'panel') {
+    return (
+      <section aria-labelledby="wechat-login-panel-title" className="flex h-full flex-col">
+        <header className="mb-5 text-center">
+          <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#07C160]/10 text-[#07C160]">
+            <WeChatIcon className="h-6 w-6" aria-hidden="true" />
+          </div>
+          <h2 id="wechat-login-panel-title" className="text-xl font-bold tracking-[-0.02em] text-slate-950">
+            {t('wechatDialogTitle')}
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-slate-500">
+            {t('wechatDialogDescription')}
+          </p>
+        </header>
+        {qrContent}
+      </section>
+    )
   }
 
   return (
@@ -256,28 +324,7 @@ export default function WechatOfficialAuthButton({
         closeOnEsc
         showDividers={false}
       >
-        <div className="flex min-h-72 flex-col items-center justify-center text-center">
-          {attempt ? (
-            // eslint-disable-next-line @next/next/no-img-element -- WeChat returns a short-lived provider QR URL.
-            <img
-              src={attempt.qrImageUrl}
-              alt={t('wechatQrAlt')}
-              width={240}
-              height={240}
-              className="h-60 w-60 rounded-2xl bg-white p-2 shadow-sm"
-            />
-          ) : (
-            <div className="flex h-60 w-60 items-center justify-center rounded-2xl bg-[var(--glass-bg-muted)] text-sm text-[var(--glass-text-secondary)]">
-              {loading ? t('wechatLoading') : t('wechatUnavailable')}
-            </div>
-          )}
-          <p
-            role={hasError ? 'alert' : 'status'}
-            className="mt-4 text-sm text-[var(--glass-text-secondary)]"
-          >
-            {status || t('wechatLoading')}
-          </p>
-        </div>
+        {qrContent}
       </GlassModalShell>
     </>
   )
