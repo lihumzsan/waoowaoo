@@ -91,7 +91,6 @@ async function main(): Promise<void> {
       cwd: handle.runtimeWorkspaceDirectory,
       approvalPolicy: ASSISTANT_RUNTIME_STATIC_CONTRACT.thread.approvalPolicy,
       sandbox: ASSISTANT_RUNTIME_STATIC_CONTRACT.thread.sandbox,
-      config: { features: { use_legacy_landlock: true } },
       ephemeral: true,
     })
     assert.ok(thread.id)

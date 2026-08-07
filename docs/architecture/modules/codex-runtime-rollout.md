@@ -83,8 +83,9 @@ Codex app-server 是唯一 Agent Runtime，并独占模型 Thread/history；Wao 
   bearer 并直连内部模型网关 → 两层隔离被当成一层 → 本地与容器都启用受限写权限并关闭 shell 网络
   （CRR-03/CRR-07B）。
 - Docker Runtime 首版 smoke 只验证镜像与 app-server 协议，没有在生产容器中执行内层沙箱命令；
-  默认 seccomp/AppArmor 阻止 Bubblewrap 的嵌套 namespace，`on-request` 又把普通读取变成无沙箱审批重试 →
-  Docker driver 显式使用无需放宽外层权限的 Landlock 后端，并以真实沙箱命令验收（CRR-03）。
+  后续验收又从容器外直接读取文件并强制旧 Landlock，仍未经过 Codex 的受管权限配置。新版 Runtime
+  因而在真实 Skill 调用时拒绝互斥的 direct enforcement 与 legacy backend → 外部 syscall 验收不能证明
+  模型调用链可用 → 不再覆写 Runtime 的沙箱后端，并以真实模型 Skill 调用验收（CRR-03）。
 - Landlock 验收曾只证明内层沙箱可以读取 Skill 文件，没有驱动模型走真实原生 Skill 调用；Skill 位于
   Codex home 时，`on-request` 仍把模型发起的读取解释为工作区外命令并要求人工确认 → syscall 可读不等于
   真实调用无需审批 → registry 生成的 Skill 只在 workspace `.agents/skills` 暴露，由容器叠加只读挂载，

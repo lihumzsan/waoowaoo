@@ -123,15 +123,9 @@ function requireAbsoluteHttpUrl(value: string | undefined, code: string): string
   return url.toString().replace(/\/$/u, '')
 }
 
-type RuntimeSandboxConfiguration = {
-  readonly mode: 'workspace-write'
-  readonly useLegacyLandlock: boolean
-}
-
-function runtimeSandboxConfiguration(): RuntimeSandboxConfiguration {
+function runtimeSandboxMode(): 'workspace-write' {
   const driver = process.env.CODEX_RUNTIME_DRIVER
-  if (driver === 'local') return { mode: 'workspace-write', useLegacyLandlock: false }
-  if (driver === 'docker') return { mode: 'workspace-write', useLegacyLandlock: true }
+  if (driver === 'local' || driver === 'docker') return 'workspace-write'
   throw new Error('ASSISTANT_RUNTIME_DRIVER_REQUIRED')
 }
 
@@ -142,7 +136,6 @@ function runtimeConfig(input: {
   readonly bearerTokenEnvironmentKey: string
   readonly requestMaxRetries: number
   readonly streamMaxRetries: number
-  readonly useLegacyLandlock: boolean
 }): RuntimeJsonObject {
   const tools = ASSISTANT_RUNTIME_STATIC_CONTRACT.tools
   return {
@@ -164,7 +157,6 @@ function runtimeConfig(input: {
       // Keep compaction local: Wao proxies Responses and standalone search,
       // not OpenAI's private remote-compaction endpoint.
       remote_compaction_v2: tools.features.remoteCompactionV2,
-      ...(input.useLegacyLandlock ? { use_legacy_landlock: true } : {}),
       // GPT-5.6 Sol/Terra select Codex's code-mode-only tool contract in their
       // official model metadata. The bundled process host must therefore be
       // available or those models fail closed without shell or Web Search.
@@ -246,7 +238,7 @@ export async function resolveAssistantRuntimeModelConfiguration(
     }),
     readProjectProductionContext(input.scope),
   ])
-  const sandbox = runtimeSandboxConfiguration()
+  const sandbox = runtimeSandboxMode()
   const config = runtimeConfig({
     mcpUrl: `${waoBaseUrl}${MCP_PATH}`,
     modelGatewayUrl: gateway.baseUrl,
@@ -254,14 +246,13 @@ export async function resolveAssistantRuntimeModelConfiguration(
     bearerTokenEnvironmentKey: gateway.bearerTokenEnvironmentKey,
     requestMaxRetries: gateway.requestMaxRetries,
     streamMaxRetries: gateway.streamMaxRetries,
-    useLegacyLandlock: sandbox.useLegacyLandlock,
   })
   const threadContract = ASSISTANT_RUNTIME_STATIC_CONTRACT.thread
   const start = {
     model: gateway.runtimeModelId,
     modelProvider: gateway.modelProviderId,
     approvalPolicy: threadContract.approvalPolicy,
-    sandbox: sandbox.mode,
+    sandbox,
     config,
     serviceName: threadContract.serviceName,
     baseInstructions: ASSISTANT_RUNTIME_BASE_INSTRUCTIONS,
@@ -279,7 +270,7 @@ export async function resolveAssistantRuntimeModelConfiguration(
         model: gateway.runtimeModelId,
         modelProvider: gateway.modelProviderId,
         approvalPolicy: threadContract.approvalPolicy,
-        sandbox: sandbox.mode,
+        sandbox,
         config,
         baseInstructions: ASSISTANT_RUNTIME_BASE_INSTRUCTIONS,
         developerInstructions: ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
