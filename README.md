@@ -153,9 +153,10 @@ npm run db:push
 npm run dev
 ```
 
-本地调试官方 Cloud 产品能力时，另复制 `.env.cloud.example` 为 `.env.cloud.local` 并运行
-`npm run dev:cloud`。两个开发命令都使用源码挂载和热更新；Docker 层只在依赖、基础镜像或 Codex
-版本变化时重建。Cloud 模式仍使用同一套本机开源 Temporal，不需要 Temporal Cloud
+本地调试官方 Cloud 产品能力时，复制完整的 `.env.cloud.example` 为 `.env.cloud.local` 并运行
+`npm run dev:cloud`。Cloud 本地开发只读取 `.env.cloud.local`，不会再读取或覆盖 `.env`；正式服务器
+只读取自己的 `.env.production`。两个开发命令都使用源码挂载和热更新；Docker 层只在依赖、基础镜像
+或 Codex 版本变化时重建。Cloud 模式仍使用同一套本机开源 Temporal，不需要 Temporal Cloud
 账户、TLS 或 API key。`npm run dev:local` 只是显式的宿主机 Runtime 排障入口，不是发布验收路径。
 
 > [!WARNING]

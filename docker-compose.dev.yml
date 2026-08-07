@@ -30,11 +30,14 @@ x-dev-service: &dev-service
     target: development
   restart: "no"
   env_file:
-    - .env
-    - "${WAO_DEV_ENV_OVERLAY:-.env}"
+    - "${WAO_DEV_ENV_FILE:?Set WAO_DEV_ENV_FILE to the single development environment file}"
   environment: *dev-environment
   volumes:
     - .:/app
+    - type: bind
+      source: "${WAO_DEV_ENV_FILE:?Set WAO_DEV_ENV_FILE to the single development environment file}"
+      target: /app/.env
+      read_only: true
     - dev_node_modules:/app/node_modules
     - dev_next:/app/.next
     - ./data:/app/data
@@ -68,6 +71,10 @@ services:
       - "${DEV_APP_BIND_ADDRESS:-127.0.0.1}:${DEV_APP_HOST_PORT:-3000}:3000"
     volumes:
       - .:/app
+      - type: bind
+        source: "${WAO_DEV_ENV_FILE:?Set WAO_DEV_ENV_FILE to the single development environment file}"
+        target: /app/.env
+        read_only: true
       - dev_node_modules:/app/node_modules
       - dev_next:/app/.next
       - ./data:/app/data
@@ -103,4 +110,5 @@ services:
 
 volumes:
   dev_node_modules:
+    name: "${COMPOSE_PROJECT_NAME:-waoowaoo}_dev_node_modules_${WAO_DEV_DEPENDENCY_FINGERPRINT:?Set WAO_DEV_DEPENDENCY_FINGERPRINT through scripts/dev-docker.sh}"
   dev_next:
