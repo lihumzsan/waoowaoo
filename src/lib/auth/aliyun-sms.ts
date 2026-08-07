@@ -1,10 +1,29 @@
-import DysmsapiClient, { SendSmsRequest } from '@alicloud/dysmsapi20170525'
+import DysmsapiClientExport, { SendSmsRequest } from '@alicloud/dysmsapi20170525'
 import { Config } from '@alicloud/openapi-client'
 import { resolveSmsDestinationFromPhoneNumber } from '@/lib/auth/phone-number'
 import type { SmsDestinationId } from '@/lib/auth/sms-destinations'
 
 const ALIYUN_SMS_ENDPOINT = 'dysmsapi.aliyuncs.com'
 const ALIYUN_SMS_TIMEOUT_MS = 10_000
+
+type DysmsapiClientConstructor = typeof DysmsapiClientExport
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function resolveDysmsapiClientConstructor(): DysmsapiClientConstructor {
+  const runtimeExport: unknown = DysmsapiClientExport
+  const constructor = typeof runtimeExport === 'function'
+    ? runtimeExport
+    : isRecord(runtimeExport) && typeof runtimeExport.default === 'function'
+      ? runtimeExport.default
+      : null
+  if (!constructor) {
+    throw new AliyunSmsConfigurationError('ALIBABA_CLOUD_SMS_SDK_CLIENT')
+  }
+  return constructor as DysmsapiClientConstructor
+}
 
 export interface AliyunSmsConfig {
   accessKeyId: string
@@ -65,6 +84,27 @@ export function readAliyunSmsConfig(): AliyunSmsConfig {
   }
 }
 
+function createAliyunSmsClient(config: AliyunSmsConfig) {
+  const Client = resolveDysmsapiClientConstructor()
+  return new Client(new Config({
+    accessKeyId: config.accessKeyId,
+    accessKeySecret: config.accessKeySecret,
+    endpoint: ALIYUN_SMS_ENDPOINT,
+    protocol: 'https',
+    connectTimeout: ALIYUN_SMS_TIMEOUT_MS,
+    readTimeout: ALIYUN_SMS_TIMEOUT_MS,
+  }))
+}
+
+export function assertAliyunSmsSdkRuntime(): void {
+  createAliyunSmsClient({
+    accessKeyId: 'runtime-smoke',
+    accessKeySecret: 'runtime-smoke',
+    signName: 'runtime-smoke',
+    templateCode: 'runtime-smoke',
+  })
+}
+
 export async function sendAliyunVerificationSms(input: {
   phoneNumber: string
   code: string
@@ -76,14 +116,7 @@ export async function sendAliyunVerificationSms(input: {
   }
 
   const config = readAliyunSmsConfig()
-  const client = new DysmsapiClient(new Config({
-    accessKeyId: config.accessKeyId,
-    accessKeySecret: config.accessKeySecret,
-    endpoint: ALIYUN_SMS_ENDPOINT,
-    protocol: 'https',
-    connectTimeout: ALIYUN_SMS_TIMEOUT_MS,
-    readTimeout: ALIYUN_SMS_TIMEOUT_MS,
-  }))
+  const client = createAliyunSmsClient(config)
   const response = await client.sendSms(new SendSmsRequest({
     phoneNumbers: input.phoneNumber,
     signName: config.signName,
