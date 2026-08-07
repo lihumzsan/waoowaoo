@@ -9,6 +9,8 @@ import { createClientApiError } from '@/lib/errors/client'
 import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
 import { getPathname } from '@/i18n/navigation'
 import { AUTH_PASSWORD_MIN_LENGTH } from '@/lib/auth/password-policy'
+import WechatOfficialAuthButton from '@/components/auth/WechatOfficialAuthButton'
+import { WeChatIcon } from '@/components/ui/icons/WeChatIcon'
 
 type AccountSecuritySnapshot = {
   email: string | null
@@ -16,6 +18,9 @@ type AccountSecuritySnapshot = {
   hasPassword: boolean
   providers: {
     google: {
+      linked: boolean
+    }
+    wechatOfficial: {
       linked: boolean
     }
   }
@@ -28,13 +33,14 @@ type AccountSecurityPayload = {
 interface AccountSecurityTabProps {
   enablePasswordAuth: boolean
   showGoogleOAuth: boolean
+  showWechatOfficialAuth: boolean
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
-function isGoogleProviderState(value: unknown): value is { linked: boolean } {
+function isLinkedProviderState(value: unknown): value is { linked: boolean } {
   return isRecord(value) && typeof value.linked === 'boolean'
 }
 
@@ -46,7 +52,8 @@ function isAccountSecuritySnapshot(value: unknown): value is AccountSecuritySnap
     (typeof value.email === 'string' || value.email === null)
     && typeof value.displayName === 'string'
     && typeof value.hasPassword === 'boolean'
-    && isGoogleProviderState(providers.google)
+    && isLinkedProviderState(providers.google)
+    && isLinkedProviderState(providers.wechatOfficial)
   )
 }
 
@@ -59,6 +66,7 @@ function isAccountSecurityPayload(value: unknown): value is AccountSecurityPaylo
 export default function AccountSecurityTab({
   enablePasswordAuth,
   showGoogleOAuth,
+  showWechatOfficialAuth,
 }: AccountSecurityTabProps) {
   const t = useTranslations('profile.accountSecurity')
   const resolveClientError = useClientErrorMessage()
@@ -233,6 +241,7 @@ export default function AccountSecurityTab({
   }
 
   const googleLinked = security.providers.google.linked
+  const wechatOfficialLinked = security.providers.wechatOfficial.linked
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 overflow-auto p-6">
@@ -321,6 +330,28 @@ export default function AccountSecurityTab({
                   <AppIcon name="link" className="h-4 w-4" />
                   {bindingGoogle ? t('binding') : t('bindGoogle')}
                 </button>
+              )}
+            </div>
+          ) : null}
+
+          {showWechatOfficialAuth ? (
+            <div className="rounded-xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)] p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--glass-text-primary)]">
+                <WeChatIcon className="h-4 w-4 text-[#07C160]" aria-hidden="true" />
+                {t('wechat')}
+              </div>
+              <p className="text-sm text-[var(--glass-text-secondary)]">
+                {wechatOfficialLinked ? t('wechatBound') : t('wechatNotBound')}
+              </p>
+              {wechatOfficialLinked ? (
+                <span className="glass-chip glass-chip-success mt-3">
+                  {t('bound')}
+                </span>
+              ) : (
+                <WechatOfficialAuthButton
+                  mode="bind"
+                  onAuthenticated={loadSecurity}
+                />
               )}
             </div>
           ) : null}

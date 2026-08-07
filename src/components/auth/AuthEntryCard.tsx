@@ -7,6 +7,7 @@ import GoogleSignInButton from '@/components/auth/GoogleSignInButton'
 import PasswordInput from '@/components/auth/PasswordInput'
 import PhoneCaptchaDialog from '@/components/auth/PhoneCaptchaDialog'
 import PhoneNumberInput from '@/components/auth/PhoneNumberInput'
+import WechatOfficialAuthButton from '@/components/auth/WechatOfficialAuthButton'
 import Navbar from '@/components/Navbar'
 import { Link, useRouter } from '@/i18n/navigation'
 import { apiFetch } from '@/lib/api-fetch'
@@ -28,6 +29,7 @@ interface AuthEntryCardProps {
     | 'enablePasswordAuth'
     | 'passwordAuthIdentity'
     | 'showGoogleOAuth'
+    | 'showWechatOfficialAuth'
   >
 }
 
@@ -534,7 +536,7 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
             </p>
           ) : null}
 
-          {features.showGoogleOAuth ? (
+          {features.showWechatOfficialAuth || features.showGoogleOAuth ? (
             <>
               {hasPrimaryAuth ? (
                 <div className="my-5 flex items-center gap-3">
@@ -543,11 +545,22 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
                   <div className="h-px flex-1 bg-slate-200" />
                 </div>
               ) : null}
-              <GoogleSignInButton
-                label={t('continueWithGoogle')}
-                loadingLabel={t('googleButtonLoading')}
-                onError={() => setError(t('googleLoginError'))}
-              />
+              <div className="space-y-3">
+                {features.showWechatOfficialAuth ? (
+                  <WechatOfficialAuthButton
+                    mode="login"
+                    onAuthenticated={finishAuthentication}
+                    disabled={pendingAction !== null}
+                  />
+                ) : null}
+                {features.showGoogleOAuth ? (
+                  <GoogleSignInButton
+                    label={t('continueWithGoogle')}
+                    loadingLabel={t('googleButtonLoading')}
+                    onError={() => setError(t('googleLoginError'))}
+                  />
+                ) : null}
+              </div>
             </>
           ) : null}
 

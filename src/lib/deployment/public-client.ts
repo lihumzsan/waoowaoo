@@ -13,6 +13,7 @@ const BOOLEAN_DEPLOYMENT_FEATURE_KEYS = [
   'showApiConfig',
   'showAccountSecurity',
   'showGoogleOAuth',
+  'showWechatOfficialAuth',
   'enablePhoneAuth',
   'enablePasswordAuth',
   'showDownloadLogs',

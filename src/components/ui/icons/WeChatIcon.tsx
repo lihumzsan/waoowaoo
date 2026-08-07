@@ -2,7 +2,7 @@ import type { SVGProps } from 'react'
 
 export type WeChatIconProps = SVGProps<SVGSVGElement>
 
-/** Two-bubble WeChat mark used only to identify the payment method. */
+/** Two-bubble WeChat mark used to identify WeChat-owned actions. */
 export function WeChatIcon(props: WeChatIconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>

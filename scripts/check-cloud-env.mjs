@@ -12,6 +12,10 @@ const COMMON_REQUIRED_KEYS = [
   'API_ENCRYPTION_KEY',
   'GOOGLE_CLIENT_ID',
   'GOOGLE_CLIENT_SECRET',
+  'WECHAT_OFFICIAL_APP_ID',
+  'WECHAT_OFFICIAL_APP_SECRET',
+  'WECHAT_OFFICIAL_TOKEN',
+  'WECHAT_OFFICIAL_ENCODING_AES_KEY',
   'ALIBABA_CLOUD_ACCESS_KEY_ID',
   'ALIBABA_CLOUD_ACCESS_KEY_SECRET',
   'ALIBABA_CLOUD_SMS_SIGN_NAME',
@@ -267,6 +271,21 @@ if (validationMode === 'production') {
 
 for (const key of ['NEXTAUTH_SECRET', 'CRON_SECRET', 'API_ENCRYPTION_KEY']) {
   if (!isMissing(env[key]) && isWeakSecret(env[key])) missing.push(`${key}=strong-secret-at-least-24-characters`)
+}
+if (!isMissing(env.WECHAT_OFFICIAL_APP_ID) && !/^wx[A-Za-z0-9]{16}$/u.test(env.WECHAT_OFFICIAL_APP_ID)) {
+  missing.push('WECHAT_OFFICIAL_APP_ID=valid-service-account-app-id')
+}
+if (!isMissing(env.WECHAT_OFFICIAL_APP_SECRET) && isWeakSecret(env.WECHAT_OFFICIAL_APP_SECRET)) {
+  missing.push('WECHAT_OFFICIAL_APP_SECRET=strong-secret-at-least-24-characters')
+}
+if (!isMissing(env.WECHAT_OFFICIAL_TOKEN) && isWeakSecret(env.WECHAT_OFFICIAL_TOKEN)) {
+  missing.push('WECHAT_OFFICIAL_TOKEN=strong-secret-at-least-24-characters')
+}
+if (
+  !isMissing(env.WECHAT_OFFICIAL_ENCODING_AES_KEY)
+  && !/^[A-Za-z0-9]{43}$/u.test(env.WECHAT_OFFICIAL_ENCODING_AES_KEY)
+) {
+  missing.push('WECHAT_OFFICIAL_ENCODING_AES_KEY=43-character-platform-key')
 }
 if (!isMissing(env.ADMIN_CREDIT_TOKEN) && isWeakSecret(env.ADMIN_CREDIT_TOKEN)) {
   missing.push('ADMIN_CREDIT_TOKEN=strong-secret-at-least-24-characters')

@@ -9,6 +9,7 @@ import {
 } from '@/lib/auth/google-oauth'
 import { authorizePasswordIdentity } from '@/lib/auth/password-auth'
 import { authorizePhoneIdentity } from '@/lib/auth/phone-verification'
+import { exchangeWechatOfficialAttempt } from '@/lib/auth/wechat-official-attempt'
 import { getDeploymentConfig, isCloudDeployment } from '@/lib/deployment/config'
 import { getDeploymentFeatures } from '@/lib/deployment/features'
 import { prisma } from '@/lib/prisma'
@@ -50,6 +51,22 @@ const phoneProvider = deploymentFeatures.enablePhoneAuth
       },
     })
   : null
+const wechatOfficialProvider = deploymentFeatures.showWechatOfficialAuth
+  ? CredentialsProvider({
+      id: 'wechat-official',
+      name: 'wechat-official',
+      credentials: {
+        attemptId: { label: 'Attempt ID', type: 'text' },
+        browserToken: { label: 'Browser token', type: 'password' },
+      },
+      async authorize(credentials) {
+        return await exchangeWechatOfficialAttempt({
+          attemptId: credentials?.attemptId,
+          browserToken: credentials?.browserToken,
+        })
+      },
+    })
+  : null
 const secureCookieRequired = (isCloudDeployment(deploymentConfig) && process.env.NODE_ENV === 'production')
   || (process.env.NEXTAUTH_URL || '').startsWith('https://')
 
@@ -59,6 +76,7 @@ export const authOptions: NextAuthOptions = {
   providers: [
     ...(passwordProvider ? [passwordProvider] : []),
     ...(phoneProvider ? [phoneProvider] : []),
+    ...(wechatOfficialProvider ? [wechatOfficialProvider] : []),
     ...(googleOAuthProvider ? [googleOAuthProvider] : []),
   ],
   session: {

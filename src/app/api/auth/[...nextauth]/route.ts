@@ -23,7 +23,11 @@ async function handlePost(req: NextRequest, ctx: NextAuthRouteContext) {
     const credentialsProvider =
         segments.length >= 2
         && segments[0] === 'callback'
-        && (segments[1] === 'credentials' || segments[1] === 'phone')
+        && (
+            segments[1] === 'credentials'
+            || segments[1] === 'phone'
+            || segments[1] === 'wechat-official'
+        )
 
     if (credentialsProvider) {
         const ip = getClientIp(req)

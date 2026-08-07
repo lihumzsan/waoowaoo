@@ -4,7 +4,7 @@ import { resolveSignupGrantCredits } from '@/lib/billing/signup-grant'
 
 export interface AuthAccountIdentityInput {
   type: 'credentials' | 'oauth'
-  provider: 'phone'
+  provider: 'phone' | 'wechat-official'
   providerAccountId: string
 }
 

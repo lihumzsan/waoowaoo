@@ -316,6 +316,7 @@ export default function ProfilePage() {
                 <AccountSecurityTab
                   enablePasswordAuth={deploymentFeatures.enablePasswordAuth}
                   showGoogleOAuth={deploymentFeatures.showGoogleOAuth}
+                  showWechatOfficialAuth={deploymentFeatures.showWechatOfficialAuth}
                 />
               </div>
             ) : activeSection === 'apiConfig' && deploymentFeatures.showApiConfig ? (

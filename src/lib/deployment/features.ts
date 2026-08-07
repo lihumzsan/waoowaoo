@@ -14,6 +14,7 @@ export interface DeploymentFeatures {
   showApiConfig: boolean
   showAccountSecurity: boolean
   showGoogleOAuth: boolean
+  showWechatOfficialAuth: boolean
   enablePhoneAuth: boolean
   enablePasswordAuth: boolean
   passwordAuthIdentity: PasswordAuthIdentity
@@ -34,6 +35,7 @@ const SELF_HOSTED_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   showPublicBetaWaitlist: false,
   showAccountSecurity: false,
   showGoogleOAuth: false,
+  showWechatOfficialAuth: false,
   enablePhoneAuth: false,
   enablePasswordAuth: true,
   passwordAuthIdentity: 'username',
@@ -52,6 +54,7 @@ const CLOUD_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   showPublicBetaWaitlist: true,
   showAccountSecurity: true,
   showGoogleOAuth: true,
+  showWechatOfficialAuth: true,
   enablePhoneAuth: false,
   enablePasswordAuth: true,
   passwordAuthIdentity: 'phone',
