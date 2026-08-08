@@ -397,9 +397,9 @@ model LlmBillingMeter {
 ///
 /// Plans are bought outright rather than subscribed to, because WeChat Pay —
 /// the payment method most of these users have — cannot back an automatically
-/// renewing charge on Stripe. Buying the same plan again extends this row's
-/// `currentPeriodEnd` instead of creating a rival one, so a user is on exactly
-/// one plan at a time and there is never a second opinion about which.
+/// renewing charge on Stripe. Every later payment starts a new paid term and
+/// updates this projection, so a user is on exactly one plan at a time and
+/// there is never a second opinion about which.
 model Subscription {
   id                 String              @id @default(uuid())
   userId             String              @unique

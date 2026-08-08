@@ -56,7 +56,7 @@
     "payWithWechat": "WeChat Pay",
     "payWithCard": "Card",
     "wechatUnavailable": "WeChat Pay is not enabled yet",
-    "planNoAutoRenew": "A one-off payment — nothing renews automatically, and you can buy again when the term ends. WeChat Pay, Alipay and cards all work.",
+    "planNoAutoRenew": "A one-off payment with no automatic renewal. Buy again anytime to restart the cycle from payment. WeChat Pay, Alipay and cards all work.",
     "wechatDialogPlanHint": "The plan starts as soon as the payment clears",
     "planDialogTitle": "Buy the {plan} plan",
     "planDialogSummary": "Pay ¥{amount}; a new cycle starts immediately with all {credits} credits, plus your usable plan balance carried over",

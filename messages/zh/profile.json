@@ -172,7 +172,7 @@
   "planMonthlyGrant": "本期额度 {credits}",
   "planEndsAt": "有效期至",
   "planDaysLeft": "剩余 {days} 天",
-  "planExtend": "续期 / 追加",
+  "planExtend": "立即重开周期",
   "planNames": {
     "starter": "个人入门",
     "creator": "创作者",

@@ -172,7 +172,7 @@
   "planMonthlyGrant": "{credits} this period",
   "planEndsAt": "Runs until",
   "planDaysLeft": "{days} days left",
-  "planExtend": "Extend",
+  "planExtend": "Restart cycle now",
   "planNames": {
     "starter": "Starter",
     "creator": "Creator",
