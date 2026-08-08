@@ -4,5 +4,6 @@
   "ark": { "envPrefix": "PLATFORM_ARK" },
   "openrouter": { "envPrefix": "PLATFORM_OPENROUTER", "requiresBaseUrl": true },
   "mureka": { "envPrefix": "PLATFORM_MUREKA" },
-  "toonflow": { "envPrefix": "PLATFORM_TOONFLOW" }
+  "toonflow": { "envPrefix": "PLATFORM_TOONFLOW" },
+  "comfyui": { "envPrefix": "COMFYUI", "requiresBaseUrl": true, "requiresApiKey": false }
 }

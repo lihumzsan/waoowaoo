@@ -17,6 +17,7 @@ import { getPlatformModels } from '@/lib/platform-models/catalog'
 import type { UnifiedModelType } from '@/lib/ai-registry/types'
 import { isUnifiedModelType } from '@/lib/user-api/api-config-shared'
 import { AppError } from '@/lib/errors/app-error'
+import { readComfyUiBaseUrl } from '@/lib/ai-providers/comfyui/config'
 import {
   findRuntimeModelByKey,
   normalizeProviderRuntimeBaseUrl,
@@ -47,7 +48,7 @@ interface CustomProvider {
 }
 
 type PlatformProviderEnv = {
-  apiKey: string
+  apiKey?: string
   baseUrl?: string
 }
 
@@ -71,13 +72,17 @@ function getProviderFamily(providerId: string): string {
 
 function resolvePlatformProviderEnv(providerId: string): PlatformProviderEnv {
   const providerFamily = getProviderFamily(providerId)
-  const entry = (PLATFORM_PROVIDER_ENV as Record<string, { envPrefix: string; requiresBaseUrl?: boolean }>)[providerFamily]
+  const entry = (PLATFORM_PROVIDER_ENV as Record<string, {
+    envPrefix: string
+    requiresBaseUrl?: boolean
+    requiresApiKey?: boolean
+  }>)[providerFamily]
   if (!entry) {
     throw new Error(`PLATFORM_PROVIDER_UNSUPPORTED: ${providerId}`)
   }
 
   const apiKey = readEnvString(`${entry.envPrefix}_API_KEY`)
-  if (!apiKey) {
+  if (entry.requiresApiKey !== false && !apiKey) {
     throw new Error(`PLATFORM_PROVIDER_API_KEY_MISSING: ${providerId}`)
   }
 
@@ -86,7 +91,7 @@ function resolvePlatformProviderEnv(providerId: string): PlatformProviderEnv {
     throw new Error(`PLATFORM_PROVIDER_BASE_URL_MISSING: ${providerId}`)
   }
   return {
-    apiKey,
+    apiKey: apiKey || '',
     ...(baseUrl ? { baseUrl } : {}),
   }
 }
@@ -284,13 +289,23 @@ export interface ProviderConfig {
 }
 
 export async function getProviderConfig(userId: string, providerId: string): Promise<ProviderConfig> {
+  if (getProviderFamily(providerId) === 'comfyui') {
+    const baseUrl = readComfyUiBaseUrl()
+    return {
+      id: providerId,
+      name: 'ComfyUI',
+      apiKey: '',
+      baseUrl,
+    }
+  }
+
   const deployment = getDeploymentConfig()
   if (isPlatformProviderCredentialMode(deployment)) {
     const platform = resolvePlatformProviderEnv(providerId)
     return {
       id: providerId,
       name: providerId,
-      apiKey: platform.apiKey,
+      apiKey: platform.apiKey || '',
       baseUrl: normalizeProviderRuntimeBaseUrl(providerId, platform.baseUrl),
     }
   }
