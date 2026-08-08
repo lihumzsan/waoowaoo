@@ -9,7 +9,7 @@
   "scripts": {
     "postinstall": "prisma generate",
     "prepare": "husky",
-    "dev": "cross-env WAO_DEV_ENV_FILE=.env sh scripts/dev-docker.sh",
+    "dev": "npm run dev:local",
     "dev:infra": "docker compose up -d mysql redis minio temporal-create-namespace",
     "dev:cloud": "npm run env:cloud:check:dev && npm run runtime:sms:smoke && cross-env WAO_DEV_ENV_FILE=.env.cloud.local sh scripts/dev-docker.sh",
     "dev:local": "npm run dev:infra && npm run storage:init && cross-env CODEX_RUNTIME_DRIVER=local concurrently --kill-others \"npm run dev:next\" \"npm run dev:temporal-worker\"",
