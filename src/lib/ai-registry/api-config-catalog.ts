@@ -47,6 +47,7 @@ function requireBuiltinApiConfigCatalog(): BuiltinApiConfigCatalogRegistration {
 
 export const API_CONFIG_CATALOG_PROVIDERS: readonly ApiConfigCatalogProvider[] = [
   { id: 'ark', name: 'Volcengine Ark', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3' },
+  { id: 'codex', name: 'Codex' },
   { id: 'openrouter', name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1' },
   { id: 'fal', name: 'FAL' },
   { id: 'google', name: 'Google AI Studio' },

@@ -16,7 +16,6 @@ import { openRouterAsyncTaskProvider } from '@/lib/ai-providers/openrouter/async
 import { toonflowAdapter } from '@/lib/ai-providers/toonflow/adapter'
 import { toonflowAsyncTaskProvider } from '@/lib/ai-providers/toonflow/async-task'
 import { codexAdapter } from '@/lib/ai-providers/codex/adapter'
-import { comfyuiAdapter } from '@/lib/ai-providers/comfyui/adapter'
 import type { AiProviderAdapter, AiProviderLanguageModelContext } from '@/lib/ai-providers/runtime-types'
 import type {
   AiProviderLanguageModelRequestContext,
@@ -32,7 +31,6 @@ import {
 
 const runtimeProviderRegistry = new AiRegistry<AiProviderAdapter>([
   codexAdapter,
-  comfyuiAdapter,
   arkAdapter,
   falAdapter,
   googleAdapter,

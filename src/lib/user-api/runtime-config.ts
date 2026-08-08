@@ -224,6 +224,9 @@ async function readUserConfig(userId: string): Promise<{ models: CustomModel[]; 
 
 async function getRuntimeModels(userId: string, mediaType?: ModelMediaType): Promise<CustomModel[]> {
   const deployment = getDeploymentConfig()
+  const codexModels = getPlatformModels().filter((model) => (
+    model.provider === 'codex' && (!mediaType || model.type === mediaType)
+  ))
   // PG-16:voice 是平台固定模态,模型 identity 在任何凭证模式下都由平台目录唯一声明
   // (用户配置面不存在 voice 类型)。provider 凭证仍按部署模式解析:
   // user-key 部署用用户自己的 FAL provider key,缺失时报 PROVIDER_NOT_FOUND/API_KEY_MISSING,
@@ -233,7 +236,10 @@ async function getRuntimeModels(userId: string, mediaType?: ModelMediaType): Pro
   }
 
   const { models } = await readUserConfig(userId)
-  return models
+  return [
+    ...codexModels,
+    ...models.filter((model) => model.provider !== 'codex'),
+  ]
 }
 
 function findModelByKey(models: CustomModel[], modelKey: string): CustomModel | null {
@@ -289,6 +295,14 @@ export interface ProviderConfig {
 }
 
 export async function getProviderConfig(userId: string, providerId: string): Promise<ProviderConfig> {
+  if (getProviderFamily(providerId) === 'codex') {
+    return {
+      id: providerId,
+      name: 'Codex',
+      apiKey: '',
+    }
+  }
+
   if (getProviderFamily(providerId) === 'comfyui') {
     const baseUrl = readComfyUiBaseUrl()
     return {

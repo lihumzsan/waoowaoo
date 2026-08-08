@@ -1,4 +1,5 @@
 {
+  "codex": { "envPrefix": "CODEX", "requiresApiKey": false },
   "google": { "envPrefix": "PLATFORM_GOOGLE" },
   "fal": { "envPrefix": "PLATFORM_FAL" },
   "ark": { "envPrefix": "PLATFORM_ARK" },
