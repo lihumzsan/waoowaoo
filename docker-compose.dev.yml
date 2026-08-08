@@ -91,6 +91,8 @@ services:
     depends_on:
       app-schema-dev:
         condition: service_completed_successfully
+      minio:
+        condition: service_healthy
       redis:
         condition: service_healthy
       temporal-create-namespace:
@@ -102,6 +104,8 @@ services:
     depends_on:
       app-schema-dev:
         condition: service_completed_successfully
+      minio:
+        condition: service_healthy
       redis:
         condition: service_healthy
       temporal-create-namespace:

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
 import { NextIntlClientProvider } from 'next-intl';
-import { getMessages, getTranslations } from 'next-intl/server';
+import { getMessages, getTranslations, setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import "../globals.css";
 import { Providers } from "./providers";
@@ -48,7 +48,9 @@ export default async function LocaleLayout({
     }
 
     // 获取翻译消息
-    const messages = await getMessages();
+    setRequestLocale(locale);
+
+    const messages = await getMessages({ locale });
 
     return (
         <html lang={locale} suppressHydrationWarning>
@@ -56,7 +58,7 @@ export default async function LocaleLayout({
                 className={`${GeistSans.variable} ${GeistMono.variable} antialiased`}
                 suppressHydrationWarning
             >
-                <NextIntlClientProvider messages={messages}>
+                <NextIntlClientProvider locale={locale} messages={messages}>
                     <Providers>
                         {children}
                     </Providers>

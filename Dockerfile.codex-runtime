@@ -23,7 +23,8 @@ RUN apt-get update \
     && chown -R node:node /workspace /runtime
 
 COPY --chown=root:root docker/codex-runtime/entrypoint.sh /usr/local/bin/wao-codex-runtime
-RUN chmod 0755 /usr/local/bin/wao-codex-runtime
+RUN sed -i 's/\r$//' /usr/local/bin/wao-codex-runtime \
+    && chmod 0755 /usr/local/bin/wao-codex-runtime
 
 ENV CODEX_HOME=/runtime/codex-home
 ENV HOME=/runtime/codex-home

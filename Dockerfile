@@ -29,7 +29,8 @@ RUN apt-get update \
 
 COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY --chown=root:root docker/development/entrypoint.sh /usr/local/bin/waoowaoo-dev-entrypoint
-RUN chmod 0755 /usr/local/bin/waoowaoo-dev-entrypoint
+RUN sed -i 's/\r$//' /usr/local/bin/waoowaoo-dev-entrypoint \
+    && chmod 0755 /usr/local/bin/waoowaoo-dev-entrypoint
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/waoowaoo-dev-entrypoint"]
 
@@ -79,7 +80,8 @@ RUN mkdir -p /app/data /app/logs \
     && chown -R node:node /app
 
 COPY --chown=root:root docker-entrypoint.sh /usr/local/bin/waoowaoo-entrypoint
-RUN chmod 0755 /usr/local/bin/waoowaoo-entrypoint
+RUN sed -i 's/\r$//' /usr/local/bin/waoowaoo-entrypoint \
+    && chmod 0755 /usr/local/bin/waoowaoo-entrypoint
 
 EXPOSE 3000
 

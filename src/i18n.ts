@@ -7,9 +7,9 @@ import { DEFAULT_USER_TIME_ZONE } from './lib/user-time-zone';
 export { locales, type Locale, routing };
 export const defaultLocale = routing.defaultLocale;
 
-export default getRequestConfig(async ({ requestLocale }) => {
+export default getRequestConfig(async ({ requestLocale, locale: localeOverride }) => {
     // 获取请求的 locale
-    const locale = await requestLocale;
+    const locale = localeOverride ?? await requestLocale;
 
     // 验证传入的 locale 是否有效
     if (!locale || !locales.includes(locale as Locale)) {
