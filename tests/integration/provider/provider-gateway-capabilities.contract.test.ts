@@ -143,6 +143,7 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
   it('registers one explicit transport protocol for every configured LLM model', () => {
     const expectedProtocol = {
       ark: 'openai-responses',
+      codex: 'codex-cli',
       google: 'google-generative-ai',
       openrouter: 'openrouter-chat',
     } as const
@@ -181,7 +182,9 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
     const defaults = getPlatformDefaultModelCatalog()
     for (const model of defaults) {
       if (model.type === 'llm') {
-        expect(resolveRegisteredLlmProtocol(model.modelKey)).toBe('openrouter-chat')
+        expect(resolveRegisteredLlmProtocol(model.modelKey)).toBe(
+          model.provider === 'codex' ? 'codex-cli' : 'openrouter-chat',
+        )
       }
       expect(listBuiltinCapabilityCatalog().some((entry) => (
         entry.modelType === model.type
