@@ -1,10 +1,10 @@
-export type VideoReferenceImageRole = 'reference' | 'first_frame' | 'last_frame'
+export type VideoReferenceImageRole = 'reference_image' | 'first_frame' | 'last_frame'
 
 export type VideoReferenceImageSource = 'asset' | 'upload' | 'generated'
 
 export interface VideoReferenceImageInput {
   readonly url: string
-  readonly role?: VideoReferenceImageRole
+  readonly role: VideoReferenceImageRole
   readonly order?: number
   readonly source?: VideoReferenceImageSource
 }
@@ -38,8 +38,8 @@ export function normalizeVideoReferenceImages(
 
   images.forEach((image, index) => {
     const url = typeof image.url === 'string' ? image.url.trim() : ''
-    if (!url) return
-    const role = image.role ?? 'reference'
+    if (!url) throw new Error('VIDEO_REFERENCE_IMAGE_URL_REQUIRED')
+    const role = image.role
 
     if (role === 'first_frame') {
       if (firstFrameSeen) throw new Error('VIDEO_REFERENCE_FIRST_FRAME_DUPLICATE')
@@ -49,7 +49,7 @@ export function normalizeVideoReferenceImages(
       if (lastFrameSeen) throw new Error('VIDEO_REFERENCE_LAST_FRAME_DUPLICATE')
       lastFrameSeen = true
     }
-    if (role === 'reference') {
+    if (role === 'reference_image') {
       if (seenReferenceUrls.has(url)) return
       seenReferenceUrls.add(url)
     }
@@ -65,47 +65,38 @@ export function normalizeVideoReferenceImages(
   return result.sort((left, right) => left.order - right.order)
 }
 
+/**
+ * Converts already-explicit Workspace video roles into the provider-neutral
+ * transport fields. No reference is ever promoted to a frame by count.
+ */
 export function resolveProviderVideoReferencePayload(input: {
-  readonly referenceImages?: readonly VideoReferenceImageInput[]
-  readonly imageUrl?: string
-  readonly legacyReferenceImages?: readonly string[]
-  readonly legacyLastFrameImageUrl?: string
-  readonly allowTextOnly?: boolean
+  readonly referenceImages: readonly VideoReferenceImageInput[]
 }): ProviderVideoReferencePayload {
-  const unifiedReferences = normalizeVideoReferenceImages(input.referenceImages ?? [])
-  const legacyReferences = normalizeVideoReferenceImages([
-    ...(input.imageUrl ? [{ url: input.imageUrl, role: input.legacyLastFrameImageUrl ? 'first_frame' as const : 'reference' as const, order: 1 }] : []),
-    ...(input.legacyLastFrameImageUrl ? [{ url: input.legacyLastFrameImageUrl, role: 'last_frame' as const, order: 2 }] : []),
-    ...(input.legacyReferenceImages ?? []).map((url, index) => ({ url, role: 'reference' as const, order: index + 3 })),
-  ])
-  const references = unifiedReferences.length > 0 ? unifiedReferences : legacyReferences
+  const references = normalizeVideoReferenceImages(input.referenceImages)
   if (references.length === 0) {
-    if (input.allowTextOnly === true) return { imageUrl: '', options: {} }
-    throw new Error('VIDEO_REFERENCE_IMAGE_REQUIRED')
+    return { imageUrl: '', options: {} }
   }
 
   const firstFrame = references.find((image) => image.role === 'first_frame')
   const lastFrame = references.find((image) => image.role === 'last_frame')
-  if (lastFrame) {
-    const firstFrameUrl = firstFrame?.url ?? references.find((image) => image.role === 'reference')?.url
-    if (!firstFrameUrl) throw new Error('VIDEO_REFERENCE_FIRST_FRAME_REQUIRED')
+  const referenceImages = references.filter((image) => image.role === 'reference_image')
+
+  if (firstFrame || lastFrame) {
+    if (!firstFrame) throw new Error('VIDEO_REFERENCE_FIRST_FRAME_REQUIRED')
+    if (referenceImages.length > 0) throw new Error('VIDEO_REFERENCE_MODE_CONFLICT')
     return {
-      imageUrl: firstFrameUrl,
-      options: { lastFrameImageUrl: lastFrame.url },
+      imageUrl: firstFrame.url,
+      options: {
+        ...(lastFrame ? { lastFrameImageUrl: lastFrame.url } : {}),
+      },
     }
   }
 
-  const normalReferences = references.filter((image) => image.role === 'reference')
-  const primaryReference = normalReferences[0]
-  if (!primaryReference) throw new Error('VIDEO_REFERENCE_IMAGE_REQUIRED')
-  if (normalReferences.length === 1) {
-    return {
-      imageUrl: primaryReference.url,
-      options: {},
-    }
+  if (referenceImages.length === 0) {
+    throw new Error('VIDEO_REFERENCE_IMAGE_REQUIRED')
   }
   return {
-    imageUrl: primaryReference.url,
-    options: { referenceImages: normalReferences.map((image) => image.url) },
+    imageUrl: '',
+    options: { referenceImages: referenceImages.map((image) => image.url) },
   }
 }

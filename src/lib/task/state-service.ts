@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { normalizeTaskError } from '@/lib/errors/normalize'
+import { parseFailureRecord } from '@/lib/errors/failure'
 import { coerceTaskIntent, type TaskIntent } from './intent'
 import { buildTaskProgressGroupId, readTaskPayloadProgressGroupId } from './progress-group'
 import { resolveTaskCoveredTargets } from './covered-targets'
@@ -39,8 +39,7 @@ type TaskStateRow = {
   status: string
   progress: number
   payload: unknown
-  errorCode: string | null
-  errorMessage: string | null
+  failure: unknown
   targetType: string
   targetId: string
   operationId: string | null
@@ -101,13 +100,12 @@ export function extractTaskStateFields(task: {
 }
 
 export function normalizeFailedError(task: {
-  errorCode: string | null
-  errorMessage: string | null
+  failure: unknown
 }) {
-  const normalized = normalizeTaskError(task.errorCode, task.errorMessage)
-  if (!normalized) return null
+  const failure = parseFailureRecord(task.failure)
+  if (!failure) return null
   return {
-    code: normalized.code,
+    code: failure.interpretation.code,
   }
 }
 
@@ -137,8 +135,7 @@ export function resolveTargetState(
     status: string
     progress: number
     payload: unknown
-    errorCode: string | null
-    errorMessage: string | null
+    failure: unknown
     operationId?: string | null
     operationRequestId?: string | null
     updatedAt: Date
@@ -305,8 +302,7 @@ export async function queryTaskTargetStates(params: {
         status: true,
         progress: true,
         payload: true,
-        errorCode: true,
-        errorMessage: true,
+        failure: true,
         targetType: true,
         targetId: true,
         operationId: true,

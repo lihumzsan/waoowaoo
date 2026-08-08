@@ -1,7 +1,6 @@
 export const CREATIVE_SKILL_IDS = [
   'creative-core',
   'story-development',
-  'long-form-production',
   'creative-direction',
   'asset-development',
   'video-direction',
@@ -10,16 +9,33 @@ export const CREATIVE_SKILL_IDS = [
 
 export type CreativeSkillId = (typeof CREATIVE_SKILL_IDS)[number]
 
-export const CREATIVE_WORKER_KINDS = [
+export const CREATIVE_DOMAIN_KINDS = [
   'story',
-  'long_form',
   'direction',
   'assets',
   'video',
   'music',
 ] as const
 
-export type CreativeWorkerKind = (typeof CREATIVE_WORKER_KINDS)[number]
+export type CreativeDomainKind = (typeof CREATIVE_DOMAIN_KINDS)[number]
+
+export const CREATIVE_OUTPUT_KINDS = [
+  'screenplay',
+  'creative_direction',
+  'asset_generation_batch',
+  'video_generation_batch',
+  'audio_generation_batch',
+] as const
+
+export type CreativeOutputKind = (typeof CREATIVE_OUTPUT_KINDS)[number]
+
+export const CREATIVE_PRODUCTION_OUTPUT_KINDS = [
+  'asset_generation_batch',
+  'video_generation_batch',
+  'audio_generation_batch',
+] as const satisfies readonly CreativeOutputKind[]
+
+export type CreativeProductionOutputKind = (typeof CREATIVE_PRODUCTION_OUTPUT_KINDS)[number]
 
 export type CreativeSkillUri = `skill://${CreativeSkillId}/SKILL.md`
 

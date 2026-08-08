@@ -53,8 +53,8 @@ import type {
 import {
   issueWaoMcpApprovalGrant,
   requireWaoMcpBrowserApproval,
-  WAO_MCP_APPROVAL_META_KEY,
 } from './approval-proof'
+import { WAO_MCP_APPROVAL_META_KEY } from './approval-contract'
 
 const logger = createScopedLogger({ module: 'wao-mcp.production-executor' })
 
@@ -341,10 +341,10 @@ async function authorizeBillableOperation(params: {
   readonly elicit: (request: WaoMcpElicitationRequest) => Promise<WaoMcpElicitationResult>
   readonly assertAuthorized: () => Promise<void>
 }): Promise<PlannedOperationInvocation | null> {
-  const prepared = prepareProjectAgentOperationInput({
+  const prepared = await prepareProjectAgentOperationInput({
     channel: 'tool',
     operation: params.operation,
-    context: params.trusted.operationContext.context,
+    context: params.trusted.operationContext,
     input: params.input,
   })
   if (prepared.invocation) {
@@ -444,6 +444,7 @@ async function executeOperation(params: {
   params.signal.throwIfAborted()
   const trusted = normalizeTrustedContext(params.context, params.signal)
   let executionInput = params.input
+  let destructiveApprovalVerified = params.context.destructiveApproved === true
 
   if (isBillablePlannedOperation(params.operation)) {
     const invocation = params.context.approvedInvocation ?? await authorizeBillableOperation({
@@ -483,12 +484,11 @@ async function executeOperation(params: {
   if (
     params.operation.confirmation.kind === 'destructive'
     && params.operation.confirmation.required
-    && params.context.destructiveApproved !== true
   ) {
-    const prepared = prepareProjectAgentOperationInput({
+    const prepared = await prepareProjectAgentOperationInput({
       channel: 'tool',
       operation: params.operation,
-      context: trusted.operationContext.context,
+      context: trusted.operationContext,
       input: params.input,
     })
     if (prepared.invocation) {
@@ -498,33 +498,36 @@ async function executeOperation(params: {
       throw new Error(`WAO_MCP_DESTRUCTIVE_INPUT_INVALID:${params.operation.id}`)
     }
     executionInput = prepared.input
-    const destructiveInputSummary = canonicalJson(prepared.input).slice(0, 1_200)
-    const approvalRequestId = buildApprovalRequestId({
-      turnId: trusted.turnId,
-      callId: trusted.callId,
-      operationId: params.operation.id,
-      inputHash: hashCanonicalJson(prepared.input),
-    })
-    const decision = await params.elicit(approvalElicitation({
-      approvalRequestId,
-      operationId: params.operation.id,
-      locale: params.context.locale,
-      plan: null,
-      kind: 'destructive',
-      destructiveInputSummary,
-    }))
-    if (!elicitationApproved(decision)) {
-      return operationDeclinedResult(params.operation, params.context.locale)
+    if (params.context.destructiveApproved !== true) {
+      const destructiveInputSummary = canonicalJson(prepared.input).slice(0, 1_200)
+      const approvalRequestId = buildApprovalRequestId({
+        turnId: trusted.turnId,
+        callId: trusted.callId,
+        operationId: params.operation.id,
+        inputHash: hashCanonicalJson(prepared.input),
+      })
+      const decision = await params.elicit(approvalElicitation({
+        approvalRequestId,
+        operationId: params.operation.id,
+        locale: params.context.locale,
+        plan: null,
+        kind: 'destructive',
+        destructiveInputSummary,
+      }))
+      if (!elicitationApproved(decision)) {
+        return operationDeclinedResult(params.operation, params.context.locale)
+      }
+      params.signal.throwIfAborted()
+      await requireWaoMcpBrowserApproval({
+        userId: trusted.userId,
+        projectId: trusted.projectId,
+        turnId: trusted.turnId,
+        approvalRequestId,
+      })
+      params.signal.throwIfAborted()
+      await params.assertAuthorized()
     }
-    params.signal.throwIfAborted()
-    await requireWaoMcpBrowserApproval({
-      userId: trusted.userId,
-      projectId: trusted.projectId,
-      turnId: trusted.turnId,
-      approvalRequestId,
-    })
-    params.signal.throwIfAborted()
-    await params.assertAuthorized()
+    destructiveApprovalVerified = true
   }
 
   if (
@@ -587,7 +590,10 @@ async function executeOperation(params: {
             registry: params.registry,
             channel: 'tool',
             operationId: params.operation.id,
-            context: trusted.operationContext,
+            context: {
+              ...trusted.operationContext,
+              destructiveApprovalVerified,
+            },
             input: executionInput,
             transaction,
             invocationMode: 'agent_tool_effect',

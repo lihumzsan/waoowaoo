@@ -1,18 +1,23 @@
 import { z } from 'zod'
+import { prisma } from '@/lib/prisma'
 import type { WorkspaceResourceView } from '@/lib/workspace-resource/contracts'
 import {
   createWorkspaceResourceFolderInTransaction,
   moveWorkspaceResourceInTransaction,
+  resolveActiveWorkspaceResourceByPath,
   restoreWorkspaceResourceInTransaction,
   softDeleteWorkspaceResourceInTransaction,
 } from '@/lib/workspace-resource/persistence'
 import {
   listWorkspaceResourceTreePage,
-  readWorkspaceResource,
+  readWorkspaceResourceByPath,
 } from '@/lib/workspace-resource/view-service'
 import { WORKSPACE_RESOURCE_FOLDER_SCHEMA_ID } from '@/lib/workspace-resource/schema-registry'
 import { defineOperation } from '@/lib/operations/define-operation'
-import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import type {
+  ProjectAgentOperationRegistryDraft,
+  ProjectAgentToolInputSchema,
+} from '@/lib/operations/types'
 
 const resourceViewSchema = z.custom<WorkspaceResourceView>((value) => (
   Boolean(value)
@@ -23,7 +28,8 @@ const resourceViewSchema = z.custom<WorkspaceResourceView>((value) => (
 ), { message: 'WORKSPACE_RESOURCE_VIEW_INVALID' })
 
 const listResourcesInputSchema = z.object({
-  prefix: z.string().trim().min(1).max(512).nullable().optional(),
+  path: z.string().trim().min(1).max(512).nullable().optional()
+    .describe('Project-relative folder path. Omit or use null for the virtual project root.'),
   search: z.string().trim().min(1).max(200).nullable().optional(),
   cursor: z.string().trim().min(1).max(1024).nullable().optional(),
   limit: z.number().int().min(1).max(200).optional(),
@@ -37,27 +43,26 @@ const listResourcesOutputSchema = z.object({
 }).strict()
 
 const getResourceInputSchema = z.object({
-  resourceId: z.string().trim().min(1).max(32).optional(),
-  workspacePath: z.string().trim().min(1).max(512).optional(),
-}).strict().refine((value) => Boolean(value.resourceId) !== Boolean(value.workspacePath), {
-  message: 'Provide exactly one of resourceId or workspacePath.',
-})
+  path: z.string().trim().min(1).max(512)
+    .describe('Exact project-relative file or folder path.'),
+}).strict()
 
 const getResourceOutputSchema = z.object({ success: z.literal(true), resource: resourceViewSchema }).strict()
 
 const createFolderInputSchema = z.object({
-  outputPath: z.string().trim().min(1).max(512)
-    .describe('Complete project-relative folder path. The virtual root is implicit and must not be created.'),
+  path: z.string().trim().min(1).max(512)
+    .describe('Complete project-relative folder path. Missing parent folders are created automatically.'),
 }).strict()
 
 const createFolderOutputSchema = z.object({
   success: z.literal(true),
   resourceId: z.string().min(1),
   workspacePath: z.string().min(1),
+  createdCount: z.number().int().nonnegative(),
 }).strict()
 
 const moveResourceInputSchema = z.object({
-  resourceId: z.string().trim().min(1).max(32),
+  sourcePath: z.string().trim().min(1).max(512),
   destinationPath: z.string().trim().min(1).max(512),
 }).strict()
 
@@ -70,7 +75,32 @@ const moveResourceOutputSchema = z.object({
 
 const deleteResourceInputSchema = z.object({
   resourceId: z.string().trim().min(1).max(32),
+  workspacePath: z.string().trim().min(1).max(512),
 }).strict()
+
+const deleteResourcePathInputSchema = z.object({
+  path: z.string().trim().min(1).max(512)
+    .describe('Exact project-relative path to delete.'),
+}).strict()
+
+const deleteResourceCanonicalizerInputSchema = z.union([
+  deleteResourcePathInputSchema,
+  deleteResourceInputSchema,
+])
+
+const deleteResourceToolInputSchema: ProjectAgentToolInputSchema = {
+  type: 'object',
+  properties: {
+    path: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 512,
+      description: 'Exact project-relative file or folder path to delete.',
+    },
+  },
+  required: ['path'],
+  additionalProperties: false,
+}
 
 const deleteResourceOutputSchema = z.object({
   success: z.literal(true),
@@ -118,7 +148,7 @@ export function createWorkspaceResourceOperations(): ProjectAgentOperationRegist
       id: 'list_resources',
       summary: 'List the canonical project file/folder tree or search it. Results include stable hierarchy, exact versions, lineage summaries, alternatives, and server-projected actions.',
       intent: 'query',
-      channels: { tool: false, api: true, mcp: false },
+      channels: { tool: true, api: true, mcp: true },
       effects: readEffects,
       inputSchema: listResourcesInputSchema,
       outputSchema: listResourcesOutputSchema,
@@ -126,7 +156,7 @@ export function createWorkspaceResourceOperations(): ProjectAgentOperationRegist
         const page = await listWorkspaceResourceTreePage({
           userId: ctx.userId,
           projectId: ctx.projectId,
-          prefix: input.prefix,
+          prefix: input.path,
           search: input.search,
           cursor: input.cursor,
           limit: input.limit,
@@ -137,29 +167,28 @@ export function createWorkspaceResourceOperations(): ProjectAgentOperationRegist
     }),
     get_resource: defineOperation({
       id: 'get_resource',
-      summary: 'Read one canonical file or folder by stable Resource ID or its current path.',
+      summary: 'Read one canonical project file or folder by its exact project-relative path.',
       intent: 'query',
-      channels: { tool: false, api: true, mcp: false },
+      channels: { tool: true, api: true, mcp: true },
       effects: readEffects,
       inputSchema: getResourceInputSchema,
       outputSchema: getResourceOutputSchema,
       execute: async (ctx, input) => getResourceOutputSchema.parse({
         success: true,
-        resource: await readWorkspaceResource({
+        resource: await readWorkspaceResourceByPath({
           userId: ctx.userId,
           projectId: ctx.projectId,
-          resourceId: input.resourceId,
-          workspacePath: input.workspacePath,
+          workspacePath: input.path,
         }),
       }),
     }),
     create_folder: defineOperation({
       id: 'create_folder',
-      summary: 'Create one durable empty project folder. Parent folders must already exist; the virtual project root is implicit.',
+      summary: 'Create a durable project folder and any missing parent folders. Existing folders are accepted like mkdir -p; the virtual root is implicit.',
       intent: 'act',
-      channels: { tool: false, api: true, mcp: false },
-      toolContractRevision: 'create_folder/v1',
-      effects: writeEffects({ destructive: false, overwrite: false, bulk: false }),
+      channels: { tool: true, api: true, mcp: true },
+      toolContractRevision: 'create_folder/v2',
+      effects: writeEffects({ destructive: false, overwrite: false, bulk: true }),
       resourceContract: {
         kind: 'resource',
         assistantPresentation: 'created_resources',
@@ -177,8 +206,8 @@ export function createWorkspaceResourceOperations(): ProjectAgentOperationRegist
         ...await createWorkspaceResourceFolderInTransaction(tx, {
           userId: ctx.userId,
           projectId: ctx.projectId,
-          workspacePath: input.outputPath,
-          sourceType: 'user_folder',
+          workspacePath: input.path,
+          sourceType: 'agent_folder',
           sourceId: null,
         }),
       }),
@@ -187,8 +216,8 @@ export function createWorkspaceResourceOperations(): ProjectAgentOperationRegist
       id: 'move_resource',
       summary: 'Atomically rename or move a file, or move a complete folder subtree while preserving every Resource ID and content version.',
       intent: 'act',
-      channels: { tool: false, api: true, mcp: false },
-      toolContractRevision: 'move_resource/v1',
+      channels: { tool: true, api: true, mcp: true },
+      toolContractRevision: 'move_resource/v2',
       effects: writeEffects({ destructive: false, overwrite: false, bulk: true }),
       resourceContract: { kind: 'none', reason: 'moves existing Resources without creating a new Resource' },
       confirmation: { kind: 'none', required: false },
@@ -199,7 +228,7 @@ export function createWorkspaceResourceOperations(): ProjectAgentOperationRegist
         ...await moveWorkspaceResourceInTransaction(tx, {
           userId: ctx.userId,
           projectId: ctx.projectId,
-          resourceId: input.resourceId,
+          sourcePath: input.sourcePath,
           destinationPath: input.destinationPath,
         }),
       }),
@@ -208,11 +237,29 @@ export function createWorkspaceResourceOperations(): ProjectAgentOperationRegist
       id: 'delete_resource',
       summary: 'Soft-delete one file or an entire folder subtree. Active or pending production Resources are rejected.',
       intent: 'act',
-      channels: { tool: false, api: true, mcp: false },
-      toolContractRevision: 'delete_resource/v2',
+      channels: { tool: true, api: true, mcp: true },
+      toolContractRevision: 'delete_resource/v3',
       effects: writeEffects({ destructive: true, overwrite: false, bulk: true }),
       resourceContract: { kind: 'none', reason: 'soft-deletes existing Resources without creating a new Resource' },
       confirmation: { kind: 'destructive', required: true },
+      toolInputSchema: deleteResourceToolInputSchema,
+      toolInputCanonicalizer: {
+        inputSchema: deleteResourceCanonicalizerInputSchema,
+        canonicalize: async (ctx, input) => {
+          const canonical = deleteResourceInputSchema.safeParse(input)
+          if (canonical.success) return canonical.data
+          const requested = deleteResourcePathInputSchema.parse(input)
+          const resource = await resolveActiveWorkspaceResourceByPath(prisma, {
+            userId: ctx.userId,
+            projectId: ctx.projectId,
+            workspacePath: requested.path,
+          })
+          return {
+            resourceId: resource.resourceId,
+            workspacePath: resource.workspacePath,
+          }
+        },
+      },
       inputSchema: deleteResourceInputSchema,
       outputSchema: deleteResourceOutputSchema,
       executeInTransaction: async (ctx, input, tx) => deleteResourceOutputSchema.parse({
@@ -221,6 +268,7 @@ export function createWorkspaceResourceOperations(): ProjectAgentOperationRegist
           userId: ctx.userId,
           projectId: ctx.projectId,
           resourceId: input.resourceId,
+          workspacePath: input.workspacePath,
         }),
       }),
     }),

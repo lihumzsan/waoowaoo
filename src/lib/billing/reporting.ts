@@ -5,6 +5,7 @@ import type { ApiType, UsageUnit } from './cost'
 import { BillingOperationError } from './errors'
 import { toMoneyNumber } from './money'
 import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
+import { resolvePublicModelName } from '@/lib/ai-exec/model-presentation'
 
 interface RecordParams {
   projectId: string
@@ -19,6 +20,7 @@ interface PureRecordParams extends RecordParams {
   quantity: number
   unit: UsageUnit
   cost: number
+  chargedCredits?: number
   balanceAfter: number
   freezeId?: string
   taskType?: string | null
@@ -46,15 +48,10 @@ export function buildBillingMetaRecord(params: {
   apiType: string
   metadata?: Record<string, unknown>
 }): Record<string, unknown> {
-  // 尝试从 model composite ID 提取短名 "provider:xxx::model" → "model"
-  const modelShort = params.model.includes('::')
-    ? (params.model.split('::').pop() ?? params.model)
-    : params.model
-
   const meta: Record<string, unknown> = {
     quantity: params.quantity,
     unit: params.unit,
-    model: modelShort,
+    model: resolvePublicModelName(params.model),
     apiType: params.apiType,
   }
 
@@ -95,10 +92,48 @@ export function buildBillingMetaRecord(params: {
     Array.isArray(params.metadata?.actualModels) &&
     (params.metadata.actualModels as unknown[]).length > 0
   ) {
-    meta.actualModels = params.metadata.actualModels
+    const actualModels = (params.metadata.actualModels as unknown[])
+      .map((value) => typeof value === 'string' ? resolvePublicModelName(value) : null)
+      .filter((value): value is string => Boolean(value))
+    if (actualModels.length > 0) meta.actualModels = actualModels
   }
 
   return meta
+}
+
+const PUBLIC_BILLING_META_KEYS = [
+  'quantity',
+  'unit',
+  'apiType',
+  'resolution',
+  'duration',
+  'generateAudio',
+  'generationMode',
+  'quality',
+  'size',
+  'aspectRatio',
+  'inputTokens',
+  'outputTokens',
+  'cachedInputTokens',
+  'chargedCost',
+  'freezeAmount',
+  'refundedAmount',
+  'receiptUrl',
+] as const
+
+/** Final public billing projection; internal model and pricing identities stay private. */
+export function projectPublicBillingMeta(
+  meta: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (!meta) return null
+
+  const projected: Record<string, unknown> = {}
+  for (const key of PUBLIC_BILLING_META_KEYS) {
+    const value = meta[key]
+    if (value !== undefined && value !== null) projected[key] = value
+  }
+
+  return Object.keys(projected).length > 0 ? projected : null
 }
 
 export function buildBillingMeta(params: Parameters<typeof buildBillingMetaRecord>[0]): string {
@@ -107,8 +142,8 @@ export function buildBillingMeta(params: Parameters<typeof buildBillingMetaRecor
 
 /**
  * 用量事实 writer（唯一的 UsageCost 写入点）。
- * 只记录用量，不产生任何 BalanceTransaction：没有资金事件的消耗
- * （如当前免费的 assistant run）走这里，资金流水只属于账本生命周期。
+ * 这里只写用量事实，不直接创建 BalanceTransaction；需要资金事件的调用方
+ * 必须在同一事务内先经账本唯一入口扣减，再把实际扣减额一并写入事实。
  */
 export async function recordUsageFact(
   txOrPrisma: Prisma.TransactionClient | typeof prisma,
@@ -122,6 +157,7 @@ export async function recordUsageFact(
     | 'quantity'
     | 'unit'
     | 'cost'
+    | 'chargedCredits'
     | 'metadata'
   > & {
     usageId?: string
@@ -163,6 +199,7 @@ export async function recordUsageFact(
     quantity: params.quantity,
     unit: params.unit,
     cost: params.cost,
+    chargedCredits: params.chargedCredits ?? 0,
     metadata,
   }
   try {
@@ -188,12 +225,14 @@ export async function recordUsageFact(
       existing.quantity !== data.quantity ||
       existing.unit !== data.unit ||
       toMoneyNumber(existing.cost) !== toMoneyNumber(data.cost) ||
+      existing.chargedCredits !== data.chargedCredits ||
       existing.metadata !== data.metadata
     ) {
       throw new BillingOperationError(
         'BILLING_USAGE_REPLAY_DIVERGED',
         'usage fact replay diverged from the persisted identity',
         { usageId },
+        error,
       )
     }
   }
@@ -204,7 +243,10 @@ export async function recordUsageCostOnly(
   txOrPrisma: Prisma.TransactionClient | typeof prisma,
   params: PureRecordParams,
 ): Promise<void> {
-  const hasProject = await recordUsageFact(txOrPrisma, params)
+  const hasProject = await recordUsageFact(txOrPrisma, {
+    ...params,
+    chargedCredits: params.cost,
+  })
   if (!hasProject) {
     _ulogInfo(`[计费] 跳过 UsageCost 记录 (projectId=${params.projectId})，仅记录流水`)
   }
@@ -278,8 +320,15 @@ export async function getProjectCostDetails(projectId: string) {
     },
   }))
   const recentRecords = recentRecordsRaw.map((item) => ({
-    ...item,
+    id: item.id,
+    projectId: item.projectId,
+    apiType: item.apiType,
+    action: item.action,
+    quantity: item.quantity,
+    unit: item.unit,
     cost: toMoneyNumber(item.cost),
+    chargedCredits: item.chargedCredits,
+    createdAt: item.createdAt,
   }))
 
   return {
@@ -320,22 +369,35 @@ export async function getUserCostSummary(userId: string) {
   }
 }
 
-export async function getUserCostDetails(userId: string, page = 1, pageSize = 20) {
+export async function getUserCostDetails(
+  userId: string,
+  page = 1,
+  pageSize = 20,
+  projectId?: string,
+) {
   const skip = (page - 1) * pageSize
+  const where = { userId, ...(projectId ? { projectId } : {}) }
 
   const [recordsRaw, total] = await Promise.all([
     prisma.usageCost.findMany({
-      where: { userId },
+      where,
       orderBy: { createdAt: 'desc' },
       skip,
       take: pageSize,
     }),
-    prisma.usageCost.count({ where: { userId } }),
+    prisma.usageCost.count({ where }),
   ])
 
   const records = recordsRaw.map((item) => ({
-    ...item,
+    id: item.id,
+    projectId: item.projectId,
+    apiType: item.apiType,
+    action: item.action,
+    quantity: item.quantity,
+    unit: item.unit,
     cost: toMoneyNumber(item.cost),
+    chargedCredits: item.chargedCredits,
+    createdAt: item.createdAt,
   }))
 
   return {

@@ -22,7 +22,7 @@ interface HomeClientProps {
 
 export default function HomeClient({ initialDeploymentFeatures }: HomeClientProps) {
   const t = useTranslations('landing')
-  const a = useTranslations('landing.auto')
+  const a = useTranslations('landing.hero')
   const { status } = useSession()
   const router = useRouter()
 

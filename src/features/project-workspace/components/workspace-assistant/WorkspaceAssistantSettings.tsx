@@ -118,7 +118,7 @@ export function WorkspaceAssistantSettings() {
             <button
               type="button"
               onClick={() => { void settings.reload() }}
-              className="mt-2 w-full rounded-lg px-2 py-1.5 text-left text-xs text-[var(--glass-tone-danger-fg)] hover:bg-[var(--glass-tone-danger-bg)]"
+              className="mt-2 w-full rounded-lg px-2 py-1.5 text-left text-xs text-[var(--glass-tone-danger-fg)] hover:bg-[var(--glass-tone-soft)]"
             >
               {t('panel.settingsError')}
             </button>

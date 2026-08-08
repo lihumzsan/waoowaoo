@@ -9,6 +9,8 @@ import type {
   ParsedAsyncExternalId,
 } from '@/lib/ai-providers/async-task-types'
 import { getProviderConfig, getUserModels } from '@/lib/user-api/runtime-config'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
+import { withRetry } from '@/lib/retry'
 
 export type PollResult = AsyncPollResult
 export type ParsedExternalId = ParsedAsyncExternalId
@@ -29,13 +31,17 @@ export async function pollAsyncTask(
 
   const registration = resolveAsyncTaskProviderByExternalId(externalId)
   const parsed = registration.parseExternalId(externalId)
-  return await registration.poll({
-    parsed,
-    context: {
-      userId,
-      getProviderConfig,
-      getUserModels,
-    },
+  return await withRetry({
+    operation: EXTERNAL_OPERATION.PROVIDER_POLL,
+    scope: `media:poll:${externalId}`,
+    run: async () => await registration.poll({
+      parsed,
+      context: {
+        userId,
+        getProviderConfig,
+        getUserModels,
+      },
+    }),
   })
 }
 
@@ -56,13 +62,17 @@ export async function cancelAsyncTask(
   const registration = resolveAsyncTaskProviderByExternalId(externalId)
   if (!registration.cancel) return 'unsupported'
   const parsed = registration.parseExternalId(externalId)
-  await registration.cancel({
-    parsed,
-    context: {
-      userId,
-      getProviderConfig,
-      getUserModels,
-    },
+  await withRetry({
+    operation: EXTERNAL_OPERATION.PROVIDER_CANCEL,
+    scope: `media:cancel:${externalId}`,
+    run: async () => await registration.cancel!({
+      parsed,
+      context: {
+        userId,
+        getProviderConfig,
+        getUserModels,
+      },
+    }),
   })
   return 'canceled'
 }

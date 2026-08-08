@@ -16,8 +16,20 @@ import type {
  */
 
 /**
- * Retail markup over provider cost, by api type. These are the product's
- * gross-margin targets before any plan discount is applied.
+ * Retail markup over provider cost, by api type.
+ *
+ * Stated as a multiple of cost: 1.8 means a credit bought at face value sells
+ * the work for 1.8x what the provider charges, which is a 44% gross margin —
+ * the two are the same fact with different denominators, and confusing them
+ * moves prices by a factor of two.
+ *
+ * This is the top of the ladder. Every plan discounts below it, so the entry
+ * plan lands near +70% and the deepest yearly term near +30%. Raising these
+ * does not by itself raise margin: a credit's face value and a plan's grant
+ * are the same knob seen from two sides, so a markup change only means
+ * something alongside the plan table in `subscription-plans.ts`. What the
+ * markup alone does own is the price of buying credits outright, which is why
+ * it has to sit above every plan rather than beside them.
  */
 export const RETAIL_MARKUP_BY_API_TYPE: Record<PricingApiType, number> = {
   text: 1.75,
@@ -45,10 +57,17 @@ const INTEGER_RETAIL_RATE_API_TYPES: ReadonlySet<PricingApiType> = new Set<Prici
  * The minimum gross margin any model must hold at the deepest plan discount in
  * the catalog. This is a fuse, not a target: it exists so a price edit or a new
  * plan can never quietly put a model underwater.
+ *
+ * Set just under the thinnest entry the current catalog produces rather than at
+ * a comfortable distance below it — a fuse with slack in it does not trip until
+ * the damage is already done.
  */
-export const MINIMUM_RETAIL_MARGIN = 0.1
+export const MINIMUM_RETAIL_MARGIN = 0.18
 
-function toRetailAmount(costCny: number, apiType: PricingApiType): number {
+export function retailCreditsFromCostCny(costCny: number, apiType: PricingApiType): number {
+  if (!Number.isFinite(costCny) || costCny < 0) {
+    throw new Error('PRICING_RETAIL_INVALID_COST')
+  }
   const credits = costCny * RETAIL_MARKUP_BY_API_TYPE[apiType] * CREDITS_PER_CNY
   if (!INTEGER_RETAIL_RATE_API_TYPES.has(apiType)) {
     return Number(credits.toFixed(6))
@@ -65,7 +84,7 @@ export function retailFromCost(
     return {
       mode: 'flat',
       ...(cost.unit ? { unit: cost.unit } : {}),
-      flatAmount: toRetailAmount(cost.flatAmount ?? 0, apiType),
+      flatAmount: retailCreditsFromCostCny(cost.flatAmount ?? 0, apiType),
     }
   }
   return {
@@ -73,7 +92,7 @@ export function retailFromCost(
     ...(cost.unit ? { unit: cost.unit } : {}),
     tiers: (cost.tiers ?? []).map((tier) => ({
       when: { ...tier.when },
-      amount: toRetailAmount(tier.amount, apiType),
+      amount: retailCreditsFromCostCny(tier.amount, apiType),
     })),
   }
 }

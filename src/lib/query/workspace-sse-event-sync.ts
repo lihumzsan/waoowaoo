@@ -179,12 +179,6 @@ export function applyWorkspaceSSEEvent(params: {
 
   if (
     normalizedLifecycleType === TASK_EVENT_TYPE.CREATED ||
-    normalizedLifecycleType === TASK_EVENT_TYPE.PROCESSING
-  ) {
-    return
-  }
-
-  if (
     normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED ||
     normalizedLifecycleType === TASK_EVENT_TYPE.FAILED ||
     normalizedLifecycleType === TASK_EVENT_TYPE.CANCELED
@@ -193,5 +187,12 @@ export function applyWorkspaceSSEEvent(params: {
     if (resourceChanges.length > 0) {
       void syncWorkspaceResourceChanges({ queryClient, changes: resourceChanges })
     }
+  }
+
+  if (
+    normalizedLifecycleType === TASK_EVENT_TYPE.CREATED ||
+    normalizedLifecycleType === TASK_EVENT_TYPE.PROCESSING
+  ) {
+    return
   }
 }

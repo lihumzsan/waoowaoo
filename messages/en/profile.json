@@ -9,6 +9,8 @@
   "upgrade": "Upgrade",
   "balanceLoadFailed": "Failed to load balance. Please retry.",
   "transactionsLoadFailed": "Failed to load transactions. Please retry.",
+  "projectCostsLoadFailed": "Failed to load project usage. Please retry.",
+  "projectCostDetailsLoadFailed": "Failed to load project usage details. Please retry.",
   "openSourceNoBilling": "Open-source edition, no billing required",
   "frozen": "Frozen",
   "totalSpent": "Total Spent",
@@ -18,12 +20,15 @@
   "logout": "Logout",
   "downloadLogs": "Download Logs",
   "accountTransactions": "Account Transactions",
+  "projectUsage": "Project Usage",
   "projectDetails": "Project Details",
   "summary": "Summary",
   "transactions": "Transactions",
   "noTransactions": "No transaction records",
   "noProjectCosts": "No project cost records",
   "noDetails": "This project has no cost details",
+  "loadingDetails": "Loading details",
+  "unknownProject": "Deleted project",
   "noRecords": "No records",
   "byType": "By Type",
   "byAction": "By Action",
@@ -35,7 +40,10 @@
     "recharge": "Credits Added",
     "consume": "Service Consumption",
     "freeze": "Credits Frozen",
-    "refund": "Freeze Refunded"
+    "refund": "Freeze Refunded",
+    "planPurchase": "Plan purchase",
+    "planGrant": "Plan credits granted",
+    "planExpire": "Plan credits expired"
   },
   "transactionType": "Type",
   "transactionOperation": "Operation",
@@ -48,6 +56,9 @@
   "balanceAfter": "Balance {amount}",
   "recordCount": "{count} records",
   "totalCost": "Total {amount}",
+  "userCharge": "User charge (credits)",
+  "generationType": "Generation Type",
+  "usage": "Usage",
   "previousPage": "Previous",
   "nextPage": "Next",
   "pagination": "{total} items, Page {page} / {totalPages}",
@@ -81,18 +92,10 @@
     "globalLocation": "Asset location {name}",
     "globalLocationImage": "Asset location {name} · Image {index}"
   },
-  "inviteCode": {
-    "title": "Invite Code",
-    "description": "Redeem an invite code or contact an admin for credits.",
-    "placeholder": "Enter invite code",
-    "redeem": "Redeem",
-    "redeeming": "Redeeming",
-    "redeemSuccess": "Redeemed successfully. Credits have been added.",
-    "redeemFailed": "Invite code redemption failed"
-  },
   "recharge": {
     "unitValue": "1 credit = ¥0.1",
     "successNotice": "Payment submitted. Credits will be added after Stripe confirms the payment.",
+    "planSuccessNotice": "Plan payment submitted. It activates after Stripe confirms the payment.",
     "cancelNotice": "Payment canceled. No charge was created."
   },
   "accountSecurity": {
@@ -111,6 +114,7 @@
     "email": "Email",
     "emailNotBound": "No email bound",
     "google": "Google Login",
+    "wechat": "WeChat Login",
     "password": "Password",
     "bound": "Bound",
     "notBound": "Not bound",
@@ -118,6 +122,8 @@
     "notSet": "Not set",
     "googleBound": "Google login is enabled",
     "googleNotBound": "Google login is not bound",
+    "wechatBound": "WeChat login is enabled",
+    "wechatNotBound": "WeChat login is not bound",
     "bindGoogle": "Bind Google",
     "binding": "Binding",
     "passwordBound": "Password login is enabled",
@@ -144,14 +150,35 @@
   "apiTypes": {
     "image": "Image Generation",
     "video": "Video Generation",
-    "text": "Text Analysis",
-    "music": "Music Generation"
+    "text": "Text Generation",
+    "music": "Music Generation",
+    "voice": "Voice Generation",
+    "other": "AI Service"
   },
   "actionTypes": {
+    "assistant_run": "LLM generation",
+    "assistant_web_search": "Web search",
     "workspace_resource_image": "Image Resource Generation",
     "workspace_resource_audio": "Audio Resource Generation",
     "workspace_resource_voice": "Voice Resource Generation",
     "workspace_resource_video": "Video Resource Generation",
     "workspace_resource_video_merge": "Video Resource Merge"
-  }
+  },
+  "planCredits": "Plan credits",
+  "planCreditsExpireOn": "Clears {date}",
+  "planCreditsNone": "No plan credits",
+  "boughtCredits": "Bought credits",
+  "boughtCreditsNeverExpire": "Never expire",
+  "planMonthlyGrant": "{credits} this period",
+  "planEndsAt": "Runs until",
+  "planDaysLeft": "{days} days left",
+  "planExtend": "Restart cycle now",
+  "planNames": {
+    "starter": "Starter",
+    "creator": "Creator",
+    "pro": "Pro",
+    "studio": "Studio",
+    "flagship": "Flagship"
+  },
+  "viewReceipt": "View receipt"
 }

@@ -138,7 +138,21 @@ function selectUnionBranchIndex(value: unknown, branches: readonly JsonValue[]):
   const matches = branches.flatMap((branch, index) => (
     schemaMatchesDiscriminator(value, branch) ? [index] : []
   ))
-  return matches.length === 1 ? matches[0] ?? -1 : -1
+  if (matches.length === 1) return matches[0] ?? -1
+  if (!isRecord(value)) return -1
+  const discriminatorMatches = branches.flatMap((branch, index) => {
+    if (!isRecord(branch)) return []
+    const properties = readProperties(branch)
+    let hasDiscriminator = false
+    for (const [key, propertySchema] of Object.entries(properties)) {
+      if (!isRecord(propertySchema) || !Object.prototype.hasOwnProperty.call(propertySchema, 'const')) continue
+      if (!Object.prototype.hasOwnProperty.call(value, key)) continue
+      hasDiscriminator = true
+      if (value[key] !== propertySchema.const) return []
+    }
+    return hasDiscriminator ? [index] : []
+  })
+  return discriminatorMatches.length === 1 ? discriminatorMatches[0] ?? -1 : -1
 }
 
 function selectUnionBranch(value: unknown, schema: JsonObject): JsonValue | null {
@@ -268,20 +282,26 @@ export function normalizeProjectAgentToolInput(params: {
     required: params.toolInputSchema.required,
     additionalProperties: params.toolInputSchema.additionalProperties,
   }, runtimeSchema)
-  if (
-    normalized !== OMIT_NULLISH_MODEL_VALUE
-    && params.inputSchema.safeParse(normalized).success
-  ) {
-    return normalized
-  }
-  const issues = Array.isArray(rawParse.error.issues) ? rawParse.error.issues : []
+  const normalizedParse = normalized === OMIT_NULLISH_MODEL_VALUE
+    ? null
+    : params.inputSchema.safeParse(normalized)
+  if (normalizedParse?.success) return normalized
+  const correctionInput = normalized === OMIT_NULLISH_MODEL_VALUE ? params.input : normalized
+  const rawIssues = normalizedParse && !normalizedParse.success
+    ? normalizedParse.error.issues
+    : rawParse.error.issues
+  const issues = expandProjectAgentToolInputIssues({
+    input: correctionInput,
+    toolInputSchema: params.toolInputSchema,
+    issues: rawIssues,
+  })
   throw new ApiError('INVALID_PARAMS', {
     code: 'OPERATION_INPUT_INVALID',
     operationId: params.operationId,
     message: 'PROJECT_AGENT_INVALID_OPERATION_INPUT',
     issues,
     corrections: buildProjectAgentToolInputCorrections({
-      input: params.input,
+      input: correctionInput,
       toolInputSchema: params.toolInputSchema,
       issues,
     }),
@@ -300,7 +320,10 @@ export interface ProjectAgentToolInputCorrection {
   message: string
   targetPath?: string
   allowedKeys?: string[]
+  allowedValues?: Array<string | number | boolean | null>
   expectedSchema?: JsonValue
+  issueCode?: string
+  reason?: string
 }
 
 function readIssuePath(issue: UnknownRecord): Array<string | number> {
@@ -361,10 +384,104 @@ function readSchemaAtPath(params: {
   return currentSchema
 }
 
+function readSchemaNodeAtPath(params: {
+  schema: JsonValue
+  input: unknown
+  path: readonly (string | number)[]
+}): JsonValue | undefined {
+  let currentSchema = params.schema
+  let currentInput = params.input
+  for (const part of params.path) {
+    if (!isRecord(currentSchema)) return undefined
+    const selectedBranch = selectUnionBranch(currentInput, currentSchema)
+    if (selectedBranch !== null) currentSchema = selectedBranch
+    if (!isRecord(currentSchema)) return undefined
+    if (typeof part === 'number') {
+      if (currentSchema.items === undefined) return undefined
+      currentSchema = toJsonValue(currentSchema.items)
+      currentInput = Array.isArray(currentInput) ? currentInput[part] : undefined
+      continue
+    }
+    const property = readProperties(currentSchema)[part]
+    if (property === undefined) return undefined
+    currentSchema = property
+    currentInput = isRecord(currentInput) ? currentInput[part] : undefined
+  }
+  return currentSchema
+}
+
+/**
+ * Zod represents a failed union as one parent `invalid_union` issue whose
+ * useful field errors live in branch-local arrays. Keep only a uniquely
+ * discriminated branch when possible; otherwise expose every real branch
+ * issue. The returned paths are absolute input paths and the union wrapper is
+ * removed, so downstream logging, model correction, and UI projection all
+ * consume the same leaf reasons.
+ */
+export function expandProjectAgentToolInputIssues(params: {
+  input: unknown
+  toolInputSchema: ProjectAgentToolInputSchema
+  issues: unknown
+}): UnknownRecord[] {
+  const rootSchema = serializeToolInputSchema(params.toolInputSchema)
+  const expanded: UnknownRecord[] = []
+
+  const visit = (issues: unknown, parentPath: readonly (string | number)[]): void => {
+    if (!Array.isArray(issues)) return
+    for (const rawIssue of issues) {
+      if (!isRecord(rawIssue)) continue
+      const path = [...parentPath, ...readIssuePath(rawIssue)]
+      if (rawIssue.code === 'invalid_union' && Array.isArray(rawIssue.errors)) {
+        const schema = readSchemaNodeAtPath({
+          schema: rootSchema,
+          input: params.input,
+          path,
+        })
+        const branches = schema === undefined ? [] : readUnionBranches(schema)
+        const value = readInputAtPath(params.input, path)
+        const selectedIndex = selectUnionBranchIndex(value, branches)
+        const branchErrors = selectedIndex >= 0
+          ? [rawIssue.errors[selectedIndex]]
+          : rawIssue.errors
+        const before = expanded.length
+        for (const errors of branchErrors) visit(errors, path)
+        if (expanded.length > before) continue
+      }
+      const leaf: UnknownRecord = { ...rawIssue, path }
+      delete leaf.errors
+      expanded.push(leaf)
+    }
+  }
+
+  visit(params.issues, [])
+  return expanded
+}
+
 function readAllowedKeys(schema: JsonValue | undefined): string[] | undefined {
   if (!isRecord(schema)) return undefined
   const keys = Object.keys(readProperties(schema))
   return keys.length > 0 ? keys : undefined
+}
+
+function readAllowedValues(schema: JsonValue | undefined): Array<string | number | boolean | null> | undefined {
+  if (!isRecord(schema)) return undefined
+  const direct = Array.isArray(schema.enum)
+    ? schema.enum
+    : Object.prototype.hasOwnProperty.call(schema, 'const')
+      ? [schema.const]
+      : []
+  const branches = [...readUnionBranches(schema), ...(Array.isArray(schema.allOf) ? schema.allOf.map(toJsonValue) : [])]
+  const values = [
+    ...direct,
+    ...branches.flatMap((branch) => readAllowedValues(branch) ?? []),
+  ].filter((value): value is string | number | boolean | null => (
+    value === null
+    || typeof value === 'string'
+    || typeof value === 'number'
+    || typeof value === 'boolean'
+  ))
+  const unique = Array.from(new Map(values.map((value) => [JSON.stringify(value), value])).values())
+  return unique.length > 0 && unique.length <= 20 ? unique : undefined
 }
 
 /**
@@ -381,7 +498,7 @@ export function buildProjectAgentToolInputCorrections(params: {
   const rootProperties = readProperties(rootSchema)
   const corrections: ProjectAgentToolInputCorrection[] = []
   const moveTargets = new Set<string>()
-  const issues = Array.isArray(params.issues) ? params.issues : []
+  const issues = expandProjectAgentToolInputIssues(params)
 
   for (const rawIssue of issues) {
     if (!isRecord(rawIssue) || rawIssue.code !== 'unrecognized_keys') continue
@@ -407,6 +524,8 @@ export function buildProjectAgentToolInputCorrections(params: {
           message: `Move ${fieldPath} to ${targetPath}; "${key}" is a top-level sibling of ${Object.keys(rootProperties).filter((rootKey) => rootKey !== key).map((rootKey) => `$input.${rootKey}`).join(' and ')}.`,
           allowedKeys: readAllowedKeys(parentSchema),
           expectedSchema: rootProperties[key],
+          issueCode: 'unrecognized_keys',
+          reason: `Field "${key}" is not allowed at ${formatInputPath(parentPath)}.`,
         })
       } else {
         corrections.push({
@@ -414,6 +533,8 @@ export function buildProjectAgentToolInputCorrections(params: {
           fieldPath,
           message: `Remove ${fieldPath}; it is not allowed at ${formatInputPath(parentPath)}.`,
           allowedKeys: readAllowedKeys(parentSchema),
+          issueCode: 'unrecognized_keys',
+          reason: `Field "${key}" is not allowed at ${formatInputPath(parentPath)}.`,
         })
       }
     }
@@ -453,6 +574,9 @@ export function buildProjectAgentToolInputCorrections(params: {
         ? `Add required field ${fieldPath} at this exact path.`
         : `Fix ${fieldPath}: ${issueMessage}`,
       allowedKeys: readAllowedKeys(parentSchema),
+      allowedValues: readAllowedValues(expectedSchema),
+      issueCode: typeof rawIssue.code === 'string' ? rawIssue.code : undefined,
+      reason: issueMessage,
       ...(includeSchema ? { expectedSchema } : {}),
     })
   }

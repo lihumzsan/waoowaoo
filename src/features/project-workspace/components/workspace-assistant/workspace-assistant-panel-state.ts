@@ -1,5 +1,10 @@
 import type { UIMessage } from 'ai'
 import { parseClientError } from '@/lib/errors/client'
+import { isKnownErrorCode } from '@/lib/errors/codes'
+import {
+  projectErrorForUser,
+  type UserErrorAction,
+} from '@/lib/errors/projection'
 import type { AssistantRuntimeSessionTurnView } from '@/lib/assistant-runtime/view-contract'
 import {
   readProjectAssistantTextAttachmentsFromMessage,
@@ -169,6 +174,7 @@ export interface WorkspaceAssistantFailureView {
   readonly tone: 'danger' | 'info'
   readonly headline: string
   readonly technical: string | null
+  readonly action: UserErrorAction
 }
 
 /**
@@ -191,5 +197,8 @@ export function resolveWorkspaceAssistantFailureView(params: {
     tone: 'danger',
     headline,
     technical: facts.requestId ? params.formatReference(facts.requestId) : null,
+    action: facts.code && isKnownErrorCode(facts.code)
+      ? projectErrorForUser(facts.code, facts.requestId).action
+      : null,
   }
 }

@@ -50,7 +50,7 @@ async function seedVideoInputs(input: {
         requestId: input.suffix,
         memberIndex: index,
       })
-      const workspacePath = `operation-durability-${input.suffix}-${String(index)}.resource`
+      const workspacePath = `operation-durability-${input.suffix}-${String(index)}`
       await reserveWorkspaceResourceInTransaction(tx, {
         resourceId,
         userId: input.userId,
@@ -64,6 +64,7 @@ async function seedVideoInputs(input: {
       await materializeWorkspaceResourceInTransaction(tx, {
         resourceId,
         userId: input.userId,
+        projectId: input.projectId,
         mediaType: 'video',
         schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
         content: { kind: 'media', mediaId: mediaObject.id },
@@ -130,8 +131,12 @@ Promise<OperationExecutionDurabilityFixture> {
   })
   const seededInputs = await seedVideoInputs({ suffix, userId, projectId })
   const parsedInput = operation.inputSchema.safeParse({
-    outputPath: `operation-durability-output-${suffix}.resource`,
-    videos: seededInputs.resources,
+    folderPath: null,
+    name: `Operation durability output ${suffix}`,
+    videos: seededInputs.resources.map(({ resourceId, contentVersion }) => ({
+      resourceId,
+      contentVersion,
+    })),
   })
   if (!parsedInput.success) {
     throw new Error('OPERATION_DURABILITY_INPUT_INVALID')

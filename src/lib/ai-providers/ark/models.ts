@@ -28,6 +28,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: 'doubao-seedance-2-0-260128',
     capabilities: {
       video: {
+        supportedInputModes: ['text_to_video', 'first_frame', 'first_last_frame', 'reference'],
         supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
         generateAudioOptions: [true],
@@ -36,8 +37,12 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         firstlastframe: true,
         supportGenerateAudio: true,
         assetReferenceMultiReference: true,
-        maxReferenceImages: 8,
+        maxReferenceImages: 9,
         maxReferenceAudios: 3,
+        maxReferenceVideos: 3,
+        maxReferenceFiles: 12,
+        referenceAudioRequiresVisual: true,
+        minReferenceAudioDurationMs: 1_800,
       },
     },
   },
@@ -47,6 +52,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: 'doubao-seedance-2-0-fast-260128',
     capabilities: {
       video: {
+        supportedInputModes: ['text_to_video', 'first_frame', 'first_last_frame', 'reference'],
         supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
         generateAudioOptions: [true],
@@ -55,8 +61,12 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         firstlastframe: true,
         supportGenerateAudio: true,
         assetReferenceMultiReference: true,
-        maxReferenceImages: 8,
+        maxReferenceImages: 9,
         maxReferenceAudios: 3,
+        maxReferenceVideos: 3,
+        maxReferenceFiles: 12,
+        referenceAudioRequiresVisual: true,
+        minReferenceAudioDurationMs: 1_800,
       },
     },
   },
@@ -308,9 +318,9 @@ export const ARK_BUILTIN_PRICING_CATALOG_ENTRIES = [
   { apiType: 'text', provider: 'ark', modelId: 'doubao-seed-1-6-lite-251015', cost: arkTokenPricing(0.3, 0.6) },
   // Seedream 5.0 lists at US$0.045 per image up to 2.36MP; converted at the
   // catalog's USD rate. Verify against the Ark console before launch.
-  { apiType: 'image', provider: 'ark', modelId: 'doubao-seedream-5-0-260128', cost: arkFlatPricing(0.324), retail: arkFlatPricing(7) },
-  { apiType: 'image', provider: 'ark', modelId: 'doubao-seedream-4-5-251128', cost: arkFlatPricing(0.25), retail: arkFlatPricing(5) },
-  { apiType: 'image', provider: 'ark', modelId: 'doubao-seedream-4-0-250828', cost: arkFlatPricing(0.2), retail: arkFlatPricing(4) },
+  { apiType: 'image', provider: 'ark', modelId: 'doubao-seedream-5-0-260128', cost: arkFlatPricing(0.324), retail: arkFlatPricing(15) },
+  { apiType: 'image', provider: 'ark', modelId: 'doubao-seedream-4-5-251128', cost: arkFlatPricing(0.25), retail: arkFlatPricing(11) },
+  { apiType: 'image', provider: 'ark', modelId: 'doubao-seedream-4-0-250828', cost: arkFlatPricing(0.2), retail: arkFlatPricing(9) },
   {
     apiType: 'video',
     provider: 'ark',
@@ -404,7 +414,7 @@ export function resolveArkOptionSchema(modality: MediaModality, modelId: string)
     return buildMediaOptionSchema('video', {
       ...ARK_VIDEO_OPTION_SCHEMA_CONFIG,
       allowedKeys: modelId === 'doubao-seedance-2-0-260128' || modelId === 'doubao-seedance-2-0-fast-260128'
-        ? ['referenceImages', 'referenceAudios']
+        ? ['referenceImages', 'referenceAudios', 'referenceVideos']
         : ['referenceImages'],
       validators: {
         aspectRatio: enumValidator(ARK_VIDEO_RATIOS),
@@ -419,6 +429,7 @@ export function resolveArkOptionSchema(modality: MediaModality, modelId: string)
         serviceTier: enumValidator(ARK_VIDEO_SERVICE_TIERS),
         executionExpiresAfter: integerRangeValidator({ min: 1 }),
         referenceAudios: stringArrayValidator(),
+        referenceVideos: stringArrayValidator({ maxLength: 3 }),
       },
     })
   }

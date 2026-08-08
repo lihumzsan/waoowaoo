@@ -6,7 +6,6 @@ import {
   getProviderConfig,
   resolveModelSelection,
 } from '@/lib/user-api/runtime-config'
-import { compileMusicPrompt } from '@/lib/ai-providers/shared/music-prompt'
 import { resolveProviderRouteSet } from '@/lib/ai-registry/provider-route-set'
 
 export function normalizeMediaOptionsForSelection(input: {
@@ -29,13 +28,10 @@ export function normalizeMediaOptionsForSelection(input: {
   const promptMaxChars = input.modality === 'music'
     ? descriptor.capabilities.music?.promptMaxChars
     : undefined
-  const effectivePrompt = input.modality === 'music' && typeof input.prompt === 'string'
-    ? compileMusicPrompt(input.prompt, options ?? {})
-    : input.prompt
   if (
     promptMaxChars !== undefined
-    && typeof effectivePrompt === 'string'
-    && effectivePrompt.length > promptMaxChars
+    && typeof input.prompt === 'string'
+    && input.prompt.length > promptMaxChars
   ) {
     throw new AiOptionValidationError({
       failure: 'invalid_option',

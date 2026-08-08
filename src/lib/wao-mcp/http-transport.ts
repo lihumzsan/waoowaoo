@@ -2,7 +2,6 @@ import { createHash, randomUUID } from 'node:crypto'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
 import { readJsonWithLimit } from '@/lib/http/body-limits'
-import { getAssistantRuntimeService } from '@/lib/assistant-runtime'
 import {
   AssistantRuntimeCapabilityTurnError,
   requireAssistantRuntimeCapabilityTurn,
@@ -41,11 +40,13 @@ export type WaoMcpHttpBindingErrorCode =
 
 export class WaoMcpHttpBindingError extends Error {
   readonly code: WaoMcpHttpBindingErrorCode
+  override readonly cause?: unknown
 
-  constructor(code: WaoMcpHttpBindingErrorCode) {
-    super(`WAO_MCP_HTTP_${code}`)
+  constructor(code: WaoMcpHttpBindingErrorCode, cause?: unknown) {
+    super(`WAO_MCP_HTTP_${code}`, { cause })
     this.name = 'WaoMcpHttpBindingError'
     this.code = code
+    this.cause = cause
   }
 }
 
@@ -206,24 +207,11 @@ async function startHttpSessionExclusive(params: {
       lifecycle: {
         before: async (context) => {
           await assertBoundRuntimeContext(params.scope, context)
-          await getAssistantRuntimeService().flushWorkspaceForMcp({
-            userId: context.userId,
-            projectId: context.projectId,
-            threadId: context.threadId,
-            runtimeTurnId: context.executionOwnerId,
-          })
         },
         assertAuthorized: async (context) => {
           await assertBoundRuntimeContext(params.scope, context)
         },
-        after: async (context) => {
-          await getAssistantRuntimeService().refreshWorkspaceAfterMcp({
-            userId: context.userId,
-            projectId: context.projectId,
-            threadId: context.threadId,
-            runtimeTurnId: context.executionOwnerId,
-          })
-        },
+        after: async () => {},
       },
     }),
     contextResolver: createBoundContextResolver(params.scope),
@@ -331,12 +319,12 @@ async function resolveActiveRuntimeTurnBinding(
   } catch (error) {
     if (!(error instanceof AssistantRuntimeCapabilityTurnError)) throw error
     if (error.code === 'ACTIVE_TURN_AMBIGUOUS') {
-      throw new WaoMcpHttpBindingError('ACTIVE_TURN_AMBIGUOUS')
+      throw new WaoMcpHttpBindingError('ACTIVE_TURN_AMBIGUOUS', error)
     }
     if (error.code === 'ACTIVE_TURN_IDENTITY_INVALID') {
-      throw new WaoMcpHttpBindingError('ACTIVE_TURN_IDENTITY_INVALID')
+      throw new WaoMcpHttpBindingError('ACTIVE_TURN_IDENTITY_INVALID', error)
     }
-    throw new WaoMcpHttpBindingError('ACTIVE_TURN_NOT_FOUND')
+    throw new WaoMcpHttpBindingError('ACTIVE_TURN_NOT_FOUND', error)
   }
   if (!isRecord(turn.contextJson)) {
     throw new WaoMcpHttpBindingError('ACTIVE_TURN_CONTEXT_INVALID')

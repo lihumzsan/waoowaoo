@@ -1,12 +1,16 @@
 import { GoogleGenAI } from '@google/genai'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import type { AiProviderMusicExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
-import { RETRY_POLICY, withRetry } from '@/lib/retry'
+import { withRetry } from '@/lib/retry'
 import { withProviderProxyDispatcher } from '@/lib/http/outbound-proxy'
 import { GOOGLE_PROVIDER_PROXY_TARGET } from '@/lib/ai-providers/google/proxy-target'
 import { AppError } from '@/lib/errors/app-error'
-import { compileMusicPrompt } from '@/lib/ai-providers/shared/music-prompt'
+import {
+  captureGoogleSdkSubmission,
+  googleSafetyTerminalError,
+} from './submission'
 
 interface GoogleMusicPart {
   inlineData?: {
@@ -33,7 +37,7 @@ function getFinishReason(response: GoogleMusicResponse): string | undefined {
   return response.candidates?.[0]?.finishReason
 }
 
-function isSafetyFinishReason(reason: string | undefined): boolean {
+function isSafetyFinishReason(reason: string | undefined): reason is string {
   return reason === 'SAFETY'
     || reason === 'PROHIBITED_CONTENT'
     || reason === 'BLOCKLIST'
@@ -75,31 +79,27 @@ export function extractGoogleMusicResult(response: unknown): {
 
   const finishReason = getFinishReason(safe)
   if (isSafetyFinishReason(finishReason)) {
-    throw new AppError('SENSITIVE_CONTENT', 'Google blocked music generation by policy', {
-      provider: 'google',
-      details: { finishReason: finishReason ?? null },
-    })
+    throw googleSafetyTerminalError(finishReason)
   }
   throw new AppError('EMPTY_RESPONSE', 'Google returned no audio', { provider: 'google' })
 }
 
 export async function executeGoogleMusicGeneration(input: AiProviderMusicExecutionContext): Promise<GenerateResult> {
-  const options = input.options ?? {}
   const { apiKey } = await getProviderConfig(input.userId, input.selection.provider)
   const ai = new GoogleGenAI({ apiKey })
   const modelId = requireSelectedModelId(input.selection, 'google:music')
 
-  const response = await withRetry({
+  const response = await captureGoogleSdkSubmission(async () => await withRetry({
+    operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
     scope: `google:music:generate:${modelId}`,
-    policy: RETRY_POLICY.providerSubmit,
     run: async () => await withProviderProxyDispatcher(
       GOOGLE_PROVIDER_PROXY_TARGET,
       async () => await ai.models.generateContent({
         model: modelId,
-        contents: [{ parts: [{ text: compileMusicPrompt(input.prompt, options) }] }],
+        contents: [{ parts: [{ text: input.prompt }] }],
       }),
     ),
-  })
+  }))
 
   const result = extractGoogleMusicResult(response)
   return {

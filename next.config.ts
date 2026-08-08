@@ -55,12 +55,18 @@ const securityHeaders = [
       "frame-ancestors 'none'",
       "object-src 'none'",
       "form-action 'self'",
-      `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''}`,
+      // Stripe.js has to be loaded from Stripe's own origin — they do not
+      // support self-hosting it, because the script is how card data and
+      // payment authentication stay outside our page. Without this the WeChat
+      // QR flow fails with nothing but a generic error.
+      `script-src 'self' 'unsafe-inline' https://js.stripe.com${process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''}`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "media-src 'self' data: blob: https:",
       "font-src 'self' data:",
       "connect-src 'self' https: wss:",
+      // Stripe.js mounts hidden iframes for payment authentication.
+      "frame-src 'self' https://js.stripe.com https://hooks.stripe.com",
       "worker-src 'self' blob:",
     ].join('; '),
   },
@@ -82,12 +88,21 @@ const nextConfig: NextConfig = {
   // Next 15 的 allowedDevOrigins 是顶层配置，不属于 experimental
   logging: false,
   devIndicators: false,
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: '**.googleusercontent.com' },
+      { protocol: 'https', hostname: '**.ggpht.com' },
+    ],
+  },
   outputFileTracingExcludes: {
     '/*': globalFunctionTraceExcludes,
     '/api/*': globalFunctionTraceExcludes,
     '/api/**/*': globalFunctionTraceExcludes,
   },
   ...(allowedDevOrigins.length > 0 ? { allowedDevOrigins } : {}),
+  async rewrites() {
+    return [{ source: '/favicon.ico', destination: '/logo.ico' }]
+  },
   async headers() {
     return [{ source: '/(.*)', headers: securityHeaders }]
   },

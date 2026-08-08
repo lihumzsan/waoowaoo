@@ -52,7 +52,7 @@ export default function UpdateNoticeModal({
         >
           <header className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--glass-tone-info-bg)]">
+              <div className="mt-0.5 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--glass-tone-soft)]">
                 <AppIcon name="sparkles" className="h-5 w-5 text-[var(--glass-tone-info-fg)]" />
               </div>
               <div>

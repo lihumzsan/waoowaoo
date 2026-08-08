@@ -24,7 +24,8 @@ const frozenResourceSchema = z.object({
   mediaType: z.enum(['image', 'audio', 'video']),
   schemaId: z.string().trim().min(1).max(96),
   inputHash: z.string().length(64),
-  prompt: z.string().trim().min(1).max(100_000),
+  prompt: z.string().min(1).max(100_000)
+    .refine((value) => value.trim().length > 0, 'Prompt must contain non-whitespace content.'),
   modelKey: z.string().trim().min(1).max(191),
   inputs: z.array(workspaceResourceInputRefSchema).max(16),
   // Shared task envelope must accept the largest declared image capability.
@@ -32,7 +33,7 @@ const frozenResourceSchema = z.object({
   // planning preflight; GPT Image 2 legitimately accepts up to 16 references.
   imageInputPositions: z.array(z.number().int().nonnegative()).max(16),
   audioInputPositions: z.array(z.number().int().nonnegative()).max(3),
-  videoInputPositions: z.array(z.number().int().nonnegative()).max(1),
+  videoInputPositions: z.array(z.number().int().nonnegative()).max(3),
   toolCallId: z.string().trim().min(1).max(191).nullable(),
   sourceTurnId: z.string().trim().min(1).max(191).nullable(),
 }).strict().superRefine((resource, context) => {
@@ -55,19 +56,10 @@ const frozenResourceSchema = z.object({
   }
 })
 
-const productionManifestSourceSchema = z.object({
-  resourceId: z.string().trim().min(1).max(32),
-  contentVersion: z.number().int().positive(),
-  workspacePath: z.string().trim().min(1).max(512),
-  sha256: z.string().regex(/^[a-f0-9]{64}$/u),
-  manifestId: z.string().trim().min(1).max(191),
-}).strict()
-
 export const workspaceResourceGenerationTaskPayloadSchema = z.object({
   lifecycleProjection: workspaceResourceLifecycleProjectionSchema,
   protocol: z.literal('workspace_resource_generation_v1'),
   resource: frozenResourceSchema,
-  productionManifestSource: productionManifestSourceSchema.optional(),
   imageModel: z.string().trim().min(1).optional(),
   videoModel: z.string().trim().min(1).optional(),
   musicModel: z.string().trim().min(1).optional(),
@@ -119,7 +111,6 @@ export function parseWorkspaceResourceGenerationTaskPayload(
     lifecycleProjection: parsed.lifecycleProjection,
     protocol: parsed.protocol,
     resource: parsed.resource,
-    productionManifestSource: parsed.productionManifestSource,
     imageModel: parsed.imageModel,
     videoModel: parsed.videoModel,
     musicModel: parsed.musicModel,
@@ -151,7 +142,6 @@ export function parseWorkspaceResourceGenerationRetrySource(
     lifecycleProjection: parsed.lifecycleProjection,
     protocol: parsed.protocol,
     resource: parsed.resource,
-    productionManifestSource: parsed.productionManifestSource,
     imageModel: parsed.imageModel,
     videoModel: parsed.videoModel,
     musicModel: parsed.musicModel,

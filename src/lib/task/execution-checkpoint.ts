@@ -101,7 +101,7 @@ export async function saveTaskHandlerCheckpoint(params: {
     if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error
     const existing = await loadTaskHandlerCheckpoint(params)
     if (!existing || canonicalJson(existing.output) !== canonicalJson(params.output)) {
-      throw new Error(`TASK_EXECUTION_CHECKPOINT_COLLISION:${params.taskId}`)
+      throw new Error(`TASK_EXECUTION_CHECKPOINT_COLLISION:${params.taskId}`, { cause: error })
     }
     return existing
   }

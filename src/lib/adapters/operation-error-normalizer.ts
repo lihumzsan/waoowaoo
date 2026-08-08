@@ -4,15 +4,21 @@ import type { ProjectAgentToolError, ProjectAgentToolErrorCode } from '@/lib/ope
 import { getErrorSpec } from '@/lib/errors/codes'
 import { normalizeAnyError } from '@/lib/errors/normalize'
 import { projectErrorForModel, projectModelErrorDetails } from '@/lib/errors/projection'
-import {
-  WorkspaceResourcePathError,
-  WorkspaceResourcePlacementError,
-} from '@/lib/workspace-resource/path'
 
 const logger = createScopedLogger({ module: 'assistant.tool' })
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function readSafeReasonCode(details: Record<string, unknown> | null | undefined): string | null {
+  const value = typeof details?.reasonCode === 'string'
+    ? details.reasonCode
+    : typeof details?.code === 'string'
+      ? details.code
+      : ''
+  const normalized = value.trim()
+  return /^[A-Z][A-Z0-9_]{0,127}$/.test(normalized) ? normalized : null
 }
 
 export function extractPrismaMissingColumn(error: unknown): string | null {
@@ -51,6 +57,7 @@ export function normalizeOperationExecutionToolError(params: {
     message: 'assistant tool execution failed; error normalized into tool payload',
     operationId: params.operationId,
     errorCode: params.error instanceof ApiError ? params.error.code : toolError.code,
+    details: toolError.details,
     error: params.error instanceof Error
       ? { name: params.error.name, message: params.error.message, stack: params.error.stack }
       : { message: toolError.message },
@@ -62,42 +69,13 @@ function buildOperationExecutionToolError(params: {
   error: unknown
   operationId: string
 }): ProjectAgentToolError {
-  const workspaceError = params.error instanceof WorkspaceResourcePlacementError
-    ? {
-        code: params.error.code === 'WORKSPACE_RESOURCE_PARENT_FOLDER_NOT_FOUND'
-          ? 'INVALID_PARAMS' as const
-          : 'CONFLICT' as const,
-        details: {
-          field: 'outputPath',
-          reasonCode: params.error.code,
-          workspacePath: params.error.workspacePath,
-        },
-      }
-    : params.error instanceof WorkspaceResourcePathError
-      ? {
-          code: 'INVALID_PARAMS' as const,
-          details: {
-            field: 'outputPath',
-            reasonCode: params.error.code,
-          },
-        }
-      : null
-  const normalized = workspaceError ?? (params.error instanceof ApiError
-    ? {
-        code: params.error.code,
-        details: params.error.details ?? null,
-      }
-    : normalizeAnyError(params.error, {
-        context: 'worker',
-        fallbackCode: 'INTERNAL_ERROR',
-      }))
-  const safeDetails = projectModelErrorDetails(normalized.details)
-  const reasonCode = typeof safeDetails.reasonCode === 'string'
-    ? safeDetails.reasonCode
-    : typeof safeDetails.code === 'string'
-      ? safeDetails.code
-      : null
-  const failure = projectErrorForModel(normalized.code)
+  const normalized = normalizeAnyError(params.error, {
+    fallbackCode: 'INTERNAL_ERROR',
+  })
+  const safeDetails = projectModelErrorDetails(normalized.interpretation.details)
+  const reasonCode = readSafeReasonCode(normalized.interpretation.details)
+    ?? readSafeReasonCode(safeDetails)
+  const failure = projectErrorForModel(normalized)
   return buildToolError({
     code: 'OPERATION_EXECUTION_FAILED',
     message: getErrorSpec(failure.code).defaultMessage,

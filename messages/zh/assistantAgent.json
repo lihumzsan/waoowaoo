@@ -81,13 +81,24 @@
     "failed": "失败",
     "interrupted": "已停止",
     "failedDetail": "操作未能完成，请重试。",
+    "validationMissing": "缺少必填字段 {field}。",
+    "validationMove": "字段 {field} 的位置不正确，应移动到 {target}。",
+    "validationUnsupported": "当前操作不支持字段 {field}。",
+    "validationAllowedValues": "字段 {field} 的值不受支持；允许值：{values}。",
+    "validationInvalidType": "字段 {field} 的值类型不正确。",
+    "validationTooSmall": "字段 {field} 小于允许范围。",
+    "validationTooBig": "字段 {field} 超出允许范围。",
+    "validationInvalid": "字段 {field} 不符合当前操作的输入要求。",
+    "reasonFieldDetail": "字段 {field} 处理失败，具体原因：{reasonCode}",
+    "reasonDetail": "操作失败，具体原因：{reasonCode}",
     "running": "进行中",
     "needsAction": "待处理",
     "show": "展开",
     "hide": "收起",
     "arguments": "参数",
     "result": "结果",
-    "waiting": "等待工具返回结果..."
+    "waiting": "等待工具返回结果...",
+    "webSearchRunning": "联网搜索中…"
   },
   "runtime": {
     "goal": "当前目标",
@@ -115,35 +126,21 @@
     "progress": {
       "shell": "命令输出",
       "file": "文件修改",
-      "mcp": "生产能力进度",
-      "diff": "本轮差异"
+      "mcp": "生产能力进度"
     },
     "native": {
       "shell": "执行命令",
       "fileChange": "修改文件",
       "webSearch": "联网检索",
       "viewImage": "查看图片",
-      "subagent": "Subagent",
-      "subagentAction": {
-        "spawnAgent": "启动 Subagent",
-        "sendInput": "向 Subagent 发送输入",
-        "resumeAgent": "恢复 Subagent",
-        "wait": "等待 Subagent",
-        "closeAgent": "关闭 Subagent",
-        "interruptAgent": "中断 Subagent",
-        "listAgents": "查看 Subagent 状态",
-        "activity": "Subagent 动态"
-      },
-      "subagentSummary": "{active} 个进行中 · {completed} 个完成 · {interrupted} 个中断",
-      "subagentStatus": {
-        "active": "进行中",
-        "completed": "已完成",
-        "interrupted": "已中断"
-      },
-      "subagentActivity": {
-        "message": "回复",
-        "reasoning": "思考",
-        "tool": "工具调用"
+      "userDecision": "用户选择",
+      "skillRead": "读取 Skill：{skill}",
+      "skillNames": {
+        "story-development": "故事与剧本开发",
+        "creative-direction": "创作方向",
+        "asset-development": "资产范围与视觉设计",
+        "video-direction": "视频导演与生成设计",
+        "music-direction": "音乐与配乐设计"
       },
       "web": {
         "search": "搜索：{query}",
@@ -221,6 +218,8 @@
     "billingQuoteWithoutCredits": "将提交 {count} 个媒体生成任务",
     "confirmContinue": "继续执行",
     "cancelAction": "取消操作",
+    "cancelDecision": "取消",
+    "sendDecision": "提交自定义答案",
     "interactionSubmitting": "处理中...",
     "interactionSubmitErrorFallback": "该响应暂时无法提交，请刷新对话后重试。",
     "contextCompacted": "已压缩较早的 {count} 条上下文记录",

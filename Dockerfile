@@ -18,6 +18,21 @@ COPY package.json package-lock.json ./
 COPY prisma ./prisma
 RUN npm ci
 
+# ==================== Local container development ====================
+FROM deps AS development
+
+ENV NODE_ENV=development
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gosu tini \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
+COPY --chown=root:root docker/development/entrypoint.sh /usr/local/bin/waoowaoo-dev-entrypoint
+RUN chmod 0755 /usr/local/bin/waoowaoo-dev-entrypoint
+
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/waoowaoo-dev-entrypoint"]
+
 # ==================== Stage 2: Build ====================
 FROM base AS builder
 WORKDIR /app

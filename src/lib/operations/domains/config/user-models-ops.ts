@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
 import { getDeploymentConfig, isPlatformProviderCredentialMode } from '@/lib/deployment/config'
-import { getPlatformModels } from '@/lib/platform-models/catalog'
+import { getPlatformDefaultModelCatalog } from '@/lib/platform-models/catalog'
 import {
   type CapabilityValue,
   type ModelCapabilities,
@@ -157,7 +157,7 @@ async function resolveModelSource(userId: string): Promise<{
   if (isPlatformProviderCredentialMode(deployment)) {
     return {
       deploymentMode: 'platform-key',
-      models: getPlatformModels(),
+      models: getPlatformDefaultModelCatalog(),
       providers: [],
     }
   }

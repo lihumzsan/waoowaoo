@@ -92,10 +92,10 @@ export async function executeProjectAgentOperationFromApi(
 
   try {
     if (operation && isBillablePlannedOperation(operation)) {
-      const prepared = prepareProjectAgentOperationInput({
+      const prepared = await prepareProjectAgentOperationInput({
         channel: 'api',
         operation,
-        context: operationContext.context,
+        context: operationContext,
         input: params.input,
       })
       if (!prepared.invocation) {
@@ -184,14 +184,11 @@ export async function executeProjectAgentOperationFromApi(
       throw new ApiError('EXTERNAL_ERROR', {
         code: 'DATABASE_SCHEMA_MISMATCH',
         field: missingColumn,
-      })
+      }, { cause: error })
     }
     const normalized = normalizeAnyError(error, {
-      context: 'api',
       fallbackCode: 'EXTERNAL_ERROR',
     })
-    throw new ApiError(normalized.code, {
-      code: 'OPERATION_EXECUTION_FAILED',
-    })
+    throw ApiError.fromFailure(normalized, error)
   }
 }

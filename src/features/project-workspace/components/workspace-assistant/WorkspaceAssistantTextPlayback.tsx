@@ -150,12 +150,7 @@ export function WorkspaceAssistantAnimatedPlainText(props: {
   return (
     <>
       {graphemes.map((grapheme, index) => (
-        <span
-          key={index}
-          className="animate-in fade-in duration-150 motion-reduce:animate-none"
-        >
-          {grapheme}
-        </span>
+        <span key={index} className="assistant-stream-in">{grapheme}</span>
       ))}
     </>
   )

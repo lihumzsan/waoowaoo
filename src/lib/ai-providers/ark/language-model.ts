@@ -5,6 +5,7 @@ import { flattenChatMessageContent } from '@/lib/ai-registry/message-content'
 import type { AiLlmMessage } from '@/lib/ai-registry/types'
 import type { AiProviderLanguageModelContext } from '@/lib/ai-providers/runtime-types'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
+import { assertArkSubmissionResponse } from './error'
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -31,11 +32,16 @@ function createArkFetch(reasoning: boolean): typeof fetch {
       ...body,
       thinking: { type: reasoning ? 'enabled' : 'disabled' },
     })
+    let response: Response
     if (typeof requestInit?.body === 'string') {
-      return await fetchWithProviderProxy(requestInput, { ...requestInit, body: nextBody })
+      response = await fetchWithProviderProxy(requestInput, { ...requestInit, body: nextBody })
+      await assertArkSubmissionResponse(response)
+      return response
     }
     if (typeof Request !== 'undefined' && requestInput instanceof Request) {
-      return await fetchWithProviderProxy(new Request(requestInput, { body: nextBody }), requestInit)
+      response = await fetchWithProviderProxy(new Request(requestInput, { body: nextBody }), requestInit)
+      await assertArkSubmissionResponse(response)
+      return response
     }
     throw new Error('ARK_LANGUAGE_MODEL_REQUEST_BODY_UNSUPPORTED')
   }

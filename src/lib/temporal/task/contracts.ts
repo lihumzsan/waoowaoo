@@ -1,15 +1,9 @@
-import type { ErrorFailureClass } from '@/lib/errors/codes'
+import type { FailureRecord } from '@/lib/errors/failure'
 import type { TaskSchedulerClass } from '@/lib/task/definition'
 import type { TaskType } from '@/lib/task/types'
 import type { WorkflowConcurrencyConfig } from '@/lib/workflow-concurrency'
 
 export type { TaskSchedulerClass } from '@/lib/task/definition'
-
-export const TEMPORAL_WORKFLOW_TYPE = {
-  OPERATION_EXECUTION: 'operationExecutionWorkflow',
-  TASK: 'taskWorkflow',
-  USER_TASK_SCHEDULER: 'userTaskSchedulerWorkflow',
-} as const
 
 export const TASK_WORKFLOW_UPDATE_NAME = {
   CANCEL: 'task.cancel',
@@ -96,10 +90,7 @@ export interface ReportTaskRetryInput {
 }
 
 export interface TaskAttemptFailure {
-  errorCode: string
-  errorMessage: string
-  errorDetails: Record<string, unknown> | null
-  failureClass: ErrorFailureClass
+  failure: FailureRecord
   retryDisposition: 'retryable' | 'final'
 }
 
@@ -131,9 +122,7 @@ export type CommitTaskTerminalInput =
   | (CommitTaskTerminalBase & {
       kind: 'failed'
       attempt: number
-      errorCode: string
-      errorMessage: string
-      errorDetails: Record<string, unknown> | null
+      failure: FailureRecord
       source: 'worker' | 'timeout'
     })
   | (CommitTaskTerminalBase & {

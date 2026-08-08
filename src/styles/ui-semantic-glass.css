@@ -187,54 +187,41 @@
   background: var(--glass-ghost-hover-bg);
 }
 
-.glass-btn-danger {
-  background: rgba(246, 119, 119, 0.14);
-  color: var(--glass-tone-danger-fg);
-  box-shadow: inset 0 0 0 1px rgba(246, 119, 119, 0.32);
+/* Tone buttons share one white surface and one shadow; only the ink differs.
+   Hover lifts the shadow instead of darkening a fill — there is no fill left
+   to darken, and tinting the surface would put the colour back on the block. */
+.glass-btn-danger,
+.glass-btn-tone-info,
+.glass-btn-tone-success,
+.glass-btn-tone-warning,
+.glass-btn-tone-danger {
+  background: var(--glass-tone-surface);
+  box-shadow: var(--glass-tone-shadow);
 }
 
-.glass-btn-danger:hover:not(:disabled) {
-  background: rgba(246, 119, 119, 0.22);
+.glass-btn-danger:hover:not(:disabled),
+.glass-btn-tone-info:hover:not(:disabled),
+.glass-btn-tone-success:hover:not(:disabled),
+.glass-btn-tone-warning:hover:not(:disabled),
+.glass-btn-tone-danger:hover:not(:disabled) {
+  box-shadow: var(--glass-tone-shadow-hover);
+}
+
+.glass-btn-danger,
+.glass-btn-tone-danger {
+  color: var(--glass-tone-danger-fg);
 }
 
 .glass-btn-tone-info {
-  background: var(--glass-tone-info-bg);
   color: var(--glass-tone-info-fg);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--glass-tone-info-fg) 24%, transparent);
-}
-
-.glass-btn-tone-info:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--glass-tone-info-bg) 85%, white);
 }
 
 .glass-btn-tone-success {
-  background: var(--glass-tone-success-bg);
   color: var(--glass-tone-success-fg);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--glass-tone-success-fg) 24%, transparent);
-}
-
-.glass-btn-tone-success:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--glass-tone-success-bg) 85%, white);
 }
 
 .glass-btn-tone-warning {
-  background: var(--glass-tone-warning-bg);
   color: var(--glass-tone-warning-fg);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--glass-tone-warning-fg) 24%, transparent);
-}
-
-.glass-btn-tone-warning:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--glass-tone-warning-bg) 85%, white);
-}
-
-.glass-btn-tone-danger {
-  background: var(--glass-tone-danger-bg);
-  color: var(--glass-tone-danger-fg);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--glass-tone-danger-fg) 24%, transparent);
-}
-
-.glass-btn-tone-danger:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--glass-tone-danger-bg) 85%, white);
 }
 
 .glass-selection-control {
@@ -274,30 +261,30 @@
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
+  /* Every chip shares one surface; the variant only supplies the ink, so a
+     caller with its own ink (a plan tier, say) can use .glass-chip alone. */
+  background: var(--glass-tone-surface);
+  color: var(--glass-tone-neutral-fg);
+  box-shadow: var(--glass-tone-shadow);
 }
 
 .glass-chip-neutral {
-  background: var(--glass-tone-neutral-bg);
   color: var(--glass-tone-neutral-fg);
 }
 
 .glass-chip-info {
-  background: var(--glass-tone-info-bg);
   color: var(--glass-tone-info-fg);
 }
 
 .glass-chip-success {
-  background: var(--glass-tone-success-bg);
   color: var(--glass-tone-success-fg);
 }
 
 .glass-chip-warning {
-  background: var(--glass-tone-warning-bg);
   color: var(--glass-tone-warning-fg);
 }
 
 .glass-chip-danger {
-  background: var(--glass-tone-danger-bg);
   color: var(--glass-tone-danger-fg);
 }
 
@@ -398,8 +385,10 @@
   color: var(--glass-tone-danger-fg);
 }
 
+/* A menu row hovers neutral like every other row; only its ink says danger.
+   The tone surface is white now, which would read as "no hover" here. */
 .glass-menu-item-danger:hover {
-  background: var(--glass-tone-danger-bg);
+  background: var(--glass-selection-hover-bg);
 }
 
 /* Gradient CTA — reserved for key actions (upgrade / primary CTA). */

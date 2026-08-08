@@ -253,7 +253,14 @@ export interface ImageCapabilities {
   fieldI18n?: CapabilityFieldI18nMap
 }
 
+export type VideoInputMode =
+  | 'text_to_video'
+  | 'first_frame'
+  | 'first_last_frame'
+  | 'reference'
+
 export interface VideoCapabilities {
+  supportedInputModes?: VideoInputMode[]
   supportsTextToVideo?: boolean
   generationModeOptions?: string[]
   generateAudioOptions?: boolean[]
@@ -264,6 +271,10 @@ export interface VideoCapabilities {
   assetReferenceMultiReference?: boolean
   maxReferenceImages?: number
   maxReferenceAudios?: number
+  maxReferenceVideos?: number
+  maxReferenceFiles?: number
+  referenceAudioRequiresVisual?: boolean
+  minReferenceAudioDurationMs?: number
   fieldI18n?: CapabilityFieldI18nMap
 }
 
@@ -326,6 +337,7 @@ const IMAGE_ALLOWED_FIELDS = new Set<keyof ImageCapabilities>([
 ])
 
 const VIDEO_ALLOWED_FIELDS = new Set<keyof VideoCapabilities>([
+  'supportedInputModes',
   'supportsTextToVideo',
   'generationModeOptions',
   'generateAudioOptions',
@@ -336,6 +348,10 @@ const VIDEO_ALLOWED_FIELDS = new Set<keyof VideoCapabilities>([
   'assetReferenceMultiReference',
   'maxReferenceImages',
   'maxReferenceAudios',
+  'maxReferenceVideos',
+  'maxReferenceFiles',
+  'referenceAudioRequiresVisual',
+  'minReferenceAudioDurationMs',
   'fieldI18n',
 ])
 
@@ -605,6 +621,28 @@ function validateImageCapabilities(issues: CapabilityValidationIssue[], raw: unk
 function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unknown) {
   if (!isRecord(raw)) return
 
+  const supportedInputModes = raw.supportedInputModes
+  const validInputModes = new Set<VideoInputMode>([
+    'text_to_video',
+    'first_frame',
+    'first_last_frame',
+    'reference',
+  ])
+  if (
+    supportedInputModes !== undefined
+    && (
+      !isStringArray(supportedInputModes)
+      || supportedInputModes.some((mode) => !validInputModes.has(mode as VideoInputMode))
+      || new Set(supportedInputModes).size !== supportedInputModes.length
+    )
+  ) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.video.supportedInputModes',
+      message: 'supportedInputModes must contain unique canonical video input modes',
+    })
+  }
+
   if (raw.supportsTextToVideo !== undefined && typeof raw.supportsTextToVideo !== 'boolean') {
     issues.push({
       code: 'CAPABILITY_FIELD_INVALID',
@@ -692,6 +730,50 @@ function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unk
       code: 'CAPABILITY_FIELD_INVALID',
       field: 'capabilities.video.maxReferenceAudios',
       message: 'maxReferenceAudios must be a positive integer',
+    })
+  }
+
+  if (
+    raw.maxReferenceVideos !== undefined
+    && (!Number.isInteger(raw.maxReferenceVideos) || (raw.maxReferenceVideos as number) <= 0)
+  ) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.video.maxReferenceVideos',
+      message: 'maxReferenceVideos must be a positive integer',
+    })
+  }
+
+  if (
+    raw.maxReferenceFiles !== undefined
+    && (!Number.isInteger(raw.maxReferenceFiles) || (raw.maxReferenceFiles as number) <= 0)
+  ) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.video.maxReferenceFiles',
+      message: 'maxReferenceFiles must be a positive integer',
+    })
+  }
+
+  if (
+    raw.referenceAudioRequiresVisual !== undefined
+    && typeof raw.referenceAudioRequiresVisual !== 'boolean'
+  ) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.video.referenceAudioRequiresVisual',
+      message: 'referenceAudioRequiresVisual must be boolean',
+    })
+  }
+
+  if (
+    raw.minReferenceAudioDurationMs !== undefined
+    && (!Number.isInteger(raw.minReferenceAudioDurationMs) || (raw.minReferenceAudioDurationMs as number) <= 0)
+  ) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.video.minReferenceAudioDurationMs',
+      message: 'minReferenceAudioDurationMs must be a positive integer',
     })
   }
 

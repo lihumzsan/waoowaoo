@@ -400,7 +400,7 @@
   }
 }
 
-/* Assistant 执行态动效:思考中标题扫光 + 运行中 Subagent 卡片扫光。
+/* Assistant 执行态动效：思考中标题扫光 + 运行中工具卡片扫光。
    仅表达"正在进行",不承担任何状态解释。 */
 .assistant-shimmer-text {
   background-image: linear-gradient(
@@ -447,5 +447,31 @@
   .assistant-run-sweep::after {
     animation: none;
     background: none;
+  }
+}
+
+/**
+ * 流式正文里新出现字符的淡入。
+ *
+ * 一次性动画,不是持续状态。上一版把它做成按位置维持的半透明窗口 —— 末尾若干
+ * 字符始终按距离末尾计算透明度,窗口随文本滑动,于是整条尾巴一直发虚,读起来
+ * 像整段文字在浮动。字只需要在出现的那一刻淡入,之后就是普通文字。
+ */
+.assistant-stream-in {
+  animation: assistant-stream-in 320ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@keyframes assistant-stream-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-stream-in {
+    animation: none;
   }
 }

@@ -1,5 +1,4 @@
 import { CREDITS_PER_CNY } from './credits'
-import type { WorkflowConcurrencyConfig } from '@/lib/workflow-concurrency'
 
 /**
  * The production subscription catalog.
@@ -9,9 +8,16 @@ import type { WorkflowConcurrencyConfig } from '@/lib/workflow-concurrency'
  * and grants are declared as literals rather than derived from a bonus rate:
  * the round numbers are the product decision, and the implied bonus is derived
  * from them for display only.
+ *
+ * The grants encode a deliberate markup ladder, read against the markups in
+ * `pricing-retail.ts`: credits bought outright carry +80% over provider cost,
+ * the entry plan +71%, and the deepest discount available anywhere — flagship
+ * on the yearly term — bottoms out at +30%. A grant edited on its own silently
+ * moves that plan's markup, so any change here belongs with a recomputed ladder
+ * rather than a single number.
  */
 
-export type SubscriptionPlanId = 'starter' | 'creator' | 'pro' | 'studio' | 'flagship'
+export type SubscriptionPlanId = 'lite' | 'starter' | 'creator' | 'pro' | 'studio' | 'flagship'
 
 export type SubscriptionInterval = 'month' | 'year'
 
@@ -21,21 +27,20 @@ export const SUBSCRIPTION_INTERVAL_MONTHS: Record<SubscriptionInterval, number> 
   year: 12,
 }
 
-/**
- * Months actually charged on a yearly plan. Two months are free, which is the
- * only discount a yearly commitment carries — the credit grant per month is
- * identical to the monthly plan.
- */
-const YEARLY_BILLED_MONTHS = 10
-
 export interface SubscriptionPlanDefinition {
   readonly id: SubscriptionPlanId
   /** Monthly list price in CNY. */
   readonly monthlyPriceCny: number
+  /**
+   * Yearly list price in CNY, declared rather than derived.
+   *
+   * A yearly price is a price, not the output of a formula: it is set to a
+   * round figure roughly ten months' worth, so the page shows ¥15,900 instead
+   * of whatever `monthlyPrice * 10` happens to produce.
+   */
+  readonly yearlyPriceCny: number
   /** Credits granted at the start of every month, on both intervals. */
   readonly monthlyCredits: number
-  /** Per-user execution capacity unlocked by this plan. */
-  readonly concurrency: WorkflowConcurrencyConfig
   /** Marks the plan the pricing page leads with. */
   readonly featured: boolean
   /**
@@ -45,54 +50,52 @@ export interface SubscriptionPlanDefinition {
   readonly firstMonthPromoCny: number | null
 }
 
-/**
- * Capacity unlocked without any subscription. Also the floor every plan
- * inherits, so a lapsed subscription degrades to this rather than to zero.
- */
-export const FREE_TIER_CONCURRENCY: WorkflowConcurrencyConfig = {
-  analysis: 2,
-  image: 2,
-  video: 2,
-}
-
 export const SUBSCRIPTION_PLANS: readonly SubscriptionPlanDefinition[] = [
   {
+    id: 'lite',
+    monthlyPriceCny: 79,
+    yearlyPriceCny: 790,
+    monthlyCredits: 800,
+    featured: false,
+    firstMonthPromoCny: null,
+  },
+  {
     id: 'starter',
-    monthlyPriceCny: 99,
-    monthlyCredits: 1_040,
-    concurrency: { analysis: 3, image: 2, video: 2 },
+    monthlyPriceCny: 199,
+    yearlyPriceCny: 1_990,
+    monthlyCredits: 2_100,
     featured: false,
     firstMonthPromoCny: null,
   },
   {
     id: 'creator',
     monthlyPriceCny: 499,
-    monthlyCredits: 5_600,
-    concurrency: { analysis: 5, image: 6, video: 6 },
+    yearlyPriceCny: 4_990,
+    monthlyCredits: 5_450,
     featured: true,
     firstMonthPromoCny: 399,
   },
   {
     id: 'pro',
     monthlyPriceCny: 1_599,
-    monthlyCredits: 18_400,
-    concurrency: { analysis: 8, image: 10, video: 10 },
+    yearlyPriceCny: 15_900,
+    monthlyCredits: 17_800,
     featured: false,
     firstMonthPromoCny: null,
   },
   {
     id: 'studio',
     monthlyPriceCny: 3_999,
-    monthlyCredits: 48_000,
-    concurrency: { analysis: 12, image: 16, video: 16 },
+    yearlyPriceCny: 39_900,
+    monthlyCredits: 45_300,
     featured: false,
     firstMonthPromoCny: null,
   },
   {
     id: 'flagship',
     monthlyPriceCny: 8_999,
-    monthlyCredits: 112_500,
-    concurrency: { analysis: 16, image: 24, video: 24 },
+    yearlyPriceCny: 89_900,
+    monthlyCredits: 104_000,
     featured: false,
     firstMonthPromoCny: null,
   },
@@ -121,9 +124,7 @@ export function subscriptionPeriodPriceCny(
   plan: SubscriptionPlanDefinition,
   interval: SubscriptionInterval,
 ): number {
-  return interval === 'year'
-    ? plan.monthlyPriceCny * YEARLY_BILLED_MONTHS
-    : plan.monthlyPriceCny
+  return interval === 'year' ? plan.yearlyPriceCny : plan.monthlyPriceCny
 }
 
 /** Total credits a full billing cycle eventually grants, across all its months. */

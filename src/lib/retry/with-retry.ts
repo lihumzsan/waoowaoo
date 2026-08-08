@@ -1,10 +1,13 @@
-import { createScopedLogger } from '@/lib/logging/core'
-import { normalizeAnyError } from '@/lib/errors/normalize'
-import type { NormalizedError } from '@/lib/errors/types'
 import {
-  computeRetryDelayMs,
-  type RetryPolicy,
-} from './policy'
+  getExternalOperationContract,
+  type ExternalOperationId,
+} from '@/lib/external-operation/registry'
+import { createScopedLogger } from '@/lib/logging/core'
+import {
+  attachFailureToThrown,
+  normalizeAnyError,
+} from '@/lib/errors/normalize'
+import type { FailureRecord } from '@/lib/errors/failure'
 
 export type RetryAttemptContext = {
   readonly attempt: number
@@ -12,17 +15,17 @@ export type RetryAttemptContext = {
 }
 
 export type RetryFailureInfo = RetryAttemptContext & {
-  readonly error: NormalizedError
+  readonly error: FailureRecord
   readonly raw: unknown
   readonly nextDelayMs: number
+  readonly operation: ExternalOperationId
   readonly scope: string
 }
 
 export type WithRetryInput<T> = {
+  readonly operation: ExternalOperationId
   readonly run: (ctx: RetryAttemptContext) => Promise<T>
-  readonly policy: RetryPolicy
-  readonly scope: string
-  readonly shouldRetry?: (info: RetryFailureInfo) => boolean
+  readonly scope?: string
   readonly onAttemptFailed?: (info: RetryFailureInfo) => void | Promise<void>
 }
 
@@ -32,54 +35,70 @@ async function delay(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-function shouldRetryFailure<T>(input: WithRetryInput<T>, info: RetryFailureInfo): boolean {
-  if (!info.error.retryable) return false
-  if (info.attempt >= info.maxAttempts) return false
-  if (!input.shouldRetry) return true
-  return input.shouldRetry(info)
+function retryDelayMs(operation: ExternalOperationId, attempt: number): number {
+  const contract = getExternalOperationContract(operation)
+  const normalizedAttempt = Math.max(1, Math.floor(attempt))
+  return Math.min(
+    contract.baseDelayMs * Math.pow(2, normalizedAttempt - 1),
+    contract.maxDelayMs,
+  )
 }
 
 export async function withRetry<T>(input: WithRetryInput<T>): Promise<T> {
-  const maxAttempts = Math.max(1, Math.floor(input.policy.maxAttempts))
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+  const contract = getExternalOperationContract(input.operation)
+  const scope = input.scope ?? input.operation
+  for (let attempt = 1; attempt <= contract.maxAttempts; attempt += 1) {
     try {
-      return await input.run({ attempt, maxAttempts })
+      return await input.run({ attempt, maxAttempts: contract.maxAttempts })
     } catch (raw: unknown) {
-      const nextDelayMs = computeRetryDelayMs(input.policy, attempt)
-      const normalized = normalizeAnyError(raw)
+      const normalized = normalizeAnyError(raw, {
+        context: {
+          system: 'application',
+          phase: 'external-operation',
+          operation: input.operation,
+        },
+        operation: input.operation,
+        attempts: attempt,
+      })
+      const failedOperation = normalized.recovery.operation ?? input.operation
+      const failedContract = getExternalOperationContract(failedOperation)
+      const nextDelayMs = retryDelayMs(failedOperation, attempt)
       const info: RetryFailureInfo = {
         attempt,
-        maxAttempts,
+        maxAttempts: contract.maxAttempts,
         error: normalized,
         raw,
         nextDelayMs,
-        scope: input.scope,
+        operation: failedOperation,
+        scope,
       }
       await input.onAttemptFailed?.(info)
-      const retry = shouldRetryFailure(input, info)
+      const retry = contract.replay === 'idempotent'
+        && failedContract.replay === 'idempotent'
+        && attempt < contract.maxAttempts
+        && attempt < failedContract.maxAttempts
       retryLogger[retry ? 'warn' : 'error']({
         action: retry ? 'retry.attempt_failed' : 'retry.exhausted',
-        message: normalized.message,
-        errorCode: normalized.code,
-        retryable: normalized.retryable,
+        message: normalized.native.message,
+        errorCode: normalized.interpretation.code,
+        retryable: retry,
         details: {
-          scope: input.scope,
+          operation: failedOperation,
+          selectedOperation: input.operation,
+          scope,
           attempt,
-          maxAttempts,
+          maxAttempts: contract.maxAttempts,
+          effect: normalized.recovery.effect,
           nextDelayMs: retry ? nextDelayMs : null,
         },
         error: raw instanceof Error
-          ? {
-            name: raw.name,
-            message: raw.message,
-            stack: raw.stack,
-          }
-          : { message: String(raw) },
+          ? { name: raw.name, message: raw.message, stack: raw.stack }
+          : { message: normalized.native.message },
       })
-      if (!retry) throw raw
+      if (!retry) throw attachFailureToThrown(raw, normalized)
       await delay(nextDelayMs)
     }
   }
 
-  throw new Error(`RETRY_INVARIANT_EXHAUSTED:${input.scope}`)
+  throw new Error(`RETRY_INVARIANT_EXHAUSTED:${input.operation}`)
 }

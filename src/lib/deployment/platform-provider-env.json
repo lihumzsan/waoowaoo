@@ -3,5 +3,6 @@
   "fal": { "envPrefix": "PLATFORM_FAL" },
   "ark": { "envPrefix": "PLATFORM_ARK" },
   "openrouter": { "envPrefix": "PLATFORM_OPENROUTER", "requiresBaseUrl": true },
-  "mureka": { "envPrefix": "PLATFORM_MUREKA" }
+  "mureka": { "envPrefix": "PLATFORM_MUREKA" },
+  "toonflow": { "envPrefix": "PLATFORM_TOONFLOW" }
 }

@@ -29,7 +29,7 @@
     }
   },
   "taskType": {
-    "creativeWork": "专业创作 Subagent",
+    "creativeWork": "专业创作",
     "workspaceResourceImage": "图片资源生成",
     "workspaceResourceAudio": "音频资源生成",
     "workspaceResourceVoice": "音色资源生成",

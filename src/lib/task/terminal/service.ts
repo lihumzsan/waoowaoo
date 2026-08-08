@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client'
+import type { FailureRecord } from '@/lib/errors/failure'
 import { prisma } from '@/lib/prisma'
 import { createScopedLogger } from '@/lib/logging/core'
 import {
@@ -189,8 +190,7 @@ export async function commitTaskTerminal(
         taskType,
       )
       let nextBillingInfo = currentBillingInfo
-      let errorCode: string | null = null
-      let errorMessage: string | null = null
+      let failure: FailureRecord | null = null
       let completedOutput: TaskHandlerCheckpointOutput | null = null
       let materializedOutput: Record<string, unknown> | null = null
 
@@ -235,8 +235,6 @@ export async function commitTaskTerminal(
               operationExecutionId: task.operationExecutionId,
             },
             result: completedOutput.result,
-            errorCode: null,
-            errorMessage: null,
           })
         if (materializedOutput) {
           completedOutput = {
@@ -255,8 +253,7 @@ export async function commitTaskTerminal(
           targetId: task.targetId,
         })
       } else {
-        errorCode = intent.kind === 'failed' ? intent.errorCode : null
-        errorMessage = intent.kind === 'failed' ? intent.errorMessage : null
+        failure = intent.kind === 'failed' ? intent.failure : null
         materializedOutput =
           await materializeWorkspaceResourceTaskTerminalInTransaction(tx, {
             kind: intent.kind,
@@ -272,8 +269,6 @@ export async function commitTaskTerminal(
               operationExecutionId: task.operationExecutionId,
             },
             result: null,
-            errorCode,
-            errorMessage,
           })
         const targetProjection = await projectTaskTargetTerminalInTransaction(
           tx,
@@ -283,13 +278,6 @@ export async function commitTaskTerminal(
             type: taskType,
             targetType: task.targetType,
             targetId: task.targetId,
-            ...(intent.kind === 'failed'
-              ? {
-                  errorCode,
-                  errorMessage,
-                  errorDetails: intent.errorDetails,
-                }
-              : {}),
           },
         )
         if (targetProjection === 'success_materialized') {
@@ -319,8 +307,7 @@ export async function commitTaskTerminal(
             intent.kind === 'completed'
               ? toJson(completedOutput?.result)
               : undefined,
-          errorCode,
-          errorMessage: errorMessage?.slice(0, 2_000) ?? null,
+          failure: failure ? toJson(failure) : Prisma.DbNull,
           billingInfo: toJson(nextBillingInfo),
           billedAt:
             nextBillingInfo?.billable && nextBillingInfo.status === 'settled'
@@ -363,7 +350,7 @@ export async function commitTaskTerminal(
           ...(completedOutput?.result ?? {}),
           ...(materializedOutput ?? {}),
           billing: nextBillingInfo,
-          ...(errorCode ? { errorCode } : {}),
+          ...(failure ? { errorCode: failure.interpretation.code } : {}),
           terminalSource:
             intent.kind === 'completed' ? 'worker' : intent.source,
         }),

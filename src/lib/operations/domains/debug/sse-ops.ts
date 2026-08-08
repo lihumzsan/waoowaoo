@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import {
+  buildTaskLifecycleEventPayload,
   getProjectChannel,
   listEventsAfter,
   listRecentTerminalLifecycleEvents,
@@ -8,13 +9,15 @@ import {
 import {
   TASK_EVENT_TYPE,
   TASK_STATUS,
+  isTaskType,
 } from '@/lib/task/types'
 import {
   TASK_SSE_EVENT_TYPE,
   type TaskSSEEvent,
 } from '@/lib/sse/events'
 import { coerceTaskIntent } from '@/lib/task/intent'
-import { withTaskCoveredTargetsPayload } from '@/lib/task/covered-targets'
+import { getTaskDefinition } from '@/lib/task/definition'
+import { resolveWorkspaceResourceRefs } from '@/lib/workspace-resource/resource-impact'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { parseWorkspaceSseCursor } from '@/lib/sse/protocol'
@@ -61,12 +64,18 @@ async function listActiveLifecycleSnapshot(params: {
   })
 
   return rows.map((row): TaskSSEEvent => {
+    if (!isTaskType(row.type)) {
+      throw new Error(`TASK_DEFINITION_MISSING:${row.type}`)
+    }
     const payload = asObject(row.payload)
     const payloadUi = asObject(payload?.ui)
     const lifecycleType = row.status === TASK_STATUS.QUEUED
       ? TASK_EVENT_TYPE.CREATED
       : TASK_EVENT_TYPE.PROCESSING
-    const eventPayload = withTaskCoveredTargetsPayload({
+    const eventPayload = buildTaskLifecycleEventPayload({
+      taskId: row.id,
+      projectId: params.projectId,
+      lifecycleType,
       taskType: row.type,
       targetType: row.targetType,
       targetId: row.targetId,
@@ -77,6 +86,14 @@ async function listActiveLifecycleSnapshot(params: {
         progress: typeof row.progress === 'number' ? row.progress : null,
       },
       coveragePayload: payload,
+      ...(lifecycleType === TASK_EVENT_TYPE.CREATED
+        ? {
+            affectedResources: resolveWorkspaceResourceRefs({
+              impact: getTaskDefinition(row.type).terminalResourceImpact,
+              projectId: params.projectId,
+            }),
+          }
+        : {}),
     })
 
     return {

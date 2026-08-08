@@ -25,6 +25,6 @@ export async function requireCodexModelGatewayActiveTurn(
     return { turnId: active.turnId }
   } catch (error) {
     if (!(error instanceof AssistantRuntimeCapabilityTurnError)) throw error
-    throw new CodexModelGatewayError('ACTIVE_TURN_REQUIRED', 403)
+    throw new CodexModelGatewayError('ACTIVE_TURN_REQUIRED', 403, error)
   }
 }

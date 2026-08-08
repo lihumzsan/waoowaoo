@@ -23,7 +23,9 @@ export const GET = apiHandler(async (request: NextRequest) => {
     ? Math.min(expires, DEFAULT_EXPIRES_SECONDS)
     : DEFAULT_EXPIRES_SECONDS
 
-  const signedUrl = await getSignedObjectUrl(authResult.media.storageKey, ttl)
+  const signedUrl = await getSignedObjectUrl(authResult.media.storageKey, {
+    expiresInSeconds: ttl,
+  })
   const response = new NextResponse(null, {
     status: 307,
     headers: { Location: signedUrl },

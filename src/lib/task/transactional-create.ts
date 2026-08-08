@@ -11,6 +11,7 @@ import {
   type BillingMode,
   type CreateTaskInput,
   type TaskBillingInfo,
+  type WorkspaceResourceRef,
 } from './types'
 
 function toJson(value: unknown): Prisma.InputJsonValue | Prisma.NullTypes.JsonNull {
@@ -18,11 +19,10 @@ function toJson(value: unknown): Prisma.InputJsonValue | Prisma.NullTypes.JsonNu
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
 }
 
-async function assertTaskSubmissionScope(
-  _tx: Prisma.TransactionClient,
+function resolveTaskSubmissionResourceRefs(
   input: CreateTaskInput & { readonly id?: string },
-): Promise<void> {
-  resolveWorkspaceResourceRefs({
+): WorkspaceResourceRef[] {
+  return resolveWorkspaceResourceRefs({
     impact: getTaskDefinition(input.type).terminalResourceImpact,
     projectId: input.projectId,
   })
@@ -37,6 +37,7 @@ async function persistValidatedSubmittedTaskInTransaction(params: {
   readonly tx: Prisma.TransactionClient
   readonly input: CreateTaskInput & { readonly id?: string }
   readonly billingMode: BillingMode
+  readonly affectedResources: readonly WorkspaceResourceRef[]
   readonly onTaskCreatedInTransaction?: (
     tx: Prisma.TransactionClient,
     task: { id: string },
@@ -101,6 +102,7 @@ async function persistValidatedSubmittedTaskInTransaction(params: {
         taskType: stored.type,
         targetType: stored.targetType,
         targetId: stored.targetId,
+        affectedResources: params.affectedResources,
         coveragePayload: input.payload,
         payload: projectTaskLifecyclePayload(input.type, {
           ...(input.payload || {}),
@@ -123,9 +125,10 @@ export async function persistSubmittedTaskInTransaction(params: {
     task: { id: string },
   ) => Promise<void>
 }): Promise<PersistedSubmittedTask> {
-  await assertTaskSubmissionScope(params.tx, params.input)
+  const affectedResources = resolveTaskSubmissionResourceRefs(params.input)
   return await persistValidatedSubmittedTaskInTransaction({
     ...params,
+    affectedResources,
   })
 }
 
@@ -226,7 +229,7 @@ export async function persistSubmittedTaskBatchInTransaction(params: {
 
   const ordered: PersistedBatchTask[] = []
   for (const input of params.inputs) {
-    await assertTaskSubmissionScope(params.tx, input)
+    const affectedResources = resolveTaskSubmissionResourceRefs(input)
     const existingCandidate = await loadExistingBatchTask(params.tx, input)
     if (existingCandidate) {
       const existing = await lockExistingBatchTaskById(params.tx, existingCandidate.id)
@@ -243,6 +246,7 @@ export async function persistSubmittedTaskBatchInTransaction(params: {
         tx: params.tx,
         input,
         billingMode: params.billingMode,
+        affectedResources,
       })
       ordered.push({ ...persisted, deduped: false })
     } catch (error) {

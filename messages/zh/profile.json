@@ -9,6 +9,8 @@
   "upgrade": "升级",
   "balanceLoadFailed": "余额加载失败，请重试",
   "transactionsLoadFailed": "账户流水加载失败，请重试",
+  "projectCostsLoadFailed": "项目用量加载失败，请重试",
+  "projectCostDetailsLoadFailed": "项目用量明细加载失败，请重试",
   "openSourceNoBilling": "开源版本，无需计费",
   "frozen": "冻结",
   "totalSpent": "已消费",
@@ -18,12 +20,15 @@
   "logout": "退出登录",
   "downloadLogs": "下载日志",
   "accountTransactions": "账户流水",
+  "projectUsage": "项目用量",
   "projectDetails": "项目明细",
   "summary": "汇总",
   "transactions": "流水",
   "noTransactions": "暂无流水记录",
   "noProjectCosts": "暂无项目费用记录",
   "noDetails": "该项目暂无费用明细",
+  "loadingDetails": "正在加载明细",
+  "unknownProject": "已删除的项目",
   "noRecords": "暂无记录",
   "byType": "按类型",
   "byAction": "按操作",
@@ -35,7 +40,10 @@
     "recharge": "额度入账",
     "consume": "服务消费",
     "freeze": "额度冻结",
-    "refund": "冻结退回"
+    "refund": "冻结退回",
+    "planPurchase": "购买套餐",
+    "planGrant": "套餐额度发放",
+    "planExpire": "套餐额度到期清零"
   },
   "transactionType": "类型",
   "transactionOperation": "操作",
@@ -48,6 +56,9 @@
   "balanceAfter": "余额 {amount}",
   "recordCount": "{count} 条记录",
   "totalCost": "总计 {amount}",
+  "userCharge": "用户费用（积分）",
+  "generationType": "生成类型",
+  "usage": "用量",
   "previousPage": "上一页",
   "nextPage": "下一页",
   "pagination": "共 {total} 条，第 {page} / {totalPages} 页",
@@ -81,18 +92,10 @@
     "globalLocation": "素材场景 {name}",
     "globalLocationImage": "素材场景 {name} · 图片 {index}"
   },
-  "inviteCode": {
-    "title": "邀请码兑换",
-    "description": "可以使用邀请码兑换额度，或联系管理员发放额度。",
-    "placeholder": "输入邀请码",
-    "redeem": "兑换",
-    "redeeming": "兑换中",
-    "redeemSuccess": "兑换成功，额度已入账",
-    "redeemFailed": "邀请码兑换失败"
-  },
   "recharge": {
     "unitValue": "1 credit = ¥0.1",
     "successNotice": "支付已提交，余额会在 Stripe 确认后入账。可稍后刷新查看。",
+    "planSuccessNotice": "套餐付款已提交，Stripe 确认后会自动生效。",
     "cancelNotice": "支付已取消，未产生扣款。"
   },
   "accountSecurity": {
@@ -111,6 +114,7 @@
     "email": "邮箱",
     "emailNotBound": "未绑定邮箱",
     "google": "Google 登录",
+    "wechat": "微信登录",
     "password": "密码",
     "bound": "已绑定",
     "notBound": "未绑定",
@@ -118,6 +122,8 @@
     "notSet": "未设置",
     "googleBound": "已可使用 Google 登录",
     "googleNotBound": "尚未绑定 Google 登录",
+    "wechatBound": "已可使用微信扫码登录",
+    "wechatNotBound": "尚未绑定微信登录",
     "bindGoogle": "绑定 Google",
     "binding": "绑定中",
     "passwordBound": "已可使用密码登录",
@@ -144,14 +150,35 @@
   "apiTypes": {
     "image": "图片生成",
     "video": "视频生成",
-    "text": "文本分析",
-    "music": "音乐生成"
+    "text": "文本生成",
+    "music": "音乐生成",
+    "voice": "语音生成",
+    "other": "AI 服务"
   },
   "actionTypes": {
+    "assistant_run": "LLM 生成",
+    "assistant_web_search": "联网搜索",
     "workspace_resource_image": "图片资源生成",
     "workspace_resource_audio": "音频资源生成",
     "workspace_resource_voice": "音色资源生成",
     "workspace_resource_video": "视频资源生成",
     "workspace_resource_video_merge": "视频资源合并"
-  }
+  },
+  "planCredits": "套餐额度",
+  "planCreditsExpireOn": "{date} 清零",
+  "planCreditsNone": "当前无套餐额度",
+  "boughtCredits": "充值额度",
+  "boughtCreditsNeverExpire": "永久有效",
+  "planMonthlyGrant": "本期额度 {credits}",
+  "planEndsAt": "有效期至",
+  "planDaysLeft": "剩余 {days} 天",
+  "planExtend": "立即重开周期",
+  "planNames": {
+    "starter": "个人入门",
+    "creator": "创作者",
+    "pro": "专业",
+    "studio": "工作室",
+    "flagship": "旗舰"
+  },
+  "viewReceipt": "查看收据"
 }

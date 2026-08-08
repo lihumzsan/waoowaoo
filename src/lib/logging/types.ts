@@ -10,6 +10,7 @@ export interface ErrorFields {
 
 export interface LogContext {
   requestId?: string
+  providerRequestId?: string
   taskId?: string
   taskAttempt?: number
   threadId?: string
@@ -25,7 +26,6 @@ export interface LogContext {
 export interface SemanticContext extends LogContext {
   errorCode?: string
   retryable?: boolean
-  failureClass?: string
   durationMs?: number
 }
 
@@ -38,6 +38,7 @@ export interface LogEvent {
   action?: string
   message: string
   requestId?: string
+  providerRequestId?: string
   taskId?: string
   taskAttempt?: number
   threadId?: string
@@ -47,7 +48,6 @@ export interface LogEvent {
   userId?: string
   errorCode?: string
   retryable?: boolean
-  failureClass?: string
   durationMs?: number
   provider?: string
   details?: Record<string, unknown> | unknown[] | null

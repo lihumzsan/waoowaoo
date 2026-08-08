@@ -88,10 +88,10 @@ describe('provider contract - fal video', () => {
         modelKey: 'fal::bytedance/seedance-2.0/fast',
         variantSubKind: 'official',
       },
-      imageUrl: 'https://example.com/hero.png',
+      imageUrl: '',
       options: {
         prompt: 'Use @Image1 as the hero and @Image2 as the location.',
-        referenceImages: ['https://example.com/location.png'],
+        referenceImages: ['https://example.com/hero.png', 'https://example.com/location.png'],
         resolution: '480p',
         duration: 6,
         aspectRatio: 'auto',

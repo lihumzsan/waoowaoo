@@ -1,12 +1,17 @@
-import path from 'node:path'
 import { z } from 'zod'
 import { VOICE_DESIGN_LANGUAGE_OPTIONS } from '@/lib/ai-registry/voice-design-contract'
 import { parseWorkspaceResourceGenerationTaskPayload } from '@/lib/workspace-resource/generation-contract'
 import { buildWorkspaceResourceId } from '@/lib/workspace-resource/identity'
-import { resourceNameFromPath } from '@/lib/workspace-resource/path'
 import {
+  assertUniqueWorkspaceResourcePaths,
+  workspaceResourceDisplayName,
+} from '@/lib/workspace-resource/path'
+import {
+  bindWorkspaceResourceTasksInTransaction,
+  createWorkspaceResourceFolderInTransaction,
   reserveWorkspaceResourceInTransaction,
-  validateWorkspaceResourcePlacement,
+  resolveGeneratedWorkspaceResourcePlacement,
+  retryWorkspaceResourcesInTransaction,
 } from '@/lib/workspace-resource/persistence'
 import { WORKSPACE_RESOURCE_SCHEMA } from '@/lib/workspace-resource/schema-registry'
 import { buildWorkspaceResourceLifecycleProjection } from '@/lib/workspace-resource/task-runtime-envelope'
@@ -31,13 +36,20 @@ import {
 } from '@/lib/ai-exec/media-preflight'
 import { AiOptionValidationError } from '@/lib/ai-exec/normalize'
 import { ApiError } from '@/lib/api-errors'
+import {
+  VOICE_PREVIEW_TARGET_MAX_SECONDS,
+  VOICE_PREVIEW_TARGET_MIN_SECONDS,
+  voicePreviewTargetIssue,
+} from '@/lib/voice/preview-contract'
 
 const voiceNewSchema = z.object({
   kind: z.literal('new'),
-  outputPath: z.string().trim().min(1).max(512)
-    .regex(/\.resource$/u, 'Voice outputPath must end in .resource.'),
+  folderPath: z.string().trim().min(1).max(512).nullable().optional()
+    .describe('Optional project-relative destination folder. Missing folders are created atomically with the voice Resources.'),
+  name: z.string().trim().min(1).max(300),
   description: z.string().trim().min(1).max(4_000),
-  previewText: z.string().trim().min(1).max(10_000),
+  previewText: z.string().trim().min(1).max(10_000)
+    .describe(`A phonetically varied sample targeting approximately ${String(VOICE_PREVIEW_TARGET_MIN_SECONDS)}-${String(VOICE_PREVIEW_TARGET_MAX_SECONDS)} seconds. This exact text is billed by character count.`),
   language: z.enum(VOICE_DESIGN_LANGUAGE_OPTIONS),
   count: z.number().int().min(1).max(6).default(1),
 }).strict()
@@ -57,6 +69,16 @@ const generateVoiceInputSchema = z.object({
       path: ['request', 'resourceIds'],
       message: 'resourceIds must be unique',
     })
+  }
+  if (value.request.kind === 'new') {
+    const issue = voicePreviewTargetIssue(value.request)
+    if (issue) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['request', 'previewText'],
+        message: issue,
+      })
+    }
   }
 })
 
@@ -80,16 +102,11 @@ const voicePlanMetadataSchema = z.object({
   resources: z.array(z.object({
     resourceId: z.string().min(1),
     workspacePath: z.string().min(1),
+    folderPath: z.string().min(1).nullable(),
     memberIndex: z.number().int().nonnegative(),
     taskPlanId: z.string().min(1),
   }).strict()).min(1),
 }).strict()
-
-function alternativePath(outputPath: string, memberIndex: number): string {
-  if (memberIndex === 0) return outputPath
-  const extension = path.posix.extname(outputPath)
-  return `${outputPath.slice(0, -extension.length)}-${String(memberIndex + 1)}${extension}`
-}
 
 async function preflightVoiceGeneration(
   ctx: ProjectAgentOperationContext,
@@ -118,7 +135,7 @@ async function preflightVoiceGeneration(
         code: 'VOICE_GENERATION_OPTION_INVALID',
         field: error.field ?? 'language',
         reason: error.reason ?? error.failure,
-      })
+      }, { cause: error })
     }
     throw error
   }
@@ -141,22 +158,27 @@ async function planNewVoice(
     ctx.toolCallId?.trim() || ctx.requestId?.trim() || fingerprint,
     fingerprint,
   ].join(':')
-  const resources = Array.from({ length: request.count }, (_, memberIndex) => {
+  const resources = await Promise.all(Array.from({ length: request.count }, async (_, memberIndex) => {
     const resourceId = buildWorkspaceResourceId({ operationId: 'generate_voice', requestId, memberIndex })
+    const workspacePath = await resolveGeneratedWorkspaceResourcePlacement(prisma, {
+      userId: ctx.userId,
+      projectId: ctx.projectId,
+      folderPath: request.folderPath,
+      name: request.name,
+      resourceId,
+      mediaType: 'audio',
+      schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
+      alternativeIndex: request.count > 1 ? memberIndex : null,
+    })
     return {
       resourceId,
-      workspacePath: alternativePath(request.outputPath, memberIndex),
+      workspacePath,
+      folderPath: request.folderPath ?? null,
       memberIndex,
       taskPlanId: `generate_voice:${resourceId}`,
     }
-  })
-  await Promise.all(resources.map(async (resource) => await validateWorkspaceResourcePlacement(prisma, {
-    userId: ctx.userId,
-    projectId: ctx.projectId,
-    outputPath: resource.workspacePath,
-    mediaType: 'audio',
-    schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
-  })))
+  }))
+  assertUniqueWorkspaceResourcePaths(resources.map((resource) => resource.workspacePath))
   const tasks = resources.map((resource) => {
     const inputHash = stableArgsFingerprint({
       description: request.description,
@@ -170,7 +192,10 @@ async function planNewVoice(
         resourceId: resource.resourceId,
         mediaType: 'audio',
         schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
-        name: resourceNameFromPath(resource.workspacePath),
+        name: workspaceResourceDisplayName({
+          workspacePath: resource.workspacePath,
+          resourceId: resource.resourceId,
+        }),
       }]),
       protocol: 'workspace_resource_generation_v1' as const,
       resource: {
@@ -261,7 +286,19 @@ async function planRetryVoice(
     }
   }))
   const tasks = resources.map((resource): PlannedTask => {
-    const payload = parseWorkspaceResourceGenerationTaskPayload(resource.sourceTask.payload)
+    const sourcePayload = parseWorkspaceResourceGenerationTaskPayload(resource.sourceTask.payload)
+    const payload = parseWorkspaceResourceGenerationTaskPayload({
+      ...sourcePayload,
+      lifecycleProjection: buildWorkspaceResourceLifecycleProjection([{
+        resourceId: resource.resourceId,
+        mediaType: 'audio',
+        schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
+        name: workspaceResourceDisplayName({
+          workspacePath: resource.workspacePath,
+          resourceId: resource.resourceId,
+        }),
+      }]),
+    })
     return createPlannedTask({
       id: resource.taskPlanId,
       taskType: TASK_TYPE.WORKSPACE_RESOURCE_VOICE,
@@ -291,6 +328,7 @@ async function planRetryVoice(
       resources: resources.map((resource) => ({
         resourceId: resource.resourceId,
         workspacePath: resource.workspacePath,
+        folderPath: null,
         memberIndex: resource.memberIndex,
         taskPlanId: resource.taskPlanId,
       })),
@@ -303,6 +341,18 @@ async function commitVoice(ctx: ProjectAgentOperationContext, plan: OperationPla
   if (!authorization) throw new Error('OPERATION_EXECUTION_AUTHORIZATION_REQUIRED')
   const metadata = voicePlanMetadataSchema.parse(plan.metadata)
   if (!metadata.retry) {
+    const folderPaths = new Set(metadata.resources.flatMap((resource) => (
+      resource.folderPath ? [resource.folderPath] : []
+    )))
+    for (const folderPath of folderPaths) {
+      await createWorkspaceResourceFolderInTransaction(authorization.transaction, {
+        userId: ctx.userId,
+        projectId: ctx.projectId,
+        workspacePath: folderPath,
+        sourceType: 'operation_output_folder',
+        sourceId: null,
+      })
+    }
     for (const resource of metadata.resources) {
       const task = plan.tasks.find((candidate) => candidate.id === resource.taskPlanId)
       if (!task) throw new Error(`VOICE_PLAN_TASK_MISSING:${resource.taskPlanId}`)
@@ -326,16 +376,25 @@ async function commitVoice(ctx: ProjectAgentOperationContext, plan: OperationPla
       })
     }
   } else {
-    const updated = await authorization.transaction.workspaceResource.updateMany({
-      where: {
-        id: { in: metadata.resources.map((resource) => resource.resourceId) },
-        userId: ctx.userId,
-        projectId: ctx.projectId,
-        status: { in: ['failed', 'canceled'] },
-      },
-      data: { status: 'pending', errorCode: null, errorMessage: null, operationId: 'generate_voice' },
+    await retryWorkspaceResourcesInTransaction(authorization.transaction, {
+      userId: ctx.userId,
+      projectId: ctx.projectId,
+      resources: metadata.resources.map((resource) => {
+        const task = plan.tasks.find((candidate) => candidate.id === resource.taskPlanId)
+        if (!task) throw new Error(`VOICE_PLAN_TASK_MISSING:${resource.taskPlanId}`)
+        const payload = parseWorkspaceResourceGenerationTaskPayload(task.payload)
+        return {
+          resourceId: resource.resourceId,
+          operationId: 'generate_voice',
+          operationExecutionId: authorization.operationExecutionId,
+          inputHash: payload.resource.inputHash,
+          prompt: payload.resource.prompt,
+          modelKey: payload.resource.modelKey,
+          generationOptions: payload.generationOptions,
+          toolCallId: ctx.toolCallId?.trim() || null,
+        }
+      }),
     })
-    if (updated.count !== metadata.resources.length) throw new Error('WORKSPACE_RESOURCE_RETRY_TARGET_CHANGED:generate_voice')
   }
   const submitted = await submitPlannedOperationTasks({ ctx, operationId: 'generate_voice' })
   const results = plan.tasks.map((task) => {
@@ -343,15 +402,15 @@ async function commitVoice(ctx: ProjectAgentOperationContext, plan: OperationPla
     if (!result) throw new Error(`VOICE_TASK_RESULT_MISSING:${task.id}`)
     return result
   })
-  for (const resource of metadata.resources) {
-    const result = submitted.get(resource.taskPlanId)
-    if (!result) throw new Error(`VOICE_TASK_RESULT_MISSING:${resource.taskPlanId}`)
-    const updated = await authorization.transaction.workspaceResource.updateMany({
-      where: { id: resource.resourceId, status: 'pending' },
-      data: { taskId: result.taskId },
-    })
-    if (updated.count !== 1) throw new Error(`VOICE_TASK_BINDING_CONFLICT:${resource.resourceId}`)
-  }
+  await bindWorkspaceResourceTasksInTransaction(authorization.transaction, {
+    userId: ctx.userId,
+    projectId: ctx.projectId,
+    bindings: metadata.resources.map((resource) => {
+      const result = submitted.get(resource.taskPlanId)
+      if (!result) throw new Error(`VOICE_TASK_RESULT_MISSING:${resource.taskPlanId}`)
+      return { resourceId: resource.resourceId, taskId: result.taskId }
+    }),
+  })
   const first = results[0]
   if (!first) throw new Error('VOICE_OPERATION_PLAN_EMPTY')
   return generateVoiceOutputSchema.parse({
@@ -374,7 +433,7 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
   return {
     generate_voice: defineOperation({
       id: 'generate_voice',
-      summary: 'Design voice preview audio Resources at explicit workspace paths. Alternatives are independent Tasks; retry reuses the original frozen payload.',
+      summary: 'Design voice preview audio Resources with server-owned placement. Alternatives are independent Tasks; retry reuses the original frozen payload.',
       intent: 'act',
       channels: { tool: true, api: true, mcp: true },
       effects: {
@@ -406,7 +465,7 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
         },
       },
       confirmation: { kind: 'billable_media', required: true },
-      planContractRevision: 'voice-generation/v5',
+      planContractRevision: 'voice-generation/v9',
       inputSchema: generateVoiceInputSchema,
       outputSchema: generateVoiceOutputSchema,
       plan: async (ctx, input) => input.request.kind === 'retry'

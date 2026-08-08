@@ -1,5 +1,5 @@
 import type { AiLlmProviderConfig } from '@/lib/ai-registry/types'
-import type { UnifiedErrorCode } from '@/lib/errors/codes'
+import { parseFailureRecord, type FailureRecord } from '@/lib/errors/failure'
 
 export type AsyncExternalIdProvider =
   | 'FAL'
@@ -7,6 +7,7 @@ export type AsyncExternalIdProvider =
   | 'GEMINI'
   | 'GOOGLE'
   | 'OPENROUTER'
+  | 'TOONFLOW'
   | 'MUREKA'
 
 export type AsyncExternalIdType = 'VIDEO' | 'IMAGE' | 'MUSIC' | 'VOICE' | 'BATCH'
@@ -21,7 +22,6 @@ type AsyncPollResultFields = {
   videoUrl?: string
   actualVideoTokens?: number
   downloadHeaders?: AsyncDownloadHeaders
-  error?: string
 }
 
 /**
@@ -39,36 +39,33 @@ export type AsyncPollResult = AsyncPollResultFields & (
   | {
     status: 'pending'
     pendingPhase?: AsyncPendingPhase
-    failureDisposition?: never
+    failure?: never
   }
   | {
     status: 'completed'
     pendingPhase?: never
-    failureDisposition?: never
+    failure?: never
   }
   | {
     status: 'failed'
     pendingPhase?: never
-    failureDisposition: 'retryable' | 'permanent'
-    errorCode: UnifiedErrorCode
+    failure: FailureRecord
   }
 )
 
 export function normalizeAsyncPollResult(input: AsyncPollResultFields & {
   readonly status: 'pending' | 'completed' | 'failed'
   readonly pendingPhase?: AsyncPendingPhase
-  readonly failureDisposition?: 'retryable' | 'permanent'
-  readonly errorCode?: UnifiedErrorCode
+  readonly failure?: FailureRecord
 }): AsyncPollResult {
   if (input.status !== 'pending' && input.pendingPhase) {
     throw new Error('ASYNC_PROVIDER_PENDING_PHASE_FORBIDDEN')
   }
   if (input.status === 'failed') {
-    if (!input.failureDisposition) throw new Error('ASYNC_PROVIDER_FAILURE_DISPOSITION_REQUIRED')
-    if (!input.errorCode) throw new Error('ASYNC_PROVIDER_FAILURE_CODE_REQUIRED')
+    if (!parseFailureRecord(input.failure)) throw new Error('ASYNC_PROVIDER_FAILURE_RECORD_REQUIRED')
     return input as AsyncPollResult
   }
-  if (input.failureDisposition) throw new Error('ASYNC_PROVIDER_NON_FAILURE_DISPOSITION_FORBIDDEN')
+  if (input.failure) throw new Error('ASYNC_PROVIDER_NON_FAILURE_RECORD_FORBIDDEN')
   return input as AsyncPollResult
 }
 

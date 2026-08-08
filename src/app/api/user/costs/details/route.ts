@@ -15,10 +15,15 @@ export const GET = apiHandler(async (request: NextRequest) => {
     const { session } = authResult
 
     const { searchParams } = new URL(request.url)
-    const page = parseInt(searchParams.get('page') || '1')
-    const pageSize = parseInt(searchParams.get('pageSize') || '20')
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1)
+    const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '20', 10) || 20))
+    const rawProjectId = searchParams.get('projectId')?.trim() || ''
+    if (rawProjectId.length > 191) {
+        return NextResponse.json({ error: 'PROJECT_ID_INVALID' }, { status: 400 })
+    }
+    const projectId = rawProjectId || undefined
 
-    const result = await getUserCostDetails(session.user.id, page, pageSize)
+    const result = await getUserCostDetails(session.user.id, page, pageSize, projectId)
 
     return NextResponse.json({
         success: true,

@@ -1,11 +1,13 @@
 import { logInfo as _ulogInfo } from '@/lib/logging/core'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import type { AiProviderVideoExecutionContext } from '@/lib/ai-providers/runtime-types'
-import { fetchWithRetry, RETRY_POLICY } from '@/lib/retry'
+import { fetchWithRetry } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
 import { normalizeVideoReferenceImages } from '@/lib/video-generation/reference-images'
 import { AppError } from '@/lib/errors/app-error'
+import { throwArkSubmissionError } from './error'
 
 export interface ArkVideoTaskRequest {
   model: string
@@ -164,6 +166,7 @@ type ArkVideoOptions = NonNullable<AiProviderVideoExecutionContext['options']> &
   frames?: number
   referenceImages?: string[]
   referenceAudios?: string[]
+  referenceVideos?: string[]
 }
 
 function assertAllowedArkVideoOptions(options: ArkVideoOptions) {
@@ -187,6 +190,7 @@ function assertAllowedArkVideoOptions(options: ArkVideoOptions) {
     'prompt',
     'referenceImages',
     'referenceAudios',
+    'referenceVideos',
   ])
   for (const [key, value] of Object.entries(options)) {
     if (value === undefined) continue
@@ -283,18 +287,23 @@ export async function arkCreateVideoTask(
   const url = `${baseUrl.replace(/\/+$/, '')}/contents/generations/tasks`
 
   _ulogInfo(`${logPrefix} 创建视频任务, 模型: ${request.model}`)
-  const response = await fetchWithRetry(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(request),
-    policy: RETRY_POLICY.providerSubmit,
-    timeoutMs,
-    scope: 'ark:video:create',
-    fetchFn: fetchWithProviderProxy,
-  })
+  let response: Response
+  try {
+    response = await fetchWithRetry(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(request),
+      operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
+      timeoutMs,
+      scope: 'ark:video:create',
+      fetchFn: fetchWithProviderProxy,
+    })
+  } catch (error: unknown) {
+    throwArkSubmissionError(error)
+  }
 
   const data = (await response.json()) as { id?: unknown; [key: string]: unknown }
   const taskId = typeof data.id === 'string' ? data.id : ''
@@ -312,6 +321,7 @@ export async function arkQueryVideoTask(
   const url = `${baseUrl.replace(/\/+$/, '')}/contents/generations/tasks/${taskId}`
 
   const response = await fetchWithRetry(url, {
+    operation: EXTERNAL_OPERATION.PROVIDER_POLL,
     method: 'GET',
     headers: { Authorization: `Bearer ${apiKey}` },
     timeoutMs,
@@ -431,6 +441,14 @@ export async function executeArkVideoGeneration(input: AiProviderVideoExecutionC
       (item): item is string => typeof item === 'string' && item.trim().length > 0,
     )))
     : []
+  const referenceVideoUrls = Array.isArray(input.options?.referenceVideos)
+    ? Array.from(new Set(input.options.referenceVideos.filter(
+      (item): item is string => typeof item === 'string' && item.trim().length > 0,
+    )))
+    : []
+  if (referenceImageUrls.length > 9) {
+    throw new Error('ARK_VIDEO_OPTION_VALUE_UNSUPPORTED: referenceImages>9')
+  }
   if (referenceAudioUrls.length > 0) {
     if (referenceAudioUrls.length > 3) {
       throw new Error('ARK_VIDEO_OPTION_VALUE_UNSUPPORTED: referenceAudios>3')
@@ -438,12 +456,20 @@ export async function executeArkVideoGeneration(input: AiProviderVideoExecutionC
     if (realModel !== 'doubao-seedance-2-0-260128' && realModel !== 'doubao-seedance-2-0-fast-260128') {
       throw new Error(`ARK_VIDEO_OPTION_UNSUPPORTED: referenceAudios for ${realModel}`)
     }
-    if (!inputImageUrl && referenceImageUrls.length === 0) {
-      throw new Error('ARK_VIDEO_REFERENCE_AUDIO_REQUIRES_IMAGE')
+  }
+  if (referenceVideoUrls.length > 0) {
+    if (referenceVideoUrls.length > 3) {
+      throw new Error('ARK_VIDEO_OPTION_VALUE_UNSUPPORTED: referenceVideos>3')
     }
-    if (lastFrameImageUrl) {
-      throw new Error('ARK_VIDEO_OPTION_UNSUPPORTED: referenceAudios_with_lastFrameImageUrl')
+    if (realModel !== 'doubao-seedance-2-0-260128' && realModel !== 'doubao-seedance-2-0-fast-260128') {
+      throw new Error(`ARK_VIDEO_OPTION_UNSUPPORTED: referenceVideos for ${realModel}`)
     }
+  }
+  if (referenceImageUrls.length + referenceAudioUrls.length + referenceVideoUrls.length > 12) {
+    throw new Error('ARK_VIDEO_OPTION_VALUE_UNSUPPORTED: totalReferences>12')
+  }
+  if (referenceAudioUrls.length > 0 && referenceImageUrls.length === 0 && referenceVideoUrls.length === 0) {
+    throw new Error('ARK_VIDEO_REFERENCE_AUDIO_REQUIRES_VISUAL')
   }
   const content: ArkVideoTaskRequest['content'] = []
   const trimmedPrompt = typeof prompt === 'string' ? prompt.trim() : ''
@@ -453,6 +479,9 @@ export async function executeArkVideoGeneration(input: AiProviderVideoExecutionC
 
   if (lastFrameImageUrl) {
     if (!inputImageUrl) throw new Error('ARK_VIDEO_LAST_FRAME_REQUIRES_FIRST_FRAME')
+    if (referenceImageUrls.length > 0 || referenceAudioUrls.length > 0 || referenceVideoUrls.length > 0) {
+      throw new Error('ARK_VIDEO_OPTION_UNSUPPORTED: references_with_lastFrameImageUrl')
+    }
     for (const image of normalizeVideoReferenceImages([
       { url: inputImageUrl, role: 'first_frame', order: 1 },
       { url: lastFrameImageUrl, role: 'last_frame', order: 2 },
@@ -464,16 +493,31 @@ export async function executeArkVideoGeneration(input: AiProviderVideoExecutionC
         role: frameRole,
       })
     }
+  } else if (inputImageUrl) {
+    if (referenceImageUrls.length > 0 || referenceAudioUrls.length > 0 || referenceVideoUrls.length > 0) {
+      throw new Error('ARK_VIDEO_OPTION_UNSUPPORTED: frame_with_references')
+    }
+    content.push({
+      type: 'image_url',
+      image_url: { url: inputImageUrl },
+      role: 'first_frame',
+    })
   } else {
     appendArkReferenceImageContents(content, normalizeVideoReferenceImages([
-      ...(inputImageUrl ? [{ url: inputImageUrl, role: 'reference' as const, order: 1 }] : []),
-      ...referenceImageUrls.map((url, index) => ({ url, role: 'reference' as const, order: index + 2 })),
+      ...referenceImageUrls.map((url, index) => ({ url, role: 'reference_image' as const, order: index + 1 })),
     ]).map((image) => image.url))
     for (const referenceAudioUrl of referenceAudioUrls) {
       content.push({
         type: 'audio_url',
         audio_url: { url: referenceAudioUrl },
         role: 'reference_audio',
+      })
+    }
+    for (const referenceVideoUrl of referenceVideoUrls) {
+      content.push({
+        type: 'video_url',
+        video_url: { url: referenceVideoUrl },
+        role: 'reference_video',
       })
     }
   }

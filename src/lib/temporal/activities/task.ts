@@ -9,12 +9,16 @@ import {
 import { Prisma } from '@prisma/client'
 import { withTextUsageCollection, type TextUsageEntry } from '@/lib/billing/runtime-usage'
 import { getUserWorkflowConcurrencyConfig } from '@/lib/config-service'
+import {
+  createFailureRecord,
+  parseFailureRecord,
+} from '@/lib/errors/failure'
 import { normalizeAnyError } from '@/lib/errors/normalize'
-import { getErrorSpec, resolveUnifiedErrorCode } from '@/lib/errors/codes'
-import { projectPublicErrorDetails } from '@/lib/errors/projection'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import { withLogContext } from '@/lib/logging/context'
 import { createScopedLogger } from '@/lib/logging/core'
 import { getTemporalClient } from '@/lib/temporal/client'
+import { encodeTemporalFailure, temporalInvariantFailure } from '@/lib/temporal/failure'
 import { buildTaskWorkflowId, buildUserTaskSchedulerWorkflowId } from '@/lib/temporal/identity'
 import { prisma } from '@/lib/prisma'
 import { getTaskDefinition } from '@/lib/task/definition'
@@ -33,10 +37,7 @@ import {
 import {
   loadReadyFollowUpBatchIdsForTerminal,
 } from '@/lib/agent-turn/follow-up-batch'
-import {
-  AssistantRuntimeTaskFollowUpHttpError,
-  requestAssistantRuntimeTaskFollowUp,
-} from '@/lib/assistant-runtime/task-follow-up-http'
+import { requestAssistantRuntimeTaskFollowUp } from '@/lib/assistant-runtime/task-follow-up-http'
 import { TASK_EVENT_TYPE, TASK_STATUS, type TaskExecutionData } from '@/lib/task/types'
 import { executeTaskHandler } from '@/lib/task/execution/registry'
 import { projectTaskProgress } from '@/lib/task/execution/progress'
@@ -112,7 +113,8 @@ interface TaskActivityHeartbeat {
 type TaskIdentity = Pick<TaskWorkflowInput, 'workflowId' | 'taskId' | 'userId' | 'taskType'>
 
 function failNonRetryable(code: string, ...details: unknown[]): never {
-  throw ApplicationFailure.nonRetryable(code, code, ...details)
+  const encoded = encodeTemporalFailure(temporalInvariantFailure(code, details))
+  throw ApplicationFailure.nonRetryable(encoded.message, encoded.type, ...encoded.details)
 }
 
 function requireNonEmpty(value: string, code: string): string {
@@ -301,19 +303,10 @@ function parseAttemptFailureCheckpoint(
     return failNonRetryable('TASK_ATTEMPT_FAILURE_CHECKPOINT_DIVERGED')
   }
   const parsed = failure as Record<string, unknown>
+  const parsedFailure = parseFailureRecord(parsed.failure)
   if (
-    typeof parsed.errorCode !== 'string' ||
-    !parsed.errorCode.trim() ||
-    typeof parsed.errorMessage !== 'string' ||
-    !parsed.errorMessage.trim() ||
-    (parsed.retryDisposition !== 'retryable' && parsed.retryDisposition !== 'final') ||
-    (parsed.failureClass !== 'TRANSIENT_PROVIDER' &&
-      parsed.failureClass !== 'PERMANENT_PROVIDER' &&
-      parsed.failureClass !== 'OUTPUT_VALIDATION') ||
-    (parsed.errorDetails !== null &&
-      (!parsed.errorDetails ||
-        typeof parsed.errorDetails !== 'object' ||
-        Array.isArray(parsed.errorDetails)))
+    !parsedFailure ||
+    (parsed.retryDisposition !== 'retryable' && parsed.retryDisposition !== 'final')
   ) {
     return failNonRetryable('TASK_ATTEMPT_FAILURE_CHECKPOINT_INVALID')
   }
@@ -323,10 +316,7 @@ function parseAttemptFailureCheckpoint(
     attemptId: expected.attemptId,
     attempt: expected.attempt,
     failure: {
-      errorCode: parsed.errorCode,
-      errorMessage: parsed.errorMessage,
-      errorDetails: parsed.errorDetails as Record<string, unknown> | null,
-      failureClass: parsed.failureClass,
+      failure: parsedFailure,
       retryDisposition: parsed.retryDisposition,
     },
   }
@@ -753,7 +743,9 @@ export async function runTaskAttempt(input: RunTaskAttemptInput): Promise<RunTas
         throw new CancelledFailure(
           'Task Activity cancellation acknowledged',
           [],
-          error instanceof Error ? error : undefined,
+          error instanceof Error
+            ? error
+            : new Error('Task Activity failed with a non-Error value', { cause: error }),
         )
       }
       if (error instanceof TaskTerminatedError) {
@@ -762,26 +754,23 @@ export async function runTaskAttempt(input: RunTaskAttemptInput): Promise<RunTas
           return { kind: 'canceled', reason: error.message }
         }
       }
-      const normalized = normalizeAnyError(error, { context: 'worker' })
+      const failureRecord = normalizeAnyError(error, {
+        context: { system: 'temporal', phase: 'task-attempt' },
+      })
       logger.error({
         action: 'task.attempt.failed',
         message: 'task attempt returned a classified failure',
         taskId: input.taskId,
-        errorCode: normalized.code,
-        retryable: normalized.retryable,
+        errorCode: failureRecord.interpretation.code,
         details: { attempt },
         error: error instanceof Error
           ? { name: error.name, message: error.message, stack: error.stack }
           : { message: String(error) },
       })
       const failure: TaskAttemptFailure = {
-        errorCode: normalized.code,
-        errorMessage: getErrorSpec(normalized.code).defaultMessage,
-        errorDetails: projectPublicErrorDetails(normalized.details),
-        failureClass: normalized.failureClass,
+        failure: failureRecord,
         retryDisposition: shouldRetryTaskFailure({
-          taskType: input.taskType,
-          failureClass: normalized.failureClass,
+          failure: failureRecord,
         })
           ? 'retryable'
           : 'final',
@@ -865,17 +854,14 @@ export async function commitTaskTerminal(
   }
   if (input.kind === 'failed') {
     requirePositiveInt(input.attempt, 'TASK_ATTEMPT_INVALID')
-    requireNonEmpty(input.errorCode, 'TASK_TERMINAL_ERROR_CODE_INVALID')
-    requireNonEmpty(input.errorMessage, 'TASK_TERMINAL_ERROR_MESSAGE_INVALID')
-    const errorCode = resolveUnifiedErrorCode(input.errorCode) ?? 'INTERNAL_ERROR'
+    const failure = parseFailureRecord(input.failure)
+    if (!failure) failNonRetryable('TASK_TERMINAL_FAILURE_INVALID')
     const result = await commitBusinessTaskTerminal({
       kind: 'failed',
       taskId: input.taskId,
       fence: { kind: 'attempt', attempt: input.attempt },
       source: input.source,
-      errorCode,
-      errorMessage: input.errorMessage,
-      errorDetails: input.errorDetails,
+      failure,
       eventPayload: { stage: 'failed', runtime: 'temporal' },
     })
     return await terminalReceiptFromCommit(input.taskId, 'failed', result)
@@ -950,12 +936,17 @@ export async function commitTaskWorkflowFailure(
         taskId: input.task.taskId,
         fence: { kind: 'active' },
         source: 'workflow',
-        errorCode: 'WORKER_EXECUTION_ERROR',
-        errorMessage: 'Task Workflow failed before returning a terminal result',
-        errorDetails: {
-          schedulerWorkflowId: input.schedulerWorkflowId,
-          enqueueId: input.enqueueId,
-        },
+        failure: createFailureRecord(
+          'WORKER_EXECUTION_ERROR',
+          'Task Workflow failed before returning a terminal result',
+          {
+            context: { system: 'temporal', phase: 'task-workflow' },
+            details: {
+              schedulerWorkflowId: input.schedulerWorkflowId,
+              enqueueId: input.enqueueId,
+            },
+          },
+        ),
         eventPayload: {
           stage: 'failed',
           runtime: 'temporal',
@@ -1135,12 +1126,12 @@ export async function notifyTaskFollowUp(input: NotifyTaskFollowUpInput): Promis
   try {
     await requestAssistantRuntimeTaskFollowUp(input.batchId)
   } catch (error) {
-    if (error instanceof AssistantRuntimeTaskFollowUpHttpError) {
-      if (error.retryable) {
-        throw ApplicationFailure.retryable(error.code, error.code, input.batchId)
-      }
-      return failNonRetryable(error.code, input.batchId, error.httpStatus)
-    }
-    throw error
+    const failure = normalizeAnyError(error, {
+      context: { system: 'runtime', phase: 'task-follow-up-delivery' },
+      operation: EXTERNAL_OPERATION.ASSISTANT_FOLLOW_UP_DELIVERY,
+      details: { batchId: input.batchId },
+    })
+    const encoded = encodeTemporalFailure(failure)
+    throw ApplicationFailure.retryable(encoded.message, encoded.type, ...encoded.details)
   }
 }

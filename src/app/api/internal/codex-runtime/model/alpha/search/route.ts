@@ -41,6 +41,9 @@ export async function POST(request: Request): Promise<Response> {
     return await proxyCodexStandaloneSearchRequest({ request, scope })
   } catch (error) {
     if (error instanceof CodexModelGatewayError) {
+      if (error.code === 'BILLING_BALANCE_INSUFFICIENT') {
+        return errorResponse(429, 'usage_not_included')
+      }
       return errorResponse(error.httpStatus, error.code)
     }
     if (request.signal.aborted) return errorResponse(499, 'REQUEST_ABORTED')

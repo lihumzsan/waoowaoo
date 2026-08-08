@@ -16,7 +16,7 @@ export const GET = apiHandler(async () => {
   } catch (error) {
     if (isPaymentConfigurationError(error)) {
       const code = readPaymentConfigurationErrorCode(error)
-      throw new ApiError('MISSING_CONFIG', { code, message: code })
+      throw new ApiError('MISSING_CONFIG', { code, message: code }, { cause: error })
     }
     throw error
   }

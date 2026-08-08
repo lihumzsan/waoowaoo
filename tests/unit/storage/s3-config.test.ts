@@ -3,6 +3,7 @@ import { loadS3StorageConfig } from '@/lib/storage/s3-config'
 
 const STORAGE_ENV_NAMES = [
   'S3_ENDPOINT',
+  'S3_UPLOAD_ENDPOINT',
   'S3_REGION',
   'S3_BUCKET',
   'S3_FORCE_PATH_STYLE',
@@ -27,6 +28,7 @@ afterEach(() => {
 describe('S3 storage configuration', () => {
   it('accepts an HTTP MinIO endpoint for local Docker storage', () => {
     process.env.S3_ENDPOINT = 'http://127.0.0.1:19000'
+    process.env.S3_UPLOAD_ENDPOINT = 'http://127.0.0.1:19000'
     process.env.S3_REGION = 'us-east-1'
     process.env.S3_BUCKET = 'waoowaoo'
     process.env.S3_FORCE_PATH_STYLE = 'true'
@@ -36,6 +38,7 @@ describe('S3 storage configuration', () => {
 
     expect(loadS3StorageConfig()).toMatchObject({
       endpoint: 'http://127.0.0.1:19000',
+      uploadEndpoint: 'http://127.0.0.1:19000',
       bucket: 'waoowaoo',
       forcePathStyle: true,
     })

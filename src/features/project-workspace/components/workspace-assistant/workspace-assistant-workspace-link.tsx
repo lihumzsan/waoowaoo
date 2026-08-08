@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, type ReactNode } from 'react'
+import { isCanonicalWorkspaceResourcePath } from '@/lib/workspace-resource/contracts'
 
 type WorkspaceAssistantWorkspaceLinkContextValue = {
   readonly openWorkspacePath: (workspacePath: string) => void
@@ -20,16 +21,10 @@ export function projectWorkspacePathFromHref(href: string): string | null {
     return null
   }
   if (
-    !workspacePath
-    || workspacePath.startsWith('/')
-    || workspacePath.startsWith('.')
-    || workspacePath.includes('\\')
-    || /[\u0000-\u001f\u007f]/u.test(workspacePath)
-    || /^[a-z][a-z\d+.-]*:/i.test(workspacePath)
+    /^[a-z][a-z\d+.-]*:/i.test(workspacePath)
+    || !isCanonicalWorkspaceResourcePath(workspacePath)
   ) return null
-  return workspacePath.split('/').every((segment) => segment && segment !== '.' && segment !== '..')
-    ? workspacePath
-    : null
+  return workspacePath
 }
 
 export function WorkspaceAssistantWorkspaceLinkProvider(props: {

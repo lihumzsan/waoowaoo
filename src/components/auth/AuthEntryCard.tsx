@@ -6,6 +6,8 @@ import { useTranslations } from 'next-intl'
 import GoogleSignInButton from '@/components/auth/GoogleSignInButton'
 import PasswordInput from '@/components/auth/PasswordInput'
 import PhoneCaptchaDialog from '@/components/auth/PhoneCaptchaDialog'
+import PhoneNumberInput from '@/components/auth/PhoneNumberInput'
+import WechatOfficialAuthButton from '@/components/auth/WechatOfficialAuthButton'
 import Navbar from '@/components/Navbar'
 import { Link, useRouter } from '@/i18n/navigation'
 import { apiFetch } from '@/lib/api-fetch'
@@ -13,12 +15,10 @@ import {
   PHONE_AUTH_RESULT_CODES,
   readPhoneAuthResultCode,
 } from '@/lib/auth/phone-auth-contract'
+import type { PasswordAuthMode } from '@/lib/auth/password-auth-contract'
+import { AUTH_PASSWORD_MIN_LENGTH } from '@/lib/auth/password-policy'
 import { normalizePhoneNumberForDestination } from '@/lib/auth/phone-number'
-import {
-  isSmsDestinationId,
-  SMS_DESTINATIONS,
-  type SmsDestinationId,
-} from '@/lib/auth/sms-destinations'
+import type { SmsDestinationId } from '@/lib/auth/sms-destinations'
 import type { PublicDeploymentFeatures } from '@/lib/deployment/public-client'
 import { buildAuthenticatedHomeTarget } from '@/lib/home/default-route'
 
@@ -27,9 +27,9 @@ interface AuthEntryCardProps {
     PublicDeploymentFeatures,
     | 'enablePhoneAuth'
     | 'enablePasswordAuth'
+    | 'passwordAuthIdentity'
     | 'showGoogleOAuth'
-    | 'showInviteCode'
-    | 'requireInviteCodeOnSignup'
+    | 'showWechatOfficialAuth'
   >
 }
 
@@ -66,7 +66,8 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
   const [captchaError, setCaptchaError] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [inviteCode, setInviteCode] = useState('')
+  const [passwordConfirmation, setPasswordConfirmation] = useState('')
+  const [authMode, setAuthMode] = useState<PasswordAuthMode>('login')
   const [pendingAction, setPendingAction] = useState<PendingAction>(null)
   const [resendSeconds, setResendSeconds] = useState(0)
   const [error, setError] = useState('')
@@ -237,10 +238,6 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
       setError(t('phoneInvalid'))
       return
     }
-    if (features.requireInviteCodeOnSignup && !inviteCode.trim()) {
-      setError(t('inviteCodeRequired'))
-      return
-    }
 
     setPendingAction('submit')
     setError('')
@@ -249,7 +246,6 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
       const result = await signIn('phone', {
         phoneNumber: normalizedPhoneNumber,
         code: verificationCode,
-        inviteCode: inviteCode.trim(),
         redirect: false,
       })
       if (result?.error === 'RateLimited') {
@@ -268,19 +264,38 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
 
   const handlePasswordSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
+    const identity = features.passwordAuthIdentity === 'phone'
+      ? resolvePhoneNumber()
+      : username.trim()
+    if (!identity) {
+      setError(features.passwordAuthIdentity === 'phone' ? t('phoneInvalid') : t('usernameRequired'))
+      return
+    }
+    if (authMode === 'register' && password.length < AUTH_PASSWORD_MIN_LENGTH) {
+      setError(t('passwordTooShort', { minimum: AUTH_PASSWORD_MIN_LENGTH }))
+      return
+    }
+    if (authMode === 'register' && password !== passwordConfirmation) {
+      setError(t('passwordMismatch'))
+      return
+    }
+
     setPendingAction('submit')
     setError('')
     setNotice('')
     try {
       const result = await signIn('credentials', {
-        username,
+        identity,
         password,
+        mode: authMode,
         redirect: false,
       })
       if (result?.error === 'RateLimited') {
         setError(t('rateLimited'))
       } else if (result?.error) {
-        setError(t('passwordAuthFailed'))
+        setError(authMode === 'register'
+          ? t('passwordRegistrationFailed')
+          : t('passwordAuthFailed'))
       } else {
         finishAuthentication()
       }
@@ -291,73 +306,95 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
     }
   }
 
-  const showInviteCode = features.enablePhoneAuth
-    && (features.showInviteCode || features.requireInviteCodeOnSignup)
+  const handleAuthModeChange = (mode: PasswordAuthMode) => {
+    if (pendingAction || mode === authMode) return
+    setAuthMode(mode)
+    setPassword('')
+    setPasswordConfirmation('')
+    setError('')
+    setNotice('')
+  }
   const hasPrimaryAuth = features.enablePhoneAuth || features.enablePasswordAuth
 
   return (
     <div className="glass-page min-h-screen">
       <Navbar />
-      <main className="flex items-center justify-center px-4 py-10 sm:py-14">
-        <section className="w-full max-w-[460px] rounded-[2rem] border border-black/8 bg-white px-6 py-8 text-black shadow-[0_24px_80px_rgba(15,23,42,0.12)] sm:px-10 sm:py-10">
-          <header className="mb-8 text-center">
-            <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              {t('title')}
+      <main className="flex min-h-[calc(100vh-4rem)] items-start justify-center px-4 py-8 sm:items-center sm:py-12">
+        <section className={`w-full rounded-[1.75rem] border border-white/80 bg-white/90 px-5 py-7 text-black shadow-[0_24px_72px_rgba(15,23,42,0.10)] backdrop-blur-xl sm:px-8 sm:py-8 ${features.showWechatOfficialAuth
+          ? 'max-w-[900px]'
+          : 'max-w-[420px]'}`}>
+          <div className={features.showWechatOfficialAuth
+            ? 'grid gap-8 md:grid-cols-[minmax(0,1fr)_minmax(300px,0.82fr)] md:gap-0'
+            : ''}>
+            <div className={features.showWechatOfficialAuth ? 'min-w-0 md:pr-8' : ''}>
+          <header className="mb-7 text-center">
+            <h1 className="text-[1.75rem] font-bold tracking-[-0.025em] sm:text-[2rem]">
+              {features.enablePasswordAuth
+                ? authMode === 'login' ? t('loginTitle') : t('registerTitle')
+                : t('title')}
             </h1>
-            <p className="mt-3 text-sm leading-6 text-slate-500">
-              {t('subtitle')}
+            <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-slate-500">
+              {features.enablePasswordAuth
+                ? authMode === 'login'
+                  ? features.showWechatOfficialAuth
+                    ? t('loginSubtitleWithWechat')
+                    : t('loginSubtitle')
+                  : t('registerSubtitle')
+                : t('subtitle')}
             </p>
           </header>
 
+          {features.enablePasswordAuth ? (
+            <div className="mb-5 grid grid-cols-2 rounded-xl bg-slate-100 p-1" role="tablist" aria-label={t('authMode')}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={authMode === 'login'}
+                disabled={pendingAction !== null}
+                onClick={() => handleAuthModeChange('login')}
+                className={`h-10 rounded-lg text-sm font-medium transition ${authMode === 'login'
+                  ? 'bg-white text-slate-950 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'}`}
+              >
+                {t('loginTab')}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={authMode === 'register'}
+                disabled={pendingAction !== null}
+                onClick={() => handleAuthModeChange('register')}
+                className={`h-10 rounded-lg text-sm font-medium transition ${authMode === 'register'
+                  ? 'bg-white text-slate-950 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'}`}
+              >
+                {t('registerTab')}
+              </button>
+            </div>
+          ) : null}
+
           {features.enablePhoneAuth ? (
-            <form onSubmit={handlePhoneSubmit} className="space-y-5">
-              <div className="grid gap-3 sm:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-                <div>
-                  <label htmlFor="phoneDestination" className="mb-2 block text-sm font-semibold text-slate-900">
-                    {t('phoneDestination')}
-                  </label>
-                  <select
-                    id="phoneDestination"
-                    name="phoneDestination"
-                    value={destinationId}
-                    disabled={pendingAction !== null}
-                    onChange={(event) => {
-                      if (!isSmsDestinationId(event.target.value)) return
-                      setDestinationId(event.target.value)
-                      setPhoneNumber('')
-                      setVerificationCode('')
-                      setError('')
-                      setNotice('')
-                    }}
-                    className="h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-black outline-none transition focus:border-slate-700 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {SMS_DESTINATIONS.map((destination) => (
-                      <option key={destination.id} value={destination.id}>
-                        {`${destination.flag} ${t(`phoneDestinations.${destination.id}`)} (+${destination.callingCode})`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="phoneNumber" className="mb-2 block text-sm font-semibold text-slate-900">
-                    {t('phoneNumber')}
-                  </label>
-                  <input
-                    id="phoneNumber"
-                    name="phoneNumber"
-                    type="tel"
-                    inputMode="tel"
-                    autoComplete="tel-national"
-                    value={phoneNumber}
-                    onChange={(event) => setPhoneNumber(event.target.value)}
-                    required
-                    className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-base text-black outline-none transition focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
-                  />
-                </div>
-              </div>
+            <form onSubmit={handlePhoneSubmit} className="space-y-4">
+              <PhoneNumberInput
+                inputId="phoneNumber"
+                destinationSelectId="phoneDestination"
+                destinationLabel={t('phoneDestination')}
+                phoneLabel={t('phoneNumber')}
+                destinationId={destinationId}
+                phoneNumber={phoneNumber}
+                disabled={pendingAction !== null}
+                onDestinationChange={(nextDestinationId) => {
+                  setDestinationId(nextDestinationId)
+                  setPhoneNumber('')
+                  setVerificationCode('')
+                  setError('')
+                  setNotice('')
+                }}
+                onPhoneNumberChange={setPhoneNumber}
+              />
 
               <div>
-                <label htmlFor="verificationCode" className="mb-2 block text-sm font-semibold text-slate-900">
+                <label htmlFor="verificationCode" className="mb-2 block text-[13px] font-medium text-slate-700">
                   {t('verificationCode')}
                 </label>
                 <div className="flex gap-3">
@@ -371,14 +408,14 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
                     value={verificationCode}
                     onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
                     required
-                    className="h-12 min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-4 text-base tracking-[0.2em] text-black outline-none transition placeholder:tracking-normal placeholder:text-slate-400 focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
+                    className="h-12 min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-4 text-base tracking-[0.2em] text-black outline-none transition placeholder:tracking-normal placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
                     placeholder={t('verificationCodePlaceholder')}
                   />
                   <button
                     type="button"
                     disabled={pendingAction !== null || resendSeconds > 0}
                     onClick={handleOpenCaptchaDialog}
-                    className="h-12 shrink-0 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-black shadow-sm transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="h-12 shrink-0 rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-800 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {pendingAction === 'send-code'
                       ? t('sendingCode')
@@ -389,29 +426,10 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
                 </div>
               </div>
 
-              {showInviteCode ? (
-                <div>
-                  <label htmlFor="inviteCode" className="mb-2 block text-sm font-semibold text-slate-900">
-                    {features.requireInviteCodeOnSignup ? t('inviteCode') : t('inviteCodeOptional')}
-                  </label>
-                  <input
-                    id="inviteCode"
-                    name="inviteCode"
-                    type="text"
-                    autoComplete="off"
-                    value={inviteCode}
-                    onChange={(event) => setInviteCode(event.target.value)}
-                    required={features.requireInviteCodeOnSignup}
-                    className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-base text-black outline-none transition placeholder:text-slate-400 focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
-                    placeholder={t('inviteCodePlaceholder')}
-                  />
-                </div>
-              ) : null}
-
               <button
                 type="submit"
                 disabled={pendingAction !== null}
-                className="h-12 w-full rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 px-4 font-semibold text-white shadow-[0_12px_28px_rgba(37,99,235,0.24)] transition hover:from-blue-700 hover:to-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-12 w-full rounded-xl bg-blue-600 px-4 font-semibold text-white shadow-[0_10px_24px_rgba(37,99,235,0.20)] transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {pendingAction === 'submit' ? t('continuing') : t('continue')}
               </button>
@@ -419,59 +437,111 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
           ) : null}
 
           {features.enablePasswordAuth ? (
-            <form onSubmit={handlePasswordSubmit} className="space-y-5">
+            <form
+              key={authMode}
+              onSubmit={handlePasswordSubmit}
+              autoComplete="on"
+              className="space-y-4"
+            >
               <div>
-                <label htmlFor="username" className="mb-2 block text-sm font-semibold text-slate-900">
-                  {t('username')}
-                </label>
-                <input
-                  id="username"
-                  name="username"
-                  type="text"
-                  autoComplete="username"
-                  value={username}
-                  onChange={(event) => setUsername(event.target.value)}
-                  required
-                  className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-base text-black outline-none transition placeholder:text-slate-400 focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
-                  placeholder={t('usernamePlaceholder')}
-                />
+                {features.passwordAuthIdentity === 'phone' ? (
+                  <PhoneNumberInput
+                    inputId="passwordPhoneNumber"
+                    inputName="username"
+                    autoComplete="username"
+                    destinationSelectId="passwordPhoneDestination"
+                    destinationLabel={t('phoneDestination')}
+                    phoneLabel={t('phoneNumber')}
+                    destinationId={destinationId}
+                    phoneNumber={phoneNumber}
+                    disabled={pendingAction !== null}
+                    onDestinationChange={(nextDestinationId) => {
+                      setDestinationId(nextDestinationId)
+                      setPhoneNumber('')
+                      setError('')
+                      setNotice('')
+                    }}
+                    onPhoneNumberChange={setPhoneNumber}
+                  />
+                ) : (
+                  <>
+                    <label htmlFor="username" className="mb-2 block text-[13px] font-medium text-slate-700">
+                      {t('username')}
+                    </label>
+                    <input
+                      id="username"
+                      name="username"
+                      type="text"
+                      autoComplete="username"
+                      value={username}
+                      onChange={(event) => setUsername(event.target.value)}
+                      required
+                      className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-base text-black outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                      placeholder={t('usernamePlaceholder')}
+                    />
+                  </>
+                )}
               </div>
 
               <div>
-                <label htmlFor="password" className="mb-2 block text-sm font-semibold text-slate-900">
+                <label htmlFor="password" className="mb-2 block text-[13px] font-medium text-slate-700">
                   {t('password')}
                 </label>
                 <PasswordInput
                   id="password"
                   name="password"
-                  autoComplete="current-password"
+                  autoComplete={authMode === 'register' ? 'new-password' : 'current-password'}
                   value={password}
                   onChange={setPassword}
                   required
-                  placeholder={t('passwordPlaceholder')}
+                  placeholder={authMode === 'register'
+                    ? t('newPasswordPlaceholder', { minimum: AUTH_PASSWORD_MIN_LENGTH })
+                    : t('passwordPlaceholder')}
                   showLabel={t('showPassword')}
                   hideLabel={t('hidePassword')}
-                  inputClassName="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 pr-12 text-base text-black outline-none transition placeholder:text-slate-400 focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
+                  inputClassName="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 pr-12 text-base text-black outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
                 />
               </div>
+
+              {authMode === 'register' ? (
+                <div>
+                  <label htmlFor="passwordConfirmation" className="mb-2 block text-[13px] font-medium text-slate-700">
+                    {t('confirmPassword')}
+                  </label>
+                  <PasswordInput
+                    id="passwordConfirmation"
+                    name="passwordConfirmation"
+                    autoComplete="new-password"
+                    value={passwordConfirmation}
+                    onChange={setPasswordConfirmation}
+                    required
+                    placeholder={t('confirmPasswordPlaceholder')}
+                    showLabel={t('showPassword')}
+                    hideLabel={t('hidePassword')}
+                    inputClassName="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 pr-12 text-base text-black outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+              ) : null}
 
               <button
                 type="submit"
                 disabled={pendingAction !== null}
-                className="h-12 w-full rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 px-4 font-semibold text-white shadow-[0_12px_28px_rgba(37,99,235,0.24)] transition hover:from-blue-700 hover:to-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-12 w-full rounded-xl bg-blue-600 px-4 font-semibold text-white shadow-[0_10px_24px_rgba(37,99,235,0.20)] transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {pendingAction === 'submit' ? t('continuing') : t('continue')}
+                {pendingAction === 'submit'
+                  ? authMode === 'login' ? t('signingIn') : t('registering')
+                  : authMode === 'login' ? t('loginButton') : t('registerButton')}
               </button>
             </form>
           ) : null}
 
           {error ? (
-            <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <p role="alert" className="mt-5 rounded-xl bg-[var(--glass-tone-surface)] px-4 py-3 text-sm text-[var(--glass-tone-danger-fg)] shadow-[var(--glass-tone-shadow)]">
               {error}
             </p>
           ) : null}
           {notice ? (
-            <p role="status" className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            <p role="status" className="mt-5 rounded-xl bg-[var(--glass-tone-surface)] px-4 py-3 text-sm text-[var(--glass-tone-success-fg)] shadow-[var(--glass-tone-shadow)]">
               {notice}
             </p>
           ) : null}
@@ -479,7 +549,7 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
           {features.showGoogleOAuth ? (
             <>
               {hasPrimaryAuth ? (
-                <div className="my-6 flex items-center gap-3">
+                <div className="my-5 flex items-center gap-3">
                   <div className="h-px flex-1 bg-slate-200" />
                   <span className="text-xs text-slate-400">{t('or')}</span>
                   <div className="h-px flex-1 bg-slate-200" />
@@ -493,16 +563,34 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
             </>
           ) : null}
 
-          <p className="mt-6 text-center text-xs leading-5 text-slate-500">
-            {t('autoCreateHint')}
+          <p className="mt-5 text-center text-xs leading-5 text-slate-500">
+            {features.enablePasswordAuth
+              ? authMode === 'login'
+                ? t('passwordLoginHint')
+                : features.passwordAuthIdentity === 'phone'
+                  ? t('phoneRegistrationHint')
+                  : t('usernameRegistrationHint')
+              : t('autoCreateHint')}
           </p>
-          <div className="mt-6 text-center">
+          <div className="mt-5 text-center">
             <Link
               href={{ pathname: '/' }}
               className="text-sm text-slate-500 transition hover:text-black"
             >
               {t('backToHome')}
             </Link>
+          </div>
+            </div>
+
+            {features.showWechatOfficialAuth ? (
+              <aside className="border-t border-slate-200 pt-8 md:border-l md:border-t-0 md:pl-8 md:pt-0">
+                <WechatOfficialAuthButton
+                  mode="login"
+                  presentation="panel"
+                  onAuthenticated={finishAuthentication}
+                />
+              </aside>
+            ) : null}
           </div>
         </section>
       </main>

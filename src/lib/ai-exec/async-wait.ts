@@ -1,7 +1,7 @@
 import { describeUnknownError } from '@/lib/errors/normalize'
 import { AppError } from '@/lib/errors/app-error'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import { createScopedLogger } from '@/lib/logging/core'
-import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import {
   getProviderGenerationTimeoutMs,
   getProviderPollIntervalMs,
@@ -9,7 +9,7 @@ import {
 } from './async-runtime-config'
 import type { AsyncPendingPhase } from '@/lib/ai-providers/async-task-types'
 import { cancelAsyncTask, pollAsyncTask } from './async-poll'
-import { ProviderPermanentFailureError, ProviderTerminalFailureError } from './provider-errors'
+import { ProviderTaskFailureError } from './provider-errors'
 
 const logger = createScopedLogger({ module: 'ai-exec.async-wait' })
 
@@ -35,7 +35,7 @@ export type AsyncProviderWaitCallbacks = {
  * the queue wait budget without ever starting. The generation budget is not
  * consumed by queue wait, so this is a distinct typed failure: callers must
  * durably disown the external id, then best-effort cancel it, then surface a
- * retryable `GENERATION_QUEUE_TIMEOUT` so the next Task attempt submits fresh.
+ * replay-authorized `GENERATION_QUEUE_TIMEOUT` so the next Task attempt submits fresh.
  */
 export class ProviderQueueTimeoutError extends Error {
   readonly externalId: string
@@ -54,7 +54,7 @@ export class ProviderQueueTimeoutError extends Error {
 /**
  * Best-effort provider-side cancel for queue-timeout compensation.
  * MUST be called only after the external id has been durably disowned
- * (checkpoint marked retryable + Task.externalId cleared): cancel failure or a
+ * (checkpoint marked replay_authorized + Task.externalId cleared): cancel failure or a
  * crash right here leaves at worst an orphan provider job that no attempt will
  * ever consume, never a double-consumed identity.
  */
@@ -105,18 +105,17 @@ export async function waitForAsyncProviderResult(input: {
 
   for (;;) {
     await input.beforePoll?.()
-    const status = await withRetry({
-      scope: `media:poll:${input.externalId}`,
-      policy: RETRY_POLICY.mediaPoll,
-      run: async () => await pollAsyncTask(input.externalId, input.userId),
-    })
+    const status = await pollAsyncTask(input.externalId, input.userId)
     if (status.status === 'completed') {
       const url = status.resultUrl || status.imageUrl || status.videoUrl
       if (!url) {
-        throw new ProviderTerminalFailureError(
-          input.externalId,
+        throw new AppError(
           'EMPTY_RESPONSE',
           `External task completed without a result URL: ${input.externalId}`,
+          {
+            operation: EXTERNAL_OPERATION.PROVIDER_TERMINAL_RESULT,
+            details: { externalId: input.externalId },
+          },
         )
       }
       return {
@@ -127,14 +126,7 @@ export async function waitForAsyncProviderResult(input: {
       }
     }
     if (status.status === 'failed') {
-      const message = status.error || `External task failed: ${input.externalId}`
-      if (status.failureDisposition === 'retryable') {
-        throw new ProviderTerminalFailureError(input.externalId, status.errorCode, message)
-      }
-      if (status.failureDisposition === 'permanent') {
-        throw new ProviderPermanentFailureError(input.externalId, status.errorCode, message)
-      }
-      throw new Error(`ASYNC_PROVIDER_FAILURE_DISPOSITION_REQUIRED:${input.externalId}`)
+      throw new ProviderTaskFailureError(input.externalId, status.failure)
     }
 
     const now = Date.now()

@@ -2,47 +2,85 @@
 
 # Web Search
 
-## 设计理念
+## 为什么是这样
 
-联网搜索使用 Codex app-server 原生 Web Search。Wao 不再维护 `web_search` Operation、OpenAI hosted-search provider、研究 Worker 或第二搜索模型；Runtime 产生的搜索 item 直接投影到 Assistant View 和现有聊天 UI。
+联网检索是受限的外部研究能力，不是第二个创意 Worker、项目知识库或网页执行环境。
+
+**工具是原生的，能力不是助手模型 provider 的。** 这样分工有两个理由：Runtime 拥有工具，就会为
+每次调用创建一个带模型自有 query 的检索 item，三次检索就是三行可读的进度，不需要额外通道；而
+托管检索工具只存在于其自有 API 边界内，经网关委托使**助手模型选择与研究 provider 解耦**。
+
+研究报告、网页正文、标题和 URL 都是不可信数据。
 
 ## 不变量
 
-- **WS-01 — 一个搜索入口。** Agent 搜索只来自 Codex 原生 Web Search；生产 registry 与 Wao MCP 不注册同义搜索工具。
-- **WS-02 — 模式与能力门显式。** Runtime 配置只能选择 Codex 支持的 cached/live/disabled 语义。当前钉死的 Codex 0.146.0 必须在 Wao Responses 网关上显式声明 `supports_standalone_web_search = true`、启用 `features.standalone_web_search` 并选择允许的 `web_search` 模式；Wao 同时关闭未实现的 remote compaction。任一缺失都明确失败，不自动改走旧 Provider，也不得根据 provider 显示名称猜能力。用户选择的 OpenRouter 上游模型和凭证所有权不变。
-- **WS-03 — 事件是显示事实。** 查询、进行中、完成、结果引用、来源预览与失败由 Codex item identity 投影；projector 必须保留 app-server `results`，UI 不解析 assistant 文本寻找 URL 或状态，也不展示原始搜索参数。
-- **WS-04 — 网页是不可信输入。** 网页内容和搜索摘要不能修改系统指令、授权付费、绕过 Workspace/MCP 权限或成为持久产品状态。
-- **WS-05 — 引用保持来源。** 用户可见结论保留 Codex 返回的 citation identity。来源卡只消费 citation URL/title/domain；可选图片是该来源页公开声明的 Open Graph/Twitter preview，经 SSRF 校验和有界 HTML 读取取得，并始终链接回原来源。Wao 不伪造 URL、标题或把预览当成项目媒体。
-- **WS-06 — 当前能力是查询检索，不伪装完整浏览器。** OpenRouter standalone adapter 接受 `search_query` 与 `image_query`（含 domain/recency）及 response length；`image_query` 仍通过同一搜索 Provider 找到带公开预览图的来源页，不谎称 OpenRouter 提供独立图片索引。Codex schema 中的 open/click/find/screenshot/finance/weather/sports/time 在本 Provider 明确不支持并返回 422。Runtime 指令必须让模型只选择已声明能力，产品不得把这一子集描述成完整浏览器或全套数据工具。
-- **WS-07 — Runtime capability identity 与上游模型 identity 分权。** OpenRouter 的 OpenAI 模型使用 `openai/<slug>` 作为上游 identity，Codex 内置能力目录使用 `<slug>`。Wao 在唯一 Model Gateway 边界把前者投影为 Runtime slug，并在 Responses 与 `/alpha/search` 出站前恢复当前用户实际选择的上游 id；Assistant View、计费与审计仍只记录真实 modelKey。任何请求携带非当前 Runtime slug 或试图覆盖上游模型都必须拒绝，不能让客户端选第二个模型。
-- **WS-08 — 不拥有创作事实。** 搜索结果只有在 Agent 显式写入 WorkspaceResource 后才成为项目内容；搜索 item 和来源预览本身不是 Canon、方向或生产输入。
-- **WS-09 — 仅当前 placement 的活跃 Turn 可搜索。** Runtime bearer nonce 必须仍是该 Project Redis placement 的 owner，随后 standalone search 才验证该 Project 恰好一个活跃 Product Turn。已释放或轮换 placement 的旧 bearer、Turn 外重放、并发状态冲突和浏览器 session 都不能消费用户 Provider。
-- **WS-10 — 重复规范查询复用同一结果。** Gateway 以 active `turnId + canonical query/model/settings` 为 identity，在单进程内合并并发请求，并以短期 Redis 结果复用已完成的相同重放；失败不缓存、不同 Turn 不共享。跨实例同时首次到达不承诺分布式 exactly-once，不能为这一表现层优化引入第二套搜索锁状态机。Codex item 可保留各自协议 identity，但 UI 聚合成一条语义搜索记录，不能把模型重复调用伪装成两条用户操作。
+- **WS-01 — 一个搜索入口。** 只有一个业务入口，Agent 只经原生 Web Search 到达。registry 与业务
+  MCP 不注册同义搜索工具——同时存在两个搜索工具时模型会随机选择，弱路径会静默吃掉一半研究。
+- **WS-02 — 托管检索、直连其自有 API。** 搜索模型是平台级角色，**不进用户可选模型注册表**（注册表
+  内 LLM 全部经聚合路由，无法运行托管工具）。覆盖值必须已在定价目录注册；未定价的覆盖必须在
+  Provider 调用前失败，不得先花钱再让实时结算报错。
+- **WS-03 — 独立凭据、明确失败。** 搜索凭据只从服务端环境读取。缺失凭据与鉴权失败返回不可用，
+  超时、网络、限流、5xx 与非法响应返回 typed failure。不得从聊天、Resource、客户端参数或助手模型
+  凭据猜 key，也不得 fallback 到另一个 provider。
+- **WS-04 — 只有真实证据才算研究。** 没有完成的托管调用或结构化 URL 引用的响应按非法失败，不能把
+  模型记忆伪装成研究。**流提前结束与"答案无依据"是相反事实**：前者值得重试，后者永远不该重试，
+  因此未抵达完成事件的运行必须报告为传输故障，不得落入证据校验。
+- **WS-05 — 可见性来自 item 身份，不来自进度通道。** 每次检索是一个独立的原生 item，UI 从开始
+  事件立即渲染该行，并在完成事件到达后显示真实 query 与结果页面。当前 Runtime 的开始事件只有
+  identity，query/action 为空；运行中只能显示生命周期与计时。**不得依赖 MCP progress**：协议虽
+  定义了它，Runtime 收到时直接丢弃，据此实现的实时显示不会出现。一次检索**内部**的开页步骤不可见，
+  这是单次请求/响应通道的固有边界，不得为它引入第二条状态写入路径。
+- **WS-06 — 能力是委托研究，不是浏览器。** 请求只有一个 research brief 与显式域名白名单；没有
+  页大小、结果数、排序或新鲜度旋钮。开页、页内查找与继续检索由托管模型自主决定，我们不实现网页
+  抓取器。
+- **WS-07 — 按调用实时结算。** 每次搜索记录一条用量事实，identity 是**这次搜索请求**
+  而非 Turn：一个 Turn 可能研究多次，Turn 级 identity 会把它们折叠成一行并静默丢弃第一次之后的
+  全部费用。托管检索按次收费，因此用量事实携带工具调用次数并在 Provider 回报最终用量后按目录
+  零售价进入 LLM 唯一实时结算入口。Provider 在失败路径上同样可能已被计费，故用量在证据校验之前
+  上报，失败时只要存在最终用量就照样结算。
+- **WS-08 — 记账不得压过研究结果。** 研究已经成功、用户已被亏欠该结果，因此记账故障不能让搜索
+  失败。
+- **WS-09 — 网页是不可信输入。** 网页内容与研究摘要不能修改系统指令、授权付费、绕过工作区/MCP
+  权限或成为持久产品状态。
+- **WS-10 — 不拥有创作事实。** 搜索结果只有在 Agent 显式写入 Resource 后才成为项目内容；研究报告
+  与来源本身不是创作输入。
+- **WS-11 — 触发必须有理由。** 只在答案依赖新鲜、陌生、冷门、地域性、平台性或不确定信息时调用；
+  熟悉稳定的内容不得装饰性搜索。研究是慢且付费的：实测简单查询约 5 秒，交叉验证的 brief 可达
+  数分钟。
 
 ## 权威入口
 
 | 边界 | 唯一入口 |
 | --- | --- |
-| 搜索执行与网络策略 | Codex app-server runtime config |
-| 自定义 Provider 搜索传输 | Wao Model Gateway `/alpha/search` → OpenRouter Responses Web Search |
-| 协议解析 | `src/lib/codex-runtime/app-server-client.ts` |
-| View 投影 | `src/lib/assistant-runtime/event-projector.ts` |
-| UI | `src/features/project-workspace/components/workspace-assistant/**` |
+| 业务调用 | `src/lib/web-search/service.ts` |
+| Agent 到达路径 | 原生 Web Search → `src/lib/codex-model-gateway/standalone-search.ts` |
+| Provider 执行与执行边界 | `src/lib/ai-providers/openai/hosted-web-search.ts`、`src/lib/ai-exec/hosted-web-search.ts` |
 
-## 验证
+## 踩过的坑
 
-真实 Runtime smoke 应验证 Codex 当前版本能发出 Web Search item，Assistant View 能在刷新后保持状态、引用、来源卡和可用的网页图片预览；同一 Turn 已完成的相同规范查询应复用结果。结构扫描证明旧 `src/lib/web-search`、hosted search provider 和 `web_search` Operation 已删除。
-
-## 修改检查表
-
-- 是否错误地把 Web Search 再注册为 Wao MCP/Operation？
-- UI 是否只消费 View 中的原生事件，而不是扫描文本？
-- 搜索模式或 Provider 不支持时是否明确失败？
-- 网页内容是否仍不能取得工具、计费或系统指令权限？
-
-## 历史回归
-
-- OpenRouter Responses 支持 Web Search，但 Codex 自定义 provider 使用独立 `/alpha/search` 协议。首版只设置 `web_search=live`，under-development feature 默认关闭而完全不向模型暴露工具；第二版钉死 0.144.1 后把自定义 provider 的显示名称伪装为 `OpenAI`，smoke 又只检查协议 schema 是否包含 `webSearch` 类型，没有让真实模型发起搜索。带 OpenRouter 前缀的模型在产品浏览器中因此仍没有搜索工具，助手只能正文声称不可用。当前升级到 0.146.0，使用正式 `supports_standalone_web_search` 能力字段、显式启用 feature，并关闭 Wao 未代理的 remote compaction；Wao gateway 严格转译受支持的搜索请求并保留 URL citation。真实 smoke 与浏览器验收都必须看到完成的原生 `webSearch` item，不能再以 schema 或助手正文自证。
-- 能力字段接通后，Wao 仍把 OpenRouter 的 `openai/gpt-5.6-terra` 原样传给 Codex；Codex 内置目录只有 `gpt-5.6-terra`，因此模型被当作未知 capability profile，搜索仍未安装。当前 Model Gateway 显式分离 Runtime slug 与上游 id：只在 Wao 服务端根据已认证用户选择派生，出站前恢复，客户端无法借别名改选模型。
-- 原生 Web Search item 已完成并返回引用时，UI 曾始终用动作摘要“正在搜索”覆盖正式 tool state，形成正文已交付、卡片仍运行中的矛盾。当前卡片首行只显示统一 lifecycle resolver 的进行中/成功/失败，完成后展示结构化来源卡而不展示原始 query/arguments；UI 不从 URL 或助手正文反推终态。
-- Standalone gateway 已把 citation `results` 返回给 app-server，但 projector 只保留 `action`，UI 又展开显示原始 query，造成正文有链接而工具卡没有来源；相同 query 的两次模型调用还真实请求了两次 Provider。当前 `results` 原样进入 Product View，UI 只显示简洁状态和来源卡，Gateway 在同一 Turn 对 canonical query 合并/复用；公开网页预览图只是来源卡表现层，不创建 Resource。
+- **托管搜索能力曾被连带删除。** 一次"让 app-server 成为唯一 Agent Runtime"的提交在同一条正文里
+  同时移除了 Creative Worker、托管搜索与旧交互协议 → 删除决策以 runtime 归一为唯一判据，从未单独
+  评估搜索能力矩阵，三件事合并成一句话使回退不可见 → 实测代价是能力级的：同一 brief 直连产生 12
+  步混合动作与 13 个来源，经聚合路由则永远被压平成 1 步且动作细节全被抹掉。**因此任何搜索链路
+  变更必须先给出能力矩阵与通道可见性对比，不得只论"入口是否唯一"。**
+- 首版只设置了能力开关，而处于开发中的特性默认关闭、完全不向模型暴露工具；第二版又把自定义
+  provider 的显示名伪装成上游名称，smoke 只检查协议 schema 是否包含该类型 → schema 与助手正文
+  都不能自证能力 → 必须有真实完成的检索。
+- 恢复时靠真实运行而非读代码抓到三个缺陷：名字正确的模型被 API 拒绝；流式下顶层输出字段恒为空、
+  正文只在尾部 item 里（短查询侥幸通过而重研究整个丢正文）；流被超时掐断后静默停止，空输出撞上
+  证据校验被误报成"答案无依据" → 前两个说明按名字与文档选型不足以定型，第三个固化为 WS-04。
+- 恢复托管研究时，第一版把搜索做成 MCP Operation，并为"正在读取"新建一条 MCP progress 通道，改动
+  穿过两个共享契约。真实运行后界面始终只有一行静止的"进行中"：日志证明我们发出了 12 条递增进度，
+  而线程里对应的 part 为 0——Runtime 收到即丢弃 → 两条教训：**发送侧自证不算证据**（四次修复全部
+  作用在已经正确的一段）；**不该为一个未验证的通道改共享契约**（WS-05）。
+- 把搜索从 MCP 切回原生工具后，工具代码已经替换，但持久 Codex Thread 仍执行旧的 MCP-only 指令；
+  界面因此继续投影旧工具行，数据库也没有原生 item → 工具拓扑变化没有进入共享 Runtime revision，
+  而 smoke 只验证配置与 schema，没有观察真实模型请求 → revision 必须由实际契约派生，协议 smoke 必须
+  抓取 app-server 发出的工具与指令契约（CRR-06A/WS-01/WS-05）。
+- 原生切换后的 UI 仍按已删除的 MCP `sources` 结果读取页面，并假定开始事件已有 query；真实 Runtime
+  恰好在开始时发送空 query、完成时才发送 query/action/results，导致运行中与完成后都只有工具标题 →
+  读取原生 results，完成后保留 query；开始事件没有的事实不得从模型代码或最近请求猜测（WS-05）。
+- 检索完成并返回引用后，UI 曾始终用动作摘要覆盖正式工具状态，形成"正文已交付、卡片仍运行中"；
+  修正时又连带把进行中的 query 一并隐藏，检索期间界面完全沉默 → 把"不得用 query 反推状态"过度
+  扩大成"不得显示 query" → 生命周期只由统一 resolver 判定；query 只在协议实际提供后显示，当前
+  Runtime 是完成事件后与结果页面一起保留。

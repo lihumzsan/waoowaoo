@@ -50,6 +50,16 @@ export function getPlatformModels(): StoredModel[] {
   return PLATFORM_MODEL_INPUTS.map(toPlatformModel)
 }
 
+export function getPlatformDefaultModelCatalog(): StoredModel[] {
+  const defaults = getPlatformDefaultModels()
+  const modelsByKey = new Map(getPlatformModels().map((model) => [model.modelKey, model]))
+  return [...new Set(Object.values(defaults))].map((modelKey) => {
+    const model = modelsByKey.get(modelKey)
+    if (!model) throw new Error(`PLATFORM_DEFAULT_MODEL_NOT_FOUND: ${modelKey}`)
+    return model
+  })
+}
+
 export function getPlatformDefaultModels(): Required<DefaultModelsPayload> {
   const models = getPlatformModels()
   const byKey = new Map(models.map((model) => [model.modelKey, model]))

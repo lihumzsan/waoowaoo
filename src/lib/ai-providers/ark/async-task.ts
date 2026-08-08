@@ -27,12 +27,10 @@ export const arkAsyncTaskProvider: AsyncTaskProviderRegistration = {
     const result = await querySeedanceVideoStatus(parsed.requestId, { apiKey, baseUrl })
     return normalizeAsyncPollResult({
       status: result.status,
-      failureDisposition: result.failureDisposition,
-      ...(result.status === 'failed' ? { errorCode: result.errorCode } : {}),
+      ...(result.status === 'failed' ? { failure: result.failure } : {}),
       videoUrl: result.videoUrl,
       resultUrl: result.videoUrl,
       ...(typeof result.actualVideoTokens === 'number' ? { actualVideoTokens: result.actualVideoTokens } : {}),
-      error: result.error,
     })
   },
 }

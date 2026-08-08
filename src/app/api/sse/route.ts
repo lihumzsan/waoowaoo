@@ -15,6 +15,8 @@ import {
   parseWorkspaceSseCursor,
   parseWorkspaceSseEventMessage,
   serializeWorkspaceSseCursor,
+  WORKSPACE_SSE_CONTROL_EVENT_TYPE,
+  WORKSPACE_SSE_HEARTBEAT_INTERVAL_MS,
 } from '@/lib/sse/protocol'
 import {
   WorkspaceSseServerSession,
@@ -25,14 +27,18 @@ import {
   WORKSPACE_SSE_LEASE_RENEW_INTERVAL_MS,
 } from '@/lib/sse/connection-lease'
 import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
+import { readWorkspaceResourceRevision } from '@/lib/workspace-resource/projection-revision'
 
 function formatSSE(event: SSEEvent, transportCursor: string) {
   const dataLine = `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`
   return `id: ${transportCursor}\n${dataLine}`
 }
 
-function formatHeartbeat() {
-  return `event: heartbeat\ndata: {"ts":"${new Date().toISOString()}"}\n\n`
+function formatHeartbeat(workspaceResourceRevision: number | null) {
+  return `event: ${WORKSPACE_SSE_CONTROL_EVENT_TYPE.HEARTBEAT}\ndata: ${JSON.stringify({
+    ts: new Date().toISOString(),
+    workspaceResourceRevision,
+  })}\n\n`
 }
 
 export const GET = apiHandler(async (request: NextRequest) => {
@@ -75,6 +81,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
       let leaseTimer: ReturnType<typeof setInterval> | null = null
       let unsubscribe: (() => Promise<void>) | null = null
       let cleanupPromise: Promise<void> | null = null
+      let heartbeatInFlight = false
       const logger = createScopedLogger({
         module: 'sse',
         action: 'sse.stream',
@@ -168,6 +175,22 @@ export const GET = apiHandler(async (request: NextRequest) => {
       }
       closeStream = close
 
+      const sendHeartbeat = async (): Promise<void> => {
+        if (closed || heartbeatInFlight) return
+        heartbeatInFlight = true
+        try {
+          const workspaceResourceRevision = projectId === GLOBAL_ASSET_PROJECT_ID
+            ? null
+            : await readWorkspaceResourceRevision({
+                projectId,
+                userId: session.user.id,
+              })
+          if (!closed) safeEnqueue(formatHeartbeat(workspaceResourceRevision))
+        } finally {
+          heartbeatInFlight = false
+        }
+      }
+
       const abortHandler = () => {
         void close()
       }
@@ -255,7 +278,13 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
         serverSession.completeBootstrap(events)
         if (closed) return
-        timer = setInterval(() => safeEnqueue(formatHeartbeat()), 15_000)
+        await sendHeartbeat()
+        if (closed) return
+        timer = setInterval(() => {
+          void sendHeartbeat().catch((error: unknown) => {
+            void fail(error)
+          })
+        }, WORKSPACE_SSE_HEARTBEAT_INTERVAL_MS)
       } catch (error) {
         await fail(error)
       }

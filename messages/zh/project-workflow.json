@@ -47,34 +47,9 @@
         "priceCredits": "最高 {cost} 积分",
         "destructiveBody": "将从当前项目目录中删除“{target}”。资源采用软删除，可通过系统恢复能力找回。"
       },
-      "create": {
-        "loading": "正在读取能力…",
-        "loadFailed": "生成能力读取失败。",
-        "retry": "重试",
-        "submit": "生成",
-        "frameHint": "生成结果将出现在这里",
-        "chooseTitle": "要创建什么？",
-        "back": "重选类型",
-        "namePlaceholder": "可选的资源名称",
-        "voiceDescriptionPlaceholder": "描述音色、语气、口音和表达方式",
-        "promptPlaceholder": "描述你想生成的内容，或点上传添加本地素材",
-        "voicePreviewPlaceholder": "输入一小段用于生成声音的文本",
-        "count": "结果数量",
-        "countRange": "{min}–{max}",
-        "duration": "时长（秒）",
-        "durationPlaceholder": "秒数",
-        "durationHelp": "请输入整数秒。",
-        "durationRange": "请输入 {min}–{max} 秒的整数。",
-        "kind": {
-          "image": "图片",
-          "video": "视频",
-          "music": "配乐",
-          "voice": "语音",
-          "upload": "上传图片或音频"
-        }
-      },
       "upload": {
         "title": "上传任务",
+        "openPicker": "上传资源",
         "failed": "上传失败",
         "retryUpload": "重试上传",
         "retryMaterialize": "重试添加",
@@ -131,8 +106,10 @@
         "openFolder": "打开文件夹",
         "deleteFolder": "删除文件夹 {path}",
         "sectionCount": "{count} 项",
-        "directory": "目录",
-        "directoryEmpty": "暂无文件夹"
+        "directory": "内容管理",
+        "directoryEmpty": "暂无项目文件",
+        "jumpToFolder": "跳转到画布位置",
+        "locateFile": "定位到画布文件"
       },
       "nodes": {
         "resourceCard": {

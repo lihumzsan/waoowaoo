@@ -3,12 +3,14 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { signIn, useSession } from 'next-auth/react'
 import { useLocale, useTranslations } from 'next-intl'
-import { AppIcon } from '@/components/ui/icons'
+import { AppIcon, GoogleLogoIcon } from '@/components/ui/icons'
 import { apiFetch } from '@/lib/api-fetch'
 import { createClientApiError } from '@/lib/errors/client'
 import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
 import { getPathname } from '@/i18n/navigation'
 import { AUTH_PASSWORD_MIN_LENGTH } from '@/lib/auth/password-policy'
+import WechatOfficialAuthButton from '@/components/auth/WechatOfficialAuthButton'
+import { WeChatIcon } from '@/components/ui/icons/WeChatIcon'
 
 type AccountSecuritySnapshot = {
   email: string | null
@@ -16,6 +18,9 @@ type AccountSecuritySnapshot = {
   hasPassword: boolean
   providers: {
     google: {
+      linked: boolean
+    }
+    wechatOfficial: {
       linked: boolean
     }
   }
@@ -28,13 +33,14 @@ type AccountSecurityPayload = {
 interface AccountSecurityTabProps {
   enablePasswordAuth: boolean
   showGoogleOAuth: boolean
+  showWechatOfficialAuth: boolean
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
-function isGoogleProviderState(value: unknown): value is { linked: boolean } {
+function isLinkedProviderState(value: unknown): value is { linked: boolean } {
   return isRecord(value) && typeof value.linked === 'boolean'
 }
 
@@ -46,7 +52,8 @@ function isAccountSecuritySnapshot(value: unknown): value is AccountSecuritySnap
     (typeof value.email === 'string' || value.email === null)
     && typeof value.displayName === 'string'
     && typeof value.hasPassword === 'boolean'
-    && isGoogleProviderState(providers.google)
+    && isLinkedProviderState(providers.google)
+    && isLinkedProviderState(providers.wechatOfficial)
   )
 }
 
@@ -59,6 +66,7 @@ function isAccountSecurityPayload(value: unknown): value is AccountSecurityPaylo
 export default function AccountSecurityTab({
   enablePasswordAuth,
   showGoogleOAuth,
+  showWechatOfficialAuth,
 }: AccountSecurityTabProps) {
   const t = useTranslations('profile.accountSecurity')
   const resolveClientError = useClientErrorMessage()
@@ -233,6 +241,7 @@ export default function AccountSecurityTab({
   }
 
   const googleLinked = security.providers.google.linked
+  const wechatOfficialLinked = security.providers.wechatOfficial.linked
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 overflow-auto p-6">
@@ -292,7 +301,8 @@ export default function AccountSecurityTab({
             <p className="truncate text-sm text-[var(--glass-text-secondary)]">
               {security.email || t('emailNotBound')}
             </p>
-            <span className="mt-3 inline-flex rounded-full bg-[var(--glass-tone-info-bg)] px-2.5 py-1 text-xs font-medium text-[var(--glass-tone-info-fg)]">
+            {/* 「已绑定」在邮箱和 Google 上是同一个事实,必须是同一个语气。 */}
+            <span className={`glass-chip mt-3 ${security.email ? 'glass-chip-success' : 'glass-chip-neutral'}`}>
               {security.email ? t('bound') : t('notBound')}
             </span>
           </div>
@@ -300,14 +310,14 @@ export default function AccountSecurityTab({
           {showGoogleOAuth ? (
             <div className="rounded-xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)] p-4">
               <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--glass-text-primary)]">
-                <AppIcon name="chrome" className="h-4 w-4" />
+                <GoogleLogoIcon className="h-4 w-4" aria-hidden="true" />
                 {t('google')}
               </div>
               <p className="text-sm text-[var(--glass-text-secondary)]">
                 {googleLinked ? t('googleBound') : t('googleNotBound')}
               </p>
               {googleLinked ? (
-                <span className="mt-3 inline-flex rounded-full bg-[var(--glass-tone-success-bg)] px-2.5 py-1 text-xs font-medium text-[var(--glass-tone-success-fg)]">
+                <span className="glass-chip glass-chip-success mt-3">
                   {t('bound')}
                 </span>
               ) : (
@@ -324,6 +334,28 @@ export default function AccountSecurityTab({
             </div>
           ) : null}
 
+          {showWechatOfficialAuth ? (
+            <div className="rounded-xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)] p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--glass-text-primary)]">
+                <WeChatIcon className="h-4 w-4 text-[#07C160]" aria-hidden="true" />
+                {t('wechat')}
+              </div>
+              <p className="text-sm text-[var(--glass-text-secondary)]">
+                {wechatOfficialLinked ? t('wechatBound') : t('wechatNotBound')}
+              </p>
+              {wechatOfficialLinked ? (
+                <span className="glass-chip glass-chip-success mt-3">
+                  {t('bound')}
+                </span>
+              ) : (
+                <WechatOfficialAuthButton
+                  mode="bind"
+                  onAuthenticated={loadSecurity}
+                />
+              )}
+            </div>
+          ) : null}
+
           {enablePasswordAuth ? (
             <div className="rounded-xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)] p-4">
               <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--glass-text-primary)]">
@@ -333,7 +365,7 @@ export default function AccountSecurityTab({
               <p className="text-sm text-[var(--glass-text-secondary)]">
                 {security.hasPassword ? t('passwordBound') : t('passwordNotSet')}
               </p>
-              <span className={`mt-3 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${security.hasPassword ? 'bg-[var(--glass-tone-success-bg)] text-[var(--glass-tone-success-fg)]' : 'bg-[var(--glass-tone-warning-bg)] text-[var(--glass-tone-warning-fg)]'}`}>
+              <span className={`glass-chip mt-3 ${security.hasPassword ? 'glass-chip-success' : 'glass-chip-warning'}`}>
                 {security.hasPassword ? t('set') : t('notSet')}
               </span>
               <button

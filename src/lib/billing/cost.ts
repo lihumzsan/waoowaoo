@@ -193,6 +193,30 @@ export function calcTextWithCache(
   return roundCredits(cost)
 }
 
+/**
+ * Price a model's server-side tool calls, which some providers bill per call on
+ * top of tokens. Only models that declare a `toolCall` tier have one, so a
+ * model without that tier costs nothing here — but an entirely unpriced model
+ * still throws, exactly as it does for tokens. Silently pricing an unknown
+ * model at zero is how unbilled usage happens.
+ */
+export function calcTextToolCalls(model: string, toolCalls: number): number {
+  const normalizedToolCalls = normalizePositiveInteger(toolCalls)
+  if (normalizedToolCalls === 0) return 0
+  ensureAiCatalogsRegistered()
+  const resolution = resolveBuiltinPricing({
+    apiType: 'text',
+    model,
+    face: 'retail',
+    selections: { tokenType: 'toolCall' },
+  })
+  if (resolution.status === 'missing_capability_match') return 0
+  if (resolution.status !== 'resolved') {
+    return throwPricingResolutionError('text', model, resolution)
+  }
+  return roundCredits((normalizedToolCalls / 1_000_000) * resolution.amount)
+}
+
 export function calcImage(
   model: string,
   quantity = 1,

@@ -54,6 +54,7 @@ export function summarizeMediaRequestInput(input: AiMediaExecutionInput): Record
       promptChars: input.options?.prompt?.length ?? 0,
       referenceImageCount: input.options?.referenceImages?.length ?? 0,
       referenceAudioCount: input.options?.referenceAudios?.length ?? 0,
+      referenceVideoCount: input.options?.referenceVideos?.length ?? 0,
       durationSeconds: typeof input.options?.duration === 'number' ? input.options.duration : null,
       resolution: input.options?.resolution ?? null,
     }
@@ -154,10 +155,9 @@ export async function wrapMediaProviderExecution<T>(
       mediaLogger.error({
         action: 'media.provider.failed',
         message: `media provider failed (${context.modality}:${context.phase})`,
-        provider: context.provider ?? normalized.provider ?? undefined,
-        errorCode: normalized.code,
-        retryable: normalized.retryable,
-        failureClass: normalized.failureClass,
+        provider: context.provider ?? normalized.context.provider,
+        errorCode: normalized.interpretation.code,
+        retryable: normalized.recovery.taskReplay === 'safe',
         durationMs: Date.now() - startedAt,
         details: {
           modality: context.modality,
@@ -165,7 +165,7 @@ export async function wrapMediaProviderExecution<T>(
           phase: context.phase,
           provider: context.provider,
         },
-        error: serializeObservedError(error, normalized.message),
+        error: serializeObservedError(error, normalized.native.message),
       })
     })
     throw error

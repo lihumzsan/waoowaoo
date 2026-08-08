@@ -1,9 +1,18 @@
 import type { ImageGenerationRequest } from '@openrouter/sdk/models'
 import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
-import type { GptImage2NormalizedOptions } from '@/lib/ai-providers/shared/gpt-image-2'
+import type { GptImage2ImageSize } from '@/lib/ai-providers/shared/gpt-image-2'
+import {
+  OPENROUTER_GPT_IMAGE_2_MODEL_ID,
+  OPENROUTER_IMAGE_MODEL_IDS,
+} from './models'
 
-export type OpenRouterImageOptions = GptImage2NormalizedOptions & {
-  quality: string
+export type OpenRouterImageOptions = Record<string, unknown> & {
+  aspectRatio: string
+  resolution: string
+  referenceImages: string[]
+  imageSize?: GptImage2ImageSize
+  outputFormat?: string
+  quality?: string
   background?: string
   outputCompression?: number
   moderation?: string
@@ -14,26 +23,54 @@ async function normalizeReferences(referenceImages: readonly string[]): Promise<
 }
 
 export async function resolveOpenRouterImageInput(input: {
+  modelId: string
   prompt: string
   options: OpenRouterImageOptions
 }) {
   const promptText = input.prompt.trim()
   if (!promptText) throw new Error('OPENROUTER_IMAGE_PROMPT_REQUIRED')
+  if (!OPENROUTER_IMAGE_MODEL_IDS.has(input.modelId)) {
+    throw new Error(`OPENROUTER_IMAGE_MODEL_UNSUPPORTED: ${input.modelId}`)
+  }
   const referenceImages = await normalizeReferences(input.options.referenceImages)
+  const inputReferences = referenceImages.length > 0
+    ? referenceImages.map((url) => ({
+        type: 'image_url' as const,
+        imageUrl: { url },
+      }))
+    : undefined
+
+  if (input.modelId !== OPENROUTER_GPT_IMAGE_2_MODEL_ID) {
+    const request = {
+      prompt: promptText,
+      n: 1,
+      resolution: input.options.resolution as ImageGenerationRequest['resolution'],
+      aspectRatio: input.options.aspectRatio as ImageGenerationRequest['aspectRatio'],
+      ...(inputReferences ? { inputReferences } : {}),
+    } satisfies Omit<ImageGenerationRequest, 'model' | 'stream'>
+    return {
+      request,
+      size: input.options.resolution,
+      quality: null,
+      outputFormat: 'png',
+      referenceImagesCount: referenceImages.length,
+      stream: false,
+    }
+  }
+
+  const imageSize = input.options.imageSize
+  const quality = input.options.quality?.trim() ?? ''
+  const outputFormat = input.options.outputFormat?.trim() ?? ''
+  if (!imageSize || !quality || !outputFormat) {
+    throw new Error('OPENROUTER_GPT_IMAGE_2_OPTIONS_INCOMPLETE')
+  }
   const request = {
     prompt: promptText,
     n: 1,
-    size: `${input.options.imageSize.width}x${input.options.imageSize.height}`,
-    quality: input.options.quality as ImageGenerationRequest['quality'],
-    outputFormat: input.options.outputFormat as ImageGenerationRequest['outputFormat'],
-    ...(referenceImages.length > 0
-      ? {
-          inputReferences: referenceImages.map((url) => ({
-            type: 'image_url' as const,
-            imageUrl: { url },
-          })),
-        }
-      : {}),
+    size: `${imageSize.width}x${imageSize.height}`,
+    quality: quality as ImageGenerationRequest['quality'],
+    outputFormat: outputFormat as ImageGenerationRequest['outputFormat'],
+    ...(inputReferences ? { inputReferences } : {}),
     ...(input.options.background
       ? { background: input.options.background as ImageGenerationRequest['background'] }
       : {}),
@@ -52,8 +89,13 @@ export async function resolveOpenRouterImageInput(input: {
   return {
     request,
     size: request.size,
-    quality: input.options.quality,
-    outputFormat: input.options.outputFormat,
+    quality,
+    outputFormat,
     referenceImagesCount: referenceImages.length,
+    // OpenRouter advertises streaming at the model endpoint level, but the
+    // pinned OpenAI image endpoint rejects streaming when input_references
+    // turns the request into image editing. Keep SSE for text-to-image only;
+    // reference-image requests use the same dedicated Images API buffered.
+    stream: referenceImages.length === 0,
   }
 }

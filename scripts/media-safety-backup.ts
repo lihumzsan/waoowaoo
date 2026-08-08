@@ -52,7 +52,7 @@ function resolveDatabaseFilePath(databaseUrl: string | undefined): string | null
 
 async function listStorageObjects(): Promise<StorageIndexRow[]> {
   const config = loadS3StorageConfig()
-  const client = new S3Client(toS3ClientConfig(config))
+  const client = new S3Client(toS3ClientConfig(config, config.endpoint))
   const out: StorageIndexRow[] = []
   for await (const page of paginateListObjectsV2({ client }, {
     Bucket: config.bucket,

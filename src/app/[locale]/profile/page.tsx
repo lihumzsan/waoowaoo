@@ -8,7 +8,10 @@ import AccountSecurityTab from './components/AccountSecurityTab'
 import ApiConfigTab from './components/ApiConfigTab'
 import ProfileSidebar, { type ProfileSectionItem } from './components/ProfileSidebar'
 import ProfileOverviewSection, { type ProfileBalanceSummary } from './components/ProfileOverviewSection'
-import ProfileBillingSection from './components/ProfileBillingSection'
+import ProfileBillingSection, {
+  type ProfileProjectCostDetail,
+  type ProfileProjectCostSummary,
+} from './components/ProfileBillingSection'
 import { type ProfileTransactionItem } from './components/ProfileTransactionsTable'
 import { BrandPageLoading } from '@/components/ui/BrandLoading'
 import { AppIcon } from '@/components/ui/icons'
@@ -17,10 +20,15 @@ import { readProfileSectionParam, type ProfileSection } from '@/lib/profile/sect
 import { apiFetch } from '@/lib/api-fetch'
 import { readClientApiError } from '@/lib/errors/client'
 import { useToast } from '@/contexts/ToastContext'
+import PaidBetaCheckoutSuccessDialog from '@/components/paid-beta/PaidBetaCheckoutSuccessDialog'
 import {
   isPublicDeploymentFeatures,
   type PublicDeploymentFeatures,
 } from '@/lib/deployment/public-client'
+import {
+  DEFAULT_USER_TIME_ZONE,
+  resolveBrowserUserTimeZone,
+} from '@/lib/user-time-zone'
 
 type DeploymentPayload = {
   features?: PublicDeploymentFeatures
@@ -29,6 +37,15 @@ type DeploymentPayload = {
 
 type TransactionsPayload = {
   transactions?: ProfileTransactionItem[]
+}
+
+type ProjectCostsPayload = {
+  total?: number
+  byProject?: ProfileProjectCostSummary[]
+}
+
+type ProjectCostDetailsPayload = {
+  records?: ProfileProjectCostDetail[]
 }
 
 function isDeploymentPayload(value: unknown): value is DeploymentPayload {
@@ -40,6 +57,14 @@ function isBalancePayload(value: unknown): value is ProfileBalanceSummary {
 }
 
 function isTransactionsPayload(value: unknown): value is TransactionsPayload {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isProjectCostsPayload(value: unknown): value is ProjectCostsPayload {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isProjectCostDetailsPayload(value: unknown): value is ProjectCostDetailsPayload {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
@@ -73,12 +98,22 @@ export default function ProfilePage() {
   const [deploymentLoadFailed, setDeploymentLoadFailed] = useState(false)
   const [balance, setBalance] = useState<ProfileBalanceSummary | null>(null)
   const [transactions, setTransactions] = useState<ProfileTransactionItem[]>([])
+  const [projectCosts, setProjectCosts] = useState<ProfileProjectCostSummary[]>([])
+  const [totalProjectCost, setTotalProjectCost] = useState(0)
   const [paymentNotice, setPaymentNotice] = useState<string | null>(null)
+  const [userTimeZone, setUserTimeZone] = useState(DEFAULT_USER_TIME_ZONE)
   const isSigningOutRef = useRef(false)
   const activeSection = deploymentFeatures
     && !isProfileSectionEnabled(urlSection, deploymentFeatures)
     ? getDefaultProfileSection(deploymentFeatures)
     : urlSection
+  const checkoutSucceeded = searchParams.get('payment') === 'success'
+    || searchParams.get('plan') === 'success'
+  const checkoutSessionId = checkoutSucceeded ? searchParams.get('session_id') : null
+
+  useEffect(() => {
+    setUserTimeZone(resolveBrowserUserTimeZone())
+  }, [])
 
   const handleSignOut = useCallback(async () => {
     isSigningOutRef.current = true
@@ -159,17 +194,59 @@ export default function ProfilePage() {
     }
   }, [showError, t])
 
+  const loadProjectCosts = useCallback(async () => {
+    try {
+      const response = await apiFetch('/api/user/costs')
+      if (!response.ok) throw await readClientApiError(response)
+      const payload: unknown = await response.json()
+      if (
+        !isProjectCostsPayload(payload)
+        || typeof payload.total !== 'number'
+        || !Array.isArray(payload.byProject)
+      ) {
+        throw new Error('PROJECT_COSTS_RESPONSE_INVALID')
+      }
+      setTotalProjectCost(payload.total)
+      setProjectCosts(payload.byProject)
+    } catch (error) {
+      showError(error, t('projectCostsLoadFailed'))
+    }
+  }, [showError, t])
+
+  const loadProjectCostDetails = useCallback(async (
+    projectId: string,
+  ): Promise<readonly ProfileProjectCostDetail[]> => {
+    try {
+      const query = new URLSearchParams({ projectId, pageSize: '100' })
+      const response = await apiFetch(`/api/user/costs/details?${query.toString()}`)
+      if (!response.ok) throw await readClientApiError(response)
+      const payload: unknown = await response.json()
+      if (!isProjectCostDetailsPayload(payload) || !Array.isArray(payload.records)) {
+        throw new Error('PROJECT_COST_DETAILS_RESPONSE_INVALID')
+      }
+      return payload.records
+    } catch (error) {
+      showError(error, t('projectCostDetailsLoadFailed'))
+      return []
+    }
+  }, [showError, t])
+
   useEffect(() => {
     if (!session || deploymentFeatures?.showBilling !== true) return
     void loadBalance()
     void loadTransactions()
-  }, [session, deploymentFeatures, loadBalance, loadTransactions])
+    void loadProjectCosts()
+  }, [session, deploymentFeatures, loadBalance, loadTransactions, loadProjectCosts])
 
   useEffect(() => {
     const paymentStatus = searchParams.get('payment')
     if (paymentStatus === 'success') {
       setPaymentNotice(t('recharge.successNotice'))
     } else if (paymentStatus === 'cancel') {
+      setPaymentNotice(t('recharge.cancelNotice'))
+    } else if (searchParams.get('plan') === 'success') {
+      setPaymentNotice(t('recharge.planSuccessNotice'))
+    } else if (searchParams.get('plan') === 'cancel') {
       setPaymentNotice(t('recharge.cancelNotice'))
     }
   }, [searchParams, t])
@@ -185,7 +262,6 @@ export default function ProfilePage() {
   const noBillingText = t('openSourceNoBilling')
   const showBilling = deploymentFeatures?.showBilling === true
   const showRecharge = deploymentFeatures?.showRecharge === true
-  const showInviteCode = deploymentFeatures?.showInviteCode === true
   const sectionItems: ProfileSectionItem[] = [
     ...(deploymentFeatures?.showBilling === true
       ? [{ section: 'overview' as const, icon: 'user' as const, label: t('accountOverview') }]
@@ -240,6 +316,7 @@ export default function ProfilePage() {
                 <AccountSecurityTab
                   enablePasswordAuth={deploymentFeatures.enablePasswordAuth}
                   showGoogleOAuth={deploymentFeatures.showGoogleOAuth}
+                  showWechatOfficialAuth={deploymentFeatures.showWechatOfficialAuth}
                 />
               </div>
             ) : activeSection === 'apiConfig' && deploymentFeatures.showApiConfig ? (
@@ -250,22 +327,23 @@ export default function ProfilePage() {
               <ProfileOverviewSection
                 balance={balance}
                 transactions={transactions}
+                timeZone={userTimeZone}
                 showUpgrade={showRecharge}
-                showInviteCode={showInviteCode}
                 paymentNotice={paymentNotice}
-                onCreditsChanged={async () => {
-                  await loadBalance()
-                  await loadTransactions()
-                }}
                 onViewAllTransactions={() => handleSectionChange('billing')}
               />
             ) : activeSection === 'billing' && showBilling ? (
               <ProfileBillingSection
                 transactions={transactions}
+                projectCosts={projectCosts}
+                totalProjectCost={totalProjectCost}
+                timeZone={userTimeZone}
                 currency={balance?.currency}
+                onLoadProjectDetails={loadProjectCostDetails}
                 onRefresh={() => {
                   void loadBalance()
                   void loadTransactions()
+                  void loadProjectCosts()
                 }}
               />
             ) : (
@@ -277,6 +355,16 @@ export default function ProfilePage() {
           </div>
         </div>
       </main>
+
+      <PaidBetaCheckoutSuccessDialog
+        providerObjectId={checkoutSessionId}
+        onClose={() => {
+          router.replace(
+            { pathname: '/profile', query: { section: activeSection } },
+            { scroll: false },
+          )
+        }}
+      />
 
     </div>
   )

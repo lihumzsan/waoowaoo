@@ -149,6 +149,7 @@ function deleteOperation(resource: WorkspaceResourceView): WorkspaceCanvasDelete
   if (
     action.operationId !== 'delete_resource'
     || action.input?.resourceId !== resource.resourceId
+    || action.input.workspacePath !== resource.workspacePath
     || typeof action.approvalInputHash !== 'string'
     || !action.approvalInputHash
   ) {
@@ -158,7 +159,10 @@ function deleteOperation(resource: WorkspaceResourceView): WorkspaceCanvasDelete
     kind: 'delete',
     operationId: action.operationId,
     confirmation: 'destructive',
-    input: { resourceId: resource.resourceId },
+    input: {
+      resourceId: resource.resourceId,
+      workspacePath: resource.workspacePath,
+    },
     approvalInputHash: action.approvalInputHash,
   }
 }

@@ -40,7 +40,7 @@ export const GET = apiHandler(async (
       throw new ApiError('INVALID_PARAMS', {
         field: 'folderKey',
         message: 'folderKey does not belong to project',
-      })
+      }, { cause: error })
     }
     throw error
   }
@@ -91,7 +91,7 @@ export const PATCH = apiHandler(async (
       throw new ApiError('INVALID_PARAMS', {
         field: 'folderKey',
         message: 'folderKey does not belong to project',
-      })
+      }, { cause: error })
     }
     throw error
   }
@@ -119,7 +119,7 @@ export const DELETE = apiHandler(async (
       throw new ApiError('INVALID_PARAMS', {
         field: 'folderKey',
         message: 'folderKey does not belong to project',
-      })
+      }, { cause: error })
     }
     throw error
   }

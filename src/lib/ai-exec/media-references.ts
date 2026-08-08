@@ -51,6 +51,12 @@ export function createMediaProviderRequestIdentity<T extends MediaRequestIdentit
     if ('referenceAudios' in options) {
       options.referenceAudios = stableMediaUrlArray(options.referenceAudios, 'referenceAudios')
     }
+    if ('referenceVideos' in options) {
+      options.referenceVideos = stableMediaUrlArray(options.referenceVideos, 'referenceVideos')
+    }
+    if ('referenceVideos' in options) {
+      options.referenceVideos = stableMediaUrlArray(options.referenceVideos, 'referenceVideos')
+    }
     if ('lastFrameImageUrl' in options && options.lastFrameImageUrl !== undefined) {
       options.lastFrameImageUrl = stableMediaUrl(options.lastFrameImageUrl, 'lastFrameImageUrl')
     }

@@ -20,24 +20,23 @@ export type AssistantRuntimeTaskFollowUpHttpResponse =
   | {
       readonly ok: false
       readonly code: string
-      readonly retryable: boolean
     }
 
 export class AssistantRuntimeTaskFollowUpHttpError extends Error {
   readonly code: string
-  readonly retryable: boolean
   readonly httpStatus: number | null
+  override readonly cause?: unknown
 
   constructor(input: {
     readonly code: string
-    readonly retryable: boolean
     readonly httpStatus: number | null
+    readonly cause?: unknown
   }) {
     super(input.code)
     this.name = 'AssistantRuntimeTaskFollowUpHttpError'
     this.code = input.code
-    this.retryable = input.retryable
     this.httpStatus = input.httpStatus
+    this.cause = input.cause
   }
 }
 
@@ -46,7 +45,6 @@ function requireCronSecret(): string {
   if (!value || !value.trim() || value !== value.trim()) {
     throw new AssistantRuntimeTaskFollowUpHttpError({
       code: 'ASSISTANT_RUNTIME_INTERNAL_AUTH_UNAVAILABLE',
-      retryable: false,
       httpStatus: null,
     })
   }
@@ -62,7 +60,6 @@ function requireBatchId(value: unknown): string {
   ) {
     throw new AssistantRuntimeTaskFollowUpHttpError({
       code: 'ASSISTANT_RUNTIME_FOLLOW_UP_BATCH_ID_INVALID',
-      retryable: false,
       httpStatus: null,
     })
   }
@@ -123,8 +120,8 @@ function parseResponse(
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new AssistantRuntimeTaskFollowUpHttpError({
       code: 'ASSISTANT_RUNTIME_FOLLOW_UP_HTTP_RESPONSE_INVALID',
-      retryable: true,
       httpStatus,
+      cause: value,
     })
   }
   const record = value as Record<string, unknown>
@@ -136,18 +133,16 @@ function parseResponse(
     && typeof record.code === 'string'
     && record.code.trim() === record.code
     && record.code.length > 0
-    && typeof record.retryable === 'boolean'
   ) {
     return {
       ok: false,
       code: record.code,
-      retryable: record.retryable,
     }
   }
   throw new AssistantRuntimeTaskFollowUpHttpError({
     code: 'ASSISTANT_RUNTIME_FOLLOW_UP_HTTP_RESPONSE_INVALID',
-    retryable: true,
     httpStatus,
+    cause: value,
   })
 }
 
@@ -173,19 +168,19 @@ export async function requestAssistantRuntimeTaskFollowUp(
     if (error instanceof AssistantRuntimeTaskFollowUpHttpError) throw error
     throw new AssistantRuntimeTaskFollowUpHttpError({
       code: 'ASSISTANT_RUNTIME_FOLLOW_UP_HTTP_UNAVAILABLE',
-      retryable: true,
       httpStatus: null,
+      cause: error,
     })
   }
 
   let body: unknown
   try {
     body = await response.json()
-  } catch {
+  } catch (error) {
     throw new AssistantRuntimeTaskFollowUpHttpError({
       code: 'ASSISTANT_RUNTIME_FOLLOW_UP_HTTP_RESPONSE_INVALID',
-      retryable: response.status >= 500,
       httpStatus: response.status,
+      cause: error,
     })
   }
   const parsed = parseResponse(body, response.status)
@@ -193,8 +188,8 @@ export async function requestAssistantRuntimeTaskFollowUp(
     if (parsed.receipt.batchId !== request.batchId) {
       throw new AssistantRuntimeTaskFollowUpHttpError({
         code: 'ASSISTANT_RUNTIME_FOLLOW_UP_HTTP_RECEIPT_DIVERGED',
-        retryable: false,
         httpStatus: response.status,
+        cause: parsed.receipt,
       })
     }
     return parsed.receipt
@@ -202,13 +197,13 @@ export async function requestAssistantRuntimeTaskFollowUp(
   if (!parsed.ok) {
     throw new AssistantRuntimeTaskFollowUpHttpError({
       code: parsed.code,
-      retryable: parsed.retryable,
       httpStatus: response.status,
+      cause: body,
     })
   }
   throw new AssistantRuntimeTaskFollowUpHttpError({
     code: 'ASSISTANT_RUNTIME_FOLLOW_UP_HTTP_STATUS_DIVERGED',
-    retryable: response.status >= 500,
     httpStatus: response.status,
+    cause: body,
   })
 }

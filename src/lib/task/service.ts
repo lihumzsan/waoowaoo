@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { RETRY_POLICY, withRetry } from '@/lib/retry'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
+import { withRetry } from '@/lib/retry'
 import { TASK_STATUS, type TaskBillingInfo, type TaskStatus } from './types'
 import { projectPersistedTaskProgressPayload } from './progress-payload'
 
@@ -78,8 +79,8 @@ export async function queryTasks(filters: {
 
 export async function isTaskActive(taskId: string) {
   const task = await withRetry({
+    operation: EXTERNAL_OPERATION.DATABASE_READ,
     scope: 'prisma:task.isActive',
-    policy: RETRY_POLICY.prisma,
     run: async () => await taskModel.findUnique({
       where: { id: taskId },
       select: { status: true },
@@ -106,8 +107,8 @@ export async function tryUpdateTaskProgress(
   const attemptWhere = processingAttemptWhere(taskId, attempt)
   if (payload) {
     const current = await withRetry({
+      operation: EXTERNAL_OPERATION.DATABASE_READ,
       scope: 'prisma:task.progress.current',
-      policy: RETRY_POLICY.prisma,
       run: async () => await taskModel.findFirst({
         where: attemptWhere,
         select: { payload: true },

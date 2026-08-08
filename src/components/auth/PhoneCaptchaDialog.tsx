@@ -63,11 +63,18 @@ export default function PhoneCaptchaDialog({
               type="text"
               inputMode="text"
               autoComplete="off"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              enterKeyHint="done"
               maxLength={4}
               value={answer}
               onChange={(event) => {
+                // Keep the controlled value unchanged in case while a mobile
+                // IME is composing. The server owns case normalization; doing
+                // it on every keystroke can make one character appear twice.
                 onAnswerChange(
-                  event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4),
+                  event.target.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 4),
                 )
               }}
               autoFocus
@@ -107,7 +114,7 @@ export default function PhoneCaptchaDialog({
         {error ? (
           <p
             role="alert"
-            className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+            className="rounded-xl bg-[var(--glass-tone-surface)] px-4 py-3 text-sm text-[var(--glass-tone-danger-fg)] shadow-[var(--glass-tone-shadow)]"
           >
             {error}
           </p>

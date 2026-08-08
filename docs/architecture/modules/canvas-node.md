@@ -2,104 +2,90 @@
 
 # Canvas 节点与投影
 
-## 设计理念
+## 为什么是这样
 
-Canvas 是 WorkspaceResource 文件树的空间化投影，不是第二套文件系统或业务状态机。一个文件夹对应一个 Canvas；画布按预算投影该文件夹的整个子树：预算内的子文件夹在原地展开为分区框（内容卡直接可见），超预算时按确定性规则收起为文件夹卡。节点 identity、存在性、生命周期、动作能力和内容来自生产 registry、正式 Query、WorkspaceResource、Lineage 与 Task owner，Canvas 只拥有位置、视口、选择和临时创建草稿等纯展示状态。
+Canvas 是 WorkspaceResource 文件树的空间化投影，不是第二套文件系统或业务状态机。一个文件夹对应
+一个 Canvas。节点 identity、存在性、生命周期、动作能力和内容全部来自 registry、正式 Query、
+Resource、Lineage 与 Task owner；Canvas 只拥有位置、视口、选择和临时草稿等纯展示状态。
+
+不存在 Storyboard、Panel、VideoGroup、EditScript、Workflow stage 等专用流程节点。历史上这些阶段
+节点各自解释一段制作状态，任何 owner 字段或查询条件漂移都会制造空窗，且把"文本记录存在"误解释成
+"媒体已成功"。
 
 ## 不变量
 
-- **CN-01 — 节点种类穷尽注册。** 生产 registry 只声明 `resourceCard` 与 `folder`，并为每种 kind 穷尽 identity、layout、renderer、Task target、动作能力与 conformance fixture。新增同类实例不得通过分散 switch 或文件存在性接入。
-- **CN-02 — 一个文件夹就是一个 Canvas。** 持久 folder Resource 以自身 `resourceId` 作为 `folderKey`；项目根使用唯一虚拟 identity `@root`，永不创建伪 Resource。Canvas 不再按 Episode、Chapter、工作流阶段或媒体类别分区。
-- **CN-02A — 节点 canonical identity 只来自 Resource。** file 节点和 folder 节点都使用各自的 `resourceId`；不得使用路径、数组位置、最近记录、Prompt、DOM、历史消息或 Task 到达顺序推导 identity。路径变化不改变节点 identity。
-- **CN-02B — 当前 Canvas 按预算投影子树，展开/收起只有一个裁判。** 当前文件夹的 Canvas 读取 `scope=subtree` 列表并由唯一 expansion policy（`workspace-canvas-expansion-policy.ts`）导出展示形态：全部文件夹默认展开为分区框；可见卡数超过显式预算（`WORKSPACE_CANVAS_EXPANSION_BUDGET`）时，后代文件最多的文件夹先收起为 folder 卡，收起的文件夹计 1 张卡，规则确定性收敛到预算以内。分区永不嵌套：每个有直接文件的展开文件夹（不论深度）都是一个顶层分组，只容纳该文件夹的直接文件；分组无边框、无进入按钮，仅有名称 pill（文件夹名 + 数量），且分组区域不拦截指针——空白处行为等同画布本身；只有子文件夹的中间目录不产生任何标记；收起文件夹卡置于顶层并以相对路径为标题（展开分组只显示名称，路径只在收起后需要上下文时出现）。后代文件数为 0 的文件夹不投影任何节点——画布只显示内容，不显示纯结构；空目录仍是正式 Resource（WR-03），内容物化后自动出现，搜索仍可定位与进入。同一画布会话内收起集合单调不回弹：停留期间内容增长只能新增收起，已收起的文件夹不得自动重新展开，基线随画布进入重置。展开/收起不是持久状态、不落库、不由 renderer 或第二处逻辑再解释；父子关系仍只由 contracts 中共享的 Catalog 路径关系函数导出，不能持久化第二份 parent 字段。收起文件夹内的后代必须进入对应文件夹后才显示。搜索可以跨项目返回结果，但选中结果前必须导航到其父文件夹，不能把后代临时混入当前 Canvas 的顶层。
-- **CN-02C — folder 是正式 Resource 与导航入口。** folder 节点消费服务端投影的名称、路径和 ancestors，原生按钮的鼠标/键盘 click、ReactFlow 卡片单击与双击都调用 Canvas owner 注入的同一个导航 callback；展开分组仅名称 pill 可交互（拖拽分组、双击进入同一 callback）；返回上级由左上角唯一返回按钮承担，Canvas 不再渲染面包屑路径。不得再用 `window` event 或 renderer 私有状态建立第二条导航路径。folder 不携带媒体、Task target、生成动作或 Lineage handle。Canvas 不维护第二份目录结构。
-- **CN-02D — 布局不改变文件归属。** 普通节点拖拽只写当前 `folderKey` 下的位置，绝不修改 `workspacePath`；移动文件或文件夹只能走 WorkspaceResource 的显式 move 能力。路径移动后由目标文件夹的正式 Query 决定节点出现位置。
-- **CN-02E — 批次、alternatives 与当前选择不改变节点事实。** 每个 Resource 始终按自己的 identity 形成节点；Prompt Set、多角色音色和 Manifest 多资产等领域批次只用 `memberIndex` 保持稳定展示顺序，不合并成候选节点。只有一次 generation request 实际创建两个以上结果时，Resource View 才下发 opaque alternatives group identity 与完整有序成员；单结果不伪造组。组也不合并节点、不产生同组 edge、不保存 selected/current/adopt；预览左右浏览的 index 只是 modal UI 状态。当前项仍只来自服务端 typed current selection，renderer 不得通过数组位置、当前 head 或本地选中态覆盖它。
-- **CN-03 — 运行展示无裁决权。** Task runtime 只能覆盖已由正式 WorkspaceResource 物化的 file 节点运行展示，不能凭 Task、Creative reasoning 或本地 optimistic 结果创建 Canvas 节点或写业务状态。
-- **CN-04 — 生命周期只有一个 resolver。** 持久 Resource、Task runtime 与纯 UI disclosure 是独立输入；projector/renderer 不得自行根据文案、有无字段、timer 或 refetch 推断 succeeded/failed。
-- **CN-05 — UI 不展示领域 ID。** raw preview 展示名称/短引用，正式 View 展示服务端按 canonical identity 投影的当前名称。缺少 View 必须显式失败，不得 `name ?? id`。
-- **CN-06 — 视频只作为 Resource 或真实 Task 投影。** Canvas 不存在 Storyboard、Panel、VideoGroup、EditScript stage 或专用 `videoPlan` 流程节点。每个生成结果是独立 video Resource；分集/镜头等用户目录语义不能改变 lifecycle 或建立第二生成入口。
-- **CN-07 — 专业文字结果仍是 Resource。** 剧本、连续性、资产/视频提示词与音乐方向都通过普通文本/结构化 Resource renderer 展示；不得恢复独立 Canon、连续性分析或专用制作阶段卡。
-- **CN-08 — 同步与异步写入都精确交接 Query。** 同步 Operation、异步 Resource 的提交事务和 Task Terminal 只通过注册的 `affectedResources` 发布可 replay 事实；提交事件只公布已经持久化的 pending Resource，终态事件只公布 Terminal 已结算事实。客户端只 invalidate/refetch 正式 Query，禁止从 TaskType、target、operation output 或本地 baseline 猜更新。
-- **CN-09 — 最终成片仍是普通视频。** 完成的章节视频与最终渲染都投影为普通 video ResourceCard，只由名称、schemaId 或 typed current-selection kind 表达用途；不得注册 `finalTimeline/finalOutput/finalArtifact` 专用节点或 renderer。渲染中的 Task 由通用 Task/Assistant 生命周期展示，成功媒体到达后才作为普通 VideoCard 进入 Canvas。
-- **CN-10 — 连线只表达当前 Canvas 可见节点间的真实 Lineage。** Resource edge 必须来自持久 `inputResourceId → outputResourceId` Lineage，且 source 与 target 都已作为当前 Canvas 的可见 Resource 节点（顶层或展开分区内）出现；收起文件夹内的资源不参与连线。推荐顺序、Canvas 邻近、Workflow step、同批成员或共享 Episode 都不能产生可见边。
-- **CN-11 — 文件夹化不得降级原卡片能力。** file 节点继续复用既有 text/image/audio/video 卡片、媒体 profile、详情卡、alternatives 预览、上传、创建、删除、直接动作、拖拽和视口行为；可见 folder 卡与展开分区同样投影正式软删除能力。媒体尺寸仍按“冻结 aspectRatio → 已完成媒体尺寸 → 资产卡展示元数据 → 项目 videoRatio”解析；展示元数据只负责 Canvas 外壳，不拥有生产 Prompt 或生成参数。folder 只增加导航和同一 Resource 动作，不得另造简化文件列表替代 ReactFlow Canvas。
-- **CN-12 — 详情卡是唯一展开机制。** 点击 Resource 卡片的外壳、标题或边缘才选中节点，并在其正下方渲染唯一详情卡（ReactFlow viewport 层，跟随画布坐标）；点击图片内容只打开大图预览，不得同时改变 selection 或唤起详情。内容消费该卡 View 的 prompt provenance 与服务端一次性下发的 `inputSummaries`；text/structured 资源的完整正文只经唯一单资源读取 route 按需加载（详情卡与预览弹窗共用同一 hook），UI 不得按 resourceId 零散请求 inputs 或推断引用。取消选中或点击空白关闭。不存在第二种展开/收起或 disclosure 状态。
-- **CN-13 — 新批次只调整一次整体视口。** Assistant Session 投影的持久 Task batch identity 是自动定位的唯一请求身份；批次至少一个 durable target 物化成 Canvas 节点后，只对当前整个 Canvas 执行一次 `fitView`。同批成员的 queued/running/terminal 变化、查询刷新和节点顺序变化都不得再次移动视口；用户拖拽、平移或缩放立即终止本次动画并把该批次标记为已处理。禁止按第一个 running 节点轮换、单节点放大、timer 恢复跟随或从 Operation 名称推断焦点。
-- **CN-14 — Canvas 直接动作只复用正式 Operation。** 卡片 retry、variant、edit、创建与上传必须从最终 Card/Action View 构造 exact Resource scope，经同一个 plan/snapshot/grant/execute 或 direct Operation adapter 写入；UI 不插入假 Resource、不改本地生命周期，只把成功 execute ACK、mutation receipt 或 SSE 作为正式 Query 失效信号。付费动作一次用户意图持有稳定 `Idempotency-Key/operationRequestId`，并只批准当前展示的完整计划。
-- **CN-14A — Canvas 表单只消费服务端能力边界。** 新建菜单与基础表单只消费生产 Operation registry 投影的 capability catalog，包括候选数量、时长与 Voice 文本上限；catalog 失败必须显式提供重试，不得静默表现为只剩上传。表单校验只改善即时反馈，最终业务输入仍由同一个 Operation schema 与 planner 裁决。
-- **CN-14B — 创建与上传显式落在当前文件夹。** Canvas 在用户提交意图时冻结完整 `outputPath`；异步上传重试沿用同一 outputPath，切换文件夹不能把进行中的任务移到新目录。文件名冲突与路径合法性仍由 WorkspaceResource 唯一写入口裁决。
-- **CN-15 — 选择与 Assistant 上下文各有唯一 UI owner。** `ProjectWorkspace` 持有唯一 Canvas selection（仅驱动详情卡）与唯一 assistant context（Chip 与 send context 消费）；assistant context 只在显式"讨论"动作时从当前 selection 复制，单纯选中不附加，Chip 清除与消息送达只清 assistant context。快捷语义动作只发送一次性受控 draft-prefill/focus 命令，不创建全局事件总线或第二份 selection。
-- **CN-16 — Canvas 没有可见性覆盖层。** 节点隐藏与 Resource 归档不是 Canvas 状态；canvas-layout 契约与 clean-cutover schema 均不携带 `hidden`，Canvas 只按 WorkspaceResource 投影结果渲染全部节点。渲染层不得重新引入第二可见性解释（本地 override、隐藏集合或按归档字段过滤）。
-- **CN-17 — 布局按 project + folder 隔离，且只持久化顶层节点。** `ProjectCanvasLayout` 的 canonical scope 是 `(projectId, folderKey)`；root 与每个 folder 分别拥有 viewport 和 node layouts。当前 Canvas 只持久化顶层节点（直接子 Resource 卡、folder 卡与分区框自身）的位置；展开分区内部的后代使用投影计算的相对布局、不可单独拖拽、不得写入父 Canvas 的 layout scope——它们的持久布局只属于各自文件夹的 Canvas。读写前必须验证非 root folder 是同项目、未删除的正式 folder Resource，禁止以路径、当前 Episode 或最近布局推断 scope。
-- **CN-18 — 1,000–5,000 项必须保持 Canvas 语义。** Resource tree/search 使用稳定 cursor 分页，Canvas 逐页物化并启用 ReactFlow viewport virtualization；不得因规模退化为普通列表。完整替换布局只能在当前 folder 全部分页完成后执行，避免用前 200 项删除未加载节点布局。列表投影只消费 bounded summary，不能为 5,000 项读取对象存储全文。
-- **CN-19 — Project-relative 链接只聚焦正式 Canvas。** 聊天中的合法 project-relative path 通过 `ProjectWorkspace` 的受控 callback 导航到其父 folder，并使用既有搜索/定位能力聚焦正式 Resource；不存在直接打开 Runtime 文件、临时页面或第二文件预览 route。folder path 导航到该 folder，无法定位时保持当前正式 Canvas，不得猜测另一目标。
-- **CN-20 — Canvas 创建只消费 Operation Capability。** 紧凑创建表单的 operation、media kind、count/时长边界与唯一默认 Resource schema 全部由服务端 Operation Registry 投影；浏览器只组装该 Operation 的当前公开输入，不能按 operation 名、数组顺序或旧字段猜 schema/model/格式。Registry conformance 必须穷尽验证每个已发布创建 action 的实际输入仍能通过对应 live schema。
-
+- **CN-01 — 节点种类穷尽注册。** registry 为每种 kind 穷尽 identity、layout、renderer、Task
+  target 与动作能力。新增同类实例不得通过分散 switch 或文件存在性接入。
+- **CN-02 — 一个文件夹就是一个 Canvas。** 持久文件夹以自身 `resourceId` 作为 scope key，项目根
+  使用唯一虚拟 identity，永不创建伪 Resource。
+- **CN-02A — 节点 canonical identity 只来自 Resource。** 不得用路径、数组位置、最近记录、Prompt、
+  DOM、历史消息或 Task 到达顺序推导 identity；路径变化不改变节点 identity。
+- **CN-02B — 展开/收起只有一个裁判。** 当前文件夹按子树读取，由唯一 expansion policy 依显式预算
+  导出展示形态。展开/收起不是持久状态、不落库、不由 renderer 或第二处逻辑再解释；父子关系只由
+  共享路径关系函数导出，不能持久化第二份 parent 字段。同一画布会话内收起集合单调不回弹。
+- **CN-02C — 导航只有一条路径。** 按钮点击、卡片单击与双击都调用 Canvas owner 注入的同一个导航
+  callback。不得用 window event 或 renderer 私有状态建立第二条导航路径，也不维护第二份目录结构。
+- **CN-02D — 布局不改变文件归属。** 拖拽只写当前 scope 下的位置，绝不修改路径；移动文件或文件夹
+  只能走 Resource 的显式 move 能力。
+- **CN-02E — 批次与当前选择不改变节点事实。** 每个 Resource 始终按自己的 identity 形成节点；
+  领域批次只保持稳定展示顺序，不合并成候选节点。只有一次 generation 实际创建两个以上结果时才
+  下发 alternatives 分组，单结果不伪造组。组不合并节点、不保存 selected/current；当前项只来自
+  服务端 typed selection，renderer 不得用数组位置或本地选中态覆盖它。
+- **CN-03 — 运行展示无裁决权。** Task runtime 只能覆盖已物化 Resource 的运行展示，不能凭 Task、
+  模型推理或本地乐观结果创建节点或写业务状态。
+- **CN-04 — 生命周期只有一个 resolver。** 持久 Resource、Task runtime 与纯 UI 展开态是独立输入；
+  projector/renderer 不得根据文案、有无字段、timer 或 refetch 推断成功/失败。
+- **CN-05 — UI 不展示领域 ID。** 正式 View 展示服务端按 canonical identity 投影的当前名称；缺少
+  View 必须显式失败，不得回退成 id。
+- **CN-08 — 同步与异步写入都精确交接 Query。** 只通过注册的受影响资源列表发布可 replay 事实：
+  提交事件只公布已持久化的 pending Resource，终态事件只公布已结算事实。客户端只 invalidate 正式
+  Query，禁止从 TaskType、target、operation output 或本地 baseline 猜更新。易失通知只优化延迟；
+  正式 Resource View 的持久 revision 是在线完整性的唯一校验水位。
+- **CN-10 — 连线只表达真实 Lineage。** 边必须来自持久的输入→输出 Lineage，且两端都已作为当前
+  Canvas 的可见节点出现。推荐顺序、空间邻近、同批成员或共享目录都不能产生可见边。
+- **CN-13 — 新批次只调整一次整体视口。** 持久批次 identity 是自动定位的唯一请求身份；至少一个
+  目标物化后只执行一次整体 fitView。同批成员的状态变化、查询刷新与顺序变化都不得再次移动视口；
+  用户操作立即终止动画。禁止按"第一个 running 节点"轮换或用 timer 恢复跟随。
+- **CN-14 — 直接动作只复用正式 Operation。** 卡片 retry、variant 与编辑必须从最终 Action View
+  构造精确 scope；上传必须经正式上传与物化 Operation。UI 不插入假 Resource、不改本地生命周期，
+  只把成功 ACK 或变更通知当作 Query 失效信号。付费动作一次用户意图持有稳定幂等键，且只批准当前
+  展示的完整计划。
+- **CN-14B — 上传显式落在当前文件夹。** 提交意图时冻结当前 `folderPath` 与名称，由服务端
+  派生并冻结最终路径；异步重试沿用已预留 Resource，切换文件夹不能把进行中的任务移到新目录。
+- **CN-15 — 选择与 Assistant 上下文各有唯一 UI owner。** 父级持有唯一 selection 与唯一 assistant
+  context；后者只在显式动作时从 selection 复制，单纯选中不附加。不建立全局事件总线或第二份
+  selection。
+- **CN-16 — Canvas 没有可见性覆盖层。** 节点隐藏与归档不是 Canvas 状态；渲染层不得引入第二可见性
+  解释（本地 override、隐藏集合或按归档字段过滤）。
+- **CN-17 — 布局按 project + folder 隔离，且只持久化顶层节点。** 读写前必须验证目标文件夹属于
+  同项目且未删除，禁止以路径、当前上下文或最近布局推断 scope。展开分区内部的后代不写入父 Canvas
+  的 layout scope。
+- **CN-18 — 大规模必须保持 Canvas 语义。** 树与搜索使用稳定 cursor 分页并启用视口虚拟化，不因
+  规模退化为普通列表。完整替换布局只能在当前目录全部分页完成后执行，避免用首页删除未加载节点的
+  布局。列表投影只消费有界摘要。
 ## 权威入口
 
-- 节点 registry：`src/features/project-workspace/canvas/registry/workspace-canvas-node-registry.ts`。
-- folder/root scope、返回与搜索定位：`ProjectWorkspaceCanvas.tsx`、`controls/CanvasFolderNavigation.tsx`（返回按钮 + 默认折叠的目录树面板 + 搜索，无面包屑；目录树消费 root `scope=subtree` 列表投影，选中走同一导航 callback，不维护第二份目录结构）；root identity 只来自 `WORKSPACE_RESOURCE_ROOT_FOLDER_KEY`。
-- 子树展开/收起唯一裁判：`projection/workspace-canvas-expansion-policy.ts`（预算常量、树构建与确定性收起规则）；renderer 只消费 `folder.display`。
-- children/subtree/search Query：`src/lib/query/hooks/useWorkspaceResources.ts` 与 `src/lib/workspace-resource/view-service.ts`（`scope=children|subtree`）；tree/search 返回 bounded summary，单资源读取才允许返回完整内容。
-- 媒体 presentation 契约：`src/features/project-workspace/canvas/node-presentation-profiles.ts`（每媒体族 shell 声明与唯一尺寸 resolver）。
-- 新批次整体视口定位：`src/features/project-workspace/canvas/hooks/useCanvasFocusFollow.ts`；批次身份与 durable target 只来自 Assistant Session View。
-- 投影编排：`src/features/project-workspace/canvas/projection/workspace-node-canvas-projection.ts`。
-- Resource 投影与通用 fallback renderer：`workspace-node-resource-projection.ts`、`nodes/renderers/resource-card.tsx`、`nodes/renderers/resource-media-shell.tsx`；Resource View 来自 `src/lib/workspace-resource/view-service.ts`。
-- 选中详情卡：`src/features/project-workspace/canvas/details/WorkspaceNodeDetailsCard.tsx` 负责 viewport 定位与宽度，唯一展示实现在同目录 `WorkspaceNodeDetailsPanel.tsx`；数据只来自 card View（prompt provenance + `inputSummaries`）。详情卡提示词只读可复制；已有 Resource 的修改一律经 Assistant 通道产生新 Resource，Canvas 不提供人工改写历史输入的入口。
-- 画布创建占位卡：`create/WorkspaceCanvasCreateDock.tsx`。双击空白产生单一临时纯 UI 草稿并分两步：先在原位选择类型（能力来自服务端 creation 声明），再展开单类型撰写面板（外壳与选中详情面板一致）；尚未提交时，点击草稿外任意位置或按 Escape 直接丢弃，双击新位置替换旧草稿，不提供固定关闭按钮；开始 plan/确认/执行后草稿不可被外部点击移除，只有正式 pending Resource 已通过当前目录 Query 投影全部计划目标后才关闭并由真实卡片接手。不注册节点 kind、不写任何持久层，提交只走通用 Operation 通道，上传只走既有上传队列两段式协议；刷新丢弃未提交草稿属预期。
-- Canvas 直接动作、创建、上传、软删除和 Assistant 预填：`src/features/project-workspace/canvas/actions/**`、`canvas/upload/**` 与 `ProjectWorkspace` 的受控 selection/draft bridge；删除确认冻结服务端 Action View 下发的 canonical `resourceId + approvalInputHash`，文件与可见 folder 共用 `delete_resource → WorkspaceResource` 唯一 writer，mutation receipt 只负责 Query 交接；服务端写入仍只走 Operation adapter。
-- folder-scoped 节点位置与 viewport：`src/lib/project-canvas/layout/**` 与 `/api/projects/[projectId]/canvas-layout`；唯一 scope 是 `(projectId, folderKey)`，不存在第二隐藏集合或 Episode layout route。
-- 可选领域事实投影必须先对齐 Resource origin/lineage；不存在 planning/asset-execution/video-stage projector。
-- 音频与成片同样使用普通 Resource 投影，不得恢复声音或最终阶段节点。
-- 唯一 lifecycle resolver：`src/features/project-workspace/canvas/lifecycle/**`。
-- 资源通知契约：`src/lib/workspace-resource/resource-impact.ts`、`resource-change-publisher.ts`。
+- 节点 registry 与投影编排：`src/features/project-workspace/canvas/**`
+- 展开/收起唯一裁判：`canvas/projection/workspace-canvas-expansion-policy.ts`
+- 唯一 lifecycle resolver：`canvas/lifecycle/**`
+- Resource View 与列表/搜索 Query：`src/lib/workspace-resource/view-service.ts`、`src/lib/query/**`
+- 布局：`src/lib/project-canvas/layout/**` + canvas-layout route（scope 为 project + folder）
+- 资源变更通知：`src/lib/workspace-resource/resource-impact.ts`、`resource-change-publisher.ts`
 
-## 验证
+## 踩过的坑
 
-- `tests/contracts/canvas-node-conformance.test.ts` 从生产 registry 穷尽校验 kind/capability/renderer/fixture，并校验媒体 presentation 契约对全部 media type 穷尽、frame shell 按画幅比解析。
-- folder 进入/返回、项目搜索定位、预算展开/收起形态、folder-scoped layout、分页完成前禁止布局覆盖、卡片刷新与真实 Resource/Task/Lineage 组合没有稳定独立 oracle，使用 authenticated 产品人工复验。
-- alternatives 左右浏览、多媒体 renderer、图片点击仅预览而卡片边缘点击选中、付费确认、当前目录创建/上传、创建草稿到 pending Resource 的无缝接力、软删除确认及上传重试同样属于 authenticated 产品人工复验；静态验证只能证明 registry、类型和唯一协议接线。
-
-## 历史回归
-
-- 媒体 Operation 收敛为按模态严格 schema 后，Agent 工具已要求 `schemaId`，但 Canvas 创建 input builder 仍发送旧 `name/resource/target` 字段，Voice capability 仍声明已删除的 `single` request kind，视频/音乐没有发布表单必需的时长范围；这条真实 UI 入口不在原媒体 conformance 枚举中，会在付费计划前全部被 strict schema 拒绝。当前 alternative-generation capability 显式拥有且校验唯一 `defaultSchemaId`、`new` request kind 和真实输入边界，Canvas 删除旧字段并只消费该投影，Registry conformance 穷尽穿过 Catalog → builder → live Operation schema。
-
-- Agent 曾输出可点击的 Runtime 绝对文件路径，浏览器把宿主目录拼成 `/zh/tmp/...` 页面并 404；直接增加“文件 route”会让临时工作副本成为第二内容入口。当前 Markdown 只接受安全 project-relative path，Canvas owner 复用正式 folder/resource 搜索定位，绝对路径与 traversal 只显示为不可导航文本。
-
-- 图片预览按钮从初版起就只在自身 `mousedown/click` handler 调用 `stopPropagation`，但 Resource tree 切换后，ReactFlow NodeWrapper 仍同时拥有内建 element selection 与业务 `onNodeClick` Resource 选择入口；图片因此会在打开大图时同时唤起下方详情。第一轮修复只给图片加 interaction marker，并在业务 `onNodeClick` 中按事件 target 返回，仍依赖包装层回调保留子元素语义，没有移除这条 Resource 选择入口，用户复验确认无效。当前显式关闭 ReactFlow element selection，中央 `onNodeClick` 不再选择 Resource；只有卡片外壳经无状态 context bridge 调用 `ProjectWorkspace` 的唯一 controlled selection writer，图片按钮只负责预览。真实 pointer/touch 组合仍是认证产品人工复验边界。
-
-- 创建菜单改为“点击外部关闭”后，确认生成弹窗也位于草稿 DOM 外；用户点击确认时，全局 pointer capture 先删除草稿，而正式 pending Resource 尚未完成 Query 接手，画布出现确定性空窗。上一版只用 ESLint、类型和 locale 对齐验证静态接线，无法反证跨 portal 的真实指针顺序。当前草稿在 plan/确认/执行与 Query handoff 期间不可 dismiss，且只在计划目标已全部进入正式 Canvas 投影后关闭；没有 timer、假节点或本地终态。认证浏览器下的真实点击时序仍是人工复验边界。
-
-- Workspace tree clean cutover 删除旧 Project read pack 时，Canvas 仍使用的 `/api/task-target-states` 唯一 API Operation `get_task_status` 一并被误删；底层 Task state service 与 route 都还在，导致每次卡片状态刷新确定性返回 Operation not found。当前查询实例归入 Task Operation pack，并保持 API-only；Canvas 不另建 Task 状态解释器。
-- 文件夹卡片首版把可见文案写成“打开文件夹”，实际却只在 ReactFlow `onNodeDoubleClick` 导航；用户按文案单击时 handler 仅清空 selection，页面没有任何响应。当前单击与双击复用同一个 `folderFromResource → onNavigate` 入口，普通 Resource 单击仍只负责选中详情。
-- 文件夹导航首版固定在 ReactFlow 视口左上 `16px`，被全局工作区导航条遮挡；语义按钮虽然存在，真实指针会命中上层 logo。后续 renderer 又通过全局 `window` event 发送按钮导航，而 ReactFlow node click 仍是另一入口，语义点击、键盘与普通卡片点击无法保证同路。当前导航控件避开全局顶栏，Canvas owner 只注入一个使用正式 Resource identity 的导航 callback；原生按钮与 ReactFlow node click 都调用它，键盘不再依赖指针事件。
-- Runtime Turn checkpoint 已把新文件原子写入 WorkspaceResource Catalog，但只发布 Assistant View 失效事件，Canvas 查询因此在当前页面继续显示旧树，刷新后才出现新目录。当前 checkpoint 在树变更提交且本地 baseline 更新后复用统一 `resource.changed` 投影事件；前端仍只消费 WorkspaceResource View，不从聊天事件或 Runtime 文件猜测节点。
-
-- BGM/环境音曾以 planner stream、BgmDesign、MusicScore 和最终节点依次交接，任何 owner 字段或 Query 条件漂移都会制造空窗。当前音乐方向是普通 WorkspaceResource，生成音乐是普通 audio Resource，最终输出是普通 video Resource；同一 Task 的正式 Revision只接手自己的 presentation，不再跨阶段交接。
-- 旧结构化 accumulator 只存在组件内存，刷新后镜头计划与 BGM presentation 会形成空窗；后续即使补上 stream checkpoint，仍让 Canvas 解释了第二份制作状态。当前结构化 stream 与制作规划节点整体删除：Task 只展示运行事实，持久 Resource 只通过正式 Query 与 `affectedResources` 接手内容，刷新不再依赖内存 delta 或阶段恢复。
-
-- Storyboard/Panel 曾把“文本镜头记录存在”误解释为“图片已成功”，18 个未提交图片 Task 的节点因此同时显示成功。首次修正只分离 Panel 与媒体 lifecycle，仍保留了不再需要的分镜图阶段。当前防线直接删除 Panel/图片节点与全部入口。
-- 多章节“全部”范围曾因 nullable 单实例 `editScript` 而不投影任何 VideoGroup，最终时间线却另外统计到视频；后续修复又依赖 `segmentIndex/gridMode`。当前每个 Chapter/媒体 Resource 都按自身 identity 投影，Canvas 不维护 episode 级 VideoGroup。
-- BGM 节点曾早于真实音频事实出现；后续加入独立环境音时复用了旧阶段阈值。当前音频节点只来自实际 Resource/Task，Canvas registry、renderer 与 layout 不再解释声音工作流。
-- 正式 View 曾在名称缺失时回显 locationId/characterId/shotId/sourceId；当前 projector 必须从 canonical identity 投影当前名称或显式拒绝，renderer 永不显示领域 ID。
-- Segment 收敛后，Canvas 每张视频卡曾复用无目标的 episode 级 action，导致全部卡片得到同一总价，单卡点击也真实提交全部 Segment；本地 `submittingNodeIds` 只标记点击卡片，无法纠正服务端批量事实。当前 projection 从同一卡片 View 构造精确 scope，计费 request 的 cache identity 包含该 scope，服务端 planner 决定唯一 Task 集合。
-- Workflow 曾同时裁决节点可见性与 Operation 可用性，Canvas 还维护独立 stage rank；首次修正只把主链降级为 recommendation，仍保留第二解释源。当前 WorkflowView 整体删除，projector 只读取领域、Resource 与 Task 事实。
-- Canvas 收费按钮曾在依赖资源尚未完成时缓存 plan preflight 的 `NOT_READY`；Task 终态虽然通过显式 `affectedResources` 刷新了正式领域 Query，却没有让由这些资源派生的 operation plan preview 失效，执行计划已 `ready` 后按钮仍保持旧错误。当前统一资源变更同步会按 project 同时 invalidate 全部 plan preview；服务端 plan/execute 的内容重验证仍是审批正确性的唯一裁判，客户端失效只负责展示最新报价 View。
-- Resource 提交曾只显示 Assistant 回执，Canvas 要等媒体终态才看见节点和 prompt；专业源剧本 origin 匹配错误又生成 raw JSON 重复卡，规划 projector 还会凭来源种类创建空制作规划和主链假连线。当前 pending Resource 提交事务立即触发正式 Query，renderer 从冻结 Task payload 展示 prompt；专业 origin 只匹配真实专业 identity，所有非 Lineage 连线已删除。
-- Workflow action gating 删除后，旧 Video Segment 卡仍按资产审核/镜头计划状态预取付费 plan，说明删除 gate 没有删除固定链。当前该专用 action policy 和 projector 一并删除；新的生成或重试只由显式 Resource 输入调用通用 Operation。
-- Canvas 自动跟随最初为串行阶段设计：它持续选择“第一个 running 节点”，同批并发成员逐个终态时选择结果随之变化，并由 3 秒 timer 在用户操作后重新抢回视口。媒体卡同时把所有图片强塞进项目 `videoRatio` 外壳并使用 `object-cover`，4:3 资产图因此上下裁切。当前批次 identity 只触发一次全画布 `fitView`，用户操作立即终止；媒体 shell 由冻结执行事实、真实媒体尺寸和资产卡展示元数据依次解析，资产完整显示；该展示回退不参与生产 Prompt 或参数裁决。
-- 通用 candidate/adoption 协议曾把 candidate set、selected binding 与整个组节点混在一起，但没有真实产品消费者；`494dacbc7` 因此删除全部死协议。当前 Canvas 的真实需求只恢复“同一次显式 generation request 的 alternatives”这一事实：组 owner 是初始 OperationExecution，成员仍是独立 Resource，View 只提供有序浏览；generic adopt、selected/current、组级 lifecycle 与组节点保持删除。
-- Canvas 选中曾由 Canvas 本地 `selectedNodeId` 拥有、父级再保存一份派生 `assistantSelection`；Chip 即使清空父级也会被子级回写。当前父级是唯一 selection owner，Canvas 与 Assistant 都受控消费同一值。
-- Canvas 布局曾以 Episode 作为唯一 scope，无法表达普通目录，也会让同一项目的文件位置互相覆盖；当前一次性切换为 `(projectId, folderKey)`，root 固定为 `@root`，旧 Episode writer 与读取参数均已删除。
-- Resource tree 曾在列表查询中读取每个文本/JSON 的对象存储全文，1,000–5,000 项时即使 ReactFlow 虚拟化也无法控制 I/O；当前 tree/search 只返回 bounded summary，完整内容只由单资源读取和 runtime projection 消费。
-
-## 修改检查表
-
-1. 当前 Canvas 是否只由 `@root` 或正式 folder `resourceId` 定义，子树展开/收起是否只由唯一 expansion policy 按显式预算导出？
-2. file/folder 节点 identity 是否只使用 `resourceId`，路径移动是否仍走唯一 WorkspaceResource move 入口？
-3. folder-scoped layout 是否验证项目归属，并在分页完整前拒绝全量覆盖？
-4. 是否保留原 Resource 卡片、详情、预览、上传、创建、动作、拖拽与视口能力，而没有退化成列表？
-5. lifecycle、Task overlay、服务端 action input 和 UI 选中态是否仍为独立输入？
-6. 是否用 Workflow、邻近、跨文件夹引用、同批关系或 fallback 伪造节点、可见性或 Lineage edge？
-7. 是否明确了需要人工复验的 Canvas observable，而不是机械新增快照测试？
+- Storyboard/Panel 把"文本镜头记录存在"解释成"图片已成功"，18 个未提交的图片 Task 同时显示成功
+  → 两种事实共用一个节点状态 → 删除阶段节点与全部入口（CN-03/CN-06）。
+- 自动跟随最初为串行阶段设计：持续选择"第一个 running 节点"，并发批次逐个终态时选择结果随之变化，
+  还有 timer 在用户操作后抢回视口 → 用运行顺序当定位身份 → 批次 identity 只触发一次整体 fitView
+  （CN-13）。
+- 视频卡曾复用无目标的批级动作，全部卡片得到同一总价，单卡点击真实提交了全部成员；本地标记只标
+  点击的卡，无法纠正服务端批量事实 → 展示层 scope 与执行 scope 不一致 → 从同一卡片 View 构造
+  精确 scope，计费请求的缓存身份包含该 scope（CN-14）。
+- 图片预览按钮从初版就 stopPropagation，但包装层同时拥有内建 element selection 与业务点击入口，
+  打开大图会同时唤起详情；第一轮只加 interaction marker，仍依赖包装层保留子元素语义，人工复验
+  确认无效 → 存在两条 selection 入口 → 显式关闭 element selection，只保留唯一 controlled writer。
+- 资源树切换后仍使用的一个查询 Operation 被误删，卡片状态刷新确定性返回"Operation not found"
+  → 删除旧读取包时没有枚举实际消费者 → 该查询归入 Task Operation 包并保持 API-only。
+- 列表查询曾为每个文本/JSON 读取对象存储全文，数千项时即使虚拟化也无法控制 I/O → 列表路径承担了
+  单资源读取的职责 → 摘要来自版本行物化的预览列，完整正文只由单资源入口消费（CN-18）。

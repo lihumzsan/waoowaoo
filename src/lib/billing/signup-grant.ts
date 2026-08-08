@@ -11,7 +11,7 @@ import { getDeploymentFeatures } from '@/lib/deployment/features'
  * Only cloud grants anything — a self-hosted deployment has no platform
  * balance to give away.
  */
-const DEFAULT_SIGNUP_GRANT_CREDITS = 100
+const DEFAULT_SIGNUP_GRANT_CREDITS = 0
 
 export function resolveSignupGrantCredits(): number {
   if (!getDeploymentFeatures(getDeploymentConfig()).showBilling) return 0

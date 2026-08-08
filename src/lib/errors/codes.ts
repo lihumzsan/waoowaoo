@@ -9,14 +9,6 @@ export const ERROR_CATEGORY = {
 
 export type ErrorCategory = (typeof ERROR_CATEGORY)[keyof typeof ERROR_CATEGORY]
 
-export const ERROR_FAILURE_CLASS = {
-  TRANSIENT_PROVIDER: 'TRANSIENT_PROVIDER',
-  PERMANENT_PROVIDER: 'PERMANENT_PROVIDER',
-  OUTPUT_VALIDATION: 'OUTPUT_VALIDATION',
-} as const
-
-export type ErrorFailureClass = (typeof ERROR_FAILURE_CLASS)[keyof typeof ERROR_FAILURE_CLASS]
-
 function defineErrorSpec<const Code extends string>(
   code: Code,
   httpStatus: number,
@@ -156,6 +148,13 @@ export const ERROR_CATALOG = {
     userMessageKey: 'errors.PROVIDER_AUTH_INVALID',
     defaultMessage: 'Provider credentials are missing or invalid',
   },
+  PLATFORM_PROVIDER_AUTH_INVALID: defineErrorSpec(
+    'PLATFORM_PROVIDER_AUTH_INVALID',
+    503,
+    true,
+    ERROR_CATEGORY.PROVIDER,
+    'Platform model service credentials require attention',
+  ),
   PROVIDER_BILLING_REQUIRED: {
     httpStatus: 402,
     retryable: false,
@@ -163,6 +162,20 @@ export const ERROR_CATALOG = {
     userMessageKey: 'errors.PROVIDER_BILLING_REQUIRED',
     defaultMessage: 'Provider account billing requires attention',
   },
+  PLATFORM_PROVIDER_BILLING_REQUIRED: defineErrorSpec(
+    'PLATFORM_PROVIDER_BILLING_REQUIRED',
+    503,
+    true,
+    ERROR_CATEGORY.PROVIDER,
+    'Platform model service billing is temporarily unavailable',
+  ),
+  PLATFORM_PROVIDER_UNAVAILABLE: defineErrorSpec(
+    'PLATFORM_PROVIDER_UNAVAILABLE',
+    503,
+    true,
+    ERROR_CATEGORY.PROVIDER,
+    'Platform model service is temporarily unavailable',
+  ),
   QUOTA_EXCEEDED: {
     httpStatus: 429,
     retryable: true,
@@ -261,6 +274,27 @@ export const ERROR_CATALOG = {
     userMessageKey: 'errors.INSUFFICIENT_BALANCE',
     defaultMessage: 'Insufficient balance',
   },
+  PAID_BETA_SOLD_OUT: defineErrorSpec(
+    'PAID_BETA_SOLD_OUT',
+    409,
+    false,
+    ERROR_CATEGORY.BILLING,
+    'This paid-beta wave is full',
+  ),
+  PUBLIC_BETA_WAITLIST_INVALID_INPUT: defineErrorSpec(
+    'PUBLIC_BETA_WAITLIST_INVALID_INPUT',
+    400,
+    false,
+    ERROR_CATEGORY.VALIDATION,
+    'The public-beta waitlist input is invalid',
+  ),
+  PUBLIC_BETA_WAITLIST_NOT_OPEN: defineErrorSpec(
+    'PUBLIC_BETA_WAITLIST_NOT_OPEN',
+    409,
+    false,
+    ERROR_CATEGORY.VALIDATION,
+    'The public-beta waitlist is not open',
+  ),
   SENSITIVE_CONTENT: {
     httpStatus: 422,
     retryable: false,
@@ -268,6 +302,13 @@ export const ERROR_CATALOG = {
     userMessageKey: 'errors.SENSITIVE_CONTENT',
     defaultMessage: 'Sensitive content detected',
   },
+  CONTENT_RIGHTS_RESTRICTION: defineErrorSpec(
+    'CONTENT_RIGHTS_RESTRICTION',
+    422,
+    false,
+    ERROR_CATEGORY.CONTENT,
+    'Generated content may involve copyrighted or otherwise protected material',
+  ),
   GENERATION_TIMEOUT: {
     httpStatus: 504,
     retryable: true,
@@ -362,19 +403,4 @@ export function resolveUnifiedErrorCode(code: unknown): UnifiedErrorCode | null 
 
 export function getErrorSpec(code: UnifiedErrorCode) {
   return ERROR_CATALOG[code]
-}
-
-export function getErrorFailureClass(code: UnifiedErrorCode): ErrorFailureClass {
-  if (
-    code === 'EMPTY_RESPONSE'
-    || code === 'MODEL_OUTPUT_TRUNCATED'
-    || code === 'PARSE_ERROR'
-    || code === 'MODEL_OUTPUT_SCHEMA_INVALID'
-    || code === 'PLAN_VALIDATION_FAILED'
-  ) {
-    return ERROR_FAILURE_CLASS.OUTPUT_VALIDATION
-  }
-  return ERROR_CATALOG[code].retryable
-    ? ERROR_FAILURE_CLASS.TRANSIENT_PROVIDER
-    : ERROR_FAILURE_CLASS.PERMANENT_PROVIDER
 }

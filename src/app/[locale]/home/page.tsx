@@ -522,12 +522,12 @@ export default function HomePage() {
                     </div>
                   ) : null}
                   {attachError ? (
-                    <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600">
+                    <p className="rounded-xl bg-[var(--glass-tone-surface)] px-4 py-3 text-sm text-[var(--glass-tone-danger-fg)] shadow-[var(--glass-tone-shadow)]">
                       {attachError}
                     </p>
                   ) : null}
                   {createError ? (
-                    <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600">
+                    <p className="rounded-xl bg-[var(--glass-tone-surface)] px-4 py-3 text-sm text-[var(--glass-tone-danger-fg)] shadow-[var(--glass-tone-shadow)]">
                       {createError}
                     </p>
                   ) : null}
@@ -593,24 +593,18 @@ export default function HomePage() {
                       <IconGradientDefs className="w-0 h-0 absolute" aria-hidden="true" />
                       <AppIcon name="statsBarGradient" className="w-4 h-4 flex-shrink-0" />
                       <div className="flex items-center gap-3 text-sm font-semibold bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">
-                        {project.stats.folders > 0 && (
-                          <span className="flex items-center gap-1">
-                            <AppIcon name="folder" className="w-3.5 h-3.5" />
-                            {project.stats.folders}
-                          </span>
-                        )}
-                        {project.stats.images > 0 && (
-                          <span className="flex items-center gap-1">
-                            <AppIcon name="statsImageGradient" className="w-3.5 h-3.5" />
-                            {project.stats.images}
-                          </span>
-                        )}
-                        {project.stats.videos > 0 && (
-                          <span className="flex items-center gap-1">
-                            <AppIcon name="statsVideoGradient" className="w-3.5 h-3.5" />
-                            {project.stats.videos}
-                          </span>
-                        )}
+                        <span className="flex items-center gap-1">
+                          <AppIcon name="folder" className="w-3.5 h-3.5 text-[var(--glass-tone-info-fg)]" />
+                          {project.stats.folders}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <AppIcon name="statsImageGradient" className="w-3.5 h-3.5" />
+                          {project.stats.images}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <AppIcon name="statsVideoGradient" className="w-3.5 h-3.5" />
+                          {project.stats.videos}
+                        </span>
                       </div>
                     </div>
                   )}

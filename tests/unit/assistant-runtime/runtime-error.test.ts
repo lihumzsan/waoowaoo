@@ -4,6 +4,27 @@ import {
   AssistantRuntimeEventProjector,
   projectAssistantRuntimeToolOutput,
 } from '@/lib/assistant-runtime/event-projector'
+import type { UnifiedErrorCode } from '@/lib/errors/codes'
+
+function expectedRuntimeFailure(code: UnifiedErrorCode, message: string) {
+  return {
+    version: 2,
+    native: { message },
+    interpretation: { code, details: null },
+    context: {
+      system: 'runtime',
+      provider: 'codex',
+      phase: 'turn',
+    },
+    recovery: {
+      operation: null,
+      effect: 'unknown',
+      taskReplay: 'forbidden',
+      attempts: 1,
+    },
+    frames: [],
+  }
+}
 
 describe('Codex runtime terminal error projection', () => {
   it('projects canonical MCP structured output instead of the transport envelope', () => {
@@ -69,10 +90,10 @@ describe('Codex runtime terminal error projection', () => {
         responseStreamDisconnected: { httpStatusCode: null },
       },
       additionalDetails: null,
-    })).toEqual({
-      errorCode: 'NETWORK_ERROR',
-      errorMessage: 'stream disconnected before completion',
-    })
+    })).toMatchObject(expectedRuntimeFailure(
+      'NETWORK_ERROR',
+      'stream disconnected before completion',
+    ))
   })
 
   it('classifies a provider protocol rejection without parsing its message', () => {
@@ -80,10 +101,69 @@ describe('Codex runtime terminal error projection', () => {
       message: 'Provider returned error',
       codexErrorInfo: 'badRequest',
       additionalDetails: 'messages.2 rejected',
-    })).toEqual({
-      errorCode: 'ASSISTANT_PROVIDER_REQUEST_INVALID',
-      errorMessage: 'Provider returned error',
-    })
+    })).toMatchObject(expectedRuntimeFailure(
+      'ASSISTANT_PROVIDER_REQUEST_INVALID',
+      'Provider returned error',
+    ))
+  })
+
+  it('classifies the pinned provider billing fact without parsing its message', () => {
+    expect(normalizeAssistantRuntimeFailure({
+      message: 'provider-specific billing copy',
+      codexErrorInfo: 'usageLimitExceeded',
+      additionalDetails: null,
+    }, { providerCredentialMode: 'user-key' })).toMatchObject(expectedRuntimeFailure(
+      'PROVIDER_BILLING_REQUIRED',
+      'provider-specific billing copy',
+    ))
+  })
+
+  it('attributes provider billing to the platform when the platform owns the key', () => {
+    expect(normalizeAssistantRuntimeFailure({
+      message: 'provider-specific billing copy',
+      codexErrorInfo: 'usageLimitExceeded',
+      additionalDetails: null,
+    }, { providerCredentialMode: 'platform-key' })).toMatchObject(expectedRuntimeFailure(
+      'PLATFORM_PROVIDER_BILLING_REQUIRED',
+      'provider-specific billing copy',
+    ))
+  })
+
+  it('attributes a normalized Provider outage to the platform key owner', () => {
+    expect(normalizeAssistantRuntimeFailure({
+      message: 'slow_down',
+      codexErrorInfo: 'serverOverloaded',
+      additionalDetails: null,
+    }, { providerCredentialMode: 'platform-key' })).toMatchObject(expectedRuntimeFailure(
+      'PLATFORM_PROVIDER_UNAVAILABLE',
+      'slow_down',
+    ))
+  })
+
+  it('normalizes an upstream HTTP status carried by a structured Codex error', () => {
+    expect(normalizeAssistantRuntimeFailure({
+      message: 'upstream request failed',
+      codexErrorInfo: {
+        responseTooManyFailedAttempts: { httpStatusCode: 402 },
+      },
+      additionalDetails: null,
+    }, { providerCredentialMode: 'platform-key' })).toMatchObject(expectedRuntimeFailure(
+      'PLATFORM_PROVIDER_BILLING_REQUIRED',
+      'upstream request failed',
+    ))
+  })
+
+  it('normalizes provider authentication from the structured upstream status', () => {
+    expect(normalizeAssistantRuntimeFailure({
+      message: 'provider request rejected',
+      codexErrorInfo: {
+        httpConnectionFailed: { httpStatusCode: 401 },
+      },
+      additionalDetails: null,
+    }, { providerCredentialMode: 'platform-key' })).toMatchObject(expectedRuntimeFailure(
+      'PLATFORM_PROVIDER_AUTH_INVALID',
+      'provider request rejected',
+    ))
   })
 
   it('keeps retry notifications non-terminal and persists the final typed failure', async () => {
@@ -143,8 +223,7 @@ describe('Codex runtime terminal error projection', () => {
     await expect(projector.terminal).resolves.toMatchObject({
       status: 'failed',
       stopReason: 'runtime_failed',
-      errorCode: 'NETWORK_ERROR',
-      errorMessage: 'stream disconnected',
+      failure: expectedRuntimeFailure('NETWORK_ERROR', 'stream disconnected'),
     })
   })
 })

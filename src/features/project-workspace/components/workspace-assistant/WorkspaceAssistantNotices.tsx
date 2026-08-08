@@ -4,11 +4,6 @@ import { AppIcon } from '@/components/ui/icons'
 import type { ProjectAgentContextCompactedPartData } from '@/lib/project-agent/types'
 
 type RuntimeGoalPartData = { readonly goal: unknown }
-type RuntimeProgressPartData = {
-  readonly itemId: string
-  readonly kind: 'shell' | 'file' | 'mcp' | 'diff'
-  readonly message: string
-}
 type RuntimeSkillsPartData = {
   readonly changed: boolean
   readonly skills: readonly {
@@ -102,26 +97,16 @@ export function AssistantRuntimeSkillsDataCard({ data }: DataMessagePartProps<Ru
           </div>
         ))}
       </div>
-      <div className="mt-2 text-[11px] text-[var(--glass-tone-warn-fg)]">
+      <div className="mt-2 text-[11px] text-[var(--glass-tone-warning-fg)]">
         {t('runtime.skills.errors', { count: data.errorCount })}
       </div>
     </details>
   )
 }
 
-export function AssistantRuntimeProgressDataCard({ data }: DataMessagePartProps<RuntimeProgressPartData>) {
-  const t = useTranslations('assistantAgent')
-  if (data.kind !== 'diff') return null
-  return (
-    <details className="rounded-xl border border-[var(--glass-stroke-base)] bg-white/70 px-3 py-2 text-xs">
-      <summary className="cursor-pointer font-medium text-[var(--glass-text-secondary)]">
-        {t(`runtime.progress.${data.kind}`)}
-      </summary>
-      <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words text-[11px] text-[var(--glass-text-tertiary)]">
-        {data.message}
-      </pre>
-    </details>
-  )
+/** Legacy runtime progress parts can exist in persisted messages, but they are internal telemetry. */
+export function AssistantRuntimeProgressDataCard() {
+  return null
 }
 
 /**

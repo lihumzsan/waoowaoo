@@ -2,12 +2,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { requestOpenRouterImage } from '@/lib/ai-providers/openrouter/image'
 import type { OpenRouterImageOptions } from '@/lib/ai-providers/openrouter/image-options'
 import {
+  OPENROUTER_BANANA_2_IMAGE_MODEL_ID,
   OPENROUTER_GPT_IMAGE_2_MODEL_ID,
   resolveOpenRouterOptionSchema,
 } from '@/lib/ai-providers/openrouter/models'
 import { AiOptionValidationError, normalizeAiOptions } from '@/lib/ai-exec/normalize'
 import { startScenarioServer } from '../../helpers/fakes/scenario-server'
-import { ProviderPreAcceptRejectedError } from '@/lib/ai-exec/submission-error'
+import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
 
 const PNG_1X1_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
 const PNG_1X1_DATA_URL = `data:image/png;base64,${PNG_1X1_BASE64}`
@@ -17,6 +18,14 @@ function normalizeImageOptions(options: Record<string, unknown>): OpenRouterImag
     schema: resolveOpenRouterOptionSchema('image', OPENROUTER_GPT_IMAGE_2_MODEL_ID),
     options,
     context: 'openrouter-image-contract',
+  }) as OpenRouterImageOptions
+}
+
+function normalizeBananaImageOptions(options: Record<string, unknown>): OpenRouterImageOptions {
+  return normalizeAiOptions({
+    schema: resolveOpenRouterOptionSchema('image', OPENROUTER_BANANA_2_IMAGE_MODEL_ID),
+    options,
+    context: 'openrouter-banana-image-contract',
   }) as OpenRouterImageOptions
 }
 
@@ -68,7 +77,7 @@ describe('provider contract - OpenRouter image', () => {
     }
   })
 
-  it('streams the dedicated image API exactly once and projects only the completed image', async () => {
+  it('streams a text-to-image request exactly once and projects only the completed image', async () => {
     server!.defineScenario({
       method: 'POST',
       path: '/openrouter/images',
@@ -107,9 +116,8 @@ describe('provider contract - OpenRouter image', () => {
       baseUrl: `${server!.baseUrl}/openrouter`,
       apiKey: 'openrouter-image-key',
       modelId: 'openai/gpt-image-2',
-      prompt: 'paint this as a watercolor scene',
+      prompt: 'paint a watercolor city scene',
       options: normalizeImageOptions({
-        referenceImages: [PNG_1X1_DATA_URL],
         aspectRatio: '9:16',
         resolution: '1K',
         quality: 'high',
@@ -134,6 +142,72 @@ describe('provider contract - OpenRouter image', () => {
     expect(requests[0]?.headers['content-type']).toBe('application/json')
     expect(JSON.parse(requests[0]?.bodyText || '{}')).toEqual({
       model: 'openai/gpt-image-2',
+      prompt: 'paint a watercolor city scene',
+      n: 1,
+      size: '1088x1920',
+      quality: 'high',
+      output_format: 'webp',
+      background: 'opaque',
+      output_compression: 60,
+      stream: true,
+      provider: {
+        only: ['openai'],
+        allow_fallbacks: false,
+        options: { openai: { moderation: 'low' } },
+      },
+    })
+    expect(requests[0]?.headers.accept).toBe('text/event-stream')
+  })
+
+  it('uses the buffered Images API when GPT Image 2 receives reference images', async () => {
+    server!.defineScenario({
+      method: 'POST',
+      path: '/openrouter/images',
+      mode: 'success',
+      submitResponse: {
+        status: 200,
+        body: {
+          created: 1_785_406_500,
+          data: [{ b64_json: PNG_1X1_BASE64, media_type: 'image/webp' }],
+          usage: {
+            prompt_tokens: 100,
+            completion_tokens: 4075,
+            total_tokens: 4175,
+            cost: 0.165,
+          },
+        },
+      },
+    })
+
+    const result = await requestOpenRouterImage({
+      baseUrl: `${server!.baseUrl}/openrouter`,
+      apiKey: 'openrouter-image-key',
+      modelId: 'openai/gpt-image-2',
+      prompt: 'paint this as a watercolor scene',
+      options: normalizeImageOptions({
+        referenceImages: [PNG_1X1_DATA_URL],
+        aspectRatio: '9:16',
+        resolution: '1K',
+        quality: 'high',
+        outputFormat: 'webp',
+        background: 'opaque',
+        outputCompression: 60,
+        moderation: 'low',
+      }),
+    })
+
+    expect(result).toEqual({
+      success: true,
+      imageBase64: PNG_1X1_BASE64,
+      imageUrl: `data:image/webp;base64,${PNG_1X1_BASE64}`,
+      metadata: {
+        openRouterUsage: { inputTokens: 100, outputTokens: 4075, totalTokens: 4175 },
+      },
+    })
+    const requests = server!.getRequests('POST', '/openrouter/images')
+    expect(requests).toHaveLength(1)
+    expect(JSON.parse(requests[0]?.bodyText || '{}')).toEqual({
+      model: 'openai/gpt-image-2',
       prompt: 'paint this as a watercolor scene',
       n: 1,
       size: '1088x1920',
@@ -145,14 +219,69 @@ describe('provider contract - OpenRouter image', () => {
       }],
       background: 'opaque',
       output_compression: 60,
-      stream: true,
+      stream: false,
       provider: {
         only: ['openai'],
         allow_fallbacks: false,
         options: { openai: { moderation: 'low' } },
       },
     })
-    expect(requests[0]?.headers.accept).toBe('text/event-stream')
+    expect(requests[0]?.headers.accept).not.toBe('text/event-stream')
+  })
+
+  it('uses the same dedicated Image API for Nano Banana without provider failover', async () => {
+    server!.defineScenario({
+      method: 'POST',
+      path: '/openrouter/images',
+      mode: 'success',
+      submitResponse: {
+        status: 200,
+        body: {
+          created: 1_785_406_500,
+          data: [{ b64_json: PNG_1X1_BASE64, media_type: 'image/png' }],
+          usage: {
+            prompt_tokens: 20,
+            completion_tokens: 1_120,
+            total_tokens: 1_140,
+            cost: 0.067,
+          },
+        },
+      },
+    })
+
+    const result = await requestOpenRouterImage({
+      baseUrl: `${server!.baseUrl}/openrouter`,
+      apiKey: 'openrouter-image-key',
+      modelId: OPENROUTER_BANANA_2_IMAGE_MODEL_ID,
+      prompt: 'cinematic desert city at sunrise',
+      options: normalizeBananaImageOptions({
+        referenceImages: [PNG_1X1_DATA_URL],
+        aspectRatio: '16:9',
+        resolution: '2K',
+      }),
+    })
+
+    expect(result).toMatchObject({
+      success: true,
+      imageUrl: `data:image/png;base64,${PNG_1X1_BASE64}`,
+      metadata: {
+        openRouterUsage: { inputTokens: 20, outputTokens: 1_120, totalTokens: 1_140 },
+      },
+    })
+    const requests = server!.getRequests('POST', '/openrouter/images')
+    expect(requests).toHaveLength(1)
+    expect(JSON.parse(requests[0]?.bodyText || '{}')).toEqual({
+      model: OPENROUTER_BANANA_2_IMAGE_MODEL_ID,
+      prompt: 'cinematic desert city at sunrise',
+      n: 1,
+      resolution: '2K',
+      aspect_ratio: '16:9',
+      input_references: [{
+        type: 'image_url',
+        image_url: { url: PNG_1X1_DATA_URL },
+      }],
+      stream: false,
+    })
   })
 
   it('does not retry an uncertain image POST', async () => {
@@ -188,6 +317,12 @@ describe('provider contract - OpenRouter image', () => {
         headers: { 'content-type': 'text/event-stream' },
         body: [
           `data: ${JSON.stringify({
+            type: 'image_generation.partial_image',
+            partial_image_index: 0,
+            b64_json: PNG_1X1_BASE64,
+          })}`,
+          '',
+          `data: ${JSON.stringify({
             type: 'error',
             error: {
               code: 'server_error',
@@ -209,7 +344,9 @@ describe('provider contract - OpenRouter image', () => {
       prompt: 'surface the stream failure',
       options: normalizeImageOptions({ aspectRatio: '1:1', resolution: '1K', quality: 'low' }),
     })).rejects.toMatchObject({
+      name: 'ProviderSubmissionError',
       code: 'EXTERNAL_ERROR',
+      disposition: 'rejected',
       provider: 'openrouter',
       message: 'Generation failed',
     })
@@ -248,7 +385,9 @@ describe('provider contract - OpenRouter image', () => {
       prompt: 'preserve the machine policy fact',
       options: normalizeImageOptions({ aspectRatio: '1:1', resolution: '1K', quality: 'low' }),
     })).rejects.toMatchObject({
+      name: 'ProviderSubmissionError',
       code: 'SENSITIVE_CONTENT',
+      disposition: 'rejected',
       provider: 'openrouter',
     })
 
@@ -278,7 +417,69 @@ describe('provider contract - OpenRouter image', () => {
       modelId: 'openai/gpt-image-2',
       prompt: 'route only after explicit rejection',
       options: normalizeImageOptions({ aspectRatio: '1:1', resolution: '1K', quality: 'low' }),
-    })).rejects.toBeInstanceOf(ProviderPreAcceptRejectedError)
+    })).rejects.toBeInstanceOf(ProviderSubmissionError)
+
+    expect(server!.getRequests('POST', '/openrouter/images')).toHaveLength(1)
+  })
+
+  it('types a structured initial 4xx response as an explicit rejection', async () => {
+    server!.defineScenario({
+      method: 'POST',
+      path: '/openrouter/images',
+      mode: 'fatal_error',
+      submitResponse: {
+        status: 400,
+        body: {
+          error: {
+            message: 'Input image URL is not directly downloadable.',
+            code: 400,
+            metadata: { error_type: 'invalid_request' },
+          },
+        },
+      },
+    })
+
+    await expect(requestOpenRouterImage({
+      baseUrl: `${server!.baseUrl}/openrouter`,
+      apiKey: 'openrouter-image-key',
+      modelId: 'openai/gpt-image-2',
+      prompt: 'surface a proven provider rejection',
+      options: normalizeImageOptions({ aspectRatio: '1:1', resolution: '1K', quality: 'low' }),
+    })).rejects.toMatchObject({
+      name: 'ProviderSubmissionError',
+      code: 'PROVIDER_SUBMISSION_REJECTED',
+      disposition: 'rejected',
+      provider: 'openrouter',
+      message: 'Input image URL is not directly downloadable.',
+    })
+
+    expect(server!.getRequests('POST', '/openrouter/images')).toHaveLength(1)
+  })
+
+  it('does not infer a disposition from a bare image rate-limit response', async () => {
+    server!.defineScenario({
+      method: 'POST',
+      path: '/openrouter/images',
+      mode: 'fatal_error',
+      submitResponse: {
+        status: 429,
+        body: { error: { message: 'Rate limited', code: 429 } },
+      },
+    })
+
+    try {
+      await requestOpenRouterImage({
+        baseUrl: `${server!.baseUrl}/openrouter`,
+        apiKey: 'openrouter-image-key',
+        modelId: 'openai/gpt-image-2',
+        prompt: 'keep HTTP-only rate limit ambiguous',
+        options: normalizeImageOptions({ aspectRatio: '1:1', resolution: '1K', quality: 'low' }),
+      })
+      throw new Error('Expected the submission to fail')
+    } catch (error) {
+      expect(error).not.toBeInstanceOf(ProviderSubmissionError)
+      expect(error).toMatchObject({ code: 'RATE_LIMIT' })
+    }
 
     expect(server!.getRequests('POST', '/openrouter/images')).toHaveLength(1)
   })

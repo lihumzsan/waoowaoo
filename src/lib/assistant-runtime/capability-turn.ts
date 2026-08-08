@@ -38,9 +38,9 @@ function requireIdentity(value: string | null): string {
 /**
  * The sole execution fence shared by every capability exposed to Codex.
  *
- * `runtimeThreadId` is intentionally absent: it is a durable resume identity
- * written only after Codex state has been checkpointed, so a valid first Turn
- * does not have one while it is calling model, search, or MCP capabilities.
+ * `runtimeThreadId` is intentionally absent because native Thread persistence
+ * identifies conversation history, not permission to execute product effects.
+ * The live owner token plus the bound product Turn remains the only fence.
  */
 export async function requireAssistantRuntimeCapabilityTurn(input: {
   readonly scope: {

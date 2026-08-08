@@ -1,5 +1,7 @@
 import type { DeploymentConfig } from './config'
-import { isPlatformProviderCredentialMode, isUserProviderCredentialMode } from './config'
+import { isUserProviderCredentialMode } from './config'
+
+export type PasswordAuthIdentity = 'username' | 'phone'
 
 export interface DeploymentFeatures {
   showOfficialPublicPages: boolean
@@ -7,20 +9,21 @@ export interface DeploymentFeatures {
   showLegalPages: boolean
   showRecharge: boolean
   showSubscription: boolean
-  showInviteCode: boolean
   showBilling: boolean
+  showPublicBetaWaitlist: boolean
   showApiConfig: boolean
   showAccountSecurity: boolean
   showGoogleOAuth: boolean
+  showWechatOfficialAuth: boolean
   enablePhoneAuth: boolean
   enablePasswordAuth: boolean
+  passwordAuthIdentity: PasswordAuthIdentity
   showDownloadLogs: boolean
   showUpdateCheck: boolean
-  requireInviteCodeOnSignup: boolean
-  usePlatformProviderConfig: boolean
+  showBetaBadge: boolean
 }
 
-type EditionDeploymentFeatures = Omit<DeploymentFeatures, 'showApiConfig' | 'usePlatformProviderConfig'>
+type EditionDeploymentFeatures = Omit<DeploymentFeatures, 'showApiConfig'>
 
 const SELF_HOSTED_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   showOfficialPublicPages: false,
@@ -28,15 +31,17 @@ const SELF_HOSTED_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   showLegalPages: false,
   showRecharge: false,
   showSubscription: false,
-  showInviteCode: false,
   showBilling: false,
+  showPublicBetaWaitlist: false,
   showAccountSecurity: false,
   showGoogleOAuth: false,
+  showWechatOfficialAuth: false,
   enablePhoneAuth: false,
   enablePasswordAuth: true,
+  passwordAuthIdentity: 'username',
   showDownloadLogs: false,
   showUpdateCheck: true,
-  requireInviteCodeOnSignup: false,
+  showBetaBadge: false,
 }
 
 const CLOUD_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
@@ -45,15 +50,17 @@ const CLOUD_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   showLegalPages: true,
   showRecharge: true,
   showSubscription: true,
-  showInviteCode: true,
   showBilling: true,
+  showPublicBetaWaitlist: true,
   showAccountSecurity: true,
   showGoogleOAuth: true,
-  enablePhoneAuth: true,
-  enablePasswordAuth: false,
+  showWechatOfficialAuth: true,
+  enablePhoneAuth: false,
+  enablePasswordAuth: true,
+  passwordAuthIdentity: 'phone',
   showDownloadLogs: false,
   showUpdateCheck: false,
-  requireInviteCodeOnSignup: false,
+  showBetaBadge: true,
 }
 
 function cloneEditionDeploymentFeatures(features: EditionDeploymentFeatures): EditionDeploymentFeatures {
@@ -67,7 +74,6 @@ export function getDeploymentFeatures(config: DeploymentConfig): DeploymentFeatu
   return {
     ...base,
     showApiConfig: isUserProviderCredentialMode(config),
-    usePlatformProviderConfig: isPlatformProviderCredentialMode(config),
   }
 }
 

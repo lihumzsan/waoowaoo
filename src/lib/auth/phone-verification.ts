@@ -1,17 +1,19 @@
 import { createHmac, randomInt, randomUUID } from 'node:crypto'
 import { ApiError } from '@/lib/api-errors'
-import { createAuthUser, readSignupInviteInput } from '@/lib/auth/account-onboarding'
+import { createAuthUser } from '@/lib/auth/account-onboarding'
+import {
+  AliyunSmsConfigurationError,
+  AliyunSmsDestinationUnavailableError,
+  AliyunSmsRejectedError,
+  sendAliyunVerificationSms,
+  type AliyunSmsSendResult,
+} from '@/lib/auth/aliyun-sms'
 import { PHONE_AUTH_RESULT_CODES, type PhoneAuthResultCode } from '@/lib/auth/phone-auth-contract'
 import { maskPhoneNumber, normalizePhoneNumber } from '@/lib/auth/phone-number'
-import {
-  sendTencentVerificationSms,
-  TencentSmsConfigurationError,
-  TencentSmsDestinationUnavailableError,
-  TencentSmsRejectedError,
-} from '@/lib/auth/tencent-sms'
 import { getDeploymentConfig } from '@/lib/deployment/config'
 import { getDeploymentFeatures } from '@/lib/deployment/features'
 import { logAuthAction } from '@/lib/logging/semantic'
+import { createScopedLogger } from '@/lib/logging/core'
 import { prisma } from '@/lib/prisma'
 import { getPrismaErrorCode } from '@/lib/prisma-error'
 import { redis } from '@/lib/redis'
@@ -20,6 +22,11 @@ const PHONE_CODE_TTL_SECONDS = 5 * 60
 const PHONE_SEND_COOLDOWN_SECONDS = 60
 const PHONE_DAILY_SEND_LIMIT = 10
 const PHONE_CODE_MAX_ATTEMPTS = 5
+
+const smsLogger = createScopedLogger({
+  module: 'auth',
+  provider: 'aliyun-sms',
+})
 
 const RESERVE_CHALLENGE_SCRIPT = `
 local dailyCount = tonumber(redis.call('GET', KEYS[3]) or '0')
@@ -81,12 +88,18 @@ export interface PhoneAuthUser {
 export class PhoneVerificationError extends Error {
   readonly code: PhoneAuthResultCode
   readonly retryAfterSeconds: number | null
+  override readonly cause?: unknown
 
-  constructor(code: PhoneAuthResultCode, retryAfterSeconds: number | null = null) {
-    super(code)
+  constructor(
+    code: PhoneAuthResultCode,
+    retryAfterSeconds: number | null = null,
+    cause?: unknown,
+  ) {
+    super(code, { cause })
     this.name = 'PhoneVerificationError'
     this.code = code
     this.retryAfterSeconds = retryAfterSeconds
+    this.cause = cause
   }
 }
 
@@ -223,66 +236,75 @@ export async function sendPhoneVerificationCode(rawPhoneNumber: unknown): Promis
     challengeId,
   })
 
+  let sendResult: AliyunSmsSendResult
   try {
-    await sendTencentVerificationSms({
+    sendResult = await sendAliyunVerificationSms({
       phoneNumber,
       code,
       challengeId,
     })
   } catch (error) {
-    if (error instanceof TencentSmsDestinationUnavailableError) {
+    if (error instanceof AliyunSmsDestinationUnavailableError) {
       await compensateRejectedChallenge(keys, challengeId)
       logAuthAction(
         'LOGIN',
         'SMS destination unavailable',
         {
           success: false,
-          provider: 'tencent-sms',
+          provider: 'aliyun-sms',
           destinationId: error.destinationId,
           reason: error.reason,
         },
         undefined,
         maskPhoneNumber(phoneNumber),
       )
-      throw new PhoneVerificationError(PHONE_AUTH_RESULT_CODES.destinationUnavailable)
+      throw new PhoneVerificationError(
+        PHONE_AUTH_RESULT_CODES.destinationUnavailable,
+        null,
+        error,
+      )
     }
-    if (error instanceof TencentSmsConfigurationError) {
+    if (error instanceof AliyunSmsConfigurationError) {
       await compensateRejectedChallenge(keys, challengeId)
     }
-    if (error instanceof TencentSmsRejectedError) {
+    if (error instanceof AliyunSmsRejectedError) {
       await compensateRejectedChallenge(keys, challengeId)
       logAuthAction(
         'LOGIN',
         'SMS provider rejected',
         {
           success: false,
-          provider: 'tencent-sms',
+          provider: 'aliyun-sms',
           providerCode: error.providerCode,
           requestId: error.requestId,
         },
         undefined,
         maskPhoneNumber(phoneNumber),
       )
-      throw new PhoneVerificationError(PHONE_AUTH_RESULT_CODES.providerRejected)
+      throw new PhoneVerificationError(PHONE_AUTH_RESULT_CODES.providerRejected, null, error)
     }
 
     logAuthAction(
       'LOGIN',
       'SMS provider unavailable',
-      { success: false, provider: 'tencent-sms' },
+      { success: false, provider: 'aliyun-sms' },
       undefined,
       maskPhoneNumber(phoneNumber),
     )
-    throw new PhoneVerificationError(PHONE_AUTH_RESULT_CODES.providerUnavailable)
+    throw new PhoneVerificationError(PHONE_AUTH_RESULT_CODES.providerUnavailable, null, error)
   }
 
-  logAuthAction(
-    'LOGIN',
-    'SMS verification code sent',
-    { success: true, provider: 'tencent-sms' },
-    undefined,
-    maskPhoneNumber(phoneNumber),
-  )
+  smsLogger.event({
+    level: 'INFO',
+    audit: true,
+    action: 'LOGIN',
+    message: 'SMS verification code sent',
+    providerRequestId: sendResult.bizId ?? sendResult.requestId ?? undefined,
+    details: {
+      success: true,
+      username: maskPhoneNumber(phoneNumber),
+    },
+  })
   return {
     phoneNumber,
     retryAfterSeconds: PHONE_SEND_COOLDOWN_SECONDS,
@@ -312,7 +334,6 @@ async function readPhoneUser(phoneNumber: string): Promise<PhoneAuthUser | null>
 export async function authorizePhoneIdentity(input: {
   phoneNumber: unknown
   code: unknown
-  inviteCode?: unknown
 }): Promise<PhoneAuthUser | null> {
   requirePhoneAuthEnabled()
   const phoneNumber = normalizePhoneNumber(input.phoneNumber)
@@ -343,12 +364,10 @@ export async function authorizePhoneIdentity(input: {
     return existingUser
   }
 
-  const inviteCode = readSignupInviteInput({ inviteCode: input.inviteCode })
   try {
     const user = await prisma.$transaction(async (tx) => (
       await createAuthUser(tx, {
         name: phoneNumber,
-        inviteCode,
         account: {
           type: 'credentials',
           provider: 'phone',
@@ -374,7 +393,7 @@ export async function authorizePhoneIdentity(input: {
       throw new ApiError('CONFLICT', {
         code: 'PHONE_AUTH_IDENTITY_CONFLICT',
         message: 'PHONE_AUTH_IDENTITY_CONFLICT',
-      })
+      }, { cause: error })
     }
     return concurrentUser
   }

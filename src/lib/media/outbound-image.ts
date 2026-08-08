@@ -1,4 +1,5 @@
 import { describeUnknownError } from '@/lib/errors/normalize'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import { createScopedLogger } from '@/lib/logging/core'
 import { resolveMediaMimeType } from '@/lib/media/media-mime'
 import {
@@ -13,6 +14,7 @@ import {
 import { isOutboundImageStorageKey } from '@/lib/media/storage-key'
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { MAX_IMAGE_BYTES, readResponseBufferWithLimit } from '@/lib/http/body-limits'
+import { withRetry } from '@/lib/retry'
 
 export { detectMimeFromBuffer } from '@/lib/media/media-mime'
 
@@ -49,18 +51,21 @@ export class OutboundImageNormalizeError extends Error {
   readonly code: OutboundImageNormalizeErrorCode
   readonly stage: OutboundImageNormalizeStage
   readonly input: string
+  override readonly cause?: unknown
 
   constructor(params: {
     code: OutboundImageNormalizeErrorCode
     stage: OutboundImageNormalizeStage
     input: string
     message: string
+    cause?: unknown
   }) {
-    super(params.message)
+    super(params.message, { cause: params.cause })
     this.name = 'OutboundImageNormalizeError'
     this.code = params.code
     this.stage = params.stage
     this.input = params.input
+    this.cause = params.cause
   }
 }
 
@@ -130,6 +135,7 @@ async function assertSafeOutboundHttpUrl(input: string, stage: OutboundImageNorm
       stage,
       input,
       message: error instanceof Error ? error.message : 'outbound image URL validation failed',
+      cause: error,
     })
   }
 }
@@ -187,7 +193,9 @@ function guessContentType(input: string, contentTypeHeader: string | null, buffe
 
 async function signStorageKey(storageKey: string): Promise<string> {
   const { getSignedObjectUrl, toFetchableUrl } = await getStorageHelpers()
-  return toFetchableUrl(await getSignedObjectUrl(storageKey, SIGNED_URL_TTL_SECONDS))
+  return toFetchableUrl(await getSignedObjectUrl(storageKey, {
+    expiresInSeconds: SIGNED_URL_TTL_SECONDS,
+  }))
 }
 
 async function toFetchableAbsoluteUrl(value: string): Promise<string> {
@@ -320,9 +328,27 @@ export async function normalizeToBase64ForGeneration(input: string): Promise<str
 
   const fetchUrl = await toFetchableAbsoluteUrl(normalizedUrl)
 
-  let response: Response | null = null
+  let downloaded: { buffer: Buffer; contentType: string | null }
   try {
-    response = await fetchSafeOutboundMedia(fetchUrl)
+    downloaded = await withRetry({
+      operation: EXTERNAL_OPERATION.MEDIA_DOWNLOAD,
+      scope: 'media:outbound-image-download',
+      run: async () => {
+        const response = await fetchSafeOutboundMedia(fetchUrl)
+        if (!response.ok) {
+          throw new OutboundImageNormalizeError({
+            code: 'OUTBOUND_IMAGE_FETCH_FAILED',
+            stage: 'normalize_base64',
+            input: normalizedUrl,
+            message: `normalizeToBase64ForGeneration fetch failed (${response.status}): ${fetchUrl}`,
+          })
+        }
+        return {
+          buffer: await readResponseBufferWithLimit(response, MAX_IMAGE_BYTES, 'outbound image'),
+          contentType: response.headers.get('content-type'),
+        }
+      },
+    })
   } catch (error) {
     if (error instanceof OutboundImageNormalizeError) {
       throw error
@@ -333,6 +359,7 @@ export async function normalizeToBase64ForGeneration(input: string): Promise<str
         stage: 'normalize_base64',
         input: normalizedUrl,
         message: error.message,
+        cause: error,
       })
     }
     throw new OutboundImageNormalizeError({
@@ -340,30 +367,11 @@ export async function normalizeToBase64ForGeneration(input: string): Promise<str
       stage: 'normalize_base64',
       input: normalizedUrl,
       message: `normalizeToBase64ForGeneration fetch exception: ${fetchUrl}`,
+      cause: error,
     })
   }
-
-  if (!response) {
-    throw new OutboundImageNormalizeError({
-      code: 'OUTBOUND_IMAGE_FETCH_EXCEPTION',
-      stage: 'normalize_base64',
-      input: normalizedUrl,
-      message: `normalizeToBase64ForGeneration missing response: ${fetchUrl}`,
-    })
-  }
-
-  if (!response.ok) {
-    throw new OutboundImageNormalizeError({
-      code: 'OUTBOUND_IMAGE_FETCH_FAILED',
-      stage: 'normalize_base64',
-      input: normalizedUrl,
-      message: `normalizeToBase64ForGeneration fetch failed (${response.status}): ${fetchUrl}`,
-    })
-  }
-
-  const buffer = await readResponseBufferWithLimit(response, MAX_IMAGE_BYTES, 'outbound image')
-  const mimeType = guessContentType(normalizedUrl, response.headers.get('content-type'), buffer)
-  return `data:${mimeType};base64,${buffer.toString('base64')}`
+  const mimeType = guessContentType(normalizedUrl, downloaded.contentType, downloaded.buffer)
+  return `data:${mimeType};base64,${downloaded.buffer.toString('base64')}`
 }
 
 /**
@@ -392,6 +400,7 @@ export async function resolveOwnedImageUrlForGeneration(
         stage: 'normalize_original',
         input: normalizedInput,
         message: error.message,
+        cause: error,
       })
     }
     throw error
@@ -448,6 +457,7 @@ export async function normalizeReferenceImagesForGeneration(
   const seen = new Set<string>()
   const normalized: string[] = []
   let candidateCount = 0
+  let firstFailure: unknown
 
   for (let index = 0; index < inputs.length; index += 1) {
     const item = inputs[index]
@@ -460,6 +470,7 @@ export async function normalizeReferenceImagesForGeneration(
     try {
       normalized.push(await normalizeReferenceForGeneration(trimmed, options.ownerUserId))
     } catch (error) {
+      firstFailure ??= error
       const issue = toNormalizationIssue(error, trimmed, index)
       options.onIssue?.(issue)
       logger.warn({
@@ -478,6 +489,7 @@ export async function normalizeReferenceImagesForGeneration(
       stage: 'normalize_reference',
       input: `candidates=${candidateCount}`,
       message: 'all reference images failed to normalize',
+      cause: firstFailure,
     })
   }
 

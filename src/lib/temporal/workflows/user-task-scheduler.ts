@@ -9,10 +9,12 @@ import {
   defineUpdate,
   proxyActivities,
   setHandler,
+  setWorkflowOptions,
   startChild,
   workflowInfo,
 } from '@temporalio/workflow'
 import type { WorkflowConcurrencyConfig } from '@/lib/workflow-concurrency'
+import { encodeTemporalFailure, temporalInvariantFailure } from '../failure'
 import {
   USER_TASK_SCHEDULER_UPDATE_NAME,
   type ScheduledTaskReceipt,
@@ -31,6 +33,7 @@ import {
   type UserTaskSchedulerView,
   type UserTaskSchedulerWorkflowInput,
 } from '../task/contracts'
+import { TEMPORAL_WORKFLOW } from '../workflow-registry'
 import { taskWorkflow } from './task'
 
 const RECENT_DEDUPE_LIMIT = 2_048
@@ -69,7 +72,8 @@ const schedulerActivities = proxyActivities<UserTaskSchedulerActivities>({
 })
 
 function fail(code: string, ...details: unknown[]): never {
-  throw ApplicationFailure.nonRetryable(code, code, ...details)
+  const encoded = encodeTemporalFailure(temporalInvariantFailure(code, details))
+  throw ApplicationFailure.nonRetryable(encoded.message, encoded.type, ...encoded.details)
 }
 
 function requireNonEmpty(value: string, code: string): void {
@@ -653,3 +657,8 @@ export async function userTaskSchedulerWorkflow(
     )
   }
 }
+
+setWorkflowOptions(
+  { versioningBehavior: TEMPORAL_WORKFLOW.USER_TASK_SCHEDULER.versioningBehavior },
+  userTaskSchedulerWorkflow,
+)

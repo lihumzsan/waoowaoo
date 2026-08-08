@@ -11,6 +11,16 @@ import type {
 } from '@/lib/ai-providers/runtime-types'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { AppError } from '@/lib/errors/app-error'
+import {
+  assertGoogleSubmissionResponse,
+  googleSafetyTerminalError,
+} from './submission'
+
+const googleLanguageModelFetch: typeof fetch = async (input, init) => {
+  const response = await fetchWithProviderProxy(input, init)
+  await assertGoogleSubmissionResponse(response)
+  return response
+}
 
 export function createGoogleSdkLanguageModel(input: AiProviderLanguageModelContext): LanguageModel {
   if (input.protocol !== 'google-generative-ai') {
@@ -20,7 +30,7 @@ export function createGoogleSdkLanguageModel(input: AiProviderLanguageModelConte
     apiKey: input.providerConfig.apiKey,
     ...(input.providerConfig.baseUrl ? { baseURL: input.providerConfig.baseUrl } : {}),
     name: input.providerKey,
-    fetch: fetchWithProviderProxy,
+    fetch: googleLanguageModelFetch,
   })
   const providerOptions = input.reasoning && input.selection.modelId.startsWith('gemini-3')
     ? {
@@ -46,9 +56,12 @@ export function validateGoogleLanguageModelResult(
   result: AiLlmExecutionResult,
   context: AiProviderLanguageModelValidationContext,
 ): void {
-  if (context.executionMode === 'vision') return
   if (result.text.trim()) return
-  if (context.executionMode === 'sync' && result.termination.kind === 'safety') return
+  if (result.termination.kind === 'safety') {
+    const reason = result.termination.rawReason || 'SAFETY'
+    throw googleSafetyTerminalError(reason)
+  }
+  if (context.executionMode === 'vision') return
   throw new AppError('EMPTY_RESPONSE', 'Google Gemini returned an empty text response, please retry', {
     provider: 'google',
     details: { rawReason: result.termination.rawReason },

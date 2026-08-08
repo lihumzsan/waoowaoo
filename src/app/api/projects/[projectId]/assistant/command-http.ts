@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
-import { ApiError } from '@/lib/api-errors'
+import { ApiError, normalizeError } from '@/lib/api-errors'
 import { AssistantRuntimeProjectBusyError } from '@/lib/assistant-runtime'
+import { InsufficientBalanceError } from '@/lib/billing'
 
 export type ProjectAgentCommandHttpBody = Record<string, unknown>
 
@@ -36,13 +37,13 @@ export async function readProjectAgentCommandHttpBody(
         code: error.message,
         field: 'body',
         message: 'request body must be a JSON object',
-      })
+      }, { cause: error })
     }
     throw new ApiError('INVALID_PARAMS', {
       code: 'BODY_PARSE_FAILED',
       field: 'body',
       message: 'request body must be valid JSON',
-    })
+    }, { cause: error })
   }
 }
 
@@ -119,6 +120,7 @@ function readAgentTurnErrorCode(text: string): string | null {
 
 export function mapProjectAgentCommandError(error: unknown): ApiError {
   if (error instanceof ApiError) return error
+  if (error instanceof InsufficientBalanceError) return normalizeError(error)
   if (error instanceof AssistantRuntimeProjectBusyError) {
     return new ApiError('AGENT_THREAD_BUSY', {
       code: 'AGENT_THREAD_BUSY',

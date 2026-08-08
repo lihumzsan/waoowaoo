@@ -1,4 +1,9 @@
-import type { AiOptionSchema, AiPublicReasoningMode } from '@/lib/ai-registry/types'
+import type {
+  AiOptionSchema,
+  AiPublicReasoningMode,
+  AiReadonlyUnknownObject,
+  AiUnknownObject,
+} from '@/lib/ai-registry/types'
 import type { PlatformModelPreset } from '@/lib/platform-models/types'
 import {
   booleanValidator,
@@ -15,10 +20,15 @@ import type { ReasoningEffort } from '@/lib/ai-registry/reasoning-effort'
 
 export const OPENROUTER_PROVIDER_TEST_LLM_MODEL_ID = 'openai/gpt-4o-mini'
 export const OPENROUTER_GPT_IMAGE_2_MODEL_ID = 'openai/gpt-image-2'
+export const OPENROUTER_BANANA_PRO_IMAGE_MODEL_ID = 'google/gemini-3-pro-image'
+export const OPENROUTER_BANANA_2_IMAGE_MODEL_ID = 'google/gemini-3.1-flash-image'
+export const OPENROUTER_BANANA_2_LITE_IMAGE_MODEL_ID = 'google/gemini-3.1-flash-lite-image'
 export const OPENROUTER_SEEDANCE_2_VIDEO_MODEL_ID = 'bytedance/seedance-2.0'
 export const OPENROUTER_SEEDANCE_2_FAST_VIDEO_MODEL_ID = 'bytedance/seedance-2.0-fast'
+export const OPENROUTER_GEMINI_3_1_PRO_MODEL_ID = 'google/gemini-3.1-pro-preview'
 export const OPENROUTER_GEMINI_3_5_FLASH_MODEL_ID = 'google/gemini-3.5-flash'
 export const OPENROUTER_GEMINI_3_5_FLASH_LITE_MODEL_ID = 'google/gemini-3.5-flash-lite'
+export const OPENROUTER_GEMINI_3_6_FLASH_MODEL_ID = 'google/gemini-3.6-flash'
 export const OPENROUTER_CLAUDE_SONNET_4_6_MODEL_ID = 'anthropic/claude-sonnet-4.6'
 export const OPENROUTER_CLAUDE_SONNET_5_MODEL_ID = 'anthropic/claude-sonnet-5'
 export const OPENROUTER_CLAUDE_FABLE_5_MODEL_ID = 'anthropic/claude-fable-5'
@@ -27,12 +37,29 @@ export const OPENROUTER_GPT_5_5_MODEL_ID = 'openai/gpt-5.5'
 export const OPENROUTER_GPT_5_6_LUNA_MODEL_ID = 'openai/gpt-5.6-luna'
 export const OPENROUTER_GPT_5_6_TERRA_MODEL_ID = 'openai/gpt-5.6-terra'
 export const OPENROUTER_GPT_5_6_SOL_MODEL_ID = 'openai/gpt-5.6-sol'
-export const OPENROUTER_PLATFORM_DEFAULT_ANALYSIS_MODEL_KEY = `openrouter::${OPENROUTER_CLAUDE_SONNET_4_6_MODEL_ID}`
-export const OPENROUTER_PLATFORM_DEFAULT_ASSISTANT_MODEL_KEY = `openrouter::${OPENROUTER_GPT_5_5_MODEL_ID}`
-export const OPENROUTER_PLATFORM_DEFAULT_VIDEO_MODEL_KEY = `openrouter::${OPENROUTER_SEEDANCE_2_FAST_VIDEO_MODEL_ID}`
+export const OPENROUTER_PLATFORM_DEFAULT_ANALYSIS_MODEL_KEY = `openrouter::${OPENROUTER_GPT_5_6_SOL_MODEL_ID}`
+export const OPENROUTER_PLATFORM_DEFAULT_ASSISTANT_MODEL_KEY = `openrouter::${OPENROUTER_GPT_5_6_SOL_MODEL_ID}`
+export const OPENROUTER_PLATFORM_DEFAULT_IMAGE_MODEL_KEY = `openrouter::${OPENROUTER_GPT_IMAGE_2_MODEL_ID}`
 export const OPENROUTER_GPT_IMAGE_2_RESOLUTION_OPTIONS = ['1K'] as const
 export const OPENROUTER_GPT_IMAGE_2_QUALITY_OPTIONS = ['high', 'medium', 'low'] as const
 export const OPENROUTER_GPT_IMAGE_2_ASPECT_RATIO_OPTIONS = ['1:1', '4:3', '3:4', '3:2', '2:3', '16:9', '9:16'] as const
+export const OPENROUTER_BANANA_PRO_RESOLUTION_OPTIONS = ['1K', '2K', '4K'] as const
+export const OPENROUTER_BANANA_2_RESOLUTION_OPTIONS = ['512', '1K', '2K', '4K'] as const
+export const OPENROUTER_BANANA_2_LITE_RESOLUTION_OPTIONS = ['1K'] as const
+export const OPENROUTER_BANANA_PRO_ASPECT_RATIO_OPTIONS = [
+  '1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9',
+] as const
+export const OPENROUTER_BANANA_2_ASPECT_RATIO_OPTIONS = [
+  '1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4',
+  '8:1', '9:16', '16:9', '21:9',
+] as const
+
+export const OPENROUTER_IMAGE_MODEL_IDS = new Set([
+  OPENROUTER_GPT_IMAGE_2_MODEL_ID,
+  OPENROUTER_BANANA_PRO_IMAGE_MODEL_ID,
+  OPENROUTER_BANANA_2_IMAGE_MODEL_ID,
+  OPENROUTER_BANANA_2_LITE_IMAGE_MODEL_ID,
+])
 
 export const OPENROUTER_VIDEO_MODEL_IDS = new Set([
   OPENROUTER_SEEDANCE_2_VIDEO_MODEL_ID,
@@ -83,14 +110,14 @@ export const OPENROUTER_LLM_MODEL_DEFINITIONS = [
     showInPlatform: false,
   },
   {
-    modelId: 'google/gemini-3.1-pro-preview',
+    modelId: OPENROUTER_GEMINI_3_1_PRO_MODEL_ID,
     name: 'Gemini 3.1 Pro',
-    pricingUsdPerMillion: [1.25, 10],
+    pricingUsdPerMillion: [2, 12],
     publicReasoningMode: 'native',
     reasoningEffortOptions: ['low', 'medium', 'high'],
     contextWindow: null,
     showInApiConfig: true,
-    showInPlatform: false,
+    showInPlatform: true,
   },
   {
     modelId: 'google/gemini-3-pro-preview',
@@ -101,6 +128,16 @@ export const OPENROUTER_LLM_MODEL_DEFINITIONS = [
     contextWindow: null,
     showInApiConfig: true,
     showInPlatform: false,
+  },
+  {
+    modelId: OPENROUTER_GEMINI_3_6_FLASH_MODEL_ID,
+    name: 'Gemini 3.6 Flash',
+    pricingUsdPerMillion: [1.5, 7.5],
+    publicReasoningMode: 'native',
+    reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'],
+    contextWindow: 1_048_576,
+    showInApiConfig: true,
+    showInPlatform: true,
   },
   {
     modelId: OPENROUTER_GEMINI_3_5_FLASH_MODEL_ID,
@@ -342,12 +379,53 @@ function openrouterGptImage2Pricing() {
   }
 }
 
+function openrouterImageResolutionPricing(
+  tiers: ReadonlyArray<readonly [resolution: string, amountUsdPerImage: number]>,
+) {
+  return {
+    mode: 'capability' as const,
+    tiers: tiers.map(([resolution, amountUsdPerImage]) => ({
+      when: { resolution },
+      amount: usdToCredits(amountUsdPerImage),
+    })),
+  }
+}
+
 export const OPENROUTER_BUILTIN_PRICING_CATALOG_ENTRIES = [
   {
     apiType: 'image',
     provider: 'openrouter',
     modelId: OPENROUTER_GPT_IMAGE_2_MODEL_ID,
     cost: openrouterGptImage2Pricing(),
+  },
+  {
+    apiType: 'image',
+    provider: 'openrouter',
+    modelId: OPENROUTER_BANANA_PRO_IMAGE_MODEL_ID,
+    cost: openrouterImageResolutionPricing([
+      ['1K', 0.134],
+      ['2K', 0.134],
+      ['4K', 0.24],
+    ]),
+  },
+  {
+    apiType: 'image',
+    provider: 'openrouter',
+    modelId: OPENROUTER_BANANA_2_IMAGE_MODEL_ID,
+    cost: openrouterImageResolutionPricing([
+      ['512', 0.045],
+      ['1K', 0.067],
+      ['2K', 0.101],
+      ['4K', 0.151],
+    ]),
+  },
+  {
+    apiType: 'image',
+    provider: 'openrouter',
+    modelId: OPENROUTER_BANANA_2_LITE_IMAGE_MODEL_ID,
+    cost: openrouterImageResolutionPricing([
+      ['1K', 0.0336],
+    ]),
   },
   ...OPENROUTER_LLM_PRICING_CATALOG_ENTRIES,
   {
@@ -385,15 +463,40 @@ export const OPENROUTER_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelType: 'image',
     provider: 'openrouter',
     modelId: OPENROUTER_GPT_IMAGE_2_MODEL_ID,
-    providerRoute: {
-      logicalCapabilityId: 'image.gpt-image-2',
-      priority: 0,
-      failoverPolicy: 'pre_accept_only',
-    },
     capabilities: {
       image: {
         resolutionOptions: [...OPENROUTER_GPT_IMAGE_2_RESOLUTION_OPTIONS],
         qualityOptions: [...OPENROUTER_GPT_IMAGE_2_QUALITY_OPTIONS],
+      },
+    },
+  },
+  {
+    modelType: 'image',
+    provider: 'openrouter',
+    modelId: OPENROUTER_BANANA_PRO_IMAGE_MODEL_ID,
+    capabilities: {
+      image: {
+        resolutionOptions: [...OPENROUTER_BANANA_PRO_RESOLUTION_OPTIONS],
+      },
+    },
+  },
+  {
+    modelType: 'image',
+    provider: 'openrouter',
+    modelId: OPENROUTER_BANANA_2_IMAGE_MODEL_ID,
+    capabilities: {
+      image: {
+        resolutionOptions: [...OPENROUTER_BANANA_2_RESOLUTION_OPTIONS],
+      },
+    },
+  },
+  {
+    modelType: 'image',
+    provider: 'openrouter',
+    modelId: OPENROUTER_BANANA_2_LITE_IMAGE_MODEL_ID,
+    capabilities: {
+      image: {
+        resolutionOptions: [...OPENROUTER_BANANA_2_LITE_RESOLUTION_OPTIONS],
       },
     },
   },
@@ -404,6 +507,7 @@ export const OPENROUTER_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: OPENROUTER_SEEDANCE_2_VIDEO_MODEL_ID,
     capabilities: {
       video: {
+        supportedInputModes: ['text_to_video', 'first_frame', 'first_last_frame', 'reference'],
         supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
         generateAudioOptions: [true, false],
@@ -412,8 +516,12 @@ export const OPENROUTER_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         firstlastframe: true,
         supportGenerateAudio: true,
         assetReferenceMultiReference: true,
-        maxReferenceImages: 8,
+        maxReferenceImages: 9,
         maxReferenceAudios: 3,
+        maxReferenceVideos: 3,
+        maxReferenceFiles: 12,
+        referenceAudioRequiresVisual: true,
+        minReferenceAudioDurationMs: 1_800,
       },
     },
   },
@@ -423,6 +531,7 @@ export const OPENROUTER_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: OPENROUTER_SEEDANCE_2_FAST_VIDEO_MODEL_ID,
     capabilities: {
       video: {
+        supportedInputModes: ['text_to_video', 'first_frame', 'first_last_frame', 'reference'],
         supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
         generateAudioOptions: [true, false],
@@ -431,8 +540,12 @@ export const OPENROUTER_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         firstlastframe: true,
         supportGenerateAudio: true,
         assetReferenceMultiReference: true,
-        maxReferenceImages: 8,
+        maxReferenceImages: 9,
         maxReferenceAudios: 3,
+        maxReferenceVideos: 3,
+        maxReferenceFiles: 12,
+        referenceAudioRequiresVisual: true,
+        minReferenceAudioDurationMs: 1_800,
       },
     },
   },
@@ -440,6 +553,9 @@ export const OPENROUTER_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
 
 export const OPENROUTER_API_CONFIG_CATALOG_MODELS = [
   { modelId: OPENROUTER_GPT_IMAGE_2_MODEL_ID, name: 'GPT Image 2', type: 'image', provider: 'openrouter' },
+  { modelId: OPENROUTER_BANANA_PRO_IMAGE_MODEL_ID, name: 'Nano Banana Pro', type: 'image', provider: 'openrouter' },
+  { modelId: OPENROUTER_BANANA_2_IMAGE_MODEL_ID, name: 'Nano Banana 2', type: 'image', provider: 'openrouter' },
+  { modelId: OPENROUTER_BANANA_2_LITE_IMAGE_MODEL_ID, name: 'Nano Banana 2 Lite', type: 'image', provider: 'openrouter' },
   ...OPENROUTER_LLM_API_CONFIG_CATALOG_MODELS,
   { modelId: OPENROUTER_SEEDANCE_2_VIDEO_MODEL_ID, name: 'Seedance 2.0', type: 'video', provider: 'openrouter' },
   { modelId: OPENROUTER_SEEDANCE_2_FAST_VIDEO_MODEL_ID, name: 'Seedance 2.0 Fast', type: 'video', provider: 'openrouter' },
@@ -447,6 +563,9 @@ export const OPENROUTER_API_CONFIG_CATALOG_MODELS = [
 
 export const OPENROUTER_PLATFORM_MODEL_PRESETS = [
   { provider: 'openrouter', modelId: OPENROUTER_GPT_IMAGE_2_MODEL_ID, name: 'GPT Image 2', type: 'image' },
+  { provider: 'openrouter', modelId: OPENROUTER_BANANA_PRO_IMAGE_MODEL_ID, name: 'Nano Banana Pro', type: 'image' },
+  { provider: 'openrouter', modelId: OPENROUTER_BANANA_2_IMAGE_MODEL_ID, name: 'Nano Banana 2', type: 'image' },
+  { provider: 'openrouter', modelId: OPENROUTER_BANANA_2_LITE_IMAGE_MODEL_ID, name: 'Nano Banana 2 Lite', type: 'image' },
   ...OPENROUTER_LLM_PLATFORM_MODEL_PRESETS,
   { provider: 'openrouter', modelId: OPENROUTER_SEEDANCE_2_VIDEO_MODEL_ID, name: 'Seedance 2.0', type: 'video' },
   { provider: 'openrouter', modelId: OPENROUTER_SEEDANCE_2_FAST_VIDEO_MODEL_ID, name: 'Seedance 2.0 Fast', type: 'video' },
@@ -454,36 +573,76 @@ export const OPENROUTER_PLATFORM_MODEL_PRESETS = [
 
 export function resolveOpenRouterOptionSchema(modality: MediaModality, modelId?: string): AiOptionSchema {
   if (modality === 'image') {
-    if (modelId !== OPENROUTER_GPT_IMAGE_2_MODEL_ID) {
+    if (modelId === OPENROUTER_GPT_IMAGE_2_MODEL_ID) {
+      return buildGptImage2OptionSchema({
+        resolutionOptions: OPENROUTER_GPT_IMAGE_2_RESOLUTION_OPTIONS,
+        aspectRatioOptions: OPENROUTER_GPT_IMAGE_2_ASPECT_RATIO_OPTIONS,
+        qualityOptions: OPENROUTER_GPT_IMAGE_2_QUALITY_OPTIONS,
+        defaultResolution: '1K',
+        defaultQuality: 'high',
+        defaultOutputFormat: 'png',
+        maxReferenceImages: 16,
+        allowedKeys: ['background', 'outputCompression', 'moderation'],
+        excludedKeys: ['keepOriginalAspectRatio', 'responseFormat'],
+        validators: {
+          background: enumValidator(['auto', 'opaque']),
+          outputCompression: integerRangeValidator({ min: 0, max: 100 }),
+          moderation: enumValidator(['auto', 'low']),
+        },
+        objectValidators: [(options) => {
+          if (options.outputCompression === undefined) return { ok: true }
+          const outputFormat = options.outputFormat ?? 'png'
+          return outputFormat === 'jpeg' || outputFormat === 'webp'
+            ? { ok: true }
+            : { ok: false, reason: 'outputCompression_requires_jpeg_or_webp' }
+        }],
+      })
+    }
+
+    const imagePolicy = modelId === OPENROUTER_BANANA_PRO_IMAGE_MODEL_ID
+      ? {
+          resolutionOptions: OPENROUTER_BANANA_PRO_RESOLUTION_OPTIONS,
+          aspectRatioOptions: OPENROUTER_BANANA_PRO_ASPECT_RATIO_OPTIONS,
+        }
+      : modelId === OPENROUTER_BANANA_2_IMAGE_MODEL_ID
+        ? {
+            resolutionOptions: OPENROUTER_BANANA_2_RESOLUTION_OPTIONS,
+            aspectRatioOptions: OPENROUTER_BANANA_2_ASPECT_RATIO_OPTIONS,
+          }
+        : modelId === OPENROUTER_BANANA_2_LITE_IMAGE_MODEL_ID
+          ? {
+              resolutionOptions: OPENROUTER_BANANA_2_LITE_RESOLUTION_OPTIONS,
+              aspectRatioOptions: OPENROUTER_BANANA_2_ASPECT_RATIO_OPTIONS,
+            }
+          : null
+    if (!imagePolicy) {
       throw new Error(`OPENROUTER_OPTION_SCHEMA_UNSUPPORTED_IMAGE_MODEL:${modelId || '<missing>'}`)
     }
-    return buildGptImage2OptionSchema({
-      resolutionOptions: OPENROUTER_GPT_IMAGE_2_RESOLUTION_OPTIONS,
-      aspectRatioOptions: OPENROUTER_GPT_IMAGE_2_ASPECT_RATIO_OPTIONS,
-      qualityOptions: OPENROUTER_GPT_IMAGE_2_QUALITY_OPTIONS,
-      defaultResolution: '1K',
-      defaultQuality: 'high',
-      defaultOutputFormat: 'png',
-      maxReferenceImages: 16,
-      allowedKeys: ['background', 'outputCompression', 'moderation'],
-      excludedKeys: ['keepOriginalAspectRatio', 'responseFormat'],
+    return buildMediaOptionSchema('image', {
+      excludedKeys: [
+        'keepOriginalAspectRatio',
+        'outputFormat',
+        'quality',
+        'responseFormat',
+        'size',
+      ],
+      required: ['aspectRatio'],
       validators: {
-        background: enumValidator(['auto', 'opaque']),
-        outputCompression: integerRangeValidator({ min: 0, max: 100 }),
-        moderation: enumValidator(['auto', 'low']),
+        aspectRatio: enumValidator(imagePolicy.aspectRatioOptions),
+        resolution: enumValidator(imagePolicy.resolutionOptions),
+        referenceImages: stringArrayValidator({ maxLength: 14 }),
       },
-      objectValidators: [(options) => {
-        if (options.outputCompression === undefined) return { ok: true }
-        const outputFormat = options.outputFormat ?? 'png'
-        return outputFormat === 'jpeg' || outputFormat === 'webp'
-          ? { ok: true }
-          : { ok: false, reason: 'outputCompression_requires_jpeg_or_webp' }
-      }],
+      normalize: (options: AiReadonlyUnknownObject): AiUnknownObject => ({
+        ...options,
+        aspectRatio: options.aspectRatio,
+        resolution: options.resolution ?? '1K',
+        referenceImages: options.referenceImages ?? [],
+      }),
     })
   }
   if (modality === 'video') {
     return buildMediaOptionSchema('video', {
-      allowedKeys: ['referenceImages', 'referenceAudios'],
+      allowedKeys: ['referenceImages', 'referenceAudios', 'referenceVideos'],
       validators: {
         duration: integerRangeValidator({ min: 4, max: 15 }),
         aspectRatio: enumValidator(OPENROUTER_SEEDANCE_2_ASPECT_RATIO_OPTIONS),
@@ -494,6 +653,7 @@ export function resolveOpenRouterOptionSchema(modality: MediaModality, modelId?:
         ),
         generateAudio: booleanValidator(),
         referenceAudios: stringArrayValidator(),
+        referenceVideos: stringArrayValidator({ maxLength: 3 }),
       },
     })
   }

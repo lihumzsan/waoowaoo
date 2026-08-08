@@ -7,22 +7,24 @@ description: Scope reusable production assets and define stable visible designs 
 
 ## 作用
 
-从精确剧本、用户要求、参考素材和已采纳的 Creative Direction 中筛选值得制作的可复用角色、场景、道具，完成稳定可见设计，并把每张资产的唯一最终图片 Prompt 与显式生成参数写入被指派的 Production Manifest。这个专业子 Agent 是资产创作内容的唯一 writer；它不调用媒体生产、计费或 Task 工具。
+从精确剧本、用户要求、参考素材和已采纳的 Creative Direction 中筛选值得制作的可复用角色、场景、道具，完成稳定可见设计，并把每张资产的唯一最终图片 Prompt 与显式生成参数写入最终结构化批次。主 Agent 是该资产专业结果的唯一 writer，并把同一批次直接交给媒体 Operation。
 
 ## 资产筛选
 
 - 资产必须同时通过三个门槛：在画面中真实出现或承载可见动作；其身份/空间结构需要跨镜头保持一致或被后续生成独立引用；不能被另一已选资产完整代表而不丢失关键视觉连续性。仅“被看见”本身不够。
 - 只在对白、旁白或背景设定中提及而没有画面呈现的实体不登记；瞬时背景物、无身份群众、普通装饰和不影响连续性的偶发物不登记。
-- 没有任何实体通过全部门槛时返回空 `assets` 并在 `overview` 解释原因；不得为了让清单非空而虚构或升级多余资产。
+- 没有任何实体通过全部门槛时使用 `decision: "no_assets"`、空 `items`，并在 `overview` 解释原因；不得为了让清单非空而虚构或升级多余资产，也不得提交这份无任务清单。
 - 同一实体的机位、景别、构图、光线或短暂动作变化不能成为新资产。只有独立且持久的视觉身份才拆分。
 - 同一叙事地点中视觉结构明显不同、各自真实承载画面动作且后续需要独立参考的空间必须拆分，例如山顶与坠落后的崖底；仅转场一闪而过、没有动作落点或无需独立视觉连续性的空间不拆分。
-- 同一个专业任务完成筛选、稳定身份设计与最终 Prompt；不输出第二套候选状态或让主 Agent 再拼接 Prompt。
-- `canonicalName + kind` 表达稳定创作身份；不得发明系统 ID、使用数组位置或新增含糊的 `other` 类型。实际身份由输出 WorkspaceResource 路径与 resourceId 拥有。
+- 通过筛选的资产中，主角级且风格空间大的视觉身份——换一种设计方向就会改变整部作品观感的核心角色、标志性生物或核心形象——其设计方向属于可对齐决策，在批次冻结前交由主 Agent 按其对齐契约处理；配角、功能性资产以及方向已由剧本、用户输入或 Creative Direction 确定的资产不触发对齐。
+- 同一个专业结果完成筛选、稳定身份设计与最终 Prompt；不输出第二套候选状态或再拼接另一版 Prompt。
+- `canonicalName + assetKind` 表达稳定创作身份；不得发明系统 ID、使用数组位置或新增含糊的 `other` 类型。实际媒体身份由输出 WorkspaceResource 路径与 resourceId 拥有。
+- 资产是基础身份设计，不是任意时刻的状态快照。剧情产生持续的新状态（重伤、换装、剃发、损毁）且后续生成需要独立引用时，创建新版本或新资产表达新状态，不改写原资产的既有解释。
 
 ## 风格消费边界
 
-- Creative Direction 非空时使用完整已采纳方向，自行判断哪些政策影响资产筛选、身份设计和最终呈现。`stableDescription` 仍只记录资产自身可见且可复用的身份、外观、材质和结构；画幅、版式、背景和生成要求只进入最终 Prompt 与 Manifest 参数，不污染身份事实。
-- 最终 Prompt 必须自行合并稳定设计、项目视觉风格和本 Skill 的资产图版式。主 Agent与服务端都不会追加、改写或补全创作指令。
+- Creative Direction 非空时使用完整已采纳方向，自行判断哪些政策影响资产筛选、身份设计和最终呈现。`stableDescription` 仍只记录资产自身可见且可复用的身份、外观、材质和结构；画幅、版式、背景和生成要求只进入最终 Prompt 与批次参数，不污染身份事实。
+- 最终 Prompt 必须自行合并稳定设计、项目视觉风格和本 Skill 的资产图版式。提交阶段与服务端都不会追加、改写或补全创作指令。
 - `stableDescription` 使用与用户内容一致的语言：中文内容写中文，英文内容写英文。
 - 角色稳定身份描述不混入艺术风格、滤镜、光影、背景或构图。
 - 场景基础描述保存真实空间结构、材质与物理光源条件；最终 Prompt 再合成项目风格与场景资产图格式。
@@ -83,39 +85,21 @@ description: Scope reusable production assets and define stable visible designs 
 - 结果适合白底居中、主体完整清楚的独立道具资产图。
 - 参考图可提供轮廓、结构、材质、纹样与配色，但不能引入参考图中的偶然背景或人物。
 
-## 最终资产图与 Production Manifest
+## 最终资产生成批次
 
-- 每个资产图片 item 必须写完整最终 Prompt；执行层会逐字冻结，不能依赖其他字段、主 Agent 或服务端再次补写。
+- 每个资产图片 item 必须写完整最终 Prompt；执行层会逐字冻结，不能依赖其他字段或服务端再次补写。
 - 角色：一张 4:3 横向图，左右等分；左侧同一角色脸部特写，右侧同一角色无遮挡全身；纯白背景；不得出现其他人物、道具或环境。
 - 场景：一张 4:3 横向图，正前方完整展示整个空间，不拆多视图；不得出现人物、松散家具或独立道具；场景固定结构可保留。
 - 道具：一张 4:3 横向图，只出现一个居中、完整、方向明确、无遮挡的道具；纯白背景；不得出现人物、其他道具或环境。
-- `aspectRatio` 必须显式写成 `"4:3"`。这是实际生成参数，不允许只在 Prompt 里提到比例。
+- 不输出 `aspectRatio`。可复用资产的 4:3 画幅由服务端资产策略唯一决定，不在专业交接中重复提交。
 - `assetKind` 与 `schemaId` 必须严格对应：`character → project.character_image`、`location → project.location_image`、`prop → project.prop_image`。
-- Manifest 必须是严格 JSON 文件，最小结构如下；`references` 只使用主 Agent分配的精确 ready Resource 身份与版本：
-
-```json
-{
-  "schemaVersion": 1,
-  "manifestId": "assets-v1",
-  "items": [
-    {
-      "itemId": "character-xu-wu",
-      "mediaType": "image",
-      "schemaId": "project.character_image",
-      "assetKind": "character",
-      "outputPath": "assets/characters/xu-wu.resource",
-      "aspectRatio": "4:3",
-      "prompt": "完整、可直接交给图片模型的最终提示词",
-      "references": []
-    }
-  ]
-}
-```
+- 唯一专业结果是运行时注入 schema 约束的 `outputKind: "asset_generation_batch"` 严格 JSON。该机器 Schema 是字段、必填项和层级的唯一权威；本 Skill 不另写文件或第二份模板。`references` 只使用精确的 ready Resource 身份与版本。
+- `overview`、`canonicalName`、`aliases`、`stableDescription`、`consumedByShots` 都是同一正式 JSON 的规定字段，不得写进旁边的 Markdown，也不得发明 Schema 之外的设计说明字段。
 
 ## 自检
 
-- 正式 Asset Manifest 是否只包含从输入剧本判断值得复用的生产资产？注入完整 Creative Direction 时，是否使用了所有相关政策且没有把无关领域变成资产事实？
-- 是否同时保留纯净的稳定设计，并把完整最终 Prompt、正确版式和显式 `4:3` 参数写入 Manifest，而没有依赖服务端补写？
+- 正式生成批次是否只包含从输入剧本判断值得复用的生产资产？注入完整 Creative Direction 时，是否使用了所有相关政策且没有把无关领域变成资产事实？
+- 是否同时保留纯净的稳定设计，并把完整最终 Prompt 与正确版式写入批次，同时把 4:3 画幅唯一交给服务端资产策略？
 - 角色是否稳定、完整、年代一致、鞋履明确，肤色/发色/瞳色等身份锚点是否写清，并排除了动作、背景、不确定词和抽象气质？
 - 非人类角色是否按真实形态处理而非套用人类模板？
 - 场景是否忠实、结构完整、层次清楚、锚点稳定，并留有无标记的落位空间？
@@ -123,4 +107,4 @@ description: Scope reusable production assets and define stable visible designs 
 
 ## 边界
 
-本 Skill 负责资产筛选、稳定可见设计、最终资产图片 Prompt 和对应 Manifest 参数。项目级呈现政策来自已提供的 Creative Direction；媒体执行、模型选择、能力校验、计费、审批、Task 与终态由主 Agent提交 Manifest 后的系统服务负责。
+本 Skill 负责资产筛选、稳定可见设计、最终资产图片 Prompt 和对应批次参数。项目级呈现政策来自已提供的 Creative Direction；主 Agent 把同一结果的原样 items 提交给 `create_image`，媒体执行、模型选择、能力校验、计费、审批、Task 与终态由系统服务负责。

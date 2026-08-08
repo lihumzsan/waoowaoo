@@ -1,9 +1,12 @@
 import { createScopedLogger } from '@/lib/logging/core'
-import { FetchStatusError, fetchWithRetry, RETRY_POLICY } from '@/lib/retry'
+import { FetchStatusError } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { buildFalQueueUrl } from './base-url'
 import { AppError } from '@/lib/errors/app-error'
-import { getErrorSpec, type UnifiedErrorCode } from '@/lib/errors/codes'
+import type { UnifiedErrorCode } from '@/lib/errors/codes'
+import { createProviderAsyncTaskFailure } from '@/lib/ai-providers/shared/async-task-status'
+import type { FailureRecord } from '@/lib/errors/failure'
+import { submitFalQueueRequest } from './submission'
 
 const falLogger = createScopedLogger({ module: 'ai-provider.fal', provider: 'fal' })
 
@@ -11,10 +14,8 @@ export interface FalQueueStatus {
   status: 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED'
   completed: boolean
   failed: boolean
-  failureDisposition?: 'retryable' | 'permanent'
-  errorCode?: UnifiedErrorCode
+  failure?: FailureRecord
   resultUrl?: string
-  error?: string
 }
 
 interface FalQueueInput {
@@ -22,38 +23,13 @@ interface FalQueueInput {
 }
 
 export async function submitFalTask(endpoint: string, input: FalQueueInput, apiKey: string): Promise<string> {
-  if (!apiKey) {
-    throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'fal' })
-  }
-
-  let response: Response
-  try {
-    response = await fetchWithRetry(buildFalQueueUrl(endpoint), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Key ${apiKey}`,
-      },
-      body: JSON.stringify(input),
-      policy: RETRY_POLICY.providerSubmit,
-      // Stryker disable next-line StringLiteral: retry scope is observability metadata, not provider behavior.
-      scope: `fal:submit:${endpoint}`,
-      fetchFn: fetchWithProviderProxy,
-    })
-  } catch (error) {
-    if (error instanceof FetchStatusError) {
-      const typed = toFalHttpAppError(error)
-      if (typed) throw typed
-    }
-    throw error
-  }
-
-  const data = await response.json() as { request_id?: unknown }
-  const requestId = typeof data.request_id === 'string' ? data.request_id : ''
-
-  if (!requestId) {
-    throw new Error('FAL未返回request_id')
-  }
+  const requestId = await submitFalQueueRequest({
+    endpoint,
+    apiKey,
+    payload: input,
+    // Stryker disable next-line StringLiteral: retry scope is observability metadata, not provider behavior.
+    scope: `fal:submit:${endpoint}`,
+  })
 
   // Stryker disable next-line StringLiteral,ObjectLiteral: observability text does not change the provider contract.
   falLogger.info({
@@ -151,16 +127,19 @@ function parseFalResultFetchError(status: number, errorText: string): FalQueueSt
     // Stryker disable next-line StringLiteral,ObjectLiteral: observability text does not change the terminal result.
     falLogger.error({
       action: 'fal.queue.failed',
-      message: 'FAL result fetch returned 422 (permanent)',
-      details: { httpStatus: status, errorType, errorMessage, failureDisposition: 'permanent' },
+      message: 'FAL result fetch returned a terminal 422 response',
+      details: { httpStatus: status, errorType, errorMessage },
     })
     return {
       status: 'COMPLETED',
       completed: true,
       failed: true,
-      failureDisposition: getErrorSpec(errorCode).retryable ? 'retryable' : 'permanent',
-      errorCode,
-      error: errorMessage,
+      failure: createProviderAsyncTaskFailure({
+        provider: 'fal',
+        code: errorCode,
+        message: errorMessage,
+        cause: new FetchStatusError(status, errorText),
+      }),
     }
   }
 
@@ -169,10 +148,10 @@ function parseFalResultFetchError(status: number, errorText: string): FalQueueSt
       ? 'FAL 下游服务错误：上游模型处理失败'
       : '下游服务错误'
 
-    // Stryker disable next-line StringLiteral,ObjectLiteral: observability text does not change retry classification.
+    // Stryker disable next-line StringLiteral,ObjectLiteral: observability text does not change execution policy.
     falLogger.error({
       action: 'fal.queue.failed',
-      message: 'FAL result fetch returned 500, rethrown as transient for retry',
+      message: 'FAL result fetch returned 500; preserving the transport failure',
       details: { httpStatus: status, errorDetail },
     })
     throw new FetchStatusError(status, errorDetail)
@@ -258,9 +237,12 @@ export async function queryFalStatus(endpoint: string, requestId: string, apiKey
           status: 'COMPLETED',
           completed: true,
           failed: true,
-          failureDisposition: 'retryable',
-          errorCode: 'EMPTY_RESPONSE',
-          error: 'FAL任务完成但未返回媒体URL',
+          failure: createProviderAsyncTaskFailure({
+            provider: 'fal',
+            code: 'EMPTY_RESPONSE',
+            message: 'FAL任务完成但未返回媒体URL',
+            cause: resultData,
+          }),
         }
       }
 
@@ -300,9 +282,12 @@ export async function queryFalStatus(endpoint: string, requestId: string, apiKey
       status: 'FAILED',
       completed: false,
       failed: true,
-      failureDisposition: getErrorSpec(errorCode).retryable ? 'retryable' : 'permanent',
-      errorCode,
-      error,
+      failure: createProviderAsyncTaskFailure({
+        provider: 'fal',
+        code: errorCode,
+        message: error,
+        cause: data,
+      }),
     }
   }
 

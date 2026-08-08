@@ -304,7 +304,7 @@ function WorkspaceAssistantUserUndeliveredMarker(props: {
   )
   if (!isUndelivered) return null
   return (
-    <div className="mt-1 flex items-center gap-1 text-[11px] leading-4 text-[var(--glass-tone-warn-fg)]">
+    <div className="mt-1 flex items-center gap-1 text-[11px] leading-4 text-[var(--glass-tone-warning-fg)]">
       <AppIcon name="alert" className="h-3 w-3 shrink-0" />
       <span>{t('panel.undelivered')}</span>
     </div>

@@ -8,6 +8,10 @@ import type {
   RuntimeSkillsListEntry,
 } from '@/lib/codex-runtime/runtime-adapter'
 import { buildAgentTurnAssistantMessageId } from '@/lib/agent-turn/stream-publisher'
+import {
+  creativeRuntimeSkillReadToolName,
+  resolveCreativeRuntimeSkillReadCommand,
+} from '@/lib/creative-skills/runtime-skill-read'
 import type {
   AssistantRuntimeEventSink,
   AssistantRuntimeInteractionView,
@@ -40,21 +44,6 @@ type PendingTextPart = {
   value: string
   started: boolean
   completedPrefixLength: number
-}
-
-type SubagentActivity = {
-  readonly id: string
-  readonly kind: 'message' | 'reasoning' | 'tool'
-  readonly label: string | null
-  readonly text: string | null
-  readonly status: 'running' | 'completed' | 'failed'
-}
-
-type SubagentProjection = {
-  agentPath: string
-  status: 'active' | 'completed' | 'interrupted'
-  readonly activityOrder: string[]
-  readonly activitiesByItemId: Map<string, SubagentActivity>
 }
 
 function isRecord(value: RuntimeJsonValue | undefined): value is RuntimeJsonObject {
@@ -116,6 +105,10 @@ export function projectAssistantRuntimeToolOutput(item: RuntimeJsonObject): Runt
     if (status === 'declined' || status === 'interrupted' || status === 'cancelled') {
       return { status, error: item.error ?? null }
     }
+    // Wao MCP structuredContent is already the canonical success, decline, or
+    // typed failure envelope. Wrapping it again changes the protocol shape and
+    // hides actionable corrections from both the model and the persisted View.
+    if (structuredContent) return structuredContent
     if (result?.isError === true || status === 'failed' || status === 'errored') {
       return {
         ok: false,
@@ -123,18 +116,11 @@ export function projectAssistantRuntimeToolOutput(item: RuntimeJsonObject): Runt
         error: item.error ?? structuredContent ?? result?.content ?? null,
       }
     }
-    if (structuredContent) return structuredContent
     return {
       status,
       result: result ?? item.result ?? null,
       durationMs: item.durationMs ?? null,
     }
-  }
-  if (type === 'collabAgentToolCall') {
-    return { status, agentsStates: item.agentsStates ?? {} }
-  }
-  if (type === 'subAgentActivity') {
-    return { status: 'completed', kind: item.kind ?? null, agentPath: item.agentPath ?? null }
   }
   if (type === 'webSearch') {
     return {
@@ -153,8 +139,11 @@ export function projectAssistantRuntimeToolOutput(item: RuntimeJsonObject): Runt
 
 function normalizePlan(params: RuntimeJsonObject): RuntimeJsonValue {
   const plan = Array.isArray(params.plan) ? params.plan : []
+  const explanation = typeof params.explanation === 'string'
+    ? params.explanation.trim()
+    : ''
   return {
-    explanation: typeof params.explanation === 'string' ? params.explanation : null,
+    explanation: explanation || null,
     plan: plan.flatMap((entry): RuntimeJsonValue[] => {
       if (!isRecord(entry)) return []
       const step = readString(entry, 'step')
@@ -176,14 +165,12 @@ function toolNameForItem(item: RuntimeJsonObject): string | null {
     }
     case 'dynamicToolCall':
       return readString(item, 'tool') ?? 'dynamic_tool'
-    case 'commandExecution':
-      return 'shell'
+    case 'commandExecution': {
+      const skillId = resolveCreativeRuntimeSkillReadCommand(item.command)
+      return skillId ? creativeRuntimeSkillReadToolName(skillId) : 'shell'
+    }
     case 'fileChange':
       return 'file_change'
-    case 'collabAgentToolCall':
-      return readString(item, 'tool') ?? 'delegate'
-    case 'subAgentActivity':
-      return 'subagent_activity'
     case 'webSearch':
       return 'web_search'
     case 'imageView':
@@ -199,25 +186,14 @@ function toolInputForItem(item: RuntimeJsonObject): RuntimeJsonValue {
     case 'mcpToolCall':
     case 'dynamicToolCall':
       return item.arguments ?? {}
-    case 'commandExecution':
-      return { command: item.command ?? null, cwd: item.cwd ?? null }
+    case 'commandExecution': {
+      const skillId = resolveCreativeRuntimeSkillReadCommand(item.command)
+      return skillId
+        ? { skillId, command: item.command ?? null, cwd: item.cwd ?? null }
+        : { command: item.command ?? null, cwd: item.cwd ?? null }
+    }
     case 'fileChange':
       return { changes: item.changes ?? [] }
-    case 'collabAgentToolCall':
-      return {
-        prompt: item.prompt ?? null,
-        senderThreadId: item.senderThreadId ?? null,
-        receiverThreadIds: item.receiverThreadIds ?? [],
-        model: item.model ?? null,
-        reasoningEffort: item.reasoningEffort ?? null,
-        agentsStates: item.agentsStates ?? {},
-      }
-    case 'subAgentActivity':
-      return {
-        kind: item.kind ?? null,
-        agentThreadId: item.agentThreadId ?? null,
-        agentPath: item.agentPath ?? null,
-      }
     case 'webSearch':
       return { query: item.query ?? null, action: item.action ?? null }
     case 'imageView':
@@ -262,8 +238,6 @@ export class AssistantRuntimeEventProjector {
   private readonly progressByItem = new Map<string, string>()
   private latestStreamSeq = 0
   private segmentIndex = 0
-  private readonly subagentsByThreadId = new Map<string, SubagentProjection>()
-  private readonly childTerminalStatus = new Map<string, 'completed' | 'interrupted'>()
   private terminalProjection: AssistantRuntimeTerminalProjection | null = null
   private finalizing = false
   private persistenceFailureReason: string | null = null
@@ -343,7 +317,6 @@ export class AssistantRuntimeEventProjector {
       return
     }
     if (event.type === 'processExited') {
-      this.interruptActiveSubagents()
       this.finish({
         status: 'interrupted',
         stopReason: event.expected ? 'runtime_process_stopped' : 'runtime_process_exited',
@@ -351,7 +324,6 @@ export class AssistantRuntimeEventProjector {
       return
     }
     if (event.type === 'protocolError') {
-      this.interruptActiveSubagents()
       this.finish({ status: 'failed', stopReason: 'runtime_protocol_error' })
       return
     }
@@ -360,7 +332,6 @@ export class AssistantRuntimeEventProjector {
       return
     }
     if (event.type !== 'notification') return
-    if (this.consumeChildNotification(event.method, event.params)) return
     if (!this.matchesNotification(event.params)) return
     this.consumeNotification(event.method, event.params)
   }
@@ -412,7 +383,9 @@ export class AssistantRuntimeEventProjector {
         this.consumeProgress(params, 'mcp', 'message')
         return
       case 'turn/diff/updated':
-        this.consumeTurnDiff(params)
+        // Runtime diffs are internal execution telemetry. File-change items already
+        // describe the user-relevant action, so never project raw patches into the
+        // persistent assistant message view.
         return
       case 'thread/compacted':
         this.upsertAndPublishDataPart('runtime-compaction', {
@@ -515,17 +488,6 @@ export class AssistantRuntimeEventProjector {
     this.queueMessageSnapshot(false)
   }
 
-  private consumeTurnDiff(params: RuntimeJsonObject): void {
-    const diff = typeof params.diff === 'string' ? params.diff : ''
-    if (!diff) return
-    this.upsertAndPublishDataPart('runtime-turn-diff', {
-      type: 'data-assistant-runtime-progress',
-      id: 'runtime-turn-diff',
-      data: { itemId: 'turn-diff', kind: 'diff', message: diff.slice(-12_000) },
-    })
-    this.queueMessageSnapshot(false)
-  }
-
   private consumeDelta(kind: PendingTextPart['kind'], params: RuntimeJsonObject): void {
     const itemId = readString(params, 'itemId')
     const delta = readString(params, 'delta')
@@ -558,6 +520,11 @@ export class AssistantRuntimeEventProjector {
   private consumeItemStarted(params: RuntimeJsonObject): void {
     const item = requireItem(params)
     if (!item) return
+    const itemType = readString(item, 'type')
+    if (itemType === 'collabAgentToolCall' || itemType === 'subAgentActivity') {
+      this.finish({ status: 'failed', stopReason: 'runtime_protocol_error' })
+      return
+    }
     const itemId = readString(item, 'id')
     const toolName = toolNameForItem(item)
     if (!itemId || !toolName) return
@@ -586,6 +553,10 @@ export class AssistantRuntimeEventProjector {
     const itemId = readString(item, 'id')
     const itemType = readString(item, 'type')
     if (!itemId || !itemType) return
+    if (itemType === 'collabAgentToolCall' || itemType === 'subAgentActivity') {
+      this.finish({ status: 'failed', stopReason: 'runtime_protocol_error' })
+      return
+    }
     if (itemType === 'agentMessage') {
       const text = readString(item, 'text') ?? this.pendingText.get(itemId)?.value ?? ''
       this.completeTextPart('text', itemId, text)
@@ -613,7 +584,6 @@ export class AssistantRuntimeEventProjector {
       this.queueMessageSnapshot()
       return
     }
-    if (itemType === 'subAgentActivity') this.consumeSubagentActivity(item)
     const part = finalToolPart(item)
     if (!part) return
     this.removePart(`${itemId}:progress`)
@@ -626,152 +596,6 @@ export class AssistantRuntimeEventProjector {
       dynamic: true,
     })
     this.queueMessageSnapshot()
-  }
-
-  private consumeSubagentActivity(item: RuntimeJsonObject): void {
-    const agentThreadId = readString(item, 'agentThreadId')
-    const agentPath = readString(item, 'agentPath')
-    const kind = readString(item, 'kind')
-    if (!agentThreadId || !agentPath) return
-    const terminal = this.childTerminalStatus.get(agentThreadId)
-    const status = kind === 'interrupted'
-      ? 'interrupted'
-      : terminal ?? 'active'
-    const current = this.ensureSubagent(agentThreadId)
-    current.agentPath = agentPath
-    current.status = status
-    this.publishSubagentLifecycle(agentThreadId)
-  }
-
-  private ensureSubagent(agentThreadId: string): SubagentProjection {
-    const existing = this.subagentsByThreadId.get(agentThreadId)
-    if (existing) return existing
-    const created: SubagentProjection = {
-      agentPath: `/agent/${agentThreadId.slice(0, 8)}`,
-      status: 'active',
-      activityOrder: [],
-      activitiesByItemId: new Map(),
-    }
-    this.subagentsByThreadId.set(agentThreadId, created)
-    return created
-  }
-
-  private upsertSubagentActivity(
-    agentThreadId: string,
-    activity: SubagentActivity,
-  ): void {
-    const subagent = this.ensureSubagent(agentThreadId)
-    if (!subagent.activitiesByItemId.has(activity.id)) subagent.activityOrder.push(activity.id)
-    subagent.activitiesByItemId.set(activity.id, activity)
-    while (subagent.activityOrder.length > 80) {
-      const removed = subagent.activityOrder.shift()
-      if (removed) subagent.activitiesByItemId.delete(removed)
-    }
-    this.publishSubagentLifecycle(agentThreadId)
-    this.queueMessageSnapshot(false)
-  }
-
-  private consumeChildNotification(method: string, params: RuntimeJsonObject): boolean {
-    const threadId = readThreadId(params)
-    if (!threadId || threadId === this.options.identity.runtimeThreadId) return false
-    if (method === 'turn/started') {
-      this.childTerminalStatus.delete(threadId)
-      const current = this.ensureSubagent(threadId)
-      current.status = 'active'
-      this.publishSubagentLifecycle(threadId)
-      this.queueMessageSnapshot()
-      return true
-    }
-    if (method === 'turn/completed') {
-      const turn = isRecord(params.turn) ? params.turn : null
-      const runtimeStatus = turn ? readString(turn, 'status') : null
-      const status = runtimeStatus === 'completed' ? 'completed' : 'interrupted'
-      this.childTerminalStatus.set(threadId, status)
-      const current = this.ensureSubagent(threadId)
-      current.status = status
-      this.publishSubagentLifecycle(threadId)
-      this.queueMessageSnapshot()
-      return true
-    }
-    if (method === 'item/agentMessage/delta' || method === 'item/reasoning/summaryTextDelta') {
-      const itemId = readString(params, 'itemId')
-      const delta = readString(params, 'delta')
-      if (!itemId || !delta) return true
-      const current = this.ensureSubagent(threadId).activitiesByItemId.get(itemId)
-      const kind = method === 'item/agentMessage/delta' ? 'message' : 'reasoning'
-      this.upsertSubagentActivity(threadId, {
-        id: itemId,
-        kind,
-        label: null,
-        text: `${current?.text ?? ''}${delta}`.slice(-12_000),
-        status: 'running',
-      })
-      return true
-    }
-    if (method === 'item/started' || method === 'item/completed') {
-      const item = requireItem(params)
-      const itemId = item ? readString(item, 'id') : null
-      const itemType = item ? readString(item, 'type') : null
-      if (!item || !itemId || !itemType) return true
-      if (itemType === 'agentMessage' || itemType === 'reasoning' || itemType === 'plan') {
-        const text = itemType === 'agentMessage' || itemType === 'plan'
-          ? readString(item, 'text')
-          : stringifySummary(item.summary)
-        const prior = this.ensureSubagent(threadId).activitiesByItemId.get(itemId)
-        this.upsertSubagentActivity(threadId, {
-          id: itemId,
-          kind: itemType === 'agentMessage' ? 'message' : 'reasoning',
-          label: null,
-          text: (text ?? prior?.text ?? '').slice(-12_000) || null,
-          status: method === 'item/completed' ? 'completed' : 'running',
-        })
-        return true
-      }
-      const toolName = toolNameForItem(item)
-      if (toolName) {
-        const status = readString(item, 'status')
-        this.upsertSubagentActivity(threadId, {
-          id: itemId,
-          kind: 'tool',
-          label: toolName,
-          text: null,
-          status: method === 'item/started'
-            ? 'running'
-            : status === 'failed' || status === 'errored'
-              ? 'failed'
-              : 'completed',
-        })
-      }
-      return true
-    }
-    return true
-  }
-
-  private publishSubagentLifecycle(agentThreadId: string): void {
-    const subagent = this.subagentsByThreadId.get(agentThreadId)
-    if (!subagent) return
-    this.upsertAndPublishDataPart(`runtime-subagent:${agentThreadId}`, {
-      type: 'data-assistant-runtime-subagent',
-      id: `runtime-subagent:${agentThreadId}`,
-      data: {
-        agentThreadId,
-        agentPath: subagent.agentPath,
-        status: subagent.status,
-        activities: subagent.activityOrder.flatMap((itemId) => {
-          const activity = subagent.activitiesByItemId.get(itemId)
-          return activity ? [activity] : []
-        }),
-      },
-    })
-  }
-
-  private interruptActiveSubagents(): void {
-    for (const [agentThreadId, subagent] of this.subagentsByThreadId) {
-      if (subagent.status !== 'active') continue
-      subagent.status = 'interrupted'
-      this.publishSubagentLifecycle(agentThreadId)
-    }
-    if (this.subagentsByThreadId.size > 0) this.queueMessageSnapshot()
   }
 
   private completeTextPart(kind: PendingTextPart['kind'], itemId: string, value: string): void {
@@ -806,7 +630,6 @@ export class AssistantRuntimeEventProjector {
   private consumeTurnCompleted(params: RuntimeJsonObject): void {
     const turn = isRecord(params.turn) ? params.turn : null
     const status = turn ? readString(turn, 'status') : null
-    this.interruptActiveSubagents()
     if (status === 'completed') {
       this.finish({ status: 'completed', stopReason: 'completed' })
       return
@@ -912,8 +735,7 @@ export class AssistantRuntimeEventProjector {
     const projection: AssistantRuntimeTerminalProjection = {
       status: input.status,
       stopReason: input.stopReason,
-      errorCode: failure?.errorCode ?? null,
-      errorMessage: failure?.errorMessage ?? null,
+      failure,
       assistantMessage,
       usage: this.latestUsage
         ? {
@@ -923,6 +745,9 @@ export class AssistantRuntimeEventProjector {
             outputTokens: this.latestUsage.outputTokens,
             cachedInputTokens: this.latestUsage.cachedInputTokens,
             requestCount: this.usageSnapshots.size,
+            // The assistant model itself has no per-call server tool charge;
+            // hosted Web Search accounts for its own calls in its own fact.
+            toolCalls: 0,
           }
         : null,
     }

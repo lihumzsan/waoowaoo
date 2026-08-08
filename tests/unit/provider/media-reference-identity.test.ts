@@ -14,6 +14,9 @@ function videoRequest(signature: string) {
       referenceAudios: [
         `https://media.example.com/voice.wav?X-Amz-Signature=${signature}`,
       ],
+      referenceVideos: [
+        `https://media.example.com/motion.mp4?X-Amz-Signature=${signature}`,
+      ],
       lastFrameImageUrl: `https://media.example.com/last.png?X-Amz-Signature=${signature}`,
     },
   } as const

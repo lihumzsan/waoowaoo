@@ -12,13 +12,32 @@ const COMMON_REQUIRED_KEYS = [
   'API_ENCRYPTION_KEY',
   'GOOGLE_CLIENT_ID',
   'GOOGLE_CLIENT_SECRET',
-  'TENCENTCLOUD_SECRET_ID',
-  'TENCENTCLOUD_SECRET_KEY',
-  'TENCENTCLOUD_SMS_REGION',
-  'TENCENTCLOUD_SMS_SDK_APP_ID',
-  'TENCENTCLOUD_SMS_DOMESTIC_SIGN_NAME',
-  'TENCENTCLOUD_SMS_DOMESTIC_TEMPLATE_ID',
-  'TENCENTCLOUD_SMS_INTERNATIONAL_TEMPLATE_ID',
+  'WECHAT_OFFICIAL_APP_ID',
+  'WECHAT_OFFICIAL_APP_SECRET',
+  'WECHAT_OFFICIAL_TOKEN',
+  'WECHAT_OFFICIAL_ENCODING_AES_KEY',
+  'ALIBABA_CLOUD_ACCESS_KEY_ID',
+  'ALIBABA_CLOUD_ACCESS_KEY_SECRET',
+  'ALIBABA_CLOUD_SMS_SIGN_NAME',
+  'ALIBABA_CLOUD_SMS_TEMPLATE_CODE',
+  'DATABASE_URL',
+  'COMPOSE_DATABASE_URL',
+  'MYSQL_DATABASE',
+  'MYSQL_USER',
+  'MYSQL_PASSWORD',
+  'MYSQL_ROOT_PASSWORD',
+  'REDIS_HOST',
+  'REDIS_PORT',
+  'REDIS_PASSWORD',
+  'TEMPORAL_MYSQL_USER',
+  'TEMPORAL_MYSQL_PASSWORD',
+  'S3_ENDPOINT',
+  'S3_UPLOAD_ENDPOINT',
+  'S3_REGION',
+  'S3_BUCKET',
+  'S3_ACCESS_KEY_ID',
+  'S3_SECRET_ACCESS_KEY',
+  'S3_FORCE_PATH_STYLE',
   'INTERNAL_APP_URL',
   'CODEX_RUNTIME_DRIVER',
   'CODEX_RUNTIME_HOST_ROOT',
@@ -30,6 +49,10 @@ const COMMON_REQUIRED_KEYS = [
   'PAYMENT_PUBLIC_BASE_URL',
   'STRIPE_SECRET_KEY',
   'STRIPE_WEBHOOK_SECRET',
+  // Browser-side Stripe.js key. Without it the in-page WeChat QR cannot be
+  // confirmed and the payment method silently disappears from the page, so a
+  // cloud deployment must fail the check rather than ship missing it.
+  'STRIPE_PUBLISHABLE_KEY',
 ]
 
 const PRODUCTION_REQUIRED_KEYS = [
@@ -187,19 +210,28 @@ if (env.BILLING_MODE !== 'ENFORCE') {
   missing.push('BILLING_MODE=ENFORCE')
 }
 
-if (validationMode === 'production' && env.CODEX_RUNTIME_DRIVER !== 'docker') {
+if (env.CODEX_RUNTIME_DRIVER !== 'docker') {
   missing.push('CODEX_RUNTIME_DRIVER=docker')
-} else if (
-  validationMode === 'development'
-  && env.CODEX_RUNTIME_DRIVER !== 'local'
-) {
-  missing.push('CODEX_RUNTIME_DRIVER=local')
 }
 if (
   !isMissing(env.CODEX_RUNTIME_HOST_ROOT)
   && (!env.CODEX_RUNTIME_HOST_ROOT.startsWith('/') || env.CODEX_RUNTIME_HOST_ROOT === '/')
 ) {
   missing.push('CODEX_RUNTIME_HOST_ROOT=absolute-non-root-path')
+}
+if (
+  validationMode === 'production'
+  && !isMissing(env.CODEX_RUNTIME_HOST_ROOT)
+  && (
+    path.resolve(env.CODEX_RUNTIME_HOST_ROOT) === '/tmp'
+    || path.resolve(env.CODEX_RUNTIME_HOST_ROOT).startsWith('/tmp/')
+    || path.resolve(env.CODEX_RUNTIME_HOST_ROOT) === '/run'
+    || path.resolve(env.CODEX_RUNTIME_HOST_ROOT).startsWith('/run/')
+    || path.resolve(env.CODEX_RUNTIME_HOST_ROOT) === '/dev/shm'
+    || path.resolve(env.CODEX_RUNTIME_HOST_ROOT).startsWith('/dev/shm/')
+  )
+) {
+  missing.push('CODEX_RUNTIME_HOST_ROOT=durable-host-volume-path')
 }
 const codexIdleTimeoutMs = Number(env.CODEX_RUNTIME_IDLE_TIMEOUT_MS)
 if (
@@ -239,6 +271,21 @@ if (validationMode === 'production') {
 
 for (const key of ['NEXTAUTH_SECRET', 'CRON_SECRET', 'API_ENCRYPTION_KEY']) {
   if (!isMissing(env[key]) && isWeakSecret(env[key])) missing.push(`${key}=strong-secret-at-least-24-characters`)
+}
+if (!isMissing(env.WECHAT_OFFICIAL_APP_ID) && !/^wx[A-Za-z0-9]{16}$/u.test(env.WECHAT_OFFICIAL_APP_ID)) {
+  missing.push('WECHAT_OFFICIAL_APP_ID=valid-service-account-app-id')
+}
+if (!isMissing(env.WECHAT_OFFICIAL_APP_SECRET) && isWeakSecret(env.WECHAT_OFFICIAL_APP_SECRET)) {
+  missing.push('WECHAT_OFFICIAL_APP_SECRET=strong-secret-at-least-24-characters')
+}
+if (!isMissing(env.WECHAT_OFFICIAL_TOKEN) && isWeakSecret(env.WECHAT_OFFICIAL_TOKEN)) {
+  missing.push('WECHAT_OFFICIAL_TOKEN=strong-secret-at-least-24-characters')
+}
+if (
+  !isMissing(env.WECHAT_OFFICIAL_ENCODING_AES_KEY)
+  && !/^[A-Za-z0-9]{43}$/u.test(env.WECHAT_OFFICIAL_ENCODING_AES_KEY)
+) {
+  missing.push('WECHAT_OFFICIAL_ENCODING_AES_KEY=43-character-platform-key')
 }
 if (!isMissing(env.ADMIN_CREDIT_TOKEN) && isWeakSecret(env.ADMIN_CREDIT_TOKEN)) {
   missing.push('ADMIN_CREDIT_TOKEN=strong-secret-at-least-24-characters')

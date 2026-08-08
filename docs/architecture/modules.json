@@ -8,7 +8,7 @@
         "src/lib/codex-runtime",
         "src/lib/codex-model-gateway",
         "src/lib/assistant-runtime",
-        "src/lib/codex-workspace",
+        "src/lib/project-production-context.ts",
         "src/lib/wao-mcp",
         "src/app/api/internal/codex-runtime",
         "src/app/api/projects/[projectId]/assistant",
@@ -45,7 +45,12 @@
       "sourcePaths": [
         "src/lib/billing",
         "src/lib/payments",
+        "src/lib/paid-beta",
+        "src/components/paid-beta",
         "src/app/api/payments",
+        "src/app/api/paid-beta",
+        "prisma/schema.prisma",
+        "prisma/migrations/20260805160000_paid_beta_and_announcements",
         "src/app/api/user/transactions",
         "src/app/api/operation-approval-grants",
         "src/app/api/projects/[projectId]/operations",
@@ -71,7 +76,6 @@
         "src/lib/query",
         "src/app/[locale]/workspace/[projectId]",
         "src/app/api/projects/[projectId]/canvas-layout",
-        "src/lib/operations/canvas-action-catalog.ts",
         "messages/en/workspace.json",
         "messages/zh/workspace.json",
         "messages/en/project-workflow.json",
@@ -83,10 +87,10 @@
     {
       "id": "workspace-resource",
       "document": "docs/architecture/modules/workspace-resource.md",
-      "title": "Workspace Resource 树",
+      "title": "Workspace Resource 持久树与直接生产",
       "sourcePaths": [
         "src/lib/workspace-resource",
-        "src/lib/codex-workspace",
+        "src/lib/project-production-context.ts",
         "src/lib/adapters/operation-error-normalizer.ts",
         "src/lib/errors/projection.ts",
         "src/lib/operations/domains/workspace-resource",
@@ -100,7 +104,7 @@
         "src/lib/task/execution/handlers/workspace-resource-video-merge.ts",
         "src/lib/task/execution/handlers/workspace-resource-voice.ts",
         "src/lib/voice/voice-resource-service.ts",
-        "src/lib/video-compose/video-merge-ffmpeg.ts",
+        "src/lib/video-compose",
         "src/types/project.ts",
         "scripts/media-mapping.ts",
         "scripts/media-restore-dry-run.ts",
@@ -164,9 +168,10 @@
     {
       "id": "creative-skills",
       "document": "docs/architecture/modules/creative-skills.md",
-      "title": "Creative Skills 与原生 Subagent",
+      "title": "Creative Skills 与主 Agent 专业输出",
       "sourcePaths": [
-        "src/lib/creative-skills"
+        "src/lib/creative-skills",
+        "src/lib/project-production-context.ts"
       ]
     },
     {
@@ -177,10 +182,17 @@
         "src/lib/ai-exec",
         "src/lib/ai-providers",
         "src/lib/ai-registry",
-        "src/lib/config-service",
+        "src/lib/config-service.ts",
+        "src/lib/model-access/system-model-resolver.ts",
+        "src/lib/operations/domains/config/user-models-ops.ts",
+        "src/lib/operations/domains/config/user-preference-ops.ts",
+        "src/lib/platform-models",
         "src/lib/platform-runtime",
+        ".env.example",
+        ".env.cloud.example",
         "src/lib/user-api/runtime-config.ts",
         "src/lib/llm-observe",
+        "src/lib/image-cache.ts",
         "src/lib/media",
         "scripts/check-outbound-image-runtime-sample.ts",
         "scripts/check-outbound-image-success-rate.ts"
@@ -191,10 +203,12 @@
       "document": "docs/architecture/modules/ai-prompt-output-contract.md",
       "title": "Agent 指令、Skill 与输出契约",
       "sourcePaths": [
+        "src/lib/ai-prompts/templates/project-agent/system/project-agent-system.txt",
         "src/lib/assistant-runtime",
         "src/lib/codex-runtime/runtime-adapter.ts",
         "src/lib/codex-runtime/app-server-client.ts",
         "src/lib/creative-skills",
+        "src/lib/project-production-context.ts",
         "src/lib/wao-mcp/contracts.ts",
         "src/lib/operations/project-agent.ts",
         "messages/en/errors.json",
@@ -204,14 +218,33 @@
     {
       "id": "web-search",
       "document": "docs/architecture/modules/web-search.md",
-      "title": "Codex 原生 Web Search",
+      "title": "托管联网研究",
       "sourcePaths": [
-        "src/lib/assistant-runtime/event-projector.ts",
-        "src/lib/assistant-runtime/view-contract.ts",
-        "src/lib/codex-runtime/app-server-client.ts",
+        "src/lib/web-search",
         "src/lib/codex-model-gateway/standalone-search.ts",
+        "src/lib/ai-providers/openai",
+        "src/lib/ai-exec/hosted-web-search.ts",
+        "src/lib/wao-mcp",
         "src/lib/media/outbound-fetch.ts",
         "src/features/project-workspace/components/workspace-assistant"
+      ]
+    },
+    {
+      "id": "failure-governance",
+      "document": "docs/architecture/modules/failure-governance.md",
+      "title": "原生失败证据与重放裁决",
+      "sourcePaths": [
+        "src/lib/errors",
+        "src/lib/retry",
+        "src/lib/external-operation",
+        "src/lib/storage",
+        "src/lib/api-errors.ts",
+        "src/lib/adapters/operation-error-normalizer.ts",
+        "src/lib/media-process.ts",
+        "scripts/diagnose-project.ts",
+        "scripts/task-error-stats.ts",
+        "scripts/check-failure-governance.ts",
+        "prisma/migrations/20260807130000_failure_record_v2"
       ]
     },
     {
@@ -222,13 +255,21 @@
         "src/app",
         "src/components",
         "src/lib/api-auth.ts",
+        "src/lib/auth.ts",
         "src/lib/auth",
         "src/lib/deployment",
-        "src/lib/errors",
         "src/lib/home",
+        "src/lib/announcements",
+        "src/lib/public-beta",
         "src/lib/profile",
         "src/lib/projects",
-        "src/lib/storage",
+        "src/i18n.ts",
+        "src/components/announcements",
+        "src/app/api/announcements",
+        "src/app/api/public-beta",
+        "prisma/schema.prisma",
+        "prisma/migrations/20260805160000_paid_beta_and_announcements",
+        "prisma/migrations/20260806200000_add_public_beta_waitlist",
         "messages",
         "package.json",
         "package-lock.json",
@@ -261,7 +302,9 @@
       "sourcePaths": [
         "src/lib/logging",
         "src/lib/llm-observe",
-        "src/app/api/logs"
+        "src/lib/errors/client-reporter.ts",
+        "src/app/api/client-log",
+        "src/app/api/admin/download-logs"
       ]
     },
     {
@@ -272,9 +315,10 @@
         "tests",
         "scripts/architecture-impact.mjs",
         "scripts/architecture-impact-lib.mjs",
-        "scripts/check-conformance.mjs",
+        "scripts/test-verification",
         "vitest.config.ts",
-        "playwright.config.ts"
+        "tests/browser-security/playwright.config.ts",
+        "tsconfig.runtime-scripts.json"
       ]
     }
   ]

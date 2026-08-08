@@ -4,11 +4,14 @@ import {
   WorkflowIdReusePolicy,
   type WorkflowClient,
 } from '@temporalio/client'
+import { AppError } from '@/lib/errors/app-error'
+import { createFailureRecord } from '@/lib/errors/failure'
 import { isTaskType } from '@/lib/task/types'
 import { getTemporalClient } from '../client'
 import { getTemporalRuntimeConfig } from '../config'
 import { buildOperationExecutionWorkflowId } from '../identity'
-import { TEMPORAL_WORKFLOW_TYPE } from '../task/contracts'
+import { decodeTemporalFailure } from '../failure'
+import { TEMPORAL_WORKFLOW } from '../workflow-registry'
 import {
   OPERATION_EXECUTION_MAX_TASKS,
   type OperationExecutionCommand,
@@ -38,6 +41,16 @@ export class TemporalOperationExecutionCommandUnconfirmedError extends Error {
     this.name = 'TemporalOperationExecutionCommandUnconfirmedError'
     this.cause = cause
   }
+}
+
+function operationWorkflowFailure(error: WorkflowFailedError): AppError {
+  const failure = decodeTemporalFailure(error)
+    ?? createFailureRecord('INTERNAL_ERROR', 'Temporal workflow failed without a canonical failure', {
+      cause: error,
+      context: { system: 'temporal', phase: 'operation-execution' },
+      details: { reasonCode: 'TEMPORAL_FAILURE_PROTOCOL_MISSING' },
+    })
+  return AppError.fromFailure(failure, error)
 }
 
 function isScheduledState(
@@ -172,7 +185,7 @@ export class TemporalOperationExecutionClient {
     let result: unknown
     try {
       const handle = await this.workflowClient.start<OperationExecutionWorkflow>(
-        TEMPORAL_WORKFLOW_TYPE.OPERATION_EXECUTION,
+        TEMPORAL_WORKFLOW.OPERATION_EXECUTION.type,
         {
           workflowId,
           workflowIdReusePolicy: WorkflowIdReusePolicy.REJECT_DUPLICATE,
@@ -193,13 +206,17 @@ export class TemporalOperationExecutionClient {
             .getHandle<OperationExecutionWorkflow>(workflowId)
             .result()
         } catch (resultError) {
-          if (resultError instanceof WorkflowFailedError) throw resultError
+          if (resultError instanceof WorkflowFailedError) {
+            throw operationWorkflowFailure(resultError)
+          }
           throw new TemporalOperationExecutionCommandUnconfirmedError(
             envelope.commandId,
             workflowId,
             resultError,
           )
         }
+      } else if (error instanceof WorkflowFailedError) {
+        throw operationWorkflowFailure(error)
       } else {
         throw new TemporalOperationExecutionCommandUnconfirmedError(
           envelope.commandId,
@@ -233,7 +250,7 @@ export async function executeOperationViaTemporal(
     ).execute(command)
   } catch (error) {
     if (
-      error instanceof WorkflowFailedError ||
+      error instanceof AppError ||
       error instanceof TemporalOperationExecutionCommandUnconfirmedError
     ) {
       throw error

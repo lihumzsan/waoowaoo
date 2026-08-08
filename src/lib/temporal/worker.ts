@@ -1,9 +1,9 @@
 import { fileURLToPath } from 'node:url'
-import { VersioningBehavior } from '@temporalio/common'
 import { NativeConnection, Worker } from '@temporalio/worker'
 import { createScopedLogger } from '@/lib/logging/core'
 import * as activities from './activities'
 import { buildTemporalConnectionOptions, getTemporalWorkerRuntimeConfig } from './config'
+import { UNREGISTERED_WORKFLOW_VERSIONING_FALLBACK } from './workflow-registry'
 
 const logger = createScopedLogger({ module: 'temporal.worker' })
 
@@ -29,7 +29,7 @@ async function runTemporalWorker(): Promise<void> {
               buildId: config.workerBuildId,
             },
             useWorkerVersioning: true,
-            defaultVersioningBehavior: VersioningBehavior.PINNED,
+            defaultVersioningBehavior: UNREGISTERED_WORKFLOW_VERSIONING_FALLBACK,
           }
         : {
             version: {

@@ -1,6 +1,8 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { stableArgsFingerprint } from '@/lib/project-agent/stable-args-hash'
+import { parseFailureRecord } from '@/lib/errors/failure'
+import { resolvePublicModelName } from '@/lib/ai-exec/model-presentation'
 import { readWorkspaceResourceTextContent } from './content-store'
 import type {
   WorkspaceResourceActionView,
@@ -29,10 +31,12 @@ import {
 import {
   isWorkspaceSubtreePath,
   parentWorkspacePath,
-  validateWorkspaceResourceFilePath,
   validateWorkspaceResourceFolderPath,
+  workspaceResourceDisplayName,
   workspacePathAncestors,
 } from './path'
+import { resolveActiveWorkspaceResourceByPath } from './persistence'
+import { readWorkspaceResourceRevision } from './projection-revision'
 
 const DEFAULT_PAGE_SIZE = 100
 const MAX_PAGE_SIZE = 200
@@ -55,8 +59,7 @@ const resourceSelect = {
   memberIndex: true,
   alternativeGroupExecutionId: true,
   taskId: true,
-  errorCode: true,
-  errorMessage: true,
+  task: { select: { failure: true } },
   deletedAt: true,
   createdAt: true,
   updatedAt: true,
@@ -145,9 +148,15 @@ function projectActions(input: {
     kind: 'delete',
     enabled: input.resource.status !== 'pending',
     operationId: 'delete_resource',
-    input: { resourceId: input.resource.id },
+    input: {
+      resourceId: input.resource.id,
+      workspacePath: input.resource.workspacePath,
+    },
     href: null,
-    approvalInputHash: stableArgsFingerprint({ resourceId: input.resource.id }),
+    approvalInputHash: stableArgsFingerprint({
+      resourceId: input.resource.id,
+      workspacePath: input.resource.workspacePath,
+    }),
   }
   if (input.resource.resourceKind === 'folder') return [deleteAction]
   const downloadHref = previewUrl(input.current)
@@ -161,8 +170,7 @@ function projectActions(input: {
       || input.resource.operationId === 'create_audio'
       || input.resource.operationId === 'create_video'
       ? input.resource.operationId
-      : input.resource.operationId === 'submit_production_manifest'
-        || input.resource.operationId === 'rerun_failed_production_items'
+      : input.resource.operationId === 'rerun_failed_production_items'
         ? 'rerun_failed_production_items'
         : null
   const retryInput: WorkspaceResourceJsonObject | null = retryOperationId === 'rerun_failed_production_items'
@@ -206,7 +214,15 @@ function projectAncestors(
   return workspacePathAncestors(workspacePath).map((ancestorPath) => {
     const folder = folderByPath.get(ancestorPath)
     if (!folder) throw new Error(`WORKSPACE_RESOURCE_ANCESTOR_FOLDER_MISSING:${ancestorPath}`)
-    return { resourceId: folder.id, name: folder.name, workspacePath: folder.workspacePath }
+    return {
+      resourceId: folder.id,
+      name: workspaceResourceDisplayName({
+        workspacePath: folder.workspacePath,
+        resourceId: folder.id,
+        resourceKind: 'folder',
+      }),
+      workspacePath: folder.workspacePath,
+    }
   })
 }
 
@@ -284,7 +300,10 @@ async function loadViews(
         resourceKind: 'file',
         mediaType,
         schemaId: source.schemaId,
-        name: source.name,
+        name: workspaceResourceDisplayName({
+          workspacePath: source.workspacePath,
+          resourceId: source.id,
+        }),
         previewUrl: previewUrl(inputVersion),
       },
     ])
@@ -296,7 +315,10 @@ async function loadViews(
     const member: WorkspaceResourceAlternativeMemberView = {
       resourceId: sibling.id,
       workspacePath: sibling.workspacePath,
-      name: sibling.name,
+      name: workspaceResourceDisplayName({
+        workspacePath: sibling.workspacePath,
+        resourceId: sibling.id,
+      }),
       schemaId: sibling.schemaId,
       mediaType: requireMediaType(sibling.mediaType),
       status: requireStatus(sibling.status),
@@ -317,9 +339,6 @@ async function loadViews(
       if (folder) folderByPath.set(ancestorPath, folder)
     }
     const ancestors = projectAncestors(row.workspacePath, folderByPath)
-    const parentPath = parentWorkspacePath(row.workspacePath)
-    const parentFolderId = parentPath ? folderByPath.get(parentPath)?.id ?? null : null
-    if (parentPath && !parentFolderId) throw new Error(`WORKSPACE_RESOURCE_PARENT_FOLDER_MISSING:${row.id}`)
     const version = resourceKind === 'file' && row.currentVersion > 0
       ? versionByKey.get(`${row.id}:${String(row.currentVersion)}`)
       : undefined
@@ -361,17 +380,20 @@ async function loadViews(
       projectId: row.projectId,
       resourceKind,
       workspacePath: row.workspacePath,
-      parentFolderId,
       ancestors,
       mediaType,
       schemaId: row.schemaId,
-      name: row.name,
+      name: workspaceResourceDisplayName({
+        workspacePath: row.workspacePath,
+        resourceId: row.id,
+        resourceKind,
+      }),
       status: requireStatus(row.status),
       contentVersion: resourceKind === 'folder' ? 0 : row.currentVersion,
       current,
       summary,
       prompt: row.prompt,
-      modelKey: row.modelKey,
+      modelName: resolvePublicModelName(row.modelKey),
       generationOptions: jsonProjection(row.generationOptions),
       operationId: row.operationId,
       memberIndex: row.memberIndex,
@@ -381,9 +403,10 @@ async function loadViews(
       inputSummaries: summariesByOutput.get(lineageKey) ?? [],
       actions: projectActions({ resource: row, current: version, mediaType }),
       taskId: row.taskId,
-      error: row.errorCode || row.errorMessage
-        ? { code: row.errorCode, message: row.errorMessage ?? row.errorCode ?? '' }
-        : null,
+      error: (() => {
+        const failure = parseFailureRecord(row.task?.failure)
+        return failure ? { code: failure.interpretation.code } : null
+      })(),
       deletedAt: row.deletedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
@@ -429,6 +452,7 @@ export async function listWorkspaceResourceTreePage(input: {
   readonly deleted?: boolean
   readonly scope?: WorkspaceResourceTreeScope
 }): Promise<WorkspaceResourceTreePage> {
+  const revision = await readWorkspaceResourceRevision(input)
   const limit = requireLimit(input.limit)
   const cursor = decodeCursor(input.cursor)
   const search = input.search?.trim() || null
@@ -473,6 +497,7 @@ export async function listWorkspaceResourceTreePage(input: {
       nextCursor: afterCursor.length > limit && last
         ? encodeCursor({ workspacePath: last.workspacePath, id: last.id })
         : null,
+      revision,
     }
   }
   const rows = await prisma.workspaceResource.findMany({
@@ -491,6 +516,7 @@ export async function listWorkspaceResourceTreePage(input: {
     nextCursor: rows.length > limit && last
       ? encodeCursor({ workspacePath: last.workspacePath, id: last.id })
       : null,
+    revision,
   }
 }
 
@@ -511,21 +537,13 @@ export async function listAllWorkspaceResourcesForRuntime(input: {
 export async function readWorkspaceResource(input: {
   readonly userId: string
   readonly projectId: string
-  readonly resourceId?: string
-  readonly workspacePath?: string
+  readonly resourceId: string
 }): Promise<WorkspaceResourceView> {
-  const workspacePath = input.workspacePath
-    ? (() => {
-        try { return validateWorkspaceResourceFilePath(input.workspacePath) }
-        catch { return validateWorkspaceResourceFolderPath(input.workspacePath) }
-      })()
-    : null
-  if (!input.resourceId && !workspacePath) throw new Error('WORKSPACE_RESOURCE_IDENTITY_REQUIRED')
   const row = await prisma.workspaceResource.findFirst({
     where: {
       userId: input.userId,
       projectId: input.projectId,
-      ...(input.resourceId ? { id: input.resourceId } : { activePath: workspacePath }),
+      id: input.resourceId,
     },
     select: resourceSelect,
   })
@@ -533,4 +551,17 @@ export async function readWorkspaceResource(input: {
   const [view] = await loadViews([row], { includeContent: true })
   if (!view) throw new Error('WORKSPACE_RESOURCE_NOT_FOUND')
   return view
+}
+
+export async function readWorkspaceResourceByPath(input: {
+  readonly userId: string
+  readonly projectId: string
+  readonly workspacePath: string
+}): Promise<WorkspaceResourceView> {
+  const resource = await resolveActiveWorkspaceResourceByPath(prisma, input)
+  return await readWorkspaceResource({
+    userId: input.userId,
+    projectId: input.projectId,
+    resourceId: resource.resourceId,
+  })
 }

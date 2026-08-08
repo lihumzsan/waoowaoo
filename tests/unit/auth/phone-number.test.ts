@@ -15,8 +15,8 @@ describe('phone canonical identity', () => {
     expect(normalizePhoneNumber('+86 (138) 0013-8000')).toBe('+8613800138000')
   })
 
-  it('preserves enabled international E.164 identities and rejects ambiguous or unsupported input', () => {
-    expect(normalizePhoneNumber('+447400123456')).toBe('+447400123456')
+  it('rejects international, ambiguous, or malformed input when only mainland China is enabled', () => {
+    expect(normalizePhoneNumber('+447400123456')).toBeNull()
     expect(normalizePhoneNumber('4155552671')).toBeNull()
     expect(normalizePhoneNumber('+14155552671')).toBeNull()
     expect(normalizePhoneNumber('+33123456789')).toBeNull()

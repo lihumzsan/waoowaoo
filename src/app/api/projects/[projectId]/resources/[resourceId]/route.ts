@@ -26,9 +26,9 @@ export const GET = apiHandler(async (
 })
 
 /**
- * Canvas deletion adapter. The canonical Resource identity from the route is
- * passed unchanged into the sole soft-delete Operation; the mutation receipt
- * is the browser Query handoff.
+ * Canvas deletion adapter. The approved Resource identity and displayed path
+ * are passed unchanged into the sole soft-delete Operation; the mutation
+ * receipt is the browser Query handoff.
  */
 export const DELETE = apiHandler(async (
   request: NextRequest,
@@ -41,7 +41,11 @@ export const DELETE = apiHandler(async (
     required: true,
     operationId: 'delete_resource',
   })
-  const approvalInputHash = stableArgsFingerprint({ resourceId })
+  const workspacePath = request.nextUrl.searchParams.get('workspacePath')
+  if (!workspacePath) {
+    throw new ApiError('INVALID_PARAMS', { field: 'workspacePath' })
+  }
+  const approvalInputHash = stableArgsFingerprint({ resourceId, workspacePath })
   if (!operationRequestId.startsWith(`delete_resource:${approvalInputHash}:`)) {
     throw new ApiError('CONFLICT', {
       code: 'APPROVAL_GRANT_REQUEST_MISMATCH',
@@ -53,7 +57,7 @@ export const DELETE = apiHandler(async (
     operationId: 'delete_resource',
     projectId,
     userId: auth.session.user.id,
-    input: { resourceId },
+    input: { resourceId, workspacePath },
     source: 'project-ui',
     responseContract: 'operation_mutation_response_v1',
     requireIdempotencyKey: true,

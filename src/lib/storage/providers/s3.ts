@@ -12,9 +12,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { loadS3StorageConfig, toS3ClientConfig, type S3StorageConfig } from '@/lib/storage/s3-config'
 import type {
   DeleteObjectsResult,
-  GetObjectStreamParams,
   ObjectMetadata,
-  ObjectStreamResult,
   SignedUrlParams,
   StorageProvider,
   UploadObjectParams,
@@ -24,49 +22,6 @@ import { normalizeKey, streamToBuffer, toFetchableUrl } from '@/lib/storage/util
 
 const MAX_DELETE_OBJECTS_PER_REQUEST = 1_000
 const MAX_SIGNED_URL_EXPIRES_SECONDS = 7 * 24 * 60 * 60
-
-type WebStreamBody = {
-  transformToWebStream: () => ReadableStream<Uint8Array>
-}
-
-function toUint8Array(chunk: unknown): Uint8Array {
-  if (chunk instanceof Uint8Array) return chunk
-  if (chunk instanceof ArrayBuffer) return new Uint8Array(chunk)
-  if (typeof chunk === 'string') return Buffer.from(chunk)
-  return Buffer.from(String(chunk))
-}
-
-function isWebStreamBody(body: unknown): body is WebStreamBody {
-  return typeof (body as { transformToWebStream?: unknown } | null)?.transformToWebStream === 'function'
-}
-
-function isAsyncIterable(body: unknown): body is AsyncIterable<unknown> {
-  return typeof (body as { [Symbol.asyncIterator]?: unknown } | null)?.[Symbol.asyncIterator] === 'function'
-}
-
-function asyncIterableToReadableStream(iterable: AsyncIterable<unknown>): ReadableStream<Uint8Array> {
-  const iterator = iterable[Symbol.asyncIterator]()
-  return new ReadableStream<Uint8Array>({
-    async pull(controller) {
-      const result = await iterator.next()
-      if (result.done) {
-        controller.close()
-        return
-      }
-      controller.enqueue(toUint8Array(result.value))
-    },
-    async cancel() {
-      await iterator.return?.()
-    },
-  })
-}
-
-function objectBodyToReadableStream(body: unknown): ReadableStream<Uint8Array> {
-  if (body instanceof ReadableStream) return body as ReadableStream<Uint8Array>
-  if (isWebStreamBody(body)) return body.transformToWebStream()
-  if (isAsyncIterable(body)) return asyncIterableToReadableStream(body)
-  throw new Error('Storage object response body is not streamable')
-}
 
 function normalizeSignedUrl(url: string): string {
   let parsed: URL
@@ -112,10 +67,14 @@ export class S3StorageProvider implements StorageProvider {
 
   private readonly config: S3StorageConfig
   private readonly client: S3Client
+  private readonly uploadClient: S3Client
 
   constructor(config: S3StorageConfig = loadS3StorageConfig()) {
     this.config = config
-    this.client = new S3Client(toS3ClientConfig(config))
+    this.client = new S3Client(toS3ClientConfig(config, config.endpoint))
+    this.uploadClient = config.uploadEndpoint === config.endpoint
+      ? this.client
+      : new S3Client(toS3ClientConfig(config, config.uploadEndpoint))
   }
 
   async verifyReady(): Promise<void> {
@@ -144,7 +103,7 @@ export class S3StorageProvider implements StorageProvider {
 
   async uploadObject(params: UploadObjectParams): Promise<UploadObjectResult> {
     const key = normalizeKey(params.key)
-    await this.client.send(new PutObjectCommand({
+    await this.uploadClient.send(new PutObjectCommand({
       Bucket: this.config.bucket,
       Key: key,
       Body: params.body,
@@ -190,6 +149,7 @@ export class S3StorageProvider implements StorageProvider {
       new GetObjectCommand({
         Bucket: this.config.bucket,
         Key: normalizeKey(params.key),
+        ...(params.responseCacheControl ? { ResponseCacheControl: params.responseCacheControl } : {}),
       }),
       { expiresIn: normalizeSignedUrlExpiry(params.expiresInSeconds) },
     )
@@ -212,25 +172,6 @@ export class S3StorageProvider implements StorageProvider {
     return {
       contentType: result.ContentType ?? null,
       contentLength: result.ContentLength ?? null,
-    }
-  }
-
-  async getObjectStream(params: GetObjectStreamParams): Promise<ObjectStreamResult> {
-    const result = await this.client.send(new GetObjectCommand({
-      Bucket: this.config.bucket,
-      Key: normalizeKey(params.key),
-      ...(params.range ? { Range: params.range } : {}),
-    }))
-    if (!result.Body) throw new Error('Storage object response body is empty')
-
-    const upstreamStatus = result.$metadata.httpStatusCode
-    return {
-      body: objectBodyToReadableStream(result.Body),
-      contentType: result.ContentType ?? null,
-      contentLength: result.ContentLength ?? null,
-      contentRange: result.ContentRange ?? null,
-      acceptRanges: result.AcceptRanges ?? null,
-      statusCode: upstreamStatus === 206 ? 206 : upstreamStatus === 416 ? 416 : 200,
     }
   }
 

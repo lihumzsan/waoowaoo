@@ -1,6 +1,11 @@
 import { CREDIT_UNIT_CNY } from './credits'
 import {
-  FREE_TIER_CONCURRENCY,
+  estimateCreditCapacity,
+  resolveCreditCapacityReference,
+  type CreditCapacityEstimate,
+  type CreditCapacityReference,
+} from './subscription-capacity'
+import {
   SUBSCRIPTION_PLANS,
   subscriptionBonusRate,
   subscriptionEffectiveCreditPriceCny,
@@ -8,7 +13,6 @@ import {
   type SubscriptionInterval,
   type SubscriptionPlanId,
 } from './subscription-plans'
-import type { WorkflowConcurrencyConfig } from '@/lib/workflow-concurrency'
 
 /**
  * The plan catalog as a client can render it.
@@ -22,7 +26,14 @@ export interface SubscriptionIntervalView {
   readonly interval: SubscriptionInterval
   /** Amount charged in one cycle. */
   readonly periodPriceCny: number
-  /** Cycle price spread over its months — what a plan "costs per month". */
+  /**
+   * Cycle price spread over its months, rounded down to a whole yuan.
+   *
+   * This is a comparison figure, not an amount anyone is charged —
+   * `periodPriceCny` is what the card actually bills. Rounding down keeps the
+   * headline from advertising a fraction of a yuan and never overstates the
+   * price; the exact cycle total is always shown next to it.
+   */
   readonly monthlyEquivalentCny: number
   /** Credits per CNY over the face rate, e.g. 0.12 for +12%. */
   readonly bonusRate: number
@@ -36,35 +47,38 @@ export interface SubscriptionPlanView {
   readonly monthlyCredits: number
   readonly featured: boolean
   readonly firstMonthPromoCny: number | null
-  readonly concurrency: WorkflowConcurrencyConfig
+  /** What a month's grant covers, if spent entirely on one kind of work. */
+  readonly monthlyCapacity: CreditCapacityEstimate
   readonly intervals: readonly SubscriptionIntervalView[]
 }
 
 export interface SubscriptionCatalogView {
   readonly creditUnitCny: number
-  readonly freeConcurrency: WorkflowConcurrencyConfig
+  /** What one clip and one image cost, so the page can show its maths. */
+  readonly capacityReference: CreditCapacityReference
   readonly plans: readonly SubscriptionPlanView[]
 }
 
 const MONTHS_PER_YEAR = 12
 
 export function buildSubscriptionPlanViews(): SubscriptionCatalogView {
+  const capacityReference = resolveCreditCapacityReference()
   return {
     creditUnitCny: CREDIT_UNIT_CNY,
-    freeConcurrency: FREE_TIER_CONCURRENCY,
+    capacityReference,
     plans: SUBSCRIPTION_PLANS.map((plan) => ({
       id: plan.id,
       monthlyCredits: plan.monthlyCredits,
       featured: plan.featured,
       firstMonthPromoCny: plan.firstMonthPromoCny,
-      concurrency: plan.concurrency,
+      monthlyCapacity: estimateCreditCapacity(plan.monthlyCredits, capacityReference),
       intervals: (['month', 'year'] as const).map((interval) => {
         const periodPriceCny = subscriptionPeriodPriceCny(plan, interval)
         const months = interval === 'year' ? MONTHS_PER_YEAR : 1
         return {
           interval,
           periodPriceCny,
-          monthlyEquivalentCny: Number((periodPriceCny / months).toFixed(2)),
+          monthlyEquivalentCny: Math.floor(periodPriceCny / months),
           bonusRate: Number(subscriptionBonusRate(plan, interval).toFixed(4)),
           effectiveCreditPriceCny: Number(
             subscriptionEffectiveCreditPriceCny(plan, interval).toFixed(5),

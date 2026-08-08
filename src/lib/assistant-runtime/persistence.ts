@@ -4,9 +4,10 @@ import { assertLlmSpendableBalance } from '@/lib/billing/llm-balance-gate'
 import { Prisma, type ProjectAgentTurn, type ProjectAssistantThread } from '@prisma/client'
 import { safeValidateUIMessages, type UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
-import { recordAgentTurnUsageFactsInTransaction } from '@/lib/agent-turn/usage'
 import { buildAgentTurnAssistantMessageId } from '@/lib/agent-turn/stream-publisher'
 import { projectErrorForModel } from '@/lib/errors/projection'
+import { parseFailureRecord } from '@/lib/errors/failure'
+import { parseProjectAgentPlanSnapshot } from '@/lib/project-agent/plan'
 import type {
   AssistantRuntimeInteractionView,
   AssistantRuntimeMessageReceipt,
@@ -26,7 +27,6 @@ const FOLLOW_UP_INPUT_MAX_BYTES = 512 * 1_024
 type TransactionClient = Prisma.TransactionClient
 
 type ThreadView = AssistantRuntimeThreadIdentity & {
-  readonly runtimeRevision: string | null
   readonly messages: readonly UIMessage[]
   readonly createdAt: Date
   readonly updatedAt: Date
@@ -63,25 +63,6 @@ function runtimeResponseRequestId(value: unknown): string {
     throw new Error('ASSISTANT_RUNTIME_INTERACTION_RESPONSE_INVALID')
   }
   return String(id)
-}
-
-function assertInteractionDoesNotRequestSecrets(
-  interaction: AssistantRuntimeInteractionView,
-): void {
-  if (interaction.method !== 'item/tool/requestUserInput') return
-  const payload = interaction.payload
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return
-  const questions = payload.questions
-  if (!Array.isArray(questions)) return
-  if (questions.some((question) => (
-    question !== null
-    && typeof question === 'object'
-    && !Array.isArray(question)
-    && 'isSecret' in question
-    && question.isSecret === true
-  ))) {
-    throw new Error('ASSISTANT_RUNTIME_SECRET_INPUT_UNSUPPORTED')
-  }
 }
 
 function toJson(value: unknown): Prisma.InputJsonValue {
@@ -160,33 +141,8 @@ function upsertMessage(existing: readonly UIMessage[], message: UIMessage): UIMe
 }
 
 function normalizePlanForStorage(value: unknown): Prisma.InputJsonValue | typeof Prisma.JsonNull {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('ASSISTANT_RUNTIME_PLAN_INVALID')
-  }
-  const record = value as Record<string, unknown>
-  if (!Array.isArray(record.plan) || record.plan.length > 25) {
-    throw new Error('ASSISTANT_RUNTIME_PLAN_INVALID')
-  }
-  if (record.explanation !== null && typeof record.explanation !== 'string') {
-    throw new Error('ASSISTANT_RUNTIME_PLAN_INVALID')
-  }
-  const explanation = typeof record.explanation === 'string' ? record.explanation.trim() : null
-  if (explanation && explanation.length > 500) throw new Error('ASSISTANT_RUNTIME_PLAN_INVALID')
-  const plan = record.plan.map((entry) => {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
-      throw new Error('ASSISTANT_RUNTIME_PLAN_INVALID')
-    }
-    const item = entry as Record<string, unknown>
-    const step = typeof item.step === 'string' ? item.step.trim() : ''
-    const status = item.status
-    if (
-      !step || step.length > 160
-      || (status !== 'pending' && status !== 'in_progress' && status !== 'completed')
-    ) throw new Error('ASSISTANT_RUNTIME_PLAN_INVALID')
-    return { step, status }
-  })
-  if (plan.length === 0 || plan.every((item) => item.status === 'completed')) return Prisma.JsonNull
-  return toJson({ explanation, plan })
+  const snapshot = parseProjectAgentPlanSnapshot(value)
+  return snapshot ? toJson(snapshot) : Prisma.JsonNull
 }
 
 function threadView(row: ProjectAssistantThread, messages: readonly UIMessage[]): ThreadView {
@@ -196,7 +152,6 @@ function threadView(row: ProjectAssistantThread, messages: readonly UIMessage[])
     assistantId: 'workspace-command',
     threadId: row.id,
     runtimeThreadId: row.runtimeThreadId,
-    runtimeRevision: row.runtimeRevision,
     messages,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -414,6 +369,7 @@ export async function bindAssistantRuntimeThread(input: {
   return await prisma.$transaction(async (tx) => {
     await lockProjectScope(tx, input.scope)
     const row = await lockThread(tx, input.scope, input.threadId)
+    if (row.clearRequestId) throw new Error('ASSISTANT_RUNTIME_CLEAR_IN_PROGRESS')
     if (row.runtimeThreadId && row.runtimeThreadId !== input.runtimeThreadId) {
       throw new Error('ASSISTANT_RUNTIME_CODEX_THREAD_ID_DIVERGED')
     }
@@ -423,37 +379,6 @@ export async function bindAssistantRuntimeThread(input: {
           where: { id: row.id },
           data: { runtimeThreadId: input.runtimeThreadId },
         })
-    return threadView(updated, await parseMessages(updated.messagesJson))
-  })
-}
-
-export async function rotateAssistantRuntimeThreadRevision(input: {
-  readonly scope: AssistantRuntimeScope
-  readonly threadId: string
-  readonly expectedRuntimeThreadId: string | null
-  readonly runtimeRevision: string
-}): Promise<ThreadView> {
-  const runtimeRevision = requireIdentity(
-    input.runtimeRevision,
-    'ASSISTANT_RUNTIME_REVISION_INVALID',
-    64,
-  )
-  return await prisma.$transaction(async (tx) => {
-    await lockProjectScope(tx, input.scope)
-    const row = await lockThread(tx, input.scope, input.threadId)
-    if (row.runtimeRevision === runtimeRevision) {
-      return threadView(row, await parseMessages(row.messagesJson))
-    }
-    if (row.runtimeThreadId !== input.expectedRuntimeThreadId) {
-      throw new Error('ASSISTANT_RUNTIME_REVISION_THREAD_DIVERGED')
-    }
-    const updated = await tx.projectAssistantThread.update({
-      where: { id: row.id },
-      data: {
-        runtimeThreadId: null,
-        runtimeRevision,
-      },
-    })
     return threadView(updated, await parseMessages(updated.messagesJson))
   })
 }
@@ -708,8 +633,7 @@ export async function failAssistantRuntimeTurnStart(input: {
       data: {
         status: turn.cancelRequestId ? 'cancelled' : 'interrupted',
         stopReason: turn.cancelRequestId ? 'cancelled_before_binding' : input.reason,
-        errorCode: null,
-        errorMessage: null,
+        failure: Prisma.DbNull,
         finishedAt: new Date(),
       },
     })
@@ -747,8 +671,7 @@ export async function failAssistantRuntimeBoundTurnStart(input: {
       data: {
         status: turn.cancelRequestId ? 'cancelled' : 'interrupted',
         stopReason: turn.cancelRequestId ? 'cancelled_during_projection_start' : input.reason,
-        errorCode: null,
-        errorMessage: null,
+        failure: Prisma.DbNull,
         finishedAt: new Date(),
       },
     })
@@ -1029,7 +952,6 @@ export async function resolveAssistantRuntimeMessageTarget(
 export async function persistAssistantRuntimeInteraction(
   interaction: AssistantRuntimeInteractionView & AssistantRuntimeScope,
 ): Promise<void> {
-  assertInteractionDoesNotRequestSecrets(interaction)
   await prisma.$transaction(async (tx) => {
     await lockProjectScope(tx, interaction)
     const thread = await lockThread(tx, interaction, interaction.threadId)
@@ -1187,15 +1109,29 @@ export async function resolveAssistantRuntimeInteraction(input: {
 }
 
 export async function replaceAssistantRuntimePlan(input: {
-  readonly scope: AssistantRuntimeScope
-  readonly threadId: string
+  readonly identity: AssistantRuntimeTurnIdentity
   readonly plan: unknown
 }): Promise<void> {
   await prisma.$transaction(async (tx) => {
-    await lockProjectScope(tx, input.scope)
-    await lockThread(tx, input.scope, input.threadId)
-    await tx.projectAssistantThread.update({
-      where: { id: input.threadId },
+    await lockProjectScope(tx, input.identity)
+    const thread = await lockThread(tx, input.identity, input.identity.threadId)
+    const rows = await tx.$queryRaw<ProjectAgentTurn[]>(Prisma.sql`
+      SELECT * FROM project_agent_turns WHERE id = ${input.identity.turnId} FOR UPDATE
+    `)
+    const turn = rows[0]
+    if (
+      !turn
+      || turn.threadId !== thread.id
+      || !input.identity.runtimeTurnId
+      || turn.runtimeTurnId !== input.identity.runtimeTurnId
+      || turn.attempt !== input.identity.attempt
+      || turn.cancelRequestId
+      || !ACTIVE_TURN_STATUSES.includes(turn.status as (typeof ACTIVE_TURN_STATUSES)[number])
+    ) {
+      throw new Error('ASSISTANT_RUNTIME_PLAN_TURN_SCOPE_DIVERGED')
+    }
+    await tx.projectAgentTurn.update({
+      where: { id: turn.id },
       data: { planJson: normalizePlanForStorage(input.plan) },
     })
   })
@@ -1284,14 +1220,6 @@ export async function settleAssistantRuntimeTurn(input: {
         where: { id: turn.id },
         data: { assistantMessageId: projectedMessageId },
       })
-      await recordAgentTurnUsageFactsInTransaction({
-        tx,
-        turnId: turn.id,
-        attempt: turn.attempt,
-        projectId: turn.projectId,
-        userId: turn.userId,
-        usageFacts: input.projection.usage ? [input.projection.usage] : [],
-      })
       return
     }
     const messages = await parseMessages(thread.messagesJson)
@@ -1314,18 +1242,9 @@ export async function settleAssistantRuntimeTurn(input: {
         status: input.projection.status,
         assistantMessageId: input.projection.assistantMessage?.id ?? null,
         stopReason: input.projection.stopReason,
-        errorCode: input.projection.errorCode,
-        errorMessage: input.projection.errorMessage,
+        failure: input.projection.failure ? toJson(input.projection.failure) : Prisma.DbNull,
         finishedAt: new Date(),
       },
-    })
-    await recordAgentTurnUsageFactsInTransaction({
-      tx,
-      turnId: turn.id,
-      attempt: turn.attempt,
-      projectId: turn.projectId,
-      userId: turn.userId,
-      usageFacts: input.projection.usage ? [input.projection.usage] : [],
     })
   })
 }
@@ -1557,8 +1476,7 @@ export async function markAssistantRuntimeProjectTurnsInterrupted(input: {
       data: {
         status: 'interrupted',
         stopReason: input.reason,
-        errorCode: null,
-        errorMessage: null,
+        failure: Prisma.DbNull,
         finishedAt: new Date(),
       },
     })
@@ -1599,7 +1517,7 @@ type FollowUpBatchWithTasks = Prisma.FollowUpBatchGetPayload<{
             targetType: true
             targetId: true
             result: true
-            errorCode: true
+            failure: true
           }
         }
       }
@@ -1621,7 +1539,10 @@ function buildFollowUpContent(batch: FollowUpBatchWithTasks): string {
       targetId: member.task.targetId,
       result: member.task.result,
       failure: member.task.status === 'failed'
-        ? projectErrorForModel(member.task.errorCode)
+        ? (() => {
+            const failure = parseFailureRecord(member.task.failure)
+            return projectErrorForModel(failure)
+          })()
         : null,
     }))
   const content = [
@@ -1669,7 +1590,7 @@ async function readFollowUpBatch(batchId: string): Promise<FollowUpBatchWithTask
               targetType: true,
               targetId: true,
               result: true,
-              errorCode: true,
+              failure: true,
             },
           },
         },
@@ -1728,7 +1649,7 @@ export async function admitAssistantRuntimeTaskFollowUp(input: {
                 targetType: true,
                 targetId: true,
                 result: true,
-                errorCode: true,
+                failure: true,
               },
             },
           },

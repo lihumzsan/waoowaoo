@@ -40,6 +40,7 @@ export type CodexModelGatewayErrorCode =
   | 'REQUEST_BODY_INVALID'
   | 'REQUEST_INSTRUCTIONS_INVALID'
   | 'REQUEST_MODEL_MISMATCH'
+  | 'BILLING_BALANCE_INSUFFICIENT'
   | 'PROVIDER_REQUEST_FAILED'
   | 'SEARCH_COMMAND_UNSUPPORTED'
   | 'SEARCH_QUERY_INVALID'
@@ -49,14 +50,17 @@ export type CodexModelGatewayErrorCode =
 export class CodexModelGatewayError extends Error {
   readonly code: CodexModelGatewayErrorCode
   readonly httpStatus: number
+  override readonly cause?: unknown
 
   constructor(
     code: CodexModelGatewayErrorCode,
     httpStatus: number,
+    cause?: unknown,
   ) {
-    super(`CODEX_MODEL_GATEWAY_${code}`)
+    super(`CODEX_MODEL_GATEWAY_${code}`, { cause })
     this.name = 'CodexModelGatewayError'
     this.code = code
     this.httpStatus = httpStatus
+    this.cause = cause
   }
 }

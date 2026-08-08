@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import { addBalance } from '@/lib/billing'
 import { freezeBalance } from '@/lib/billing/ledger'
 import { createAgentFollowUpBatchBinding } from '@/lib/agent-turn/follow-up-batch'
+import { createFailureRecord } from '@/lib/errors/failure'
 import type { WorkspaceResourceInputRef } from '@/lib/workspace-resource/contracts'
 import { buildWorkspaceResourceId } from '@/lib/workspace-resource/identity'
 import {
@@ -80,7 +81,7 @@ async function seedSourceVideos(input: {
         requestId: input.suffix,
         memberIndex: index,
       })
-      const workspacePath = `task-durability-${input.suffix}-source-${String(index)}.resource`
+      const workspacePath = `task-durability-${input.suffix}-source-${String(index)}`
       await reserveWorkspaceResourceInTransaction(tx, {
         resourceId,
         userId: input.userId,
@@ -94,6 +95,7 @@ async function seedSourceVideos(input: {
       await materializeWorkspaceResourceInTransaction(tx, {
         resourceId,
         userId: input.userId,
+        projectId: input.projectId,
         mediaType: 'video',
         schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
         content: { kind: 'media', mediaId: mediaObject.id },
@@ -181,7 +183,7 @@ async function submitFixtureTask(input: {
               resourceId,
               userId: input.userId,
               projectId: input.projectId,
-              outputPath: `task-durability-${input.suffix}-output.resource`,
+              outputPath: `task-durability-${input.suffix}-output`,
               mediaType: 'video',
               schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
               operationId,
@@ -228,10 +230,18 @@ async function seedFinalFailureCheckpoint(
         attemptId: `${workflowId}:attempt:1`,
         attempt: 1,
         failure: {
-          errorCode: 'TASK_DURABILITY_EXPECTED_FINAL',
-          errorMessage: 'Deterministic terminal fixture failure',
-          errorDetails: null,
-          failureClass: 'PERMANENT_PROVIDER',
+          failure: createFailureRecord(
+            'PROVIDER_SUBMISSION_REJECTED',
+            'Deterministic terminal fixture failure',
+            {
+              details: { reasonCode: 'TASK_DURABILITY_EXPECTED_FINAL' },
+              context: {
+              system: 'provider',
+              provider: 'temporal-test-provider',
+              phase: 'submit',
+              },
+            },
+          ) as unknown as Prisma.InputJsonObject,
           retryDisposition: 'final',
         },
       } satisfies Prisma.InputJsonValue,

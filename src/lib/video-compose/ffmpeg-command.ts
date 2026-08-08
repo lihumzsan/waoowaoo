@@ -66,10 +66,28 @@ export async function runFfmpegCommand(command: FfmpegBinaryName, args: readonly
     }
   } catch (error) {
     if (isTimeoutTermination(error)) {
-      throw new Error(`FFMPEG_COMMAND_TIMEOUT:${stage}:${timeoutMs}`)
+      throw new Error(`FFMPEG_COMMAND_TIMEOUT:${stage}:${timeoutMs}`, { cause: error })
     }
     throw error
   }
+}
+
+export async function probeMediaDurationSeconds(
+  filePath: string,
+  stage = 'media_probe_duration',
+): Promise<number> {
+  const result = await runFfmpegCommand('ffprobe', [
+    '-v',
+    'error',
+    '-show_entries',
+    'format=duration',
+    '-of',
+    'default=noprint_wrappers=1:nokey=1',
+    filePath,
+  ], { stage })
+  const duration = Number.parseFloat(result.stdout.trim())
+  if (!Number.isFinite(duration) || duration <= 0) throw new Error('MEDIA_DURATION_INVALID')
+  return duration
 }
 
 export function createFfmpegCommandRunner(context: FfmpegCommandContext): FfmpegCommandRunner {

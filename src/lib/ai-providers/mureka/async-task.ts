@@ -4,6 +4,7 @@ import type {
   ParsedAsyncExternalId,
 } from '@/lib/ai-providers/async-task-types'
 import { normalizeAsyncPollResult } from '@/lib/ai-providers/async-task-types'
+import { createProviderAsyncTaskFailure } from '@/lib/ai-providers/shared/async-task-status'
 import { FetchStatusError } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { buildMurekaUrl } from './base-url'
@@ -97,9 +98,12 @@ export const murekaAsyncTaskProvider: AsyncTaskProviderRegistration = {
       if (!resultUrl) {
         return normalizeAsyncPollResult({
           status: 'failed',
-          failureDisposition: 'retryable',
-          errorCode: 'EMPTY_RESPONSE',
-          error: `MUREKA_RESULT_URL_MISSING:${parsed.requestId}`,
+          failure: createProviderAsyncTaskFailure({
+            provider: 'mureka',
+            code: 'EMPTY_RESPONSE',
+            message: `MUREKA_RESULT_URL_MISSING:${parsed.requestId}`,
+            cause: data,
+          }),
         })
       }
       return normalizeAsyncPollResult({ status: 'completed', resultUrl })
@@ -110,17 +114,23 @@ export const murekaAsyncTaskProvider: AsyncTaskProviderRegistration = {
         : `MUREKA_TASK_${status.toUpperCase()}`
       return normalizeAsyncPollResult({
         status: 'failed',
-        failureDisposition: 'permanent',
-        errorCode: 'PROVIDER_SUBMISSION_REJECTED',
-        error: reason,
+        failure: createProviderAsyncTaskFailure({
+          provider: 'mureka',
+          code: 'PROVIDER_SUBMISSION_REJECTED',
+          message: reason,
+          cause: data,
+        }),
       })
     }
     if (status === 'timeouted') {
       return normalizeAsyncPollResult({
         status: 'failed',
-        failureDisposition: 'retryable',
-        errorCode: 'GENERATION_TIMEOUT',
-        error: `MUREKA_TASK_TIMEOUTED:${parsed.requestId}`,
+        failure: createProviderAsyncTaskFailure({
+          provider: 'mureka',
+          code: 'GENERATION_TIMEOUT',
+          message: `MUREKA_TASK_TIMEOUTED:${parsed.requestId}`,
+          cause: data,
+        }),
       })
     }
     return normalizeAsyncPollResult({ status: 'pending' })

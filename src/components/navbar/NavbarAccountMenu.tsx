@@ -1,6 +1,7 @@
 'use client'
 
-import type { CSSProperties, RefObject } from 'react'
+import Image from 'next/image'
+import { useState, type CSSProperties, type RefObject } from 'react'
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { Link } from '@/i18n/navigation'
@@ -21,11 +22,11 @@ interface NavbarAccountMenuProps {
   style: CSSProperties | null
   userName: string
   userEmail: string | null
+  userImage: string | null
   balance: NavbarUserBalance | null
   creditsUnit: string
   showBilling: boolean
   showRecharge: boolean
-  showPricingLink: boolean
   showDownloadLogs: boolean
   showUpdateCheck: boolean
   manualChecking: boolean
@@ -36,8 +37,34 @@ interface NavbarAccountMenuProps {
   onSignOut: () => void
 }
 
-export function NavbarUserAvatar({ name, size = 'sm' }: { name: string; size?: 'sm' | 'md' }) {
+export function NavbarUserAvatar({
+  name,
+  image,
+  size = 'sm',
+}: {
+  name: string
+  image: string | null
+  size?: 'sm' | 'md'
+}) {
+  const [failedImage, setFailedImage] = useState<string | null>(null)
   const sizeClass = size === 'md' ? 'h-9 w-9 text-sm' : 'h-7 w-7 text-xs'
+
+  if (image && failedImage !== image) {
+    const pixels = size === 'md' ? 36 : 28
+    return (
+      <Image
+        aria-hidden="true"
+        src={image}
+        alt=""
+        width={pixels}
+        height={pixels}
+        sizes={`${pixels}px`}
+        className={`${sizeClass} shrink-0 rounded-full object-cover shadow-[inset_0_1px_0_rgba(255,255,255,0.4)]`}
+        onError={() => setFailedImage(image)}
+      />
+    )
+  }
+
   return (
     <span
       aria-hidden="true"
@@ -54,11 +81,11 @@ export default function NavbarAccountMenu({
   style,
   userName,
   userEmail,
+  userImage,
   balance,
   creditsUnit,
   showBilling,
   showRecharge,
-  showPricingLink,
   showDownloadLogs,
   showUpdateCheck,
   manualChecking,
@@ -82,7 +109,7 @@ export default function NavbarAccountMenu({
     >
       {/* 账户头部:头像 + 名称 + 邮箱 */}
       <div className="flex items-center gap-3 rounded-xl px-2.5 py-2.5">
-        <NavbarUserAvatar name={userName} size="md" />
+        <NavbarUserAvatar name={userName} image={userImage} size="md" />
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold text-[var(--glass-text-primary)]">{userName}</div>
           {userEmail ? (
@@ -113,6 +140,15 @@ export default function NavbarAccountMenu({
           <div className="glass-num mt-1.5 text-xl font-bold tracking-tight text-[var(--glass-text-primary)]">
             {formatCreditAmount(balance.balance, creditsUnit)}
           </div>
+          {/* A bought term simply stops when it runs out, so the reminder has
+              to arrive before it does. */}
+          {balance.plan?.expiringSoon ? (
+            <div className="mt-1.5 text-[11px] font-medium text-[var(--glass-warning,#f5a524)]">
+              {balance.plan.daysLeft > 0
+                ? t('account.planExpiringSoon', { days: balance.plan.daysLeft })
+                : t('account.planExpired')}
+            </div>
+          ) : null}
           {balance.health === 'ok' ? null : (
             <div
               className={`mt-1.5 text-[11px] font-medium ${
@@ -162,32 +198,6 @@ export default function NavbarAccountMenu({
           <span className="flex-1 text-left">{item.label}</span>
         </Link>
       ))}
-
-      {/* 从 dock 收敛进来的入口:资产中心、价格 */}
-      <Link
-        href={{ pathname: '/workspace/asset-hub' }}
-        target="_blank"
-        rel="noopener noreferrer"
-        role="menuitem"
-        onClick={onClose}
-        className="glass-menu-item"
-      >
-        <AppIcon name="folderHeart" className="h-4 w-4 shrink-0" />
-        <span className="flex-1 text-left">{t('assetHub')}</span>
-      </Link>
-      {showPricingLink ? (
-        <Link
-          href={{ pathname: '/pricing' }}
-          target="_blank"
-          rel="noopener noreferrer"
-          role="menuitem"
-          onClick={onClose}
-          className="glass-menu-item"
-        >
-          <AppIcon name="diamond" className="h-4 w-4 shrink-0" />
-          <span className="flex-1 text-left">{t('pricing')}</span>
-        </Link>
-      ) : null}
 
       {/* 语言(唯一切换入口,内嵌展开) */}
       <LanguageSwitcher variant="menu-row" />

@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { getRequestConfig } from 'next-intl/server';
 import { routing, locales, type Locale } from './i18n/routing';
+import { DEFAULT_USER_TIME_ZONE } from './lib/user-time-zone';
 
 // Re-export for convenience
 export { locales, type Locale, routing };
@@ -46,6 +47,8 @@ export default getRequestConfig(async ({ requestLocale }) => {
         assistantAgent,
         legal,
         pricing,
+        paidBeta,
+        announcements,
         contact
     ] = await Promise.all([
         import(`../messages/${locale}/common.json`),
@@ -77,11 +80,16 @@ export default getRequestConfig(async ({ requestLocale }) => {
         import(`../messages/${locale}/assistantAgent.json`),
         import(`../messages/${locale}/legal.json`),
         import(`../messages/${locale}/pricing.json`),
+        import(`../messages/${locale}/paidBeta.json`),
+        import(`../messages/${locale}/announcements.json`),
         import(`../messages/${locale}/contact.json`)
     ]);
 
     return {
         locale,
+        // Never inherit the deployment container's UTC zone as a user-facing
+        // default. Client billing Views refine this with the browser IANA zone.
+        timeZone: DEFAULT_USER_TIME_ZONE,
         messages: {
             common: common.default,
             assetLibrary: assetLibrary.default,
@@ -112,6 +120,8 @@ export default getRequestConfig(async ({ requestLocale }) => {
             assistantAgent: assistantAgent.default,
             legal: legal.default,
             pricing: pricing.default,
+            paidBeta: paidBeta.default,
+            announcements: announcements.default,
             contact: contact.default
         }
     };

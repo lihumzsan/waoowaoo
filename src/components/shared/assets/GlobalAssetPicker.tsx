@@ -231,7 +231,7 @@ export default function GlobalAssetPicker({
                                             key={char.id}
                                             onClick={() => setSelectedId(char.id)}
                                             className={`relative cursor-pointer rounded-xl border-2 p-2 transition-all hover:shadow-md ${selectedId === char.id
-                                                ? 'border-[var(--glass-stroke-focus)] bg-[var(--glass-tone-info-bg)]'
+                                                ? 'border-[var(--glass-stroke-strong)] bg-[var(--glass-tone-soft)]'
                                                 : 'border-[var(--glass-stroke-base)] hover:border-[var(--glass-stroke-focus)]'
                                                 }`}
                                         >
@@ -275,7 +275,7 @@ export default function GlobalAssetPicker({
                                             key={loc.id}
                                             onClick={() => setSelectedId(loc.id)}
                                             className={`relative cursor-pointer rounded-xl border-2 p-2 transition-all hover:shadow-md ${selectedId === loc.id
-                                                ? 'border-[var(--glass-stroke-focus)] bg-[var(--glass-tone-info-bg)]'
+                                                ? 'border-[var(--glass-stroke-strong)] bg-[var(--glass-tone-soft)]'
                                                 : 'border-[var(--glass-stroke-base)] hover:border-[var(--glass-stroke-focus)]'
                                                 }`}
                                         >
@@ -322,7 +322,7 @@ export default function GlobalAssetPicker({
                                             key={prop.id}
                                             onClick={() => setSelectedId(prop.id)}
                                             className={`relative cursor-pointer rounded-xl border-2 p-2 transition-all hover:shadow-md ${selectedId === prop.id
-                                                ? 'border-[var(--glass-stroke-focus)] bg-[var(--glass-tone-info-bg)]'
+                                                ? 'border-[var(--glass-stroke-strong)] bg-[var(--glass-tone-soft)]'
                                                 : 'border-[var(--glass-stroke-base)] hover:border-[var(--glass-stroke-focus)]'
                                                 }`}
                                         >

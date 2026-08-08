@@ -30,6 +30,12 @@ if [ "${CODEX_RUNTIME_DRIVER:-}" = "docker" ]; then
       exit 1
       ;;
   esac
+  case "$runtime_root" in
+    /tmp|/tmp/*|/run/*|/dev/shm|/dev/shm/*)
+      echo "CODEX_RUNTIME_HOST_ROOT must be backed by durable storage" >&2
+      exit 1
+      ;;
+  esac
   mkdir -p "$runtime_root"
   chown node:node "$runtime_root"
 

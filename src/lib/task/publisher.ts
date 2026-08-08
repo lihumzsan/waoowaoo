@@ -102,8 +102,8 @@ function normalizeLifecyclePayload(
   next.lifecycleType = lifecycleType
   next.intent = coerceTaskIntent(next.intent ?? payloadUi?.intent, taskType)
   if (lifecycleType === TASK_EVENT_TYPE.FAILED || lifecycleType === TASK_EVENT_TYPE.CANCELED) {
-    // Task.errorMessage remains diagnostic storage. Lifecycle events are
-    // replayed to browsers and tools, so terminal projections expose codes only.
+    // Task.failure remains the diagnostic fact. Lifecycle events are replayed
+    // to browsers and tools, so terminal projections expose codes only.
     delete next.message
     delete next.errorMessage
     if (lifecycleType === TASK_EVENT_TYPE.FAILED) {
@@ -312,6 +312,12 @@ export function buildTaskLifecycleEventPayload(params: {
     ),
     coveragePayload: params.coveragePayload ?? params.payload ?? null,
   })
+  if (normalizedType === TASK_EVENT_TYPE.CREATED) {
+    if (!params.affectedResources) {
+      throw new Error(`TASK_CREATED_AFFECTED_RESOURCES_REQUIRED:${params.taskId}`)
+    }
+    return { ...normalizedPayload, affectedResources: [...params.affectedResources] }
+  }
   if (!isTaskTerminalEventType(normalizedType)) {
     if (params.affectedResources !== undefined) {
       throw new Error(`TASK_NON_TERMINAL_AFFECTED_RESOURCES_FORBIDDEN:${params.taskId}`)

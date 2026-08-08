@@ -1,13 +1,18 @@
-import { describeUnknownError } from '@/lib/errors/normalize'
-import { resolveUnifiedErrorCode, type UnifiedErrorCode } from '@/lib/errors/codes'
+import { describeUnknownError, normalizeAnyError } from '@/lib/errors/normalize'
 import { createHash, randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { AppError } from '@/lib/errors/app-error'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
+import {
+  parseFailureRecord,
+  projectProviderCredentialOwnership,
+  type FailureRecord,
+} from '@/lib/errors/failure'
+import { getDeploymentConfig } from '@/lib/deployment/config'
 import { getLogContext } from '@/lib/logging/context'
 import { createScopedLogger } from '@/lib/logging/core'
 import { prisma } from '@/lib/prisma'
-import { FetchStatusError } from '@/lib/retry'
-import { ProviderPreAcceptRejectedError } from '@/lib/ai-exec/submission-error'
+import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
 import { loadTaskExecutionFingerprint } from './execution-checkpoint'
 
 const STEP_PREFIX = 'provider:'
@@ -33,8 +38,6 @@ type TaskDurableInvocationResultPolicy<TResult> = {
   readonly parse: (value: unknown) => TResult
   readonly rejectionMessage?: (result: TResult) => string | null
   readonly outcomeUnknownMessage?: (result: TResult) => string | null
-  readonly isKnownRejectionError?: (error: unknown) => boolean
-  readonly isKnownRetryableFailureError?: (error: unknown) => boolean
 }
 
 type ProviderInvocationDescriptor = {
@@ -49,11 +52,7 @@ type ProviderInvocationDescriptor = {
 type ProviderInvocationOutput = ProviderInvocationDescriptor & {
   readonly taskAttempt?: number
   readonly result?: unknown
-  readonly error?: {
-    readonly name: string
-    readonly message: string
-    readonly code?: UnifiedErrorCode
-  }
+  readonly failure?: FailureRecord
 }
 
 type MediaProviderRouteDescriptor = {
@@ -71,14 +70,11 @@ type MediaProviderRouteAttempt = {
     | 'submitting'
     | 'pre_accept_rejected'
     | 'submitted'
-    | 'retryable_rejected'
+    | 'replay_authorized'
     | 'rejected'
     | 'outcome_unknown'
   readonly externalId?: string
-  readonly error?: {
-    readonly name: string
-    readonly message: string
-  }
+  readonly failure?: FailureRecord
 }
 
 type MediaProviderRouteInvocationOutput = ProviderInvocationOutput & {
@@ -138,6 +134,9 @@ function parseOutput(value: unknown): ProviderInvocationOutput {
     typeof output.modelKey !== 'string'
   )
     throw new Error('PROVIDER_INVOCATION_CHECKPOINT_OUTPUT_INVALID')
+  if (output.failure !== undefined && !parseFailureRecord(output.failure)) {
+    throw new Error('PROVIDER_INVOCATION_CHECKPOINT_FAILURE_INVALID')
+  }
   return output as ProviderInvocationOutput
 }
 
@@ -187,12 +186,15 @@ function parseRouteOutput(value: unknown): MediaProviderRouteInvocationOutput {
         'submitting',
         'pre_accept_rejected',
         'submitted',
-        'retryable_rejected',
+        'replay_authorized',
         'rejected',
         'outcome_unknown',
       ].includes(String(candidate.state))
     )
       throw new Error('PROVIDER_ROUTE_ATTEMPT_OUTPUT_INVALID')
+    if (candidate.failure !== undefined && !parseFailureRecord(candidate.failure)) {
+      throw new Error('PROVIDER_ROUTE_ATTEMPT_FAILURE_INVALID')
+    }
   }
   return record as unknown as MediaProviderRouteInvocationOutput
 }
@@ -283,88 +285,15 @@ function outcomeUnknown(descriptor: ProviderInvocationDescriptor, cause?: unknow
         invocationKey: descriptor.invocationKey,
         modality: descriptor.modality,
         modelKey: descriptor.modelKey,
+        ...(cause === undefined
+          ? {}
+          : { diagnostic: describeUnknownError(cause).slice(0, 2_000) }),
       },
+      context: { system: 'provider', provider: descriptor.provider, phase: 'submit' },
+      operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
       cause,
     },
   )
-}
-
-function rejected(
-  descriptor: ProviderInvocationDescriptor,
-  message: string,
-  cause?: unknown,
-): AppError {
-  // A typed non-retryable AppError from the adapter is the authoritative
-  // rejection fact (e.g. deterministic pre-submission validation); wrapping
-  // it would bury the actionable code under the generic rejection envelope.
-  if (cause instanceof AppError && !cause.retryable) return cause
-  return new AppError(
-    'PROVIDER_SUBMISSION_REJECTED',
-    message || 'Provider rejected the generation request',
-    {
-      provider: descriptor.provider,
-      details: {
-        taskId: descriptor.taskId,
-        invocationKey: descriptor.invocationKey,
-        modality: descriptor.modality,
-        modelKey: descriptor.modelKey,
-      },
-      cause,
-    },
-  )
-}
-
-function retryableSubmissionFailure(
-  descriptor: ProviderInvocationDescriptor,
-  message: string,
-  cause?: unknown,
-): AppError {
-  return new AppError(
-    'PROVIDER_SUBMIT_FAILED',
-    message || 'Provider temporarily declined the generation request',
-    {
-      provider: descriptor.provider,
-      details: {
-        taskId: descriptor.taskId,
-        invocationKey: descriptor.invocationKey,
-        modality: descriptor.modality,
-        modelKey: descriptor.modelKey,
-      },
-      cause,
-    },
-  )
-}
-
-function isRetryableSubmissionStatus(status: number): boolean {
-  return (
-    status === 408 ||
-    status === 425 ||
-    status === 429 ||
-    status === 500 ||
-    status === 502 ||
-    status === 503 ||
-    status === 504
-  )
-}
-
-function readExplicitHttpStatus(error: unknown): number | null {
-  if (error instanceof FetchStatusError) return error.status
-  if (!error || typeof error !== 'object' || Array.isArray(error)) return null
-  const record = error as {
-    readonly status?: unknown
-    readonly statusCode?: unknown
-    readonly code?: unknown
-  }
-  for (const candidate of [record.status, record.statusCode, record.code]) {
-    const status =
-      typeof candidate === 'number'
-        ? candidate
-        : typeof candidate === 'string' && /^\d{3}$/.test(candidate.trim())
-          ? Number.parseInt(candidate.trim(), 10)
-          : NaN
-    if (Number.isInteger(status) && status >= 100 && status <= 599) return status
-  }
-  return null
 }
 
 function requireTaskAttempt(taskId: string): number {
@@ -390,7 +319,7 @@ async function loadCheckpoint(taskId: string, stepKey: string): Promise<Provider
 /**
  * Returns the provider route durably accepted for one logical Task invocation.
  * Consumers never inspect checkpoint JSON and receive no route while submission
- * is unaccepted, ambiguous, retryable, or rejected.
+ * is unaccepted, ambiguous, replay-authorized, or rejected.
  */
 export async function readTaskProviderInvocationRouteSelection(params: {
   readonly taskId: string
@@ -526,7 +455,7 @@ async function claimRouteCheckpoint(params: {
   }
 }
 
-async function reclaimRetryableCheckpoint(params: {
+async function reclaimReplayAuthorizedCheckpoint(params: {
   readonly checkpoint: ProviderCheckpoint
   readonly descriptor: ProviderInvocationDescriptor
   readonly taskAttempt: number
@@ -539,7 +468,7 @@ async function reclaimRetryableCheckpoint(params: {
     )
   }
   if (params.taskAttempt <= previousAttempt!) {
-    throwStoredRetryableFailure(params.descriptor, output)
+    throwStoredReplayAuthorizedFailure(params.descriptor, output)
   }
 
   const nextOutput: ProviderInvocationOutput = {
@@ -547,7 +476,7 @@ async function reclaimRetryableCheckpoint(params: {
     taskAttempt: params.taskAttempt,
   }
   const updated = await prisma.taskExecutionCheckpoint.updateMany({
-    where: { id: params.checkpoint.id, state: 'retryable_rejected' },
+    where: { id: params.checkpoint.id, state: 'replay_authorized' },
     data: {
       state: 'submitting',
       output: toJson(nextOutput),
@@ -569,17 +498,16 @@ async function reclaimRetryableCheckpoint(params: {
 async function transitionCheckpoint(params: {
   readonly checkpointId: string
   readonly descriptor: ProviderInvocationDescriptor
-  readonly state: 'submitted' | 'rejected' | 'retryable_rejected' | 'outcome_unknown'
+  readonly state: 'submitted' | 'rejected' | 'replay_authorized' | 'outcome_unknown'
   readonly taskAttempt: number
   readonly result?: unknown
-  readonly error?: unknown
+  readonly failure?: FailureRecord
 }): Promise<void> {
-  const error = params.error === undefined ? undefined : toStoredError(params.error)
   const output: ProviderInvocationOutput = {
     ...params.descriptor,
     taskAttempt: params.taskAttempt,
     ...(params.result !== undefined ? { result: params.result } : {}),
-    ...(error ? { error } : {}),
+    ...(params.failure ? { failure: params.failure } : {}),
   }
   const updated = await prisma.taskExecutionCheckpoint.updateMany({
     where: { id: params.checkpointId, state: 'submitting' },
@@ -604,7 +532,7 @@ async function transitionRouteCheckpoint(params: {
     | 'submitting'
     | 'submitted'
     | 'rejected'
-    | 'retryable_rejected'
+    | 'replay_authorized'
     | 'outcome_unknown'
   readonly output: MediaProviderRouteInvocationOutput
 }): Promise<boolean> {
@@ -613,7 +541,7 @@ async function transitionRouteCheckpoint(params: {
     data: {
       state: params.state,
       output: toJson(params.output),
-      completedAt: ['submitted', 'rejected', 'retryable_rejected', 'outcome_unknown'].includes(
+      completedAt: ['submitted', 'rejected', 'replay_authorized', 'outcome_unknown'].includes(
         params.state,
       )
         ? new Date()
@@ -678,64 +606,55 @@ async function claimNextProviderRoute(params: {
   return claimed ? nextOutput : null
 }
 
-function readStoredError(output: ProviderInvocationOutput): string {
-  return output.error?.message || 'Provider rejected the generation request'
+function readStoredFailure(output: ProviderInvocationOutput): FailureRecord | null {
+  return parseFailureRecord(output.failure)
 }
 
-function readStoredTypedError(
+function storedProviderFailure(
   descriptor: ProviderInvocationDescriptor,
-  output: ProviderInvocationOutput,
-): AppError | null {
-  const code = resolveUnifiedErrorCode(output.error?.code)
-  return code
-    ? new AppError(code, readStoredError(output), { provider: descriptor.provider })
-    : null
+  error: unknown,
+  options: {
+    readonly fallbackCode: 'PROVIDER_SUBMISSION_REJECTED' | 'PROVIDER_SUBMIT_FAILED'
+    readonly operation: typeof EXTERNAL_OPERATION.PROVIDER_SUBMIT
+      | typeof EXTERNAL_OPERATION.PROVIDER_SUBMIT_REPLAY_AUTHORIZED
+  },
+): FailureRecord {
+  const failure = normalizeAnyError(error, {
+    fallbackCode: options.fallbackCode,
+    context: { system: 'provider', provider: descriptor.provider, phase: 'submit' },
+    operation: options.operation,
+    details: {
+      taskId: descriptor.taskId,
+      invocationKey: descriptor.invocationKey,
+      modality: descriptor.modality,
+      modelKey: descriptor.modelKey,
+    },
+  })
+  return projectProviderCredentialOwnership(
+    failure,
+    getDeploymentConfig().providerCredentialMode,
+  )
 }
 
 function throwStoredRejected(
-  descriptor: ProviderInvocationDescriptor,
+  _descriptor: ProviderInvocationDescriptor,
   output: ProviderInvocationOutput,
 ): never {
-  throw readStoredTypedError(descriptor, output)
-    ?? rejected(descriptor, readStoredError(output))
+  const failure = readStoredFailure(output)
+  if (!failure) throw new Error('PROVIDER_INVOCATION_CHECKPOINT_FAILURE_MISSING')
+  throw AppError.fromFailure(failure)
 }
 
-function throwStoredRetryableFailure(
-  descriptor: ProviderInvocationDescriptor,
+function throwStoredReplayAuthorizedFailure(
+  _descriptor: ProviderInvocationDescriptor,
   output: ProviderInvocationOutput,
 ): never {
-  throw readStoredTypedError(descriptor, output)
-    ?? retryableSubmissionFailure(descriptor, readStoredError(output))
+  const failure = readStoredFailure(output)
+  if (!failure) throw new Error('PROVIDER_INVOCATION_CHECKPOINT_FAILURE_MISSING')
+  throw AppError.fromFailure(failure)
 }
 
-function readErrorMessage(error: unknown): string {
-  return describeUnknownError(error)
-}
-
-function toStoredError(error: unknown): NonNullable<ProviderInvocationOutput['error']> {
-  if (error instanceof AppError) {
-    return {
-      name: error.name || 'AppError',
-      message: error.message.slice(0, 2_000),
-      code: error.code,
-    }
-  }
-  if (error instanceof ProviderPreAcceptRejectedError) {
-    const code: UnifiedErrorCode = error.reason === 'provider_account_limit'
-      ? 'PROVIDER_BILLING_REQUIRED'
-      : 'PROVIDER_SUBMISSION_REJECTED'
-    return {
-      name: error.name,
-      message: error.message.slice(0, 2_000),
-      code,
-    }
-  }
-  return error instanceof Error
-    ? { name: error.name || 'Error', message: error.message.slice(0, 2_000) }
-    : { name: typeof error, message: describeUnknownError(error).slice(0, 2_000) }
-}
-
-async function markCheckpointRetryable(params: {
+async function markCheckpointReplayAuthorized(params: {
   readonly checkpoint: ProviderCheckpoint
   readonly taskAttempt: number
   readonly error: unknown
@@ -752,7 +671,7 @@ async function markCheckpointRetryable(params: {
       `PROVIDER_INVOCATION_RETRY_ATTEMPT_STALE:${output.taskId}:${output.invocationKey}`,
     )
   }
-  if (params.checkpoint.state === 'retryable_rejected' && storedAttempt === params.taskAttempt)
+  if (params.checkpoint.state === 'replay_authorized' && storedAttempt === params.taskAttempt)
     return
   if (params.checkpoint.state !== 'submitted') {
     throw new Error(
@@ -768,23 +687,38 @@ async function markCheckpointRetryable(params: {
         `PROVIDER_ROUTE_RETRY_ATTEMPT_INVALID:${output.taskId}:${output.invocationKey}`,
       )
     }
+    const failure = storedProviderFailure(
+      {
+        taskId: output.taskId,
+        invocationKey: output.invocationKey,
+        invocationHash: output.invocationHash,
+        modality: output.modality,
+        provider: last.provider,
+        modelKey: last.modelKey,
+      },
+      params.error,
+      {
+        fallbackCode: 'PROVIDER_SUBMIT_FAILED',
+        operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT_REPLAY_AUTHORIZED,
+      },
+    )
     attempts[attempts.length - 1] = {
       ...last,
-      state: 'retryable_rejected',
-      error: toStoredError(params.error),
+      state: 'replay_authorized',
+      failure,
     }
     const nextOutput: MediaProviderRouteInvocationOutput = {
       ...output,
       taskAttempt: params.taskAttempt,
       routeAttempts: attempts,
       nextRouteIndex: last.routeIndex,
-      error: toStoredError(params.error),
+      failure,
       result: undefined,
     }
     const updated = await prisma.taskExecutionCheckpoint.updateMany({
       where: { id: params.checkpoint.id, state: 'submitted' },
       data: {
-        state: 'retryable_rejected',
+        state: 'replay_authorized',
         output: toJson(nextOutput),
         completedAt: new Date(),
       },
@@ -798,7 +732,7 @@ async function markCheckpointRetryable(params: {
       )
     }
     const currentOutput = parseRouteOutput(current.output)
-    if (current.state === 'retryable_rejected' && currentOutput.taskAttempt === params.taskAttempt)
+    if (current.state === 'replay_authorized' && currentOutput.taskAttempt === params.taskAttempt)
       return
     throw new Error(
       `PROVIDER_INVOCATION_RETRY_TRANSITION_FAILED:${output.taskId}:${output.invocationKey}`,
@@ -808,7 +742,21 @@ async function markCheckpointRetryable(params: {
   const nextOutput: ProviderInvocationOutput = {
     ...output,
     taskAttempt: params.taskAttempt,
-    error: toStoredError(params.error),
+    failure: storedProviderFailure(
+      {
+        taskId: output.taskId,
+        invocationKey: output.invocationKey,
+        invocationHash: output.invocationHash,
+        modality: output.modality,
+        provider: output.provider,
+        modelKey: output.modelKey,
+      },
+      params.error,
+      {
+        fallbackCode: 'PROVIDER_SUBMIT_FAILED',
+        operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT_REPLAY_AUTHORIZED,
+      },
+    ),
   }
   const updated = await prisma.taskExecutionCheckpoint.updateMany({
     where: {
@@ -816,7 +764,7 @@ async function markCheckpointRetryable(params: {
       state: 'submitted',
     },
     data: {
-      state: 'retryable_rejected',
+      state: 'replay_authorized',
       output: toJson(nextOutput),
       completedAt: new Date(),
     },
@@ -830,14 +778,14 @@ async function markCheckpointRetryable(params: {
     )
   }
   const currentOutput = parseOutput(current.output)
-  if (current.state === 'retryable_rejected' && currentOutput.taskAttempt === params.taskAttempt)
+  if (current.state === 'replay_authorized' && currentOutput.taskAttempt === params.taskAttempt)
     return
   throw new Error(
     `PROVIDER_INVOCATION_RETRY_TRANSITION_FAILED:${output.taskId}:${output.invocationKey}`,
   )
 }
 
-export async function markTaskProviderInvocationRetryable(params: {
+export async function markTaskProviderInvocationReplayAuthorized(params: {
   readonly taskId: string
   readonly invocation: TaskProviderInvocation
   readonly error: unknown
@@ -853,7 +801,7 @@ export async function markTaskProviderInvocationRetryable(params: {
   if (output.taskId !== params.taskId || output.invocationKey !== invocationKey) {
     throw new Error(`PROVIDER_INVOCATION_CHECKPOINT_CONFLICT:${params.taskId}:${invocationKey}`)
   }
-  await markCheckpointRetryable({ checkpoint, taskAttempt, error: params.error })
+  await markCheckpointReplayAuthorized({ checkpoint, taskAttempt, error: params.error })
 }
 
 function readExternalId(result: unknown): string | null {
@@ -937,7 +885,7 @@ export async function listTaskAcceptedProviderExternalIds(
   return [...externalIds]
 }
 
-export async function markTaskProviderInvocationRetryableByExternalId(params: {
+export async function markTaskProviderInvocationReplayAuthorizedByExternalId(params: {
   readonly taskId: string
   readonly externalId: string
   readonly error: unknown
@@ -948,7 +896,7 @@ export async function markTaskProviderInvocationRetryableByExternalId(params: {
   const candidates = await prisma.taskExecutionCheckpoint.findMany({
     where: {
       taskId: params.taskId,
-      state: { in: ['submitted', 'retryable_rejected'] },
+      state: { in: ['submitted', 'replay_authorized'] },
       stepKey: { startsWith: STEP_PREFIX },
     },
     select: { id: true, stepKey: true, inputFingerprint: true, state: true, output: true },
@@ -962,7 +910,7 @@ export async function markTaskProviderInvocationRetryableByExternalId(params: {
       `PROVIDER_EXTERNAL_ID_CHECKPOINT_${matches.length === 0 ? 'MISSING' : 'CONFLICT'}:${params.taskId}:${externalId}`,
     )
   }
-  await markCheckpointRetryable({ checkpoint: matches[0]!, taskAttempt, error: params.error })
+  await markCheckpointReplayAuthorized({ checkpoint: matches[0]!, taskAttempt, error: params.error })
 }
 
 export async function executeTaskDurableInvocation<TResult>(params: {
@@ -1005,8 +953,8 @@ export async function executeTaskDurableInvocation<TResult>(params: {
 
   if (checkpoint.state === 'submitted') return params.resultPolicy.parse(output.result)
   if (checkpoint.state === 'rejected') throwStoredRejected(descriptor, output)
-  if (checkpoint.state === 'retryable_rejected') {
-    claim = await reclaimRetryableCheckpoint({ checkpoint, descriptor, taskAttempt })
+  if (checkpoint.state === 'replay_authorized') {
+    claim = await reclaimReplayAuthorizedCheckpoint({ checkpoint, descriptor, taskAttempt })
     checkpoint = claim.checkpoint
     output = parseOutput(checkpoint.output)
     assertDescriptor(output, descriptor)
@@ -1017,8 +965,8 @@ export async function executeTaskDurableInvocation<TResult>(params: {
     }
     if (checkpoint.state === 'submitted') return params.resultPolicy.parse(output.result)
     if (checkpoint.state === 'rejected') throwStoredRejected(descriptor, output)
-    if (checkpoint.state === 'retryable_rejected') {
-      throwStoredRetryableFailure(descriptor, output)
+    if (checkpoint.state === 'replay_authorized') {
+      throwStoredReplayAuthorizedFailure(descriptor, output)
     }
   }
   if (!claim.claimed) throw outcomeUnknown(descriptor)
@@ -1028,63 +976,52 @@ export async function executeTaskDurableInvocation<TResult>(params: {
   try {
     result = await params.execute()
   } catch (error) {
-    const typedAppError = error instanceof AppError ? error : null
-    const explicitHttpStatus = readExplicitHttpStatus(error)
     if (
-      typedAppError?.retryable === true ||
-      (explicitHttpStatus !== null && isRetryableSubmissionStatus(explicitHttpStatus)) ||
-      params.resultPolicy.isKnownRetryableFailureError?.(error) === true
+      error instanceof ProviderSubmissionError
+      && (error.disposition === 'rejected'
+        || error.disposition === 'pre_accept_rejected')
     ) {
+      const state = 'rejected' as const
+      const failure = storedProviderFailure(
+        descriptor,
+        error,
+        {
+          fallbackCode: 'PROVIDER_SUBMISSION_REJECTED',
+          operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
+        },
+      )
       try {
         await transitionCheckpoint({
           checkpointId: checkpoint.id,
           descriptor,
-          state: 'retryable_rejected',
+          state,
           taskAttempt,
-          error,
+          failure,
         })
       } catch (transitionError) {
         throw outcomeUnknown(descriptor, transitionError)
       }
-      if (typedAppError) throw typedAppError
-      throw retryableSubmissionFailure(descriptor, readErrorMessage(error), error)
+      throw AppError.fromFailure(failure, error)
     }
-    if (
-      typedAppError !== null ||
-      explicitHttpStatus !== null ||
-      params.resultPolicy.isKnownRejectionError?.(error) === true
-    ) {
-      try {
-        await transitionCheckpoint({
-          checkpointId: checkpoint.id,
-          descriptor,
-          state: 'rejected',
-          taskAttempt,
-          error,
-        })
-      } catch (transitionError) {
-        throw outcomeUnknown(descriptor, transitionError)
-      }
-      if (typedAppError) throw typedAppError
-      throw rejected(descriptor, readErrorMessage(error), error)
-    }
+    const unknown = outcomeUnknown(descriptor, error)
     try {
       await transitionCheckpoint({
         checkpointId: checkpoint.id,
         descriptor,
         state: 'outcome_unknown',
         taskAttempt,
-        error,
+        failure: unknown.failure,
       })
     } catch (transitionError) {
       throw outcomeUnknown(descriptor, transitionError)
     }
-    throw outcomeUnknown(descriptor, error)
+    throw unknown
   }
 
   const unknownOutcomeMessage = params.resultPolicy.outcomeUnknownMessage?.(result) ?? null
   if (unknownOutcomeMessage) {
     const error = new Error(unknownOutcomeMessage)
+    const unknown = outcomeUnknown(descriptor, error)
     try {
       await transitionCheckpoint({
         checkpointId: checkpoint.id,
@@ -1092,15 +1029,27 @@ export async function executeTaskDurableInvocation<TResult>(params: {
         state: 'outcome_unknown',
         taskAttempt,
         result,
+        failure: unknown.failure,
       })
     } catch (transitionError) {
       throw outcomeUnknown(descriptor, transitionError)
     }
-    throw outcomeUnknown(descriptor, error)
+    throw unknown
   }
 
   const rejectionMessage = params.resultPolicy.rejectionMessage?.(result) ?? null
   if (rejectionMessage) {
+    const failure = storedProviderFailure(
+      descriptor,
+      new ProviderSubmissionError('PROVIDER_SUBMISSION_REJECTED', rejectionMessage, {
+        disposition: 'rejected',
+        provider: descriptor.provider,
+      }),
+      {
+        fallbackCode: 'PROVIDER_SUBMISSION_REJECTED',
+        operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
+      },
+    )
     try {
       await transitionCheckpoint({
         checkpointId: checkpoint.id,
@@ -1108,11 +1057,12 @@ export async function executeTaskDurableInvocation<TResult>(params: {
         state: 'rejected',
         taskAttempt,
         result,
+        failure,
       })
     } catch (error) {
       throw outcomeUnknown(descriptor, error)
     }
-    throw rejected(descriptor, rejectionMessage)
+    throw AppError.fromFailure(failure)
   }
 
   try {
@@ -1197,7 +1147,6 @@ export async function executeTaskProviderInvocation<
           result.success
             ? null
             : result.error || 'Provider returned success:false without a typed acceptance outcome',
-        isKnownRejectionError: (error) => error instanceof AppError && !error.retryable,
       },
     })
   }
@@ -1255,20 +1204,20 @@ export async function executeTaskProviderInvocation<
   if (checkpoint.state === 'submitted') return parseMediaProviderResult<TResult>(output.result)
   if (checkpoint.state === 'rejected') throwStoredRejected(descriptor, output)
   if (checkpoint.state === 'outcome_unknown') throw outcomeUnknown(descriptor)
-  if (checkpoint.state === 'retryable_rejected') {
+  if (checkpoint.state === 'replay_authorized') {
     const previousAttempt = output.taskAttempt
     if (!Number.isInteger(previousAttempt) || taskAttempt <= previousAttempt!) {
-      throwStoredRetryableFailure(descriptor, output)
+      throwStoredReplayAuthorizedFailure(descriptor, output)
     }
     const routeReadyOutput: MediaProviderRouteInvocationOutput = {
       ...output,
       taskAttempt,
       result: undefined,
-      error: undefined,
+      failure: undefined,
     }
     const reclaimed = await transitionRouteCheckpoint({
       checkpointId: checkpoint.id,
-      expectedState: 'retryable_rejected',
+      expectedState: 'replay_authorized',
       state: 'route_ready',
       output: routeReadyOutput,
     })
@@ -1306,8 +1255,24 @@ export async function executeTaskProviderInvocation<
     try {
       result = await route.execute()
     } catch (error) {
-      if (error instanceof ProviderPreAcceptRejectedError) {
+      const routeFailureDescriptor: ProviderInvocationDescriptor = {
+        ...descriptor,
+        provider: routeDescriptor.provider,
+        modelKey: routeDescriptor.modelKey,
+      }
+      if (
+        error instanceof ProviderSubmissionError
+        && error.disposition === 'pre_accept_rejected'
+      ) {
         if (error.externalId !== null) throw outcomeUnknown(descriptor, error)
+        const failure = storedProviderFailure(
+          routeFailureDescriptor,
+          error,
+          {
+            fallbackCode: 'PROVIDER_SUBMISSION_REJECTED',
+            operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
+          },
+        )
         const nextRouteIndex = routeIndex + 1
         const nextState = nextRouteIndex < params.routes.length ? 'route_ready' : 'rejected'
         const nextOutput: MediaProviderRouteInvocationOutput = {
@@ -1318,10 +1283,10 @@ export async function executeTaskProviderInvocation<
             provider: routeDescriptor.provider,
             modelKey: routeDescriptor.modelKey,
             state: 'pre_accept_rejected',
-            error: toStoredError(error),
+            failure,
           }),
           nextRouteIndex,
-          error: toStoredError(error),
+          failure,
         }
         const transitioned = await transitionRouteCheckpoint({
           checkpointId: checkpoint.id,
@@ -1329,7 +1294,7 @@ export async function executeTaskProviderInvocation<
           state: nextState,
           output: nextOutput,
         })
-        if (!transitioned) throw outcomeUnknown(descriptor)
+        if (!transitioned) throw outcomeUnknown(descriptor, error)
         logger.warn({
           action: 'provider.route.switched',
           message: 'provider pre-accept rejection recorded; advancing provider route',
@@ -1352,13 +1317,22 @@ export async function executeTaskProviderInvocation<
         continue
       }
 
-      const typedAppError = error instanceof AppError ? error : null
-      const explicitHttpStatus = readExplicitHttpStatus(error)
-      const retryableFailure =
-        typedAppError?.retryable === true
-        || (explicitHttpStatus !== null && isRetryableSubmissionStatus(explicitHttpStatus))
-      const permanentRejection =
-        typedAppError?.retryable === false || explicitHttpStatus !== null
+      const knownDisposition = error instanceof ProviderSubmissionError
+        ? error.disposition
+        : 'outcome_unknown'
+      const nextState = knownDisposition === 'rejected'
+          ? 'rejected'
+          : 'outcome_unknown'
+      const terminal = nextState === 'outcome_unknown'
+        ? outcomeUnknown(routeFailureDescriptor, error)
+        : AppError.fromFailure(storedProviderFailure(
+            routeFailureDescriptor,
+            error,
+            {
+              fallbackCode: 'PROVIDER_SUBMISSION_REJECTED',
+              operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
+            },
+          ), error)
       const nextOutput: MediaProviderRouteInvocationOutput = {
         ...output,
         routeAttempts: replaceLastRouteAttempt(output, {
@@ -1366,36 +1340,28 @@ export async function executeTaskProviderInvocation<
           taskAttempt,
           provider: routeDescriptor.provider,
           modelKey: routeDescriptor.modelKey,
-          state: retryableFailure
-            ? 'retryable_rejected'
-            : permanentRejection
-              ? 'rejected'
-              : 'outcome_unknown',
-          error: toStoredError(error),
+          state: nextState,
+          failure: terminal.failure,
         }),
         nextRouteIndex: routeIndex,
-        error: toStoredError(error),
+        failure: terminal.failure,
       }
-      const nextState = retryableFailure
-        ? 'retryable_rejected'
-        : permanentRejection
-          ? 'rejected'
-          : 'outcome_unknown'
       const transitioned = await transitionRouteCheckpoint({
         checkpointId: checkpoint.id,
         expectedState: 'submitting',
         state: nextState,
         output: nextOutput,
       })
-      if (!transitioned) throw outcomeUnknown(descriptor)
-      if (typedAppError) throw typedAppError
-      if (retryableFailure)
-        throw retryableSubmissionFailure(descriptor, readErrorMessage(error), error)
-      if (permanentRejection) throw rejected(descriptor, readErrorMessage(error), error)
-      throw outcomeUnknown(descriptor, error)
+      if (!transitioned) throw outcomeUnknown(descriptor, error)
+      throw terminal
     }
 
     if (!result.success) {
+      const message = result.error || 'Provider returned success:false without a typed acceptance outcome'
+      const unknown = outcomeUnknown(
+        { ...descriptor, provider: routeDescriptor.provider, modelKey: routeDescriptor.modelKey },
+        new Error(message),
+      )
       const nextOutput: MediaProviderRouteInvocationOutput = {
         ...output,
         routeAttempts: replaceLastRouteAttempt(output, {
@@ -1404,17 +1370,9 @@ export async function executeTaskProviderInvocation<
           provider: routeDescriptor.provider,
           modelKey: routeDescriptor.modelKey,
           state: 'outcome_unknown',
-          error: {
-            name: 'ProviderResultRejected',
-            message:
-              result.error || 'Provider returned success:false without a typed acceptance outcome',
-          },
+          failure: unknown.failure,
         }),
-        error: {
-          name: 'ProviderResultRejected',
-          message:
-            result.error || 'Provider returned success:false without a typed acceptance outcome',
-        },
+        failure: unknown.failure,
       }
       const transitioned = await transitionRouteCheckpoint({
         checkpointId: checkpoint.id,
@@ -1422,8 +1380,8 @@ export async function executeTaskProviderInvocation<
         state: 'outcome_unknown',
         output: nextOutput,
       })
-      if (!transitioned) throw outcomeUnknown(descriptor)
-      throw outcomeUnknown(descriptor, new Error(nextOutput.error?.message))
+      if (!transitioned) throw outcomeUnknown(descriptor, unknown)
+      throw unknown
     }
 
     const routedResult = withProviderRouteMetadata({
@@ -1445,7 +1403,7 @@ export async function executeTaskProviderInvocation<
         ...(externalId ? { externalId } : {}),
       }),
       result: routedResult,
-      error: undefined,
+      failure: undefined,
     }
     const transitioned = await transitionRouteCheckpoint({
       checkpointId: checkpoint.id,

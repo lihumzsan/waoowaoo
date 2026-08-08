@@ -21,6 +21,7 @@ import NavbarAccountMenu, { NavbarUserAvatar } from './navbar/NavbarAccountMenu'
 import {
   buildNavbarSettingsMenuItems,
   isNavbarBalancePayload,
+  readNavbarPlan,
   shouldCloseNavbarSettingsMenu,
   type NavbarUserBalance,
 } from './navbar/account-menu-model'
@@ -49,7 +50,7 @@ interface NavbarProps {
 
 function NavbarSessionLoadingSkeleton({ label }: { label: string }) {
   const skeletonClassName =
-    'block rounded-full border border-[var(--glass-stroke-base)] bg-[var(--glass-tone-neutral-bg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] motion-safe:animate-pulse'
+    'block rounded-full border border-[var(--glass-stroke-base)] bg-[var(--glass-skeleton-bg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] motion-safe:animate-pulse'
 
   return (
     <div role="status" aria-label={label} className="flex items-center gap-1.5">
@@ -72,6 +73,7 @@ export default function Navbar({
   const logoUid = `navbar-logo-${useId().replace(/:/g, '')}`
   const [deploymentFeatures, setDeploymentFeatures] = useState<PublicDeploymentFeatures | null>(initialDeploymentFeatures)
   const showUpdateCheck = deploymentFeatures?.showUpdateCheck === true
+  const showBetaBadge = deploymentFeatures?.showBetaBadge === true
   const { currentVersion, update, shouldPulse, showModal, openModal, dismissCurrentUpdate, checkNow } = useGithubReleaseUpdate({
     enabled: showUpdateCheck,
   })
@@ -93,6 +95,7 @@ export default function Navbar({
   const showDownloadLogs = deploymentFeatures?.showDownloadLogs === true
   const userName = session?.user?.name ?? t('profile')
   const userEmail = session?.user?.email ?? null
+  const userImage = session?.user?.image ?? null
   const creditsUnit = t('account.creditsUnit')
   const settingsMenuItems = buildNavbarSettingsMenuItems(deploymentFeatures, {
     apiConfig: t('settingsMenu.apiConfig'),
@@ -154,6 +157,7 @@ export default function Navbar({
             totalSpent: payload.totalSpent,
             health: payload.health,
             referenceClipsRemaining: payload.referenceClipsRemaining,
+            plan: readNavbarPlan((payload as { subscription?: unknown }).subscription),
           })
         }
       })
@@ -232,20 +236,30 @@ export default function Navbar({
               href={session ? buildAuthenticatedHomeTarget() : { pathname: '/' }}
               target={session ? '_blank' : undefined}
               rel={session ? 'noopener noreferrer' : undefined}
-              className="group flex h-[52px] w-[52px] items-center justify-center"
+              className="group flex h-[52px] items-center gap-2"
             >
               <BrandLogoShape
                 uid={logoUid}
-                size={52}
+                size={48}
                 title={tc('appName')}
-                className="h-[52px] w-[52px] transition-transform group-hover:scale-105"
+                className="h-12 w-12 transition-transform group-hover:scale-105"
               />
+              <span className="flex flex-col items-start leading-none">
+                <span className="text-[15px] font-bold tracking-[-0.02em] text-[var(--glass-text-primary)]">
+                  {tc('appName')}
+                </span>
+                {showBetaBadge ? (
+                  <span className="mt-1 rounded-full bg-[var(--glass-tone-surface)] px-1.5 py-0.5 text-[8px] font-bold tracking-[0.18em] text-[var(--glass-tone-info-fg)] shadow-[var(--glass-tone-shadow)]">
+                    {tc('betaBadge')}
+                  </span>
+                ) : null}
+              </span>
             </Link>
             {showUpdateCheck && update ? (
               <button
                 type="button"
                 onClick={openModal}
-                className="relative inline-flex items-center gap-1.5 rounded-full border border-[var(--glass-tone-warning-fg)]/40 bg-[linear-gradient(135deg,var(--glass-tone-warning-bg),var(--glass-bg-surface-strong))] px-2.5 py-1 text-[11px] font-semibold text-[var(--glass-tone-warning-fg)] shadow-[0_8px_24px_-16px_rgba(245,158,11,0.9)] transition-all hover:brightness-105"
+                className="relative inline-flex items-center gap-1.5 rounded-full bg-[var(--glass-tone-surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--glass-tone-warning-fg)] shadow-[var(--glass-tone-shadow)] transition-shadow hover:shadow-[var(--glass-tone-shadow-hover)]"
                 aria-label={tc('updateNotice.openDialog')}
               >
                 {shouldPulse ? <span className="absolute -inset-1 animate-ping rounded-full bg-[var(--glass-tone-warning-fg)] opacity-20" /> : null}
@@ -288,7 +302,7 @@ export default function Navbar({
                     title={userName}
                     aria-label={userName}
                   >
-                    <NavbarUserAvatar name={userName} />
+                    <NavbarUserAvatar name={userName} image={userImage} />
                   </button>
                 </div>
                 {!mounted ? (
@@ -349,11 +363,11 @@ export default function Navbar({
           style={settingsMenuStyle}
           userName={userName}
           userEmail={userEmail}
+          userImage={userImage}
           balance={balance}
           creditsUnit={creditsUnit}
           showBilling={showBilling}
           showRecharge={showRecharge}
-          showPricingLink={showPricingLink}
           showDownloadLogs={showDownloadLogs}
           showUpdateCheck={showUpdateCheck}
           manualChecking={manualChecking}

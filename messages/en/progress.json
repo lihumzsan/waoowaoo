@@ -29,7 +29,7 @@
     }
   },
   "taskType": {
-    "creativeWork": "Creative Subagent",
+    "creativeWork": "Creative work",
     "workspaceResourceImage": "Image resource generation",
     "workspaceResourceAudio": "Audio resource generation",
     "workspaceResourceVoice": "Voice resource generation",

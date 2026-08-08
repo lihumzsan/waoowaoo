@@ -146,6 +146,7 @@ describe('Temporal Task terminal and follow-up durability', () => {
         select: {
           status: true,
           attempt: true,
+          failure: true,
           updatedAt: true,
         },
       })
@@ -211,6 +212,7 @@ describe('Temporal Task terminal and follow-up durability', () => {
           select: {
             status: true,
             attempt: true,
+            failure: true,
             updatedAt: true,
           },
         }),
@@ -244,6 +246,23 @@ describe('Temporal Task terminal and follow-up durability', () => {
       ])
 
       expect(firstFinalTask).toEqual(firstCommittedTask)
+      expect(firstFinalTask.failure).toMatchObject({
+        version: 2,
+        native: {
+          message: 'Deterministic terminal fixture failure',
+          code: 'PROVIDER_SUBMISSION_REJECTED',
+        },
+        interpretation: {
+          code: 'PROVIDER_SUBMISSION_REJECTED',
+          details: { reasonCode: 'TASK_DURABILITY_EXPECTED_FINAL' },
+        },
+        context: {
+          system: 'provider',
+          provider: 'temporal-test-provider',
+          phase: 'submit',
+        },
+        recovery: { operation: null, taskReplay: 'forbidden' },
+      })
       expect(firstTerminalEvents).toEqual([{ id: firstTerminalReceipt.terminalEventId }])
       expect(followUpTurns).toHaveLength(1)
       expect(batchAfterNotification).toEqual({
@@ -420,8 +439,7 @@ describe('Temporal Task terminal and follow-up durability', () => {
             status: true,
             attempt: true,
             progress: true,
-            errorCode: true,
-            errorMessage: true,
+            failure: true,
             billingInfo: true,
           },
         }),
@@ -463,8 +481,6 @@ describe('Temporal Task terminal and follow-up durability', () => {
           select: {
             status: true,
             currentVersion: true,
-            errorCode: true,
-            errorMessage: true,
             versions: {
               where: { version: 1 },
               select: { mediaId: true },
@@ -477,8 +493,7 @@ describe('Temporal Task terminal and follow-up durability', () => {
         status: TASK_STATUS.COMPLETED,
         attempt: 1,
         progress: 100,
-        errorCode: null,
-        errorMessage: null,
+        failure: null,
         billingInfo: {
           status: 'settled',
           freezeId: fixture.freezeId,
@@ -497,8 +512,6 @@ describe('Temporal Task terminal and follow-up durability', () => {
       expect(resource).toEqual({
         status: 'ready',
         currentVersion: 1,
-        errorCode: null,
-        errorMessage: null,
         versions: [{ mediaId: fixture.mediaObjectId }],
       })
       expect(activityAttempts(history, 'cancelTaskProviderJobs')).toHaveLength(0)

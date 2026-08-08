@@ -31,6 +31,9 @@ export type AccountSecuritySnapshot = {
     google: {
       linked: boolean
     }
+    wechatOfficial: {
+      linked: boolean
+    }
   }
 }
 
@@ -78,6 +81,9 @@ export async function getAccountSecurity(userId: string): Promise<AccountSecurit
 
   const email = trimOptional(user.email)
   const googleLinked = user.accounts.some((account) => account.provider === 'google')
+  const wechatOfficialLinked = user.accounts.some(
+    (account) => account.provider === 'wechat-official',
+  )
 
   return {
     email,
@@ -86,6 +92,9 @@ export async function getAccountSecurity(userId: string): Promise<AccountSecurit
     providers: {
       google: {
         linked: googleLinked,
+      },
+      wechatOfficial: {
+        linked: wechatOfficialLinked,
       },
     },
   }

@@ -3,18 +3,16 @@ import {
   executeTaskDurableInvocation,
   executeTaskProviderInvocation,
   listTaskAcceptedProviderExternalIds,
-  markTaskProviderInvocationRetryable,
-  markTaskProviderInvocationRetryableByExternalId,
+  markTaskProviderInvocationReplayAuthorized,
+  markTaskProviderInvocationReplayAuthorizedByExternalId,
   readTaskProviderInvocationExternalId,
   readTaskProviderInvocationRouteSelection,
 } from '@/lib/task/provider-invocation'
 import { withLogContext } from '@/lib/logging/context'
-import { AppError } from '@/lib/errors/app-error'
-import { FetchStatusError } from '@/lib/retry'
 import { TASK_TYPE } from '@/lib/task/types'
 import { parseStoredAiLlmExecutionResult } from '@/lib/ai-exec/llm/result-projector'
 import type { AiLlmExecutionResult } from '@/lib/ai-registry/types'
-import { ProviderPreAcceptRejectedError } from '@/lib/ai-exec/submission-error'
+import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
 import { resetBillingState } from '../../helpers/db-reset'
 import { createQueuedTask, createTestProject, createTestUser } from '../../helpers/billing-fixtures'
 import { prisma } from '../../helpers/prisma'
@@ -101,7 +99,7 @@ describe('provider invocation at-most-once DB integration', () => {
       invoke('provider-selective-retry-task', secondCue, 1, 'media:music:cue:2'),
     ).resolves.toMatchObject({ success: true })
     await withLogContext({ taskId: 'provider-selective-retry-task', taskAttempt: 1 }, async () => {
-      await markTaskProviderInvocationRetryable({
+      await markTaskProviderInvocationReplayAuthorized({
         taskId: 'provider-selective-retry-task',
         invocation: { key: 'media:music:cue:2' },
         error: new Error('generated cue failed validation'),
@@ -153,7 +151,7 @@ describe('provider invocation at-most-once DB integration', () => {
     await withLogContext(
       { taskId: 'provider-external-terminal-retry-task', taskAttempt: 1 },
       async () => {
-        await markTaskProviderInvocationRetryableByExternalId({
+        await markTaskProviderInvocationReplayAuthorizedByExternalId({
           taskId: 'provider-external-terminal-retry-task',
           externalId: 'FAL:IMAGE:model:first-request',
           error: new Error('external job failed'),
@@ -226,9 +224,10 @@ describe('provider invocation at-most-once DB integration', () => {
   it('advances one logical invocation to the next declared route only after typed pre-accept rejection', async () => {
     await seedTask('provider-route-failover-task')
     const primary = vi.fn(async () => {
-      throw new ProviderPreAcceptRejectedError(
-        'provider_account_limit',
+      throw new ProviderSubmissionError(
+        'PROVIDER_BILLING_REQUIRED',
         'primary account hard limit',
+        { disposition: 'pre_accept_rejected', provider: 'openrouter' },
       )
     })
     const secondary = vi.fn(async () => ({
@@ -417,69 +416,12 @@ describe('provider invocation at-most-once DB integration', () => {
     ).resolves.toEqual({ state: 'outcome_unknown' })
   })
 
-  it('lets only a newer Task attempt reclaim an explicit transient provider non-acceptance', async () => {
-    await seedTask('provider-transient-retry-task')
-    const firstAttempt = vi.fn(async () => {
-      throw new FetchStatusError(503, 'provider temporarily unavailable')
-    })
-    const sameAttemptReplay = vi.fn(async () => ({ success: true, audioUrl: 'must-not-run' }))
-    let releaseSecondAttempt!: () => void
-    const secondAttemptBlocked = new Promise<void>((resolve) => {
-      releaseSecondAttempt = resolve
-    })
-    const secondAttempt = vi.fn(async () => {
-      await secondAttemptBlocked
-      return { success: true, audioUrl: 'https://provider/recovered.mp3' }
-    })
-
-    await expect(invoke('provider-transient-retry-task', firstAttempt, 1)).rejects.toMatchObject({
-      code: 'PROVIDER_SUBMIT_FAILED',
-      retryable: true,
-    })
-    await expect(
-      prisma.taskExecutionCheckpoint.findFirstOrThrow({
-        where: { taskId: 'provider-transient-retry-task' },
-        select: { state: true },
-      }),
-    ).resolves.toEqual({ state: 'retryable_rejected' })
-
-    await expect(
-      invoke('provider-transient-retry-task', sameAttemptReplay, 1),
-    ).rejects.toMatchObject({
-      code: 'PROVIDER_SUBMIT_FAILED',
-      retryable: true,
-    })
-    const recoveryOwner = invoke('provider-transient-retry-task', secondAttempt, 2)
-    await vi.waitFor(() => expect(secondAttempt).toHaveBeenCalledTimes(1))
-    await expect(invoke('provider-transient-retry-task', secondAttempt, 2)).rejects.toMatchObject({
-      code: 'PROVIDER_SUBMISSION_OUTCOME_UNKNOWN',
-    })
-    releaseSecondAttempt()
-    await expect(recoveryOwner).resolves.toMatchObject({
-      success: true,
-      audioUrl: 'https://provider/recovered.mp3',
-    })
-    await expect(invoke('provider-transient-retry-task', secondAttempt, 2)).resolves.toMatchObject({
-      success: true,
-    })
-
-    expect(firstAttempt).toHaveBeenCalledTimes(1)
-    expect(sameAttemptReplay).not.toHaveBeenCalled()
-    expect(secondAttempt).toHaveBeenCalledTimes(1)
-    await expect(
-      prisma.taskExecutionCheckpoint.findFirstOrThrow({
-        where: { taskId: 'provider-transient-retry-task' },
-        select: { state: true },
-      }),
-    ).resolves.toEqual({ state: 'submitted' })
-  })
-
-  it('treats AI SDK statusCode as an explicit retryable non-acceptance', async () => {
+  it('does not infer safe resubmission from an AI SDK statusCode', async () => {
     await seedTask('provider-ai-sdk-status-retry-task')
     const firstAttempt = vi.fn(async () => {
       throw Object.assign(new Error('AI SDK request failed with rate limit'), { statusCode: 429 })
     })
-    const recovered = vi.fn(async () => ({
+    const mustNotRun = vi.fn(async () => ({
       success: true,
       audioUrl: 'https://provider/recovered-from-ai-sdk-status.mp3',
     }))
@@ -487,60 +429,60 @@ describe('provider invocation at-most-once DB integration', () => {
     await expect(
       invoke('provider-ai-sdk-status-retry-task', firstAttempt, 1),
     ).rejects.toMatchObject({
-      code: 'PROVIDER_SUBMIT_FAILED',
-      retryable: true,
+      code: 'PROVIDER_SUBMISSION_OUTCOME_UNKNOWN',
     })
     await expect(
       prisma.taskExecutionCheckpoint.findFirstOrThrow({
         where: { taskId: 'provider-ai-sdk-status-retry-task' },
         select: { state: true },
       }),
-    ).resolves.toEqual({ state: 'retryable_rejected' })
+    ).resolves.toEqual({ state: 'outcome_unknown' })
 
-    await expect(invoke('provider-ai-sdk-status-retry-task', recovered, 2)).resolves.toMatchObject({
-      success: true,
+    await expect(invoke('provider-ai-sdk-status-retry-task', mustNotRun, 2)).rejects.toMatchObject({
+      code: 'PROVIDER_SUBMISSION_OUTCOME_UNKNOWN',
     })
     expect(firstAttempt).toHaveBeenCalledTimes(1)
-    expect(recovered).toHaveBeenCalledTimes(1)
+    expect(mustNotRun).not.toHaveBeenCalled()
   })
 
-  it('keeps an explicit permanent provider rejection closed across newer Task attempts', async () => {
-    await seedTask('provider-permanent-rejection-task')
+  it('does not infer a provider disposition from HTTP 422 alone', async () => {
+    await seedTask('provider-status-only-rejection-task')
     const rejectedExecute = vi.fn(async () => {
-      throw new FetchStatusError(422, 'request cannot be accepted')
+      throw Object.assign(new Error('request cannot be accepted'), { status: 422 })
     })
     const laterAttempt = vi.fn(async () => ({ success: true, audioUrl: 'must-not-run' }))
 
     await expect(
-      invoke('provider-permanent-rejection-task', rejectedExecute, 1),
+      invoke('provider-status-only-rejection-task', rejectedExecute, 1),
     ).rejects.toMatchObject({
-      code: 'PROVIDER_SUBMISSION_REJECTED',
-      retryable: false,
+      code: 'PROVIDER_SUBMISSION_OUTCOME_UNKNOWN',
+      failure: { recovery: { operation: 'provider.submit', taskReplay: 'forbidden' } },
     })
     await expect(
-      invoke('provider-permanent-rejection-task', laterAttempt, 2),
+      invoke('provider-status-only-rejection-task', laterAttempt, 2),
     ).rejects.toMatchObject({
-      code: 'PROVIDER_SUBMISSION_REJECTED',
-      retryable: false,
+      code: 'PROVIDER_SUBMISSION_OUTCOME_UNKNOWN',
+      failure: { recovery: { operation: 'provider.submit', taskReplay: 'forbidden' } },
     })
 
     expect(rejectedExecute).toHaveBeenCalledTimes(1)
     expect(laterAttempt).not.toHaveBeenCalled()
     await expect(
       prisma.taskExecutionCheckpoint.findFirstOrThrow({
-        where: { taskId: 'provider-permanent-rejection-task' },
+        where: { taskId: 'provider-status-only-rejection-task' },
         select: { state: true },
       }),
-    ).resolves.toEqual({ state: 'rejected' })
+    ).resolves.toEqual({ state: 'outcome_unknown' })
   })
 
-  it('surfaces a typed pre-submission validation error instead of an unknown outcome', async () => {
+  it('persists and replays the full adapter-owned rejection fact', async () => {
     await seedTask('provider-typed-validation-task')
     const validationExecute = vi.fn(async () => {
-      throw new AppError(
+      throw new ProviderSubmissionError(
         'MUSIC_PROMPT_TOO_LONG',
         'Music prompt is 1035 characters; the model accepts at most 1024',
         {
+          disposition: 'rejected',
           provider: 'mureka',
           details: { requested: 1035, allowed: 1024 },
         },
@@ -552,12 +494,12 @@ describe('provider invocation at-most-once DB integration', () => {
       invoke('provider-typed-validation-task', validationExecute, 1),
     ).rejects.toMatchObject({
       code: 'MUSIC_PROMPT_TOO_LONG',
-      retryable: false,
       details: { requested: 1035, allowed: 1024 },
+      failure: { recovery: { operation: 'provider.submit', taskReplay: 'forbidden' } },
     })
     await expect(invoke('provider-typed-validation-task', laterAttempt, 2)).rejects.toMatchObject({
       code: 'MUSIC_PROMPT_TOO_LONG',
-      retryable: false,
+      failure: { recovery: { operation: 'provider.submit', taskReplay: 'forbidden' } },
     })
 
     expect(validationExecute).toHaveBeenCalledTimes(1)
@@ -569,7 +511,21 @@ describe('provider invocation at-most-once DB integration', () => {
       }),
     ).resolves.toMatchObject({
       state: 'rejected',
-      output: { error: { code: 'MUSIC_PROMPT_TOO_LONG' } },
+      output: {
+        failure: {
+          version: 2,
+          native: {
+            name: 'ProviderSubmissionError',
+            message: 'Music prompt is 1035 characters; the model accepts at most 1024',
+          },
+          interpretation: {
+            code: 'MUSIC_PROMPT_TOO_LONG',
+            details: { requested: 1035, allowed: 1024 },
+          },
+          context: { system: 'provider', provider: 'mureka', phase: 'submit' },
+          recovery: { taskReplay: 'forbidden' },
+        },
+      },
     })
   })
 

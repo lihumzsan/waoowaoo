@@ -6,6 +6,11 @@ export interface GoogleOAuthConfig {
   clientSecret: string
 }
 
+const GOOGLE_PROFILE_IMAGE_HOST_SUFFIXES = [
+  'googleusercontent.com',
+  'ggpht.com',
+] as const
+
 function readTrimmedEnv(name: string): string {
   const value = process.env[name]
   if (typeof value !== 'string' || !value.trim()) {
@@ -16,6 +21,12 @@ function readTrimmedEnv(name: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isGoogleProfileImageHostname(hostname: string): boolean {
+  return GOOGLE_PROFILE_IMAGE_HOST_SUFFIXES.some(
+    (suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`),
+  )
 }
 
 export function readGoogleOAuthConfig(): GoogleOAuthConfig {
@@ -33,6 +44,14 @@ export function createGoogleOAuthProvider(
   return GoogleProvider({
     ...readGoogleOAuthConfig(),
     allowDangerousEmailAccountLinking: false,
+    profile(profile) {
+      return {
+        id: profile.sub,
+        name: profile.name,
+        email: profile.email,
+        image: readGoogleProfileImage(profile),
+      }
+    },
   })
 }
 
@@ -45,4 +64,18 @@ export function readVerifiedGoogleProfileEmail(profile: unknown): string | null 
   if (emailVerified !== true) return null
 
   return email.trim().toLowerCase()
+}
+
+export function readGoogleProfileImage(profile: unknown): string | null {
+  if (!isRecord(profile)) return null
+  const picture = profile.picture
+  if (typeof picture !== 'string' || !picture.trim()) return null
+
+  try {
+    const url = new URL(picture.trim())
+    if (url.protocol !== 'https:' || !isGoogleProfileImageHostname(url.hostname)) return null
+    return url.toString()
+  } catch {
+    return null
+  }
 }

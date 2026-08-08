@@ -52,7 +52,10 @@ import {
 } from '@/lib/ai-registry/llm-protocol'
 import { resolveProviderRouteSet } from '@/lib/ai-registry/provider-route-set'
 import { listBuiltinPricingCatalog } from '@/lib/ai-registry/pricing-catalog'
-import { getPlatformModels } from '@/lib/platform-models/catalog'
+import {
+  getPlatformDefaultModelCatalog,
+  getPlatformModels,
+} from '@/lib/platform-models/catalog'
 
 const ORIGINAL_REASONING_ENV = {
   PROVIDER_CREDENTIAL_MODE: process.env.PROVIDER_CREDENTIAL_MODE,
@@ -112,9 +115,9 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
     })).toThrow(AiOptionValidationError)
   })
 
-  it('derives only the declared GPT Image 2 provider routes from the production catalog', () => {
+  it('keeps every production model on its explicitly selected provider', () => {
     expect(resolveProviderRouteSet('image', `openrouter::${OPENROUTER_GPT_IMAGE_2_MODEL_ID}`)).toEqual({
-      logicalCapabilityId: 'image.gpt-image-2',
+      logicalCapabilityId: `image:openrouter::${OPENROUTER_GPT_IMAGE_2_MODEL_ID}`,
       primaryModelKey: `openrouter::${OPENROUTER_GPT_IMAGE_2_MODEL_ID}`,
       failoverPolicy: 'pre_accept_only',
       routes: [
@@ -124,12 +127,6 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
           modelKey: `openrouter::${OPENROUTER_GPT_IMAGE_2_MODEL_ID}`,
           priority: 0,
         },
-        {
-          provider: 'fal',
-          modelId: FAL_GPT_IMAGE_2_MODEL_ID,
-          modelKey: `fal::${FAL_GPT_IMAGE_2_MODEL_ID}`,
-          priority: 1,
-        },
       ],
     })
     expect(resolveProviderRouteSet('image', `fal::${FAL_GPT_IMAGE_2_MODEL_ID}`).routes).toEqual([
@@ -137,9 +134,10 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
         provider: 'fal',
         modelId: FAL_GPT_IMAGE_2_MODEL_ID,
         modelKey: `fal::${FAL_GPT_IMAGE_2_MODEL_ID}`,
-        priority: 1,
+        priority: 0,
       },
     ])
+    expect(listBuiltinCapabilityCatalog().every((entry) => entry.providerRoute === undefined)).toBe(true)
   })
 
   it('registers one explicit transport protocol for every configured LLM model', () => {
@@ -176,6 +174,25 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
       expect(pricing.has(model.modelId)).toBe(model.pricingUsdPerMillion !== null)
       expect(apiConfig.has(model.modelId)).toBe(model.showInApiConfig)
       expect(platform.has(model.modelId)).toBe(model.showInPlatform)
+    }
+  })
+
+  it('publishes only priced and capable platform defaults', () => {
+    const defaults = getPlatformDefaultModelCatalog()
+    for (const model of defaults) {
+      if (model.type === 'llm') {
+        expect(resolveRegisteredLlmProtocol(model.modelKey)).toBe('openrouter-chat')
+      }
+      expect(listBuiltinCapabilityCatalog().some((entry) => (
+        entry.modelType === model.type
+        && entry.provider === model.provider
+        && entry.modelId === model.modelId
+      ))).toBe(true)
+      expect(listBuiltinPricingCatalog().some((entry) => (
+        entry.apiType === (model.type === 'llm' ? 'text' : model.type)
+        && entry.provider === model.provider
+        && entry.modelId === model.modelId
+      ))).toBe(true)
     }
   })
 
@@ -751,8 +768,17 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
         && candidate.provider === 'openrouter'
         && candidate.modelId === 'bytedance/seedance-2.0-fast'
       ))
-      expect(entry?.capabilities?.video?.maxReferenceImages).toBe(8)
+      expect(entry?.capabilities?.video?.maxReferenceImages).toBe(9)
       expect(entry?.capabilities?.video?.maxReferenceAudios).toBe(3)
+      expect(entry?.capabilities?.video?.maxReferenceVideos).toBe(3)
+      expect(entry?.capabilities?.video?.maxReferenceFiles).toBe(12)
+      expect(entry?.capabilities?.video?.referenceAudioRequiresVisual).toBe(true)
+      expect(entry?.capabilities?.video?.supportedInputModes).toEqual([
+        'text_to_video',
+        'first_frame',
+        'first_last_frame',
+        'reference',
+      ])
     })
 
     it('declares all Ark video models as multi-reference capable', () => {

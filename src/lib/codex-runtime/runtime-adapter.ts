@@ -180,11 +180,6 @@ export type RuntimeSkillsListResponse = {
   readonly data: readonly RuntimeSkillsListEntry[]
 }
 
-export type RuntimeThreadInjectItemsParams = {
-  readonly threadId: string
-  readonly items: readonly RuntimeJsonValue[]
-}
-
 export type RuntimeTurnStartParams = {
   readonly threadId: string
   readonly clientUserMessageId?: string
@@ -264,7 +259,6 @@ export interface RuntimeAdapter {
   resumeThread(params: RuntimeThreadResumeParams): Promise<RuntimeThread>
   readThread(params: RuntimeThreadReadParams): Promise<RuntimeThread>
   listSkills(params: RuntimeSkillsListParams): Promise<RuntimeSkillsListResponse>
-  injectThreadItems(params: RuntimeThreadInjectItemsParams): Promise<void>
   startTurn(params: RuntimeTurnStartParams): Promise<RuntimeTurn>
   steerTurn(params: RuntimeTurnSteerParams): Promise<string>
   interruptTurn(params: RuntimeTurnInterruptParams): Promise<void>

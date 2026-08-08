@@ -25,7 +25,6 @@ import {
 export const FAL_GPT_IMAGE_2_MODEL_ID = 'gpt-image-2'
 export const FAL_LYRIA_3_PRO_MODEL_ID = 'fal-ai/lyria3/pro'
 export const FAL_QWEN_3_TTS_VOICE_DESIGN_1_7B_MODEL_ID = QWEN_3_TTS_VOICE_DESIGN_1_7B_MODEL_ID
-export const FAL_PLATFORM_DEFAULT_IMAGE_MODEL_KEY = `fal::${FAL_GPT_IMAGE_2_MODEL_ID}`
 export const FAL_PLATFORM_DEFAULT_MUSIC_MODEL_KEY = `fal::${FAL_LYRIA_3_PRO_MODEL_ID}`
 export const FAL_PLATFORM_DEFAULT_VOICE_MODEL_KEY = PLATFORM_VOICE_DESIGN_MODEL_KEY
 export const FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID = 'alibaba/happy-horse/image-to-video'
@@ -77,11 +76,6 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelType: 'image',
     provider: 'fal',
     modelId: FAL_GPT_IMAGE_2_MODEL_ID,
-    providerRoute: {
-      logicalCapabilityId: 'image.gpt-image-2',
-      priority: 1,
-      failoverPolicy: 'pre_accept_only',
-    },
     capabilities: { image: { resolutionOptions: [...FAL_IMAGE_RESOLUTIONS], qualityOptions: [...FAL_GPT_IMAGE_2_QUALITY_OPTIONS] } },
   },
   {
@@ -127,6 +121,7 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID,
     capabilities: {
       video: {
+        supportedInputModes: ['text_to_video', 'first_frame', 'first_last_frame', 'reference'],
         supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
         generateAudioOptions: [true],
@@ -135,8 +130,12 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         firstlastframe: true,
         supportGenerateAudio: true,
         assetReferenceMultiReference: true,
-        maxReferenceImages: 8,
+        maxReferenceImages: 9,
         maxReferenceAudios: 3,
+        maxReferenceVideos: 3,
+        maxReferenceFiles: 12,
+        referenceAudioRequiresVisual: true,
+        minReferenceAudioDurationMs: 1_800,
       },
     },
   },
@@ -146,6 +145,7 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID,
     capabilities: {
       video: {
+        supportedInputModes: ['text_to_video', 'first_frame', 'first_last_frame', 'reference'],
         supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
         generateAudioOptions: [true],
@@ -154,8 +154,12 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         firstlastframe: true,
         supportGenerateAudio: true,
         assetReferenceMultiReference: true,
-        maxReferenceImages: 8,
+        maxReferenceImages: 9,
         maxReferenceAudios: 3,
+        maxReferenceVideos: 3,
+        maxReferenceFiles: 12,
+        referenceAudioRequiresVisual: true,
+        minReferenceAudioDurationMs: 1_800,
       },
     },
   },
@@ -478,12 +482,13 @@ export function resolveFalOptionSchema(modality: MediaModality, modelId: string)
     if (modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID || modelId === FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID) {
       return buildMediaOptionSchema('video', {
         ...FAL_VIDEO_OPTION_SCHEMA_CONFIG,
-        allowedKeys: ['referenceImages', 'referenceAudios'],
+        allowedKeys: ['referenceImages', 'referenceAudios', 'referenceVideos'],
         validators: {
           duration: integerRangeValidator({ min: 4, max: 15 }),
           aspectRatio: enumValidator(['auto', '21:9', '16:9', '4:3', '1:1', '3:4', '9:16']),
           resolution: enumValidator(modelId === FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID ? ['480p', '720p'] : ['480p', '720p', '1080p']),
           referenceAudios: stringArrayValidator(),
+          referenceVideos: stringArrayValidator({ maxLength: 3 }),
         },
         objectValidators: [createFalVideoObjectValidator(modelId, FAL_VIDEO_MODEL_IDS)],
       })

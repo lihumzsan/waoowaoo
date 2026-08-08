@@ -1,5 +1,4 @@
-import { ERROR_FAILURE_CLASS, type ErrorFailureClass } from '@/lib/errors/codes'
-import { isLLMTaskType } from '@/lib/llm-observe/task-policy'
+import type { FailureRecord } from '@/lib/errors/failure'
 import type { TaskType } from './types'
 import { getTaskDefinition } from './definition'
 
@@ -9,11 +8,9 @@ export function getTaskMaxAttempts(type: TaskType): number {
   return getTaskDefinition(type).maxAttempts
 }
 
+/** Replay permission comes only from the operation contract/effect fact. */
 export function shouldRetryTaskFailure(input: {
-  readonly taskType: TaskType
-  readonly failureClass: ErrorFailureClass
+  readonly failure: FailureRecord
 }): boolean {
-  if (input.failureClass === ERROR_FAILURE_CLASS.TRANSIENT_PROVIDER) return true
-  return input.failureClass === ERROR_FAILURE_CLASS.OUTPUT_VALIDATION
-    && isLLMTaskType(input.taskType)
+  return input.failure.recovery.taskReplay === 'safe'
 }

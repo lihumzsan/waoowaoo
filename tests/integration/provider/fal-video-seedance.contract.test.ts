@@ -182,7 +182,7 @@ describe('provider contract - fal video', () => {
         modelKey: 'fal::bytedance/seedance-2.0',
         variantSubKind: 'official',
       },
-      imageUrl: 'https://example.com/hero.png',
+      imageUrl: '',
       options: {
         prompt: 'Use @Image1 as the hero and @Image2 as the location.',
         referenceImages: ['https://example.com/hero.png', 'https://example.com/location.png'],
@@ -229,10 +229,12 @@ describe('provider contract - fal video', () => {
         modelKey: 'fal::bytedance/seedance-2.0',
         variantSubKind: 'official',
       },
-      imageUrl: 'https://example.com/character.png',
+      imageUrl: '',
       options: {
         prompt: 'Image 1 (@Image1) speaks with audio 1 (@Audio1): {Stay with me.}',
+        referenceImages: ['https://example.com/character.png'],
         referenceAudios: [referenceAudioDataUrl],
+        referenceVideos: ['https://example.com/performance.mp4'],
         resolution: '720p',
         duration: 6,
         aspectRatio: '16:9',
@@ -246,11 +248,35 @@ describe('provider contract - fal video', () => {
       prompt: 'Image 1 (@Image1) speaks with audio 1 (@Audio1): {Stay with me.}',
       image_urls: ['https://example.com/character.png'],
       audio_urls: [referenceAudioDataUrl],
+      video_urls: ['https://example.com/performance.mp4'],
       resolution: '720p',
       duration: '6',
       aspect_ratio: '16:9',
       generate_audio: true,
     })
+  })
+
+  it('rejects reference audio without a visual reference before provider submission', async () => {
+    await expect(executeFalVideoGeneration({
+      userId: 'user-1',
+      selection: {
+        provider: 'fal',
+        modelId: 'bytedance/seedance-2.0',
+        modelKey: 'fal::bytedance/seedance-2.0',
+        variantSubKind: 'official',
+      },
+      imageUrl: '',
+      options: {
+        prompt: 'Follow the supplied performance audio.',
+        referenceAudios: ['https://example.com/performance.wav'],
+        resolution: '720p',
+        duration: 6,
+        aspectRatio: '16:9',
+        generateAudio: true,
+      },
+    })).rejects.toThrow('FAL_VIDEO_REFERENCE_AUDIO_REQUIRES_VISUAL')
+
+    expect(server!.getRequests('POST', '/fal/bytedance/seedance-2.0/reference-to-video')).toHaveLength(0)
   })
 
   it('submits Seedance 2.0 prompt-only requests to text-to-video', async () => {

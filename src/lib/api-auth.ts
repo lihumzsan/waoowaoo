@@ -7,7 +7,8 @@ import { getServerSession } from 'next-auth/next'
 import { NextResponse } from 'next/server'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { RETRY_POLICY, withRetry } from '@/lib/retry'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
+import { withRetry } from '@/lib/retry'
 import { extractModelKey } from '@/lib/config-service'
 import { getErrorSpec, type UnifiedErrorCode } from '@/lib/errors/codes'
 import { getLogContext, setLogContext } from '@/lib/logging/context'
@@ -52,8 +53,8 @@ function withCanonicalSessionUser(session: AuthSession, user: ExistingAuthUser):
 
 async function resolveExistingSession(session: AuthSession): Promise<AuthSession | null> {
     const userById = await withRetry({
+        operation: EXTERNAL_OPERATION.DATABASE_READ,
         scope: 'prisma:requireUserAuth',
-        policy: RETRY_POLICY.prisma,
         run: async () => await prisma.user.findUnique({
             where: { id: session.user.id },
             select: { id: true, name: true, email: true },
@@ -194,8 +195,8 @@ export async function requireProjectAuth(projectId: string): Promise<ProjectAuth
 
     // 2. 获取项目基础信息
     const project = await withRetry({
+        operation: EXTERNAL_OPERATION.DATABASE_READ,
         scope: 'prisma:requireProjectAuth',
-        policy: RETRY_POLICY.prisma,
         run: async () => await prisma.project.findUnique({
             where: { id: projectId },
         }),
@@ -274,8 +275,8 @@ export async function requireProjectAuthLight(
     bindAuthLogContext(session, projectId)
 
     const project = await withRetry({
+        operation: EXTERNAL_OPERATION.DATABASE_READ,
         scope: 'prisma:requireProjectAuthLight',
-        policy: RETRY_POLICY.prisma,
         run: async () => await prisma.project.findUnique({
             where: { id: projectId }
         }),

@@ -1,19 +1,15 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { cp, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { once } from 'node:events'
+import { access, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { createServer, type IncomingMessage, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { ElicitRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import {
-  captureWorkspaceBundle,
-  encodeWorkspaceBundle,
-  materializeWorkspaceBundle,
-  type WorkspaceBundleV1,
-} from '@/lib/codex-runtime/workspace-bundle'
 import { LocalRuntimeManager } from '@/lib/codex-runtime/local-runtime-manager'
 import { PRODUCTION_CODEX_INITIALIZE_CAPABILITIES } from '@/lib/codex-runtime/runtime-config'
 import type {
@@ -21,21 +17,27 @@ import type {
   RuntimeEvent,
   RuntimeJsonObject,
 } from '@/lib/codex-runtime/runtime-adapter'
-import { createWaoMcpOperationCatalog } from '@/lib/wao-mcp/operation-catalog'
 import { createWaoMcpServer } from '@/lib/wao-mcp/server'
-import type { WaoMcpOperationExecutorResult } from '@/lib/wao-mcp/contracts'
-import { inspectCapturedCodexState } from '@/lib/assistant-runtime/runtime-persistence'
+import { createWaoMcpToolRegistry } from '@/lib/wao-mcp/tool-registry'
 import {
-  CREATIVE_SKILL_IDS,
-  CREATIVE_WORKERS,
-  materializeCreativeRuntimeConfiguration,
+  WAO_MCP_USER_DECISION_META_KEY,
+  WAO_MCP_USER_DECISION_TOOL_NAME,
+} from '@/lib/wao-mcp/user-decision'
+import type { WaoMcpOperationExecutorResult } from '@/lib/wao-mcp/contracts'
+import { AssistantRuntimePersistence } from '@/lib/assistant-runtime/runtime-persistence'
+import {
+  ASSISTANT_RUNTIME_CODEX_VERSION,
+  ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
+  ASSISTANT_RUNTIME_STATIC_CONTRACT,
+} from '@/lib/assistant-runtime/runtime-access'
+import {
+  CREATIVE_RUNTIME_SKILLS,
 } from '@/lib/creative-skills'
 import {
   ASSISTANT_RUNTIME_APPROVAL_METHODS,
   ASSISTANT_RUNTIME_INPUT_METHODS,
 } from '@/lib/assistant-runtime/view-contract'
 
-const VALIDATED_CODEX_VERSION = 'codex-cli 0.146.0'
 const DEFAULT_MODEL = 'gpt-5.6-sol'
 const TURN_TIMEOUT_MS = 180_000
 const OFFLINE_STAGE_TIMEOUT_MS = 30_000
@@ -44,13 +46,21 @@ type AppServerSmokeResult = {
   readonly initializedUserAgent: string
   readonly threadId: string
   readonly resumed: boolean
+  readonly failedTurnPersisted: boolean
+  readonly idempotentScopeClearValidated: boolean
   readonly liveTurn: boolean
   readonly liveTurnStatus: string | null
   readonly streamedText: string
-  readonly capturedStateBytes: number
   readonly customResponsesProvider: boolean
   readonly skillsListed: readonly string[]
   readonly protocolSurfaceValidated: boolean
+  readonly runtimeContractValidated: boolean
+}
+
+type RuntimeRequestCapture = {
+  readonly baseUrl: string
+  readonly request: Promise<RuntimeJsonObject>
+  readonly close: () => Promise<void>
 }
 
 function requireObject(value: unknown, label: string): RuntimeJsonObject {
@@ -69,6 +79,115 @@ function createSignal(): { readonly promise: Promise<void>; readonly resolve: ()
       if (!resolver) throw new Error('CODEX_RUNTIME_SMOKE_SIGNAL_UNINITIALIZED')
       resolver()
     },
+  }
+}
+
+async function readHttpBody(request: IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = []
+  for await (const chunk of request) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)))
+  }
+  return Buffer.concat(chunks)
+}
+
+function closeServer(server: Server): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error) reject(error)
+      else resolve()
+    })
+  })
+}
+
+async function startRuntimeRequestCapture(): Promise<RuntimeRequestCapture> {
+  let resolveRequest!: (request: RuntimeJsonObject) => void
+  let rejectRequest!: (error: unknown) => void
+  let captured = false
+  const request = new Promise<RuntimeJsonObject>((resolve, reject) => {
+    resolveRequest = resolve
+    rejectRequest = reject
+  })
+  const server = createServer((incoming, response) => {
+    void (async () => {
+      if (incoming.method !== 'POST' || !incoming.url?.endsWith('/responses')) {
+        response.writeHead(404, { 'content-type': 'application/json' })
+        response.end('{"error":{"message":"not found"}}')
+        return
+      }
+      const bytes = await readHttpBody(incoming)
+      if (!captured) {
+        captured = true
+        const parsed: unknown = JSON.parse(bytes.toString('utf8'))
+        resolveRequest(requireObject(parsed, 'captured Responses request'))
+      }
+      response.writeHead(400, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({
+        error: {
+          message: 'Intentional runtime contract probe failure.',
+          type: 'invalid_request_error',
+          code: 'runtime_contract_probe',
+        },
+      }))
+    })().catch((error: unknown) => {
+      rejectRequest(error)
+      if (!response.headersSent) response.writeHead(500, { 'content-type': 'application/json' })
+      response.end('{"error":{"message":"capture failed"}}')
+    })
+  })
+  server.on('error', rejectRequest)
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const address = server.address()
+  assert(address && typeof address !== 'string', 'Runtime request capture address unavailable')
+  return {
+    baseUrl: `http://127.0.0.1:${String(address.port)}/api/internal/codex-runtime/model`,
+    request,
+    close: async () => await closeServer(server),
+  }
+}
+
+function assertRuntimeContractRequest(request: RuntimeJsonObject): void {
+  const serialized = JSON.stringify(request)
+  assert.ok(
+    serialized.includes('The native Web Search tool returns a synthesized, cited report'),
+    'The live model request did not contain the current native Web Search instruction.',
+  )
+  assert.ok(
+    !serialized.includes('Research the public web only through the wao MCP'),
+    'The live model request retained the obsolete MCP-only Web Search instruction.',
+  )
+  assert.ok(
+    serialized.includes('web__run'),
+    'The live model request did not install the standalone Web Search executor.',
+  )
+  assert.ok(
+    !serialized.includes('mcp__wao__web_search'),
+    'The live model request installed the deleted Wao MCP search tool.',
+  )
+  assert.ok(
+    ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS.includes('# Professional Wao Skills'),
+    'The live model request did not load the canonical project Agent prompt.',
+  )
+  assert.ok(
+    serialized.includes('wao.request_user_decision'),
+    'The live model request did not name the Wao-owned user decision tool.',
+  )
+  assert.ok(
+    !serialized.includes('native user-input request'),
+    'The live model request retained the deleted native Choice instruction.',
+  )
+  for (const runtimeSkill of CREATIVE_RUNTIME_SKILLS) {
+    const professionalSkillId = runtimeSkill.skillIds[1]
+    assert.ok(
+      serialized.includes(professionalSkillId),
+      `The live model request did not expose Wao Skill ${professionalSkillId}.`,
+    )
+  }
+  for (const toolName of ['spawn_agent', 'send_message', 'wait_agent', 'interrupt_agent']) {
+    assert.ok(
+      !serialized.includes(`\"${toolName}\"`),
+      `The live model request exposed disabled collaboration tool ${toolName}.`,
+    )
   }
 }
 
@@ -123,8 +242,6 @@ async function assertPinnedProtocolSurface(rootDir: string): Promise<void> {
     'commandExecution',
     'fileChange',
     'mcpToolCall',
-    'collabAgentToolCall',
-    'subAgentActivity',
     'webSearch',
   ]) {
     assert.ok(notifications.includes(`\"${itemType}\"`), `Pinned Codex protocol no longer exposes ${itemType}`)
@@ -143,35 +260,31 @@ async function assertPinnedProtocolSurface(rootDir: string): Promise<void> {
   }
 }
 
-async function runWorkspaceSmoke(rootDir: string): Promise<void> {
-  const workspaceDir = path.join(rootDir, 'workspace')
-  const bundle: WorkspaceBundleV1 = {
-    schemaVersion: 1,
-    directories: ['project', 'project/empty'],
-    files: [
-      {
-        path: 'project/brief.md',
-        content: '# Runtime smoke\n\nThe Canvas is a projection of this project workspace.\n',
-      },
-      {
-        path: 'project/resources.json',
-        content: '{"resources":[]}',
-      },
-    ],
-  }
-
-  await materializeWorkspaceBundle(workspaceDir, bundle)
-  const captured = await captureWorkspaceBundle(workspaceDir)
-  assert.deepEqual(encodeWorkspaceBundle(captured), encodeWorkspaceBundle(bundle))
-}
-
 async function runMcpSmoke(): Promise<void> {
   const calls: string[] = []
   let completedCalls = 0
   let sessionClosed = false
   const elicitationObserved = createSignal()
+  const decisionElicitationObserved = createSignal()
+  const decisionCancellationObserved = createSignal()
+  let decisionElicitationCount = 0
   const approvalReleased = createSignal()
-  const operationIds = createWaoMcpOperationCatalog().map((entry) => entry.operationId)
+  const registry = createWaoMcpToolRegistry()
+  const toolNames = registry.map((entry) => entry.name)
+  const operationIds = registry.flatMap((entry) => (
+    entry.kind === 'operation' ? [entry.operation.operationId] : []
+  ))
+  assert.ok(!operationIds.some((operationId) => operationId === 'web_search'), (
+    'Wao MCP must not register a second search entry beside native Web Search.'
+  ))
+  assert.ok(!operationIds.includes('submit_production_manifest'), 'Deleted Manifest operation remains in Wao MCP.')
+  for (const operationId of ['create_image', 'create_audio', 'create_video']) {
+    assert.ok(operationIds.includes(operationId), `Direct media operation missing from Wao MCP: ${operationId}`)
+  }
+  assert.ok(
+    toolNames.includes(WAO_MCP_USER_DECISION_TOOL_NAME),
+    'Wao MCP user decision tool is missing from the exhaustive registry.',
+  )
   const server = createWaoMcpServer({
     contextResolver: {
       resolve: async ({ requestId }) => ({
@@ -245,6 +358,40 @@ async function runMcpSmoke(): Promise<void> {
   client.setRequestHandler(ElicitRequestSchema, async (request) => {
     assert.equal(request.params.mode, 'form')
     assert.equal(request.params.requestedSchema.type, 'object')
+    if (Object.hasOwn(request.params.requestedSchema.properties, 'optionId')) {
+      const option = requireObject(
+        request.params.requestedSchema.properties.optionId,
+        'decision option schema',
+      )
+      assert.equal(option.type, 'string')
+      assert.ok(Array.isArray(option.oneOf))
+      assert.equal(option.description, undefined)
+      assert.deepEqual(request.params._meta?.[WAO_MCP_USER_DECISION_META_KEY], {
+        protocol: 'wao_user_decision_presentation_v1',
+        options: [
+          {
+            id: 'direction_a',
+            description: 'Use a restrained documentary treatment.',
+          },
+          {
+            id: 'direction_b',
+            description: 'Use a cinematic narrative treatment.',
+          },
+        ],
+      })
+      decisionElicitationCount += 1
+      if (decisionElicitationCount === 1) {
+        decisionElicitationObserved.resolve()
+        return {
+          action: 'accept',
+          content: { optionId: 'direction_b' },
+        }
+      }
+      decisionCancellationObserved.resolve()
+      return {
+        action: 'decline',
+      }
+    }
     elicitationObserved.resolve()
     await approvalReleased.promise
     return {
@@ -260,12 +407,25 @@ async function runMcpSmoke(): Promise<void> {
     const listed = await client.listTools()
     assert.deepEqual(
       listed.tools.map((tool) => tool.name),
-      operationIds,
+      toolNames,
     )
     let toolCallSettled = false
     const pendingResult = client.callTool({
-      name: 'submit_production_manifest',
-      arguments: { manifestPath: 'production/smoke-manifest.json' },
+      name: 'create_image',
+      arguments: {
+        request: {
+          kind: 'new',
+          items: [{
+            itemId: 'smoke-image',
+            name: 'Smoke image',
+            mediaType: 'image',
+            schemaId: 'generic.image',
+            assetKind: null,
+            prompt: 'A minimal runtime contract smoke image.',
+            count: 1,
+          }],
+        },
+      },
     }).finally(() => {
       toolCallSettled = true
     })
@@ -275,8 +435,56 @@ async function runMcpSmoke(): Promise<void> {
     approvalReleased.resolve()
     const result = await pendingResult
     assert.equal(result.isError, undefined)
-    assert.deepEqual(calls, ['submit_production_manifest'])
+    assert.deepEqual(calls, ['create_image'])
     assert.equal(completedCalls, 1)
+    const userDecisionArguments = {
+      header: 'Direction',
+      question: 'Which direction should the project use?',
+      options: [
+        {
+          id: 'direction_a',
+          label: 'Direction A',
+          description: 'Use a restrained documentary treatment.',
+        },
+        {
+          id: 'direction_b',
+          label: 'Direction B',
+          description: 'Use a cinematic narrative treatment.',
+        },
+      ],
+      otherLabel: 'Another direction',
+    }
+    const decisionResult = await client.callTool({
+      name: WAO_MCP_USER_DECISION_TOOL_NAME,
+      arguments: userDecisionArguments,
+    })
+    await decisionElicitationObserved.promise
+    assert.equal(decisionResult.isError, undefined)
+    assert.deepEqual(decisionResult.structuredContent, {
+      ok: true,
+      data: {
+        outcome: 'selected',
+        selection: {
+          kind: 'option',
+          optionId: 'direction_b',
+          label: 'Direction B',
+        },
+      },
+    })
+    const cancellationResult = await client.callTool({
+      name: WAO_MCP_USER_DECISION_TOOL_NAME,
+      arguments: userDecisionArguments,
+    })
+    await decisionCancellationObserved.promise
+    assert.equal(cancellationResult.isError, undefined)
+    assert.deepEqual(cancellationResult.structuredContent, {
+      ok: true,
+      data: {
+        outcome: 'cancelled',
+        action: 'decline',
+      },
+    })
+    assert.deepEqual(calls, ['create_image'])
     await clientTransport.terminateSession()
     assert.equal(sessionClosed, true)
   } finally {
@@ -337,26 +545,49 @@ async function runAppServerSmoke(params: {
   const actualVersion = execFileSync('codex', ['--version'], { encoding: 'utf8' }).trim()
   assert.equal(
     actualVersion,
-    process.env.CODEX_RUNTIME_EXPECTED_VERSION?.trim() || VALIDATED_CODEX_VERSION,
+    process.env.CODEX_RUNTIME_EXPECTED_VERSION?.trim()
+      || `codex-cli ${ASSISTANT_RUNTIME_CODEX_VERSION}`,
     'Codex CLI version differs from the Stage 0 validated protocol version',
   )
   await assertPinnedProtocolSurface(params.rootDir)
 
-  const codexHome = path.join(params.rootDir, 'codex-home')
-  await mkdir(codexHome, { recursive: true, mode: 0o700 })
-  await materializeCreativeRuntimeConfiguration(codexHome)
-  for (const worker of CREATIVE_WORKERS) {
-    const profile = await readFile(path.join(codexHome, 'agents', `${worker.agentType}.toml`), 'utf8')
-    assert.ok(profile.includes(`name = "${worker.agentType}"`))
-    assert.ok(profile.includes('[mcp_servers.wao]\nenabled = false'))
-    for (const skillId of worker.skillIds) {
-      assert.ok(profile.includes(`<wao_skill id=\\"${skillId}\\"`))
-    }
-    for (const skillId of CREATIVE_SKILL_IDS.filter((skillId) => !worker.skillIds.includes(skillId))) {
-      assert.ok(!profile.includes(`<wao_skill id=\\"${skillId}\\"`), (
-        `Custom agent ${worker.agentType} received an undeclared Skill: ${skillId}`
+  const persistence = new AssistantRuntimePersistence({
+    hostRoot: path.join(params.rootDir, 'runtime-persistence'),
+  })
+  const persistenceScope = { userId: 'runtime-smoke-user', projectId: 'runtime-smoke-project' }
+  const materialization = await persistence.materialize(persistenceScope)
+  const codexHome = materialization.hostCodexHomeDirectory
+  const cwd = materialization.hostWorkspaceDirectory
+  const primaryInstructions = await readFile(path.join(codexHome, 'AGENTS.md'), 'utf8')
+  assert.match(primaryInstructions, /developer instructions are the authoritative project policy/u)
+  assert.doesNotMatch(primaryInstructions, /Subagent|child agent|delegate/iu)
+  const primaryConfig = await readFile(path.join(codexHome, 'config.toml'), 'utf8')
+  assert.match(primaryConfig, /\[agents\]\nenabled = false/)
+  assert.ok(!primaryConfig.includes('hooks = true'))
+  await assert.rejects(access(path.join(codexHome, 'agents')), { code: 'ENOENT' })
+  await assert.rejects(access(path.join(codexHome, 'hooks.json')), { code: 'ENOENT' })
+  await assert.rejects(access(path.join(codexHome, 'hooks')), { code: 'ENOENT' })
+  const professionalSkillIds = CREATIVE_RUNTIME_SKILLS.map((skill) => skill.skillIds[1])
+  for (const runtimeSkill of CREATIVE_RUNTIME_SKILLS) {
+    const professionalSkillId = runtimeSkill.skillIds[1]
+    const installedSkill = await readFile(
+      path.join(cwd, '.agents', 'skills', professionalSkillId, 'SKILL.md'),
+      'utf8',
+    )
+    assert.ok(installedSkill.includes(`name: ${professionalSkillId}`))
+    assert.ok(installedSkill.includes(`outputKind=${JSON.stringify(runtimeSkill.outputKind)}`))
+    assert.ok(installedSkill.includes('<wao_output_schema'))
+    assert.ok(installedSkill.includes('<wao_skill_source id="creative-core"'))
+    assert.ok(installedSkill.includes(`<wao_skill_source id="${professionalSkillId}"`))
+    for (const otherSkillId of professionalSkillIds.filter((skillId) => skillId !== professionalSkillId)) {
+      assert.ok(!installedSkill.includes(`<wao_skill_source id="${otherSkillId}"`), (
+        `Runtime Skill ${professionalSkillId} embedded another professional domain: ${otherSkillId}`
       ))
     }
+    await assert.rejects(
+      access(path.join(codexHome, 'skills', professionalSkillId, 'SKILL.md')),
+      { code: 'ENOENT' },
+    )
   }
   const createManager = (home: string) => new LocalRuntimeManager({
     clientInfo: {
@@ -373,32 +604,40 @@ async function runAppServerSmoke(params: {
     initializeCapabilities: PRODUCTION_CODEX_INITIALIZE_CAPABILITIES,
   })
   const manager = createManager(codexHome)
+  const requestCapture = await startRuntimeRequestCapture()
   let restoredManager: LocalRuntimeManager | null = null
   const runtimeKey = 'stage-0-smoke'
-  const cwd = path.join(params.rootDir, 'workspace')
+  const toolContract = ASSISTANT_RUNTIME_STATIC_CONTRACT.tools
+  const approvalPolicy = ASSISTANT_RUNTIME_STATIC_CONTRACT.thread.approvalPolicy
+  assert.equal(
+    approvalPolicy,
+    'never',
+    'Creative Runtime shell access must fail closed instead of requesting interactive approval.',
+  )
   const customProviderConfig = {
-    web_search: 'live',
+    web_search: toolContract.webSearch,
     features: {
-      skill_search: false,
-      image_generation: false,
-      standalone_web_search: true,
+      skill_search: toolContract.features.skillSearch,
+      image_generation: toolContract.features.imageGeneration,
+      standalone_web_search: toolContract.features.standaloneWebSearch,
+      remote_compaction_v2: toolContract.features.remoteCompactionV2,
       code_mode: {
-        enabled: true,
-        direct_only_tool_namespaces: ['wao'],
+        enabled: toolContract.features.codeMode.enabled,
+        direct_only_tool_namespaces: [...toolContract.features.codeMode.directOnlyToolNamespaces],
       },
       code_mode_host: {
-        enabled: true,
-        disable_in_process_fallback: true,
+        enabled: toolContract.features.codeModeHost.enabled,
+        disable_in_process_fallback: toolContract.features.codeModeHost.disableInProcessFallback,
       },
     },
     model_providers: {
       'wao-runtime-smoke': {
         name: 'Wao Runtime Smoke Responses Provider',
-        base_url: 'http://127.0.0.1:9/api/internal/codex-runtime/model',
+        base_url: requestCapture.baseUrl,
         env_key: 'WAO_MCP_RUNTIME_BEARER_TOKEN',
-        wire_api: 'responses',
-        requires_openai_auth: false,
-        supports_standalone_web_search: true,
+        wire_api: toolContract.modelProvider.wireApi,
+        requires_openai_auth: toolContract.modelProvider.requiresOpenAiAuth,
+        supports_standalone_web_search: toolContract.modelProvider.supportsStandaloneWebSearch,
         request_max_retries: 0,
         stream_max_retries: 0,
       },
@@ -417,26 +656,56 @@ async function runAppServerSmoke(params: {
     assert.equal(listedSkills.data.length, 1)
     assert.equal(listedSkills.data[0]?.cwd, cwd)
     assert.deepEqual(listedSkills.data[0]?.errors, [])
-    assert.ok(listedSkills.data[0]?.skills.every((skill) => !skill.enabled), (
-      'The primary Agent must not have any enabled native Skill.'
-    ))
-    for (const skillId of CREATIVE_SKILL_IDS) {
-      assert.ok(!listedSkills.data[0]?.skills.some((skill) => skill.name === skillId), (
-        `Wao professional Skill leaked into the primary Agent inventory: ${skillId}`
-      ))
-    }
+    const enabledSkillNames = (listedSkills.data[0]?.skills ?? [])
+      .filter((skill) => skill.enabled)
+      .map((skill) => skill.name)
+      .sort()
+    assert.deepEqual(enabledSkillNames, [...professionalSkillIds].sort())
+    const probeThread = await firstRuntime.startThread({
+      model: process.env.CODEX_RUNTIME_SMOKE_MODEL?.trim() || DEFAULT_MODEL,
+      modelProvider: 'wao-runtime-smoke',
+      cwd,
+      approvalPolicy,
+      sandbox: 'read-only',
+      config: customProviderConfig,
+      developerInstructions: ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
+      ephemeral: true,
+    })
+    const probeCompletion = waitForTurnCompletion({
+      runtime: firstRuntime,
+      threadId: probeThread.id,
+      onDelta: () => undefined,
+    })
+    const probeTurn = await firstRuntime.startTurn({
+      threadId: probeThread.id,
+      input: [{ type: 'text', text: 'Probe the installed runtime contract.' }],
+      cwd,
+      approvalPolicy,
+      sandboxPolicy: { type: 'readOnly', networkAccess: false },
+    })
+    const [capturedRequest, completedProbeTurn] = await Promise.all([
+      requestCapture.request,
+      probeCompletion,
+    ])
+    assert.equal(completedProbeTurn.id, probeTurn.id)
+    assert.notEqual(completedProbeTurn.status, 'completed')
+    assertRuntimeContractRequest(capturedRequest)
+
     const thread = await firstRuntime.startThread({
       model: process.env.CODEX_RUNTIME_SMOKE_MODEL?.trim() || DEFAULT_MODEL,
       modelProvider: 'wao-runtime-smoke',
       cwd,
-      approvalPolicy: 'never',
+      approvalPolicy,
       sandbox: 'read-only',
       config: customProviderConfig,
-      developerInstructions: 'Reply in the locale used by the user. Do not modify files in this smoke run.',
+      developerInstructions: ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
       ephemeral: false,
     })
     assert.equal((await firstRuntime.readThread({ threadId: thread.id })).id, thread.id)
 
+    const persistenceMarker = params.liveTurn
+      ? 'Reply with exactly RUNTIME_SMOKE_OK.'
+      : 'FAILED_TURN_PERSISTENCE_MARKER'
     if (params.liveTurn) {
       const completed = waitForTurnCompletion({
         runtime: firstRuntime,
@@ -449,7 +718,7 @@ async function runAppServerSmoke(params: {
         threadId: thread.id,
         input: [{ type: 'text', text: 'Reply with exactly RUNTIME_SMOKE_OK.' }],
         cwd,
-        approvalPolicy: 'never',
+        approvalPolicy,
         sandboxPolicy: { type: 'readOnly', networkAccess: false },
       })
       const completedTurn = await completed
@@ -458,82 +727,78 @@ async function runAppServerSmoke(params: {
       assert.equal(liveTurnStatus, 'completed')
       assert.equal(streamedText.trim(), 'RUNTIME_SMOKE_OK')
     } else {
-      // Force a durable rollout without contacting the model gateway. This is
-      // the same stable Responses item shape used by legacy message injection.
-      await firstRuntime.injectThreadItems({
+      const completed = waitForTurnCompletion({
+        runtime: firstRuntime,
         threadId: thread.id,
-        items: [{
-          type: 'message',
-          role: 'user',
-          content: [{ type: 'input_text', text: 'Runtime persistence smoke.' }],
-        }, {
-          type: 'message',
-          role: 'assistant',
-          content: [{ type: 'output_text', text: 'Product View recovery smoke.' }],
-        }],
+        onDelta: () => undefined,
       })
+      const failedTurn = await firstRuntime.startTurn({
+        threadId: thread.id,
+        input: [{ type: 'text', text: persistenceMarker }],
+        cwd,
+        approvalPolicy,
+        sandboxPolicy: { type: 'readOnly', networkAccess: false },
+      })
+      const completedTurn = await completed
+      assert.equal(completedTurn.id, failedTurn.id)
+      liveTurnStatus = typeof completedTurn.status === 'string' ? completedTurn.status : null
+      assert.notEqual(liveTurnStatus, 'completed')
     }
 
-    const capturedStateBytes = await inspectCapturedCodexState(
-      codexHome,
-    )
-    assert.ok(capturedStateBytes > 30)
+    const beforeCrash = await firstRuntime.readThread({ threadId: thread.id, includeTurns: true })
+    assert.ok(JSON.stringify(beforeCrash.raw).includes(persistenceMarker))
 
-    await manager.shutdown(runtimeKey)
-    const restoredCodexHome = path.join(params.rootDir, 'restored-codex-home')
-    await mkdir(restoredCodexHome, { recursive: true, mode: 0o700 })
-    for (const directory of ['sessions', 'archived_sessions']) {
-      await cp(
-        path.join(codexHome, directory),
-        path.join(restoredCodexHome, directory),
-        { recursive: true, force: false, errorOnExist: true },
-      ).catch((error: unknown) => {
-        if (
-          typeof error === 'object'
-          && error !== null
-          && 'code' in error
-          && error.code === 'ENOENT'
-        ) return
-        throw error
-      })
-    }
-    await materializeCreativeRuntimeConfiguration(restoredCodexHome)
-    restoredManager = createManager(restoredCodexHome)
+    // SIGKILL the app-server and reuse the exact same Codex home. No Wao
+    // checkpoint, bundle restore, or product-message injection participates.
+    await manager.forceShutdown(runtimeKey)
+    restoredManager = createManager(codexHome)
     const secondRuntime = await restoredManager.ensure({ runtimeKey, cwd })
     const resumed = await secondRuntime.resumeThread({
       threadId: thread.id,
       model: process.env.CODEX_RUNTIME_SMOKE_MODEL?.trim() || DEFAULT_MODEL,
       modelProvider: 'wao-runtime-smoke',
       cwd,
-      approvalPolicy: 'never',
+      approvalPolicy,
       sandbox: 'read-only',
       config: customProviderConfig,
     })
     assert.equal(resumed.id, thread.id)
-    assert.equal((await secondRuntime.readThread({ threadId: thread.id })).id, thread.id)
+    const afterCrash = await secondRuntime.readThread({ threadId: thread.id, includeTurns: true })
+    assert.equal(afterCrash.id, thread.id)
+    assert.ok(JSON.stringify(afterCrash.raw).includes(persistenceMarker))
     const restoredSkills = await secondRuntime.listSkills({ cwds: [cwd], forceReload: true })
-    assert.ok(restoredSkills.data[0]?.skills.every((skill) => !skill.enabled), (
-      'The resumed primary Agent must not regain native Skills.'
-    ))
+    const restoredEnabledSkillNames = (restoredSkills.data[0]?.skills ?? [])
+      .filter((skill) => skill.enabled)
+      .map((skill) => skill.name)
+      .sort()
+    assert.deepEqual(restoredEnabledSkillNames, [...professionalSkillIds].sort())
+    await restoredManager.shutdown(runtimeKey)
+    await persistence.destroyMaterialization(materialization)
+    await persistence.clearScope(persistenceScope)
+    await persistence.clearScope(persistenceScope)
+    await assert.rejects(access(codexHome), { code: 'ENOENT' })
 
     return {
       initializedUserAgent: initialized.userAgent,
       threadId: thread.id,
       resumed: true,
+      failedTurnPersisted: !params.liveTurn,
+      idempotentScopeClearValidated: true,
       liveTurn: params.liveTurn,
       liveTurnStatus,
       streamedText,
-      capturedStateBytes,
       customResponsesProvider: true,
       skillsListed: listedSkills.data[0]?.skills
         .filter((skill) => skill.enabled)
         .map((skill) => `${skill.name}@${skill.path}`) ?? [],
       protocolSurfaceValidated: true,
+      runtimeContractValidated: true,
     }
   } finally {
     await Promise.allSettled([
       manager.shutdownAll(),
       restoredManager?.shutdownAll() ?? Promise.resolve(),
+      requestCapture.close(),
     ])
   }
 }
@@ -542,7 +807,6 @@ async function main(): Promise<void> {
   const liveTurn = process.argv.includes('--live-turn')
   const rootDir = await mkdtemp(path.join(tmpdir(), 'wao-codex-runtime-smoke-'))
   try {
-    await withStageTimeout('workspace', async () => await runWorkspaceSmoke(rootDir))
     await withStageTimeout('mcp', async () => await runMcpSmoke())
     const appServer = await withStageTimeout(
       'app-server',
@@ -550,8 +814,7 @@ async function main(): Promise<void> {
     )
     process.stdout.write(`${JSON.stringify({
       ok: true,
-      workspace: 'canonical_round_trip',
-      mcp: createWaoMcpOperationCatalog().map((entry) => entry.operationId),
+      mcp: createWaoMcpToolRegistry().map((entry) => entry.name),
       appServer,
     }, null, 2)}\n`)
   } finally {

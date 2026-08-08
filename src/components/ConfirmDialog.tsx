@@ -36,21 +36,21 @@ export default function ConfirmDialog({
         <AppIcon name="alert" className="w-6 h-6 text-[var(--glass-tone-danger-fg)]" />
       ),
       confirmBg: 'glass-btn-tone-danger',
-      iconBg: 'bg-[var(--glass-tone-danger-bg)]'
+      iconBg: 'bg-[var(--glass-tone-soft)]'
     },
     warning: {
       icon: (
         <AppIcon name="alert" className="w-6 h-6 text-[var(--glass-tone-warning-fg)]" />
       ),
       confirmBg: 'glass-btn-tone-warning',
-      iconBg: 'bg-[var(--glass-tone-warning-bg)]'
+      iconBg: 'bg-[var(--glass-tone-soft)]'
     },
     info: {
       icon: (
         <AppIcon name="info" className="w-6 h-6 text-[var(--glass-tone-info-fg)]" />
       ),
       confirmBg: 'glass-btn-tone-info',
-      iconBg: 'bg-[var(--glass-tone-info-bg)]'
+      iconBg: 'bg-[var(--glass-tone-soft)]'
     }
   }
 

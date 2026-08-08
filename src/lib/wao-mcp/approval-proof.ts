@@ -4,8 +4,7 @@ import {
   issueApprovalGrantGroupInTransaction,
   type IssuedApprovalGrant,
 } from '@/lib/operations/planned-operation-invocation'
-
-export const WAO_MCP_APPROVAL_META_KEY = 'wao.dev/approval-request-id'
+import { WAO_MCP_APPROVAL_META_KEY } from './approval-contract'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)

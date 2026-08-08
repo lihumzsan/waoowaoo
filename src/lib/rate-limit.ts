@@ -51,6 +51,24 @@ export const AUTH_CAPTCHA_ISSUE_LIMIT: RateLimitConfig = {
     maxRequests: 20,
 }
 
+/** WeChat QR attempts call a provider API and allocate short-lived server state. */
+export const AUTH_WECHAT_ATTEMPT_LIMIT: RateLimitConfig = {
+    windowSeconds: 60,
+    maxRequests: 10,
+}
+
+/** One attempt opens one event stream; reconnects remain bounded per client source. */
+export const AUTH_WECHAT_STREAM_LIMIT: RateLimitConfig = {
+    windowSeconds: 60,
+    maxRequests: 20,
+}
+
+/** Public-beta reservation: one client source may register five numbers per hour. */
+export const PUBLIC_BETA_WAITLIST_LIMIT: RateLimitConfig = {
+    windowSeconds: 60 * 60,
+    maxRequests: 5,
+}
+
 // ============================================================
 // 核心逻辑
 // ============================================================

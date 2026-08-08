@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { TextMessagePartProps } from '@assistant-ui/react'
 import type { Components } from 'react-markdown'
+import { readSourceDomain, WebSourceFavicon } from './WebSourceFavicon'
 import { useWorkspaceAssistantTextPlayback } from './WorkspaceAssistantTextPlayback'
 import {
   projectWorkspacePathFromHref,
@@ -28,13 +29,6 @@ const STREAMED_TEXT_EXCLUDED_TAGS = new Set([
   'table', 'thead', 'tbody', 'tfoot', 'tr',
   'ul', 'ol', 'dl',
 ])
-const STREAMED_TEXT_CLASS_NAMES = [
-  'animate-in',
-  'fade-in',
-  'duration-150',
-  'motion-reduce:animate-none',
-] as const
-
 function animateStreamedTextChildren(node: StreamedHastNode): void {
   if (!node.children || STREAMED_TEXT_EXCLUDED_TAGS.has(node.tagName ?? '')) return
   node.children = node.children.flatMap((child) => {
@@ -42,7 +36,7 @@ function animateStreamedTextChildren(node: StreamedHastNode): void {
       return Array.from(child.value).map<StreamedHastNode>((character) => ({
         type: 'element',
         tagName: 'span',
-        properties: { className: [...STREAMED_TEXT_CLASS_NAMES] },
+        properties: { className: ['assistant-stream-in'] },
         children: [{ type: 'text', value: character }],
       }))
     }
@@ -51,6 +45,12 @@ function animateStreamedTextChildren(node: StreamedHastNode): void {
   })
 }
 
+/**
+ * Each character fades in once as it arrives, then it is ordinary text. The
+ * animation belongs to the character's appearance, not to its distance from
+ * the end — a ramp measured from the tail keeps re-dimming settled text as the
+ * window slides, which reads as the whole paragraph floating.
+ */
 function rehypeAnimateWorkspaceAssistantStreamedText() {
   return (tree: StreamedHastNode) => animateStreamedTextChildren(tree)
 }
@@ -68,14 +68,20 @@ function WorkspaceMarkdownLink(props: { readonly href?: string; readonly childre
   const workspaceLink = useWorkspaceAssistantWorkspaceLink()
   const href = props.href?.trim() ?? ''
   if (isExternalWebHref(href)) {
+    // Cited sources read as a run of blue underlines when a paragraph carries
+    // several of them. A compact chip carrying the site's own icon keeps the
+    // sentence readable and makes the source recognisable before it is clicked.
+    const domain = readSourceDomain(href)
     return (
       <a
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="break-words text-[var(--glass-accent-from)] underline underline-offset-2 [overflow-wrap:anywhere]"
+        title={href}
+        className="mx-0.5 inline-flex max-w-[16rem] items-baseline gap-1 rounded-md bg-black/[0.045] px-1.5 py-px align-baseline text-[0.9em] leading-[1.5] text-[var(--glass-text-secondary)] no-underline transition-colors hover:bg-black/[0.08] hover:text-[var(--glass-text-primary)]"
       >
-        {props.children}
+        <WebSourceFavicon domain={domain} className="h-3 w-3 self-center" />
+        <span className="truncate">{props.children}</span>
       </a>
     )
   }

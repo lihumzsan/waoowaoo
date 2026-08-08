@@ -1,25 +1,13 @@
-import type { UnifiedErrorCode } from '@/lib/errors/codes'
+import type { FailureRecord } from '@/lib/errors/failure'
 
-export class ProviderTerminalFailureError extends Error {
+export class ProviderTaskFailureError extends Error {
   readonly externalId: string
-  readonly code: UnifiedErrorCode
+  readonly failure: FailureRecord
 
-  constructor(externalId: string, code: UnifiedErrorCode, message: string, options?: { cause?: unknown }) {
-    super(message, options)
-    this.name = 'ProviderTerminalFailureError'
+  constructor(externalId: string, failure: FailureRecord) {
+    super(failure.native.message)
+    this.name = 'ProviderTaskFailureError'
     this.externalId = externalId
-    this.code = code
-  }
-}
-
-export class ProviderPermanentFailureError extends Error {
-  readonly externalId: string
-  readonly code: UnifiedErrorCode
-
-  constructor(externalId: string, code: UnifiedErrorCode, message: string, options?: { cause?: unknown }) {
-    super(message, options)
-    this.name = 'ProviderPermanentFailureError'
-    this.externalId = externalId
-    this.code = code
+    this.failure = failure
   }
 }

@@ -202,7 +202,8 @@ function ToastContainer({
                         rounded-xl
                         animate-in slide-in-from-right-full duration-300
                         max-w-md
-                        border
+                        bg-[var(--glass-tone-surface)]
+                        shadow-[var(--glass-tone-shadow-hover)]
                         ${getToastStyle(toast.type)}
                     `}
                 >
@@ -242,17 +243,18 @@ function ToastContainer({
 // 工具函数
 // ============================================================
 
+/** Surface and elevation are shared by the container; the type only picks ink. */
 function getToastStyle(type: Toast['type']): string {
     switch (type) {
         case 'success':
-            return 'bg-[var(--glass-tone-success-bg)] text-[var(--glass-tone-success-fg)] border-[color:color-mix(in_srgb,var(--glass-tone-success-fg)_22%,transparent)]'
+            return 'text-[var(--glass-tone-success-fg)]'
         case 'error':
-            return 'bg-[var(--glass-tone-danger-bg)] text-[var(--glass-tone-danger-fg)] border-[color:color-mix(in_srgb,var(--glass-tone-danger-fg)_22%,transparent)]'
+            return 'text-[var(--glass-tone-danger-fg)]'
         case 'warning':
-            return 'bg-[var(--glass-tone-warning-bg)] text-[var(--glass-tone-warning-fg)] border-[color:color-mix(in_srgb,var(--glass-tone-warning-fg)_22%,transparent)]'
+            return 'text-[var(--glass-tone-warning-fg)]'
         case 'info':
         default:
-            return 'bg-[var(--glass-tone-info-bg)] text-[var(--glass-tone-info-fg)] border-[color:color-mix(in_srgb,var(--glass-tone-info-fg)_22%,transparent)]'
+            return 'text-[var(--glass-tone-info-fg)]'
     }
 }
 

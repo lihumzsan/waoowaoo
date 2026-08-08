@@ -17,6 +17,7 @@ export type AssistantRuntimeSessionTurnView = {
   readonly sourceId: string
   readonly status: 'queued' | 'running' | 'waiting_approval' | 'completed' | 'failed' | 'interrupted' | 'cancelled'
   readonly attempt: number
+  readonly plan: ProjectAgentPlanSnapshot | null
   readonly assistantMessageId: string | null
   readonly stopReason: string | null
   readonly errorCode: string | null
@@ -47,7 +48,6 @@ export type AssistantRuntimeSessionView = {
   readonly thread: {
     readonly threadId: string
     readonly messages: readonly UIMessage[]
-    readonly plan: ProjectAgentPlanSnapshot | null
     readonly createdAt: string
     readonly updatedAt: string
   } | null
@@ -112,7 +112,6 @@ export const ASSISTANT_RUNTIME_APPROVAL_METHODS = [
 ] as const
 
 export const ASSISTANT_RUNTIME_INPUT_METHODS = [
-  'item/tool/requestUserInput',
   'mcpServer/elicitation/request',
 ] as const
 
@@ -135,62 +134,10 @@ export function isAssistantRuntimeInputRequest(
     .includes(interaction.method))
 }
 
-export type AssistantRuntimeUserInputQuestion = {
-  readonly id: string
-  readonly header: string
-  readonly question: string
-  readonly isOther: boolean
-  readonly isSecret: boolean
-  readonly options: readonly { readonly label: string; readonly description: string }[] | null
-}
-
-export function readAssistantRuntimeUserInputQuestions(
-  interaction: AssistantRuntimePendingInteractionView,
-): readonly AssistantRuntimeUserInputQuestion[] {
-  if (interaction.method !== 'item/tool/requestUserInput' || !isRecord(interaction.params)) {
-    throw new Error('ASSISTANT_RUNTIME_REQUEST_USER_INPUT_INVALID')
-  }
-  const questions = interaction.params.questions
-  if (!Array.isArray(questions) || questions.length < 1 || questions.length > 3) {
-    throw new Error('ASSISTANT_RUNTIME_REQUEST_USER_INPUT_INVALID')
-  }
-  const ids = new Set<string>()
-  return questions.map((value): AssistantRuntimeUserInputQuestion => {
-    if (!isRecord(value)) throw new Error('ASSISTANT_RUNTIME_REQUEST_USER_INPUT_INVALID')
-    const id = requireString(value.id, 'ASSISTANT_RUNTIME_REQUEST_USER_INPUT_INVALID')
-    if (ids.has(id)) throw new Error('ASSISTANT_RUNTIME_REQUEST_USER_INPUT_INVALID')
-    ids.add(id)
-    const options = value.options === null
-      ? null
-      : Array.isArray(value.options)
-        ? (() => {
-            const labels = new Set<string>()
-            return value.options.map((option) => {
-              if (!isRecord(option)) throw new Error('ASSISTANT_RUNTIME_REQUEST_USER_INPUT_INVALID')
-              const label = requireString(option.label, 'ASSISTANT_RUNTIME_REQUEST_USER_INPUT_INVALID')
-              if (labels.has(label)) throw new Error('ASSISTANT_RUNTIME_REQUEST_USER_INPUT_INVALID')
-              labels.add(label)
-              return {
-                label,
-                description: typeof option.description === 'string' ? option.description : '',
-              }
-            })
-          })()
-        : (() => { throw new Error('ASSISTANT_RUNTIME_REQUEST_USER_INPUT_INVALID') })()
-    return {
-      id,
-      header: requireString(value.header, 'ASSISTANT_RUNTIME_REQUEST_USER_INPUT_INVALID'),
-      question: requireString(value.question, 'ASSISTANT_RUNTIME_REQUEST_USER_INPUT_INVALID'),
-      isOther: value.isOther === true,
-      isSecret: value.isSecret === true,
-      options,
-    }
-  })
-}
-
 export type AssistantRuntimeMcpElicitation = {
   readonly mode: 'form' | 'url'
   readonly message: string
+  readonly meta: Record<string, unknown> | null
   readonly requestedSchema: Record<string, unknown> | null
   readonly url: string | null
 }
@@ -201,6 +148,10 @@ export function readAssistantRuntimeMcpElicitation(
   if (interaction.method !== 'mcpServer/elicitation/request' || !isRecord(interaction.params)) {
     throw new Error('ASSISTANT_RUNTIME_MCP_ELICITATION_INVALID')
   }
+  const meta = interaction.params._meta
+  if (meta !== undefined && !isRecord(meta)) {
+    throw new Error('ASSISTANT_RUNTIME_MCP_ELICITATION_INVALID')
+  }
   const mode = interaction.params.mode
   if (mode === 'form') {
     if (!isRecord(interaction.params.requestedSchema)) {
@@ -209,6 +160,7 @@ export function readAssistantRuntimeMcpElicitation(
     return {
       mode,
       message: requireString(interaction.params.message, 'ASSISTANT_RUNTIME_MCP_ELICITATION_INVALID'),
+      meta: meta ?? null,
       requestedSchema: interaction.params.requestedSchema,
       url: null,
     }
@@ -229,6 +181,7 @@ export function readAssistantRuntimeMcpElicitation(
     return {
       mode,
       message: requireString(interaction.params.message, 'ASSISTANT_RUNTIME_MCP_ELICITATION_INVALID'),
+      meta: meta ?? null,
       requestedSchema: null,
       url: url.toString(),
     }
@@ -236,39 +189,6 @@ export function readAssistantRuntimeMcpElicitation(
   // openai/form is intentionally unsupported until its schema has a product
   // renderer. Guessing an arbitrary provider form would corrupt the response.
   throw new Error('ASSISTANT_RUNTIME_MCP_ELICITATION_MODE_UNSUPPORTED')
-}
-
-function validateRequestUserInputResult(
-  interaction: AssistantRuntimePendingInteractionView,
-  result: unknown,
-): RuntimeJsonValue {
-  const questions = readAssistantRuntimeUserInputQuestions(interaction)
-  if (!isRecord(result)) throw new Error('ASSISTANT_RUNTIME_REQUEST_USER_INPUT_RESPONSE_INVALID')
-  assertExactKeys(result, ['answers'], 'ASSISTANT_RUNTIME_REQUEST_USER_INPUT_RESPONSE_INVALID')
-  if (!isRecord(result.answers)) throw new Error('ASSISTANT_RUNTIME_REQUEST_USER_INPUT_RESPONSE_INVALID')
-  const answers = result.answers
-  if (Object.keys(answers).some((id) => !questions.some((question) => question.id === id))) {
-    throw new Error('ASSISTANT_RUNTIME_REQUEST_USER_INPUT_RESPONSE_INVALID')
-  }
-  const normalized: Record<string, RuntimeJsonValue> = {}
-  for (const question of questions) {
-    const answer = answers[question.id]
-    if (!isRecord(answer)) throw new Error('ASSISTANT_RUNTIME_REQUEST_USER_INPUT_RESPONSE_INVALID')
-    assertExactKeys(answer, ['answers'], 'ASSISTANT_RUNTIME_REQUEST_USER_INPUT_RESPONSE_INVALID')
-    if (!Array.isArray(answer.answers) || answer.answers.length < 1 || answer.answers.length > 8) {
-      throw new Error('ASSISTANT_RUNTIME_REQUEST_USER_INPUT_RESPONSE_INVALID')
-    }
-    const values = answer.answers.map((value) => requireString(
-      value,
-      'ASSISTANT_RUNTIME_REQUEST_USER_INPUT_RESPONSE_INVALID',
-    ))
-    const offered = new Set(question.options?.map((option) => option.label) ?? [])
-    if (!question.isOther && question.options && values.some((value) => !offered.has(value))) {
-      throw new Error('ASSISTANT_RUNTIME_REQUEST_USER_INPUT_RESPONSE_INVALID')
-    }
-    normalized[question.id] = { answers: values }
-  }
-  return { answers: normalized }
 }
 
 function validatePrimitive(value: unknown, schema: Record<string, unknown>): RuntimeJsonValue {
@@ -377,8 +297,6 @@ export function buildAssistantRuntimeServerResponse(input: {
       permissions.fileSystem = requested.fileSystem
     }
     result = { permissions, scope: 'turn' }
-  } else if (interaction.method === 'item/tool/requestUserInput') {
-    result = validateRequestUserInputResult(interaction, input.result)
   } else if (interaction.method === 'mcpServer/elicitation/request') {
     result = validateMcpElicitationResult(interaction, input.result)
   } else {

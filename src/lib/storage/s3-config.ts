@@ -6,6 +6,7 @@ const DEFAULT_S3_REGION = 'us-east-1'
 
 export type S3StorageConfig = {
   readonly endpoint: string
+  readonly uploadEndpoint: string
   readonly region: string
   readonly bucket: string
   readonly forcePathStyle: boolean
@@ -16,18 +17,27 @@ export type S3StorageConfig = {
   }
 }
 
-function parseS3Endpoint(rawEndpoint: string): string {
+function parseS3Endpoint(name: string, rawEndpoint: string): string {
   let endpoint: URL
   try {
     endpoint = new URL(rawEndpoint)
   } catch {
-    throw new StorageConfigError('S3_ENDPOINT must be a valid absolute URL')
+    throw new StorageConfigError(`${name} must be a valid absolute URL`)
   }
 
   if (endpoint.protocol !== 'http:' && endpoint.protocol !== 'https:') {
-    throw new StorageConfigError('S3_ENDPOINT must use HTTP or HTTPS')
+    throw new StorageConfigError(`${name} must use HTTP or HTTPS`)
   }
-  return endpoint.toString().replace(/\/$/, '')
+  if (endpoint.username || endpoint.password) {
+    throw new StorageConfigError(`${name} must not contain credentials`)
+  }
+  if (endpoint.search || endpoint.hash) {
+    throw new StorageConfigError(`${name} must not contain query parameters or a fragment`)
+  }
+  if (endpoint.pathname !== '/' && endpoint.pathname !== '') {
+    throw new StorageConfigError(`${name} must not contain a path`)
+  }
+  return endpoint.origin
 }
 
 function parseBooleanEnv(name: string, defaultValue: boolean): boolean {
@@ -41,7 +51,8 @@ function parseBooleanEnv(name: string, defaultValue: boolean): boolean {
 export function loadS3StorageConfig(): S3StorageConfig {
   const sessionToken = process.env.S3_SESSION_TOKEN?.trim()
   return {
-    endpoint: parseS3Endpoint(requireEnv('S3_ENDPOINT')),
+    endpoint: parseS3Endpoint('S3_ENDPOINT', requireEnv('S3_ENDPOINT')),
+    uploadEndpoint: parseS3Endpoint('S3_UPLOAD_ENDPOINT', requireEnv('S3_UPLOAD_ENDPOINT')),
     region: process.env.S3_REGION?.trim() || DEFAULT_S3_REGION,
     bucket: requireEnv('S3_BUCKET'),
     forcePathStyle: parseBooleanEnv('S3_FORCE_PATH_STYLE', false),
@@ -53,9 +64,9 @@ export function loadS3StorageConfig(): S3StorageConfig {
   }
 }
 
-export function toS3ClientConfig(config: S3StorageConfig): S3ClientConfig {
+export function toS3ClientConfig(config: S3StorageConfig, endpoint: string): S3ClientConfig {
   return {
-    endpoint: config.endpoint,
+    endpoint,
     region: config.region,
     forcePathStyle: config.forcePathStyle,
     credentials: config.credentials,

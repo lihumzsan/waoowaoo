@@ -69,10 +69,8 @@ model ProjectAssistantThread {
   userId          String
   assistantId     String
   runtimeThreadId String?            @unique @db.VarChar(191)
-  runtimeRevision String?            @db.VarChar(64)
   clearRequestId  String?            @db.VarChar(128)
   messagesJson    Json
-  planJson        Json?
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   project         Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -99,11 +97,11 @@ model ProjectAgentTurn {
   executionOwnerId   String?                @db.VarChar(191)
   userMessageJson    Json?
   contextJson        Json
+  planJson           Json?
   runtimeTurnId      String?                @unique @db.VarChar(191)
   assistantMessageId String?                @db.VarChar(191)
   stopReason         String?                @db.VarChar(64)
-  errorCode          String?                @db.VarChar(128)
-  errorMessage       String?                @db.Text
+  failure            Json?
   cancelRequestId    String?                @db.VarChar(128)
   cancelReason       String?                @db.Text
   startedAt          DateTime?
@@ -207,31 +205,32 @@ model ProjectAssistantMessageCommand {
 }
 
 model Project {
-  id                       String                           @id @default(uuid())
-  name                     String
-  description              String?                          @db.Text
-  userId                   String
-  analysisModel            String?
-  imageModel               String?
-  videoModel               String?
-  musicModel               String?
-  videoRatio               String?
-  characterModel           String?
-  locationModel            String?
-  editModel                String?
-  videoResolution          String                           @default("720p")
-  capabilityOverrides      String?                          @db.LongText
-  imageResolution          String                           @default("2K")
-  createdAt                DateTime                         @default(now())
-  updatedAt                DateTime                         @default(now()) @updatedAt
-  lastAccessedAt           DateTime?
-  user                     User                             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  usageCosts               UsageCost[]
-  assistantThreads         ProjectAssistantThread[]
-  assistantMessageCommands ProjectAssistantMessageCommand[]
-  mutationBatches          MutationBatch[]
-  workspaceResources       WorkspaceResource[]
-  canvasLayouts            ProjectCanvasLayout[]
+  id                        String                           @id @default(uuid())
+  name                      String
+  description               String?                          @db.Text
+  userId                    String
+  workspaceResourceRevision Int                              @default(0)
+  analysisModel             String?
+  imageModel                String?
+  videoModel                String?
+  musicModel                String?
+  videoRatio                String?
+  characterModel            String?
+  locationModel             String?
+  editModel                 String?
+  videoResolution           String                           @default("720p")
+  capabilityOverrides       String?                          @db.LongText
+  imageResolution           String                           @default("2K")
+  createdAt                 DateTime                         @default(now())
+  updatedAt                 DateTime                         @default(now()) @updatedAt
+  lastAccessedAt            DateTime?
+  user                      User                             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usageCosts                UsageCost[]
+  assistantThreads          ProjectAssistantThread[]
+  assistantMessageCommands  ProjectAssistantMessageCommand[]
+  mutationBatches           MutationBatch[]
+  workspaceResources        WorkspaceResource[]
+  canvasLayouts             ProjectCanvasLayout[]
 
   @@index([userId])
   @@map("projects")
@@ -249,19 +248,23 @@ model Session {
 }
 
 model UsageCost {
-  id        String   @id @default(uuid())
-  projectId String
-  userId    String
-  apiType   String
-  model     String
-  action    String
-  quantity  Int
-  unit      String
-  cost      Int
-  metadata  String?  @db.Text
-  createdAt DateTime @default(now())
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String   @id @default(uuid())
+  projectId      String
+  userId         String
+  apiType        String
+  model          String
+  action         String
+  quantity       Int
+  unit           String
+  /// Exact retail usage in credits. LLM rows keep six decimal places while
+  /// the balance ledger remains integer-only.
+  cost           Decimal  @db.Decimal(18, 6)
+  /// Whole credits actually removed from the balance when this fact settled.
+  chargedCredits Int      @default(0)
+  metadata       String?  @db.Text
+  createdAt      DateTime @default(now())
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([apiType])
   @@index([createdAt])
@@ -271,21 +274,24 @@ model UsageCost {
 }
 
 model User {
-  id            String          @id @default(uuid())
-  name          String          @unique(map: "User_name_key")
-  email         String?
-  emailVerified DateTime?
-  image         String?
-  password      String?
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @default(now()) @updatedAt
-  accounts      Account[]
-  projects      Project[]
-  sessions      Session[]
-  usageCosts    UsageCost[]
-  balance       UserBalance?
-  subscription  Subscription?
-  preferences   UserPreference?
+  id                   String                @id @default(uuid())
+  name                 String                @unique(map: "User_name_key")
+  email                String?
+  emailVerified        DateTime?
+  image                String?
+  password             String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @default(now()) @updatedAt
+  accounts             Account[]
+  projects             Project[]
+  sessions             Session[]
+  usageCosts           UsageCost[]
+  llmBillingMeter      LlmBillingMeter?
+  balance              UserBalance?
+  subscription         Subscription?
+  preferences          UserPreference?
+  paidBetaSeats        PaidBetaSeat[]
+  announcementReceipts AnnouncementReceipt[]
 
   // 资产中心
   globalAssetFolders              GlobalAssetFolder[]
@@ -297,7 +303,6 @@ model User {
   projectAssistantThreadArchives  ProjectAssistantThreadArchive[]
   projectAssistantMessageCommands ProjectAssistantMessageCommand[]
   mutationBatches                 MutationBatch[]
-  inviteRedemptions               InviteRedemption[]
   workspaceResources              WorkspaceResource[]
 
   @@map("user")
@@ -354,7 +359,7 @@ model VerificationToken {
 model UserBalance {
   id                    String    @id @default(uuid())
   userId                String    @unique
-  /// Permanent pool: top-ups, invite codes and manual grants. Never expires.
+  /// Permanent pool: top-ups and manual grants. Never expires.
   balance               Int       @default(0)
   /// Subscription pool: granted each period, expires at `subscriptionExpiresAt`
   /// and is always consumed before `balance` so it is not wasted.
@@ -369,28 +374,51 @@ model UserBalance {
   @@map("user_balances")
 }
 
+/// Per-user rounding carry for realtime LLM settlement. Provider generations
+/// settle one by one, but the integer credit ledger only moves when cumulative
+/// exact retail usage crosses a whole-credit boundary.
+model LlmBillingMeter {
+  userId                     String   @id
+  prepaidMicrocredits        BigInt   @default(0)
+  totalRetailMicrocredits    BigInt   @default(0)
+  totalChargedCredits        Int      @default(0)
+  totalUncoveredMicrocredits BigInt   @default(0)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @default(now()) @updatedAt
+  user                       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("llm_billing_meters")
+}
+
 /// One user's subscription. A user has at most one; changing plan updates this
 /// row rather than creating a second one, so there is never a second opinion
 /// about which plan is in force.
+/// A paid plan term.
+///
+/// Plans are bought outright rather than subscribed to, because WeChat Pay —
+/// the payment method most of these users have — cannot back an automatically
+/// renewing charge on Stripe. Every later payment starts a new paid term and
+/// updates this projection, so a user is on exactly one plan at a time and
+/// there is never a second opinion about which.
 model Subscription {
-  id                   String              @id @default(uuid())
-  userId               String              @unique
-  planId               String              @db.VarChar(32)
-  interval             String              @db.VarChar(8)
-  /// Mirrors Stripe's subscription status; Stripe is the authority on it.
-  status               String              @db.VarChar(32)
-  stripeSubscriptionId String              @unique @db.VarChar(191)
-  stripeCustomerId     String              @db.VarChar(191)
-  currentPeriodStart   DateTime
-  currentPeriodEnd     DateTime
-  cancelAtPeriodEnd    Boolean             @default(false)
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @default(now()) @updatedAt
-  user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  grants               SubscriptionGrant[]
+  id                 String              @id @default(uuid())
+  userId             String              @unique
+  planId             String              @db.VarChar(32)
+  interval           String              @db.VarChar(8)
+  /// Canonical identity of the paid term currently projected by this row.
+  currentTermKey     String              @db.VarChar(128)
+  /// `active` while the paid term covers today; `expired` once it does not.
+  status             String              @db.VarChar(32)
+  /// Start of the current paid term. Monthly grants are counted from here.
+  currentPeriodStart DateTime
+  /// End of what has been paid for. Grants stop at this boundary.
+  currentPeriodEnd   DateTime
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @default(now()) @updatedAt
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  grants             SubscriptionGrant[]
 
   @@index([status])
-  @@index([stripeCustomerId])
   @@map("subscriptions")
 }
 
@@ -401,6 +429,8 @@ model Subscription {
 model SubscriptionGrant {
   id             String       @id @default(uuid())
   subscriptionId String
+  /// Paid-term identity. Period indexes restart at zero for every new term.
+  termKey        String       @db.VarChar(128)
   periodIndex    Int
   planId         String       @db.VarChar(32)
   credits        Int
@@ -408,42 +438,102 @@ model SubscriptionGrant {
   grantedAt      DateTime     @default(now())
   subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
-  @@unique([subscriptionId, periodIndex])
+  @@unique([subscriptionId, termKey, periodIndex])
   @@index([expiresAt])
   @@map("subscription_grants")
 }
 
-model InviteCode {
-  id             String             @id @default(uuid())
-  codeHash       String             @unique @db.VarChar(128)
-  amount         Int
-  maxRedemptions Int?
-  redeemedCount  Int                @default(0)
-  expiresAt      DateTime?
-  disabledAt     DateTime?
-  description    String?            @db.Text
-  createdBy      String?            @db.VarChar(128)
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @default(now()) @updatedAt
-  redemptions    InviteRedemption[]
+/// One bounded paid-beta wave. The row is the only capacity and lifecycle
+/// owner; payment routes consume its View instead of carrying their own flags.
+model PaidBetaCampaign {
+  id                    String         @id @db.VarChar(64)
+  status                String         @db.VarChar(16)
+  capacity              Int
+  startsAt              DateTime
+  endsAt                DateTime?
+  legacyPaymentCutoffAt DateTime
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @default(now()) @updatedAt
+  seats                 PaidBetaSeat[]
 
-  @@index([expiresAt])
-  @@index([disabledAt])
-  @@map("invite_codes")
+  @@index([status, startsAt, endsAt])
+  @@map("paid_beta_campaigns")
 }
 
-model InviteRedemption {
-  id           String     @id @default(uuid())
-  inviteCodeId String
-  userId       String
-  amount       Int
-  createdAt    DateTime   @default(now())
-  inviteCode   InviteCode @relation(fields: [inviteCodeId], references: [id], onDelete: Cascade)
-  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+/// A person occupying one seat in one paid-beta wave. `campaignId + userId`
+/// is the canonical participant identity, so repeat purchases never consume a
+/// second seat.
+model PaidBetaSeat {
+  id         String                   @id @default(uuid())
+  campaignId String                   @db.VarChar(64)
+  userId     String
+  status     String                   @db.VarChar(16)
+  paidAt     DateTime?
+  releasedAt DateTime?
+  createdAt  DateTime                 @default(now())
+  updatedAt  DateTime                 @default(now()) @updatedAt
+  campaign   PaidBetaCampaign         @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  user       User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attempts   PaidBetaPaymentAttempt[]
 
-  @@unique([inviteCodeId, userId])
-  @@index([userId])
-  @@map("invite_redemptions")
+  @@unique([campaignId, userId])
+  @@index([campaignId, status, createdAt])
+  @@index([userId, status])
+  @@map("paid_beta_seats")
+}
+
+/// A provider-side attempt that belongs to a reserved seat. The provider
+/// object identity lets card redirects and webhook replays converge on the
+/// same local fact without interpreting URLs or UI state.
+model PaidBetaPaymentAttempt {
+  id               String       @id @default(uuid())
+  seatId           String
+  providerKind     String       @db.VarChar(32)
+  providerObjectId String?      @unique @db.VarChar(191)
+  status           String       @db.VarChar(16)
+  expiresAt        DateTime
+  paidAt           DateTime?
+  terminalAt       DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @default(now()) @updatedAt
+  seat             PaidBetaSeat @relation(fields: [seatId], references: [id], onDelete: Cascade)
+
+  @@index([seatId, status, expiresAt])
+  @@index([status, expiresAt])
+  @@map("paid_beta_payment_attempts")
+}
+
+/// One explicit request to be contacted when the public beta opens.
+/// `campaignId + phoneE164` is the canonical identity, so retries and
+/// concurrent submissions cannot create duplicate contact records.
+model PublicBetaWaitlistEntry {
+  id          String   @id @default(uuid())
+  campaignId  String   @db.VarChar(64)
+  phoneE164   String   @db.VarChar(32)
+  locale      String   @db.VarChar(8)
+  source      String   @db.VarChar(32)
+  consentedAt DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  @@unique([campaignId, phoneE164])
+  @@index([campaignId, createdAt])
+  @@map("public_beta_waitlist_entries")
+}
+
+/// A versioned per-user acknowledgement. New announcement versions remain
+/// independently deliverable without localStorage or device-specific state.
+model AnnouncementReceipt {
+  id             String   @id @default(uuid())
+  userId         String
+  announcementId String   @db.VarChar(96)
+  version        Int
+  acknowledgedAt DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, announcementId, version])
+  @@index([userId, acknowledgedAt])
+  @@map("announcement_receipts")
 }
 
 model BalanceFreeze {
@@ -518,8 +608,7 @@ model Task {
   payload              Json?
   executionFingerprint String?   @db.VarChar(64)
   result               Json?
-  errorCode            String?
-  errorMessage         String?   @db.Text
+  failure              Json?
   billingInfo          Json?
   billedAt             DateTime?
   queuedAt             DateTime  @default(now())
@@ -883,8 +972,6 @@ model WorkspaceResource {
   operationExecutionId        String?
   alternativeGroupExecutionId String?
   toolCallId                  String?                    @db.VarChar(191)
-  errorCode                   String?                    @db.VarChar(128)
-  errorMessage                String?                    @db.Text
   materializedAt              DateTime?
   deletedAt                   DateTime?
   createdAt                   DateTime                   @default(now())

@@ -4,6 +4,7 @@ import {
   resolveUnifiedErrorCode,
   type UnifiedErrorCode,
 } from './codes'
+import type { FailureRecord, NativeFailureEvidence } from './failure'
 
 export type UserErrorAction =
   | 'contact_support'
@@ -35,6 +36,30 @@ export interface ModelErrorProjection {
   category: string
   retryable: boolean
   action: ModelErrorAction
+  details: Record<string, unknown>
+}
+
+function sanitizeDiagnosticText(value: string): string {
+  return value
+    .replace(/(https?:\/\/[^\s?#]+)\?[^\s]*/gi, '$1?[redacted]')
+    .replace(/([?&](?:token|signature|credential|key|secret)=)[^&\s]*/gi, '$1[redacted]')
+    .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+/gi, 'Bearer [redacted]')
+    .replace(/\b(api[-_]?key|password|secret|token)\s*[:=]\s*[^\s,;]+/gi, '$1=[redacted]')
+    .slice(0, 2_000)
+}
+
+function projectNativeFailureEvidence(
+  native: NativeFailureEvidence,
+): Record<string, unknown> {
+  return {
+    name: native.name,
+    message: sanitizeDiagnosticText(native.message),
+    code: native.code,
+    statusCode: native.statusCode,
+    requestId: native.requestId,
+    metadata: native.metadata,
+    cause: native.cause ? projectNativeFailureEvidence(native.cause) : null,
+  }
 }
 
 const PUBLIC_DETAIL_KEYS = new Set([
@@ -42,14 +67,18 @@ const PUBLIC_DETAIL_KEYS = new Set([
   'available',
   'code',
   'field',
+  'inputMode',
+  'limit',
   'maxBytes',
   'maxChars',
   'maxFiles',
+  'mediaType',
   'required',
   'reasonCode',
   'retryAfter',
   'retryAfterSeconds',
   'workspacePath',
+  'value',
 ])
 
 function isPublicDetailValue(value: unknown): boolean {
@@ -92,8 +121,17 @@ function projectModelCorrection(value: unknown): Record<string, unknown> | null 
     action: source.action,
     fieldPath: source.fieldPath,
   }
+  if (typeof source.message === 'string' && source.message.length <= 512) {
+    projected.message = source.message
+  }
   if (typeof source.targetPath === 'string' && source.targetPath.length <= 256) {
     projected.targetPath = source.targetPath
+  }
+  if (typeof source.issueCode === 'string' && source.issueCode.length <= 64) {
+    projected.issueCode = source.issueCode
+  }
+  if (typeof source.reason === 'string' && source.reason.length <= 512) {
+    projected.reason = source.reason
   }
   if (
     Array.isArray(source.allowedKeys)
@@ -101,6 +139,18 @@ function projectModelCorrection(value: unknown): Record<string, unknown> | null 
     && source.allowedKeys.every((key) => typeof key === 'string' && key.length <= 128)
   ) {
     projected.allowedKeys = source.allowedKeys
+  }
+  if (
+    Array.isArray(source.allowedValues)
+    && source.allowedValues.length <= 20
+    && source.allowedValues.every((item) => (
+      item === null
+      || typeof item === 'string' && item.length <= 128
+      || typeof item === 'number' && Number.isFinite(item)
+      || typeof item === 'boolean'
+    ))
+  ) {
+    projected.allowedValues = source.allowedValues
   }
   return projected
 }
@@ -132,7 +182,6 @@ function resolveUserAction(code: UnifiedErrorCode): UserErrorAction {
   ) return 'open_provider_settings'
   if (code === 'CONTEXT_BUDGET_EXCEEDED') return 'new_conversation'
   const spec = getErrorSpec(code)
-  if (code === 'PROVIDER_SUBMISSION_REJECTED') return 'revise_input'
   if (
     spec.category === ERROR_CATEGORY.VALIDATION
     && (spec.httpStatus === 400 || spec.httpStatus === 413 || spec.httpStatus === 415 || spec.httpStatus === 422)
@@ -144,8 +193,16 @@ function resolveUserAction(code: UnifiedErrorCode): UserErrorAction {
   return null
 }
 
-function resolveModelAction(code: UnifiedErrorCode): ModelErrorAction {
-  if (code === 'TASK_NOT_READY') return 'wait'
+function resolveModelAction(
+  code: UnifiedErrorCode,
+  taskReplay: FailureRecord['recovery']['taskReplay'],
+): ModelErrorAction {
+  if (
+    code === 'TASK_NOT_READY'
+    || code === 'PLATFORM_PROVIDER_AUTH_INVALID'
+    || code === 'PLATFORM_PROVIDER_BILLING_REQUIRED'
+    || code === 'PLATFORM_PROVIDER_UNAVAILABLE'
+  ) return 'wait'
   if (
     code === 'INSUFFICIENT_BALANCE'
     || code === 'MODEL_NOT_CONFIGURED'
@@ -165,7 +222,7 @@ function resolveModelAction(code: UnifiedErrorCode): ModelErrorAction {
   ) return 'revise_input'
   // A terminal Task failure never authorizes a new paid Operation. Retryable
   // is exposed as a fact, while the model is instructed to inform the user.
-  if (spec.retryable) return 'inform_user'
+  if (taskReplay === 'safe') return 'inform_user'
   return 'stop'
 }
 
@@ -184,13 +241,41 @@ export function projectErrorForUser(
   }
 }
 
-export function projectErrorForModel(codeInput: unknown): ModelErrorProjection {
-  const code = resolveUnifiedErrorCode(codeInput) ?? 'INTERNAL_ERROR'
+export function projectErrorForModel(
+  failure: FailureRecord | null | undefined,
+): ModelErrorProjection {
+  const code = failure?.interpretation.code ?? 'INTERNAL_ERROR'
   const spec = getErrorSpec(code)
+  const taskReplay = failure?.recovery.taskReplay ?? 'forbidden'
+  const productDetails = projectModelErrorDetails(failure?.interpretation.details)
   return {
     code,
     category: spec.category,
-    retryable: spec.retryable,
-    action: resolveModelAction(code),
+    retryable: taskReplay === 'safe',
+    action: resolveModelAction(code, taskReplay),
+    details: failure
+      ? {
+          ...productDetails,
+          native: projectNativeFailureEvidence(failure.native),
+          context: {
+            system: failure.context.system,
+            provider: failure.context.provider ?? null,
+            phase: failure.context.phase ?? null,
+            operation: failure.recovery.operation,
+            frames: failure.frames.map((frame) => ({
+              system: frame.system,
+              provider: frame.provider ?? null,
+              phase: frame.phase ?? null,
+              operation: frame.operation ?? null,
+              ...(frame.message ? { message: sanitizeDiagnosticText(frame.message) } : {}),
+            })),
+          },
+          recovery: {
+            effect: failure.recovery.effect,
+            taskReplay: failure.recovery.taskReplay,
+            attempts: failure.recovery.attempts,
+          },
+        }
+      : productDetails,
   }
 }

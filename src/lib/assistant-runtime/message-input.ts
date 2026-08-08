@@ -1,6 +1,6 @@
 import { safeValidateUIMessages, type UIMessage } from 'ai'
 import { MAX_IMAGE_BYTES } from '@/lib/http/body-limits'
-import { normalizeToOriginalMediaUrl } from '@/lib/media/outbound-image'
+import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
 import type { RuntimeUserInput } from '@/lib/codex-runtime/runtime-adapter'
 import {
   readProjectAssistantMediaAttachmentsFromMessage,
@@ -125,7 +125,7 @@ export async function prepareAssistantRuntimeUserInput(input: {
     }
     runtimeInputs.push({
       type: 'image',
-      url: await normalizeToOriginalMediaUrl(registration.media.storageKey),
+      url: await normalizeToBase64ForGeneration(registration.media.storageKey),
       detail: 'high',
     })
   }

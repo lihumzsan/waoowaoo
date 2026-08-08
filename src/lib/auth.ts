@@ -1,10 +1,15 @@
 import type { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import { logAuthAction } from './logging/semantic'
-import { createAuthAdapter } from '@/lib/auth/next-auth-adapter'
-import { createGoogleOAuthProvider, readVerifiedGoogleProfileEmail } from '@/lib/auth/google-oauth'
+import { createAuthAdapter, syncLinkedGoogleAccountImage } from '@/lib/auth/next-auth-adapter'
+import {
+  createGoogleOAuthProvider,
+  readGoogleProfileImage,
+  readVerifiedGoogleProfileEmail,
+} from '@/lib/auth/google-oauth'
 import { authorizePasswordIdentity } from '@/lib/auth/password-auth'
 import { authorizePhoneIdentity } from '@/lib/auth/phone-verification'
+import { exchangeWechatOfficialAttempt } from '@/lib/auth/wechat-official-attempt'
 import { getDeploymentConfig, isCloudDeployment } from '@/lib/deployment/config'
 import { getDeploymentFeatures } from '@/lib/deployment/features'
 import { prisma } from '@/lib/prisma'
@@ -17,13 +22,15 @@ const passwordProvider = deploymentFeatures.enablePasswordAuth
       id: 'credentials',
       name: 'password',
       credentials: {
-        username: { label: 'Username', type: 'text' },
+        identity: { label: 'Identity', type: 'text' },
         password: { label: 'Password', type: 'password' },
+        mode: { label: 'Mode', type: 'text' },
       },
       async authorize(credentials) {
         return await authorizePasswordIdentity({
-          username: credentials?.username,
+          identity: credentials?.identity,
           password: credentials?.password,
+          mode: credentials?.mode,
         })
       },
     })
@@ -35,13 +42,27 @@ const phoneProvider = deploymentFeatures.enablePhoneAuth
       credentials: {
         phoneNumber: { label: 'Phone number', type: 'tel' },
         code: { label: 'Verification code', type: 'text' },
-        inviteCode: { label: 'Invite code', type: 'text' },
       },
       async authorize(credentials) {
         return await authorizePhoneIdentity({
           phoneNumber: credentials?.phoneNumber,
           code: credentials?.code,
-          inviteCode: credentials?.inviteCode,
+        })
+      },
+    })
+  : null
+const wechatOfficialProvider = deploymentFeatures.showWechatOfficialAuth
+  ? CredentialsProvider({
+      id: 'wechat-official',
+      name: 'wechat-official',
+      credentials: {
+        attemptId: { label: 'Attempt ID', type: 'text' },
+        browserToken: { label: 'Browser token', type: 'password' },
+      },
+      async authorize(credentials) {
+        return await exchangeWechatOfficialAttempt({
+          attemptId: credentials?.attemptId,
+          browserToken: credentials?.browserToken,
         })
       },
     })
@@ -55,6 +76,7 @@ export const authOptions: NextAuthOptions = {
   providers: [
     ...(passwordProvider ? [passwordProvider] : []),
     ...(phoneProvider ? [phoneProvider] : []),
+    ...(wechatOfficialProvider ? [wechatOfficialProvider] : []),
     ...(googleOAuthProvider ? [googleOAuthProvider] : []),
   ],
   session: {
@@ -76,9 +98,19 @@ export const authOptions: NextAuthOptions = {
       logAuthAction('LOGIN', 'Google login succeeded', { success: true, provider: 'google' }, undefined, verifiedEmail)
       return true
     },
-    async jwt({ token, user, trigger }) {
+    async jwt({ token, user, trigger, account, profile }) {
       if (user) {
         token.id = user.id
+      }
+      if (account?.provider === 'google') {
+        const image = readGoogleProfileImage(profile)
+        if (image) {
+          await syncLinkedGoogleAccountImage({
+            providerAccountId: account.providerAccountId,
+            image,
+          })
+          token.picture = image
+        }
       }
       if (trigger === 'update' && typeof token.id === 'string') {
         const currentUser = await prisma.user.findUnique({
@@ -94,6 +126,7 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user && typeof token.id === 'string') {
         session.user.id = token.id
+        session.user.image = typeof token.picture === 'string' ? token.picture : null
       }
       return session
     }

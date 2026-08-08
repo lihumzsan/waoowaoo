@@ -10,6 +10,7 @@ import { requireOfficialCloudPricingPage } from '@/lib/public-site/visibility'
 import type { Locale } from '@/i18n/routing'
 import { buildGlassPricingContent } from './content'
 import PricingGlassPageClient from './page-client'
+import { readPaidBetaCampaignView } from '@/lib/paid-beta/campaign'
 
 export interface PricingGlassPageContentProps {
   readonly params: Promise<{ readonly locale: Locale }>
@@ -24,11 +25,16 @@ export async function PricingGlassPageContent({ params }: PricingGlassPageConten
     pricing: readOfficialPricingPage(officialLocale),
     contact: readOfficialContactPage(officialLocale),
   })
+  const paidBetaCampaign = await readPaidBetaCampaignView()
 
   return (
     <>
       <Navbar reserveLayoutSpace={false} initialDeploymentFeatures={deploymentFeatures} />
-      <PricingGlassPageClient content={content} />
+      <PricingGlassPageClient
+        content={content}
+        paidBetaCampaign={paidBetaCampaign}
+        publicBetaWaitlistEnabled={deploymentFeatures.showPublicBetaWaitlist}
+      />
       <PublicFooter initialDeploymentFeatures={deploymentFeatures} />
     </>
   )

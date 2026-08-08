@@ -30,8 +30,8 @@ const selection = {
  * Critical Provider Contract
  * Authority: FAL Lyria registry descriptor plus the FAL music submission adapter.
  * Fault seam: the uncontrollable external HTTP endpoint is replaced; descriptor validation and request serialization are production code.
- * Rejects: discrete-only durations, range drift, integer-only validation, or dropping the deterministic negative prompt on submission.
- * Final oracle: 120, fractional in-range, and 180 pass; out-of-range values fail before HTTP; the exact in-range duration and negative_prompt reach the provider payload.
+ * Rejects: discrete-only durations, range drift, integer-only validation, changing the frozen prompt, or dropping the deterministic negative prompt on submission.
+ * Final oracle: 120, fractional in-range, and 180 pass; out-of-range values fail before HTTP; the exact frozen prompt and negative_prompt reach the provider payload.
  * Command: npx vitest run tests/integration/provider/fal-music-capability.contract.test.ts
  */
 describe('FAL Lyria continuous duration capability', () => {
@@ -66,10 +66,11 @@ describe('FAL Lyria continuous duration capability', () => {
     }))
     const music = falAdapter.music
     if (!music) throw new Error('TEST_FAL_MUSIC_ADAPTER_REQUIRED')
+    const prompt = 'Instrumental through-composed restrained underscore.'
     const result = await music.execute({
       userId: 'user-1',
       selection,
-      prompt: 'Instrumental through-composed restrained underscore.',
+      prompt,
       options: {
         durationSeconds: 149.5,
         vocalMode: 'instrumental',
@@ -83,7 +84,6 @@ describe('FAL Lyria continuous duration capability', () => {
     const init = fetchMock.mock.calls[0]?.[1]
     const body = JSON.parse(typeof init?.body === 'string' ? init.body : '{}') as Record<string, unknown>
     expect(body.negative_prompt).toBe('pitched vocal timbres, speech-rate prosody')
-    expect(body.prompt).toContain('Target duration: 149.5 seconds')
-    expect(body.prompt).toContain('Instrumental only. Do not include vocals or lyrics.')
+    expect(body.prompt).toBe(prompt)
   })
 })

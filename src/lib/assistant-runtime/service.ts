@@ -1,7 +1,5 @@
-import type { UIMessage } from 'ai'
 import type {
   RuntimeEvent,
-  RuntimeJsonValue,
   RuntimeSandboxMode,
   RuntimeSandboxPolicy,
   RuntimeUserInput,
@@ -40,6 +38,7 @@ import {
   acceptAssistantRuntimeSteer,
   admitAssistantRuntimeTaskFollowUp,
   admitAssistantRuntimeTurn,
+  bindAssistantRuntimeThread,
   bindAssistantRuntimeTurn,
   claimAssistantRuntimeSteer,
   claimAssistantRuntimeTurnStart,
@@ -57,7 +56,6 @@ import {
   hashAssistantRuntimeSubmitCommand,
   readAssistantRuntimeMessageReplay,
   replaceAssistantRuntimePlan,
-  rotateAssistantRuntimeThreadRevision,
   resolveAssistantRuntimeMessageTarget,
   requestAssistantRuntimeInterrupt,
   resolveAssistantRuntimeInteraction,
@@ -116,13 +114,6 @@ function requireBoundTurnIdentity(
   return value
 }
 
-function assistantMessageText(message: UIMessage): string {
-  return message.parts
-    .flatMap((part) => part.type === 'text' ? [part.text.trim()] : [])
-    .filter(Boolean)
-    .join('\n\n')
-}
-
 function runtimeScope(input: { readonly userId: string; readonly projectId: string }): RuntimeSessionScope {
   return { userId: input.userId, projectId: input.projectId }
 }
@@ -141,9 +132,10 @@ function isMessageReplayControl(
 function withTurnContext(
   inputs: readonly RuntimeUserInput[],
   locale: string,
+  projectProductionContext: AssistantRuntimeModelConfiguration['projectProductionContext'],
 ): readonly RuntimeUserInput[] {
   return [
-    { type: 'text', text: buildAssistantRuntimeTurnContext(locale) },
+    { type: 'text', text: buildAssistantRuntimeTurnContext(locale, projectProductionContext) },
     ...inputs,
   ]
 }
@@ -296,15 +288,10 @@ export class AssistantRuntimeService {
     })
     let preparedThread: PreparedThread
     try {
-      const historyMessages = admission.replayed
-        ? thread.messages.filter((message) => message.id !== normalizedCommand.message.id)
-        : thread.messages
       preparedThread = await this.prepareThread({
         scope: command,
         threadId: thread.threadId,
-        recoveryThreadId: thread.runtimeThreadId,
-        runtimeRevision: thread.runtimeRevision,
-        historyMessages,
+        runtimeThreadId: thread.runtimeThreadId,
       })
     } catch (error) {
       await failAssistantRuntimeTurnStart({
@@ -449,32 +436,6 @@ export class AssistantRuntimeService {
     return { threadId: command.threadId, turnId: command.turnId, status: 'interrupt_requested' }
   }
 
-  async flushWorkspaceForMcp(input: {
-    readonly userId: string
-    readonly projectId: string
-    readonly threadId: string
-    readonly runtimeTurnId: string
-  }): Promise<void> {
-    await this.manager.flushWorkspaceForMcp(
-      runtimeScope(input),
-      input.threadId,
-      input.runtimeTurnId,
-    )
-  }
-
-  async refreshWorkspaceAfterMcp(input: {
-    readonly userId: string
-    readonly projectId: string
-    readonly threadId: string
-    readonly runtimeTurnId: string
-  }): Promise<void> {
-    await this.manager.refreshWorkspaceAfterMcp(
-      runtimeScope(input),
-      input.threadId,
-      input.runtimeTurnId,
-    )
-  }
-
   async respondToServerRequest(command: AssistantRuntimeServerRequestCommand): Promise<void> {
     return await this.runProjectTransition(runtimeScope(command), async () => (
       await this.respondToServerRequestExclusive(command)
@@ -521,7 +482,8 @@ export class AssistantRuntimeService {
     if (claim === 'replayed') {
       return { threadId: command.threadId, archived: true }
     }
-    const expectedOwnerToken = await this.manager.readOwnerToken(runtimeScope(command))
+    const scope = runtimeScope(command)
+    const access = await this.access.get(scope)
     const liveCompletions = [...this.liveTurns.values()]
       .filter(({ started }) => (
         started.identity.projectId === command.projectId
@@ -529,13 +491,9 @@ export class AssistantRuntimeService {
         && started.identity.threadId === command.threadId
       ))
       .map(({ completion }) => completion)
-    await this.manager.stop(
-      runtimeScope(command),
-      'shutdown',
-      expectedOwnerToken ?? undefined,
-    )
+    await this.manager.clearPersistentScope(scope, access.ownerToken)
     await Promise.all(liveCompletions)
-    this.access.invalidate(runtimeScope(command))
+    this.access.invalidate(scope)
     await clearAssistantRuntimeThread({
       scope: command,
       threadId: command.threadId,
@@ -589,9 +547,7 @@ export class AssistantRuntimeService {
       preparedThread = await this.prepareThread({
         scope: followUp,
         threadId: thread.threadId,
-        recoveryThreadId: thread.runtimeThreadId,
-        runtimeRevision: thread.runtimeRevision,
-        historyMessages: thread.messages,
+        runtimeThreadId: thread.runtimeThreadId,
       })
     } catch (error) {
       await rollbackAssistantRuntimeTaskFollowUpPreparation({
@@ -636,64 +592,40 @@ export class AssistantRuntimeService {
   private async prepareThread(input: {
     readonly scope: AssistantRuntimeSubmitCommand | AssistantRuntimeTaskFollowUp
     readonly threadId: string
-    readonly recoveryThreadId: string | null
-    readonly runtimeRevision: string | null
-    readonly historyMessages: readonly UIMessage[]
+    readonly runtimeThreadId: string | null
   }): Promise<PreparedThread> {
     const scope = runtimeScope(input.scope)
     const access = await this.access.get(scope)
     const model = await this.models.resolve({ scope, access })
-    let recoveryThreadId = input.recoveryThreadId
-    if (input.runtimeRevision !== model.runtimeRevision) {
-      if (recoveryThreadId) await this.manager.stop(scope, 'recover')
-      const rotated = await rotateAssistantRuntimeThreadRevision({
-        scope: input.scope,
-        threadId: input.threadId,
-        expectedRuntimeThreadId: recoveryThreadId,
-        runtimeRevision: model.runtimeRevision,
-      })
-      recoveryThreadId = rotated.runtimeThreadId
-    }
     await this.manager.ensure(scope, {
       environment: access.environment,
       ownerToken: access.ownerToken,
     })
     const runtime = await this.manager.ensureThread(scope, {
       productThreadId: input.threadId,
-      recoveryThreadId,
+      runtimeThreadId: input.runtimeThreadId,
       configuration: model.thread,
     })
-    const historyItems: RuntimeJsonValue[] = []
-    for (const message of input.historyMessages) {
-      if (message.role === 'user') {
-        const prepared = await prepareAssistantRuntimeUserInput({
-          message,
-          userId: input.scope.userId,
-          projectId: input.scope.projectId,
-        })
-        const text = prepared.inputs
-          .flatMap((part) => part.type === 'text' ? [part.text] : [])
-          .join('\n\n')
-          .trim()
-        if (text) {
-          historyItems.push({
-            type: 'message',
-            role: 'user',
-            content: [{ type: 'input_text', text }],
-          })
-        }
-        continue
-      }
-      if (message.role !== 'assistant') continue
-      const text = assistantMessageText(message)
-      if (!text) continue
-      historyItems.push({
-        type: 'message',
-        role: 'assistant',
-        content: [{ type: 'output_text', text }],
+    try {
+      await bindAssistantRuntimeThread({
+        scope: input.scope,
+        threadId: input.threadId,
+        runtimeThreadId: runtime.runtimeThreadId,
       })
+    } catch (bindError) {
+      if (runtime.disposition === 'started') {
+        try {
+          await this.manager.stop(scope, 'shutdown', access.ownerToken)
+          await this.manager.clearPersistentScope(scope, access.ownerToken)
+        } catch (cleanupError) {
+          throw new AggregateError(
+            [bindError, cleanupError],
+            'ASSISTANT_RUNTIME_THREAD_BINDING_AND_CLEANUP_FAILED',
+          )
+        }
+      }
+      throw bindError
     }
-    await this.manager.seedThreadHistory(scope, input.threadId, historyItems)
     return { threadId: input.threadId, runtime, model }
   }
 
@@ -726,18 +658,6 @@ export class AssistantRuntimeService {
     const pendingEvents: RuntimeEvent[] = []
     let projector: AssistantRuntimeEventProjector | null = null
     const unsubscribe = this.manager.subscribe(scope, (managerEvent) => {
-      if (managerEvent.type === 'threadCheckpointed'
-        && managerEvent.thread.productThreadId === input.preparedThread.threadId) {
-        void publishAgentSessionViewChanged({
-          projectId: input.scope.projectId,
-          userId: input.scope.userId,
-          threadId: input.preparedThread.threadId,
-          turnId: input.turn.turnId,
-          attempt: input.turn.attempt || null,
-          reason: 'runtime_thread_checkpointed',
-        })
-        return
-      }
       if (!isRuntimeEvent(managerEvent)) return
       if (projector) projector.consume(managerEvent.event)
       else pendingEvents.push(managerEvent.event)
@@ -752,14 +672,18 @@ export class AssistantRuntimeService {
       })
       const runtimeTurn = await this.manager.startTurn(scope, input.preparedThread.threadId, {
         clientUserMessageId: input.sourceId,
-        input: withTurnContext(input.inputs, input.locale),
+        input: withTurnContext(
+          input.inputs,
+          input.locale,
+          input.preparedThread.model.projectProductionContext,
+        ),
         model: input.preparedThread.model.runtimeModel,
-        approvalPolicy: 'on-request',
+        approvalPolicy: input.preparedThread.model.thread.start.approvalPolicy,
         sandboxPolicy: buildTurnSandboxPolicy(
           input.preparedThread.model.thread.start.sandbox,
         ),
         summary: 'concise',
-        personality: 'pragmatic',
+        personality: 'none',
         collaborationMode: {
           mode: 'default',
           settings: {
@@ -825,11 +749,7 @@ export class AssistantRuntimeService {
           turnId: identity.turnId,
           runtimeRequestId: requestId,
         }),
-        onPlan: async (plan) => await replaceAssistantRuntimePlan({
-          scope: input.scope,
-          threadId: identity.threadId,
-          plan,
-        }),
+        onPlan: async (plan) => await replaceAssistantRuntimePlan({ identity, plan }),
         onMessageSnapshot: async (message) => await persistAssistantRuntimeMessageSnapshot({
           identity,
           message,

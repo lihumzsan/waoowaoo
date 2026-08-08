@@ -4,6 +4,7 @@ import {
 } from '@/lib/workspace-resource/generation-contract'
 import { resolveOwnedAudioUrlForGeneration } from '@/lib/media/outbound-audio'
 import { resolveOwnedImageUrlForGeneration } from '@/lib/media/outbound-image'
+import { resolveOwnedVideoUrlForGeneration } from '@/lib/media/outbound-video'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { resolveWorkspaceResourceInputMedia } from '@/lib/workspace-resource/input-media'
 import { reportTaskProgress } from '../progress'
@@ -43,9 +44,9 @@ async function loadVideoImageReferences(
   })
   return await Promise.all(resources.map(async (resource, index) => {
     const reference = resource.reference
-    const role: 'first_frame' | 'last_frame' | 'reference' = reference.role === 'first_frame' || reference.role === 'last_frame'
+    const role: 'first_frame' | 'last_frame' | 'reference_image' = reference.role === 'first_frame' || reference.role === 'last_frame'
       ? reference.role
-      : 'reference'
+      : 'reference_image'
     return {
       url: await resolveOwnedImageUrlForGeneration(
         resource.storageKey,
@@ -56,6 +57,28 @@ async function loadVideoImageReferences(
       source: 'generated' as const,
     }
   }))
+}
+
+async function loadVideoReferences(
+  context: TaskExecutionContext,
+  input: WorkspaceResourceGenerationTaskPayload,
+): Promise<string[]> {
+  const inputByPosition = new Map(input.resource.inputs.map((reference) => [reference.position, reference]))
+  const videoInputs = input.resource.videoInputPositions.map((position) => {
+    const reference = inputByPosition.get(position)
+    if (!reference) throw new Error(`WORKSPACE_RESOURCE_VIDEO_INPUT_POSITION_INVALID:${String(position)}`)
+    return reference
+  })
+  if (videoInputs.length === 0) return []
+  const resources = await resolveWorkspaceResourceInputMedia({
+    userId: context.data.userId,
+    projectId: context.data.projectId,
+    references: videoInputs,
+    expectedMediaType: 'video',
+  })
+  return await Promise.all(resources.map(async (resource) => (
+    await resolveOwnedVideoUrlForGeneration(resource.storageKey, context.data.userId)
+  )))
 }
 
 export async function loadVideoAudioReferences(
@@ -99,6 +122,7 @@ export async function handleWorkspaceResourceVideoTask(
   await reportTaskProgress(context, 20, { stage: 'workspace_resource_prepare' })
   const referenceImages = await loadVideoImageReferences(context, payload)
   const referenceAudios = await loadVideoAudioReferences(data.userId, data.projectId, payload)
+  const referenceVideos = await loadVideoReferences(context, payload)
   const options = payload.generationOptions
   const durationSeconds = payload.durationSeconds
   if (!durationSeconds) {
@@ -110,12 +134,11 @@ export async function handleWorkspaceResourceVideoTask(
     modelId: payload.resource.modelKey,
     referenceImages,
     referenceAudios,
-    allowTextOnly: referenceImages.length === 0,
+    referenceVideos,
     options: {
       ...frozenVideoOptions(options),
       prompt: payload.resource.prompt,
       duration: durationSeconds,
-      generationMode: options.generationMode === 'firstlastframe' ? 'firstlastframe' : 'normal',
     },
   })
   const providerRoute = await requireTaskProviderRouteSelection(

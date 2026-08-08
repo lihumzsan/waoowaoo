@@ -1,6 +1,7 @@
 {
     "appName": "waoowaoo",
     "betaVersion": "Beta v{version}",
+    "betaBadge": "BETA",
     "updateNotice": {
         "title": "New version available",
         "subtitle": "Current v{current} · Latest v{latest}",

@@ -1,14 +1,20 @@
 import {
   ApplicationFailure,
   proxyActivities,
+  setWorkflowOptions,
   workflowInfo,
 } from '@temporalio/workflow'
+import {
+  encodeTemporalFailure,
+  temporalInvariantFailure,
+} from '../failure'
 import {
   OPERATION_EXECUTION_PROTOCOL,
   type OperationExecutionActivities,
   type OperationExecutionWorkflowInput,
   type OperationExecutionWorkflowReceipt,
 } from '../operation-execution/contracts'
+import { TEMPORAL_WORKFLOW } from '../workflow-registry'
 
 const activities = proxyActivities<OperationExecutionActivities>({
   startToCloseTimeout: '3 minutes',
@@ -21,7 +27,12 @@ const activities = proxyActivities<OperationExecutionActivities>({
 })
 
 function fail(code: string, ...details: unknown[]): never {
-  throw ApplicationFailure.nonRetryable(code, code, ...details)
+  const encoded = encodeTemporalFailure(temporalInvariantFailure(code, details))
+  throw ApplicationFailure.nonRetryable(
+    encoded.message,
+    encoded.type,
+    ...encoded.details,
+  )
 }
 
 function requireIdentity(value: unknown, code: string): void {
@@ -103,3 +114,8 @@ export async function operationExecutionWorkflow(
     envelope: input.envelope,
   })
 }
+
+setWorkflowOptions(
+  { versioningBehavior: TEMPORAL_WORKFLOW.OPERATION_EXECUTION.versioningBehavior },
+  operationExecutionWorkflow,
+)

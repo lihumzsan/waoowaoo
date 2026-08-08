@@ -1,27 +1,33 @@
 'use client'
 
 import type { ToolCallMessagePartProps } from '@assistant-ui/react'
-import { getToolName, isToolUIPart, type UIMessage } from 'ai'
+import { isToolUIPart, type UIMessage } from 'ai'
 import { useLocale, useTranslations } from 'next-intl'
 import {
   createContext,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
 import { AppIcon } from '@/components/ui/icons'
+import { WebSourceFavicon } from './WebSourceFavicon'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
-import type { AssistantRuntimeSessionTurnView } from '@/lib/assistant-runtime/view-contract'
+import { resolveUnifiedErrorCode, type UnifiedErrorCode } from '@/lib/errors/codes'
+import {
+  parseCreativeRuntimeSkillReadToolName,
+  resolveCreativeRuntimeSkillReadCommand,
+  type CreativeRuntimeSkillId,
+} from '@/lib/creative-skills/runtime-skill-read'
 import { useWorkspaceAssistantRunningSurface } from './WorkspaceAssistantReasoning'
 import {
   isWorkspaceAssistantRuntimeInterruptedToolPart,
   resolveWorkspaceAssistantRepeatedToolCallGroups,
-  resolveWorkspaceAssistantSubagentLifecycleViews,
   resolveWorkspaceAssistantToolCallDisplayState,
   resolveWorkspaceAssistantToolCallGroupView,
-  type WorkspaceAssistantSubagentLifecycleView,
   type WorkspaceAssistantRepeatedToolCallGroup,
   type WorkspaceAssistantToolCallDisplayState,
   type WorkspaceAssistantToolCallGroupView,
@@ -33,29 +39,13 @@ type RepeatedToolCallEntry = {
 }
 type WorkspaceAssistantToolCallContextValue = {
   readonly repeatedByToolCallId: ReadonlyMap<string, RepeatedToolCallEntry>
-  readonly subagentsByToolCallId: ReadonlyMap<string, WorkspaceAssistantSubagentLifecycleView>
   readonly interruptedToolCallIds: ReadonlySet<string>
 }
 const EMPTY_TOOL_CALL_CONTEXT: WorkspaceAssistantToolCallContextValue = {
   repeatedByToolCallId: new Map(),
-  subagentsByToolCallId: new Map(),
   interruptedToolCallIds: new Set(),
 }
 const WorkspaceAssistantToolCallContext = createContext<WorkspaceAssistantToolCallContextValue>(EMPTY_TOOL_CALL_CONTEXT)
-const NATIVE_SUBAGENT_TOOL_NAMES = new Set([
-  'spawnAgent',
-  'spawn_agent',
-  'sendInput',
-  'send_message',
-  'resumeAgent',
-  'followup_task',
-  'wait',
-  'wait_agent',
-  'closeAgent',
-  'interrupt_agent',
-  'list_agents',
-  'subagent_activity',
-])
 
 type AssistantAgentTranslator = ReturnType<typeof useTranslations<'assistantAgent'>>
 
@@ -78,66 +68,116 @@ function readPublicWebUrl(value: unknown): string | null {
   }
 }
 
-function resolveNativeToolTitle(toolName: string, t: AssistantAgentTranslator): string | null {
-  if (NATIVE_SUBAGENT_TOOL_NAMES.has(toolName)) {
-    switch (toolName) {
-      case 'spawnAgent': return t('runtime.native.subagentAction.spawnAgent')
-      case 'spawn_agent': return t('runtime.native.subagentAction.spawnAgent')
-      case 'sendInput': return t('runtime.native.subagentAction.sendInput')
-      case 'send_message': return t('runtime.native.subagentAction.sendInput')
-      case 'resumeAgent': return t('runtime.native.subagentAction.resumeAgent')
-      case 'followup_task': return t('runtime.native.subagentAction.resumeAgent')
-      case 'wait': return t('runtime.native.subagentAction.wait')
-      case 'wait_agent': return t('runtime.native.subagentAction.wait')
-      case 'closeAgent': return t('runtime.native.subagentAction.closeAgent')
-      case 'interrupt_agent': return t('runtime.native.subagentAction.interruptAgent')
-      case 'list_agents': return t('runtime.native.subagentAction.listAgents')
-      case 'subagent_activity': return t('runtime.native.subagentAction.activity')
-    }
+/** Read only the canonical error projection carried by a failed tool result. */
+function resolveToolFailureCode(result: unknown): UnifiedErrorCode | null {
+  if (!isRecord(result) || result.ok !== false) return null
+  const error = isRecord(result.error) ? result.error : null
+  const details = isRecord(error?.details) ? error.details : null
+  const failure = isRecord(details?.failure) ? details.failure : null
+  return resolveUnifiedErrorCode(failure?.code)
+    ?? resolveUnifiedErrorCode(error?.code)
+}
+
+type ToolFailureCorrection = {
+  readonly action: 'add_required_field' | 'fix_invalid_value' | 'move_unknown_field' | 'remove_unknown_field'
+  readonly field: string
+  readonly issueCode: string | null
+  readonly target: string | null
+  readonly allowedValues: readonly string[]
+}
+
+const TOOL_FAILURE_CORRECTION_ACTIONS = new Set<ToolFailureCorrection['action']>([
+  'add_required_field',
+  'fix_invalid_value',
+  'move_unknown_field',
+  'remove_unknown_field',
+])
+
+function resolveToolFailureCorrection(result: unknown): ToolFailureCorrection | null {
+  if (!isRecord(result) || result.ok !== false) return null
+  const error = isRecord(result.error) ? result.error : null
+  const details = isRecord(error?.details) ? error.details : null
+  const first = Array.isArray(details?.corrections) && isRecord(details.corrections[0])
+    ? details.corrections[0]
+    : null
+  const field = readText(first?.fieldPath)
+  const action = readText(first?.action)
+  if (!field || !action || !TOOL_FAILURE_CORRECTION_ACTIONS.has(action as ToolFailureCorrection['action'])) return null
+  const allowedValues = Array.isArray(first?.allowedValues)
+    ? first.allowedValues.flatMap((value) => (
+        value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+          ? [String(value)]
+          : []
+      ))
+    : []
+  return {
+    action: action as ToolFailureCorrection['action'],
+    field,
+    issueCode: readText(first?.issueCode),
+    target: readText(first?.targetPath),
+    allowedValues,
   }
+}
+
+function translateToolFailureCorrection(
+  correction: ToolFailureCorrection,
+  t: AssistantAgentTranslator,
+): string {
+  if (correction.action === 'add_required_field') {
+    return t('toolCall.validationMissing', { field: correction.field })
+  }
+  if (correction.action === 'move_unknown_field' && correction.target) {
+    return t('toolCall.validationMove', { field: correction.field, target: correction.target })
+  }
+  if (correction.action === 'remove_unknown_field') {
+    return t('toolCall.validationUnsupported', { field: correction.field })
+  }
+  if (correction.allowedValues.length > 0) {
+    return t('toolCall.validationAllowedValues', {
+      field: correction.field,
+      values: correction.allowedValues.join(', '),
+    })
+  }
+  if (correction.issueCode === 'invalid_type') {
+    return t('toolCall.validationInvalidType', { field: correction.field })
+  }
+  if (correction.issueCode === 'too_small') {
+    return t('toolCall.validationTooSmall', { field: correction.field })
+  }
+  if (correction.issueCode === 'too_big') {
+    return t('toolCall.validationTooBig', { field: correction.field })
+  }
+  return t('toolCall.validationInvalid', { field: correction.field })
+}
+
+function resolveToolFailureReason(result: unknown): { field: string | null; reasonCode: string } | null {
+  if (!isRecord(result) || result.ok !== false) return null
+  const error = isRecord(result.error) ? result.error : null
+  const details = isRecord(error?.details) ? error.details : null
+  const reasonCode = readText(details?.reasonCode)
+  if (!reasonCode) return null
+  return { field: readText(details?.field), reasonCode }
+}
+
+function resolveNativeToolTitle(toolName: string, t: AssistantAgentTranslator): string | null {
   switch (toolName) {
     case 'shell': return t('runtime.native.shell')
     case 'file_change': return t('runtime.native.fileChange')
     case 'web_search': return t('runtime.native.webSearch')
     case 'view_image': return t('runtime.native.viewImage')
+    case 'wao.request_user_decision': return t('runtime.native.userDecision')
     default: return null
   }
 }
 
-function resolveSubagentSummary(
+function resolveRuntimeSkillRead(
+  toolName: string,
   args: unknown,
-  result: unknown,
-  t: AssistantAgentTranslator,
-): string | null {
-  const output = isRecord(result) ? result : null
-  const input = isRecord(args) ? args : null
-  const states = isRecord(output?.agentsStates)
-    ? output.agentsStates
-    : isRecord(input?.agentsStates)
-      ? input.agentsStates
-      : null
-  if (!states) return null
-  let active = 0
-  let completed = 0
-  let failed = 0
-  for (const value of Object.values(states)) {
-    const status = isRecord(value) ? readText(value.status) : null
-    if (status === 'pendingInit' || status === 'running') active += 1
-    else if (status === 'completed' || status === 'shutdown') completed += 1
-    else if (status === 'interrupted' || status === 'errored' || status === 'notFound') failed += 1
-  }
-  return t('runtime.native.subagentSummary', { active, completed, interrupted: failed })
-}
-
-function localizeSubagentLifecycle(
-  lifecycle: WorkspaceAssistantSubagentLifecycleView,
-  t: AssistantAgentTranslator,
-): string {
-  return t('runtime.native.subagentSummary', {
-    active: lifecycle.active,
-    completed: lifecycle.completed,
-    interrupted: lifecycle.interrupted,
-  })
+): CreativeRuntimeSkillId | null {
+  const projectedSkillId = parseCreativeRuntimeSkillReadToolName(toolName)
+  if (projectedSkillId) return projectedSkillId
+  if (toolName !== 'shell' || !isRecord(args)) return null
+  return resolveCreativeRuntimeSkillReadCommand(args.command)
 }
 
 type WebSearchSource = {
@@ -147,35 +187,61 @@ type WebSearchSource = {
   readonly previewImageUrl: string | null
 }
 
+/** Reads native standalone-search results from the completed Codex item. */
 function resolveWebSearchSources(result: unknown): WebSearchSource[] {
   const output = isRecord(result) ? result : null
   if (!Array.isArray(output?.results)) return []
+  const previewBySourceUrl = new Map<string, string>()
+  for (const entry of output.results) {
+    if (!isRecord(entry) || entry.type !== 'image_result') continue
+    const sourceUrl = readPublicWebUrl(entry.source_url)
+    const imageUrl = readPublicWebUrl(entry.image_url)
+    if (sourceUrl && imageUrl && !previewBySourceUrl.has(sourceUrl)) {
+      previewBySourceUrl.set(sourceUrl, imageUrl)
+    }
+  }
   const byUrl = new Map<string, WebSearchSource>()
   for (const entry of output.results) {
     if (!isRecord(entry)) continue
-    const url = readPublicWebUrl(entry.source_url) ?? readPublicWebUrl(entry.url)
+    const url = entry.type === 'image_result'
+      ? readPublicWebUrl(entry.source_url)
+      : readPublicWebUrl(entry.url)
     if (!url || byUrl.has(url)) continue
     try {
-      const parsed = new URL(url)
+      const domain = readText(entry.source_domain)
+        ?? new URL(url).hostname.replace(/^www\./, '')
       byUrl.set(url, {
         url,
-        title: readText(entry.title) ?? parsed.hostname.replace(/^www\./, ''),
-        domain: readText(entry.source_domain) ?? parsed.hostname.replace(/^www\./, ''),
-        previewImageUrl: readPublicWebUrl(entry.preview_image_url) ?? readPublicWebUrl(entry.image_url),
+        title: readText(entry.title) ?? domain,
+        domain,
+        previewImageUrl: previewBySourceUrl.get(url) ?? null,
       })
     } catch {}
   }
   return [...byUrl.values()].slice(0, 6)
 }
 
+function resolveWebSearchQuery(args: unknown): string | null {
+  if (!isRecord(args)) return null
+  const direct = readText(args.query)
+  if (direct) return direct
+  const action = isRecord(args.action) ? args.action : null
+  const actionQuery = readText(action?.query)
+  if (actionQuery) return actionQuery
+  if (!Array.isArray(action?.queries)) return null
+  const queries = action.queries.flatMap((query) => {
+    const value = readText(query)
+    return value ? [value] : []
+  })
+  return queries.length > 0 ? queries.join(' · ') : null
+}
+
 export function WorkspaceAssistantRepeatedToolCallGroupProvider({
   children,
   messages = [],
-  turns = [],
 }: {
   readonly children: ReactNode
   readonly messages: readonly UIMessage[]
-  readonly turns: readonly AssistantRuntimeSessionTurnView[]
 }) {
   const value = useMemo((): WorkspaceAssistantToolCallContextValue => {
     const repeatedByToolCallId = new Map<string, RepeatedToolCallEntry>()
@@ -186,22 +252,6 @@ export function WorkspaceAssistantRepeatedToolCallGroupProvider({
       }
       for (const toolCallId of group.toolCallIds) repeatedByToolCallId.set(toolCallId, entry)
     }
-    const statusByAssistantMessageId = new Map(turns.flatMap((turn) => (
-      turn.assistantMessageId ? [[turn.assistantMessageId, turn.status] as const] : []
-    )))
-    const statusByTurnId = new Map(turns.map((turn) => [turn.turnId, turn.status] as const))
-    for (const message of messages) {
-      if (message.role !== 'assistant' || !isRecord(message.metadata)) continue
-      const custom = isRecord(message.metadata.custom) ? message.metadata.custom : null
-      const turnId = readText(custom?.waoAgentTurnId)
-      const status = turnId ? statusByTurnId.get(turnId) : null
-      if (status) statusByAssistantMessageId.set(message.id, status)
-    }
-    const lifecycleByMessageId = resolveWorkspaceAssistantSubagentLifecycleViews(
-      messages,
-      statusByAssistantMessageId,
-    )
-    const subagentsByToolCallId = new Map<string, WorkspaceAssistantSubagentLifecycleView>()
     const interruptedToolCallIds = new Set<string>()
     for (const message of messages) {
       for (const part of message.parts) {
@@ -209,15 +259,9 @@ export function WorkspaceAssistantRepeatedToolCallGroupProvider({
           interruptedToolCallIds.add(part.toolCallId)
         }
       }
-      const lifecycle = lifecycleByMessageId.get(message.id)
-      if (!lifecycle) continue
-      for (const part of message.parts) {
-        if (!isToolUIPart(part) || !NATIVE_SUBAGENT_TOOL_NAMES.has(getToolName(part))) continue
-        subagentsByToolCallId.set(part.toolCallId, lifecycle)
-      }
     }
-    return { repeatedByToolCallId, subagentsByToolCallId, interruptedToolCallIds }
-  }, [messages, turns])
+    return { repeatedByToolCallId, interruptedToolCallIds }
+  }, [messages])
   return (
     <WorkspaceAssistantToolCallContext.Provider value={value}>
       {children}
@@ -264,30 +308,64 @@ function translateDisplayState(
   }
 }
 
+/**
+ * Seconds a still-running row has been running.
+ *
+ * A long tool call must prove it is alive on its own. Making that proof depend
+ * on provider progress events was the earlier mistake: when they did not
+ * arrive, a research call sat on one static line for minutes and read as
+ * frozen. A local clock cannot fail to arrive.
+ */
+function useRunningSeconds(running: boolean): number {
+  const startedAtRef = useRef<number | null>(null)
+  const [seconds, setSeconds] = useState(0)
+  useEffect(() => {
+    if (!running) {
+      startedAtRef.current = null
+      setSeconds(0)
+      return
+    }
+    startedAtRef.current ??= Date.now()
+    const tick = (): void => {
+      const startedAt = startedAtRef.current
+      if (startedAt !== null) setSeconds(Math.floor((Date.now() - startedAt) / 1_000))
+    }
+    tick()
+    const timer = window.setInterval(tick, 1_000)
+    return () => window.clearInterval(timer)
+  }, [running])
+  return seconds
+}
+
+function formatRunningSeconds(seconds: number): string {
+  if (seconds < 60) return `${String(seconds)}s`
+  return `${String(Math.floor(seconds / 60))}m${String(seconds % 60).padStart(2, '0')}s`
+}
+
 export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) {
   const t = useTranslations('assistantAgent')
+  const tErrors = useTranslations('errors')
   const locale = normalizeProjectAgentLocale(useLocale())
-  const [expanded, setExpanded] = useState(false)
   const context = useContext(WorkspaceAssistantToolCallContext)
   const repeatedEntry = context.repeatedByToolCallId.get(props.toolCallId)
-  const subagentLifecycle = context.subagentsByToolCallId.get(props.toolCallId) ?? null
   const groupView = repeatedEntry?.view ?? null
+  const runtimeSkillId = resolveRuntimeSkillRead(props.toolName, props.args)
   const operationId = props.toolName.startsWith('wao.')
     ? props.toolName.slice('wao.'.length)
     : props.toolName
-  const operationTitle = resolveNativeToolTitle(props.toolName, t)
-    ?? localizeProjectAgentOperationTitle(operationId, locale)
+  const operationTitle = runtimeSkillId
+    ? t('runtime.native.skillRead', {
+        skill: t(`runtime.native.skillNames.${runtimeSkillId}`),
+      })
+    : resolveNativeToolTitle(props.toolName, t)
+      ?? localizeProjectAgentOperationTitle(operationId, locale)
   const toolStatus = props.status.type
+  const runningSeconds = useRunningSeconds(toolStatus === 'running')
   useWorkspaceAssistantRunningSurface(
     `tool:${props.toolCallId}`,
     toolStatus === 'running' || toolStatus === 'requires-action',
   )
   if (groupView && groupView.leaderToolCallId !== props.toolCallId) return null
-  if (
-    subagentLifecycle
-    && NATIVE_SUBAGENT_TOOL_NAMES.has(props.toolName)
-    && props.toolName !== 'subagent_activity'
-  ) return null
 
   // Two failure shapes exist: the app-level ToolResult envelope ({ok:false})
   // and the terminal-closure/SDK error output ({error}, isError=true) written
@@ -305,18 +383,30 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
         })
   const failed = groupView ? groupView.failed > 0 : displayState === 'failed'
   const interrupted = groupView ? groupView.interrupted > 0 : displayState === 'interrupted'
-  const nativeSummary = NATIVE_SUBAGENT_TOOL_NAMES.has(props.toolName)
-      ? subagentLifecycle
-        ? localizeSubagentLifecycle(subagentLifecycle, t)
-        : resolveSubagentSummary(props.args, props.result, t)
-      : null
-  const summaryText = nativeSummary ?? translateDisplayState(displayState, t)
+  const summaryText = translateDisplayState(displayState, t)
+  const failureCode = groupView ? null : resolveToolFailureCode(props.result)
+  const failureCorrection = groupView ? null : resolveToolFailureCorrection(props.result)
+  const failureReason = groupView ? null : resolveToolFailureReason(props.result)
+  let failureDetail = failureCode && tErrors.has(failureCode)
+    ? tErrors(failureCode)
+    : t('toolCall.failedDetail')
+  if (failureReason) {
+    failureDetail = tErrors.has(failureReason.reasonCode as UnifiedErrorCode)
+      ? tErrors(failureReason.reasonCode as UnifiedErrorCode)
+      : failureReason.field
+        ? t('toolCall.reasonFieldDetail', {
+            field: failureReason.field,
+            reasonCode: failureReason.reasonCode,
+          })
+        : t('toolCall.reasonDetail', { reasonCode: failureReason.reasonCode })
+  }
+  if (failureCorrection) {
+    failureDetail = translateToolFailureCorrection(failureCorrection, t)
+  }
   const iconName = failed || interrupted ? 'alert' : 'settingsHex'
-  const displayTitle = groupView
-    ? props.toolName === 'web_search'
-      ? operationTitle
-      : t('toolCall.groupTitle', { title: operationTitle, count: groupView.total })
-    : operationTitle
+  const displayTitle = !groupView || runtimeSkillId || props.toolName === 'web_search'
+    ? operationTitle
+    : t('toolCall.groupTitle', { title: operationTitle, count: groupView.total })
   const mixedGroup = groupView && ([
     groupView.success,
     groupView.submitted,
@@ -325,46 +415,34 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
     groupView.running,
     groupView.needsAction,
   ].filter((count) => count > 0).length > 1)
-  const webSearchSources = props.toolName === 'web_search'
+  const webSearchSources = operationId === 'web_search'
     ? resolveWebSearchSources(props.result)
     : []
+  // Codex 0.146 starts standalone Web Search with an empty query/action and
+  // fills both only on item/completed. Keep the completed brief visible beside
+  // its native result pages; the running row must not invent unavailable data.
+  const webSearchQuery = operationId === 'web_search'
+    ? resolveWebSearchQuery(props.args)
+    : null
 
   return (
-    <div className={`text-sm leading-5 ${failed || interrupted ? 'text-[var(--glass-tone-warn-fg)]' : 'text-[var(--glass-text-tertiary)]'}`}>
+    <div className={`text-sm leading-5 ${failed || interrupted ? 'text-[var(--glass-tone-warning-fg)]' : 'text-[var(--glass-text-tertiary)]'}`}>
       <div className="flex items-center gap-2">
         <AppIcon name={iconName} className="h-3.5 w-3.5 shrink-0" />
         <span className="min-w-0 truncate">{summaryText} · {displayTitle}</span>
+        {runningSeconds > 0 ? (
+          <span className="shrink-0 tabular-nums opacity-60">{formatRunningSeconds(runningSeconds)}</span>
+        ) : null}
       </div>
-      {subagentLifecycle && props.toolName === 'subagent_activity' ? (
-        <div className="ml-5 mt-1.5">
-          <button
-            type="button"
-            onClick={() => setExpanded((value) => !value)}
-            className="inline-flex items-center gap-1 text-xs font-medium text-[var(--glass-text-secondary)] hover:text-[var(--glass-text-primary)]"
+      {webSearchQuery ? (
+        <div className="ml-5 mt-1 flex min-w-0 items-center gap-1.5 text-xs leading-4">
+          <AppIcon name="search" className="h-3 w-3 shrink-0 opacity-70" aria-hidden="true" />
+          <span
+            className="min-w-0 line-clamp-2 break-words text-[var(--glass-text-secondary)]"
+            title={webSearchQuery}
           >
-            {expanded ? t('toolCall.hide') : t('toolCall.show')}
-            <AppIcon name="chevronDown" className={`h-3 w-3 transition-transform ${expanded ? 'rotate-180' : ''}`} />
-          </button>
-          {expanded ? (
-            <div className="mt-2 space-y-3 rounded-xl bg-slate-50/80 px-3 py-2.5 ring-1 ring-slate-200/70">
-              {subagentLifecycle.agents.map((agent) => (
-                <div key={agent.agentThreadId} className="space-y-1.5">
-                  <div className="flex min-w-0 items-center justify-between gap-3 text-xs">
-                    <span className="truncate font-medium text-[var(--glass-text-secondary)]">{agent.agentPath}</span>
-                    <span className="shrink-0 text-[var(--glass-text-tertiary)]">{t(`runtime.native.subagentStatus.${agent.status}`)}</span>
-                  </div>
-                  {agent.activities.map((activity) => (
-                    <div key={activity.id} className="flex gap-2 text-xs leading-5 text-[var(--glass-text-tertiary)]">
-                      <span className={`mt-2 h-1.5 w-1.5 shrink-0 rounded-full ${activity.status === 'running' ? 'animate-pulse bg-blue-500' : activity.status === 'failed' ? 'bg-amber-500' : 'bg-slate-300'}`} />
-                      <span className="min-w-0 whitespace-pre-wrap break-words">
-                        {activity.text ?? activity.label ?? t(`runtime.native.subagentActivity.${activity.kind}`)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          ) : null}
+            {webSearchQuery}
+          </span>
         </div>
       ) : null}
       {webSearchSources.length > 0 ? (
@@ -382,8 +460,8 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={source.previewImageUrl} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover bg-slate-100" />
               ) : (
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-slate-400 ring-1 ring-slate-200">
-                  <AppIcon name="globe" className="h-4 w-4" />
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white ring-1 ring-slate-200">
+                  <WebSourceFavicon domain={source.domain} className="h-5 w-5" />
                 </span>
               )}
               <span className="min-w-0">
@@ -400,8 +478,8 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
         </div>
       ) : null}
       {failed ? (
-        <div className="ml-5 mt-1 rounded-lg bg-[var(--glass-tone-warn-bg)]/45 px-2 py-1 text-xs leading-4">
-          {t('toolCall.failedDetail')}
+        <div className="ml-5 mt-1 rounded-lg bg-[var(--glass-tone-surface)] shadow-[var(--glass-tone-shadow)] px-2 py-1 text-xs leading-4">
+          {failureDetail}
         </div>
       ) : null}
     </div>

@@ -77,24 +77,30 @@ description: Design continuous instrumental scoring, dynamics, silence, and dial
 
 这些只是决策示例，不能复制为固定配器模板。
 
-## 每个 cue 的最终生成指令 `generationPrompt`
+## 每个 cue 的最终生成指令 `prompt`
 
-配乐的最终执行按 cue 独立进行：调用方对每个 cue 把该 cue 的 `generationPrompt` 原样交给音乐生成模型，模型只观看该 cue 时间窗口内的画面，一个字都不会改写或补充。cue 的 purpose/musicalDirection/dialogueSafety 字段给人阅读与混音参考，音乐模型永远看不到。因此这个 cue 的全部可执行决策都必须内化进它自己的 `generationPrompt`。判定整部作品应刻意不配乐时，输出空的 `cues: []` 并在 overview/warnings 中说明理由。
+配乐的最终执行按 cue 独立进行：调用方对每个 item 把其 `prompt` 原样交给音乐生成模型，模型只观看该 cue 时间窗口内的画面，一个字都不会改写或补充。`purpose`、`musicalDirection`、`dialogueSafety` 字段给人阅读与混音参考，音乐模型永远看不到。因此这个 cue 的全部可执行决策都必须内化进它自己的 `prompt`。判定整部作品应刻意不配乐时使用 `decision: "no_music"`、空 `items` 并在 `overview`/`warnings` 中说明理由；不要提交这份无任务清单。
 
-每条 `generationPrompt` 应遵守模型的真实能力边界：
+每条 `prompt` 应遵守模型的真实能力边界：
 
 - 始终用英文撰写：当前音乐生成模型对英文指令的服从度显著更好，对中文支持很差。这只影响生成指令；其他给人阅读的字段仍使用与用户内容一致的语言。
 - 模型看不到 cue 之外的画面：本段的叙事前后文必须写进指令里（此刻人物处境、情绪从何而来、要走向哪里），否则模型只能凭孤立画面猜测。
 - 不写精确 BPM 数字和变速表。用状态语言表达速度纪律，例如"整段保持单一稳定脉冲，不加速、不减速、不重新起拍"。情绪强度交给音符细分、配器密度、音区与和声张力。
 - 一个 cue 一条情绪弧线：用 2 到 4 个粗粒度阶段描述本段曲线（如"克制 → 增强 → 抽离"），不写精确到秒的时刻表。
 - 一个 cue 一个主题动机，段内变奏，明确禁止中途另起新主题。
-- 字符预算只读取 `system/project.json` 中的 `productionCapabilities.music.promptMaxCharacters`，并由代码确定性计数强制；该能力为空时停止交付 Manifest，不得猜测。超限会被拒绝，不存在"大约"。优先级为：速度纪律与主题唯一性 > 情绪弧线 > 配器与空间 > 其他细节；写不下的内容宁可舍弃细节也不牺牲前两项。
+- 字符预算只读取系统直接注入的 `productionCapabilities.music`：`promptTargetCharacters` 是必须主动遵守的保守写作目标，`promptMaxCharacters` 是服务端确定性计数的硬拒绝线。不要写到硬上限附近，也不要依赖自己精确数数；默认用不超过 4 个紧凑英文句子，在目标预算内留出余量。任一能力为空时停止交付生成批次，不得猜测。优先级为：速度纪律与主题唯一性 > 情绪弧线 > 配器与空间 > 其他细节；写不下的内容宁可舍弃细节也不牺牲前两项。
 - cue 内部的短暂降档与呼吸照常用文字设计，但生成模型只有倾向性响应；跨段的"完全无音乐"由 cue 边界结构性保证，不再依赖模型自觉。
+
+下面是一个短而完整的结构示例，只示范信息密度与可执行性，不复制它的题材或配器：
+
+```text
+Instrumental cinematic score built on one restrained two-note motif and a steady pulse. Begin with sparse low strings and dry percussion, tighten through close dissonance and metallic texture, then fall to near-silence before fragile glass harmonics emerge. Keep the dialogue band clear and transients soft. No vocals, choir, trailer hits, heroic brass, literal effects, tempo changes, new themes, or triumphant cadence; end unresolved with ample headroom.
+```
 
 ## 自检
 
-- 每个 cue 的 `generationPrompt` 是否已内化该段全部可执行决策与叙事前后文，不依赖其他字段被再次阅读？决定不配乐时是否显式输出空 `cues: []` 并说明理由？
-- cue 切分是否只发生在约 6 秒以上的静音间隔处，每段时长与指令字符数是否都在 `system/project.json` 的 `productionCapabilities.music` 预算内？
+- 每个 cue 的 `prompt` 是否已内化该段全部可执行决策与叙事前后文，不依赖其他字段被再次阅读，并且不超过 `promptTargetCharacters`？决定不配乐时是否显式使用 `decision: "no_music"` 与空 `items` 并说明理由？
+- cue 切分是否只发生在约 6 秒以上的静音间隔处，每段时长与指令字符数是否都在系统注入的 `productionCapabilities.music` 预算内？
 - 是否使用真实时间线时长，并且没有声称分析未提供的画面或音轨？
 - 注入完整 Creative Direction 时，是否把所有与音乐有关的政策具体转译为音乐气质、声场、节奏密度和配器，而不是忽略、照抄或强行塞进配乐？
 - 是否先完成叙事诊断，再决定配乐立场、存在与留白？
@@ -104,31 +110,12 @@ description: Design continuous instrumental scoring, dynamics, silence, and dial
 - 是否排除了人声、歌词、环境录音、拟音和字面同步音效？
 - 是否避免了无依据的英雄化、浪漫化、凯旋终止、预告片撞击、稳定循环和重复高潮？
 
-## 写入 Production Manifest
+## 返回音频生成批次
 
-- 每个 cue 对应一个 `mediaType: "audio"` item；`prompt` 必须是该 cue 完整最终 `generationPrompt`，主 Agent与服务端不会再补写。
-- 显式填写 `durationSeconds`、`vocalMode`，以及确实需要的 `genre`、`mood`、`bpm`。当前 BGM 默认 `schemaId` 为 `project.bgm_audio`。
-- Manifest 是严格 JSON 文件，最小结构如下：
-
-```json
-{
-  "schemaVersion": 1,
-  "manifestId": "music-v1",
-  "items": [
-    {
-      "itemId": "cue-001",
-      "mediaType": "audio",
-      "schemaId": "project.bgm_audio",
-      "outputPath": "audio/cue-001.resource",
-      "durationSeconds": 60,
-      "vocalMode": "instrumental",
-      "prompt": "Complete final English generation prompt",
-      "references": []
-    }
-  ]
-}
-```
+- 每个 cue 对应一个 `mediaType: "audio"` item；`prompt` 必须是该 cue 完整最终生成指令，提交阶段与服务端不会再补写。
+- 显式填写 `durationSeconds`、`vocalMode`，以及确实需要的 `genre`、`mood`、`bpm`。这些结构化字段不会被服务端重新拼接进 `prompt`；任何音乐模型必须执行的创作决定仍须写入短 `prompt`。当前 BGM 默认 `schemaId` 为 `project.bgm_audio`。
+- 唯一专业结果是运行时注入 schema 约束的 `outputKind: "audio_generation_batch"` 严格 JSON。该机器 Schema 是字段、必填项和层级的唯一权威；本 Skill 不另写一份可能漂移的 JSON 模板或配乐说明文件。
 
 ## 边界
 
-本 Skill 提供音乐创作方法、最终生成提示词和 Manifest 中显式的时长与音乐参数。模型选择、能力校验、媒体提交、计费、Task 与终态由确定性执行层负责。
+本 Skill 提供音乐创作方法、最终生成提示词和批次中显式的时长与音乐参数。模型选择、能力校验、媒体提交、计费、Task 与终态由确定性执行层负责。

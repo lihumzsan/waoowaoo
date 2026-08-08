@@ -27,18 +27,25 @@ async function resetTaskExecutionState() {
   await prisma.task.deleteMany()
 }
 
+async function resetPaidBetaAndAnnouncementState() {
+  await prisma.paidBetaPaymentAttempt.deleteMany()
+  await prisma.paidBetaSeat.deleteMany()
+  await prisma.paidBetaCampaign.deleteMany()
+  await prisma.announcementReceipt.deleteMany()
+}
+
 export async function resetBillingState() {
+  await resetPaidBetaAndAnnouncementState()
   await prisma.balanceTransaction.deleteMany()
   await prisma.balanceFreeze.deleteMany()
   await prisma.usageCost.deleteMany()
   await prisma.subscriptionGrant.deleteMany()
   await prisma.subscription.deleteMany()
+  await prisma.llmBillingMeter.deleteMany()
   await resetAgentTurnState()
   await resetWorkspaceResourceState()
   await resetTaskExecutionState()
   await resetOperationExecutionState()
-  await prisma.inviteRedemption.deleteMany()
-  await prisma.inviteCode.deleteMany()
   await prisma.userBalance.deleteMany()
   await prisma.project.deleteMany()
   await prisma.session.deleteMany()
@@ -63,6 +70,7 @@ export async function resetAssetHubState() {
 }
 
 export async function resetSystemState() {
+  await resetPaidBetaAndAnnouncementState()
   await resetTaskState()
   await resetAssetHubState()
   await prisma.usageCost.deleteMany()
@@ -73,7 +81,6 @@ export async function resetSystemState() {
   await prisma.userBalance.deleteMany()
   await prisma.balanceFreeze.deleteMany()
   await prisma.balanceTransaction.deleteMany()
-  await prisma.inviteRedemption.deleteMany()
-  await prisma.inviteCode.deleteMany()
+  await prisma.llmBillingMeter.deleteMany()
   await prisma.user.deleteMany()
 }

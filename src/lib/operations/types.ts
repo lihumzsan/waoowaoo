@@ -56,6 +56,8 @@ export interface ProjectAgentOperationContext {
   /** Outer Operation transaction that atomically owns Task creation/output. */
   operationExecutionTransaction?: Prisma.TransactionClient | null
   executionAuthorization?: OperationExecutionAuthorization | null
+  /** Set only after the destructive approval owner verifies this exact call. */
+  destructiveApprovalVerified?: boolean
   followUpBatchBinding?: ProjectAgentFollowUpBatchBinding | null
 }
 
@@ -91,6 +93,13 @@ type BivariantOperationExecute<Input, Output> = {
     context: ProjectAgentOperationContext,
     input: Input,
   ): Promise<Output>
+}['bivarianceHack']
+
+type BivariantOperationToolInputCanonicalize<Input> = {
+  bivarianceHack(
+    context: ProjectAgentOperationContext,
+    input: unknown,
+  ): Promise<Input>
 }['bivarianceHack']
 
 type BivariantTransactionalOperationExecute<Input, Output> = {
@@ -298,6 +307,17 @@ interface ProjectAgentOperationDefinitionFields<
    * schema still validates every invocation.
    */
   toolInputSchema?: ProjectAgentToolInputSchema
+  /**
+   * Optional boundary that translates a model-friendly Tool payload into the
+   * canonical Operation input before approval, hashing, durable dispatch, or
+   * execution. Its input schema may also accept the canonical form so replayed
+   * durable commands remain idempotent, while `toolInputSchema` stays the only
+   * shape advertised to the model.
+   */
+  toolInputCanonicalizer?: {
+    inputSchema: RuntimeSchema<unknown>
+    canonicalize: BivariantOperationToolInputCanonicalize<Input>
+  }
   inputSchema: RuntimeSchema<Input>
   outputSchema: RuntimeSchema<Output>
 }

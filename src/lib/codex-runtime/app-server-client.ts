@@ -18,7 +18,6 @@ import type {
   RuntimeSkillsListParams,
   RuntimeSkillsListResponse,
   RuntimeThread,
-  RuntimeThreadInjectItemsParams,
   RuntimeThreadReadParams,
   RuntimeThreadResumeParams,
   RuntimeThreadStartParams,
@@ -32,6 +31,7 @@ import type {
 
 const DEFAULT_COMMAND = 'codex'
 const DEFAULT_ARGS = [
+  '--dangerously-bypass-hook-trust',
   'app-server',
   '--listen',
   'stdio://',
@@ -431,18 +431,6 @@ export class CodexAppServerClient implements RuntimeAdapter {
         throw new CodexAppServerProtocolError('SKILLS_LIST_RESPONSE_DATA_INVALID')
       }
       return { data: result.data.map(parseSkillsListEntry) }
-    })
-  }
-
-  async injectThreadItems(params: RuntimeThreadInjectItemsParams): Promise<void> {
-    await this.requireInitialized()
-    const response = await this.request('thread/inject_items', {
-      threadId: requireString(params.threadId, 'THREAD_INJECT_ITEMS_ID_INVALID'),
-      items: params.items.map((item) => requireJsonValue(item, 'THREAD_INJECT_ITEMS_ITEM_INVALID')),
-    })
-    this.parseProtocolResponse(() => {
-      const result = requireJsonObject(response, 'THREAD_INJECT_ITEMS_RESPONSE_INVALID')
-      if (Object.keys(result).length !== 0) throw new CodexAppServerProtocolError('THREAD_INJECT_ITEMS_RESPONSE_NOT_EMPTY')
     })
   }
 

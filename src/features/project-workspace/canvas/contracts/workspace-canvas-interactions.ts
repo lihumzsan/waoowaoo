@@ -5,28 +5,11 @@ import type {
   WorkspaceResourceStatus,
   WorkspaceResourceView,
 } from '@/lib/workspace-resource/contracts'
-import type { CanvasCreationActionView } from '@/lib/operations/canvas-action-catalog'
-
-export const WORKSPACE_CANVAS_CREATE_KINDS = [
-  'image',
-  'video',
-  'music',
-  'voice',
-] as const
-
-export type WorkspaceCanvasCreateKind = typeof WORKSPACE_CANVAS_CREATE_KINDS[number]
 
 export interface WorkspaceCanvasPathFocusRequest {
   readonly requestId: string
   readonly workspacePath: string
 }
-
-/**
- * Server-projected create capability. The browser renders the small 1.0 form,
- * but never guesses whether an Operation is available or what count range it
- * accepts.
- */
-export type WorkspaceCanvasCreateCapabilityView = CanvasCreationActionView
 
 export type WorkspaceCanvasResourceOperationKind = 'retry' | 'variant' | 'delete'
 
@@ -54,7 +37,10 @@ export interface WorkspaceCanvasDeleteOperationView {
   readonly kind: 'delete'
   readonly operationId: string
   readonly confirmation: 'destructive'
-  readonly input: { readonly resourceId: string }
+  readonly input: {
+    readonly resourceId: string
+    readonly workspacePath: string
+  }
   readonly approvalInputHash: string
 }
 
@@ -77,7 +63,7 @@ export interface WorkspaceCanvasResourcePreviewView {
   readonly name: string
   readonly status: WorkspaceResourceStatus
   readonly mediaType: WorkspaceResourceMediaType
-  readonly error: { readonly code: string | null; readonly message: string } | null
+  readonly error: { readonly code: string } | null
 }
 
 export type WorkspaceCanvasResourceSummaryView =
@@ -136,16 +122,6 @@ export interface WorkspaceAssistantDraftRequest {
   readonly requestId: string
   readonly text: string | null
   readonly focus: boolean
-}
-
-export interface WorkspaceCanvasCreateRequest {
-  readonly capability: WorkspaceCanvasCreateCapabilityView
-  readonly name: string
-  readonly prompt: string
-  readonly count: number
-  readonly durationSeconds: number | null
-  readonly voicePreviewText: string
-  readonly position: { readonly x: number; readonly y: number }
 }
 
 export interface WorkspaceCanvasUploadPlacement {

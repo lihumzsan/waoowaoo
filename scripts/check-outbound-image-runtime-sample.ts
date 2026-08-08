@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { TASK_TYPE } from '@/lib/task/types'
+import { parseFailureRecord } from '@/lib/errors/failure'
 
 type AnyJson = unknown
 
@@ -18,7 +19,7 @@ type Options = {
   json: boolean
 }
 
-type FailureType = 'normalize' | 'model' | 'cancelled' | 'other'
+type FailureType = 'normalize' | 'model' | 'other'
 
 const MODEL_ERROR_CODES = new Set([
   'GENERATION_FAILED',
@@ -91,26 +92,25 @@ function findStringMatches(
 }
 
 function classifyFailure(task: {
-  errorCode: string | null
-  errorMessage: string | null
+  failure: unknown
   result: AnyJson | null
   events: Array<{ payload: AnyJson | null }>
 }): FailureType {
-  const code = (task.errorCode || '').trim().toUpperCase()
+  const failure = parseFailureRecord(task.failure)
+  const code = failure?.interpretation.code ?? ''
   const normalizeRe = /normalize|video_frame_normalize|normalizeReferenceImagesForGeneration|reference image normalize failed|outbound image input is empty|relative_path_rejected/i
   const modelRe = /generation failed|provider|upstream|rate limit|timed out|timeout|sensitive/i
 
-  if (code === 'TASK_CANCELLED') return 'cancelled'
   if (MODEL_ERROR_CODES.has(code)) return 'model'
   if (code) {
-    const explicitNormalizeCode = code === 'INVALID_PARAMS' || code === 'OUTBOUND_IMAGE_FETCH_FAILED'
+    const explicitNormalizeCode = code === 'INVALID_PARAMS'
     if (explicitNormalizeCode) return 'normalize'
     return 'other'
   }
 
   const values: string[] = []
   if (code) values.push(code)
-  if (task.errorMessage) values.push(task.errorMessage)
+  if (failure?.native.message) values.push(failure.native.message)
   if (task.result) {
     for (const hit of findStringMatches(task.result, () => true)) {
       values.push(hit.value)
@@ -150,8 +150,7 @@ async function main() {
       targetType: true,
       targetId: true,
       createdAt: true,
-      errorCode: true,
-      errorMessage: true,
+      failure: true,
       payload: true,
       result: true,
     },
@@ -210,7 +209,6 @@ async function main() {
   const failedByClass: Record<FailureType, number> = {
     normalize: 0,
     model: 0,
-    cancelled: 0,
     other: 0,
   }
   const failedByCode: Record<string, number> = {}
@@ -257,11 +255,11 @@ async function main() {
 
     if (task.status === 'failed') {
       failedCount += 1
-      const code = (task.errorCode || 'UNKNOWN').trim() || 'UNKNOWN'
+      const failure = parseFailureRecord(task.failure)
+      const code = failure?.interpretation.code ?? 'UNKNOWN'
       failedByCode[code] = (failedByCode[code] || 0) + 1
       const failureType = classifyFailure({
-        errorCode: task.errorCode,
-        errorMessage: task.errorMessage,
+        failure: task.failure,
         result: task.result,
         events: taskEventsForTask,
       })
@@ -279,7 +277,7 @@ async function main() {
   )
   process.stdout.write(`[check:outbound-image-runtime-sample] task_types=${JSON.stringify(typeCount)}\n`)
   process.stdout.write(
-    `[check:outbound-image-runtime-sample] failures total=${failedCount} normalize=${failedByClass.normalize} model=${failedByClass.model} cancelled=${failedByClass.cancelled} other=${failedByClass.other} by_code=${JSON.stringify(failedByCode)}\n`,
+    `[check:outbound-image-runtime-sample] failures total=${failedCount} normalize=${failedByClass.normalize} model=${failedByClass.model} other=${failedByClass.other} by_code=${JSON.stringify(failedByCode)}\n`,
   )
 
   if (options.json) {

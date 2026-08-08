@@ -71,7 +71,7 @@ export default function ProfileSidebar({
       <button
         type="button"
         onClick={onSignOut}
-        className="mt-3 flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium text-[var(--glass-tone-danger-fg)] transition-colors duration-150 hover:bg-[var(--glass-tone-danger-bg)]"
+        className="mt-3 flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium text-[var(--glass-tone-danger-fg)] transition-colors duration-150 hover:bg-[var(--glass-tone-soft)]"
       >
         <AppIcon name="logout" className="h-4 w-4" />
         {t('logout')}

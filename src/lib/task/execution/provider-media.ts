@@ -13,15 +13,13 @@ import {
   waitForAsyncProviderResult,
 } from '@/lib/ai-exec/async-wait'
 import { cancelAsyncTask } from '@/lib/ai-exec/async-poll'
-import {
-  ProviderPermanentFailureError,
-  ProviderTerminalFailureError,
-} from '@/lib/ai-exec/provider-errors'
+import { ProviderTaskFailureError } from '@/lib/ai-exec/provider-errors'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import { processMediaResult } from '@/lib/media-process'
 import { TaskTerminatedError } from '@/lib/task/errors'
 import {
   listTaskAcceptedProviderExternalIds,
-  markTaskProviderInvocationRetryableByExternalId,
+  markTaskProviderInvocationReplayAuthorizedByExternalId,
   readTaskProviderInvocationRouteSelection,
 } from '@/lib/task/provider-invocation'
 import { isTaskActive } from '@/lib/task/service'
@@ -226,8 +224,26 @@ export async function waitExternalResult(
         },
         cause: error,
       })
+      // 顺序契约（PG-06A 排队超时补偿）：先把Provider checkpoint从submitted
+      // 原子推进为replay_authorized，再尽力取消Provider侧任务。下一attempt
+      // 只能经同一invocation identity重新授权，不能从Task投影推断提交许可。
+      await markTaskProviderInvocationReplayAuthorizedByExternalId({
+        taskId: job.data.taskId,
+        externalId,
+        error: queueError,
+      })
+      const replayAuthorized = new AppError('GENERATION_QUEUE_TIMEOUT', error.message, {
+        details: {
+          externalId,
+          externalStatus: 'queue_timeout',
+          queuedMs: error.queuedMs,
+          queueTimeoutMs: error.queueTimeoutMs,
+        },
+        operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT_REPLAY_AUTHORIZED,
+        cause: queueError,
+      })
       logger.error({
-        message: queueError.message,
+        message: replayAuthorized.message,
         errorCode: 'GENERATION_QUEUE_TIMEOUT',
         retryable: true,
         durationMs: Date.now() - startAt,
@@ -235,43 +251,21 @@ export async function waitExternalResult(
           externalId,
         },
       })
-      // 顺序契约（PG-06A 排队超时补偿）：先把Provider checkpoint从submitted
-      // 原子推进为retryable_rejected，再尽力取消Provider侧任务。下一attempt
-      // 只能经同一invocation identity重新授权，不能从Task投影推断提交许可。
-      await markTaskProviderInvocationRetryableByExternalId({
-        taskId: job.data.taskId,
-        externalId,
-        error: queueError,
-      })
       await cancelAsyncProviderTaskBestEffort({ externalId, userId })
-      throw queueError
+      throw replayAuthorized
     }
-    if (error instanceof ProviderTerminalFailureError) {
-      const terminalError = new AppError(error.code, error.message, {
-        details: { externalId, externalStatus: 'failed' },
-        cause: error,
-      })
+    if (error instanceof ProviderTaskFailureError) {
+      const terminalError = AppError.fromFailure(error.failure, error)
       logger.error({
         message: terminalError.message,
-        errorCode: 'EXTERNAL_ERROR',
-        retryable: true,
+        errorCode: error.failure.interpretation.code,
+        retryable: error.failure.recovery.taskReplay === 'safe',
         durationMs: Date.now() - startAt,
         details: {
           externalId,
         },
       })
-      await markTaskProviderInvocationRetryableByExternalId({
-        taskId: job.data.taskId,
-        externalId,
-        error: terminalError,
-      })
       throw terminalError
-    }
-    if (error instanceof ProviderPermanentFailureError) {
-      throw new AppError(error.code, error.message, {
-        details: { externalId, externalStatus: 'failed' },
-        cause: error,
-      })
     }
     throw error
   }
@@ -330,7 +324,7 @@ export async function resolveImageSourceFromGeneration(
   } catch (error) {
     // The Provider Gateway is the sole classifier for durable submission
     // outcomes. Preserve its typed error so an ambiguous POST remains
-    // non-retryable instead of being flattened into GENERATION_FAILED.
+    // replay-forbidden instead of being flattened into GENERATION_FAILED.
     if (error instanceof AppError) throw error
     throw new AppError(
       'EXTERNAL_ERROR',
@@ -400,13 +394,10 @@ export async function resolveVideoSourceFromGeneration(
   params: {
     userId: string
     modelId: string
-    imageUrl?: string
-    referenceImages?: readonly VideoReferenceImageInput[]
+    referenceImages: readonly VideoReferenceImageInput[]
     referenceAudios?: readonly string[]
-    allowTextOnly?: boolean
-    options?: AiVideoExecutionOptions & {
-      generationMode?: 'normal' | 'firstlastframe'
-    }
+    referenceVideos?: readonly string[]
+    options?: AiVideoExecutionOptions
     pollProgress?: { start?: number; end?: number }
   },
 ): Promise<{ url: string; actualVideoTokens?: number; downloadHeaders?: Record<string, string> }> {
@@ -422,15 +413,10 @@ export async function resolveVideoSourceFromGeneration(
 
   const providerReferencePayload = resolveProviderVideoReferencePayload({
     referenceImages: params.referenceImages,
-    imageUrl: params.imageUrl,
-    legacyReferenceImages: params.options?.referenceImages,
-    legacyLastFrameImageUrl: params.options?.lastFrameImageUrl,
-    allowTextOnly: params.allowTextOnly,
   })
   const providerRequestOptions: Record<string, string | number | boolean | string[]> = {}
   for (const [key, value] of Object.entries(params.options || {})) {
     if (
-      key === 'generationMode' ||
       key === 'referenceImages' ||
       key === 'lastFrameImageUrl' ||
       value === undefined
@@ -458,6 +444,9 @@ export async function resolveVideoSourceFromGeneration(
           ...providerReferencePayload.options,
           ...(params.referenceAudios && params.referenceAudios.length > 0
             ? { referenceAudios: [...params.referenceAudios] }
+            : {}),
+          ...(params.referenceVideos && params.referenceVideos.length > 0
+            ? { referenceVideos: [...params.referenceVideos] }
             : {}),
         },
         { key: 'media:video:primary' },

@@ -4,14 +4,22 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { useTranslations } from 'next-intl'
 import { AssistantRuntimeProvider, ThreadPrimitive } from '@assistant-ui/react'
 import { AppIcon } from '@/components/ui/icons'
+import { UserErrorActionLink } from '@/components/errors/UserErrorActionLink'
 import { useAttachmentFilePicker } from '@/components/project-assistant/useAttachmentFilePicker'
 import {
   isAssistantRuntimeApprovalRequest,
   isAssistantRuntimeInputRequest,
   readAssistantRuntimeMcpElicitation,
-  readAssistantRuntimeUserInputQuestions,
   type AssistantRuntimePendingInteractionView,
 } from '@/lib/assistant-runtime/view-contract'
+import {
+  readWaoMcpUserDecisionPresentation,
+  type WaoMcpUserDecisionPresentation,
+  WAO_MCP_USER_DECISION_OPTION_FIELD,
+  WAO_MCP_USER_DECISION_OTHER_FIELD,
+  WAO_MCP_USER_DECISION_OTHER_OPTION_ID,
+} from '@/lib/wao-mcp/user-decision'
+import { isWaoMcpApprovalRequestMeta } from '@/lib/wao-mcp/approval-contract'
 import {
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_ACCEPT,
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES,
@@ -109,7 +117,7 @@ function WorkspaceAssistantRunFailureNotice({
   return (
     <div
       role="alert"
-      className="flex items-start gap-2 rounded-md border border-[var(--glass-tone-warn-fg)]/25 bg-[var(--glass-tone-warn-bg)]/70 px-3 py-2 text-sm leading-5 text-[var(--glass-tone-warn-fg)]"
+      className="flex items-start gap-2 rounded-md bg-[var(--glass-tone-surface)] shadow-[var(--glass-tone-shadow)] px-3 py-2 text-sm leading-5 text-[var(--glass-tone-warning-fg)]"
     >
       <AppIcon name="alert" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
       <div className="min-w-0">
@@ -120,12 +128,17 @@ function WorkspaceAssistantRunFailureNotice({
             {failure.technical}
           </div>
         ) : null}
-        {action ? (
+        {failure.action === 'recharge' ? (
+          <UserErrorActionLink
+            action={failure.action}
+            className="mt-1.5 inline-flex rounded-md border border-[var(--glass-tone-warning-fg)]/30 bg-white/70 px-2 py-1 text-xs font-medium text-[var(--glass-tone-warning-fg)] transition-colors hover:bg-white"
+          />
+        ) : action ? (
           <button
             type="button"
             disabled={action.pending}
             onClick={action.onClick}
-            className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-[var(--glass-tone-warn-fg)]/30 bg-white/70 px-2 py-1 text-xs font-medium text-[var(--glass-tone-warn-fg)] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-[var(--glass-tone-warning-fg)]/30 bg-white/70 px-2 py-1 text-xs font-medium text-[var(--glass-tone-warning-fg)] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             <AppIcon name="refresh" className="h-3 w-3 shrink-0" />
             {action.pending ? action.pendingLabel : action.label}
@@ -184,12 +197,9 @@ function runtimePermissionApprovalFacts(
 
 type RuntimeRequestContent =
   | {
-      readonly kind: 'questions'
-      readonly questions: ReturnType<typeof readAssistantRuntimeUserInputQuestions>
-    }
-  | {
       readonly kind: 'elicitation'
       readonly elicitation: ReturnType<typeof readAssistantRuntimeMcpElicitation>
+      readonly userDecisionPresentation: WaoMcpUserDecisionPresentation | null
     }
   | { readonly kind: 'invalid' }
 
@@ -197,16 +207,15 @@ function parseRuntimeRequestContent(
   interaction: AssistantRuntimePendingInteractionView,
 ): RuntimeRequestContent {
   try {
-    if (interaction.method === 'item/tool/requestUserInput') {
-      return {
-        kind: 'questions',
-        questions: readAssistantRuntimeUserInputQuestions(interaction),
-      }
-    }
     if (interaction.method === 'mcpServer/elicitation/request') {
+      const elicitation = readAssistantRuntimeMcpElicitation(interaction)
       return {
         kind: 'elicitation',
-        elicitation: readAssistantRuntimeMcpElicitation(interaction),
+        elicitation,
+        userDecisionPresentation: readWaoMcpUserDecisionPresentation({
+          requestedSchema: elicitation.requestedSchema,
+          meta: elicitation.meta,
+        }),
       }
     }
   } catch {
@@ -296,97 +305,32 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
     return (
       <div
         role="alert"
-        className="rounded-md border border-[var(--glass-tone-warn-fg)]/25 bg-[var(--glass-tone-warn-bg)]/70 px-3 py-2 text-sm text-[var(--glass-tone-warn-fg)]"
+        className="rounded-md bg-[var(--glass-tone-surface)] shadow-[var(--glass-tone-shadow)] px-3 py-2 text-sm text-[var(--glass-tone-warning-fg)]"
       >
         {t('panel.sessionStateError')}
       </div>
     )
   }
 
-  if (content.kind === 'questions') {
-    const ready = content.questions.every((question) => {
-      const value = values[question.id]
-      return typeof value === 'string' && value.trim().length > 0
-    })
-    return (
-      <div className="space-y-3 rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-sm text-[var(--glass-text-primary)]">
-        {content.questions.map((question) => (
-          <fieldset key={question.id} className="space-y-2">
-            <legend className="font-semibold">{question.header}</legend>
-            <p className="text-xs leading-5 text-[var(--glass-text-secondary)]">
-              {question.question}
-            </p>
-            {question.options ? (
-              <div className="grid gap-2">
-                {question.options.map((option) => {
-                  const selected = values[question.id] === option.label
-                  return (
-                    <button
-                      key={option.label}
-                      type="button"
-                      disabled={submitting}
-                      className={`rounded-xl border px-3 py-2 text-left transition-colors ${selected ? 'border-neutral-900 bg-neutral-50' : 'border-[var(--glass-stroke-base)] bg-white hover:bg-neutral-100'}`}
-                      onClick={() => {
-                        setValues((current) => ({ ...current, [question.id]: option.label }))
-                        setError(false)
-                      }}
-                    >
-                      <span className="block font-medium">{option.label}</span>
-                      {option.description ? (
-                        <span className="mt-0.5 block text-xs text-[var(--glass-text-secondary)]">
-                          {option.description}
-                        </span>
-                      ) : null}
-                    </button>
-                  )
-                })}
-              </div>
-            ) : null}
-            {question.isOther || !question.options ? (
-              <input
-                type={question.isSecret ? 'password' : 'text'}
-                value={typeof values[question.id] === 'string' ? String(values[question.id]) : ''}
-                disabled={submitting}
-                className="w-full rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 py-2 outline-none focus:border-neutral-700"
-                onChange={(event) => {
-                  setValues((current) => ({ ...current, [question.id]: event.target.value }))
-                  setError(false)
-                }}
-              />
-            ) : null}
-          </fieldset>
-        ))}
-        {error ? (
-          <div role="alert" className="text-xs text-[var(--glass-tone-warn-fg)]">
-            {t('cards.interactionSubmitErrorFallback')}
-          </div>
-        ) : null}
-        <button
-          type="button"
-          disabled={!ready || submitting}
-          className="w-full rounded-xl bg-neutral-900 px-3 py-2 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
-          onClick={() => {
-            submit({
-              answers: Object.fromEntries(
-                content.questions.map((question) => [
-                  question.id,
-                  { answers: [String(values[question.id]).trim()] },
-                ]),
-              ),
-            })
-          }}
-        >
-          {submitting ? t('cards.interactionSubmitting') : t('cards.confirmContinue')}
-        </button>
-      </div>
-    )
-  }
-
   const elicitation = content.elicitation
   const schema = elicitation.requestedSchema
+  const userDecisionPresentation = content.userDecisionPresentation
+  const isWaoUserDecision = userDecisionPresentation !== null
+  const isWaoApproval = isWaoMcpApprovalRequestMeta(elicitation.meta)
   const properties = schema && isRecord(schema.properties)
     ? Object.entries(schema.properties)
     : []
+  const otherDecisionProperty = isWaoUserDecision
+    ? properties.find(([key]) => key === WAO_MCP_USER_DECISION_OTHER_FIELD)?.[1]
+    : null
+  const otherDecisionLabel = isRecord(otherDecisionProperty)
+    && typeof otherDecisionProperty.title === 'string'
+    && otherDecisionProperty.title.trim()
+    ? otherDecisionProperty.title
+    : null
+  const otherDecisionValue = typeof values[WAO_MCP_USER_DECISION_OTHER_FIELD] === 'string'
+    ? values[WAO_MCP_USER_DECISION_OTHER_FIELD]
+    : ''
   const required = new Set(
     schema && Array.isArray(schema.required)
       ? schema.required.filter((key): key is string => typeof key === 'string')
@@ -403,7 +347,7 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
         && runtimeEnumOptions(property.items).length > 0
     })
   )
-  const formReady = schemaSupported && properties.every(([key, property]) => {
+  const formReady = schemaSupported && (isWaoApproval || properties.every(([key, property]) => {
     if (!required.has(key)) return true
     if (!isRecord(property)) return false
     const value = values[key]
@@ -416,7 +360,7 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
         && (property.type !== 'integer' || Number.isInteger(parsed))
     }
     return typeof value === 'string' && value.trim().length > 0
-  })
+  }))
   const formContent = (): Record<string, unknown> => {
     const result: Record<string, unknown> = {}
     for (const [key, property] of properties) {
@@ -438,10 +382,34 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
     }
     return result
   }
+  const submitCustomDecision = (): void => {
+    const answer = otherDecisionValue.trim()
+    if (!answer || submitting) return
+    submit({
+      action: 'accept',
+      content: {
+        [WAO_MCP_USER_DECISION_OPTION_FIELD]: WAO_MCP_USER_DECISION_OTHER_OPTION_ID,
+        [WAO_MCP_USER_DECISION_OTHER_FIELD]: answer,
+      },
+      _meta: null,
+    })
+  }
 
   return (
-    <div className="space-y-3 rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-sm text-[var(--glass-text-primary)]">
-      <p className="leading-5">{elicitation.message}</p>
+    <div className="relative space-y-3 rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-sm text-[var(--glass-text-primary)]">
+      {isWaoUserDecision ? (
+        <button
+          type="button"
+          aria-label={t('cards.cancelDecision')}
+          title={t('cards.cancelDecision')}
+          disabled={submitting}
+          className="absolute right-2.5 top-2.5 rounded-full p-1.5 text-[var(--glass-text-secondary)] transition-colors hover:bg-neutral-100 hover:text-[var(--glass-text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => submit({ action: 'decline', content: null, _meta: null })}
+        >
+          <AppIcon name="close" className="h-4 w-4" />
+        </button>
+      ) : null}
+      <p className={`leading-5 ${isWaoUserDecision ? 'pr-8' : ''}`}>{elicitation.message}</p>
       {elicitation.mode === 'url' && elicitation.url ? (
         <a
           href={elicitation.url}
@@ -456,6 +424,7 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
         <div className="space-y-3">
           {properties.map(([key, property]) => {
             if (!isRecord(property)) return null
+            if (isWaoApproval && key === 'confirmed') return null
             const label = typeof property.title === 'string' && property.title.trim()
               ? property.title
               : key
@@ -463,6 +432,93 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
               ? property.description
               : null
             const enumOptions = runtimeEnumOptions(property)
+            if (isWaoUserDecision && key === WAO_MCP_USER_DECISION_OTHER_FIELD) return null
+            if (
+              isWaoUserDecision
+              && key === WAO_MCP_USER_DECISION_OPTION_FIELD
+              && enumOptions.length > 0
+            ) {
+              const decisionOptions = enumOptions.filter(
+                (option) => option.value !== WAO_MCP_USER_DECISION_OTHER_OPTION_ID,
+              )
+              return (
+                <fieldset key={key} className="space-y-2">
+                  <legend className="font-semibold">{label}</legend>
+                  {description && !isWaoUserDecision ? (
+                    <p className="whitespace-pre-line text-xs leading-5 text-[var(--glass-text-secondary)]">
+                      {description}
+                    </p>
+                  ) : null}
+                  <div className="grid gap-2">
+                    {decisionOptions.map((option) => {
+                      const presentationOption = userDecisionPresentation.options.find(
+                        (candidate) => candidate.id === option.value,
+                      )
+                      if (!presentationOption) {
+                        throw new Error('WAO_MCP_USER_DECISION_PRESENTATION_INVALID')
+                      }
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          disabled={submitting}
+                          className="rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 py-2 text-left font-medium transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          onClick={() => submit({
+                            action: 'accept',
+                            content: { [WAO_MCP_USER_DECISION_OPTION_FIELD]: option.value },
+                            _meta: null,
+                          })}
+                        >
+                          <span className="block font-semibold">{option.label}</span>
+                          <span className="mt-1 block text-xs font-normal leading-5 text-[var(--glass-text-secondary)]">
+                            {presentationOption.description}
+                          </span>
+                        </button>
+                      )
+                    })}
+                    {otherDecisionLabel ? (
+                      <div className="relative">
+                        <input
+                          type="text"
+                          minLength={isRecord(otherDecisionProperty) && typeof otherDecisionProperty.minLength === 'number'
+                            ? otherDecisionProperty.minLength
+                            : undefined}
+                          maxLength={isRecord(otherDecisionProperty) && typeof otherDecisionProperty.maxLength === 'number'
+                            ? otherDecisionProperty.maxLength
+                            : undefined}
+                          value={otherDecisionValue}
+                          placeholder={otherDecisionLabel}
+                          disabled={submitting}
+                          className="w-full rounded-xl border border-[var(--glass-stroke-base)] bg-white py-2 pl-3 pr-11 outline-none focus:border-neutral-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          onChange={(event) => {
+                            setValues((current) => ({
+                              ...current,
+                              [WAO_MCP_USER_DECISION_OTHER_FIELD]: event.target.value,
+                            }))
+                            setError(false)
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
+                            event.preventDefault()
+                            submitCustomDecision()
+                          }}
+                        />
+                        <button
+                          type="button"
+                          aria-label={t('cards.sendDecision')}
+                          title={t('cards.sendDecision')}
+                          disabled={submitting || !otherDecisionValue.trim()}
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg bg-neutral-900 p-1.5 text-white transition-colors hover:bg-neutral-700 disabled:cursor-not-allowed disabled:bg-neutral-300"
+                          onClick={submitCustomDecision}
+                        >
+                          <AppIcon name="arrowRight" className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                </fieldset>
+              )
+            }
             if (property.type === 'boolean') {
               return (
                 <label key={key} className="flex items-start gap-2">
@@ -520,7 +576,7 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
               <label key={key} className="block space-y-1">
                 <span className="block font-medium">{label}</span>
                 {description ? (
-                  <span className="block text-xs text-[var(--glass-text-secondary)]">
+                  <span className="block whitespace-pre-line text-xs text-[var(--glass-text-secondary)]">
                     {description}
                   </span>
                 ) : null}
@@ -562,37 +618,41 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
         </div>
       ) : null}
       {!schemaSupported ? (
-        <div role="alert" className="text-xs text-[var(--glass-tone-warn-fg)]">
+        <div role="alert" className="text-xs text-[var(--glass-tone-warning-fg)]">
           {t('panel.sessionStateError')}
         </div>
       ) : null}
       {error ? (
-        <div role="alert" className="text-xs text-[var(--glass-tone-warn-fg)]">
+        <div role="alert" className="text-xs text-[var(--glass-tone-warning-fg)]">
           {t('cards.interactionSubmitErrorFallback')}
         </div>
       ) : null}
-      <div className="flex gap-2">
-        <button
-          type="button"
-          disabled={submitting || (elicitation.mode === 'form' && !formReady)}
-          className="flex-1 rounded-xl bg-neutral-900 px-3 py-2 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
-          onClick={() => submit({
-            action: 'accept',
-            content: elicitation.mode === 'form' ? formContent() : null,
-            _meta: null,
-          })}
-        >
-          {submitting ? t('cards.interactionSubmitting') : t('cards.confirmContinue')}
-        </button>
-        <button
-          type="button"
-          disabled={submitting}
-          className="rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 py-2 font-medium hover:bg-neutral-100 disabled:opacity-50"
-          onClick={() => submit({ action: 'decline', content: null, _meta: null })}
-        >
-          {t('cards.cancelAction')}
-        </button>
-      </div>
+      {!isWaoUserDecision ? (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={submitting || (elicitation.mode === 'form' && !formReady)}
+            className="flex-1 rounded-xl bg-neutral-900 px-3 py-2 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={() => submit({
+              action: 'accept',
+              content: isWaoApproval
+                ? { confirmed: true }
+                : elicitation.mode === 'form' ? formContent() : null,
+              _meta: null,
+            })}
+          >
+            {submitting ? t('cards.interactionSubmitting') : t('cards.confirmContinue')}
+          </button>
+          <button
+            type="button"
+            disabled={submitting}
+            className="rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 py-2 font-medium hover:bg-neutral-100 disabled:opacity-50"
+            onClick={() => submit({ action: 'decline', content: null, _meta: null })}
+          >
+            {t('cards.cancelAction')}
+          </button>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -867,13 +927,6 @@ export default function WorkspaceAssistantPanel({
         onClick: resendUndeliveredMessage,
       }
     : null
-  const assistantTurns = useMemo(() => {
-    const byId = new Map((assistantRuntime.view?.recentTurns ?? []).map((turn) => [turn.turnId, turn] as const))
-    const current = assistantRuntime.view?.currentTurn ?? null
-    if (current) byId.set(current.turnId, current)
-    return [...byId.values()]
-  }, [assistantRuntime.view?.currentTurn, assistantRuntime.view?.recentTurns])
-
   return (
     <aside
       className="pointer-events-none fixed inset-y-0 right-0 z-20 w-0"
@@ -897,7 +950,6 @@ export default function WorkspaceAssistantPanel({
         <div className="h-full opacity-100 transition-opacity duration-200">
           <WorkspaceAssistantRepeatedToolCallGroupProvider
             messages={assistantRuntime.messages}
-            turns={assistantTurns}
           >
             <WorkspaceAssistantWorkspaceLinkProvider
               openWorkspacePath={onOpenWorkspacePath}
@@ -938,7 +990,7 @@ export default function WorkspaceAssistantPanel({
                           {assistantRuntime.viewError ? (
                             <div
                               role="alert"
-                              className="rounded-md border border-[var(--glass-tone-warn-fg)]/25 bg-[var(--glass-tone-warn-bg)]/70 px-3 py-2 text-sm leading-5 text-[var(--glass-tone-warn-fg)]"
+                              className="rounded-md bg-[var(--glass-tone-surface)] shadow-[var(--glass-tone-shadow)] px-3 py-2 text-sm leading-5 text-[var(--glass-tone-warning-fg)]"
                             >
                               {t('panel.sessionStateError')}
                             </div>
@@ -958,6 +1010,7 @@ export default function WorkspaceAssistantPanel({
                                 technical: currentTurn?.requestId
                                   ? formatFailureReference(currentTurn.requestId)
                                   : null,
+                                action: null,
                               }}
                               action={continueAction ?? resendAction}
                             />
@@ -997,7 +1050,6 @@ export default function WorkspaceAssistantPanel({
                     </div>
                   </WorkspaceAssistantRunningSurfaceProvider>
                 </ThreadPrimitive.Viewport>
-
                 <div className="mx-4 mb-2 shrink-0">
                   {displayedRuntimeRequest ? (
                     <div className="mb-2">
@@ -1009,9 +1061,9 @@ export default function WorkspaceAssistantPanel({
                     </div>
                   ) : null}
                   <div className="relative">
-                    {assistantRuntime.view?.thread?.plan ? (
+                    {assistantRuntime.view?.currentTurn?.plan ? (
                       <WorkspaceAssistantPlanCard
-                        plan={assistantRuntime.view.thread.plan}
+                        plan={assistantRuntime.view.currentTurn.plan}
                         isRunActive={assistantRuntime.view.currentTurn?.status === 'running'}
                       />
                     ) : null}

@@ -179,7 +179,7 @@ export async function submitOperationTaskBatch(
         message: error.message,
         required: error.required,
         available: error.available,
-      })
+      }, { cause: error })
     }
     throw error
   }

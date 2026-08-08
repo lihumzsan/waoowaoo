@@ -1,6 +1,7 @@
 import { GoogleGenAI, HarmBlockThreshold, HarmCategory } from '@google/genai'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
-import { RETRY_POLICY, withRetry } from '@/lib/retry'
+import { withRetry } from '@/lib/retry'
 import type { AiProviderImageExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 import {
   assertAllowedGoogleImageOptions,
@@ -12,6 +13,10 @@ import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selectio
 import { withProviderProxyDispatcher } from '@/lib/http/outbound-proxy'
 import { GOOGLE_PROVIDER_PROXY_TARGET } from '@/lib/ai-providers/google/proxy-target'
 import { AppError } from '@/lib/errors/app-error'
+import {
+  captureGoogleSdkSubmission,
+  googleSafetyTerminalError,
+} from './submission'
 
 type GoogleImageOptions = NonNullable<AiProviderImageExecutionContext['options']>
 
@@ -35,15 +40,15 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
 
   if (modelId === 'gemini-3-pro-image-preview-batch') {
     const { submitGeminiBatch } = await import('@/lib/ai-providers/google/batch')
-    const result = await withRetry({
+    const result = await captureGoogleSdkSubmission(async () => await withRetry({
+      operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
       scope: `google:image:batch:${modelId}`,
-      policy: RETRY_POLICY.providerSubmit,
       run: async () => await submitGeminiBatch(apiKey, input.prompt, {
         referenceImages,
         ...(options.aspectRatio ? { aspectRatio: options.aspectRatio } : {}),
         ...(options.resolution ? { resolution: options.resolution } : {}),
       }),
-    })
+    }))
 
     return {
       success: true,
@@ -54,9 +59,9 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
   }
 
   if (modelId.startsWith('imagen-')) {
-    const response = await withRetry({
+    const response = await captureGoogleSdkSubmission(async () => await withRetry({
+      operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
       scope: `google:image:imagen:${modelId}`,
-      policy: RETRY_POLICY.providerSubmit,
       run: async () => await withProviderProxyDispatcher(
         GOOGLE_PROVIDER_PROXY_TARGET,
         async () => await ai.models.generateImages({
@@ -68,7 +73,7 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
           },
         }),
       ),
-    })
+    }))
 
     const generatedImages = (response as ImagenResponse).generatedImages
     const imageBytes = generatedImages?.[0]?.image?.imageBytes
@@ -97,9 +102,9 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
     { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
   ]
 
-  const response = await withRetry({
+  const response = await captureGoogleSdkSubmission(async () => await withRetry({
+    operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
     scope: `google:image:gemini:${modelId}`,
-    policy: RETRY_POLICY.providerSubmit,
     run: async () => await withProviderProxyDispatcher(
       GOOGLE_PROVIDER_PROXY_TARGET,
       async () => await ai.models.generateContent({
@@ -119,7 +124,7 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
         },
       }),
     ),
-  })
+  }))
 
   const candidate = response.candidates?.[0]
   const parts = candidate?.content?.parts || []
@@ -137,7 +142,7 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
 
   const finishReason = candidate?.finishReason
   if (finishReason === 'IMAGE_SAFETY' || finishReason === 'SAFETY') {
-    throw new AppError('SENSITIVE_CONTENT', 'Google blocked image generation by policy', { provider: 'google' })
+    throw googleSafetyTerminalError(finishReason)
   }
 
   throw new AppError('EMPTY_RESPONSE', 'Gemini returned no image', { provider: 'google' })

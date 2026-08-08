@@ -174,6 +174,121 @@ export async function checkBalance(userId: string, requiredAmount: number): Prom
   return balance.balance >= requiredAmount
 }
 
+type LockedBalanceRow = {
+  balance: number
+  subscriptionCredits: number
+  subscriptionExpiresAt: Date | null
+}
+
+export type RealtimeUsageDebitResult = {
+  chargedCredits: number
+  balanceAfter: number
+}
+
+/**
+ * Debit up to the currently available whole credits for one post-priced usage
+ * fact. The caller owns usage identity and exact-price accumulation; this
+ * function remains the only writer for balance and BalanceTransaction.
+ */
+export async function consumeAvailableCreditsInTransaction(
+  tx: Prisma.TransactionClient,
+  params: {
+    userId: string
+    requiredCredits: number
+    idempotencyKey: string
+    projectId: string
+    action: string
+    apiType: ApiType
+    model: string
+    quantity: number
+    unit: UsageUnit
+    metadata?: Record<string, unknown>
+  },
+): Promise<RealtimeUsageDebitResult> {
+  const requiredCredits = assertCreditAmount(params.requiredCredits, 'requiredCredits')
+  await tx.userBalance.upsert({
+    where: { userId: params.userId },
+    create: { userId: params.userId, balance: 0, frozenAmount: 0, totalSpent: 0 },
+    update: {},
+  })
+  const rows = await tx.$queryRaw<LockedBalanceRow[]>`
+    SELECT balance, subscriptionCredits, subscriptionExpiresAt
+    FROM user_balances
+    WHERE userId = ${params.userId}
+    FOR UPDATE
+  `
+  const row = rows[0]
+  if (!row) {
+    throw new BillingOperationError('BILLING_BALANCE_NOT_FOUND', 'balance row missing after initialization', {
+      userId: params.userId,
+    })
+  }
+  const now = new Date()
+  const state = toPoolState(row)
+  const available = usableCredits(state, now)
+  const chargedCredits = Math.min(requiredCredits, available)
+  if (chargedCredits === 0) {
+    return { chargedCredits: 0, balanceAfter: available }
+  }
+  const split = planPoolDebit(state, chargedCredits, now)
+  if (!split) {
+    throw new BillingOperationError('BILLING_BALANCE_DEBIT_CONFLICT', 'locked balance could not fund realtime usage', {
+      userId: params.userId,
+      requiredCredits,
+      available,
+    })
+  }
+  const updated = await tx.userBalance.update({
+    where: { userId: params.userId },
+    data: {
+      ...(split.recharge > 0 ? { balance: { decrement: split.recharge } } : {}),
+      ...(split.subscription > 0
+        ? { subscriptionCredits: { decrement: split.subscription } }
+        : {}),
+      totalSpent: { increment: chargedCredits },
+    },
+  })
+  const balanceAfter = usableCredits(toPoolState(updated), now)
+  await tx.balanceTransaction.create({
+    data: {
+      userId: params.userId,
+      type: 'consume',
+      amount: -chargedCredits,
+      balanceAfter,
+      description: `${params.action} - ${params.model}`,
+      relatedId: params.idempotencyKey,
+      idempotencyKey: params.idempotencyKey,
+      projectId: isProjectScoped(params.projectId) ? params.projectId : null,
+      taskType: params.action,
+      billingMeta: buildBillingMeta({
+        quantity: params.quantity,
+        unit: params.unit,
+        model: params.model,
+        apiType: params.apiType,
+        metadata: {
+          ...(params.metadata ?? {}),
+          chargedCost: chargedCredits,
+          subscriptionCredits: split.subscription,
+          rechargeCredits: split.recharge,
+        },
+      }),
+    },
+  })
+  ledgerLogger.info({
+    audit: true,
+    action: 'billing.llm_realtime.settled',
+    message: 'realtime LLM usage settled',
+    userId: params.userId,
+    projectId: params.projectId,
+    details: {
+      usageId: params.idempotencyKey,
+      chargedCredits,
+      balanceAfter,
+    },
+  })
+  return { chargedCredits, balanceAfter }
+}
+
 type FreezeBalanceOptions = {
   source?: string
   taskId?: string
@@ -195,6 +310,7 @@ function requirePositiveFreezeAmount(amount: number): number {
       'BILLING_INVALID_FREEZE_AMOUNT',
       'freeze amount must be a positive whole number of credits',
       { amount },
+      error,
     )
   }
 }
@@ -457,7 +573,7 @@ export async function freezeBalance(
             expectedUserId: userId,
             actualTaskId: existing.taskId,
             expectedTaskId: options.taskId ?? null,
-          })
+          }, error)
         }
         return existing.status === 'pending'
           && existingAmount === normalizedAmount
@@ -486,7 +602,7 @@ export async function freezeBalance(
       userId,
       amount: normalizedAmount,
       idempotencyKey: options?.idempotencyKey ?? null,
-    })
+    }, error)
   }
 }
 
@@ -638,7 +754,12 @@ export async function confirmChargeWithRecord(
     if (error instanceof Error) {
       throw new BillingOperationError('BILLING_CONFIRM_FAILED', error.message, { freezeId }, error)
     }
-    throw new BillingOperationError('BILLING_CONFIRM_FAILED', `confirm charge failed: ${describeUnknownError(error)}`, { freezeId })
+    throw new BillingOperationError(
+      'BILLING_CONFIRM_FAILED',
+      `confirm charge failed: ${describeUnknownError(error)}`,
+      { freezeId },
+      error,
+    )
   }
 }
 
@@ -837,7 +958,12 @@ export async function increasePendingFreezeAmount(freezeId: string, delta: numbe
     if (error instanceof Error) {
       throw new BillingOperationError('BILLING_FREEZE_EXPAND_FAILED', error.message, { freezeId, delta: normalizedDelta }, error)
     }
-    throw new BillingOperationError('BILLING_FREEZE_EXPAND_FAILED', `increase freeze failed: ${describeUnknownError(error)}`, { freezeId, delta: normalizedDelta })
+    throw new BillingOperationError(
+      'BILLING_FREEZE_EXPAND_FAILED',
+      `increase freeze failed: ${describeUnknownError(error)}`,
+      { freezeId, delta: normalizedDelta },
+      error,
+    )
   }
 }
 

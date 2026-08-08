@@ -27,7 +27,7 @@ const ALLOWED_FIELDS: ReadonlyArray<string> = [
   'assistantBillingConfirmationRequired',
 ]
 
-const MODEL_FIELDS = new Set([
+const PLATFORM_MODEL_FIELDS = new Set([
   'assistantModel',
   'analysisModel',
   'characterModel',
@@ -137,7 +137,7 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
         await lockUserPreferenceOwner(transaction, ctx.userId)
         const body: Record<string, unknown> = input
         if (isPlatformProviderCredentialMode(deployment)) {
-          const attemptedModelField = Object.keys(body).find((field) => MODEL_FIELDS.has(field))
+          const attemptedModelField = Object.keys(body).find((field) => PLATFORM_MODEL_FIELDS.has(field))
           if (attemptedModelField) {
             throw new ApiError('FORBIDDEN', {
               code: 'PLATFORM_MODELS_MANAGED_BY_PLATFORM',
@@ -165,6 +165,14 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
           create: { userId: ctx.userId, ...updateData },
         })
 
+        if (isPlatformProviderCredentialMode(deployment)) {
+          return {
+            preference: {
+              ...preference,
+              ...getPlatformDefaultModels(),
+            },
+          }
+        }
         return { preference }
       },
     }),

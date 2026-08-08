@@ -9,7 +9,6 @@ import {
   settleTaskBillingInTransaction,
 } from '@/lib/billing/service'
 import { BillingOperationError } from '@/lib/billing/errors'
-import { buildLlmUsageFactId, recordLlmUsageFact } from '@/lib/billing/llm-usage'
 import { TASK_TYPE, type TaskBillingInfo } from '@/lib/task/types'
 import { prisma } from '../../helpers/prisma'
 import { resetBillingState } from '../../helpers/db-reset'
@@ -112,52 +111,6 @@ describe('billing/service integration', () => {
     expect(balance?.balance).toBeCloseTo(10, 8)
     expect(balance?.totalSpent).toBeCloseTo(0, 8)
     expect(await prisma.balanceTransaction.count({ where: { type: 'shadow_consume' } })).toBe(1)
-  })
-
-  it('exact-replays free LLM usage by canonical row identity and rejects divergent usage', async () => {
-    const user = await createTestUser()
-    const project = await createTestProject(user.id)
-    const usageId = buildLlmUsageFactId('agent-turn', ['turn-usage-test', 1, 'agent_model'])
-    const usage = {
-      phase: 'agent_model' as const,
-      modelKey: 'openai::usage-test-model',
-      inputTokens: 120,
-      outputTokens: 30,
-      cachedInputTokens: 20,
-      requestCount: 1,
-    }
-
-    const record = async (outputTokens = usage.outputTokens) => {
-      await prisma.$transaction(async (tx) => {
-        await recordLlmUsageFact(tx, {
-          usageId,
-          projectId: project.id,
-          userId: user.id,
-          action: 'assistant.run',
-          usage: { ...usage, outputTokens },
-          metadata: { turnId: 'turn-usage-test', attempt: 1 },
-        })
-      })
-    }
-
-    await record()
-    await record()
-
-    const facts = await prisma.usageCost.findMany({ where: { id: usageId } })
-    expect(facts).toHaveLength(1)
-    expect(facts[0]).toMatchObject({
-      quantity: 150,
-      unit: 'token',
-      action: 'assistant.run',
-      model: usage.modelKey,
-    })
-    expect(facts[0]!.cost).toBe(0)
-    expect(await prisma.balanceTransaction.count()).toBe(0)
-
-    await expect(record(31)).rejects.toMatchObject({
-      code: 'BILLING_USAGE_REPLAY_DIVERGED',
-    } satisfies Partial<BillingOperationError>)
-    expect(await prisma.usageCost.count({ where: { id: usageId } })).toBe(1)
   })
 
   it('freezes and settles in ENFORCE mode with actual usage', async () => {

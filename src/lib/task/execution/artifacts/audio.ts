@@ -1,4 +1,7 @@
 import { decodeBase64WithLimit, MAX_AUDIO_BYTES, readResponseBufferWithLimit } from '@/lib/http/body-limits'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
+import { fetchSafeOutboundMedia } from '@/lib/media/outbound-fetch'
+import { withRetry } from '@/lib/retry'
 import { toFetchableUrl } from '@/lib/storage'
 
 function readString(value: unknown): string {
@@ -44,12 +47,18 @@ export async function loadGeneratedAudio(input: {
   const decoded = decodeAudioDataUrl(dataUrl, input.label)
   if (decoded) return decoded
 
-  const response = await fetch(toFetchableUrl(dataUrl))
-  if (!response.ok) {
-    throw new Error(`${input.errorPrefix}_AUDIO_DOWNLOAD_FAILED:${response.status}`)
-  }
-  return {
-    buffer: await readResponseBufferWithLimit(response, MAX_AUDIO_BYTES, input.label),
-    mimeType: response.headers.get('content-type') || explicitMimeType,
-  }
+  return await withRetry({
+    operation: EXTERNAL_OPERATION.MEDIA_DOWNLOAD,
+    scope: 'media:generated-audio-download',
+    run: async () => {
+      const response = await fetchSafeOutboundMedia(toFetchableUrl(dataUrl))
+      if (!response.ok) {
+        throw new Error(`${input.errorPrefix}_AUDIO_DOWNLOAD_FAILED:${response.status}`)
+      }
+      return {
+        buffer: await readResponseBufferWithLimit(response, MAX_AUDIO_BYTES, input.label),
+        mimeType: response.headers.get('content-type') || explicitMimeType,
+      }
+    },
+  })
 }

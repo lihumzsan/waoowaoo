@@ -13,6 +13,44 @@ export const EMPTY_WORKSPACE_SSE_CURSOR: WorkspaceSseCursor = {
   taskEventId: 0,
 }
 
+export const WORKSPACE_SSE_CONTROL_EVENT_TYPE = {
+  HEARTBEAT: 'heartbeat',
+} as const
+
+export const WORKSPACE_SSE_HEARTBEAT_INTERVAL_MS = 15_000
+export const WORKSPACE_SSE_HEARTBEAT_TIMEOUT_MS = 45_000
+
+export type WorkspaceSseHeartbeat = {
+  readonly ts: string
+  readonly workspaceResourceRevision: number | null
+}
+
+export function parseWorkspaceSseHeartbeat(value: unknown): WorkspaceSseHeartbeat {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('SSE_HEARTBEAT_PAYLOAD_INVALID')
+  }
+  const record = value as Record<string, unknown>
+  const revision = record.workspaceResourceRevision
+  if (
+    typeof record.ts !== 'string'
+    || record.ts.length === 0
+    || (
+      revision !== null
+      && (
+        typeof revision !== 'number'
+        || !Number.isSafeInteger(revision)
+        || revision < 0
+      )
+    )
+  ) {
+    throw new Error('SSE_HEARTBEAT_PAYLOAD_INVALID')
+  }
+  return {
+    ts: record.ts,
+    workspaceResourceRevision: revision as number | null,
+  }
+}
+
 function parsePositiveInteger(value: string): number {
   if (!/^\d+$/.test(value)) throw new Error('SSE_CURSOR_INTEGER_INVALID')
   const parsed = Number.parseInt(value, 10)

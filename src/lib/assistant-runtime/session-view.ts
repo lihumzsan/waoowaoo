@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client'
 import { safeValidateUIMessages, type UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
 import { buildAgentTurnAssistantMessageId } from '@/lib/agent-turn/stream-publisher'
-import { resolveUnifiedErrorCode } from '@/lib/errors/codes'
+import { parseFailureRecord } from '@/lib/errors/failure'
 import type { RuntimeJsonValue } from '@/lib/codex-runtime/runtime-adapter'
 import {
   parseProjectAgentPlanSnapshot,
@@ -40,27 +40,32 @@ function toTurnView(row: {
   readonly sourceId: string
   readonly status: string
   readonly attempt: number
+  readonly planJson: Prisma.JsonValue | null
   readonly assistantMessageId: string | null
   readonly stopReason: string | null
-  readonly errorCode: string | null
+  readonly failure: Prisma.JsonValue | null
   readonly cancelReason: string | null
   readonly startedAt: Date | null
   readonly finishedAt: Date | null
   readonly createdAt: Date
   readonly updatedAt: Date
 }): AssistantRuntimeSessionTurnView {
+  const status = parseTurnStatus(row.status)
   return {
     turnId: row.id,
     requestId: row.requestId,
     sourceKind: parseSourceKind(row.sourceKind),
     sourceId: row.sourceId,
-    status: parseTurnStatus(row.status),
+    status,
     attempt: row.attempt,
+    plan: status === 'running' || status === 'waiting_approval'
+      ? parseProjectAgentPlanSnapshot(row.planJson)
+      : null,
     assistantMessageId: row.assistantMessageId ?? (row.startedAt
       ? buildAgentTurnAssistantMessageId({ turnId: row.id, attempt: row.attempt })
       : null),
     stopReason: row.stopReason,
-    errorCode: row.errorCode ? resolveUnifiedErrorCode(row.errorCode) ?? 'INTERNAL_ERROR' : null,
+    errorCode: parseFailureRecord(row.failure)?.interpretation.code ?? null,
     cancelReason: row.cancelReason,
     startedAt: row.startedAt?.toISOString() ?? null,
     finishedAt: row.finishedAt?.toISOString() ?? null,
@@ -220,7 +225,7 @@ export async function getAssistantRuntimeSessionView(
         status: task.status,
         terminal: TERMINAL_TASK_STATUSES.has(task.status),
         errorCode: task.status === 'failed'
-          ? resolveUnifiedErrorCode(task.errorCode) ?? 'INTERNAL_ERROR'
+          ? parseFailureRecord(task.failure)?.interpretation.code ?? 'INTERNAL_ERROR'
           : null,
         createdAt: task.createdAt.toISOString(),
         finishedAt: task.finishedAt?.toISOString() ?? null,
@@ -253,7 +258,6 @@ export async function getAssistantRuntimeSessionView(
       thread: {
         threadId: thread.id,
         messages,
-        plan: parseProjectAgentPlanSnapshot(thread.planJson),
         createdAt: thread.createdAt.toISOString(),
         updatedAt: thread.updatedAt.toISOString(),
       },

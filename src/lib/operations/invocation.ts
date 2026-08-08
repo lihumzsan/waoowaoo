@@ -6,6 +6,7 @@ import { publishOperationMutationReceipt } from '@/lib/workspace-resource/resour
 import { resolveOperationScopeInput } from './environment-input'
 import {
   buildProjectAgentToolInputCorrections,
+  expandProjectAgentToolInputIssues,
   normalizeProjectAgentToolInput,
 } from './tool-input-schema'
 import {
@@ -77,38 +78,54 @@ function normalizeInvocationInput(params: {
   }
 }
 
-export function prepareProjectAgentOperationInput(params: {
+export async function prepareProjectAgentOperationInput(params: {
   channel: OperationInvocationChannel
   operation: ProjectAgentOperationDefinition
-  context: ProjectAgentOperationContext['context']
+  context: ProjectAgentOperationContext
   input: unknown
   approvedInvocation?: PlannedOperationInvocation | null
-}): {
+}): Promise<{
   input: unknown
   invocation: PlannedOperationInvocation | null
-} {
+}> {
   assertOperationChannelAllowed(params.operation, params.channel)
-  const normalized = normalizeInvocationInput(params)
+  const normalized = normalizeInvocationInput({
+    ...params,
+    context: params.context.context,
+  })
+  const toolRuntimeSchema = params.operation.toolInputCanonicalizer?.inputSchema
+    ?? params.operation.inputSchema
   const normalizedBusinessInput =
     params.channel === 'tool'
       ? normalizeProjectAgentToolInput({
           operationId: params.operation.id,
           input: normalized.businessInput,
-          inputSchema: params.operation.inputSchema,
+          inputSchema: toolRuntimeSchema,
           toolInputSchema: params.operation.toolInputSchema,
         })
       : normalized.businessInput
-  const parsedInput = params.operation.inputSchema.safeParse(normalizedBusinessInput)
+  const canonicalInput = params.channel === 'tool' && params.operation.toolInputCanonicalizer
+    ? await params.operation.toolInputCanonicalizer.canonicalize(
+        params.context,
+        normalizedBusinessInput,
+      )
+    : normalizedBusinessInput
+  const parsedInput = params.operation.inputSchema.safeParse(canonicalInput)
   if (!parsedInput.success) {
+    const issues = expandProjectAgentToolInputIssues({
+      input: canonicalInput,
+      toolInputSchema: params.operation.toolInputSchema,
+      issues: parsedInput.error.issues,
+    })
     throw new ApiError('INVALID_PARAMS', {
       code: 'OPERATION_INPUT_INVALID',
       operationId: params.operation.id,
       message: 'PROJECT_AGENT_INVALID_OPERATION_INPUT',
-      issues: parsedInput.error.issues,
+      issues,
       corrections: buildProjectAgentToolInputCorrections({
-        input: normalizedBusinessInput,
+        input: canonicalInput,
         toolInputSchema: params.operation.toolInputSchema,
-        issues: parsedInput.error.issues,
+        issues,
       }),
     })
   }
@@ -181,7 +198,13 @@ export async function invokeProjectAgentOperation(params: {
       operation.effects.billable ||
       operation.effects.externalSideEffects ||
       operation.effects.longRunning ||
-      operation.confirmation.kind !== 'none' ||
+      (
+        operation.confirmation.kind !== 'none'
+        && !(
+          operation.confirmation.kind === 'destructive'
+          && params.context.destructiveApprovalVerified === true
+        )
+      ) ||
       !operation.executeInTransaction ||
       operation.prepareTransaction ||
       operation.compensateTransactionFailure ||
@@ -189,10 +212,10 @@ export async function invokeProjectAgentOperation(params: {
   ) {
     throw new Error(`PROJECT_AGENT_OPERATION_TOOL_EFFECT_CONTRACT_INVALID:${operation.id}`)
   }
-  const prepared = prepareProjectAgentOperationInput({
+  const prepared = await prepareProjectAgentOperationInput({
     channel: params.channel,
     operation,
-    context: params.context.context,
+    context: params.context,
     input: params.input,
     approvedInvocation: params.approvedInvocation,
   })

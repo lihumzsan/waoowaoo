@@ -1,6 +1,4 @@
-import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { createScopedLogger } from '@/lib/logging/core'
 import {
   expireSubscriptionPoolInTransaction,
   grantSubscriptionPeriodInTransaction,
@@ -13,17 +11,16 @@ import {
   type SubscriptionPlanId,
 } from './subscription-plans'
 
-const subscriptionLogger = createScopedLogger({ module: 'billing.subscription' })
-
 /**
- * Statuses in which a subscription still grants credits. Stripe owns the
- * status; this list is only our reading of which of them are "paid up".
- * `past_due` keeps granting on purpose — that is the grace period, and Stripe
- * moves the subscription to `unpaid`/`canceled` when retries are exhausted.
+ * Statuses in which a plan term still grants credits.
+ *
+ * A term is bought outright, so there is no dunning or grace period to model:
+ * it is either paid up or it has run out. `currentPeriodEnd` is what actually
+ * stops the grants; this status is the coarse flag alongside it.
  */
-const GRANTING_STATUSES: ReadonlySet<string> = new Set(['active', 'trialing', 'past_due'])
+const GRANTING_STATUSES: ReadonlySet<string> = new Set(['active'])
 
-export function isGrantingSubscriptionStatus(status: string): boolean {
+export function isGrantingPlanTermStatus(status: string): boolean {
   return GRANTING_STATUSES.has(status)
 }
 
@@ -49,9 +46,9 @@ export function addMonths(from: Date, months: number): Date {
 /**
  * Which monthly period a subscription is in, counted from its anchor.
  *
- * The index is monotonic across renewals and plan changes, which is what makes
- * it usable as a grant identity: a yearly term pays once and grants twelve
- * times, and a monthly term simply keeps counting.
+ * The index is monotonic inside one paid term. A yearly term pays once and
+ * grants twelve times; a later payment receives a new `currentTermKey` and
+ * starts again at period zero without colliding with the previous term.
  */
 export function resolvePeriodIndex(anchorAt: Date, now: Date): number {
   if (now.getTime() <= anchorAt.getTime()) return 0
@@ -71,8 +68,9 @@ export interface SubscriptionSnapshot {
   readonly planId: SubscriptionPlanId
   readonly interval: SubscriptionInterval
   readonly status: string
-  readonly cancelAtPeriodEnd: boolean
+  readonly currentPeriodStart: Date
   readonly currentPeriodEnd: Date
+  readonly currentTermKey: string
   readonly grantsCredits: boolean
 }
 
@@ -82,9 +80,9 @@ type SubscriptionRow = {
   planId: string
   interval: string
   status: string
-  cancelAtPeriodEnd: boolean
+  currentPeriodStart: Date
   currentPeriodEnd: Date
-  createdAt: Date
+  currentTermKey: string
 }
 
 export function toSubscriptionSnapshot(row: SubscriptionRow): SubscriptionSnapshot | null {
@@ -95,9 +93,10 @@ export function toSubscriptionSnapshot(row: SubscriptionRow): SubscriptionSnapsh
     planId: row.planId,
     interval: row.interval,
     status: row.status,
-    cancelAtPeriodEnd: row.cancelAtPeriodEnd,
+    currentPeriodStart: row.currentPeriodStart,
     currentPeriodEnd: row.currentPeriodEnd,
-    grantsCredits: isGrantingSubscriptionStatus(row.status),
+    currentTermKey: row.currentTermKey,
+    grantsCredits: isGrantingPlanTermStatus(row.status),
   }
 }
 
@@ -116,17 +115,17 @@ export async function ensureCurrentPeriodGranted(
 ): Promise<{ status: 'granted' | 'already_granted' | 'no_subscription' | 'not_granting' }> {
   const subscription = await prisma.subscription.findUnique({ where: { userId } })
   if (!subscription) return { status: 'no_subscription' }
-  if (!isGrantingSubscriptionStatus(subscription.status)) return { status: 'not_granting' }
+  if (!isGrantingPlanTermStatus(subscription.status)) return { status: 'not_granting' }
   if (!isSubscriptionPlanId(subscription.planId)) {
     throw new Error(`SUBSCRIPTION_PLAN_UNKNOWN: ${subscription.planId}`)
   }
 
   const plan = getSubscriptionPlan(subscription.planId)
-  const periodIndex = resolvePeriodIndex(subscription.createdAt, now)
-  const expiresAt = addMonths(subscription.createdAt, periodIndex + 1)
+  const periodIndex = resolvePeriodIndex(subscription.currentPeriodStart, now)
+  const expiresAt = addMonths(subscription.currentPeriodStart, periodIndex + 1)
 
-  // A term that has run past what was paid for stops granting. Stripe will
-  // either renew it (advancing currentPeriodEnd) or end it.
+  // Grants stop at the boundary of this paid term. A later payment starts a
+  // different term identity instead of extending this one.
   if (expiresAt.getTime() > subscription.currentPeriodEnd.getTime()) {
     return { status: 'not_granting' }
   }
@@ -135,96 +134,14 @@ export async function ensureCurrentPeriodGranted(
     subscriptionId: subscription.id,
     userId,
     planId: plan.id,
+    termKey: subscription.currentTermKey,
     periodIndex,
     credits: plan.monthlyCredits,
     expiresAt,
+    grantedAt: now,
   }))
 
   return { status: result.status === 'granted' ? 'granted' : 'already_granted' }
-}
-
-/**
- * Top up the current period after an immediate upgrade.
- *
- * An upgrade takes effect at once, so the user gets the difference between the
- * new plan's monthly grant and what this period already granted. Credits
- * already spent are not clawed back, and a downgrade adds nothing — it takes
- * effect when the period ends, so this returns zero rather than a negative.
- */
-export async function topUpCurrentPeriodForPlanChange(
-  tx: Prisma.TransactionClient,
-  input: {
-    subscriptionId: string
-    userId: string
-    nextPlanId: SubscriptionPlanId
-    periodIndex: number
-    expiresAt: Date
-  },
-): Promise<{ addedCredits: number }> {
-  const plan = getSubscriptionPlan(input.nextPlanId)
-  const existing = await tx.subscriptionGrant.findUnique({
-    where: {
-      subscriptionId_periodIndex: {
-        subscriptionId: input.subscriptionId,
-        periodIndex: input.periodIndex,
-      },
-    },
-  })
-  if (!existing) {
-    await grantSubscriptionPeriodInTransaction(tx, {
-      subscriptionId: input.subscriptionId,
-      userId: input.userId,
-      planId: plan.id,
-      periodIndex: input.periodIndex,
-      credits: plan.monthlyCredits,
-      expiresAt: input.expiresAt,
-    })
-    return { addedCredits: plan.monthlyCredits }
-  }
-
-  const delta = plan.monthlyCredits - existing.credits
-  if (delta <= 0) return { addedCredits: 0 }
-
-  await tx.userBalance.update({
-    where: { userId: input.userId },
-    data: { subscriptionCredits: { increment: delta } },
-  })
-  await tx.subscriptionGrant.update({
-    where: { id: existing.id },
-    data: { credits: plan.monthlyCredits, planId: plan.id },
-  })
-  await tx.balanceTransaction.create({
-    data: {
-      userId: input.userId,
-      type: 'subscription_grant',
-      amount: 0,
-      balanceAfter: 0,
-      description: `[UPGRADE] ${plan.id} period ${input.periodIndex}`,
-      relatedId: input.subscriptionId,
-      idempotencyKey: `subscription:${input.subscriptionId}:${input.periodIndex}:upgrade:${plan.id}`,
-      billingMeta: JSON.stringify({
-        planId: plan.id,
-        periodIndex: input.periodIndex,
-        addedCredits: delta,
-        previousCredits: existing.credits,
-      }),
-    },
-  })
-
-  subscriptionLogger.info({
-    audit: true,
-    action: 'billing.subscription.upgraded',
-    message: 'subscription upgrade topped up current period',
-    userId: input.userId,
-    details: {
-      subscriptionId: input.subscriptionId,
-      planId: plan.id,
-      periodIndex: input.periodIndex,
-      addedCredits: delta,
-    },
-  })
-
-  return { addedCredits: delta }
 }
 
 /** End a subscription: stop granting and clear whatever the pool still holds. */
