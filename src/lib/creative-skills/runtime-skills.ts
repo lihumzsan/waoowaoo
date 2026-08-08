@@ -174,7 +174,7 @@ export async function materializeCreativeRuntimeConfiguration(
     // `~` resolves through this process's CODEX_HOME on both drivers. A host
     // absolute path is invalid inside Docker and would silently leave the
     // bundled system Skill enabled there.
-    `path = ${tomlString(path.join('~', 'skills', '.system', skillId, 'SKILL.md'))}`,
+    `path = ${tomlString(path.posix.join('~', 'skills', '.system', skillId, 'SKILL.md'))}`,
     'enabled = false',
     '',
   ])
