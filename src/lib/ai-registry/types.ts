@@ -10,6 +10,7 @@ export type AiLlmProtocol =
   | 'openai-responses'
   | 'openai-compatible-chat'
   | 'openrouter-chat'
+  | 'codex-cli'
   | 'google-generative-ai'
 
 /** Provider wire verified specifically for Codex custom model providers. */
@@ -532,6 +533,7 @@ function validateLLMCapabilities(issues: CapabilityValidationIssue[], raw: unkno
     'openai-responses',
     'openai-compatible-chat',
     'openrouter-chat',
+    'codex-cli',
     'google-generative-ai',
   ]
   if (!allowedProtocols.includes(protocol as AiLlmProtocol)) {
