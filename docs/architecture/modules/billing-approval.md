@@ -55,8 +55,10 @@ Task 并扣费。Web、MCP 与未来 CLI 调用同一 planning/submit service；
   各池出资额，结算与回滚按原出资归还；周期已过期后释放的订阅额度必须作废并落流水，不得复活。
   过期只能在读取时按到期时间判定（lazy），正确性不依赖定时任务是否按时执行。取消订阅只结束
   订阅池，绝不动充值池。
-- **BA-16 — 每期发放只有一个幂等写入者。** 发放身份是 `(订阅, 期次)`；重投回调、重放 Activity
-  与并发 sweep 只发放一次。发放替换而非累加，上期余额在同一事务作废并落流水。套餐只能从我们在
+- **BA-16 — 每期发放只有一个幂等写入者。** 发放身份是 `(付费 term, 期次)`；每次购买或升级产生新的
+  term identity，期次可从零重新开始；重投回调、重放 Activity
+  与并发 sweep 只发放一次。同一 term 的下一期发放替换而非累加，上期余额在同一事务作废并落流水；
+  新 term 首期只结转当下仍可用的套餐余额，再加新套餐完整月额度。套餐只能从我们在
   下单时写入的 metadata 读取，禁止从支付平台的价格 id 或金额反推。
 - **BA-17 — LLM 后付、逐调用实时结算、事前只做门禁。** 模型价格跑完才知道，不进入
   plan/quote/freeze 链路。每个完成的 Provider generation 或搜索请求拥有独立幂等 identity，并在同一
@@ -105,3 +107,6 @@ Task 并扣费。Web、MCP 与未来 CLI 调用同一 planning/submit service；
   → approval identity 不含输入 → canonical input hash 纳入 identity（BA-12）。
 - 图片生成的新 producer 绕过既有能力编译器，只把画幅写进 Task，价格目录按分辨率+质量+画幅匹配
   因而报"找不到价格" → 新实例漏接既有编译入口 → 所有图片 producer 走同一 payload builder。
+- 套餐重复购买曾同时用 `createdAt` 和 `currentPeriodStart` 解释周期，并把第二笔付款顺延到未来；两者仅差
+  1ms 也会让已付款的下一期永远无法发放 → 上一版只断言付款当下没有重复发放，没有把时钟推进到下一期，
+  也没有为每笔付款建立 term identity → 购买成功改为立即开启新 term，发放按 `(付费 term, 期次)` 幂等。

@@ -1,12 +1,12 @@
 import type Stripe from 'stripe'
 import {
   getSubscriptionPlan,
-  subscriptionPeriodPriceCny,
   type SubscriptionInterval,
   type SubscriptionPlanId,
 } from '@/lib/billing/subscription-plans'
 import { quoteRecharge, STRIPE_PAYMENT_CURRENCY, type RechargeQuote } from './recharge-config'
 import { createStripeClient } from './stripe-client'
+import { quotePlanPurchase } from './plan-purchase-quote'
 import { admitPaidBetaPayment } from './paid-beta-admission'
 import {
   attachPaidBetaProviderObject,
@@ -123,15 +123,7 @@ export async function createWechatPlanIntent(
   input: CreateWechatPlanIntentInput,
 ): Promise<WechatPlanIntentResult> {
   const plan = getSubscriptionPlan(input.planId)
-  const listPriceCny = subscriptionPeriodPriceCny(plan, input.interval)
-  // The promo is a first-purchase discount on the monthly term. It changes what
-  // is charged, never what the term grants.
-  const promoCny = input.interval === 'month' ? plan.firstMonthPromoCny : null
-  const amountCny = promoCny ?? listPriceCny
-  const minorAmount = Math.round(amountCny * 100)
-  if (!Number.isSafeInteger(minorAmount) || minorAmount <= 0) {
-    throw new Error('PAYMENT_AMOUNT_INVALID')
-  }
+  const quote = await quotePlanPurchase(input)
 
   const attempt = await admitPaidBetaPayment({
     userId: input.userId,
@@ -140,8 +132,8 @@ export async function createWechatPlanIntent(
 
   try {
     const intent = await createStripeClient().paymentIntents.create({
-      amount: minorAmount,
-      currency: STRIPE_PAYMENT_CURRENCY.toLowerCase(),
+      amount: quote.amountMinor,
+      currency: quote.currency,
       payment_method_types: ['wechat_pay'],
       metadata: {
         waoowaoo_kind: WECHAT_PLAN_KIND,
@@ -149,8 +141,11 @@ export async function createWechatPlanIntent(
         plan_id: plan.id,
         plan_interval: input.interval,
         monthly_credits: String(plan.monthlyCredits),
-        payment_amount: amountCny.toFixed(2),
-        payment_currency: STRIPE_PAYMENT_CURRENCY.toLowerCase(),
+        plan_quote_version: quote.version,
+        plan_purchase_action: quote.action,
+        list_price_cny: quote.listPriceCny.toFixed(2),
+        payment_amount: quote.amountCny.toFixed(2),
+        payment_currency: quote.currency,
         [PAID_BETA_ATTEMPT_METADATA_KEY]: attempt.attemptId,
         [PAID_BETA_SEAT_METADATA_KEY]: attempt.seatId,
       },
@@ -166,7 +161,7 @@ export async function createWechatPlanIntent(
       clientSecret: intent.client_secret,
       planId: plan.id,
       interval: input.interval,
-      amountCny,
+      amountCny: quote.amountCny,
     }
   } catch (error) {
     await failPaidBetaPaymentAttempt(attempt.attemptId)

@@ -9,15 +9,43 @@ export interface GrantSubscriptionPeriodInput {
   readonly subscriptionId: string
   readonly userId: string
   readonly planId: string
+  readonly termKey: string
   /** Months elapsed since the paid term began. A yearly term grants 0…11. */
   readonly periodIndex: number
   readonly credits: number
   readonly expiresAt: Date
+  readonly grantedAt?: Date
 }
 
 export type GrantSubscriptionPeriodResult =
   | { readonly status: 'granted'; readonly credits: number; readonly expiredCredits: number }
   | { readonly status: 'already_granted' }
+
+type LockedSubscriptionBalance = {
+  balance: number
+  subscriptionCredits: number
+  subscriptionExpiresAt: Date | null
+}
+
+export async function lockSubscriptionBalanceInTransaction(
+  tx: Prisma.TransactionClient,
+  userId: string,
+): Promise<LockedSubscriptionBalance> {
+  await tx.userBalance.upsert({
+    where: { userId },
+    create: { userId, balance: 0, frozenAmount: 0, totalSpent: 0 },
+    update: {},
+  })
+  const rows = await tx.$queryRaw<LockedSubscriptionBalance[]>`
+    SELECT balance, subscriptionCredits, subscriptionExpiresAt
+    FROM user_balances
+    WHERE userId = ${userId}
+    FOR UPDATE
+  `
+  const balance = rows[0]
+  if (!balance) throw new Error('SUBSCRIPTION_BALANCE_LOCK_FAILED')
+  return balance
+}
 
 /**
  * Grant one period's credits, replacing whatever the previous period left.
@@ -27,7 +55,8 @@ export type GrantSubscriptionPeriodResult =
  * ledger explains where those credits went. Only the subscription pool is
  * touched — credits the user bought outright are never affected by a grant.
  *
- * `SubscriptionGrant(subscriptionId, periodIndex)` is the idempotency key. A
+ * `SubscriptionGrant(subscriptionId, termKey, periodIndex)` is the idempotency
+ * key. A
  * retried webhook, a replayed workflow activity or a duplicate Stripe delivery
  * therefore grants once; the second attempt reports `already_granted` rather
  * than handing out free credits.
@@ -43,8 +72,9 @@ export async function grantSubscriptionPeriodInTransaction(
 
   const existing = await tx.subscriptionGrant.findUnique({
     where: {
-      subscriptionId_periodIndex: {
+      subscriptionId_termKey_periodIndex: {
         subscriptionId: input.subscriptionId,
+        termKey: input.termKey,
         periodIndex: input.periodIndex,
       },
     },
@@ -52,16 +82,12 @@ export async function grantSubscriptionPeriodInTransaction(
   })
   if (existing) return { status: 'already_granted' }
 
-  const balance = await tx.userBalance.upsert({
-    where: { userId: input.userId },
-    create: { userId: input.userId, balance: 0, frozenAmount: 0, totalSpent: 0 },
-    update: {},
-  })
+  const balance = await lockSubscriptionBalanceInTransaction(tx, input.userId)
 
   // Whatever the previous period left behind is forfeited now. Reading it
   // through the same expiry rule the rest of the ledger uses keeps one
   // definition of "still valid".
-  const now = new Date()
+  const now = input.grantedAt ?? new Date()
   const carriedOver = balance.subscriptionCredits
   const stillUsable = usableSubscriptionCredits(
     {
@@ -83,10 +109,12 @@ export async function grantSubscriptionPeriodInTransaction(
   await tx.subscriptionGrant.create({
     data: {
       subscriptionId: input.subscriptionId,
+      termKey: input.termKey,
       periodIndex: input.periodIndex,
       planId: input.planId,
       credits: input.credits,
       expiresAt: input.expiresAt,
+      ...(input.grantedAt ? { grantedAt: input.grantedAt } : {}),
     },
   })
 
@@ -120,9 +148,10 @@ export async function grantSubscriptionPeriodInTransaction(
       balanceAfter: balance.balance,
       description: `[GRANT] ${input.planId} period ${input.periodIndex}`,
       relatedId: input.subscriptionId,
-      idempotencyKey: `subscription:${input.subscriptionId}:${input.periodIndex}`,
+      idempotencyKey: `subscription:${input.termKey}:${input.periodIndex}`,
       billingMeta: JSON.stringify({
         planId: input.planId,
+        termKey: input.termKey,
         periodIndex: input.periodIndex,
         grantedCredits: input.credits,
         expiresAt: input.expiresAt.toISOString(),
@@ -137,6 +166,7 @@ export async function grantSubscriptionPeriodInTransaction(
     userId: input.userId,
     details: {
       subscriptionId: input.subscriptionId,
+      termKey: input.termKey,
       planId: input.planId,
       periodIndex: input.periodIndex,
       credits: input.credits,
@@ -146,6 +176,146 @@ export async function grantSubscriptionPeriodInTransaction(
   })
 
   return { status: 'granted', credits: input.credits, expiredCredits: carriedOver }
+}
+
+export interface StartSubscriptionTermInput {
+  readonly subscriptionId: string
+  readonly userId: string
+  readonly planId: string
+  readonly termKey: string
+  readonly credits: number
+  readonly startsAt: Date
+  readonly expiresAt: Date
+}
+
+export type StartSubscriptionTermResult =
+  | {
+      readonly status: 'granted'
+      readonly credits: number
+      readonly carriedCredits: number
+      readonly expiredCredits: number
+      readonly previousCredits: number
+      readonly previousExpiresAt: Date | null
+    }
+  | { readonly status: 'already_granted' }
+
+/**
+ * Start a newly paid term and add its complete first-month grant.
+ *
+ * Buying today carries the still-usable old pool into the new expiry and adds
+ * the complete new monthly grant. Advancing the same yearly term still replaces
+ * its previous period through `grantSubscriptionPeriodInTransaction`.
+ */
+export async function startSubscriptionTermInTransaction(
+  tx: Prisma.TransactionClient,
+  input: StartSubscriptionTermInput,
+): Promise<StartSubscriptionTermResult> {
+  assertCreditAmount(input.credits, 'credits')
+  if (!input.termKey.trim()) throw new Error('SUBSCRIPTION_TERM_KEY_REQUIRED')
+
+  const existing = await tx.subscriptionGrant.findUnique({
+    where: {
+      subscriptionId_termKey_periodIndex: {
+        subscriptionId: input.subscriptionId,
+        termKey: input.termKey,
+        periodIndex: 0,
+      },
+    },
+    select: { id: true },
+  })
+  if (existing) return { status: 'already_granted' }
+
+  const balance = await lockSubscriptionBalanceInTransaction(tx, input.userId)
+  const carriedCredits = usableSubscriptionCredits({
+    subscriptionCredits: balance.subscriptionCredits,
+    subscriptionExpiresAt: balance.subscriptionExpiresAt,
+    rechargeCredits: balance.balance,
+  }, input.startsAt)
+  const expiredCredits = Math.max(0, balance.subscriptionCredits - carriedCredits)
+  const nextCredits = carriedCredits + input.credits
+
+  await tx.userBalance.update({
+    where: { userId: input.userId },
+    data: {
+      subscriptionCredits: nextCredits,
+      subscriptionExpiresAt: input.expiresAt,
+    },
+  })
+  await tx.subscriptionGrant.create({
+    data: {
+      subscriptionId: input.subscriptionId,
+      termKey: input.termKey,
+      periodIndex: 0,
+      planId: input.planId,
+      credits: input.credits,
+      expiresAt: input.expiresAt,
+      grantedAt: input.startsAt,
+    },
+  })
+
+  if (expiredCredits > 0) {
+    await tx.balanceTransaction.create({
+      data: {
+        userId: input.userId,
+        type: 'subscription_expire',
+        amount: 0,
+        balanceAfter: balance.balance,
+        description: '[EXPIRE] subscription credits expired before new term',
+        relatedId: input.subscriptionId,
+        billingMeta: JSON.stringify({
+          termKey: input.termKey,
+          forfeitedCredits: expiredCredits,
+        }),
+      },
+    })
+  }
+
+  await tx.balanceTransaction.create({
+    data: {
+      userId: input.userId,
+      type: 'subscription_grant',
+      amount: 0,
+      balanceAfter: balance.balance,
+      description: `[GRANT] ${input.planId} new term`,
+      relatedId: input.subscriptionId,
+      idempotencyKey: `subscription:${input.termKey}:0`,
+      billingMeta: JSON.stringify({
+        planId: input.planId,
+        termKey: input.termKey,
+        periodIndex: 0,
+        grantedCredits: input.credits,
+        carriedCredits,
+        expiredCredits,
+        balanceAfterGrant: nextCredits,
+        expiresAt: input.expiresAt.toISOString(),
+      }),
+    },
+  })
+
+  subscriptionLedgerLogger.info({
+    audit: true,
+    action: 'billing.subscription.term_started',
+    message: 'paid subscription term started',
+    userId: input.userId,
+    details: {
+      subscriptionId: input.subscriptionId,
+      termKey: input.termKey,
+      planId: input.planId,
+      grantedCredits: input.credits,
+      carriedCredits,
+      expiredCredits,
+      expiresAt: input.expiresAt.toISOString(),
+    },
+  })
+
+  return {
+    status: 'granted',
+    credits: input.credits,
+    carriedCredits,
+    expiredCredits,
+    previousCredits: balance.subscriptionCredits,
+    previousExpiresAt: balance.subscriptionExpiresAt,
+  }
 }
 
 /**

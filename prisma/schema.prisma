@@ -405,6 +405,8 @@ model Subscription {
   userId             String              @unique
   planId             String              @db.VarChar(32)
   interval           String              @db.VarChar(8)
+  /// Canonical identity of the paid term currently projected by this row.
+  currentTermKey     String              @db.VarChar(128)
   /// `active` while the paid term covers today; `expired` once it does not.
   status             String              @db.VarChar(32)
   /// Start of the current paid term. Monthly grants are counted from here.
@@ -427,6 +429,8 @@ model Subscription {
 model SubscriptionGrant {
   id             String       @id @default(uuid())
   subscriptionId String
+  /// Paid-term identity. Period indexes restart at zero for every new term.
+  termKey        String       @db.VarChar(128)
   periodIndex    Int
   planId         String       @db.VarChar(32)
   credits        Int
@@ -434,7 +438,7 @@ model SubscriptionGrant {
   grantedAt      DateTime     @default(now())
   subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
-  @@unique([subscriptionId, periodIndex])
+  @@unique([subscriptionId, termKey, periodIndex])
   @@index([expiresAt])
   @@map("subscription_grants")
 }

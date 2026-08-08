@@ -59,7 +59,9 @@
     "planNoAutoRenew": "一次性付款，不会自动续费；到期后可再次购买。支持微信支付、支付宝与银行卡。",
     "wechatDialogPlanHint": "支付成功后套餐立即生效，额度当月发放",
     "planDialogTitle": "购买 {plan} 套餐",
-    "planDialogSummary": "应付 ¥{amount}，每月发放 {credits} credits",
+    "planDialogSummary": "应付 ¥{amount}；支付成功立即开启新周期，完整 {credits} credits 到账，原可用套餐余额结转",
+    "planQuoteLoading": "正在确认本次应付金额…",
+    "planQuoteLoadError": "暂时无法确认应付金额，请关闭后重试。",
     "payWithWechatHint": "扫码支付，无需离开本页",
     "payWithCardHint": "跳转 Stripe 安全结账页",
     "paymentSucceeded": "支付成功",
@@ -67,7 +69,7 @@
     "paymentDone": "开始创作",
     "rechargeSucceeded": "已到账 {credits} credits",
     "currentPlanBadge": "当前套餐",
-    "planExtendCta": "追加购买",
+    "planExtendCta": "立即重开周期",
     "capacityVideos": "约 {count} 段顶级视频"
   }
 }

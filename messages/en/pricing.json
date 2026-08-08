@@ -59,7 +59,9 @@
     "planNoAutoRenew": "A one-off payment — nothing renews automatically, and you can buy again when the term ends. WeChat Pay, Alipay and cards all work.",
     "wechatDialogPlanHint": "The plan starts as soon as the payment clears",
     "planDialogTitle": "Buy the {plan} plan",
-    "planDialogSummary": "¥{amount} — {credits} credits granted monthly",
+    "planDialogSummary": "Pay ¥{amount}; a new cycle starts immediately with all {credits} credits, plus your usable plan balance carried over",
+    "planQuoteLoading": "Confirming the amount due…",
+    "planQuoteLoadError": "We could not confirm the amount due. Close this dialog and try again.",
     "payWithWechatHint": "Scan to pay, without leaving this page",
     "payWithCardHint": "Continue on Stripe's secure checkout",
     "paymentSucceeded": "Payment received",
@@ -67,7 +69,7 @@
     "paymentDone": "Start creating",
     "rechargeSucceeded": "{credits} credits added",
     "currentPlanBadge": "Your plan",
-    "planExtendCta": "Extend",
+    "planExtendCta": "Restart cycle now",
     "capacityVideos": "About {count} premium clips"
   }
 }

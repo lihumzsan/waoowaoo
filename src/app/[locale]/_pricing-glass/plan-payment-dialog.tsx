@@ -9,6 +9,7 @@ import type { GlassPlan } from './content'
 import type { SubscriptionInterval } from '@/lib/billing/subscription-plans'
 import { WechatQrImage, type WechatRechargeState } from './wechat-recharge'
 import PaidBetaGroupAccess from '@/components/paid-beta/PaidBetaGroupAccess'
+import { apiFetch } from '@/lib/api-fetch'
 
 /**
  * Choosing how to pay for a plan.
@@ -21,6 +22,19 @@ import PaidBetaGroupAccess from '@/components/paid-beta/PaidBetaGroupAccess'
  */
 
 export type PlanPaymentMethod = 'wechat' | 'card'
+
+type PlanQuote = {
+  readonly amountCny: number
+  readonly monthlyCredits: number
+}
+
+function readPlanQuote(value: unknown): PlanQuote | null {
+  if (!value || typeof value !== 'object') return null
+  const record = value as Record<string, unknown>
+  return typeof record.amountCny === 'number' && typeof record.monthlyCredits === 'number'
+    ? { amountCny: record.amountCny, monthlyCredits: record.monthlyCredits }
+    : null
+}
 
 function cx(...v: readonly (string | false | null | undefined)[]) {
   return v.filter(Boolean).join(' ')
@@ -86,18 +100,42 @@ export function PlanPaymentDialog({
 }) {
   const t = useTranslations('pricing.glass')
   const [method, setMethod] = useState<PlanPaymentMethod | null>(null)
+  const [quote, setQuote] = useState<PlanQuote | null>(null)
+  const [quoteError, setQuoteError] = useState(false)
 
   // Reopening for a different plan must not inherit the previous choice.
   useEffect(() => {
-    if (!plan) setMethod(null)
-  }, [plan])
+    if (!plan) {
+      setMethod(null)
+      setQuote(null)
+      setQuoteError(false)
+      return
+    }
+    const controller = new AbortController()
+    setQuote(null)
+    setQuoteError(false)
+    void apiFetch('/api/payments/stripe/plan/quote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ planId: plan.id, interval }),
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('PLAN_QUOTE_REQUEST_FAILED')
+        const next = readPlanQuote(await response.json())
+        if (!next) throw new Error('PLAN_QUOTE_RESPONSE_INVALID')
+        setQuote(next)
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return
+        setQuoteError(true)
+      })
+    return () => controller.abort()
+  }, [interval, plan])
 
   if (!plan) return null
   const settled = wechat.settled
-  const priced = plan.intervals[interval]
-  const chargedCny = interval === 'month' && plan.firstMonthPromoCny !== null
-    ? plan.firstMonthPromoCny
-    : priced.periodPriceCny
+  const quoteBusy = quote === null && !quoteError
   const qr = wechat.payment
 
   return (
@@ -106,10 +144,12 @@ export function PlanPaymentDialog({
       onClose={onClose}
       size="sm"
       title={t('planDialogTitle', { plan: plan.label })}
-      description={t('planDialogSummary', {
-        amount: chargedCny.toLocaleString('en-US'),
-        credits: plan.creditsAmount.toLocaleString('en-US'),
-      })}
+      description={quote
+        ? t('planDialogSummary', {
+            amount: quote.amountCny.toLocaleString('en-US'),
+            credits: quote.monthlyCredits.toLocaleString('en-US'),
+          })
+        : quoteError ? t('planQuoteLoadError') : t('planQuoteLoading')}
     >
       {settled ? (
         <PaidBetaGroupAccess onDone={onClose} />
@@ -131,7 +171,7 @@ export function PlanPaymentDialog({
               icon="wechat"
               label={t('payWithWechat')}
               hint={t('payWithWechatHint')}
-              busy={wechat.busy || cardBusy}
+              busy={wechat.busy || cardBusy || quoteBusy || quoteError}
               onClick={() => {
                 setMethod('wechat')
                 wechat.start({ kind: 'plan', planId: plan.id, interval })
@@ -142,7 +182,7 @@ export function PlanPaymentDialog({
             icon="card"
             label={t('payWithCard')}
             hint={t('payWithCardHint')}
-            busy={wechat.busy || cardBusy}
+            busy={wechat.busy || cardBusy || quoteBusy || quoteError}
             onClick={() => {
               setMethod('card')
               onPayWithCard()

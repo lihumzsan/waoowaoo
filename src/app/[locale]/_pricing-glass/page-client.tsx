@@ -112,6 +112,7 @@ function PlanCard({
   busy,
   onSubscribe,
   owned,
+  hasPlanHistory,
   paymentOpen,
 }: {
   readonly plan: GlassPlan
@@ -120,12 +121,13 @@ function PlanCard({
   readonly onSubscribe: () => void
   /** True when this is the plan the signed-in visitor already holds. */
   readonly owned: boolean
+  readonly hasPlanHistory: boolean
   readonly paymentOpen: boolean
 }) {
   const t = useTranslations('pricing.glass')
   const priced = plan.intervals[interval]
   const featured = plan.featured
-  const promoPriceCny = interval === 'month' ? plan.firstMonthPromoCny : null
+  const promoPriceCny = interval === 'month' && !hasPlanHistory ? plan.firstMonthPromoCny : null
   const headlinePriceCny = promoPriceCny ?? (
     interval === 'year' ? priced.monthlyEquivalentCny : priced.periodPriceCny
   )
@@ -284,6 +286,7 @@ export default function PricingGlassPageClient({
               busy={purchase.busy}
               onSubscribe={() => setPayingFor(plan)}
               owned={currentPlan?.planId === plan.id}
+              hasPlanHistory={currentPlan !== null}
               paymentOpen={paidBetaCampaign.paymentOpen}
             />
           ))}

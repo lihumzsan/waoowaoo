@@ -6,6 +6,10 @@ import { toMoneyNumber } from '@/lib/billing/money'
 import { PLAN_PURCHASE_KIND } from './stripe-plan-purchase'
 import { WECHAT_PLAN_KIND, WECHAT_RECHARGE_KIND } from './stripe-wechat-intent'
 import { applyPlanPurchaseInTransaction } from '@/lib/billing/plan-term-service'
+import {
+  restorePlanPaymentReversalInTransaction,
+  reversePlanPaymentInTransaction,
+} from '@/lib/billing/plan-reversal-service'
 import { resolveReceiptUrl } from './stripe-receipt'
 import {
   isSubscriptionInterval,
@@ -36,6 +40,8 @@ interface StripeCheckoutSessionLike {
   createdAt: Date
   paymentIntentId: string | null
   paymentStatus: string | null
+  amountTotalMinor: number | null
+  currency: string | null
   metadata: Record<string, string>
 }
 
@@ -148,6 +154,8 @@ function readCheckoutSession(value: Stripe.Checkout.Session): StripeCheckoutSess
     createdAt: new Date(value.created * 1000),
     paymentIntentId,
     paymentStatus: readString(value.payment_status),
+    amountTotalMinor: typeof value.amount_total === 'number' ? value.amount_total : null,
+    currency: readString(value.currency)?.toLowerCase() ?? null,
     metadata: value.metadata ?? {},
   }
 }
@@ -199,6 +207,24 @@ function readPositiveMetadataNumber(metadata: Record<string, string>, key: strin
   return value
 }
 
+function readPlanPaymentFacts(
+  metadata: Record<string, string>,
+  actualAmountMinor: number | null,
+  actualCurrency: string | null,
+): { paymentAmountMinor: number; paymentCurrency: string } {
+  const quotedAmount = readPositiveMetadataNumber(metadata, 'payment_amount')
+  const quotedAmountMinor = Math.round(quotedAmount * 100)
+  const quotedCurrency = readString(metadata.payment_currency)?.toLowerCase()
+  if (!quotedCurrency) throw new Error('STRIPE_CHECKOUT_METADATA_PAYMENT_CURRENCY_REQUIRED')
+  if (!Number.isSafeInteger(actualAmountMinor) || actualAmountMinor === null || actualAmountMinor <= 0) {
+    throw new Error('STRIPE_PLAN_PAYMENT_AMOUNT_REQUIRED')
+  }
+  if (!actualCurrency) throw new Error('STRIPE_PLAN_PAYMENT_CURRENCY_REQUIRED')
+  if (actualAmountMinor !== quotedAmountMinor) throw new Error('STRIPE_PLAN_PAYMENT_AMOUNT_MISMATCH')
+  if (actualCurrency !== quotedCurrency) throw new Error('STRIPE_PLAN_PAYMENT_CURRENCY_MISMATCH')
+  return { paymentAmountMinor: actualAmountMinor, paymentCurrency: actualCurrency }
+}
+
 /**
  * Credit a WeChat Pay top-up.
  *
@@ -210,6 +236,7 @@ function readPositiveMetadataNumber(metadata: Record<string, string>, key: strin
 async function creditWechatPaymentIntent(
   eventId: string,
   intent: Stripe.PaymentIntent,
+  paidAt: Date,
 ): Promise<StripeWebhookHandleResult> {
   const metadata = intent.metadata ?? {}
 
@@ -222,12 +249,17 @@ async function creditWechatPaymentIntent(
     if (!userId) throw new Error('STRIPE_CHECKOUT_METADATA_USER_ID_REQUIRED')
     if (!planId || !isSubscriptionPlanId(planId)) throw new Error('STRIPE_PLAN_METADATA_PLAN_ID_INVALID')
     if (!interval || !isSubscriptionInterval(interval)) throw new Error('STRIPE_PLAN_METADATA_INTERVAL_INVALID')
+    const payment = readPlanPaymentFacts(
+      metadata,
+      intent.amount_received,
+      readString(intent.currency)?.toLowerCase() ?? null,
+    )
     const receiptUrl = await resolveReceiptUrl(intent.id)
     const applied = await prisma.$transaction(async (tx) => {
       await settlePaidBetaPaymentInTransaction(tx, {
         userId,
         providerObjectId: intent.id,
-        providerCreatedAt: new Date(intent.created * 1000),
+        providerCreatedAt: paidAt,
         attemptId: readString(metadata[PAID_BETA_ATTEMPT_METADATA_KEY]),
       })
       return applyPlanPurchaseInTransaction(tx, {
@@ -235,6 +267,10 @@ async function creditWechatPaymentIntent(
         planId,
         interval,
         purchaseId: intent.id,
+        providerObjectId: intent.id,
+        paidAt,
+        paymentAmountMinor: payment.paymentAmountMinor,
+        paymentCurrency: payment.paymentCurrency,
         receiptUrl,
       })
     })
@@ -417,12 +453,29 @@ function creditsForMinorAmount(meta: RechargeBillingMeta, amountMinor: number, c
   return credits
 }
 
-async function debitRefund(eventId: string, refund: StripeRefundLike): Promise<StripeWebhookHandleResult> {
+async function debitRefund(
+  eventId: string,
+  refund: StripeRefundLike,
+  occurredAt: Date,
+): Promise<StripeWebhookHandleResult> {
   if (refund.status === 'failed' || refund.status === 'canceled') {
     return { received: true, action: 'ignored', eventType: 'refund', objectId: refund.id, reason: `refund_${refund.status}` }
   }
   let credits = 0
   await prisma.$transaction(async (tx) => {
+    const plan = await reversePlanPaymentInTransaction(tx, {
+      eventId,
+      objectType: 'refund',
+      objectId: refund.id,
+      paymentIntentId: refund.paymentIntentId,
+      amountMinor: refund.amountMinor,
+      currency: refund.currency,
+      occurredAt,
+    })
+    if (plan.status !== 'not_plan_purchase') {
+      credits = plan.credits
+      return
+    }
     const recharge = await findRechargeByPaymentIntent(tx, refund.paymentIntentId)
     credits = creditsForMinorAmount(recharge.meta, refund.amountMinor, refund.currency)
     await applyBalanceAdjustmentWithTransaction(tx, recharge.userId, -credits, {
@@ -440,6 +493,16 @@ async function restoreFailedRefund(eventId: string, refund: StripeRefundLike): P
   let credits = 0
   let restored = false
   await prisma.$transaction(async (tx) => {
+    const plan = await restorePlanPaymentReversalInTransaction(tx, {
+      eventId,
+      objectType: 'refund',
+      objectId: refund.id,
+    })
+    if (plan.status !== 'not_plan_reversal') {
+      credits = plan.credits
+      restored = true
+      return
+    }
     const recharge = await findRechargeByPaymentIntent(tx, refund.paymentIntentId)
     credits = creditsForMinorAmount(recharge.meta, refund.amountMinor, refund.currency)
     const debit = await tx.balanceTransaction.findFirst({
@@ -463,9 +526,26 @@ async function restoreFailedRefund(eventId: string, refund: StripeRefundLike): P
     : { received: true, action: 'ignored', eventType: 'refund.failed', objectId: refund.id, reason: 'refund_debit_missing' }
 }
 
-async function debitDispute(eventId: string, dispute: StripeDisputeLike): Promise<StripeWebhookHandleResult> {
+async function debitDispute(
+  eventId: string,
+  dispute: StripeDisputeLike,
+  occurredAt: Date,
+): Promise<StripeWebhookHandleResult> {
   let credits = 0
   await prisma.$transaction(async (tx) => {
+    const plan = await reversePlanPaymentInTransaction(tx, {
+      eventId,
+      objectType: 'dispute',
+      objectId: dispute.id,
+      paymentIntentId: dispute.paymentIntentId,
+      amountMinor: dispute.amountMinor,
+      currency: dispute.currency,
+      occurredAt,
+    })
+    if (plan.status !== 'not_plan_purchase') {
+      credits = plan.credits
+      return
+    }
     const recharge = await findRechargeByPaymentIntent(tx, dispute.paymentIntentId)
     credits = creditsForMinorAmount(recharge.meta, dispute.amountMinor, dispute.currency)
     await applyBalanceAdjustmentWithTransaction(tx, recharge.userId, -credits, {
@@ -483,6 +563,16 @@ async function restoreDisputeFunds(eventId: string, dispute: StripeDisputeLike):
   let credits = 0
   let restored = false
   await prisma.$transaction(async (tx) => {
+    const plan = await restorePlanPaymentReversalInTransaction(tx, {
+      eventId,
+      objectType: 'dispute',
+      objectId: dispute.id,
+    })
+    if (plan.status !== 'not_plan_reversal') {
+      credits = plan.credits
+      restored = true
+      return
+    }
     const recharge = await findRechargeByPaymentIntent(tx, dispute.paymentIntentId)
     const debit = await tx.balanceTransaction.findFirst({
       where: { userId: recharge.userId, type: 'adjust', idempotencyKey: `stripe:dispute:${dispute.id}:debit` },
@@ -560,19 +650,31 @@ export async function handleStripeWebhook(rawBody: string, signatureHeader: stri
       if (!interval || !isSubscriptionInterval(interval)) {
         throw new Error('STRIPE_PLAN_METADATA_INTERVAL_INVALID')
       }
-      const receiptUrl = session.paymentIntentId ? await resolveReceiptUrl(session.paymentIntentId) : null
+      if (!session.paymentIntentId) throw new Error('STRIPE_CHECKOUT_PAYMENT_INTENT_REQUIRED')
+      const paymentIntentId = session.paymentIntentId
+      const payment = readPlanPaymentFacts(
+        session.metadata,
+        session.amountTotalMinor,
+        session.currency,
+      )
+      const paidAt = new Date(event.created * 1000)
+      const receiptUrl = await resolveReceiptUrl(paymentIntentId)
       const applied = await prisma.$transaction(async (tx) => {
         await settlePaidBetaPaymentInTransaction(tx, {
           userId,
           providerObjectId: session.id,
-          providerCreatedAt: session.createdAt,
+          providerCreatedAt: paidAt,
           attemptId: readString(session.metadata[PAID_BETA_ATTEMPT_METADATA_KEY]),
         })
         return applyPlanPurchaseInTransaction(tx, {
           userId,
           planId,
           interval,
-          purchaseId: session.id,
+          purchaseId: paymentIntentId,
+          providerObjectId: session.id,
+          paidAt,
+          paymentAmountMinor: payment.paymentAmountMinor,
+          paymentCurrency: payment.paymentCurrency,
           receiptUrl,
         })
       })
@@ -593,12 +695,20 @@ export async function handleStripeWebhook(rawBody: string, signatureHeader: stri
   }
 
   if (event.type === 'payment_intent.succeeded') {
-    const result = await creditWechatPaymentIntent(eventId, event.data.object)
+    const result = await creditWechatPaymentIntent(
+      eventId,
+      event.data.object,
+      new Date(event.created * 1000),
+    )
     return { ...result, eventType: event.type }
   }
 
   if (event.type === 'refund.created') {
-    const result = await debitRefund(eventId, readRefund(event.data.object))
+    const result = await debitRefund(
+      eventId,
+      readRefund(event.data.object),
+      new Date(event.created * 1000),
+    )
     return { ...result, eventType: event.type }
   }
 
@@ -613,12 +723,16 @@ export async function handleStripeWebhook(rawBody: string, signatureHeader: stri
       const result = await restoreFailedRefund(eventId, refund)
       return { ...result, eventType: event.type }
     }
-    const result = await debitRefund(eventId, refund)
+    const result = await debitRefund(eventId, refund, new Date(event.created * 1000))
     return { ...result, eventType: event.type }
   }
 
   if (event.type === 'charge.dispute.funds_withdrawn') {
-    const result = await debitDispute(eventId, readDispute(event.data.object))
+    const result = await debitDispute(
+      eventId,
+      readDispute(event.data.object),
+      new Date(event.created * 1000),
+    )
     return { ...result, eventType: event.type }
   }
 

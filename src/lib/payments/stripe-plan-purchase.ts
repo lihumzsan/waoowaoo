@@ -3,12 +3,11 @@ import { CREDIT_UNIT_CNY } from '@/lib/billing/credits'
 import {
   getSubscriptionPlan,
   SUBSCRIPTION_INTERVAL_MONTHS,
-  subscriptionPeriodPriceCny,
   type SubscriptionInterval,
   type SubscriptionPlanId,
 } from '@/lib/billing/subscription-plans'
-import { STRIPE_PAYMENT_CURRENCY } from './recharge-config'
 import { createStripeClient } from './stripe-client'
+import { quotePlanPurchase } from './plan-purchase-quote'
 import { admitPaidBetaPayment } from './paid-beta-admission'
 import {
   attachPaidBetaProviderObject,
@@ -57,12 +56,6 @@ function normalizeOrigin(origin: string): string {
   return trimmed
 }
 
-function toMinorUnits(amountCny: number): number {
-  const minor = Math.round(amountCny * 100)
-  if (!Number.isSafeInteger(minor) || minor <= 0) throw new Error('PAYMENT_AMOUNT_INVALID')
-  return minor
-}
-
 function getPlanText(
   locale: 'zh' | 'en',
   planId: SubscriptionPlanId,
@@ -92,14 +85,8 @@ export async function createPlanPurchaseSession(
 ): Promise<PlanPurchaseResult> {
   const plan = getSubscriptionPlan(input.planId)
   const origin = normalizeOrigin(input.origin)
-  const currency = STRIPE_PAYMENT_CURRENCY.toLowerCase()
-  const priceCny = subscriptionPeriodPriceCny(plan, input.interval)
+  const quote = await quotePlanPurchase(input)
   const text = getPlanText(input.locale, plan.id, input.interval, plan.monthlyCredits)
-
-  // The promo is a first-purchase discount on the monthly term, applied to the
-  // amount charged. It never changes how many credits the term grants.
-  const promoCny = input.interval === 'month' ? plan.firstMonthPromoCny : null
-  const chargedCny = promoCny ?? priceCny
   const attempt = await admitPaidBetaPayment({
     userId: input.userId,
     providerKind: 'stripe_checkout',
@@ -112,9 +99,11 @@ export async function createPlanPurchaseSession(
     plan_interval: input.interval,
     monthly_credits: String(plan.monthlyCredits),
     credit_unit_cny: String(CREDIT_UNIT_CNY),
-    list_price_cny: priceCny.toFixed(2),
-    payment_amount: chargedCny.toFixed(2),
-    payment_currency: currency,
+    plan_quote_version: quote.version,
+    plan_purchase_action: quote.action,
+    list_price_cny: quote.listPriceCny.toFixed(2),
+    payment_amount: quote.amountCny.toFixed(2),
+    payment_currency: quote.currency,
     [PAID_BETA_ATTEMPT_METADATA_KEY]: attempt.attemptId,
     [PAID_BETA_SEAT_METADATA_KEY]: attempt.seatId,
   }
@@ -131,8 +120,8 @@ export async function createPlanPurchaseSession(
       line_items: [{
         quantity: 1,
         price_data: {
-          currency,
-          unit_amount: toMinorUnits(chargedCny),
+          currency: quote.currency,
+          unit_amount: quote.amountMinor,
           product_data: {
             name: text.name,
             description: text.description,
@@ -153,7 +142,7 @@ export async function createPlanPurchaseSession(
       url: session.url,
       planId: plan.id,
       interval: input.interval,
-      priceCny: chargedCny,
+      priceCny: quote.amountCny,
       monthlyCredits: plan.monthlyCredits,
     }
   } catch (error) {

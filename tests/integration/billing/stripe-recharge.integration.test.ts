@@ -1,6 +1,7 @@
 import Stripe from 'stripe'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { handleStripeWebhook } from '@/lib/payments/stripe-webhook'
+import { quotePlanPurchase } from '@/lib/payments/plan-purchase-quote'
 import { getBalance } from '@/lib/billing'
 import {
   attachPaidBetaProviderObject,
@@ -38,6 +39,7 @@ function checkoutEvent(input: {
   return JSON.stringify({
     id: `evt_${input.sessionId}`,
     type: input.type || 'checkout.session.completed',
+    created: currentStripeTimestamp(),
     data: {
       object: {
         id: input.sessionId,
@@ -70,6 +72,7 @@ function paymentIntentEvent(input: {
   return JSON.stringify({
     id: `evt_${input.paymentIntentId}`,
     type: 'payment_intent.succeeded',
+    created: currentStripeTimestamp(),
     data: {
       object: {
         id: input.paymentIntentId,
@@ -99,6 +102,7 @@ function refundEvent(input: {
   return JSON.stringify({
     id: `evt_${input.type || 'refund.created'}_${input.refundId}`,
     type: input.type || 'refund.created',
+    created: currentStripeTimestamp(),
     data: {
       object: {
         id: input.refundId,
@@ -121,6 +125,7 @@ function disputeEvent(input: {
   return JSON.stringify({
     id: `evt_${input.type}_${input.disputeId}_${input.status}`,
     type: input.type,
+    created: currentStripeTimestamp(),
     data: {
       object: {
         id: input.disputeId,
@@ -398,17 +403,22 @@ describe('billing/stripe recharge integration', () => {
     const payload = JSON.stringify({
       id: 'evt_plan_buy',
       type: 'checkout.session.completed',
+      created: timestamp,
       data: {
         object: {
           id: 'cs_plan_buy',
           created: timestamp,
           payment_intent: 'pi_plan_buy',
           payment_status: 'paid',
+          amount_total: 39_900,
+          currency: 'cny',
           metadata: {
             waoowaoo_kind: 'credit_plan_purchase',
             user_id: user.id,
             plan_id: 'creator',
             plan_interval: 'month',
+            payment_amount: '399.00',
+            payment_currency: 'cny',
           },
         },
       },
@@ -435,41 +445,197 @@ describe('billing/stripe recharge integration', () => {
     expect(balance.subscriptionCredits).toBe(grants[0]?.credits)
   })
 
-  it('extends a running term instead of discarding what is left of it', async () => {
+  it('uses the first-purchase price only before the first successful plan payment', async () => {
+    const user = await createTestUser()
+    const first = await quotePlanPurchase({ userId: user.id, planId: 'creator', interval: 'month' })
+    expect(first).toMatchObject({ amountCny: 399, promotionApplied: true, action: 'start' })
+    await prisma.balanceTransaction.create({
+      data: {
+        userId: user.id,
+        type: 'plan_purchase',
+        amount: 0,
+        balanceAfter: 0,
+        externalOrderId: 'pi_prior_plan',
+        idempotencyKey: 'stripe:plan:pi_prior_plan',
+      },
+    })
+    const repeat = await quotePlanPurchase({ userId: user.id, planId: 'creator', interval: 'month' })
+    expect(repeat).toMatchObject({ amountCny: 499, promotionApplied: false, action: 'start' })
+  })
+
+  it('restarts a running monthly term and immediately adds the complete grant', async () => {
     const user = await createTestUser()
     const timestamp = currentStripeTimestamp()
-    const buy = (sessionId: string) => JSON.stringify({
+    const buy = (sessionId: string, eventCreated: number) => JSON.stringify({
       id: `evt_${sessionId}`,
       type: 'checkout.session.completed',
+      created: eventCreated,
       data: {
         object: {
           id: sessionId,
           created: timestamp,
           payment_intent: `pi_${sessionId}`,
           payment_status: 'paid',
+          amount_total: 49_900,
+          currency: 'cny',
           metadata: {
             waoowaoo_kind: 'credit_plan_purchase',
             user_id: user.id,
             plan_id: 'creator',
             plan_interval: 'month',
+            payment_amount: '499.00',
+            payment_currency: 'cny',
           },
         },
       },
     })
 
-    const firstPayload = buy('cs_term_1')
+    const firstPayload = buy('cs_term_1', timestamp)
     await handleStripeWebhook(firstPayload, signPayload(firstPayload, timestamp))
     const afterFirst = await prisma.subscription.findUniqueOrThrow({ where: { userId: user.id } })
+    const firstBalance = await prisma.userBalance.findUniqueOrThrow({ where: { userId: user.id } })
 
-    const secondPayload = buy('cs_term_2')
+    const secondPaidAt = timestamp + 60
+    const secondPayload = buy('cs_term_2', secondPaidAt)
     await handleStripeWebhook(secondPayload, signPayload(secondPayload, timestamp))
     const afterSecond = await prisma.subscription.findUniqueOrThrow({ where: { userId: user.id } })
+    const secondBalance = await prisma.userBalance.findUniqueOrThrow({ where: { userId: user.id } })
 
-    // The second month is added to the end of the first, not started over.
-    expect(afterSecond.currentPeriodEnd.getTime()).toBeGreaterThan(afterFirst.currentPeriodEnd.getTime())
-    expect(afterSecond.currentPeriodStart.getTime()).toBe(afterFirst.currentPeriodStart.getTime())
-    // Still one month granted: buying ahead does not hand out both months now.
-    expect(await prisma.subscriptionGrant.count({ where: { subscriptionId: afterSecond.id } })).toBe(1)
+    expect(afterSecond.currentPeriodStart).toEqual(new Date(secondPaidAt * 1000))
+    expect(afterSecond.currentPeriodStart.getTime()).toBeGreaterThan(afterFirst.currentPeriodStart.getTime())
+    expect(afterSecond.currentTermKey).toBe('pi_cs_term_2')
+    expect(secondBalance.subscriptionCredits).toBe(firstBalance.subscriptionCredits * 2)
+    expect(await prisma.subscriptionGrant.count({ where: { subscriptionId: afterSecond.id } })).toBe(2)
+  })
+
+  it('reverses an untouched immediate plan term and restores it if the refund fails', async () => {
+    const user = await createTestUser()
+    const timestamp = currentStripeTimestamp()
+    const purchase = JSON.stringify({
+      id: 'evt_plan_refund_buy',
+      type: 'checkout.session.completed',
+      created: timestamp,
+      data: {
+        object: {
+          id: 'cs_plan_refund_buy',
+          created: timestamp,
+          payment_intent: 'pi_plan_refund_buy',
+          payment_status: 'paid',
+          amount_total: 7_900,
+          currency: 'cny',
+          metadata: {
+            waoowaoo_kind: 'credit_plan_purchase',
+            user_id: user.id,
+            plan_id: 'lite',
+            plan_interval: 'month',
+            payment_amount: '79.00',
+            payment_currency: 'cny',
+          },
+        },
+      },
+    })
+    await handleStripeWebhook(purchase, signPayload(purchase, timestamp))
+    expect((await prisma.userBalance.findUniqueOrThrow({ where: { userId: user.id } })).subscriptionCredits)
+      .toBe(800)
+
+    const refund = refundEvent({
+      refundId: 're_plan_full',
+      paymentIntentId: 'pi_plan_refund_buy',
+      amountMinor: 7_900,
+    })
+    const reversed = await handleStripeWebhook(refund, signPayload(refund, timestamp))
+    expect(reversed).toMatchObject({ action: 'debited', credits: 800 })
+    expect((await prisma.userBalance.findUniqueOrThrow({ where: { userId: user.id } })).subscriptionCredits)
+      .toBe(0)
+    expect((await prisma.subscription.findUniqueOrThrow({ where: { userId: user.id } })).status)
+      .toBe('refunded')
+
+    const failed = refundEvent({
+      type: 'refund.failed',
+      refundId: 're_plan_full',
+      paymentIntentId: 'pi_plan_refund_buy',
+      amountMinor: 7_900,
+      status: 'failed',
+    })
+    const restored = await handleStripeWebhook(failed, signPayload(failed, timestamp))
+    expect(restored).toMatchObject({ action: 'restored', credits: 800 })
+    expect((await prisma.userBalance.findUniqueOrThrow({ where: { userId: user.id } })).subscriptionCredits)
+      .toBe(800)
+    expect((await prisma.subscription.findUniqueOrThrow({ where: { userId: user.id } })).status)
+      .toBe('active')
+  })
+
+  it('refunds a reconciled legacy purchase that only extended an ungranted future month', async () => {
+    const user = await createTestUser()
+    const timestamp = currentStripeTimestamp()
+    const startsAt = new Date((timestamp - 24 * 60 * 60) * 1000)
+    const previousEndsAt = new Date(startsAt)
+    previousEndsAt.setUTCMonth(previousEndsAt.getUTCMonth() + 1)
+    const extendedEndsAt = new Date(previousEndsAt)
+    extendedEndsAt.setUTCMonth(extendedEndsAt.getUTCMonth() + 1)
+    const subscription = await prisma.subscription.create({
+      data: {
+        userId: user.id,
+        planId: 'lite',
+        interval: 'month',
+        currentTermKey: 'legacy_term',
+        status: 'active',
+        currentPeriodStart: startsAt,
+        currentPeriodEnd: extendedEndsAt,
+      },
+    })
+    await prisma.userBalance.upsert({
+      where: { userId: user.id },
+      create: { userId: user.id, balance: 0, subscriptionCredits: 0, frozenAmount: 0, totalSpent: 800 },
+      update: { subscriptionCredits: 0, subscriptionExpiresAt: previousEndsAt },
+    })
+    await prisma.subscriptionGrant.create({
+      data: {
+        subscriptionId: subscription.id,
+        termKey: 'legacy_term',
+        periodIndex: 0,
+        planId: 'lite',
+        credits: 800,
+        expiresAt: previousEndsAt,
+        grantedAt: startsAt,
+      },
+    })
+    await prisma.balanceTransaction.create({
+      data: {
+        userId: user.id,
+        type: 'plan_purchase',
+        amount: 0,
+        balanceAfter: 0,
+        relatedId: subscription.id,
+        externalOrderId: 'pi_legacy_future_lite',
+        idempotencyKey: 'stripe:plan:legacy_future_lite',
+        billingMeta: JSON.stringify({
+          purchaseMode: 'legacy_extend_v1',
+          paymentIntentId: 'pi_legacy_future_lite',
+          paymentAmountMinor: 7_900,
+          paymentCurrency: 'cny',
+          planId: 'lite',
+          interval: 'month',
+          grantedCredits: 0,
+          paidAt: startsAt.toISOString(),
+          termStartsAt: startsAt.toISOString(),
+          termEndsAt: extendedEndsAt.toISOString(),
+          previousTermEndsAt: previousEndsAt.toISOString(),
+        }),
+      },
+    })
+
+    const refund = refundEvent({
+      refundId: 're_legacy_future_lite',
+      paymentIntentId: 'pi_legacy_future_lite',
+      amountMinor: 7_900,
+    })
+    const result = await handleStripeWebhook(refund, signPayload(refund, timestamp))
+    expect(result).toMatchObject({ action: 'debited', credits: 0 })
+    const after = await prisma.subscription.findUniqueOrThrow({ where: { id: subscription.id } })
+    expect(after.currentPeriodEnd).toEqual(previousEndsAt)
+    expect((await prisma.userBalance.findUniqueOrThrow({ where: { userId: user.id } })).subscriptionCredits)
+      .toBe(0)
   })
 
   it('fails closed when a refund cannot be tied to the canonical payment intent', async () => {
