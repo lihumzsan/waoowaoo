@@ -91,6 +91,7 @@ reports/test-results/
 
 # temporary files
 tmp/
+.worktrees/
 
 # internal AI agent config (not for public)
 AGENTS.md
