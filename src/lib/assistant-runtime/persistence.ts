@@ -364,21 +364,34 @@ export async function bindAssistantRuntimeThread(input: {
   readonly scope: AssistantRuntimeScope
   readonly threadId: string
   readonly runtimeThreadId: string
+  /**
+   * The native id observed before a replacement. Omitting it keeps the first
+   * bind contract: only an unbound product Thread can receive a new native id.
+   */
+  readonly expectedRuntimeThreadId?: string | null
 }): Promise<ThreadView> {
   requireIdentity(input.runtimeThreadId, 'ASSISTANT_RUNTIME_CODEX_THREAD_ID_INVALID')
+  if (input.expectedRuntimeThreadId !== undefined && input.expectedRuntimeThreadId !== null) {
+    requireIdentity(
+      input.expectedRuntimeThreadId,
+      'ASSISTANT_RUNTIME_EXPECTED_CODEX_THREAD_ID_INVALID',
+    )
+  }
   return await prisma.$transaction(async (tx) => {
     await lockProjectScope(tx, input.scope)
     const row = await lockThread(tx, input.scope, input.threadId)
     if (row.clearRequestId) throw new Error('ASSISTANT_RUNTIME_CLEAR_IN_PROGRESS')
-    if (row.runtimeThreadId && row.runtimeThreadId !== input.runtimeThreadId) {
+    if (row.runtimeThreadId === input.runtimeThreadId) {
+      return threadView(row, await parseMessages(row.messagesJson))
+    }
+    const expectedRuntimeThreadId = input.expectedRuntimeThreadId ?? null
+    if (row.runtimeThreadId !== expectedRuntimeThreadId) {
       throw new Error('ASSISTANT_RUNTIME_CODEX_THREAD_ID_DIVERGED')
     }
-    const updated = row.runtimeThreadId
-      ? row
-      : await tx.projectAssistantThread.update({
-          where: { id: row.id },
-          data: { runtimeThreadId: input.runtimeThreadId },
-        })
+    const updated = await tx.projectAssistantThread.update({
+      where: { id: row.id },
+      data: { runtimeThreadId: input.runtimeThreadId },
+    })
     return threadView(updated, await parseMessages(updated.messagesJson))
   })
 }
