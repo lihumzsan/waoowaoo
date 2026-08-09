@@ -601,16 +601,20 @@ export class AssistantRuntimeService {
       environment: access.environment,
       ownerToken: access.ownerToken,
     })
-    const runtime = await this.manager.ensureThread(scope, {
+    const preparedRuntime = await this.ensureThreadWithRecovery({
+      scope,
+      access,
       productThreadId: input.threadId,
       runtimeThreadId: input.runtimeThreadId,
       configuration: model.thread,
     })
+    const runtime = preparedRuntime.runtime
     try {
       await bindAssistantRuntimeThread({
         scope: input.scope,
         threadId: input.threadId,
         runtimeThreadId: runtime.runtimeThreadId,
+        expectedRuntimeThreadId: preparedRuntime.replacesRuntimeThreadId,
       })
     } catch (bindError) {
       if (runtime.disposition === 'started') {
@@ -627,6 +631,46 @@ export class AssistantRuntimeService {
       throw bindError
     }
     return { threadId: input.threadId, runtime, model }
+  }
+
+  private async ensureThreadWithRecovery(input: {
+    readonly scope: RuntimeSessionScope
+    readonly access: AssistantRuntimeAccess
+    readonly productThreadId: string
+    readonly runtimeThreadId: string | null
+    readonly configuration: AssistantRuntimeModelConfiguration['thread']
+  }): Promise<{
+    readonly runtime: RuntimeThreadSessionView
+    readonly replacesRuntimeThreadId: string | null
+  }> {
+    try {
+      const runtime = await this.manager.ensureThread(input.scope, {
+        productThreadId: input.productThreadId,
+        runtimeThreadId: input.runtimeThreadId,
+        configuration: input.configuration,
+      })
+      return { runtime, replacesRuntimeThreadId: null }
+    } catch (resumeError) {
+      if (!input.runtimeThreadId) throw resumeError
+
+      // Wao's durable messages and task facts stay untouched. Native Codex
+      // history cannot be reconstructed from them, so only discard the failed
+      // App Server session and establish one new native Thread/MCP session.
+      await this.manager.stop(input.scope, 'shutdown', input.access.ownerToken)
+      await this.manager.ensure(input.scope, {
+        environment: input.access.environment,
+        ownerToken: input.access.ownerToken,
+      })
+      const runtime = await this.manager.ensureThread(input.scope, {
+        productThreadId: input.productThreadId,
+        runtimeThreadId: null,
+        configuration: input.configuration,
+      })
+      return {
+        runtime,
+        replacesRuntimeThreadId: input.runtimeThreadId,
+      }
+    }
   }
 
   private async startProjection(input: {
