@@ -6,14 +6,6 @@ x-dev-environment: &dev-environment
   REDIS_USERNAME: ""
   REDIS_PASSWORD: "${REDIS_PASSWORD:?Set REDIS_PASSWORD in the selected development env file}"
   REDIS_TLS: ""
-  S3_ENDPOINT: http://minio:9000
-  S3_UPLOAD_ENDPOINT: http://minio:9000
-  S3_REGION: "${S3_REGION:-us-east-1}"
-  S3_BUCKET: "${S3_BUCKET:?Set S3_BUCKET in the selected development env file}"
-  S3_ACCESS_KEY_ID: "${S3_ACCESS_KEY_ID:?Set S3_ACCESS_KEY_ID in the selected development env file}"
-  S3_SECRET_ACCESS_KEY: "${S3_SECRET_ACCESS_KEY:?Set S3_SECRET_ACCESS_KEY in the selected development env file}"
-  S3_SESSION_TOKEN: "${S3_SESSION_TOKEN:-}"
-  S3_FORCE_PATH_STYLE: "${S3_FORCE_PATH_STYLE:-true}"
   TEMPORAL_ADDRESS: temporal:7233
   TEMPORAL_NAMESPACE: "${TEMPORAL_NAMESPACE:-waoowaoo}"
   TEMPORAL_TASK_QUEUE: "${TEMPORAL_TASK_QUEUE:-waoowaoo-runtime}"
@@ -89,8 +81,8 @@ services:
       - ./docker-logs:/app/logs
       - "${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock"
       - type: bind
-        source: "${WAO_DEV_CODEX_RUNTIME_HOST_PATH:?Set WAO_DEV_CODEX_RUNTIME_HOST_PATH through scripts/dev-docker.mjs}"
-        target: "${WAO_DEV_CODEX_RUNTIME_ROOT:?Set WAO_DEV_CODEX_RUNTIME_ROOT through scripts/dev-docker.mjs}"
+        source: "${WAO_DEV_CODEX_RUNTIME_ROOT:?Set WAO_DEV_CODEX_RUNTIME_ROOT through scripts/dev-docker.sh}"
+        target: "${WAO_DEV_CODEX_RUNTIME_ROOT:?Set WAO_DEV_CODEX_RUNTIME_ROOT through scripts/dev-docker.sh}"
     networks:
       default:
         aliases: [app]
