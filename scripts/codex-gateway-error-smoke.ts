@@ -26,6 +26,7 @@ type ProviderFailureCase = {
     readonly type: string
     readonly code: string
   }
+  readonly errorType?: string
   readonly expected: RuntimeJsonValue
 }
 
@@ -46,7 +47,7 @@ const CASES: readonly ProviderFailureCase[] = [
     name: 'request',
     status: 422,
     error: { type: 'invalid_request_error', code: 'invalid_request' },
-    expected: 'serverOverloaded',
+    expected: 'other',
   },
   {
     name: 'rate-limit',
@@ -77,7 +78,8 @@ const CASES: readonly ProviderFailureCase[] = [
   {
     name: 'context',
     status: 400,
-    error: { type: 'invalid_request_error', code: 'context_length_exceeded' },
+    error: { type: 'invalid_request_error', code: 'invalid_prompt' },
+    errorType: 'context_length_exceeded',
     expected: 'contextWindowExceeded',
   },
 ]
@@ -121,6 +123,7 @@ async function startGatewayServer(): Promise<{
       assert(selected, 'Gateway smoke failure case was not selected')
       const providerResponse = Response.json({
         error: { ...selected.error, message: 'provider-private-message' },
+        ...(selected.errorType ? { error_type: selected.errorType } : {}),
       }, {
         status: selected.status,
         headers: {

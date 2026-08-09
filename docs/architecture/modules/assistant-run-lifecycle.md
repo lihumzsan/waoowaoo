@@ -104,6 +104,10 @@ View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 pl
   仍被官方 Runtime 降成 `other` → 同一可见性不变量换 writer 后又漏掉真实入口 → 模型网关把 Provider
   非成功响应投影到官方 Codex 已支持的结构化错误类别，projector 再作为终态错误的唯一解释者映射到共享
   error registry，禁止维护 Runtime fork 或从错误文案反推状态。
+- 网关错误投影随后仍只用自造的嵌套 `error.type/code` 信封验收；OpenRouter Responses 把稳定原因放在
+  顶层 `error_type`，导致真实 400 再次丢失原生诊断并被兜底伪装成 `slow_down` → 协议 smoke 没覆盖实际
+  Provider skin，且兜底改变了错误语义 → 网关必须读取各受支持 skin 的稳定 typed 字段、携带有界脱敏
+  原生 message，并把未知请求拒绝投影为非可用性错误（ARL-17/FG-01）。
 - Runtime 恢复曾把数据库消息重新注入新 Thread；失败 Turn 的最新用户消息尚未投影时，恢复上下文会
   回到更早约束 → 产品 View 被误作模型 history writer → Product Thread 在首个 Turn 前绑定，后续只
   resume 持久 Codex Thread，View 永不参与模型历史恢复（ARL-07）。

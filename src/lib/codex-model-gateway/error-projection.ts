@@ -16,6 +16,15 @@ export type CodexProviderResponseProjection = {
   readonly failureKind: CodexProviderFailureKind | null
   readonly providerStatus: number
   readonly providerCode: string | null
+  readonly providerErrorType: string | null
+}
+
+type ProviderErrorMetadata = {
+  readonly code: string | null
+  readonly type: string | null
+  readonly errorType: string | null
+  readonly providerCode: string | null
+  readonly message: string | null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -42,10 +51,18 @@ function boundedProviderErrorToken(value: unknown): string | null {
   return normalized && normalized.length <= 128 ? normalized : null
 }
 
-async function readProviderErrorMetadata(response: Response): Promise<{
-  readonly code: string | null
-  readonly type: string | null
-}> {
+function boundedProviderErrorMessage(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const normalized = value
+    .trim()
+    .replace(/(https?:\/\/[^\s?#]+)\?[^\s]*/gi, '$1?[redacted]')
+    .replace(/([?&](?:token|signature|credential|key|secret)=)[^&\s]*/gi, '$1[redacted]')
+    .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+/gi, 'Bearer [redacted]')
+    .replace(/\b(api[-_]?key|password|secret|token)\s*[:=]\s*[^\s,;]+/gi, '$1=[redacted]')
+  return normalized ? normalized.slice(0, 2_000) : null
+}
+
+async function readProviderErrorMetadata(response: Response): Promise<ProviderErrorMetadata> {
   try {
     const body = await readResponseBufferWithLimit(
       response.clone(),
@@ -54,22 +71,32 @@ async function readProviderErrorMetadata(response: Response): Promise<{
     )
     const parsed: unknown = JSON.parse(body.toString('utf8'))
     if (!isRecord(parsed) || !isRecord(parsed.error)) {
-      return { code: null, type: null }
+      return { code: null, type: null, errorType: null, providerCode: null, message: null }
     }
+    const errorMetadata = isRecord(parsed.error.metadata) ? parsed.error.metadata : null
+    const topLevelMetadata = isRecord(parsed.metadata) ? parsed.metadata : null
     return {
       code: boundedProviderErrorToken(parsed.error.code),
       type: boundedProviderErrorToken(parsed.error.type),
+      errorType: boundedProviderErrorToken(parsed.error_type)
+        ?? boundedProviderErrorToken(parsed.error.error_type)
+        ?? boundedProviderErrorToken(errorMetadata?.error_type)
+        ?? boundedProviderErrorToken(topLevelMetadata?.error_type),
+      providerCode: boundedProviderErrorToken(errorMetadata?.provider_code)
+        ?? boundedProviderErrorToken(topLevelMetadata?.provider_code),
+      message: boundedProviderErrorMessage(parsed.error.message),
     }
   } catch {
-    return { code: null, type: null }
+    return { code: null, type: null, errorType: null, providerCode: null, message: null }
   }
 }
 
 function canonicalCodexErrorResponse(params: {
   readonly source: Response
-  readonly status: 429 | 500 | 503
+  readonly status: 400 | 429 | 500 | 503
   readonly type: string
   readonly code: string
+  readonly message: string | null
 }): Response {
   const headers = new Headers({
     'Cache-Control': 'no-store',
@@ -81,13 +108,14 @@ function canonicalCodexErrorResponse(params: {
     error: {
       type: params.type,
       code: params.code,
-      message: params.code,
+      message: params.message ?? params.code,
     },
   }, { status: params.status, headers })
 }
 
 function canonicalCodexStreamFailureResponse(params: {
   readonly code: string
+  readonly message: string | null
 }): Response {
   const event = {
     type: 'response.failed',
@@ -100,7 +128,7 @@ function canonicalCodexStreamFailureResponse(params: {
       background: false,
       error: {
         code: params.code,
-        message: params.code,
+        message: params.message ?? params.code,
       },
       incomplete_details: null,
       usage: null,
@@ -120,12 +148,14 @@ function canonicalCodexStreamFailureResponse(params: {
 }
 
 function hasProviderErrorToken(
-  metadata: { readonly code: string | null; readonly type: string | null },
+  metadata: ProviderErrorMetadata,
   values: ReadonlySet<string>,
 ): boolean {
   return Boolean(
     (metadata.code && values.has(metadata.code))
-    || (metadata.type && values.has(metadata.type)),
+    || (metadata.type && values.has(metadata.type))
+    || (metadata.errorType && values.has(metadata.errorType))
+    || (metadata.providerCode && values.has(metadata.providerCode))
   )
 }
 
@@ -148,10 +178,14 @@ const PROVIDER_CONTEXT_ERROR_TOKENS = new Set([
   'context_length_exceeded',
   'context_window_exceeded',
   'max_tokens_exceeded',
+  'string_too_long',
+  'token_limit_exceeded',
 ])
 
 const PROVIDER_OVERLOAD_ERROR_TOKENS = new Set([
   'overloaded',
+  'provider_overloaded',
+  'provider_unavailable',
   'server_is_overloaded',
   'slow_down',
 ])
@@ -171,11 +205,13 @@ export async function projectCodexProviderResponse(
       failureKind: null,
       providerStatus,
       providerCode: null,
+      providerErrorType: null,
     }
   }
 
   const metadata = await readProviderErrorMetadata(response)
-  const providerCode = metadata.code ?? metadata.type
+  const providerCode = metadata.providerCode ?? metadata.code ?? metadata.type
+  const providerErrorType = metadata.errorType
   if (
     providerStatus === 402
     || hasProviderErrorToken(metadata, PROVIDER_BILLING_ERROR_TOKENS)
@@ -186,28 +222,36 @@ export async function projectCodexProviderResponse(
         status: 429,
         type: 'usage_not_included',
         code: 'usage_not_included',
+        message: metadata.message,
       }),
       failureKind: 'billing_required',
       providerStatus,
       providerCode,
+      providerErrorType,
     }
   }
   if (hasProviderErrorToken(metadata, PROVIDER_POLICY_ERROR_TOKENS)) {
     return {
-      response: canonicalCodexStreamFailureResponse({ code: 'cyber_policy' }),
+      response: canonicalCodexStreamFailureResponse({
+        code: 'cyber_policy',
+        message: metadata.message,
+      }),
       failureKind: 'policy_rejected',
       providerStatus,
       providerCode,
+      providerErrorType,
     }
   }
   if (hasProviderErrorToken(metadata, PROVIDER_CONTEXT_ERROR_TOKENS)) {
     return {
       response: canonicalCodexStreamFailureResponse({
         code: 'context_length_exceeded',
+        message: metadata.message,
       }),
       failureKind: 'context_exceeded',
       providerStatus,
       providerCode,
+      providerErrorType,
     }
   }
   if (providerStatus === 429) {
@@ -216,6 +260,7 @@ export async function projectCodexProviderResponse(
       failureKind: 'rate_limited',
       providerStatus,
       providerCode,
+      providerErrorType,
     }
   }
   if (hasProviderErrorToken(metadata, PROVIDER_OVERLOAD_ERROR_TOKENS)) {
@@ -225,10 +270,12 @@ export async function projectCodexProviderResponse(
         status: 503,
         type: 'server_error',
         code: 'slow_down',
+        message: metadata.message,
       }),
       failureKind: 'temporarily_unavailable',
       providerStatus,
       providerCode,
+      providerErrorType,
     }
   }
   if (providerStatus === 401 || providerStatus === 403 || providerStatus === 404) {
@@ -238,23 +285,27 @@ export async function projectCodexProviderResponse(
         status: 503,
         type: 'server_error',
         code: 'slow_down',
+        message: metadata.message,
       }),
       failureKind: 'configuration_unavailable',
       providerStatus,
       providerCode,
+      providerErrorType,
     }
   }
   if (providerStatus >= 400 && providerStatus < 500) {
     return {
       response: canonicalCodexErrorResponse({
         source: response,
-        status: 503,
-        type: 'server_error',
-        code: 'slow_down',
+        status: 400,
+        type: 'invalid_request_error',
+        code: 'invalid_request',
+        message: metadata.message,
       }),
       failureKind: 'request_rejected',
       providerStatus,
       providerCode,
+      providerErrorType,
     }
   }
   if (providerStatus >= 500) {
@@ -264,10 +315,12 @@ export async function projectCodexProviderResponse(
         status: 503,
         type: 'server_error',
         code: 'slow_down',
+        message: metadata.message,
       }),
       failureKind: 'temporarily_unavailable',
       providerStatus,
       providerCode,
+      providerErrorType,
     }
   }
   return {
@@ -276,9 +329,11 @@ export async function projectCodexProviderResponse(
       status: 500,
       type: 'server_error',
       code: 'provider_response_invalid',
+      message: metadata.message,
     }),
     failureKind: 'temporarily_unavailable',
     providerStatus,
     providerCode,
+    providerErrorType,
   }
 }

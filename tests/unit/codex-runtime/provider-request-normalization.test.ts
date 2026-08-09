@@ -77,8 +77,8 @@ describe('Codex provider request normalization', () => {
     {
       providerStatus: 422,
       providerError: { type: 'invalid_request_error', code: 'invalid_request' },
-      expectedStatus: 503,
-      expectedCode: 'slow_down',
+      expectedStatus: 400,
+      expectedCode: 'invalid_request',
       expectedKind: 'request_rejected',
     },
     {
@@ -110,6 +110,27 @@ describe('Codex provider request normalization', () => {
     expect(projected.providerStatus).toBe(providerStatus)
     expect(projected.response.status).toBe(expectedStatus)
     expect(await projected.response.text()).toContain(`\"code\":\"${expectedCode}\"`)
+  })
+
+  it('preserves the documented OpenRouter Responses error type and diagnostic', async () => {
+    const projected = await projectCodexProviderResponse(Response.json({
+      id: 'resp_failed',
+      status: 'failed',
+      error: {
+        code: 'invalid_prompt',
+        message: 'Item ctc_123 was provided without its required output.',
+      },
+      error_type: 'invalid_request',
+    }, { status: 400 }))
+
+    expect(projected.failureKind).toBe('request_rejected')
+    expect(projected.providerStatus).toBe(400)
+    expect(projected.providerCode).toBe('invalid_prompt')
+    expect(projected.providerErrorType).toBe('invalid_request')
+    expect(projected.response.status).toBe(400)
+    expect(await projected.response.text()).toContain(
+      'Item ctc_123 was provided without its required output.',
+    )
   })
 
   it('preserves a Provider rate-limit response and its retry boundary', async () => {

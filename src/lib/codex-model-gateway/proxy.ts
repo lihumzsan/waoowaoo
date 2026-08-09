@@ -214,6 +214,7 @@ export async function proxyCodexResponsesRequest(params: {
         modelKey: upstream.modelKey,
         providerStatus: projection.providerStatus,
         providerCode: projection.providerCode,
+        providerErrorType: projection.providerErrorType,
         providerRequestId: readProviderRequestId(response),
         failureKind: projection.failureKind,
       },
