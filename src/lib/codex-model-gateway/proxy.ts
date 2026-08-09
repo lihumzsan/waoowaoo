@@ -52,6 +52,11 @@ function readInstructionMessage(item: Record<string, unknown>): string | null {
   return parts.join('\n\n')
 }
 
+function isUnreplayableReasoningItem(item: Record<string, unknown>): boolean {
+  return item.type === 'reasoning'
+    && (typeof item.encrypted_content !== 'string' || !item.encrypted_content.trim())
+}
+
 /**
  * Codex may append current-Turn developer context after Product View history.
  * OpenRouter's Anthropic-compatible routes translate that item to a mid-history
@@ -76,6 +81,11 @@ export function normalizeCodexProviderRequest(body: Record<string, unknown>): vo
       input.push(item)
       continue
     }
+    // With `store: false`, only encrypted reasoning output is a replayable
+    // Provider input. An interrupted stream can persist a summary-only item;
+    // replaying it next to the following encrypted item makes OpenAI reject the
+    // request because the encrypted payload is bound to a different item id.
+    if (isUnreplayableReasoningItem(item)) continue
     const instruction = readInstructionMessage(item)
     if (instruction === null) input.push(item)
     else instructions.push(instruction)

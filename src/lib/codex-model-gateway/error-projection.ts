@@ -62,6 +62,16 @@ function boundedProviderErrorMessage(value: unknown): string | null {
   return normalized ? normalized.slice(0, 2_000) : null
 }
 
+function readNestedProviderError(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== 'string') return null
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return isRecord(parsed) && isRecord(parsed.error) ? parsed.error : null
+  } catch {
+    return null
+  }
+}
+
 async function readProviderErrorMetadata(response: Response): Promise<ProviderErrorMetadata> {
   try {
     const body = await readResponseBufferWithLimit(
@@ -75,16 +85,24 @@ async function readProviderErrorMetadata(response: Response): Promise<ProviderEr
     }
     const errorMetadata = isRecord(parsed.error.metadata) ? parsed.error.metadata : null
     const topLevelMetadata = isRecord(parsed.metadata) ? parsed.metadata : null
+    const nestedProviderError = readNestedProviderError(errorMetadata?.raw)
     return {
-      code: boundedProviderErrorToken(parsed.error.code),
-      type: boundedProviderErrorToken(parsed.error.type),
+      code: boundedProviderErrorToken(parsed.error.code)
+        ?? boundedProviderErrorToken(nestedProviderError?.code),
+      type: boundedProviderErrorToken(parsed.error.type)
+        ?? boundedProviderErrorToken(nestedProviderError?.type),
       errorType: boundedProviderErrorToken(parsed.error_type)
         ?? boundedProviderErrorToken(parsed.error.error_type)
         ?? boundedProviderErrorToken(errorMetadata?.error_type)
-        ?? boundedProviderErrorToken(topLevelMetadata?.error_type),
+        ?? boundedProviderErrorToken(topLevelMetadata?.error_type)
+        ?? boundedProviderErrorToken(nestedProviderError?.error_type),
       providerCode: boundedProviderErrorToken(errorMetadata?.provider_code)
-        ?? boundedProviderErrorToken(topLevelMetadata?.provider_code),
-      message: boundedProviderErrorMessage(parsed.error.message),
+        ?? boundedProviderErrorToken(errorMetadata?.provider_error_code)
+        ?? boundedProviderErrorToken(topLevelMetadata?.provider_code)
+        ?? boundedProviderErrorToken(topLevelMetadata?.provider_error_code)
+        ?? boundedProviderErrorToken(nestedProviderError?.code),
+      message: boundedProviderErrorMessage(nestedProviderError?.message)
+        ?? boundedProviderErrorMessage(parsed.error.message),
     }
   } catch {
     return { code: null, type: null, errorType: null, providerCode: null, message: null }

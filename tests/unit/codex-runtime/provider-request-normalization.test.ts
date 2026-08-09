@@ -59,6 +59,31 @@ describe('Codex provider request normalization', () => {
     })).toThrow('CODEX_MODEL_GATEWAY_REQUEST_INSTRUCTIONS_INVALID')
   })
 
+  it('drops interrupted summary-only reasoning while preserving encrypted reasoning', () => {
+    const interrupted = {
+      type: 'reasoning',
+      id: 'rs_interrupted',
+      summary: [{ type: 'summary_text', text: 'partial reasoning' }],
+      content: null,
+      encrypted_content: null,
+    }
+    const replayable = {
+      type: 'reasoning',
+      id: 'rs_complete',
+      summary: [],
+      content: null,
+      encrypted_content: 'encrypted-state',
+    }
+    const request: Record<string, unknown> = {
+      store: false,
+      input: [interrupted, replayable],
+    }
+
+    normalizeCodexProviderRequest(request)
+
+    expect(request.input).toEqual([replayable])
+  })
+
   it.each([
     {
       providerStatus: 402,
@@ -130,6 +155,32 @@ describe('Codex provider request normalization', () => {
     expect(projected.response.status).toBe(400)
     expect(await projected.response.text()).toContain(
       'Item ctc_123 was provided without its required output.',
+    )
+  })
+
+  it('unwraps OpenRouter BYOK provider diagnostics hidden in metadata.raw', async () => {
+    const projected = await projectCodexProviderResponse(Response.json({
+      error: {
+        code: 400,
+        message: 'Provider returned error',
+        metadata: {
+          provider_error_code: 'invalid_encrypted_content',
+          raw: JSON.stringify({
+            error: {
+              type: 'invalid_request_error',
+              code: 'invalid_encrypted_content',
+              message: 'Encrypted content item_id did not match the target item id.',
+            },
+          }),
+        },
+      },
+    }, { status: 400 }))
+
+    expect(projected.failureKind).toBe('request_rejected')
+    expect(projected.providerCode).toBe('invalid_encrypted_content')
+    expect(projected.response.status).toBe(400)
+    expect(await projected.response.text()).toContain(
+      'Encrypted content item_id did not match the target item id.',
     )
   })
 

@@ -108,6 +108,10 @@ View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 pl
   顶层 `error_type`，导致真实 400 再次丢失原生诊断并被兜底伪装成 `slow_down` → 协议 smoke 没覆盖实际
   Provider skin，且兜底改变了错误语义 → 网关必须读取各受支持 skin 的稳定 typed 字段、携带有界脱敏
   原生 message，并把未知请求拒绝投影为非可用性错误（ARL-17/FG-01）。
+- Runtime 中断可留下只有摘要、没有加密载荷的 reasoning item；首版网关把所有历史 item 原样重放，
+  下一个完整 reasoning 的加密载荷因此被 Provider 判定为绑定了错误 identity，旧诊断防线又只看到网关
+  的泛化外层错误 → Provider 请求边界只重放具有可验证加密载荷的 reasoning，并从有界原生错误信封读取
+  上游诊断；产品消息和持久 Rollout 均不另建修复 writer（ARL-07/ARL-17）。
 - Runtime 恢复曾把数据库消息重新注入新 Thread；失败 Turn 的最新用户消息尚未投影时，恢复上下文会
   回到更早约束 → 产品 View 被误作模型 history writer → Product Thread 在首个 Turn 前绑定，后续只
   resume 持久 Codex Thread，View 永不参与模型历史恢复（ARL-07）。
