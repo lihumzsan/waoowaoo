@@ -423,6 +423,14 @@ export class AssistantRuntimeEventProjector {
     if (failure) this.latestRuntimeFailure = failure
     // `willRetry=true` is an app-server-owned retry within the same Turn.
     // It is progress, not a second lifecycle or a Product Turn terminal fact.
+    if (params.willRetry === true) {
+      this.upsertAndPublishDataPart('runtime-retry', {
+        type: 'data-assistant-runtime-progress',
+        id: 'runtime-retry',
+        data: { itemId: 'runtime', kind: 'retry', message: '' },
+      })
+      this.queueMessageSnapshot()
+    }
   }
 
   private consumeGoal(params: RuntimeJsonObject): void {
@@ -628,6 +636,7 @@ export class AssistantRuntimeEventProjector {
   }
 
   private consumeTurnCompleted(params: RuntimeJsonObject): void {
+    this.removePart('runtime-retry')
     const turn = isRecord(params.turn) ? params.turn : null
     const status = turn ? readString(turn, 'status') : null
     if (status === 'completed') {

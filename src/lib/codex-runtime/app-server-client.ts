@@ -39,6 +39,7 @@ const DEFAULT_ARGS = [
   'code_mode_host',
 ] as const
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 2_000
+const MAX_DIAGNOSTIC_CHARS = 16_000
 
 type PendingRequest = {
   readonly method: string
@@ -60,6 +61,7 @@ export type CodexAppServerClientOptions = {
   readonly args?: readonly string[]
   readonly env?: NodeJS.ProcessEnv
   readonly shutdownTimeoutMs?: number
+  readonly onDiagnostic?: (diagnostic: string) => void
 }
 
 export class CodexAppServerRpcError extends Error {
@@ -299,6 +301,29 @@ function validateOptions(options: CodexAppServerClientOptions): void {
   }
 }
 
+function sanitizeDiagnostic(value: string): string {
+  return value
+    .replace(/Bearer\s+[^\s"']+/giu, 'Bearer [REDACTED]')
+    .replace(/([?&](?:token|key|secret)=)[^&\s"']+/giu, '$1[REDACTED]')
+    .slice(-MAX_DIAGNOSTIC_CHARS)
+    .trim()
+}
+
+function isActionableDiagnostic(value: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (isRecord(parsed)) {
+      if (parsed.level === 'ERROR') return true
+      const fields = isRecord(parsed.fields) ? parsed.fields : null
+      const message = fields && typeof fields.message === 'string' ? fields.message : ''
+      return /(?:failed to (?:connect|send|load|refresh|warm|fetch|initialize)|stream disconnected|falling back to HTTP|MCP startup reconnect|http\/request send failed)/iu.test(message)
+    }
+  } catch {
+    // Non-JSON diagnostics from Codex are still useful when they are failures.
+  }
+  return /(?:error|failed|disconnect|refused|timeout)/iu.test(value)
+}
+
 export class CodexAppServerClient implements RuntimeAdapter {
   private readonly child: ChildProcessWithoutNullStreams
   private readonly reader: ReadlineInterface
@@ -330,8 +355,15 @@ export class CodexAppServerClient implements RuntimeAdapter {
     })
     this.reader = createInterface({ input: this.child.stdout, crlfDelay: Infinity })
     this.reader.on('line', (line) => this.handleLine(line))
-    this.child.stderr.on('data', () => {
-      // stderr is diagnostic-only; consuming it prevents child-process backpressure.
+    const diagnosticReader = createInterface({ input: this.child.stderr, crlfDelay: Infinity })
+    diagnosticReader.on('line', (line) => {
+      const diagnostic = sanitizeDiagnostic(line)
+      if (!diagnostic || !isActionableDiagnostic(diagnostic)) return
+      if (options.onDiagnostic) {
+        options.onDiagnostic(diagnostic)
+        return
+      }
+      process.stderr.write(`CODEX_APP_SERVER_DIAGNOSTIC:${diagnostic}\n`)
     })
     this.child.once('error', (error) => this.failProtocol(new CodexAppServerProtocolError(`PROCESS_SPAWN_FAILED:${error.message}`)))
     this.child.once('exit', (code, signal) => this.handleExit(code, signal))

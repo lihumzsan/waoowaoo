@@ -4,6 +4,7 @@ import { AppIcon } from '@/components/ui/icons'
 import type { ProjectAgentContextCompactedPartData } from '@/lib/project-agent/types'
 
 type RuntimeGoalPartData = { readonly goal: unknown }
+type RuntimeProgressPartData = { readonly kind: unknown }
 type RuntimeSkillsPartData = {
   readonly changed: boolean
   readonly skills: readonly {
@@ -104,9 +105,15 @@ export function AssistantRuntimeSkillsDataCard({ data }: DataMessagePartProps<Ru
   )
 }
 
-/** Legacy runtime progress parts can exist in persisted messages, but they are internal telemetry. */
-export function AssistantRuntimeProgressDataCard() {
-  return null
+export function AssistantRuntimeProgressDataCard({ data }: DataMessagePartProps<RuntimeProgressPartData>) {
+  const t = useTranslations('assistantAgent')
+  if (data.kind !== 'retry') return null
+  return (
+    <div className="flex items-center gap-1.5 border-l-2 border-[var(--glass-tone-warning-fg)]/35 pl-2 text-xs leading-5 text-[var(--glass-tone-warning-fg)]">
+      <AppIcon name="alert" className="h-3 w-3 shrink-0 opacity-70" />
+      <span>{t('runtime.reconnecting')}</span>
+    </div>
+  )
 }
 
 /**

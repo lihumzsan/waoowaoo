@@ -103,6 +103,7 @@
   "runtime": {
     "goal": "Active goal",
     "goalUsage": "{tokens} tokens · {seconds}s",
+    "reconnecting": "The Codex connection was interrupted. Reconnecting…",
     "goalStatus": {
       "active": "Active",
       "paused": "Paused",

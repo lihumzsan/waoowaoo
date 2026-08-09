@@ -103,6 +103,7 @@
   "runtime": {
     "goal": "当前目标",
     "goalUsage": "{tokens} tokens · {seconds} 秒",
+    "reconnecting": "Codex 连接中断，正在重新连接…",
     "goalStatus": {
       "active": "进行中",
       "paused": "已暂停",

@@ -15,6 +15,7 @@ export type LocalRuntimeManagerOptions = {
   readonly args?: readonly string[]
   readonly env?: NodeJS.ProcessEnv
   readonly shutdownTimeoutMs?: number
+  readonly onDiagnostic?: (diagnostic: string) => void
 }
 
 export type EnsureLocalRuntimeParams = {
@@ -111,6 +112,7 @@ export class LocalRuntimeManager {
       args: this.options.args,
       env: this.options.env,
       shutdownTimeoutMs: this.options.shutdownTimeoutMs,
+      onDiagnostic: this.options.onDiagnostic,
     }
   }
 }
