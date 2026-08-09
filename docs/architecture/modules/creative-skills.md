@@ -21,9 +21,9 @@ fallback。
 - **CS-02 — 专业映射穷尽。** registry 穷尽 `domainKind → 一个专业 Skill → 固定 outputKind → strict
   JSON schema → 媒体 Operation 或可选保存 schemaId`。调用方不得另建同义路由、私有 schema 或根据
   文件存在猜能力。
-- **CS-03 — 主 Agent 只拥有 Wao 领域 Skill。** Runtime 只向主 Agent 暴露 registry 声明的领域
-  Skill；`creative-core` 只作为每个领域 Skill 的共同正文嵌入，不形成需要二次选择的独立入口。
-  Runtime 自带的系统 Skills 继续显式禁用；inventory 与 registry 不一致必须失败。
+- **CS-03 — 主 Agent 的 Wao Skill identity 单一。** Runtime 只在 workspace 内暴露 registry 声明的领域
+  Skill；`creative-core` 只作为每个领域 Skill 的共同正文嵌入，不形成需要二次选择的独立入口。原生 Codex 系统 Skills
+  属于用户 Home，Wao 不复制、禁用或清理它们；Wao registry 与 workspace inventory 不一致必须失败。
 - **CS-04 — 每个 Skill 固定组装。** 一个物化 Skill 恰好包含核心正文、一个专业正文和该专业
   outputKind 的 registry schema；不得动态发现、混入其他领域 Skill，或从散文示例重建字段。
 - **CS-05 — 专业内容单 writer。** 主 Agent 是当前专业结果的唯一 writer；校验修正、用户呈现、
@@ -35,8 +35,9 @@ fallback。
 - **CS-07 — 生成 items 直接执行。** 图片、视频和音乐对象包含可直接传给对应媒体 Operation 的完整
   items，包括最终 Prompt、创作身份、创作参数和 Resource 版本引用。Project 画幅、资产格式、模型、
   能力校验、计费和 Task 仍由各自系统 owner 决定；服务端不得补写创作内容。
-- **CS-08 — Agent 能力默认关闭。** Runtime 配置必须关闭 Codex agents；专业创作不得创建、等待、
-  中断或恢复 child Thread，也不得保留 child lifecycle、hook 或 UI 投影作为备用路径。
+- **CS-08 — Wao 不创建 Agent 委派旁路。** 专业创作不得创建、等待、中断或恢复 child Thread，也不得保留
+  child lifecycle、hook 或 UI 投影作为备用路径。原生 Codex agent 配置属于用户 Home，Wao 不通过 workspace placement
+  改写它；Wao developer instructions 仍要求专业结果留在当前主 Turn。
 - **CS-09 — 语言由用户决定。** Skill 可以使用适合模型的知识语言，但用户可见文本和工作区交付遵循
   当前 locale 或用户明确要求。
 - **CS-10 — 真人与写实风格是正常创作能力。** 不在 Skill 或指令里注入真人、公众人物或相似度禁令。

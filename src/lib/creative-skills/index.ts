@@ -6,7 +6,6 @@ export { readCreativeSkillResource } from './loader'
 export {
   CREATIVE_RUNTIME_SKILL_REGISTRY,
   CREATIVE_RUNTIME_SKILLS,
-  PRIMARY_AGENT_DISABLED_NATIVE_SKILL_IDS,
   creativeSkillRoutingInstructions,
   materializeCreativeRuntimeConfiguration,
 } from './runtime-skills'

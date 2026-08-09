@@ -896,7 +896,7 @@ function fingerprintEnvironment(environment: Readonly<Record<string, string>>): 
 }
 
 function validateMaterialization(value: RuntimeSessionMaterialization): RuntimeSessionMaterialization {
-  if (!value.hostWorkspaceDirectory || !value.hostCodexHomeDirectory) {
+  if (!value.hostWorkspaceDirectory) {
     throw new Error('CODEX_RUNTIME_SESSION_MATERIALIZATION_INVALID')
   }
   return value

@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { readCreativeSkillResource } from './loader'
 import {
@@ -73,24 +73,6 @@ export const CREATIVE_RUNTIME_SKILLS: readonly CreativeRuntimeSkillDefinition[] 
   CREATIVE_RUNTIME_SKILL_REGISTRY,
 )
 
-/** Pinned Codex system Skills stay disabled. A Codex upgrade that adds one fails smoke. */
-export const PRIMARY_AGENT_DISABLED_NATIVE_SKILL_IDS = [
-  'imagegen',
-  'openai-docs',
-  'plugin-creator',
-  'review-agent',
-  'skill-creator',
-  'skill-installer',
-] as const
-
-const PRIMARY_AGENT_RUNTIME_BOOTSTRAP = `# Wao runtime
-
-The developer instructions are the authoritative project policy. Native Wao Skills provide the professional method and strict output schema for each matching result. Runtime scratch is never a project Resource.`
-
-function tomlString(value: string): string {
-  return JSON.stringify(value)
-}
-
 function withoutFrontmatter(content: string): string {
   const normalized = content.replace(/^\uFEFF/u, '')
   const match = normalized.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n/u)
@@ -144,21 +126,10 @@ async function buildRuntimeSkill(skill: CreativeRuntimeSkillDefinition): Promise
 }
 
 export async function materializeCreativeRuntimeConfiguration(
-  codexHomeDirectory: string,
   runtimeSkillsDirectory: string,
 ): Promise<void> {
   const skillsDirectory = runtimeSkillsDirectory
   await mkdir(skillsDirectory, { recursive: true, mode: 0o700 })
-  // Earlier runtimes installed Wao Skills in Codex home. That made native
-  // Skill reads look like workspace-external shell access under on-request
-  // approval. These registry-owned files are regenerated for every placement;
-  // remove only their exact old directories so there is one discoverable copy.
-  await Promise.all(CREATIVE_RUNTIME_SKILLS.map(async (skill) => {
-    await rm(
-      path.join(codexHomeDirectory, 'skills', skill.skillIds[1]),
-      { recursive: true, force: true },
-    )
-  }))
   await Promise.all(CREATIVE_RUNTIME_SKILLS.map(async (skill) => {
     const professionalSkillId = skill.skillIds[1]
     const skillDirectory = path.join(skillsDirectory, professionalSkillId)
@@ -169,33 +140,6 @@ export async function materializeCreativeRuntimeConfiguration(
       { mode: 0o600 },
     )
   }))
-  const disabledSkills = PRIMARY_AGENT_DISABLED_NATIVE_SKILL_IDS.flatMap((skillId) => [
-    '[[skills.config]]',
-    // `~` resolves through this process's CODEX_HOME on both drivers. A host
-    // absolute path is invalid inside Docker and would silently leave the
-    // bundled system Skill enabled there.
-    `path = ${tomlString(path.posix.join('~', 'skills', '.system', skillId, 'SKILL.md'))}`,
-    'enabled = false',
-    '',
-  ])
-  await Promise.all([
-    writeFile(
-      path.join(codexHomeDirectory, 'AGENTS.md'),
-      `${PRIMARY_AGENT_RUNTIME_BOOTSTRAP.trim()}\n`,
-      { mode: 0o600 },
-    ),
-    writeFile(
-      path.join(codexHomeDirectory, 'config.toml'),
-      [
-        '[agents]',
-        'enabled = false',
-        '',
-        disabledSkills.join('\n'),
-        '',
-      ].join('\n'),
-      { mode: 0o600 },
-    ),
-  ])
 }
 
 export function creativeSkillRoutingInstructions(): readonly string[] {

@@ -2,7 +2,6 @@ import type { RuntimeAdapter } from './runtime-adapter'
 
 export type RuntimeContainerMaterialization = {
   readonly hostWorkspaceDirectory: string
-  readonly hostCodexHomeDirectory: string
 }
 
 export type RuntimeContainerLaunchRequest = {

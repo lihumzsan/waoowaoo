@@ -35,8 +35,6 @@
     "architecture:durable-budget": "node scripts/check-durable-kernel-budget.mjs",
     "architecture:failure-governance": "tsx --tsconfig tsconfig.runtime-scripts.json scripts/check-failure-governance.ts",
     "runtime:codex:smoke": "tsx scripts/codex-runtime-smoke.ts",
-    "runtime:codex:container-smoke": "tsx scripts/codex-runtime-container-smoke.ts",
-    "runtime:codex:gateway-error-smoke": "tsx scripts/codex-gateway-error-smoke.ts",
     "runtime:sms:smoke": "tsx --tsconfig tsconfig.runtime-scripts.json scripts/aliyun-sms-sdk-smoke.ts",
     "check:media-normalization": "tsx scripts/check-media-normalization.ts",
     "check:capability-catalog": "node scripts/check-capability-catalog.mjs",

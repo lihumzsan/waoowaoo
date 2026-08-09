@@ -1,7 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { settleRealtimeLlmUsage } from '@/lib/billing/llm-realtime-settlement'
 import { BillingOperationError } from '@/lib/billing/errors'
-import { attachOpenRouterRealtimeBilling } from '@/lib/codex-model-gateway/openrouter-realtime-billing'
 import { prisma } from '../../helpers/prisma'
 import { resetBillingState } from '../../helpers/db-reset'
 import { createTestProject, createTestUser, seedBalance } from '../../helpers/billing-fixtures'
@@ -110,48 +109,6 @@ describe('billing/LLM realtime settlement integration', () => {
     await expect(settle({ ...input, outputTokens: 31 })).rejects.toMatchObject({
       code: 'BILLING_USAGE_REPLAY_DIVERGED',
     } satisfies Partial<BillingOperationError>)
-  })
-
-  it('settles the final OpenRouter stream usage and persists only the user price', async () => {
-    const user = await createTestUser()
-    const project = await createTestProject(user.id)
-    await seedBalance(user.id, 10)
-    const payload = {
-      type: 'response.completed',
-      response: {
-        id: 'generation-stream-price',
-        status: 'completed',
-        usage: {
-          input_tokens: 120,
-          output_tokens: 30,
-          input_tokens_details: { cached_tokens: 20 },
-          cost: 0.01,
-        },
-      },
-    }
-    const upstream = new Response(
-      `event: response.completed\ndata: ${JSON.stringify(payload)}\n\n`,
-      { headers: { 'Content-Type': 'text/event-stream' } },
-    )
-    const billed = await attachOpenRouterRealtimeBilling({
-      response: upstream,
-      headerGenerationId: null,
-      userId: user.id,
-      projectId: project.id,
-      turnId: 'turn-stream-price',
-      modelKey: usage.modelKey,
-    })
-
-    await billed.text()
-
-    const fact = await prisma.usageCost.findFirstOrThrow({
-      where: { userId: user.id, projectId: project.id },
-    })
-    // 0.01 USD × 7.2 CNY/USD × 1.75 retail × 10 credits/CNY.
-    expect(Number(fact.cost)).toBe(1.26)
-    expect(fact.chargedCredits).toBe(2)
-    expect(fact.metadata).not.toContain('costUsd')
-    expect(fact.metadata).not.toContain('providerCost')
   })
 
   it('serializes concurrent generations against one user meter', async () => {

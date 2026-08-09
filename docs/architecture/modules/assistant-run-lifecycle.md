@@ -52,9 +52,9 @@ View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 pl
   running/waiting 的取消与所有 pending 交互在同一 Project 锁下关闭。晚到审批、Grant、Task、
   同步写或模型晚到输出不能越过取消标记开始新副作用。
 - **ARL-14 — clear 先 claim 再停 placement。** clear 标记是清空进行中的唯一 fence；claim 后新
-  准入、模型网关、MCP binding、审批证明与所有 effect 事务立即失败关闭。已归档请求的重放直接返回，
-  绝不停止后来创建的新 Thread/Turn。首次 clear 必须在独占 scope ownership 下停稳 placement，并
-  幂等删除该 scope 的 opaque Codex home 后再完成产品归档。
+  准入、原生 Thread binding、MCP binding、审批证明与所有 effect 事务立即失败关闭。已归档请求的重放直接返回，
+  绝不停止后来创建的新 Thread/Turn。首次 clear 必须在独占 scope ownership 下停稳 placement，销毁 Wao 的临时 workspace
+  后再完成产品归档；当前用户的标准 Codex Home 不属于 Wao clear 的写入范围。
 - **ARL-15 — secret input fail closed。** 当前没有独立 secret authority；标记为 secret 的原生输入
   请求在写普通消息前拒绝。
 - **ARL-16 — 重连替换旧连接而不扩容。** 每个标签页对每个 Project 持有稳定的 session identity；

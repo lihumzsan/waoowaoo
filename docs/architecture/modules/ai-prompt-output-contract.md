@@ -37,8 +37,8 @@ Skill，同一用户目标可顺序产生多个不同领域结果。专业创作
 - **APO-10 — 不用 Prompt 伪造媒体能力边界。** 指令与 Skill 不注入真人、公众人物、相似度或写实
   风格禁令。能力只读取系统注入的声明式 View，Provider 拒绝只通过统一 typed failure 返回，不得再
   投影成常驻 Agent 政策。
-- **APO-11 — 不存在委派旁路。** Runtime 必须关闭 agents。专业结果
-  的创建、修正和提交都留在同一 Turn；不得通过 child event、hook、UI 或提高推理等级恢复第二 writer。
+- **APO-11 — 不存在 Wao 委派旁路。** Wao 不创建或恢复 child Thread，也不通过 placement 改写用户 Codex Home 的
+  agents 配置。专业结果的创建、修正和提交都留在同一 Turn；不得通过 child event、hook、UI 或提高推理等级恢复第二 writer。
 
 ## 权威入口
 

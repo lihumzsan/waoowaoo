@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { createInterface, type Interface as ReadlineInterface } from 'node:readline'
+import { resolveCodexExecutablePath } from '@/lib/ai-providers/codex/client'
 import type {
   RuntimeAdapter,
   RuntimeApprovalPolicy,
@@ -29,7 +30,6 @@ import type {
   RuntimeUserInput,
 } from './runtime-adapter'
 
-const DEFAULT_COMMAND = 'codex'
 const DEFAULT_ARGS = [
   '--dangerously-bypass-hook-trust',
   'app-server',
@@ -89,7 +89,7 @@ function hasOwn(record: Record<string, unknown>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(record, key)
 }
 
-function assertOnlyKeys(record: Record<string, unknown>, allowed: readonly string[], code: string): void {
+export function assertOnlyKeys(record: Record<string, unknown>, allowed: readonly string[], code: string): void {
   const allowedKeys = new Set(allowed)
   if (Object.keys(record).some((key) => !allowedKeys.has(key))) {
     throw new CodexAppServerProtocolError(code)
@@ -318,10 +318,11 @@ export class CodexAppServerClient implements RuntimeAdapter {
 
   constructor(options: CodexAppServerClientOptions) {
     validateOptions(options)
+    const command = options.command ?? resolveCodexExecutablePath()
     this.clientInfo = options.clientInfo
     this.initializeCapabilities = options.initializeCapabilities ?? null
     this.shutdownTimeoutMs = options.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS
-    this.child = spawn(options.command ?? DEFAULT_COMMAND, [...(options.args ?? DEFAULT_ARGS)], {
+    this.child = spawn(command, [...(options.args ?? DEFAULT_ARGS)], {
       cwd: options.cwd,
       env: options.env ?? process.env,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -361,7 +362,6 @@ export class CodexAppServerClient implements RuntimeAdapter {
     await this.requireInitialized()
     const requestParams: RuntimeJsonObject = {}
     putOptional(requestParams, 'model', params.model)
-    putOptional(requestParams, 'modelProvider', params.modelProvider)
     putOptional(requestParams, 'serviceTier', params.serviceTier)
     putOptional(requestParams, 'cwd', params.cwd)
     putOptional(requestParams, 'approvalPolicy', params.approvalPolicy ? approvalPolicyToJson(params.approvalPolicy) : undefined)
@@ -386,7 +386,6 @@ export class CodexAppServerClient implements RuntimeAdapter {
       threadId: requireString(params.threadId, 'THREAD_RESUME_ID_INVALID'),
     }
     putOptional(requestParams, 'model', params.model)
-    putOptional(requestParams, 'modelProvider', params.modelProvider)
     putOptional(requestParams, 'serviceTier', params.serviceTier)
     putOptional(requestParams, 'cwd', params.cwd)
     putOptional(requestParams, 'approvalPolicy', params.approvalPolicy ? approvalPolicyToJson(params.approvalPolicy) : undefined)

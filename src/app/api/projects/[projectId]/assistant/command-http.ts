@@ -114,7 +114,7 @@ function collectErrorText(error: unknown): string {
 
 function readAgentTurnErrorCode(text: string): string | null {
   return text.match(
-    /\b(?:AGENT|TEMPORAL|PROJECT_AGENT|PROJECT_ASSISTANT|ASSISTANT_RUNTIME|CODEX_RUNTIME|CODEX_MODEL_GATEWAY)_[A-Z0-9_]+\b/,
+    /\b(?:AGENT|TEMPORAL|PROJECT_AGENT|PROJECT_ASSISTANT|ASSISTANT_RUNTIME|CODEX_RUNTIME)_[A-Z0-9_]+\b/,
   )?.[0] ?? null
 }
 
@@ -156,11 +156,9 @@ export function mapProjectAgentCommandError(error: unknown): ApiError {
     })
   }
   if (
-    agentTurnCode === 'CODEX_MODEL_GATEWAY_ASSISTANT_MODEL_NOT_CONFIGURED'
-    || agentTurnCode === 'CODEX_MODEL_GATEWAY_ASSISTANT_MODEL_UNSUPPORTED'
-    || agentTurnCode === 'CODEX_MODEL_GATEWAY_PROVIDER_RESPONSES_UNSUPPORTED'
-    || agentTurnCode === 'CODEX_MODEL_GATEWAY_PROVIDER_CONFIG_UNAVAILABLE'
-    || agentTurnCode === 'CODEX_MODEL_GATEWAY_PROVIDER_BASE_URL_INVALID'
+    agentTurnCode === 'ASSISTANT_RUNTIME_CODEX_LOGIN_REQUIRED'
+    || agentTurnCode === 'ASSISTANT_RUNTIME_CODEX_LOCAL_DRIVER_REQUIRED'
+    || agentTurnCode === 'ASSISTANT_RUNTIME_CODEX_PROTOCOL_UNSUPPORTED'
   ) {
     return new ApiError('MISSING_CONFIG', {
       code: agentTurnCode,

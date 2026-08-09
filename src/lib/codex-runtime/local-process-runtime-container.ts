@@ -11,6 +11,8 @@ export type LocalProcessRuntimeContainerOptions = Omit<CodexAppServerClientOptio
 
 const SAFE_LOCAL_ENVIRONMENT_NAMES = [
   'ALL_PROXY',
+  'CODEX_HOME',
+  'CODEX_SQLITE_HOME',
   'HTTP_PROXY',
   'HTTPS_PROXY',
   'LANG',
@@ -49,16 +51,11 @@ export class LocalProcessRuntimeContainerAdapter implements RuntimeContainerAdap
       request.materialization.hostWorkspaceDirectory,
       'CODEX_LOCAL_RUNTIME_WORKSPACE_INVALID',
     )
-    const codexHomeDirectory = requireAbsolutePath(
-      request.materialization.hostCodexHomeDirectory,
-      'CODEX_LOCAL_RUNTIME_HOME_INVALID',
-    )
     const env = Object.create(null) as NodeJS.ProcessEnv
     for (const name of SAFE_LOCAL_ENVIRONMENT_NAMES) {
       const value = process.env[name]
       if (value !== undefined) env[name] = value
     }
-    env.CODEX_HOME = codexHomeDirectory
     Object.assign(env, normalizeRuntimeScopedEnvironment(request.environment))
     const runtime = new CodexAppServerClient({
       ...this.options,

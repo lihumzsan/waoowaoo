@@ -14,6 +14,10 @@ Provider 差异只停留在 `ai-providers` 的实现、`ai-exec` 的统一执行
 外部异步任务的创建、external id、轮询、终态、错误分类和重试必须是完整协议；Provider 返回失败、
 未知状态或不支持的能力时如实 surface，不伪造完成、不跳过、不换模型继续。
 
+桌面 Codex assistant 不属于本 Provider Gateway：文本与原生搜索由当前用户登录的 Codex App Server 负责，
+Wao 不为它建立 Responses proxy、OpenRouter provider 或第二套模型重试链。Provider Gateway 继续只拥有产品
+媒体与其他显式 provider adapter 的执行边界。
+
 ## 不变量
 
 - **PG-01 — 服务端显式选择。** provider 与 model 由统一 registry 解析；Agent-facing 媒体工具

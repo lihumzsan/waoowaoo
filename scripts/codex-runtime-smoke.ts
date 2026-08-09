@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { once } from 'node:events'
-import { access, mkdtemp, readFile, rm } from 'node:fs/promises'
-import { createServer, type IncomingMessage, type Server } from 'node:http'
+import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
@@ -11,7 +9,13 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { ElicitRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { LocalRuntimeManager } from '@/lib/codex-runtime/local-runtime-manager'
-import { PRODUCTION_CODEX_INITIALIZE_CAPABILITIES } from '@/lib/codex-runtime/runtime-config'
+import {
+  PRODUCTION_CODEX_INITIALIZE_CAPABILITIES,
+  readCodexRuntimeConfig,
+} from '@/lib/codex-runtime/runtime-config'
+import { resolveCodexExecutablePath } from '@/lib/ai-providers/codex/client'
+import { CODEX_DEFAULT_MODEL_ID } from '@/lib/ai-providers/codex/constants'
+import { assertOnlyKeys, CodexAppServerProtocolError } from '@/lib/codex-runtime/app-server-client'
 import type {
   RuntimeAdapter,
   RuntimeEvent,
@@ -38,7 +42,6 @@ import {
   ASSISTANT_RUNTIME_INPUT_METHODS,
 } from '@/lib/assistant-runtime/view-contract'
 
-const DEFAULT_MODEL = 'gpt-5.6-sol'
 const TURN_TIMEOUT_MS = 180_000
 const OFFLINE_STAGE_TIMEOUT_MS = 30_000
 
@@ -51,16 +54,9 @@ type AppServerSmokeResult = {
   readonly liveTurn: boolean
   readonly liveTurnStatus: string | null
   readonly streamedText: string
-  readonly customResponsesProvider: boolean
   readonly skillsListed: readonly string[]
   readonly protocolSurfaceValidated: boolean
   readonly runtimeContractValidated: boolean
-}
-
-type RuntimeRequestCapture = {
-  readonly baseUrl: string
-  readonly request: Promise<RuntimeJsonObject>
-  readonly close: () => Promise<void>
 }
 
 function requireObject(value: unknown, label: string): RuntimeJsonObject {
@@ -82,122 +78,33 @@ function createSignal(): { readonly promise: Promise<void>; readonly resolve: ()
   }
 }
 
-async function readHttpBody(request: IncomingMessage): Promise<Buffer> {
-  const chunks: Buffer[] = []
-  for await (const chunk of request) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)))
-  }
-  return Buffer.concat(chunks)
-}
-
-function closeServer(server: Server): Promise<void> {
-  return new Promise((resolve, reject) => {
-    server.close((error) => {
-      if (error) reject(error)
-      else resolve()
-    })
-  })
-}
-
-async function startRuntimeRequestCapture(): Promise<RuntimeRequestCapture> {
-  let resolveRequest!: (request: RuntimeJsonObject) => void
-  let rejectRequest!: (error: unknown) => void
-  let captured = false
-  const request = new Promise<RuntimeJsonObject>((resolve, reject) => {
-    resolveRequest = resolve
-    rejectRequest = reject
-  })
-  const server = createServer((incoming, response) => {
-    void (async () => {
-      if (incoming.method !== 'POST' || !incoming.url?.endsWith('/responses')) {
-        response.writeHead(404, { 'content-type': 'application/json' })
-        response.end('{"error":{"message":"not found"}}')
-        return
+async function listRelativeNames(root: string): Promise<readonly string[]> {
+  const names: string[] = []
+  async function visit(directory: string, prefix: string): Promise<void> {
+    const entries = await readdir(directory, { withFileTypes: true })
+    for (const entry of entries) {
+      const relative = prefix ? path.join(prefix, entry.name) : entry.name
+      names.push(relative)
+      if (entry.isDirectory() && !entry.isSymbolicLink()) {
+        await visit(path.join(directory, entry.name), relative)
       }
-      const bytes = await readHttpBody(incoming)
-      if (!captured) {
-        captured = true
-        const parsed: unknown = JSON.parse(bytes.toString('utf8'))
-        resolveRequest(requireObject(parsed, 'captured Responses request'))
-      }
-      response.writeHead(400, { 'content-type': 'application/json' })
-      response.end(JSON.stringify({
-        error: {
-          message: 'Intentional runtime contract probe failure.',
-          type: 'invalid_request_error',
-          code: 'runtime_contract_probe',
-        },
-      }))
-    })().catch((error: unknown) => {
-      rejectRequest(error)
-      if (!response.headersSent) response.writeHead(500, { 'content-type': 'application/json' })
-      response.end('{"error":{"message":"capture failed"}}')
-    })
-  })
-  server.on('error', rejectRequest)
-  server.listen(0, '127.0.0.1')
-  await once(server, 'listening')
-  const address = server.address()
-  assert(address && typeof address !== 'string', 'Runtime request capture address unavailable')
-  return {
-    baseUrl: `http://127.0.0.1:${String(address.port)}/api/internal/codex-runtime/model`,
-    request,
-    close: async () => await closeServer(server),
+    }
   }
+  await visit(root, '')
+  return names.sort()
 }
 
-function assertRuntimeContractRequest(request: RuntimeJsonObject): void {
-  const serialized = JSON.stringify(request)
-  assert.ok(
-    serialized.includes('The native Web Search tool returns a synthesized, cited report'),
-    'The live model request did not contain the current native Web Search instruction.',
-  )
-  assert.ok(
-    !serialized.includes('Research the public web only through the wao MCP'),
-    'The live model request retained the obsolete MCP-only Web Search instruction.',
-  )
-  assert.ok(
-    serialized.includes('web__run'),
-    'The live model request did not install the standalone Web Search executor.',
-  )
-  assert.ok(
-    !serialized.includes('mcp__wao__web_search'),
-    'The live model request installed the deleted Wao MCP search tool.',
-  )
-  assert.ok(
-    ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS.includes('# Professional Wao Skills'),
-    'The live model request did not load the canonical project Agent prompt.',
-  )
-  assert.ok(
-    serialized.includes('wao.request_user_decision'),
-    'The live model request did not name the Wao-owned user decision tool.',
-  )
-  assert.ok(
-    !serialized.includes('native user-input request'),
-    'The live model request retained the deleted native Choice instruction.',
-  )
-  for (const runtimeSkill of CREATIVE_RUNTIME_SKILLS) {
-    const professionalSkillId = runtimeSkill.skillIds[1]
-    assert.ok(
-      serialized.includes(professionalSkillId),
-      `The live model request did not expose Wao Skill ${professionalSkillId}.`,
-    )
-  }
-  for (const toolName of ['spawn_agent', 'send_message', 'wait_agent', 'interrupt_agent']) {
-    assert.ok(
-      !serialized.includes(`\"${toolName}\"`),
-      `The live model request exposed disabled collaboration tool ${toolName}.`,
-    )
-  }
-}
-
-async function withStageTimeout<T>(label: string, action: () => Promise<T>): Promise<T> {
+async function withStageTimeout<T>(
+  label: string,
+  action: () => Promise<T>,
+  timeoutMs = OFFLINE_STAGE_TIMEOUT_MS,
+): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | null = null
   try {
     return await Promise.race([
       action(),
       new Promise<never>((_resolve, reject) => {
-        timeout = setTimeout(() => reject(new Error(`CODEX_RUNTIME_SMOKE_STAGE_TIMEOUT:${label}`)), OFFLINE_STAGE_TIMEOUT_MS)
+        timeout = setTimeout(() => reject(new Error(`CODEX_RUNTIME_SMOKE_STAGE_TIMEOUT:${label}`)), timeoutMs)
       }),
     ])
   } finally {
@@ -207,7 +114,7 @@ async function withStageTimeout<T>(label: string, action: () => Promise<T>): Pro
 
 async function assertPinnedProtocolSurface(rootDir: string): Promise<void> {
   const schemaDirectory = path.join(rootDir, 'protocol-schema')
-  execFileSync('codex', [
+  execFileSync(resolveCodexExecutablePath(), [
     'app-server',
     'generate-json-schema',
     '--experimental',
@@ -538,11 +445,72 @@ function waitForTurnCompletion(params: {
   })
 }
 
+function buildNativeRuntimeConfig(): RuntimeJsonObject {
+  const tools = ASSISTANT_RUNTIME_STATIC_CONTRACT.tools
+  return {
+    web_search: tools.webSearch,
+    features: {
+      skill_search: tools.features.skillSearch,
+      image_generation: tools.features.imageGeneration,
+      standalone_web_search: tools.features.standaloneWebSearch,
+      remote_compaction_v2: tools.features.remoteCompactionV2,
+      code_mode: {
+        enabled: tools.features.codeMode.enabled,
+        direct_only_tool_namespaces: [...tools.features.codeMode.directOnlyToolNamespaces],
+      },
+      code_mode_host: {
+        enabled: tools.features.codeModeHost.enabled,
+        disable_in_process_fallback: tools.features.codeModeHost.disableInProcessFallback,
+      },
+    },
+    // The native smoke intentionally does not start Wao's HTTP endpoint. The
+    // MCP registry and auth boundary are verified by runMcpSmoke separately.
+    mcp_servers: {},
+  }
+}
+
 async function runAppServerSmoke(params: {
   rootDir: string
   liveTurn: boolean
 }): Promise<AppServerSmokeResult> {
-  const actualVersion = execFileSync('codex', ['--version'], { encoding: 'utf8' }).trim()
+  const staticToolContract = ASSISTANT_RUNTIME_STATIC_CONTRACT.tools
+  assert.equal(
+    staticToolContract.features.standaloneWebSearch,
+    false,
+    'Native Codex owns standalone web search; Wao must not install a model gateway search bridge.',
+  )
+  assert.equal(
+    'modelProvider' in staticToolContract,
+    false,
+    'Native Codex must not expose a custom model provider contract.',
+  )
+  assert.equal(staticToolContract.waoMcp.required, true)
+  assert.throws(
+    () => assertOnlyKeys({ unexpected: true }, [], 'SMOKE_UNEXPECTED_FIELD'),
+    CodexAppServerProtocolError,
+  )
+  assert.throws(
+    () => readCodexRuntimeConfig({ ...process.env, CODEX_RUNTIME_DRIVER: 'docker' }),
+    /ASSISTANT_RUNTIME_CODEX_LOCAL_DRIVER_REQUIRED/u,
+  )
+  const persistence = new AssistantRuntimePersistence({
+    hostRoot: path.join(params.rootDir, 'runtime-persistence'),
+  })
+  const sharedHome = path.join(params.rootDir, 'shared-codex-home')
+  await mkdir(sharedHome, { recursive: true, mode: 0o700 })
+  const sharedHomeSentinel = path.join(sharedHome, 'sentinel.txt')
+  await writeFile(sharedHomeSentinel, 'preserve me\n')
+  const sharedHomeBefore = await listRelativeNames(sharedHome)
+  const persistenceScope = { userId: 'runtime-smoke-user', projectId: 'runtime-smoke-project' }
+  const materialization = await persistence.materialize(persistenceScope)
+  assert.equal(
+    'hostCodexHomeDirectory' in materialization,
+    false,
+    'Runtime materialization must never allocate a per-scope Codex Home.',
+  )
+  assert.deepEqual(await listRelativeNames(sharedHome), sharedHomeBefore)
+  await assert.rejects(access(path.join(params.rootDir, 'runtime-persistence', 'codex-homes')), { code: 'ENOENT' })
+  const actualVersion = execFileSync(resolveCodexExecutablePath(), ['--version'], { encoding: 'utf8' }).trim()
   assert.equal(
     actualVersion,
     process.env.CODEX_RUNTIME_EXPECTED_VERSION?.trim()
@@ -550,23 +518,7 @@ async function runAppServerSmoke(params: {
     'Codex CLI version differs from the Stage 0 validated protocol version',
   )
   await assertPinnedProtocolSurface(params.rootDir)
-
-  const persistence = new AssistantRuntimePersistence({
-    hostRoot: path.join(params.rootDir, 'runtime-persistence'),
-  })
-  const persistenceScope = { userId: 'runtime-smoke-user', projectId: 'runtime-smoke-project' }
-  const materialization = await persistence.materialize(persistenceScope)
-  const codexHome = materialization.hostCodexHomeDirectory
   const cwd = materialization.hostWorkspaceDirectory
-  const primaryInstructions = await readFile(path.join(codexHome, 'AGENTS.md'), 'utf8')
-  assert.match(primaryInstructions, /developer instructions are the authoritative project policy/u)
-  assert.doesNotMatch(primaryInstructions, /Subagent|child agent|delegate/iu)
-  const primaryConfig = await readFile(path.join(codexHome, 'config.toml'), 'utf8')
-  assert.match(primaryConfig, /\[agents\]\nenabled = false/)
-  assert.ok(!primaryConfig.includes('hooks = true'))
-  await assert.rejects(access(path.join(codexHome, 'agents')), { code: 'ENOENT' })
-  await assert.rejects(access(path.join(codexHome, 'hooks.json')), { code: 'ENOENT' })
-  await assert.rejects(access(path.join(codexHome, 'hooks')), { code: 'ENOENT' })
   const professionalSkillIds = CREATIVE_RUNTIME_SKILLS.map((skill) => skill.skillIds[1])
   for (const runtimeSkill of CREATIVE_RUNTIME_SKILLS) {
     const professionalSkillId = runtimeSkill.skillIds[1]
@@ -584,12 +536,8 @@ async function runAppServerSmoke(params: {
         `Runtime Skill ${professionalSkillId} embedded another professional domain: ${otherSkillId}`
       ))
     }
-    await assert.rejects(
-      access(path.join(codexHome, 'skills', professionalSkillId, 'SKILL.md')),
-      { code: 'ENOENT' },
-    )
   }
-  const createManager = (home: string) => new LocalRuntimeManager({
+  const createManager = () => new LocalRuntimeManager({
     clientInfo: {
       name: 'wao-runtime-smoke',
       title: 'Wao Codex Runtime Smoke',
@@ -597,52 +545,15 @@ async function runAppServerSmoke(params: {
     },
     env: {
       ...process.env,
-      CODEX_HOME: home,
-      HOME: home,
       WAO_MCP_RUNTIME_BEARER_TOKEN: 'runtime-smoke-token',
     },
     initializeCapabilities: PRODUCTION_CODEX_INITIALIZE_CAPABILITIES,
   })
-  const manager = createManager(codexHome)
-  const requestCapture = await startRuntimeRequestCapture()
+  const manager = createManager()
   let restoredManager: LocalRuntimeManager | null = null
   const runtimeKey = 'stage-0-smoke'
-  const toolContract = ASSISTANT_RUNTIME_STATIC_CONTRACT.tools
   const approvalPolicy = ASSISTANT_RUNTIME_STATIC_CONTRACT.thread.approvalPolicy
-  assert.equal(
-    approvalPolicy,
-    'never',
-    'Creative Runtime shell access must fail closed instead of requesting interactive approval.',
-  )
-  const customProviderConfig = {
-    web_search: toolContract.webSearch,
-    features: {
-      skill_search: toolContract.features.skillSearch,
-      image_generation: toolContract.features.imageGeneration,
-      standalone_web_search: toolContract.features.standaloneWebSearch,
-      remote_compaction_v2: toolContract.features.remoteCompactionV2,
-      code_mode: {
-        enabled: toolContract.features.codeMode.enabled,
-        direct_only_tool_namespaces: [...toolContract.features.codeMode.directOnlyToolNamespaces],
-      },
-      code_mode_host: {
-        enabled: toolContract.features.codeModeHost.enabled,
-        disable_in_process_fallback: toolContract.features.codeModeHost.disableInProcessFallback,
-      },
-    },
-    model_providers: {
-      'wao-runtime-smoke': {
-        name: 'Wao Runtime Smoke Responses Provider',
-        base_url: requestCapture.baseUrl,
-        env_key: 'WAO_MCP_RUNTIME_BEARER_TOKEN',
-        wire_api: toolContract.modelProvider.wireApi,
-        requires_openai_auth: toolContract.modelProvider.requiresOpenAiAuth,
-        supports_standalone_web_search: toolContract.modelProvider.supportsStandaloneWebSearch,
-        request_max_retries: 0,
-        stream_max_retries: 0,
-      },
-    },
-  }
+  const nativeRuntimeConfig = buildNativeRuntimeConfig()
   let streamedText = ''
   let liveTurnStatus: string | null = null
 
@@ -660,52 +571,21 @@ async function runAppServerSmoke(params: {
       .filter((skill) => skill.enabled)
       .map((skill) => skill.name)
       .sort()
-    assert.deepEqual(enabledSkillNames, [...professionalSkillIds].sort())
-    const probeThread = await firstRuntime.startThread({
-      model: process.env.CODEX_RUNTIME_SMOKE_MODEL?.trim() || DEFAULT_MODEL,
-      modelProvider: 'wao-runtime-smoke',
-      cwd,
-      approvalPolicy,
-      sandbox: 'read-only',
-      config: customProviderConfig,
-      developerInstructions: ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
-      ephemeral: true,
-    })
-    const probeCompletion = waitForTurnCompletion({
-      runtime: firstRuntime,
-      threadId: probeThread.id,
-      onDelta: () => undefined,
-    })
-    const probeTurn = await firstRuntime.startTurn({
-      threadId: probeThread.id,
-      input: [{ type: 'text', text: 'Probe the installed runtime contract.' }],
-      cwd,
-      approvalPolicy,
-      sandboxPolicy: { type: 'readOnly', networkAccess: false },
-    })
-    const [capturedRequest, completedProbeTurn] = await Promise.all([
-      requestCapture.request,
-      probeCompletion,
-    ])
-    assert.equal(completedProbeTurn.id, probeTurn.id)
-    assert.notEqual(completedProbeTurn.status, 'completed')
-    assertRuntimeContractRequest(capturedRequest)
-
+    for (const professionalSkillId of professionalSkillIds) {
+      assert.ok(enabledSkillNames.includes(professionalSkillId), `Native Codex did not load ${professionalSkillId}`)
+    }
     const thread = await firstRuntime.startThread({
-      model: process.env.CODEX_RUNTIME_SMOKE_MODEL?.trim() || DEFAULT_MODEL,
-      modelProvider: 'wao-runtime-smoke',
+      model: process.env.CODEX_RUNTIME_SMOKE_MODEL?.trim() || CODEX_DEFAULT_MODEL_ID,
       cwd,
       approvalPolicy,
       sandbox: 'read-only',
-      config: customProviderConfig,
+      config: nativeRuntimeConfig,
       developerInstructions: ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
       ephemeral: false,
     })
     assert.equal((await firstRuntime.readThread({ threadId: thread.id })).id, thread.id)
 
-    const persistenceMarker = params.liveTurn
-      ? 'Reply with exactly RUNTIME_SMOKE_OK.'
-      : 'FAILED_TURN_PERSISTENCE_MARKER'
+    const persistenceMarker = 'RUNTIME_SMOKE_OK'
     if (params.liveTurn) {
       const completed = waitForTurnCompletion({
         runtime: firstRuntime,
@@ -726,68 +606,59 @@ async function runAppServerSmoke(params: {
       liveTurnStatus = typeof completedTurn.status === 'string' ? completedTurn.status : null
       assert.equal(liveTurnStatus, 'completed')
       assert.equal(streamedText.trim(), 'RUNTIME_SMOKE_OK')
-    } else {
-      const completed = waitForTurnCompletion({
-        runtime: firstRuntime,
-        threadId: thread.id,
-        onDelta: () => undefined,
-      })
-      const failedTurn = await firstRuntime.startTurn({
-        threadId: thread.id,
-        input: [{ type: 'text', text: persistenceMarker }],
-        cwd,
-        approvalPolicy,
-        sandboxPolicy: { type: 'readOnly', networkAccess: false },
-      })
-      const completedTurn = await completed
-      assert.equal(completedTurn.id, failedTurn.id)
-      liveTurnStatus = typeof completedTurn.status === 'string' ? completedTurn.status : null
-      assert.notEqual(liveTurnStatus, 'completed')
     }
 
-    const beforeCrash = await firstRuntime.readThread({ threadId: thread.id, includeTurns: true })
-    assert.ok(JSON.stringify(beforeCrash.raw).includes(persistenceMarker))
+    const beforeCrash = await firstRuntime.readThread({ threadId: thread.id, includeTurns: params.liveTurn })
+    if (params.liveTurn) assert.ok(JSON.stringify(beforeCrash.raw).includes(persistenceMarker))
 
-    // SIGKILL the app-server and reuse the exact same Codex home. No Wao
-    // checkpoint, bundle restore, or product-message injection participates.
-    await manager.forceShutdown(runtimeKey)
-    restoredManager = createManager(codexHome)
-    const secondRuntime = await restoredManager.ensure({ runtimeKey, cwd })
-    const resumed = await secondRuntime.resumeThread({
-      threadId: thread.id,
-      model: process.env.CODEX_RUNTIME_SMOKE_MODEL?.trim() || DEFAULT_MODEL,
-      modelProvider: 'wao-runtime-smoke',
-      cwd,
-      approvalPolicy,
-      sandbox: 'read-only',
-      config: customProviderConfig,
-    })
-    assert.equal(resumed.id, thread.id)
-    const afterCrash = await secondRuntime.readThread({ threadId: thread.id, includeTurns: true })
-    assert.equal(afterCrash.id, thread.id)
-    assert.ok(JSON.stringify(afterCrash.raw).includes(persistenceMarker))
-    const restoredSkills = await secondRuntime.listSkills({ cwds: [cwd], forceReload: true })
-    const restoredEnabledSkillNames = (restoredSkills.data[0]?.skills ?? [])
-      .filter((skill) => skill.enabled)
-      .map((skill) => skill.name)
-      .sort()
-    assert.deepEqual(restoredEnabledSkillNames, [...professionalSkillIds].sort())
-    await restoredManager.shutdown(runtimeKey)
+    let resumed = false
+    if (params.liveTurn) {
+      // SIGKILL the app-server and resume the materialized native thread. No
+      // Wao checkpoint, bundle restore, or product-message injection participates.
+      await manager.forceShutdown(runtimeKey)
+      restoredManager = createManager()
+      const secondRuntime = await restoredManager.ensure({ runtimeKey, cwd })
+      const resumedThread = await secondRuntime.resumeThread({
+        threadId: thread.id,
+        model: process.env.CODEX_RUNTIME_SMOKE_MODEL?.trim() || CODEX_DEFAULT_MODEL_ID,
+        cwd,
+        approvalPolicy,
+        sandbox: 'read-only',
+        config: nativeRuntimeConfig,
+      })
+      assert.equal(resumedThread.id, thread.id)
+      resumed = true
+      const afterCrash = await secondRuntime.readThread({ threadId: thread.id, includeTurns: true })
+      assert.ok(JSON.stringify(afterCrash.raw).includes(persistenceMarker))
+      const restoredSkills = await secondRuntime.listSkills({ cwds: [cwd], forceReload: true })
+      const restoredEnabledSkillNames = (restoredSkills.data[0]?.skills ?? [])
+        .filter((skill) => skill.enabled)
+        .map((skill) => skill.name)
+        .sort()
+      for (const professionalSkillId of professionalSkillIds) {
+        assert.ok(
+          restoredEnabledSkillNames.includes(professionalSkillId),
+          `Native Codex did not retain ${professionalSkillId} after resume`,
+        )
+      }
+    }
+    await manager.shutdownAll()
+    await restoredManager?.shutdownAll()
     await persistence.destroyMaterialization(materialization)
     await persistence.clearScope(persistenceScope)
     await persistence.clearScope(persistenceScope)
-    await assert.rejects(access(codexHome), { code: 'ENOENT' })
+    assert.deepEqual(await listRelativeNames(sharedHome), sharedHomeBefore)
+    await assert.rejects(access(cwd), { code: 'ENOENT' })
 
     return {
       initializedUserAgent: initialized.userAgent,
       threadId: thread.id,
-      resumed: true,
-      failedTurnPersisted: !params.liveTurn,
+      resumed,
+      failedTurnPersisted: false,
       idempotentScopeClearValidated: true,
       liveTurn: params.liveTurn,
       liveTurnStatus,
       streamedText,
-      customResponsesProvider: true,
       skillsListed: listedSkills.data[0]?.skills
         .filter((skill) => skill.enabled)
         .map((skill) => `${skill.name}@${skill.path}`) ?? [],
@@ -798,13 +669,131 @@ async function runAppServerSmoke(params: {
     await Promise.allSettled([
       manager.shutdownAll(),
       restoredManager?.shutdownAll() ?? Promise.resolve(),
-      requestCapture.close(),
     ])
   }
 }
 
+async function runNativeConcurrencySmoke(rootDir: string): Promise<void> {
+  const persistence = new AssistantRuntimePersistence({
+    hostRoot: path.join(rootDir, 'concurrency-persistence'),
+  })
+  const sharedHome = path.join(rootDir, 'concurrency-shared-home')
+  await mkdir(sharedHome, { recursive: true, mode: 0o700 })
+  await writeFile(path.join(sharedHome, 'sentinel.txt'), 'preserve me\n')
+  const sharedHomeBefore = await listRelativeNames(sharedHome)
+  const scopeA = { userId: 'runtime-concurrency-user-a', projectId: 'runtime-concurrency-project-a' }
+  const scopeB = { userId: 'runtime-concurrency-user-b', projectId: 'runtime-concurrency-project-b' }
+  const materializationA = await persistence.materialize(scopeA)
+  const materializationB = await persistence.materialize(scopeB)
+  const managerA = new LocalRuntimeManager({
+    clientInfo: { name: 'wao-runtime-concurrency-a', title: 'Wao Codex Runtime Concurrency A', version: '0.1.0' },
+    env: { ...process.env, WAO_MCP_RUNTIME_BEARER_TOKEN: 'runtime-concurrency-token-a' },
+    initializeCapabilities: PRODUCTION_CODEX_INITIALIZE_CAPABILITIES,
+  })
+  const managerB = new LocalRuntimeManager({
+    clientInfo: { name: 'wao-runtime-concurrency-b', title: 'Wao Codex Runtime Concurrency B', version: '0.1.0' },
+    env: { ...process.env, WAO_MCP_RUNTIME_BEARER_TOKEN: 'runtime-concurrency-token-b' },
+    initializeCapabilities: PRODUCTION_CODEX_INITIALIZE_CAPABILITIES,
+  })
+  const runtimeKeyA = 'native-concurrency-a'
+  const runtimeKeyB = 'native-concurrency-b'
+  const cwdA = materializationA.hostWorkspaceDirectory
+  const cwdB = materializationB.hostWorkspaceDirectory
+  const config = buildNativeRuntimeConfig()
+  const approvalPolicy = ASSISTANT_RUNTIME_STATIC_CONTRACT.thread.approvalPolicy
+  const sentinelA = 'NATIVE_CONCURRENCY_ALPHA'
+  const sentinelB = 'NATIVE_CONCURRENCY_BETA'
+  try {
+    const [runtimeA, runtimeB] = await Promise.all([
+      managerA.ensure({ runtimeKey: runtimeKeyA, cwd: cwdA }),
+      managerB.ensure({ runtimeKey: runtimeKeyB, cwd: cwdB }),
+    ])
+    const [initializedA, initializedB] = await Promise.all([
+      runtimeA.initialize(),
+      runtimeB.initialize(),
+    ])
+    assert.equal(initializedA.platformFamily, initializedB.platformFamily)
+    const [threadA, threadB] = await Promise.all([
+      runtimeA.startThread({
+        model: CODEX_DEFAULT_MODEL_ID,
+        cwd: cwdA,
+        approvalPolicy,
+        sandbox: 'read-only',
+        config,
+        developerInstructions: ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
+        ephemeral: false,
+      }),
+      runtimeB.startThread({
+        model: CODEX_DEFAULT_MODEL_ID,
+        cwd: cwdB,
+        approvalPolicy,
+        sandbox: 'read-only',
+        config,
+        developerInstructions: ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
+        ephemeral: false,
+      }),
+    ])
+    assert.notEqual(threadA.id, threadB.id)
+    let streamedA = ''
+    let streamedB = ''
+    const completionA = waitForTurnCompletion({
+      runtime: runtimeA,
+      threadId: threadA.id,
+      onDelta: (delta) => { streamedA += delta },
+    })
+    const completionB = waitForTurnCompletion({
+      runtime: runtimeB,
+      threadId: threadB.id,
+      onDelta: (delta) => { streamedB += delta },
+    })
+    const [turnA, turnB] = await Promise.all([
+      runtimeA.startTurn({
+        threadId: threadA.id,
+        input: [{ type: 'text', text: `Reply with exactly ${sentinelA}.` }],
+        cwd: cwdA,
+        approvalPolicy,
+        sandboxPolicy: { type: 'readOnly', networkAccess: false },
+      }),
+      runtimeB.startTurn({
+        threadId: threadB.id,
+        input: [{ type: 'text', text: `Reply with exactly ${sentinelB}.` }],
+        cwd: cwdB,
+        approvalPolicy,
+        sandboxPolicy: { type: 'readOnly', networkAccess: false },
+      }),
+    ])
+    const [completedA, completedB] = await Promise.all([completionA, completionB])
+    assert.equal(completedA.id, turnA.id)
+    assert.equal(completedB.id, turnB.id)
+    assert.equal(completedA.status, 'completed')
+    assert.equal(completedB.status, 'completed')
+    assert.equal(streamedA.trim(), sentinelA)
+    assert.equal(streamedB.trim(), sentinelB)
+    const [readA, readB] = await Promise.all([
+      runtimeA.readThread({ threadId: threadA.id, includeTurns: true }),
+      runtimeB.readThread({ threadId: threadB.id, includeTurns: true }),
+    ])
+    const serializedA = JSON.stringify(readA.raw)
+    const serializedB = JSON.stringify(readB.raw)
+    assert.ok(serializedA.includes(sentinelA))
+    assert.ok(!serializedA.includes(sentinelB))
+    assert.ok(serializedB.includes(sentinelB))
+    assert.ok(!serializedB.includes(sentinelA))
+  } finally {
+    await Promise.allSettled([managerA.shutdownAll(), managerB.shutdownAll()])
+    await Promise.allSettled([
+      persistence.destroyMaterialization(materializationA),
+      persistence.destroyMaterialization(materializationB),
+      persistence.clearScope(scopeA),
+      persistence.clearScope(scopeB),
+    ])
+  }
+  assert.deepEqual(await listRelativeNames(sharedHome), sharedHomeBefore)
+}
+
 async function main(): Promise<void> {
-  const liveTurn = process.argv.includes('--live-turn')
+  const liveTurn = process.argv.includes('--native-live-turn')
+  const nativeConcurrency = process.argv.includes('--native-concurrency')
   const rootDir = await mkdtemp(path.join(tmpdir(), 'wao-codex-runtime-smoke-'))
   try {
     await withStageTimeout('mcp', async () => await runMcpSmoke())
@@ -812,13 +801,21 @@ async function main(): Promise<void> {
       'app-server',
       async () => await runAppServerSmoke({ rootDir, liveTurn }),
     )
+    if (nativeConcurrency) {
+      await withStageTimeout(
+        'native-concurrency',
+        async () => await runNativeConcurrencySmoke(rootDir),
+        180_000,
+      )
+    }
     process.stdout.write(`${JSON.stringify({
       ok: true,
       mcp: createWaoMcpToolRegistry().map((entry) => entry.name),
       appServer,
+      nativeConcurrencyValidated: nativeConcurrency,
     }, null, 2)}\n`)
   } finally {
-    await rm(rootDir, { recursive: true, force: true })
+    await rm(rootDir, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 })
   }
 }
 

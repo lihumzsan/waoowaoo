@@ -1,6 +1,4 @@
 import path from 'node:path'
-import { getDeploymentConfig, type DeploymentConfig } from '../deployment/config'
-import { DockerRuntimeContainerAdapter } from './docker-runtime-container'
 import { LocalProcessRuntimeContainerAdapter } from './local-process-runtime-container'
 import type { RuntimeClientInfo, RuntimeInitializeCapabilities } from './runtime-adapter'
 import type { RuntimeContainerAdapter } from './runtime-container'
@@ -42,16 +40,9 @@ export const PRODUCTION_CODEX_INITIALIZE_CAPABILITIES: RuntimeInitializeCapabili
 
 export function readCodexRuntimeConfig(
   environment: NodeJS.ProcessEnv = process.env,
-  deployment: DeploymentConfig = getDeploymentConfig(),
 ): CodexRuntimeConfig {
   const driver = requireDriver(environment.CODEX_RUNTIME_DRIVER)
-  if (
-    deployment.edition === 'cloud'
-    && environment.NODE_ENV === 'production'
-    && driver !== 'docker'
-  ) {
-    throw new Error('CODEX_RUNTIME_CLOUD_REQUIRES_DOCKER')
-  }
+  if (driver === 'docker') throw new Error('ASSISTANT_RUNTIME_CODEX_LOCAL_DRIVER_REQUIRED')
   const base: RuntimeConfigBase = {
     driver,
     hostRoot: requireHostRoot(environment.CODEX_RUNTIME_HOST_ROOT),
@@ -85,23 +76,10 @@ export function createRuntimeContainerAdapter(
   config: CodexRuntimeConfig,
   params: CodexRuntimeContainerFactoryParams,
 ): RuntimeContainerAdapter {
-  if (config.driver === 'local') {
-    return new LocalProcessRuntimeContainerAdapter({
-      clientInfo: params.clientInfo,
-      initializeCapabilities: PRODUCTION_CODEX_INITIALIZE_CAPABILITIES,
-      shutdownTimeoutMs: params.shutdownTimeoutMs,
-    })
-  }
-  return new DockerRuntimeContainerAdapter({
-    image: config.image,
-    networkName: config.networkName,
+  if (config.driver !== 'local') throw new Error('ASSISTANT_RUNTIME_CODEX_LOCAL_DRIVER_REQUIRED')
+  return new LocalProcessRuntimeContainerAdapter({
     clientInfo: params.clientInfo,
     initializeCapabilities: PRODUCTION_CODEX_INITIALIZE_CAPABILITIES,
-    cpuLimit: config.cpuLimit,
-    memoryBytes: config.memoryBytes,
-    pidsLimit: config.pidsLimit,
-    immutableImageRequired: (params.processEnvironment ?? process.env).NODE_ENV === 'production',
-    processEnvironment: params.processEnvironment ?? process.env,
     shutdownTimeoutMs: params.shutdownTimeoutMs,
   })
 }

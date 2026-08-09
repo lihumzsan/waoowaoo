@@ -16,7 +16,6 @@ const MANAGED_LABEL = 'wao.codex-runtime.managed'
 const SCOPE_LABEL = 'wao.codex-runtime.scope'
 const OWNER_LABEL = 'wao.codex-runtime.owner'
 const CONTAINER_WORKSPACE_DIRECTORY = '/workspace'
-const CONTAINER_CODEX_HOME_DIRECTORY = '/runtime/codex-home'
 const CONTAINER_RUNTIME_SKILLS_DIRECTORY = '/workspace/.agents/skills'
 const MIN_MEMORY_BYTES = 256 * 1024 * 1024
 const BWRAP_DOCKER_CAPABILITIES = [
@@ -81,10 +80,6 @@ export class DockerRuntimeContainerAdapter implements RuntimeContainerAdapter {
       request.materialization.hostWorkspaceDirectory,
       'CODEX_DOCKER_RUNTIME_WORKSPACE_INVALID',
     )
-    const codexHomeDirectory = requireAbsolutePath(
-      request.materialization.hostCodexHomeDirectory,
-      'CODEX_DOCKER_RUNTIME_HOME_INVALID',
-    )
     const runtimeSkillsDirectory = path.join(workspaceDirectory, '.agents', 'skills')
     const containerName = `wao-codex-${scopeId.slice(0, 20)}-${randomUUID().slice(0, 8)}`
     const environment = normalizeRuntimeScopedEnvironment(request.environment)
@@ -136,8 +131,6 @@ export class DockerRuntimeContainerAdapter implements RuntimeContainerAdapter {
       // model from changing registry-generated methods through workspace write.
       '--mount',
       buildBindMount(runtimeSkillsDirectory, CONTAINER_RUNTIME_SKILLS_DIRECTORY, 'readonly'),
-      '--mount',
-      buildBindMount(codexHomeDirectory, CONTAINER_CODEX_HOME_DIRECTORY, 'readwrite'),
       '--workdir',
       CONTAINER_WORKSPACE_DIRECTORY,
       // Forward the selected variable names from the Docker CLI environment.

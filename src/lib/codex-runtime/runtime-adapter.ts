@@ -120,7 +120,6 @@ export type RuntimeTurn = {
 
 export type RuntimeThreadStartParams = {
   readonly model?: string
-  readonly modelProvider?: string
   readonly serviceTier?: string | null
   readonly cwd?: string
   readonly approvalPolicy?: RuntimeApprovalPolicy
@@ -136,7 +135,6 @@ export type RuntimeThreadStartParams = {
 export type RuntimeThreadResumeParams = {
   readonly threadId: string
   readonly model?: string
-  readonly modelProvider?: string
   readonly serviceTier?: string | null
   readonly cwd?: string
   readonly approvalPolicy?: RuntimeApprovalPolicy
