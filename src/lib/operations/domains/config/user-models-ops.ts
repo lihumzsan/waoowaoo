@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
 import { getDeploymentConfig, isPlatformProviderCredentialMode } from '@/lib/deployment/config'
-import { getPlatformDefaultModelCatalog } from '@/lib/platform-models/catalog'
+import { getPlatformDefaultModelCatalog, getPlatformModels } from '@/lib/platform-models/catalog'
 import {
   type CapabilityValue,
   type ModelCapabilities,
@@ -169,7 +169,10 @@ async function resolveModelSource(userId: string): Promise<{
 
   return {
     deploymentMode: 'user-key',
-    models: parseStoredModels(pref?.customModels),
+    models: [
+      ...getPlatformModels().filter((model) => model.provider === 'comfyui'),
+      ...parseStoredModels(pref?.customModels),
+    ],
     providers: parseStoredProviders(pref?.customProviders),
   }
 }
@@ -221,7 +224,11 @@ export function createUserModelsOperations(): ProjectAgentOperationRegistryDraft
 
           const provider = toProvider(model)
           if (!provider) continue
-          if (modelSource.deploymentMode !== 'platform-key' && !providerIdsWithApiKey.has(provider)) continue
+          if (
+            modelSource.deploymentMode !== 'platform-key'
+            && provider !== 'comfyui'
+            && !providerIdsWithApiKey.has(provider)
+          ) continue
           const modelId = toModelId(model)
           const option: UserModelOption = {
             value: modelKey,

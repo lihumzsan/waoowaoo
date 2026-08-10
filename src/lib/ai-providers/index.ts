@@ -16,6 +16,8 @@ import { openRouterAsyncTaskProvider } from '@/lib/ai-providers/openrouter/async
 import { toonflowAdapter } from '@/lib/ai-providers/toonflow/adapter'
 import { toonflowAsyncTaskProvider } from '@/lib/ai-providers/toonflow/async-task'
 import { codexAdapter } from '@/lib/ai-providers/codex/adapter'
+import { comfyuiAdapter } from '@/lib/ai-providers/comfyui/adapter'
+import { comfyuiAsyncTaskProvider } from '@/lib/ai-providers/comfyui/async-task'
 import type { AiProviderAdapter, AiProviderLanguageModelContext } from '@/lib/ai-providers/runtime-types'
 import type {
   AiProviderLanguageModelRequestContext,
@@ -37,6 +39,7 @@ const runtimeProviderRegistry = new AiRegistry<AiProviderAdapter>([
   murekaAdapter,
   openRouterAdapter,
   toonflowAdapter,
+  comfyuiAdapter,
 ])
 
 const asyncTaskProviderRegistry: AsyncTaskProviderRegistration[] = [
@@ -47,6 +50,7 @@ const asyncTaskProviderRegistry: AsyncTaskProviderRegistration[] = [
   murekaAsyncTaskProvider,
   openRouterAsyncTaskProvider,
   toonflowAsyncTaskProvider,
+  comfyuiAsyncTaskProvider,
 ]
 
 export function resolveAsyncTaskProviderByExternalId(externalId: string): AsyncTaskProviderRegistration {
@@ -54,7 +58,7 @@ export function resolveAsyncTaskProviderByExternalId(externalId: string): AsyncT
   if (!registration) {
     throw new Error(
       `无法识别的 externalId 格式: "${externalId}". ` +
-      `支持的格式: FAL:TYPE:endpoint:requestId, ARK:TYPE:requestId, GEMINI:BATCH:batchName, GOOGLE:VIDEO:operationName, OPENROUTER:VIDEO:requestId, TOONFLOW:VIDEO:taskICode, MUREKA:MUSIC:endpoint:taskId`,
+      `支持的格式: FAL:TYPE:endpoint:requestId, ARK:TYPE:requestId, GEMINI:BATCH:batchName, GOOGLE:VIDEO:operationName, OPENROUTER:VIDEO:requestId, TOONFLOW:VIDEO:taskICode, MUREKA:MUSIC:endpoint:taskId, COMFYUI:VIDEO:promptId`,
     )
   }
   return registration

@@ -22,6 +22,7 @@ import {
 } from '@/lib/ai-providers/toonflow/models'
 import type { DefaultModelsPayload } from '@/lib/user-api/api-config-types'
 import type { PlatformModelPreset } from '@/lib/platform-models/types'
+import { COMFYUI_PLATFORM_MODEL_PRESETS } from '@/lib/ai-providers/comfyui/models'
 
 export type PlatformDefaultModelField = keyof Required<DefaultModelsPayload>
 export const PLATFORM_DEFAULT_ASSISTANT_MODEL_KEY = OPENROUTER_PLATFORM_DEFAULT_ASSISTANT_MODEL_KEY
@@ -34,6 +35,7 @@ export const PLATFORM_MODEL_INPUTS: readonly PlatformModelPreset[] = [
   ...MUREKA_PLATFORM_MODEL_PRESETS,
   ...OPENROUTER_PLATFORM_MODEL_PRESETS,
   ...TOONFLOW_PLATFORM_MODEL_PRESETS,
+  ...COMFYUI_PLATFORM_MODEL_PRESETS,
 ]
 
 export const PLATFORM_DEFAULT_MODEL_KEYS: Record<PlatformDefaultModelField, string> = {

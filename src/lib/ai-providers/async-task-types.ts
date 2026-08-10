@@ -9,6 +9,7 @@ export type AsyncExternalIdProvider =
   | 'OPENROUTER'
   | 'TOONFLOW'
   | 'MUREKA'
+  | 'COMFYUI'
 
 export type AsyncExternalIdType = 'VIDEO' | 'IMAGE' | 'MUSIC' | 'VOICE' | 'BATCH'
 

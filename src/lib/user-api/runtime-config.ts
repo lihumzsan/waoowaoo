@@ -224,8 +224,8 @@ async function readUserConfig(userId: string): Promise<{ models: CustomModel[]; 
 
 async function getRuntimeModels(userId: string, mediaType?: ModelMediaType): Promise<CustomModel[]> {
   const deployment = getDeploymentConfig()
-  const codexModels = getPlatformModels().filter((model) => (
-    model.provider === 'codex' && (!mediaType || model.type === mediaType)
+  const localPlatformModels = getPlatformModels().filter((model) => (
+    (model.provider === 'codex' || model.provider === 'comfyui') && (!mediaType || model.type === mediaType)
   ))
   // PG-16:voice 是平台固定模态,模型 identity 在任何凭证模式下都由平台目录唯一声明
   // (用户配置面不存在 voice 类型)。provider 凭证仍按部署模式解析:
@@ -237,7 +237,7 @@ async function getRuntimeModels(userId: string, mediaType?: ModelMediaType): Pro
 
   const { models } = await readUserConfig(userId)
   return [
-    ...codexModels,
+    ...localPlatformModels,
     ...models.filter((model) => model.provider !== 'codex'),
   ]
 }
