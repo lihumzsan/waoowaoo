@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
 import { NextIntlClientProvider } from 'next-intl';
-import { getMessages, getTranslations } from 'next-intl/server';
+import { getMessages, getTranslations, setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import "../globals.css";
 import { Providers } from "./providers";
@@ -46,6 +46,8 @@ export default async function LocaleLayout({
     if (!locales.includes(locale as SupportedLocale)) {
         notFound();
     }
+
+    setRequestLocale(locale);
 
     // 获取翻译消息
     const messages = await getMessages();
