@@ -42,6 +42,25 @@ const allowedDevOrigins = (process.env.NEXT_ALLOWED_DEV_ORIGINS || '')
   .map((value) => value.trim())
   .filter(Boolean)
 
+function readHttpOrigin(value: string | undefined): string | null {
+  const normalized = value?.trim()
+  if (!normalized) return null
+  try {
+    const parsed = new URL(normalized)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+      ? parsed.origin
+      : null
+  } catch {
+    return null
+  }
+}
+
+// `/m/:publicId` authorizes the request, then redirects immutable media reads
+// to the configured object-storage endpoint. Keep that exact origin renderable
+// without broadly allowing arbitrary HTTP media in the page CSP.
+const storageMediaOrigin = readHttpOrigin(process.env.S3_ENDPOINT)
+const storageMediaSource = storageMediaOrigin ? ` ${storageMediaOrigin}` : ''
+
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'X-Frame-Options', value: 'DENY' },
@@ -61,8 +80,8 @@ const securityHeaders = [
       // QR flow fails with nothing but a generic error.
       `script-src 'self' 'unsafe-inline' https://js.stripe.com${process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''}`,
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https:",
-      "media-src 'self' data: blob: https:",
+      `img-src 'self' data: blob: https:${storageMediaSource}`,
+      `media-src 'self' data: blob: https:${storageMediaSource}`,
       "font-src 'self' data:",
       "connect-src 'self' https: wss:",
       // Stripe.js mounts hidden iframes for payment authentication.

@@ -1,5 +1,3 @@
-import './versioned-registration'
-
 export {
   operationExecutionWorkflow,
   taskWorkflow,

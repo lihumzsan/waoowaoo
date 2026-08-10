@@ -9,7 +9,6 @@ import {
   defineUpdate,
   proxyActivities,
   setHandler,
-  setWorkflowOptions,
   startChild,
   workflowInfo,
 } from '@temporalio/workflow'
@@ -33,7 +32,6 @@ import {
   type UserTaskSchedulerView,
   type UserTaskSchedulerWorkflowInput,
 } from '../task/contracts'
-import { TEMPORAL_WORKFLOW } from '../workflow-registry'
 import { taskWorkflow } from './task'
 
 const RECENT_DEDUPE_LIMIT = 2_048
@@ -657,8 +655,3 @@ export async function userTaskSchedulerWorkflow(
     )
   }
 }
-
-setWorkflowOptions(
-  { versioningBehavior: TEMPORAL_WORKFLOW.USER_TASK_SCHEDULER.versioningBehavior },
-  userTaskSchedulerWorkflow,
-)

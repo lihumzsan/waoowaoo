@@ -1,4 +1,3 @@
-import { resolve } from 'node:path'
 import { heartbeat } from '@temporalio/activity'
 import { NativeConnection, Worker } from '@temporalio/worker'
 import * as productionActivities from '@/lib/temporal/activities'
@@ -10,6 +9,7 @@ import type {
   RunTaskAttemptInput,
   RunTaskAttemptResult,
 } from '@/lib/temporal/task/contracts'
+import { resolveTemporalWorkflowBundlePath } from '@/lib/temporal/workflow-bundle-path'
 
 const READY_MARKER = '[task-durability-worker] READY'
 const BLOCKED_MARKER =
@@ -57,10 +57,7 @@ async function main(): Promise<void> {
       connection,
       namespace: config.namespace,
       taskQueue: config.taskQueue,
-      workflowsPath: resolve(
-        process.cwd(),
-        'src/lib/temporal/workflows/index.ts',
-      ),
+      workflowsPath: resolveTemporalWorkflowBundlePath(false),
       activities: {
         ...productionActivities,
         runTaskAttempt,

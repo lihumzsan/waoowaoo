@@ -1,7 +1,6 @@
 import {
   ApplicationFailure,
   proxyActivities,
-  setWorkflowOptions,
   workflowInfo,
 } from '@temporalio/workflow'
 import {
@@ -14,7 +13,6 @@ import {
   type OperationExecutionWorkflowInput,
   type OperationExecutionWorkflowReceipt,
 } from '../operation-execution/contracts'
-import { TEMPORAL_WORKFLOW } from '../workflow-registry'
 
 const activities = proxyActivities<OperationExecutionActivities>({
   startToCloseTimeout: '3 minutes',
@@ -114,8 +112,3 @@ export async function operationExecutionWorkflow(
     envelope: input.envelope,
   })
 }
-
-setWorkflowOptions(
-  { versioningBehavior: TEMPORAL_WORKFLOW.OPERATION_EXECUTION.versioningBehavior },
-  operationExecutionWorkflow,
-)

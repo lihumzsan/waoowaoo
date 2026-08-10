@@ -1,4 +1,3 @@
-import { resolve } from 'node:path'
 import { NativeConnection, Worker } from '@temporalio/worker'
 import {
   executeOperation as executeProductionOperation,
@@ -12,6 +11,7 @@ import type {
   ExecuteOperationActivityInput,
   OperationExecutionWorkflowReceipt,
 } from '@/lib/temporal/operation-execution/contracts'
+import { resolveTemporalWorkflowBundlePath } from '@/lib/temporal/workflow-bundle-path'
 
 interface Deferred<T> {
   readonly promise: Promise<T>
@@ -109,10 +109,7 @@ export async function startOperationExecutionDurabilityWorker(input: {
     connection,
     namespace: config.namespace,
     taskQueue: config.taskQueue,
-    workflowsPath: resolve(
-      process.cwd(),
-      'src/lib/temporal/workflows/index.ts',
-    ),
+    workflowsPath: resolveTemporalWorkflowBundlePath(false),
     activities: {
       executeOperation,
       resolveTaskSchedulerAdmission,

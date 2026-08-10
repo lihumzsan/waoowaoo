@@ -5,7 +5,6 @@ import {
   type ServerResponse,
 } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { resolve } from 'node:path'
 import type { History } from '@temporalio/common/lib/proto-utils'
 import { CancelledFailure, Context, heartbeat } from '@temporalio/activity'
 import { NativeConnection, Worker } from '@temporalio/worker'
@@ -21,6 +20,7 @@ import {
 } from '@/lib/assistant-runtime/task-follow-up-http'
 import * as productionActivities from '@/lib/temporal/activities'
 import { buildTemporalConnectionOptions, getTemporalRuntimeConfig } from '@/lib/temporal/config'
+import { resolveTemporalWorkflowBundlePath } from '@/lib/temporal/workflow-bundle-path'
 import type {
   CommitTaskTerminalInput,
   NotifyTaskFollowUpInput,
@@ -257,7 +257,7 @@ export async function startTaskProductionWorker(): Promise<TaskProductionWorkerH
     connection,
     namespace: config.namespace,
     taskQueue: config.taskQueue,
-    workflowsPath: resolve(process.cwd(), 'src/lib/temporal/workflows/index.ts'),
+    workflowsPath: resolveTemporalWorkflowBundlePath(false),
     activities: productionActivities,
     shutdownGraceTime: '5 seconds',
   })
@@ -317,7 +317,7 @@ export async function startTaskQueuedCancelWorker(input: {
     connection,
     namespace: config.namespace,
     taskQueue: config.taskQueue,
-    workflowsPath: resolve(process.cwd(), 'src/lib/temporal/workflows/index.ts'),
+    workflowsPath: resolveTemporalWorkflowBundlePath(false),
     activities: {
       ...productionActivities,
       runTaskAttempt,
@@ -402,7 +402,7 @@ export async function startTaskLateCancelWorker(input: {
     connection,
     namespace: config.namespace,
     taskQueue: config.taskQueue,
-    workflowsPath: resolve(process.cwd(), 'src/lib/temporal/workflows/index.ts'),
+    workflowsPath: resolveTemporalWorkflowBundlePath(false),
     activities: {
       ...productionActivities,
       runTaskAttempt,
@@ -489,7 +489,7 @@ export async function startTaskDurabilityWorker(input: {
       connection,
       namespace: config.namespace,
       taskQueue: config.taskQueue,
-      workflowsPath: resolve(process.cwd(), 'src/lib/temporal/workflows/index.ts'),
+      workflowsPath: resolveTemporalWorkflowBundlePath(false),
       activities: {
         ...productionActivities,
         commitTaskTerminal,
