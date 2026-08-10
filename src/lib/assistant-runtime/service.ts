@@ -456,6 +456,12 @@ export class AssistantRuntimeService {
       throw new Error('ASSISTANT_RUNTIME_INTERACTION_RESPONSE_ID_DIVERGED')
     }
     await this.manager.respondToServerRequest(runtimeScope(command), command.response)
+    await resolveAssistantRuntimeInteraction({
+      scope: runtimeScope(command),
+      threadId: command.threadId,
+      turnId: command.turnId,
+      runtimeRequestId: decision.runtimeRequestId,
+    })
     await publishAgentSessionViewChanged({
       ...command,
       attempt: null,

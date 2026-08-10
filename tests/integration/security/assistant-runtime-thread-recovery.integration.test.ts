@@ -112,6 +112,34 @@ class DeterministicRuntimeAdapter implements RuntimeAdapter {
     }
     for (const listener of this.listeners) listener(event)
   }
+
+  requestUserDecision(): void {
+    if (!this.lastTurnThreadId) throw new Error('TEST_RUNTIME_TURN_NOT_STARTED')
+    const event: RuntimeEvent = {
+      type: 'serverRequest',
+      request: {
+        id: 'asset-approval',
+        method: 'mcpServer/elicitation/request',
+        params: {
+          threadId: this.lastTurnThreadId,
+          turnId: runtimeTurnId,
+          mode: 'form',
+          message: 'Keep the generated assets?',
+          requestedSchema: {
+            type: 'object',
+            required: ['optionId'],
+            properties: {
+              optionId: {
+                type: 'string',
+                oneOf: [{ const: 'pause', title: 'Pause' }],
+              },
+            },
+          },
+        },
+      },
+    }
+    for (const listener of this.listeners) listener(event)
+  }
 }
 
 class DeterministicRuntimeContainer implements RuntimeContainerAdapter {
@@ -136,6 +164,12 @@ class DeterministicRuntimeContainer implements RuntimeContainerAdapter {
     const latest = this.runtimes.at(-1)
     if (!latest) throw new Error('TEST_RUNTIME_NOT_LAUNCHED')
     latest.completeTurn()
+  }
+
+  requestLatestUserDecision(): void {
+    const latest = this.runtimes.at(-1)
+    if (!latest) throw new Error('TEST_RUNTIME_NOT_LAUNCHED')
+    latest.requestUserDecision()
   }
 }
 
@@ -320,6 +354,83 @@ describe('Assistant Runtime native Thread recovery', () => {
       })
       await expect(prisma.projectAgentTurn.count({ where: { threadId: thread.id } }))
         .resolves.toBe(1)
+    } finally {
+      await manager.shutdownAll()
+    }
+  })
+
+  it('settles an accepted user decision when the runtime omits a resolved notification', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const container = new DeterministicRuntimeContainer()
+    const manager = new RuntimeSessionManager({
+      container,
+      persistence: testPersistence,
+      ownership: new RedisAssistantRuntimeOwnership(),
+      idleTimeoutMs: 60_000,
+      waitForTurnSettlement: async () => undefined,
+      onError: () => undefined,
+    })
+    const access: AssistantRuntimeAccess = {
+      environment: { WAO_MCP_TEST_TOKEN: 'test-token' },
+      bearerToken: 'test-token',
+      ownerToken: `owner_${randomUUID()}`,
+      expiresAtMs: Date.now() + 60_000,
+    }
+    const service = new AssistantRuntimeService({
+      manager,
+      access: { get: async () => access, invalidate: () => undefined },
+      models: { resolve: async () => testModel(project) },
+    })
+    const message: UIMessage = {
+      id: 'decision-without-resolution-event',
+      role: 'user',
+      parts: [{ type: 'text', text: 'ask for an asset decision' }],
+    }
+
+    try {
+      const receipt = await service.send({
+        projectId: project.id,
+        userId: user.id,
+        assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
+        requestId: randomUUID(),
+        sourceId: message.id,
+        message,
+        context: { locale: 'zh', selectedScopeRef: null, selectedAssetId: null },
+      })
+      container.requestLatestUserDecision()
+
+      const readInteraction = async () => (
+        await prisma.agentTurnInteraction.findFirst({
+          where: { turnId: receipt.turnId },
+          select: { id: true, status: true },
+        })
+      )
+      await expect.poll(readInteraction).toMatchObject({ status: 'pending' })
+      const interactionId = (await readInteraction())?.id
+      if (!interactionId) throw new Error('TEST_INTERACTION_NOT_PERSISTED')
+
+      await service.respondToServerRequest({
+        projectId: project.id,
+        userId: user.id,
+        assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
+        threadId: receipt.threadId,
+        turnId: receipt.turnId,
+        interactionId,
+        response: {
+          id: 'asset-approval',
+          result: { action: 'accept', content: { optionId: 'pause' }, _meta: null },
+        },
+      })
+
+      await expect(prisma.agentTurnInteraction.findUniqueOrThrow({
+        where: { id: interactionId },
+        select: { status: true, resolvedAt: true },
+      })).resolves.toMatchObject({ status: 'resolved', resolvedAt: expect.any(Date) })
+      await expect(prisma.projectAgentTurn.findUniqueOrThrow({
+        where: { id: receipt.turnId },
+        select: { status: true },
+      })).resolves.toEqual({ status: 'running' })
     } finally {
       await manager.shutdownAll()
     }
