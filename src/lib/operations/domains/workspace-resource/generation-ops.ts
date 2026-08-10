@@ -86,7 +86,8 @@ import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
 import { CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS } from '@/lib/workspace-resource/generation-contract'
 import { resolveWorkspaceResourceInputMedia } from '@/lib/workspace-resource/input-media'
 import { AppError } from '@/lib/errors/app-error'
-import { describeUnknownError } from '@/lib/errors/normalize'
+import { augmentFailureRecord } from '@/lib/errors/failure'
+import { normalizeAnyError } from '@/lib/errors/normalize'
 
 const MAX_BATCH_ITEMS = OPERATION_EXECUTION_MAX_TASKS
 const MEDIA_GENERATION_PLAN_CONTRACT_REVISION = 'workspace-resource-generation-batch/v8'
@@ -345,7 +346,7 @@ function throwMediaPreflightError(
             commitmentInputField: 'videoRatio',
           },
           agentRetryableAfterCorrection: true,
-        })
+        }, { cause: error })
       }
       if (input.ratioOwner === 'asset') {
         throw new ApiError('INVALID_PARAMS', {
@@ -353,7 +354,7 @@ function throwMediaPreflightError(
           field: 'modelKey',
           value: input.aspectRatio,
           modelKey: input.modelKey,
-        })
+        }, { cause: error })
       }
     }
     throw new ApiError('INVALID_PARAMS', {
@@ -361,13 +362,20 @@ function throwMediaPreflightError(
       field: error.field ?? 'generation',
       reason: error.reason ?? error.failure,
       mediaType: input.mediaType,
-    })
+    }, { cause: error })
   }
-  throw new ApiError('INVALID_PARAMS', {
-    code: 'MEDIA_GENERATION_PREFLIGHT_FAILED',
-    field: input.mediaType,
-    reason: describeUnknownError(error),
-  })
+  throw ApiError.fromFailure(augmentFailureRecord(normalizeAnyError(error), {
+    details: {
+      reasonCode: 'MEDIA_GENERATION_PREFLIGHT_FAILED',
+      field: input.mediaType,
+      mediaType: input.mediaType,
+    },
+    context: {
+      system: 'application',
+      phase: 'media_preflight',
+    },
+    message: 'Workspace media generation preflight failed',
+  }), error)
 }
 
 function validateReferenceCapabilities(input: {
