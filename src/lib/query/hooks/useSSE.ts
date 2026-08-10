@@ -41,7 +41,8 @@ function connectionIdStorageKey(projectId: string): string {
   return `workspace-sse-connection:v1:${projectId}`
 }
 
-function readOrCreateConnectionId(projectId: string): string {
+function readOrCreateConnectionId(projectId: string): string | null {
+  if (typeof window === 'undefined') return null
   const storage = window.sessionStorage
   const key = connectionIdStorageKey(projectId)
   const existing = storage?.getItem(key)
@@ -85,9 +86,11 @@ export function useSSE({ projectId, enabled = true, onEvent }: UseSSEOptions) {
   const connection = useMemo(() => {
     if (!projectId) return null
     const cursor = readStoredCursor(projectId)
+    const connectionId = readOrCreateConnectionId(projectId)
+    if (!connectionId) return null
     const params = new URLSearchParams({
       projectId,
-      connectionId: readOrCreateConnectionId(projectId),
+      connectionId,
     })
     if (cursor.taskEventId > 0) {
       params.set('cursor', serializeWorkspaceSseCursor(cursor))
