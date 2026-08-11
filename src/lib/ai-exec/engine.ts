@@ -48,6 +48,9 @@ import {
   summarizeMediaRequestInput,
   wrapMediaProviderExecution,
 } from '@/lib/ai-exec/media-observe'
+import { createScopedLogger } from '@/lib/logging/core'
+
+const mediaExecutionLogger = createScopedLogger({ module: 'ai-exec.media' })
 
 export type AiMediaExecutionModality = Extract<AiModality, 'image' | 'video' | 'music' | 'voice'>
 
@@ -155,6 +158,32 @@ export type AiMediaExecutionInput =
     options?: AiVoiceExecutionOptions
   }
 
+async function executeProviderRouteWithoutFence<TResult>(
+  route: TaskProviderInvocationRoute<TResult>,
+): Promise<TResult> {
+  if (route.prepare) {
+    const prepared = await route.prepare()
+    try {
+      return await prepared.execute()
+    } finally {
+      try {
+        await prepared.cleanup()
+      } catch (error) {
+        mediaExecutionLogger.warn({
+          action: 'provider.invocation.cleanup_failed',
+          message: 'prepared provider invocation cleanup failed outside Task execution',
+          provider: route.provider,
+          details: { modelKey: route.modelKey },
+          error: error instanceof Error
+            ? { name: error.name, message: error.message, stack: error.stack }
+            : { message: String(error) },
+        })
+      }
+    }
+  }
+  return await route.execute()
+}
+
 export async function executeMediaGeneration(
   input: AiMediaExecutionInput,
   invocation?: TaskProviderInvocation,
@@ -183,16 +212,19 @@ export async function executeMediaGeneration(
         options: input.options,
         prompt: input.prompt,
       }) as AiImageExecutionOptions | undefined
+      const context = {
+        userId: input.userId,
+        selection: routeSelection,
+        prompt: input.prompt,
+        options,
+      }
       return {
         provider: routeSelection.provider,
         modelKey: routeSelection.modelKey,
         request: createMediaProviderRequestIdentity({ ...input, modelKey: routeSelection.modelKey }),
-        execute: async () => await modalityAdapter.execute({
-          userId: input.userId,
-          selection: routeSelection,
-          prompt: input.prompt,
-          options,
-        }),
+        ...(modalityAdapter.prepare
+          ? { prepare: async () => await modalityAdapter.prepare(context) }
+          : { execute: async () => await modalityAdapter.execute(context) }),
       }
     }
     case 'video': {
@@ -206,16 +238,17 @@ export async function executeMediaGeneration(
         options: input.options,
         prompt: input.options?.prompt,
       }) as AiVideoExecutionOptions | undefined
+      const context = {
+        userId: input.userId,
+        selection: routeSelection,
+        imageUrl: input.imageUrl,
+        options,
+      }
       return {
         provider: routeSelection.provider,
         modelKey: routeSelection.modelKey,
         request: createMediaProviderRequestIdentity({ ...input, modelKey: routeSelection.modelKey }),
-        execute: async () => await modalityAdapter.execute({
-          userId: input.userId,
-          selection: routeSelection,
-          imageUrl: input.imageUrl,
-          options,
-        }),
+        execute: async () => await modalityAdapter.execute(context),
       }
     }
     case 'music': {
@@ -229,16 +262,17 @@ export async function executeMediaGeneration(
         options: input.options,
         prompt: input.prompt,
       }) as AiMusicExecutionOptions | undefined
+      const context = {
+        userId: input.userId,
+        selection: routeSelection,
+        prompt: input.prompt,
+        options,
+      }
       return {
         provider: routeSelection.provider,
         modelKey: routeSelection.modelKey,
         request: createMediaProviderRequestIdentity({ ...input, modelKey: routeSelection.modelKey }),
-        execute: async () => await modalityAdapter.execute({
-          userId: input.userId,
-          selection: routeSelection,
-          prompt: input.prompt,
-          options,
-        }),
+        execute: async () => await modalityAdapter.execute(context),
       }
     }
     case 'voice': {
@@ -251,17 +285,18 @@ export async function executeMediaGeneration(
         modality: input.modality,
         options: input.options,
       }) as AiVoiceExecutionOptions | undefined
+      const context = {
+        userId: input.userId,
+        selection: routeSelection,
+        description: input.description,
+        text: input.text,
+        options,
+      }
       return {
         provider: routeSelection.provider,
         modelKey: routeSelection.modelKey,
         request: createMediaProviderRequestIdentity({ ...input, modelKey: routeSelection.modelKey }),
-        execute: async () => await modalityAdapter.execute({
-          userId: input.userId,
-          selection: routeSelection,
-          description: input.description,
-          text: input.text,
-          options,
-        }),
+        execute: async () => await modalityAdapter.execute(context),
       }
     }
     }
@@ -270,16 +305,37 @@ export async function executeMediaGeneration(
   // own failures and rethrows execution errors unchanged (no control-flow change).
   const buildObservedRoute = (routeSelection: AiResolvedSelection): TaskProviderInvocationRoute<GenerateResult> => {
     const route = buildRoute(routeSelection)
-    return {
-      ...route,
-      execute: () => wrapMediaProviderExecution(
-        {
-          provider: route.provider,
-          modelKey: route.modelKey,
-          modality: input.modality,
-          phase: 'execute',
-          requestSummary: () => summarizeMediaRequestInput(input),
+    const observation = {
+      provider: route.provider,
+      modelKey: route.modelKey,
+      modality: input.modality,
+      phase: 'execute' as const,
+      requestSummary: () => summarizeMediaRequestInput(input),
+    }
+    if (route.prepare) {
+      return {
+        provider: route.provider,
+        modelKey: route.modelKey,
+        request: route.request,
+        prepare: async () => {
+          const prepared = await route.prepare()
+          return {
+            cleanup: prepared.cleanup,
+            execute: () => wrapMediaProviderExecution(
+              observation,
+              prepared.execute,
+              summarizeGenerateResult,
+            ),
+          }
         },
+      }
+    }
+    return {
+      provider: route.provider,
+      modelKey: route.modelKey,
+      request: route.request,
+      execute: () => wrapMediaProviderExecution(
+        observation,
         route.execute,
         summarizeGenerateResult,
       ),
@@ -288,7 +344,7 @@ export async function executeMediaGeneration(
   const taskId = getLogContext().taskId
   let result: GenerateResult
   if (!taskId) {
-    result = await buildObservedRoute(selection).execute()
+    result = await executeProviderRouteWithoutFence(buildObservedRoute(selection))
   } else {
     if (!invocation) throw new Error(`TASK_PROVIDER_INVOCATION_KEY_REQUIRED:${taskId}:${input.modality}`)
     const routeSet = resolveProviderRouteSet(input.modality, selection.modelKey)

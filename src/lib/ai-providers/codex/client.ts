@@ -12,6 +12,24 @@ import {
   CODEX_DEFAULT_REASONING_EFFORT,
   CODEX_DEFAULT_SERVICE_TIER,
 } from './constants'
+import { createScopedLogger } from '@/lib/logging/core'
+
+const codexClientLogger = createScopedLogger({ module: 'ai-provider.codex.client' })
+
+async function cleanupCodexTempDirAfterFailure(tempDir: string): Promise<void> {
+  try {
+    await fs.rm(tempDir, { recursive: true, force: true })
+  } catch (cleanupError) {
+    codexClientLogger.warn({
+      action: 'codex.temp.cleanup_failed',
+      message: 'Codex temporary directory cleanup failed after local preparation error',
+      details: { tempDir },
+      error: cleanupError instanceof Error
+        ? { name: cleanupError.name, message: cleanupError.message, stack: cleanupError.stack }
+        : { message: String(cleanupError) },
+    })
+  }
+}
 
 export type CodexChatMessage = {
   role: 'user' | 'assistant' | 'system'
@@ -757,82 +775,91 @@ async function resolveCodexGeneratedImagePath(params: {
   return await findNewestImageFile(params.tempDir)
 }
 
-export async function runCodexImageGeneration(
+export async function prepareCodexImageGenerationExecution(
   params: CodexImageGenerationParams,
-): Promise<CodexImageGenerationResult> {
+): Promise<{
+  readonly execute: () => Promise<CodexImageGenerationResult>
+  readonly cleanup: () => Promise<void>
+}> {
   const executablePath = resolveCodexExecutablePath(params.codexPath)
   await assertCodexExecutableExists(executablePath)
 
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'waoowaoo-codex-image-'))
-  const outputPath = path.join(tempDir, 'last-message.json')
-  const cwd = params.cwd || tempDir
-  const args = buildCodexImageExecArgs({
-    model: params.model,
-    outputPath,
-    imagePaths: params.imagePaths,
-  })
-  const timeoutMs = params.timeoutMs ?? readTimeoutMs(process.env.CODEX_IMAGE_TIMEOUT_MS || process.env.CODEX_LLM_TIMEOUT_MS)
-
   try {
-    const result = await spawnCodex(executablePath, args, {
-      cwd,
-      timeoutMs,
-      stdin: params.prompt,
-    }).catch((error) => {
-      if (error instanceof CodexExecError) throw error
-      throw new CodexExecError(
-        'CODEX_EXEC_FAILED',
-        error instanceof Error ? error.message : String(error),
-      )
+    const outputPath = path.join(tempDir, 'last-message.json')
+    const cwd = params.cwd || tempDir
+    const args = buildCodexImageExecArgs({
+      model: params.model,
+      outputPath,
+      imagePaths: params.imagePaths,
     })
-
-    if (result.exitCode !== 0) {
-      throw new CodexExecError(
-        'CODEX_EXEC_FAILED',
-        `Codex exec exited with code ${result.exitCode ?? 'null'}`,
-        {
-          exitCode: result.exitCode,
-          signal: result.signal,
-          stdout: truncateForError(result.stdout),
-          stderr: truncateForError(result.stderr),
-        },
-      )
-    }
-
-    const output = await fs.readFile(outputPath, 'utf8').catch(() => '')
-    const text = output.trimEnd()
-    const imagePath = await resolveCodexGeneratedImagePath({
-      text,
-      extraTexts: [result.stdout, result.stderr],
-      excludePaths: params.imagePaths,
-      cwd,
-      tempDir,
-    })
-    if (!imagePath) {
-      throw new CodexExecError(
-        'CODEX_IMAGE_OUTPUT_NOT_FOUND',
-        'Codex image generation completed without a readable image path',
-        {
-          exitCode: result.exitCode,
-          signal: result.signal,
-          stdout: truncateForError(result.stdout),
-          stderr: truncateForError(result.stderr),
-        },
-      )
-    }
-
-    const imageBytes = await fs.readFile(imagePath)
-    const mimeType = inferImageMimeType(imageBytes, imagePath)
+    const timeoutMs = params.timeoutMs
+      ?? readTimeoutMs(process.env.CODEX_IMAGE_TIMEOUT_MS || process.env.CODEX_LLM_TIMEOUT_MS)
     return {
-      imagePath,
-      imageBase64: imageBytes.toString('base64'),
-      mimeType,
-      text,
-      stdout: result.stdout,
-      stderr: result.stderr,
+      cleanup: () => fs.rm(tempDir, { recursive: true, force: true }),
+      execute: async () => {
+        const result = await spawnCodex(executablePath, args, {
+          cwd,
+          timeoutMs,
+          stdin: params.prompt,
+        }).catch((error) => {
+          if (error instanceof CodexExecError) throw error
+          throw new CodexExecError(
+            'CODEX_EXEC_FAILED',
+            error instanceof Error ? error.message : String(error),
+          )
+        })
+
+        if (result.exitCode !== 0) {
+          throw new CodexExecError(
+            'CODEX_EXEC_FAILED',
+            `Codex exec exited with code ${result.exitCode ?? 'null'}`,
+            {
+              exitCode: result.exitCode,
+              signal: result.signal,
+              stdout: truncateForError(result.stdout),
+              stderr: truncateForError(result.stderr),
+            },
+          )
+        }
+
+        const output = await fs.readFile(outputPath, 'utf8').catch(() => '')
+        const text = output.trimEnd()
+        const imagePath = await resolveCodexGeneratedImagePath({
+          text,
+          extraTexts: [result.stdout, result.stderr],
+          excludePaths: params.imagePaths,
+          cwd,
+          tempDir,
+        })
+        if (!imagePath) {
+          throw new CodexExecError(
+            'CODEX_IMAGE_OUTPUT_NOT_FOUND',
+            'Codex image generation completed without a readable image path',
+            {
+              exitCode: result.exitCode,
+              signal: result.signal,
+              stdout: truncateForError(result.stdout),
+              stderr: truncateForError(result.stderr),
+            },
+          )
+        }
+
+        const imageBytes = await fs.readFile(imagePath)
+        const mimeType = inferImageMimeType(imageBytes, imagePath)
+        return {
+          imagePath,
+          imageBase64: imageBytes.toString('base64'),
+          mimeType,
+          text,
+          stdout: result.stdout,
+          stderr: result.stderr,
+        }
+      },
     }
-  } finally {
-    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined)
+  } catch (error) {
+    await cleanupCodexTempDirAfterFailure(tempDir)
+    throw error
   }
 }
 
@@ -956,10 +983,10 @@ export async function prepareCodexImageInputs(
 
     return {
       imagePaths,
-      cleanup: () => fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined),
+      cleanup: () => fs.rm(tempDir, { recursive: true, force: true }),
     }
   } catch (error) {
-    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined)
+    await cleanupCodexTempDirAfterFailure(tempDir)
     throw error
   }
 }

@@ -1,9 +1,10 @@
 import { describeUnknownError } from '@/lib/errors/normalize'
-import { resolveMediaMimeType } from '@/lib/media/media-mime'
+import { detectMimeFromBuffer, resolveMediaMimeType } from '@/lib/media/media-mime'
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { authorizeStorageObjectReadForUser } from '@/lib/media/storage-access-policy'
 import { DEFAULT_SIGNED_URL_EXPIRES_SECONDS } from '@/lib/storage/utils'
-import { getObjectMetadata, getSignedObjectUrl } from '@/lib/storage'
+import { getObjectBuffer, getObjectMetadata, getSignedObjectUrl } from '@/lib/storage'
+import { StorageObjectSizeExceededError } from '@/lib/storage/errors'
 
 function storageErrorSummary(error: unknown): string {
   if (error instanceof Error) return `${error.name}: ${error.message}`
@@ -13,6 +14,7 @@ function storageErrorSummary(error: unknown): string {
 export type OwnedMediaOutboundErrorCode =
   | 'OWNED_MEDIA_UNSUPPORTED_INPUT'
   | 'OWNED_MEDIA_STORAGE_METADATA_FAILED'
+  | 'OWNED_MEDIA_STORAGE_READ_FAILED'
   | 'OWNED_MEDIA_SIZE_UNKNOWN'
   | 'OWNED_MEDIA_EMPTY'
   | 'OWNED_MEDIA_SIZE_EXCEEDED'
@@ -46,22 +48,31 @@ export type OwnedMediaForGeneration = {
   readonly durationMs: number | null
 }
 
+export type OwnedMediaBytesForGeneration = Omit<OwnedMediaForGeneration, 'url'> & {
+  readonly bytes: Buffer
+}
+
+type OwnedMediaDescriptor = Omit<OwnedMediaForGeneration, 'url'>
+
+type OwnedMediaResolutionOptions = {
+  readonly maxBytes: number
+  readonly label: string
+  readonly supportedMimeTypes: ReadonlySet<string>
+  readonly normalizeMimeType?: (mimeType: string) => string
+  readonly requireDetectedMimeType?: boolean
+}
+
 /**
  * The only background-task projection path for private provider-bound media.
  * It resolves canonical storage identity, applies the same relation owner
  * policy as authenticated media routes, validates object metadata, and issues
  * a bounded signed URL without a browser route, cookie, or internal credential.
  */
-export async function resolveOwnedMediaForGeneration(
+async function resolveOwnedMediaDescriptorForGeneration(
   input: string,
   userId: string,
-  options: {
-    readonly maxBytes: number
-    readonly label: string
-    readonly supportedMimeTypes: ReadonlySet<string>
-    readonly normalizeMimeType?: (mimeType: string) => string
-  },
-): Promise<OwnedMediaForGeneration> {
+  options: OwnedMediaResolutionOptions,
+): Promise<OwnedMediaDescriptor> {
   const normalizedInput = input.trim()
   const storageKey = await resolveStorageKeyFromMediaValue(normalizedInput)
   if (!storageKey) {
@@ -130,6 +141,20 @@ export async function resolveOwnedMediaForGeneration(
     })
   }
 
+  return {
+    storageKey: media.storageKey,
+    contentType,
+    sizeBytes,
+    durationMs: media.durationMs,
+  }
+}
+
+export async function resolveOwnedMediaForGeneration(
+  input: string,
+  userId: string,
+  options: OwnedMediaResolutionOptions,
+): Promise<OwnedMediaForGeneration> {
+  const media = await resolveOwnedMediaDescriptorForGeneration(input, userId, options)
   const url = await getSignedObjectUrl(media.storageKey, {
     expiresInSeconds: DEFAULT_SIGNED_URL_EXPIRES_SECONDS,
   })
@@ -139,15 +164,81 @@ export async function resolveOwnedMediaForGeneration(
   } catch {
     throw new OwnedMediaOutboundError({
       code: 'OWNED_MEDIA_SIGNED_URL_INVALID',
-      mediaInput: normalizedInput,
+      mediaInput: input.trim(),
       message: `${options.label} signed URL is invalid`,
     })
   }
   return {
     url: parsedUrl.toString(),
-    storageKey: media.storageKey,
+    ...media,
+  }
+}
+
+/**
+ * Owner-authorized background byte materialization for runtimes that consume a
+ * local file instead of a provider-fetchable URL. Storage is read through the
+ * configured provider SDK; private-network HTTP remains forbidden.
+ */
+export async function readOwnedMediaBytesForGeneration(
+  input: string,
+  userId: string,
+  options: OwnedMediaResolutionOptions,
+): Promise<OwnedMediaBytesForGeneration> {
+  const media = await resolveOwnedMediaDescriptorForGeneration(input, userId, options)
+  let bytes: Buffer
+  try {
+    bytes = await getObjectBuffer(media.storageKey, { maxBytes: options.maxBytes })
+  } catch (error) {
+    if (error instanceof StorageObjectSizeExceededError) {
+      throw new OwnedMediaOutboundError({
+        code: 'OWNED_MEDIA_SIZE_EXCEEDED',
+        mediaInput: input.trim(),
+        message: `${options.label} exceeds ${String(options.maxBytes)} bytes: ${media.storageKey}`,
+        cause: error,
+      })
+    }
+    throw new OwnedMediaOutboundError({
+      code: 'OWNED_MEDIA_STORAGE_READ_FAILED',
+      mediaInput: input.trim(),
+      message: `${options.label} storage read failed for ${media.storageKey}: ${storageErrorSummary(error)}`,
+      cause: error,
+    })
+  }
+  if (bytes.length === 0) {
+    throw new OwnedMediaOutboundError({
+      code: 'OWNED_MEDIA_EMPTY',
+      mediaInput: input.trim(),
+      message: `${options.label} is empty: ${media.storageKey}`,
+    })
+  }
+  if (bytes.length > options.maxBytes) {
+    throw new OwnedMediaOutboundError({
+      code: 'OWNED_MEDIA_SIZE_EXCEEDED',
+      mediaInput: input.trim(),
+      message: `${options.label} exceeds ${String(options.maxBytes)} bytes: ${media.storageKey}`,
+    })
+  }
+  const sniffedContentType = detectMimeFromBuffer(bytes)
+  if (options.requireDetectedMimeType && !sniffedContentType) {
+    throw new OwnedMediaOutboundError({
+      code: 'OWNED_MEDIA_FORMAT_UNSUPPORTED',
+      mediaInput: input.trim(),
+      message: `${options.label} format could not be detected from object bytes`,
+    })
+  }
+  const contentType = sniffedContentType
+    ? options.normalizeMimeType?.(sniffedContentType) ?? sniffedContentType
+    : media.contentType
+  if (!options.supportedMimeTypes.has(contentType)) {
+    throw new OwnedMediaOutboundError({
+      code: 'OWNED_MEDIA_FORMAT_UNSUPPORTED',
+      mediaInput: input.trim(),
+      message: `${options.label} format is unsupported: ${contentType}`,
+    })
+  }
+  return {
+    ...media,
     contentType,
-    sizeBytes,
-    durationMs: media.durationMs,
+    bytes,
   }
 }

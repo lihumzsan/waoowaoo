@@ -1,7 +1,37 @@
-import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
-import type { AiProviderImageExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
-import { prepareCodexImageInputs, runCodexImageGeneration } from './client'
+import {
+  normalizeToBase64ForGeneration,
+  OutboundImageNormalizeError,
+  resolveOwnedImageDataUrlForGeneration,
+} from '@/lib/media/outbound-image'
+import type {
+  AiProviderImageExecutionContext,
+  AiProviderPreparedMediaExecution,
+} from '@/lib/ai-providers/runtime-types'
+import {
+  prepareCodexImageGenerationExecution,
+  prepareCodexImageInputs,
+} from './client'
 import { CODEX_DEFAULT_IMAGE_MODEL_ID, CODEX_DEFAULT_MODEL_ID } from './constants'
+import { createScopedLogger } from '@/lib/logging/core'
+
+const codexImageLogger = createScopedLogger({ module: 'ai-provider.codex.image' })
+
+async function cleanupReferencesAfterPreparationFailure(
+  cleanup: (() => Promise<void>) | undefined,
+): Promise<void> {
+  if (!cleanup) return
+  try {
+    await cleanup()
+  } catch (error) {
+    codexImageLogger.warn({
+      action: 'codex.reference.cleanup_failed',
+      message: 'Codex reference image cleanup failed after local preparation error',
+      error: error instanceof Error
+        ? { name: error.name, message: error.message, stack: error.stack }
+        : { message: String(error) },
+    })
+  }
+}
 
 function readOptionString(options: AiProviderImageExecutionContext['options'], key: string): string | undefined {
   const value = options?.[key]
@@ -38,41 +68,65 @@ function buildCodexImagePrompt(input: AiProviderImageExecutionContext, imageMode
   return lines.join('\n')
 }
 
-function formatCodexImageError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error)
-  return message.slice(0, 1_000)
+async function normalizeCodexReferenceImage(
+  input: string,
+  userId: string,
+): Promise<string> {
+  try {
+    return await resolveOwnedImageDataUrlForGeneration(input, userId)
+  } catch (error) {
+    if (
+      error instanceof OutboundImageNormalizeError
+      && error.code === 'OUTBOUND_IMAGE_UNSUPPORTED_INPUT'
+    ) {
+      return await normalizeToBase64ForGeneration(input)
+    }
+    throw error
+  }
 }
 
-export async function executeCodexImageGeneration(
+export async function prepareCodexImageGeneration(
   input: AiProviderImageExecutionContext,
-): Promise<GenerateResult> {
+): Promise<AiProviderPreparedMediaExecution> {
   const references = (input.options?.referenceImages || [])
     .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
     .map((value) => value.trim())
-  let prepared: Awaited<ReturnType<typeof prepareCodexImageInputs>> | null = null
+  const prepared = references.length > 0
+    ? await prepareCodexImageInputs(
+        references,
+        async (reference) => await normalizeCodexReferenceImage(reference, input.userId),
+      )
+    : null
+  if (references.length > 0 && prepared?.imagePaths.length === 0) {
+    await cleanupReferencesAfterPreparationFailure(prepared.cleanup)
+    throw new Error('CODEX_REFERENCE_IMAGE_INPUTS_EMPTY')
+  }
 
   try {
-    if (references.length > 0) {
-      prepared = await prepareCodexImageInputs(references, normalizeToBase64ForGeneration)
-      if (prepared.imagePaths.length === 0) {
-        return { success: false, error: 'CODEX_REFERENCE_IMAGE_INPUTS_EMPTY' }
-      }
-    }
-
     const imageModelId = input.selection.modelId || CODEX_DEFAULT_IMAGE_MODEL_ID
-    const result = await runCodexImageGeneration({
+    const generation = await prepareCodexImageGenerationExecution({
       model: readOptionString(input.options, 'codexModelId') || CODEX_DEFAULT_MODEL_ID,
       prompt: buildCodexImagePrompt(input, imageModelId, prepared?.imagePaths.length || 0),
       imagePaths: prepared?.imagePaths || [],
     })
     return {
-      success: true,
-      imageBase64: result.imageBase64,
-      imageUrl: `data:${result.mimeType};base64,${result.imageBase64}`,
+      cleanup: async () => {
+        await Promise.all([
+          generation.cleanup(),
+          prepared?.cleanup() ?? Promise.resolve(),
+        ])
+      },
+      execute: async () => {
+        const result = await generation.execute()
+        return {
+          success: true,
+          imageBase64: result.imageBase64,
+          imageUrl: `data:${result.mimeType};base64,${result.imageBase64}`,
+        }
+      },
     }
   } catch (error) {
-    return { success: false, error: formatCodexImageError(error) }
-  } finally {
-    await prepared?.cleanup().catch(() => undefined)
+    await cleanupReferencesAfterPreparationFailure(prepared?.cleanup)
+    throw error
   }
 }

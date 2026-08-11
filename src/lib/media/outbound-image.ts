@@ -9,6 +9,7 @@ import {
 } from '@/lib/media/outbound-fetch'
 import {
   OwnedMediaOutboundError,
+  readOwnedMediaBytesForGeneration,
   resolveOwnedMediaForGeneration,
 } from '@/lib/media/outbound-owned-media'
 import { isOutboundImageStorageKey } from '@/lib/media/storage-key'
@@ -398,6 +399,40 @@ export async function resolveOwnedImageUrlForGeneration(
           ? 'OUTBOUND_IMAGE_UNSUPPORTED_INPUT'
           : 'OUTBOUND_IMAGE_FETCH_FAILED',
         stage: 'normalize_original',
+        input: normalizedInput,
+        message: error.message,
+        cause: error,
+      })
+    }
+    throw error
+  }
+}
+
+/**
+ * Materializes an authorized storage-backed image for a local provider runtime.
+ * Unlike normalizeToBase64ForGeneration, this never fetches a signed URL and
+ * therefore does not weaken the outbound private-network policy.
+ */
+export async function resolveOwnedImageDataUrlForGeneration(
+  input: string,
+  userId: string,
+): Promise<string> {
+  const normalizedInput = normalizeInput(input)
+  try {
+    const media = await readOwnedMediaBytesForGeneration(normalizedInput, userId, {
+      maxBytes: MAX_IMAGE_BYTES,
+      label: 'owned outbound image',
+      supportedMimeTypes: SUPPORTED_PROVIDER_IMAGE_MIME_TYPES,
+      requireDetectedMimeType: true,
+    })
+    return `data:${media.contentType};base64,${media.bytes.toString('base64')}`
+  } catch (error) {
+    if (error instanceof OwnedMediaOutboundError) {
+      throw new OutboundImageNormalizeError({
+        code: error.code === 'OWNED_MEDIA_UNSUPPORTED_INPUT'
+          ? 'OUTBOUND_IMAGE_UNSUPPORTED_INPUT'
+          : 'OUTBOUND_IMAGE_FETCH_FAILED',
+        stage: 'normalize_base64',
         input: normalizedInput,
         message: error.message,
         cause: error,

@@ -68,6 +68,153 @@ describe('provider invocation at-most-once DB integration', () => {
     await resetBillingState()
   })
 
+  it('does not create a single-route provider fence when local preparation fails', async () => {
+    await seedTask('provider-local-preflight-task')
+    const localFailure = new Error('CODEX_LOCAL_REFERENCE_PREPARE_FAILED')
+
+    await expect(
+      withLogContext({ taskId: 'provider-local-preflight-task', taskAttempt: 1 }, async () =>
+        await executeTaskProviderInvocation({
+          taskId: 'provider-local-preflight-task',
+          invocation: { key: 'media:image:primary' },
+          modality: 'image',
+          logicalCapabilityId: 'image:codex::gpt-image-2',
+          primaryModelKey: 'codex::gpt-image-2',
+          routes: [
+            {
+              provider: 'codex',
+              modelKey: 'codex::gpt-image-2',
+              request: { prompt: 'local preflight failure' },
+              prepare: async () => {
+                throw localFailure
+              },
+            },
+          ],
+        }),
+      ),
+    ).rejects.toBe(localFailure)
+
+    await expect(
+      prisma.taskExecutionCheckpoint.findMany({
+        where: { taskId: 'provider-local-preflight-task' },
+        select: { state: true },
+      }),
+    ).resolves.toEqual([])
+  })
+
+  it('keeps a route ready without a submitting attempt when local preparation fails', async () => {
+    await seedTask('provider-route-local-preflight-task')
+    const localFailure = new Error('CODEX_LOCAL_REFERENCE_PREPARE_FAILED')
+
+    await expect(
+      withLogContext({ taskId: 'provider-route-local-preflight-task', taskAttempt: 1 }, async () =>
+        await executeTaskProviderInvocation({
+          taskId: 'provider-route-local-preflight-task',
+          invocation: { key: 'media:image:primary' },
+          modality: 'image',
+          logicalCapabilityId: 'image:gpt-image-2',
+          primaryModelKey: 'codex::gpt-image-2',
+          routes: [
+            {
+              provider: 'codex',
+              modelKey: 'codex::gpt-image-2',
+              request: { prompt: 'local preflight failure' },
+              prepare: async () => {
+                throw localFailure
+              },
+            },
+            {
+              provider: 'fal',
+              modelKey: 'fal::gpt-image-2',
+              request: { prompt: 'must remain untouched' },
+              execute: async () => ({ success: true, imageUrl: 'https://provider/result.png' }),
+            },
+          ],
+        }),
+      ),
+    ).rejects.toBe(localFailure)
+
+    const checkpoint = await prisma.taskExecutionCheckpoint.findFirstOrThrow({
+      where: { taskId: 'provider-route-local-preflight-task' },
+      select: { state: true, output: true },
+    })
+    expect(checkpoint.state).toBe('route_ready')
+    expect(checkpoint.output).toMatchObject({ routeAttempts: [], nextRouteIndex: 0 })
+  })
+
+  it('preserves multi-route replay authorization when higher-attempt preparation fails', async () => {
+    await seedTask('provider-route-replay-preflight-task')
+    const request = { prompt: 'replay local preflight failure' }
+    const base = {
+      taskId: 'provider-route-replay-preflight-task',
+      invocation: { key: 'media:image:primary' },
+      modality: 'image',
+      logicalCapabilityId: 'image:gpt-image-2',
+      primaryModelKey: 'codex::gpt-image-2',
+    } as const
+    await withLogContext(
+      { taskId: 'provider-route-replay-preflight-task', taskAttempt: 1 },
+      async () => await executeTaskProviderInvocation({
+        ...base,
+        routes: [
+          {
+            provider: 'codex',
+            modelKey: 'codex::gpt-image-2',
+            request,
+            execute: async () => ({ success: true, imageUrl: 'data:image/png;base64,AA==' }),
+          },
+          {
+            provider: 'fal',
+            modelKey: 'fal::gpt-image-2',
+            request,
+            execute: async () => ({ success: true, imageUrl: 'https://provider/result.png' }),
+          },
+        ],
+      }),
+    )
+    await withLogContext(
+      { taskId: 'provider-route-replay-preflight-task', taskAttempt: 1 },
+      async () => await markTaskProviderInvocationReplayAuthorized({
+        taskId: 'provider-route-replay-preflight-task',
+        invocation: { key: 'media:image:primary' },
+        error: new Error('accepted result must be regenerated'),
+      }),
+    )
+
+    const localFailure = new Error('CODEX_LOCAL_REFERENCE_PREPARE_FAILED')
+    await expect(
+      withLogContext(
+        { taskId: 'provider-route-replay-preflight-task', taskAttempt: 2 },
+        async () => await executeTaskProviderInvocation({
+          ...base,
+          routes: [
+            {
+              provider: 'codex',
+              modelKey: 'codex::gpt-image-2',
+              request,
+              prepare: async () => {
+                throw localFailure
+              },
+            },
+            {
+              provider: 'fal',
+              modelKey: 'fal::gpt-image-2',
+              request,
+              execute: async () => ({ success: true, imageUrl: 'https://provider/result.png' }),
+            },
+          ],
+        }),
+      ),
+    ).rejects.toBe(localFailure)
+
+    await expect(
+      prisma.taskExecutionCheckpoint.findFirstOrThrow({
+        where: { taskId: 'provider-route-replay-preflight-task' },
+        select: { state: true },
+      }),
+    ).resolves.toEqual({ state: 'replay_authorized' })
+  })
+
   it('persists and replays the provider result without another external call', async () => {
     await seedTask('provider-replay-task')
     const execute = vi.fn(async () => ({ success: true, audioUrl: 'https://provider/result.mp3' }))

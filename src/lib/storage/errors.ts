@@ -4,3 +4,13 @@ export class StorageConfigError extends Error {
     this.name = 'StorageConfigError'
   }
 }
+
+export class StorageObjectSizeExceededError extends Error {
+  readonly maxBytes: number
+
+  constructor(maxBytes: number) {
+    super(`Storage object exceeds ${String(maxBytes)} bytes`)
+    this.name = 'StorageObjectSizeExceededError'
+    this.maxBytes = maxBytes
+  }
+}

@@ -13,12 +13,14 @@ import { loadS3StorageConfig, toS3ClientConfig, type S3StorageConfig } from '@/l
 import type {
   DeleteObjectsResult,
   ObjectMetadata,
+  ObjectReadOptions,
   SignedUrlParams,
   StorageProvider,
   UploadObjectParams,
   UploadObjectResult,
 } from '@/lib/storage/types'
 import { normalizeKey, streamToBuffer, toFetchableUrl } from '@/lib/storage/utils'
+import { StorageObjectSizeExceededError } from '@/lib/storage/errors'
 
 const MAX_DELETE_OBJECTS_PER_REQUEST = 1_000
 const MAX_SIGNED_URL_EXPIRES_SECONDS = 7 * 24 * 60 * 60
@@ -156,12 +158,21 @@ export class S3StorageProvider implements StorageProvider {
     return normalizeSignedUrl(url)
   }
 
-  async getObjectBuffer(key: string): Promise<Buffer> {
+  async getObjectBuffer(key: string, options: ObjectReadOptions = {}): Promise<Buffer> {
     const result = await this.client.send(new GetObjectCommand({
       Bucket: this.config.bucket,
       Key: normalizeKey(key),
     }))
-    return await streamToBuffer(result.Body)
+    if (
+      options.maxBytes !== undefined
+      && result.ContentLength !== undefined
+      && result.ContentLength > options.maxBytes
+    ) {
+      const body = result.Body as { destroy?: () => void } | undefined
+      body?.destroy?.()
+      throw new StorageObjectSizeExceededError(options.maxBytes)
+    }
+    return await streamToBuffer(result.Body, options.maxBytes)
   }
 
   async getObjectMetadata(key: string): Promise<ObjectMetadata> {

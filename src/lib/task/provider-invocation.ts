@@ -913,6 +913,69 @@ export async function markTaskProviderInvocationReplayAuthorizedByExternalId(par
   await markCheckpointReplayAuthorized({ checkpoint: matches[0]!, taskAttempt, error: params.error })
 }
 
+export type PreparedProviderInvocation<TResult> = {
+  readonly execute: () => Promise<TResult>
+  readonly cleanup: () => Promise<void>
+}
+
+type DirectProviderInvocation<TResult> = {
+  readonly execute: () => Promise<TResult>
+  readonly prepare?: never
+}
+
+type LocallyPreparedProviderInvocation<TResult> = {
+  readonly execute?: never
+  readonly prepare: () => Promise<PreparedProviderInvocation<TResult>>
+}
+
+type ProviderInvocationExecution<TResult> =
+  | DirectProviderInvocation<TResult>
+  | LocallyPreparedProviderInvocation<TResult>
+
+function isLocallyPreparedProviderInvocation<TResult>(
+  execution: ProviderInvocationExecution<TResult>,
+): execution is LocallyPreparedProviderInvocation<TResult> {
+  return typeof execution.prepare === 'function'
+}
+
+async function prepareProviderInvocation<TResult>(
+  execution: ProviderInvocationExecution<TResult>,
+): Promise<PreparedProviderInvocation<TResult>> {
+  if (isLocallyPreparedProviderInvocation(execution)) return await execution.prepare()
+  return {
+    execute: execution.execute,
+    cleanup: async () => undefined,
+  }
+}
+
+async function cleanupPreparedProviderInvocation<TResult>(
+  prepared: PreparedProviderInvocation<TResult> | null,
+  context: {
+    readonly taskId: string
+    readonly invocationKey: string
+    readonly provider: string
+    readonly modelKey: string
+  },
+): Promise<void> {
+  try {
+    await prepared?.cleanup()
+  } catch (error) {
+    logger.warn({
+      action: 'provider.invocation.cleanup_failed',
+      message: 'prepared provider invocation cleanup failed',
+      taskId: context.taskId,
+      provider: context.provider,
+      details: {
+        invocationKey: context.invocationKey,
+        modelKey: context.modelKey,
+      },
+      error: error instanceof Error
+        ? { name: error.name, message: error.message, stack: error.stack }
+        : { message: String(error) },
+    })
+  }
+}
+
 export async function executeTaskDurableInvocation<TResult>(params: {
   readonly taskId: string
   readonly invocation: TaskProviderInvocation
@@ -920,9 +983,8 @@ export async function executeTaskDurableInvocation<TResult>(params: {
   readonly provider: string
   readonly modelKey: string
   readonly request: unknown
-  readonly execute: () => Promise<TResult>
   readonly resultPolicy: TaskDurableInvocationResultPolicy<TResult>
-}): Promise<TResult> {
+} & ProviderInvocationExecution<TResult>): Promise<TResult> {
   const invocationKey = params.invocation.key.trim()
   if (!invocationKey) throw new Error('PROVIDER_INVOCATION_KEY_REQUIRED')
   const descriptor: ProviderInvocationDescriptor = {
@@ -941,22 +1003,41 @@ export async function executeTaskDurableInvocation<TResult>(params: {
   const inputFingerprint = await loadTaskExecutionFingerprint(params.taskId)
   const stepKey = buildStepKey(invocationKey)
   const taskAttempt = requireTaskAttempt(params.taskId)
-  let claim = await claimCheckpoint({ descriptor, inputFingerprint, stepKey, taskAttempt })
-  let checkpoint = claim.checkpoint
-  let output = parseOutput(checkpoint.output)
-  assertDescriptor(output, descriptor)
-  if (checkpoint.inputFingerprint !== inputFingerprint) {
-    throw new Error(
-      `PROVIDER_INVOCATION_INPUT_FINGERPRINT_CONFLICT:${params.taskId}:${invocationKey}`,
-    )
-  }
+  let prepared: PreparedProviderInvocation<TResult> | null = null
+  try {
+    let checkpoint = await loadCheckpoint(params.taskId, stepKey)
+    let claim: { readonly checkpoint: ProviderCheckpoint; readonly claimed: boolean }
+    if (checkpoint) {
+      const storedOutput = parseOutput(checkpoint.output)
+      assertDescriptor(storedOutput, descriptor)
+      if (checkpoint.inputFingerprint !== inputFingerprint) {
+        throw new Error(
+          `PROVIDER_INVOCATION_INPUT_FINGERPRINT_CONFLICT:${params.taskId}:${invocationKey}`,
+        )
+      }
+      if (checkpoint.state === 'submitted') return params.resultPolicy.parse(storedOutput.result)
+      if (checkpoint.state === 'rejected') throwStoredRejected(descriptor, storedOutput)
+      if (checkpoint.state === 'outcome_unknown') throw outcomeUnknown(descriptor)
+      if (checkpoint.state !== 'replay_authorized') throw outcomeUnknown(descriptor)
 
-  if (checkpoint.state === 'submitted') return params.resultPolicy.parse(output.result)
-  if (checkpoint.state === 'rejected') throwStoredRejected(descriptor, output)
-  if (checkpoint.state === 'replay_authorized') {
-    claim = await reclaimReplayAuthorizedCheckpoint({ checkpoint, descriptor, taskAttempt })
+      const previousAttempt = storedOutput.taskAttempt
+      if (!Number.isInteger(previousAttempt) || (previousAttempt ?? 0) < 1) {
+        throw new Error(
+          `PROVIDER_INVOCATION_RETRY_ATTEMPT_INVALID:${params.taskId}:${invocationKey}`,
+        )
+      }
+      if (taskAttempt <= previousAttempt!) {
+        throwStoredReplayAuthorizedFailure(descriptor, storedOutput)
+      }
+      prepared = await prepareProviderInvocation(params)
+      claim = await reclaimReplayAuthorizedCheckpoint({ checkpoint, descriptor, taskAttempt })
+    } else {
+      prepared = await prepareProviderInvocation(params)
+      claim = await claimCheckpoint({ descriptor, inputFingerprint, stepKey, taskAttempt })
+    }
+
     checkpoint = claim.checkpoint
-    output = parseOutput(checkpoint.output)
+    const output = parseOutput(checkpoint.output)
     assertDescriptor(output, descriptor)
     if (checkpoint.inputFingerprint !== inputFingerprint) {
       throw new Error(
@@ -968,23 +1049,82 @@ export async function executeTaskDurableInvocation<TResult>(params: {
     if (checkpoint.state === 'replay_authorized') {
       throwStoredReplayAuthorizedFailure(descriptor, output)
     }
-  }
-  if (!claim.claimed) throw outcomeUnknown(descriptor)
-  if (checkpoint.state !== 'submitting') throw outcomeUnknown(descriptor)
+    if (!claim.claimed) throw outcomeUnknown(descriptor)
+    if (checkpoint.state !== 'submitting') throw outcomeUnknown(descriptor)
 
-  let result: TResult
-  try {
-    result = await params.execute()
-  } catch (error) {
-    if (
-      error instanceof ProviderSubmissionError
-      && (error.disposition === 'rejected'
-        || error.disposition === 'pre_accept_rejected')
-    ) {
-      const state = 'rejected' as const
+    let result: TResult
+    try {
+      result = await prepared.execute()
+    } catch (error) {
+      if (
+        error instanceof ProviderSubmissionError
+        && (error.disposition === 'rejected'
+          || error.disposition === 'pre_accept_rejected')
+      ) {
+        const state = 'rejected' as const
+        const failure = storedProviderFailure(
+          descriptor,
+          error,
+          {
+            fallbackCode: 'PROVIDER_SUBMISSION_REJECTED',
+            operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
+          },
+        )
+        try {
+          await transitionCheckpoint({
+            checkpointId: checkpoint.id,
+            descriptor,
+            state,
+            taskAttempt,
+            failure,
+          })
+        } catch (transitionError) {
+          throw outcomeUnknown(descriptor, transitionError)
+        }
+        throw AppError.fromFailure(failure, error)
+      }
+      const unknown = outcomeUnknown(descriptor, error)
+      try {
+        await transitionCheckpoint({
+          checkpointId: checkpoint.id,
+          descriptor,
+          state: 'outcome_unknown',
+          taskAttempt,
+          failure: unknown.failure,
+        })
+      } catch (transitionError) {
+        throw outcomeUnknown(descriptor, transitionError)
+      }
+      throw unknown
+    }
+
+    const unknownOutcomeMessage = params.resultPolicy.outcomeUnknownMessage?.(result) ?? null
+    if (unknownOutcomeMessage) {
+      const error = new Error(unknownOutcomeMessage)
+      const unknown = outcomeUnknown(descriptor, error)
+      try {
+        await transitionCheckpoint({
+          checkpointId: checkpoint.id,
+          descriptor,
+          state: 'outcome_unknown',
+          taskAttempt,
+          result,
+          failure: unknown.failure,
+        })
+      } catch (transitionError) {
+        throw outcomeUnknown(descriptor, transitionError)
+      }
+      throw unknown
+    }
+
+    const rejectionMessage = params.resultPolicy.rejectionMessage?.(result) ?? null
+    if (rejectionMessage) {
       const failure = storedProviderFailure(
         descriptor,
-        error,
+        new ProviderSubmissionError('PROVIDER_SUBMISSION_REJECTED', rejectionMessage, {
+          disposition: 'rejected',
+          provider: descriptor.provider,
+        }),
         {
           fallbackCode: 'PROVIDER_SUBMISSION_REJECTED',
           operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
@@ -994,97 +1134,47 @@ export async function executeTaskDurableInvocation<TResult>(params: {
         await transitionCheckpoint({
           checkpointId: checkpoint.id,
           descriptor,
-          state,
+          state: 'rejected',
           taskAttempt,
+          result,
           failure,
         })
-      } catch (transitionError) {
-        throw outcomeUnknown(descriptor, transitionError)
+      } catch (error) {
+        throw outcomeUnknown(descriptor, error)
       }
-      throw AppError.fromFailure(failure, error)
+      throw AppError.fromFailure(failure)
     }
-    const unknown = outcomeUnknown(descriptor, error)
-    try {
-      await transitionCheckpoint({
-        checkpointId: checkpoint.id,
-        descriptor,
-        state: 'outcome_unknown',
-        taskAttempt,
-        failure: unknown.failure,
-      })
-    } catch (transitionError) {
-      throw outcomeUnknown(descriptor, transitionError)
-    }
-    throw unknown
-  }
 
-  const unknownOutcomeMessage = params.resultPolicy.outcomeUnknownMessage?.(result) ?? null
-  if (unknownOutcomeMessage) {
-    const error = new Error(unknownOutcomeMessage)
-    const unknown = outcomeUnknown(descriptor, error)
     try {
       await transitionCheckpoint({
         checkpointId: checkpoint.id,
         descriptor,
-        state: 'outcome_unknown',
+        state: 'submitted',
         taskAttempt,
         result,
-        failure: unknown.failure,
-      })
-    } catch (transitionError) {
-      throw outcomeUnknown(descriptor, transitionError)
-    }
-    throw unknown
-  }
-
-  const rejectionMessage = params.resultPolicy.rejectionMessage?.(result) ?? null
-  if (rejectionMessage) {
-    const failure = storedProviderFailure(
-      descriptor,
-      new ProviderSubmissionError('PROVIDER_SUBMISSION_REJECTED', rejectionMessage, {
-        disposition: 'rejected',
-        provider: descriptor.provider,
-      }),
-      {
-        fallbackCode: 'PROVIDER_SUBMISSION_REJECTED',
-        operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
-      },
-    )
-    try {
-      await transitionCheckpoint({
-        checkpointId: checkpoint.id,
-        descriptor,
-        state: 'rejected',
-        taskAttempt,
-        result,
-        failure,
       })
     } catch (error) {
       throw outcomeUnknown(descriptor, error)
     }
-    throw AppError.fromFailure(failure)
-  }
-
-  try {
-    await transitionCheckpoint({
-      checkpointId: checkpoint.id,
-      descriptor,
-      state: 'submitted',
-      taskAttempt,
-      result,
+    return result
+  } finally {
+    await cleanupPreparedProviderInvocation(prepared, {
+      taskId: params.taskId,
+      invocationKey,
+      provider: descriptor.provider,
+      modelKey: descriptor.modelKey,
     })
-  } catch (error) {
-    throw outcomeUnknown(descriptor, error)
   }
-  return result
 }
 
-export type TaskProviderInvocationRoute<TResult> = {
+type TaskProviderInvocationRouteBase = {
   readonly provider: string
   readonly modelKey: string
   readonly request: unknown
-  readonly execute: () => Promise<TResult>
 }
+
+export type TaskProviderInvocationRoute<TResult> = TaskProviderInvocationRouteBase
+  & ProviderInvocationExecution<TResult>
 
 function withProviderRouteMetadata<TResult extends MediaProviderInvocationResult>(params: {
   readonly result: TResult
@@ -1133,6 +1223,10 @@ export async function executeTaskProviderInvocation<
   }
   const onlyRoute = params.routes.length === 1 ? params.routes[0] : undefined
   if (onlyRoute) {
+    const execution: ProviderInvocationExecution<TResult> =
+      isLocallyPreparedProviderInvocation(onlyRoute)
+        ? { prepare: onlyRoute.prepare }
+        : { execute: onlyRoute.execute }
     return await executeTaskDurableInvocation({
       taskId: params.taskId,
       invocation: params.invocation,
@@ -1140,7 +1234,7 @@ export async function executeTaskProviderInvocation<
       provider: onlyRoute.provider,
       modelKey: onlyRoute.modelKey,
       request: onlyRoute.request,
-      execute: onlyRoute.execute,
+      ...execution,
       resultPolicy: {
         parse: parseMediaProviderResult<TResult>,
         outcomeUnknownMessage: (result) =>
@@ -1204,29 +1298,15 @@ export async function executeTaskProviderInvocation<
   if (checkpoint.state === 'submitted') return parseMediaProviderResult<TResult>(output.result)
   if (checkpoint.state === 'rejected') throwStoredRejected(descriptor, output)
   if (checkpoint.state === 'outcome_unknown') throw outcomeUnknown(descriptor)
-  if (checkpoint.state === 'replay_authorized') {
+  let replayAuthorized = checkpoint.state === 'replay_authorized'
+  if (replayAuthorized) {
     const previousAttempt = output.taskAttempt
     if (!Number.isInteger(previousAttempt) || taskAttempt <= previousAttempt!) {
       throwStoredReplayAuthorizedFailure(descriptor, output)
     }
-    const routeReadyOutput: MediaProviderRouteInvocationOutput = {
-      ...output,
-      taskAttempt,
-      result: undefined,
-      failure: undefined,
-    }
-    const reclaimed = await transitionRouteCheckpoint({
-      checkpointId: checkpoint.id,
-      expectedState: 'replay_authorized',
-      state: 'route_ready',
-      output: routeReadyOutput,
-    })
-    if (!reclaimed) throw outcomeUnknown(descriptor)
-    checkpoint = { ...checkpoint, state: 'route_ready', output: routeReadyOutput }
-    output = routeReadyOutput
   }
   if (checkpoint.state === 'submitting') throw outcomeUnknown(descriptor)
-  if (checkpoint.state !== 'route_ready') throw outcomeUnknown(descriptor)
+  if (checkpoint.state !== 'route_ready' && !replayAuthorized) throw outcomeUnknown(descriptor)
 
   while (output.nextRouteIndex < params.routes.length) {
     const routeIndex = output.nextRouteIndex
@@ -1234,11 +1314,31 @@ export async function executeTaskProviderInvocation<
     const routeDescriptor = routes[routeIndex]
     if (!route || !routeDescriptor)
       throw new Error(`PROVIDER_ROUTE_MISSING:${params.logicalCapabilityId}:${routeIndex}`)
-    const claimedOutput = await claimNextProviderRoute({ checkpoint, output, taskAttempt })
-    if (!claimedOutput) throw outcomeUnknown(descriptor)
-    output = claimedOutput
-    checkpoint = { ...checkpoint, state: 'submitting', output }
-    logger.info({
+    const prepared = await prepareProviderInvocation(route)
+    try {
+      if (replayAuthorized) {
+        const routeReadyOutput: MediaProviderRouteInvocationOutput = {
+          ...output,
+          taskAttempt,
+          result: undefined,
+          failure: undefined,
+        }
+        const reclaimed = await transitionRouteCheckpoint({
+          checkpointId: checkpoint.id,
+          expectedState: 'replay_authorized',
+          state: 'route_ready',
+          output: routeReadyOutput,
+        })
+        if (!reclaimed) throw outcomeUnknown(descriptor)
+        checkpoint = { ...checkpoint, state: 'route_ready', output: routeReadyOutput }
+        output = routeReadyOutput
+        replayAuthorized = false
+      }
+      const claimedOutput = await claimNextProviderRoute({ checkpoint, output, taskAttempt })
+      if (!claimedOutput) throw outcomeUnknown(descriptor)
+      output = claimedOutput
+      checkpoint = { ...checkpoint, state: 'submitting', output }
+      logger.info({
       action: 'provider.route.attempted',
       message: 'provider route submission attempt started',
       taskId: params.taskId,
@@ -1251,9 +1351,9 @@ export async function executeTaskProviderInvocation<
       },
     })
 
-    let result: TResult
-    try {
-      result = await route.execute()
+      let result: TResult
+      try {
+        result = await prepared.execute()
     } catch (error) {
       const routeFailureDescriptor: ProviderInvocationDescriptor = {
         ...descriptor,
@@ -1412,7 +1512,15 @@ export async function executeTaskProviderInvocation<
       output: nextOutput,
     })
     if (!transitioned) throw outcomeUnknown(descriptor)
-    return routedResult
+      return routedResult
+    } finally {
+      await cleanupPreparedProviderInvocation(prepared, {
+        taskId: params.taskId,
+        invocationKey,
+        provider: routeDescriptor.provider,
+        modelKey: routeDescriptor.modelKey,
+      })
+    }
   }
 
   throwStoredRejected(descriptor, output)

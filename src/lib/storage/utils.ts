@@ -1,4 +1,4 @@
-import { StorageConfigError } from './errors'
+import { StorageConfigError, StorageObjectSizeExceededError } from './errors'
 import { getInternalBaseUrl } from '@/lib/env'
 
 export const DEFAULT_SIGNED_URL_EXPIRES_SECONDS = 24 * 60 * 60
@@ -33,29 +33,41 @@ export function normalizeKey(raw: string): string {
   return raw.replace(/^\/+/, '')
 }
 
-export async function streamToBuffer(body: unknown): Promise<Buffer> {
+export async function streamToBuffer(body: unknown, maxBytes?: number): Promise<Buffer> {
+  if (maxBytes !== undefined && (!Number.isSafeInteger(maxBytes) || maxBytes <= 0)) {
+    throw new Error(`STORAGE_OBJECT_MAX_BYTES_INVALID:${String(maxBytes)}`)
+  }
   if (!body) {
     throw new Error('Empty response body from storage provider')
   }
   if (body instanceof Uint8Array) {
+    if (maxBytes !== undefined && body.byteLength > maxBytes) {
+      throw new StorageObjectSizeExceededError(maxBytes)
+    }
     return Buffer.from(body)
   }
   if (typeof body === 'string') {
-    return Buffer.from(body)
+    const buffer = Buffer.from(body)
+    if (maxBytes !== undefined && buffer.byteLength > maxBytes) {
+      throw new StorageObjectSizeExceededError(maxBytes)
+    }
+    return buffer
   }
 
   const chunks: Buffer[] = []
+  let totalBytes = 0
   for await (const chunk of body as AsyncIterable<unknown>) {
-    if (Buffer.isBuffer(chunk)) {
-      chunks.push(chunk)
-      continue
+    const buffer = Buffer.isBuffer(chunk)
+      ? chunk
+      : chunk instanceof Uint8Array
+        ? Buffer.from(chunk)
+        : Buffer.from(String(chunk))
+    totalBytes += buffer.byteLength
+    if (maxBytes !== undefined && totalBytes > maxBytes) {
+      throw new StorageObjectSizeExceededError(maxBytes)
     }
-    if (chunk instanceof Uint8Array) {
-      chunks.push(Buffer.from(chunk))
-      continue
-    }
-    chunks.push(Buffer.from(String(chunk)))
+    chunks.push(buffer)
   }
 
-  return Buffer.concat(chunks)
+  return Buffer.concat(chunks, totalBytes)
 }

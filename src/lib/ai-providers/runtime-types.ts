@@ -139,18 +139,42 @@ export type AiProviderVoiceExecutionContext = {
   }
 }
 
-export type AiProviderMediaModalityAdapter<M extends 'image' | 'video' | 'music' | 'voice'> = {
-  describe: (selection: AiResolvedSelection) => AiVariantDescriptor
-  execute: (
-    input: M extends 'image'
-      ? AiProviderImageExecutionContext
-      : M extends 'video'
-        ? AiProviderVideoExecutionContext
-        : M extends 'music'
-          ? AiProviderMusicExecutionContext
-          : AiProviderVoiceExecutionContext,
-  ) => Promise<GenerateResult>
+type AiProviderMediaExecutionContext<M extends 'image' | 'video' | 'music' | 'voice'> =
+  M extends 'image'
+    ? AiProviderImageExecutionContext
+    : M extends 'video'
+      ? AiProviderVideoExecutionContext
+      : M extends 'music'
+        ? AiProviderMusicExecutionContext
+        : AiProviderVoiceExecutionContext
+
+export type AiProviderPreparedMediaExecution = {
+  readonly execute: () => Promise<GenerateResult>
+  readonly cleanup: () => Promise<void>
 }
+
+type AiProviderMediaModalityAdapterBase = {
+  describe: (selection: AiResolvedSelection) => AiVariantDescriptor
+}
+
+type AiProviderDirectMediaModalityAdapter<M extends 'image' | 'video' | 'music' | 'voice'> =
+  AiProviderMediaModalityAdapterBase & {
+    execute: (input: AiProviderMediaExecutionContext<M>) => Promise<GenerateResult>
+    prepare?: never
+  }
+
+type AiProviderPreparedMediaModalityAdapter<M extends 'image' | 'video' | 'music' | 'voice'> =
+  AiProviderMediaModalityAdapterBase & {
+    execute?: never
+    prepare: (
+      input: AiProviderMediaExecutionContext<M>,
+    ) => Promise<AiProviderPreparedMediaExecution>
+  }
+
+export type AiProviderMediaModalityAdapter<M extends 'image' | 'video' | 'music' | 'voice'> =
+  M extends 'image'
+    ? AiProviderDirectMediaModalityAdapter<M> | AiProviderPreparedMediaModalityAdapter<M>
+    : AiProviderDirectMediaModalityAdapter<M>
 
 export type AiProviderLanguageModelAdapter = {
   create: (input: AiProviderLanguageModelContext) => LanguageModel

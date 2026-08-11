@@ -102,6 +102,9 @@ Wao 不为它建立 Responses proxy、OpenRouter provider 或第二套模型重�
   重新提交 → 把传输凭据当业务输入 → identity projector 剥除 query/hash（PG-06C）。
 - 同步图片的 POST 断连已被 fence 判为 `outcome_unknown`，但上层 helper 捕获所有异常统一包装成
   通用错误，Task 因此被调度三次 → typed disposition 没有穿过 handler → 分类原样抛出（PG-06）。
+- engine 已把 option normalize 移到 fence 前，Codex adapter 却仍在 `execute` 内下载私有参考图，
+  且 catch-all 把本地 SSRF 拒绝改成 `success:false`，再次误记 `outcome_unknown` → 旧防线未覆盖
+  adapter 内本地预处理 → adapter 用互斥 `prepare/execute` 契约，owner 校验后经 storage SDK 物化（PG-06/17/18）。
 - 结构化输出的 fence 剥离曾与"JSON 内容修复、正文截取"写在一起，删除修复路径时把安全的外层
   envelope 归一也一并删了，完整合法 JSON 被 ``` 包裹后连续解析失败 → 一次删除跨越了两个语义 →
   只剥最外层完整 fence，继续拒绝一切内容修补（PG-09）。

@@ -24,6 +24,10 @@ export interface ObjectMetadata {
   contentLength: number | null
 }
 
+export interface ObjectReadOptions {
+  readonly maxBytes?: number
+}
+
 export interface StorageProvider {
   readonly kind: 's3'
   verifyReady(): Promise<void>
@@ -32,7 +36,7 @@ export interface StorageProvider {
   deleteObject(key: string): Promise<void>
   deleteObjects(keys: string[]): Promise<DeleteObjectsResult>
   getSignedObjectUrl(params: SignedUrlParams): Promise<string>
-  getObjectBuffer(key: string): Promise<Buffer>
+  getObjectBuffer(key: string, options?: ObjectReadOptions): Promise<Buffer>
   getObjectMetadata(key: string): Promise<ObjectMetadata>
   extractStorageKey(input: string | null | undefined): string | null
   toFetchableUrl(inputUrl: string): string

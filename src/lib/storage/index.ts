@@ -5,6 +5,7 @@ import { S3StorageProvider } from '@/lib/storage/providers/s3'
 import type {
   DeleteObjectsResult,
   ObjectMetadata,
+  ObjectReadOptions,
   StorageProvider,
 } from '@/lib/storage/types'
 import { DEFAULT_SIGNED_URL_EXPIRES_SECONDS } from '@/lib/storage/utils'
@@ -69,10 +70,18 @@ export function extractStorageKey(input: string | null | undefined): string | nu
   return getStorageProvider().extractStorageKey(input)
 }
 
-export async function getObjectBuffer(key: string): Promise<Buffer> {
+export async function getObjectBuffer(
+  key: string,
+  options: ObjectReadOptions = {},
+): Promise<Buffer> {
+  if (options.maxBytes !== undefined) {
+    // A deterministic limit breach must not download the same oversized object
+    // three times. The enclosing Task can safely retry this local preflight.
+    return await getStorageProvider().getObjectBuffer(key, options)
+  }
   return await withRetry({
     operation: EXTERNAL_OPERATION.STORAGE_READ,
-    run: async () => await getStorageProvider().getObjectBuffer(key),
+    run: async () => await getStorageProvider().getObjectBuffer(key, options),
   })
 }
 
