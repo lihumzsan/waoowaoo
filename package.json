@@ -32,6 +32,7 @@
     "db:push": "prisma db push --skip-generate",
     "stats:errors": "tsx scripts/task-error-stats.ts",
     "architecture:impact": "node scripts/architecture-impact.mjs",
+    "check:free-product-contract": "node scripts/check-free-product-contract.mjs",
     "architecture:durable-budget": "node scripts/check-durable-kernel-budget.mjs",
     "architecture:failure-governance": "tsx --tsconfig tsconfig.runtime-scripts.json scripts/check-failure-governance.ts",
     "runtime:codex:smoke": "tsx scripts/codex-runtime-smoke.ts",
