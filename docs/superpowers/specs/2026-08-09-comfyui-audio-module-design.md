@@ -1,5 +1,10 @@
 # ComfyUI 音频模块设计
 
+> **状态：已被窄化设计取代，不再作为实施权威。** 环境音部分由
+> [`2026-08-11-moss-soundeffect-integration-design.md`](2026-08-11-moss-soundeffect-integration-design.md)
+> 取代。本文件中的 Stable Audio 纯音乐、默认音乐模型切换和双工作流交付未在当前任务中获批，
+> 只能作为历史背景，实施不得据此扩张范围。
+
 ## 状态与已确认决策
 
 本设计覆盖两个同时交付的音频能力：
