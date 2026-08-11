@@ -8,7 +8,7 @@ import {
   type CodexModelGatewayScope,
 } from './contracts'
 import { resolveCodexModelGatewayUpstream } from './selection'
-import { requireCodexModelGatewayActiveTurn } from './active-turn-guard'
+import { requireCodexModelGatewayModelActiveTurn } from './active-turn-guard'
 import { projectCodexProviderResponse } from './error-projection'
 import { assertLlmSpendableBalance } from '@/lib/billing/llm-balance-gate'
 import { InsufficientBalanceError } from '@/lib/billing/errors'
@@ -140,8 +140,8 @@ function isUnreplayableReasoningItem(item: Record<string, unknown>): boolean {
 
 function readAdditionalTools(item: Record<string, unknown>): readonly unknown[] | null {
   if (item.type !== 'additional_tools') return null
-  if (item.role !== 'developer' || !Array.isArray(item.tools) || item.tools.length === 0) {
-    throw new CodexModelGatewayError('REQUEST_BODY_INVALID', 400)
+  if (item.role !== 'developer' || !Array.isArray(item.tools)) {
+    throw new CodexModelGatewayError('REQUEST_TOOLS_INVALID', 400)
   }
   return item.tools
 }
@@ -164,7 +164,7 @@ export function normalizeCodexProviderRequest(body: Record<string, unknown>): vo
   if (!Array.isArray(body.input)) return
 
   if (body.tools !== undefined && !Array.isArray(body.tools)) {
-    throw new CodexModelGatewayError('REQUEST_BODY_INVALID', 400)
+    throw new CodexModelGatewayError('REQUEST_TOOLS_INVALID', 400)
   }
 
   const instructions = typeof topLevel === 'string' && topLevel.trim()
@@ -196,38 +196,56 @@ export function normalizeCodexProviderRequest(body: Record<string, unknown>): vo
   if (tools.length > 0) body.tools = tools
 }
 
-async function readAndValidateBody(params: {
-  readonly request: Request
-  readonly runtimeModelId: string
-  readonly upstreamModelId: string
-}): Promise<{
-  readonly body: Buffer
-  readonly diagnostics: ProviderRequestDiagnostics
+async function readCodexModelRequest(request: Request): Promise<{
+  readonly parsed: Record<string, unknown>
+  readonly runtimeTurnId: string
 }> {
-  const contentType = params.request.headers.get('content-type')?.toLowerCase()
+  const contentType = request.headers.get('content-type')?.toLowerCase()
     || ''
   if (!contentType.startsWith('application/json')) {
-    throw new CodexModelGatewayError('REQUEST_BODY_INVALID', 400)
+    throw new CodexModelGatewayError('REQUEST_CONTENT_TYPE_INVALID', 415)
   }
   let body: Buffer
   try {
     body = await readRequestBufferWithLimit(
-      params.request,
+      request,
       CODEX_MODEL_REQUEST_MAX_BYTES,
       'Codex Responses request',
     )
-  } catch {
-    throw new CodexModelGatewayError('REQUEST_BODY_INVALID', 400)
+  } catch (error) {
+    throw new CodexModelGatewayError('REQUEST_BODY_READ_FAILED', 400, error)
   }
   let parsed: unknown
   try {
     parsed = JSON.parse(body.toString('utf8')) as unknown
-  } catch {
-    throw new CodexModelGatewayError('REQUEST_BODY_INVALID', 400)
+  } catch (error) {
+    throw new CodexModelGatewayError('REQUEST_BODY_JSON_INVALID', 400, error)
   }
   if (!isRecord(parsed)) {
-    throw new CodexModelGatewayError('REQUEST_BODY_INVALID', 400)
+    throw new CodexModelGatewayError('REQUEST_BODY_JSON_INVALID', 400)
   }
+  const clientMetadata = isRecord(parsed.client_metadata) ? parsed.client_metadata : null
+  const runtimeTurnId = clientMetadata?.turn_id
+  if (
+    typeof runtimeTurnId !== 'string'
+    || runtimeTurnId !== runtimeTurnId.trim()
+    || runtimeTurnId.length === 0
+    || runtimeTurnId.length > 191
+  ) {
+    throw new CodexModelGatewayError('REQUEST_TURN_IDENTITY_INVALID', 400)
+  }
+  return { parsed, runtimeTurnId }
+}
+
+function normalizeAndValidateBody(params: {
+  readonly parsed: Record<string, unknown>
+  readonly runtimeModelId: string
+  readonly upstreamModelId: string
+}): {
+  readonly body: Buffer
+  readonly diagnostics: ProviderRequestDiagnostics
+} {
+  const { parsed } = params
   if (parsed.model !== params.runtimeModelId) {
     throw new CodexModelGatewayError('REQUEST_MODEL_MISMATCH', 403)
   }
@@ -330,7 +348,12 @@ export async function proxyCodexResponsesRequest(params: {
     projectId: params.scope.projectId,
     assistantId: CODEX_MODEL_GATEWAY_ASSISTANT_ID,
   }
-  const activeTurn = await requireCodexModelGatewayActiveTurn(scope, params.scope.nonce)
+  const modelRequest = await readCodexModelRequest(params.request)
+  const activeTurn = await requireCodexModelGatewayModelActiveTurn(
+    scope,
+    params.scope.nonce,
+    modelRequest.runtimeTurnId,
+  )
   try {
     await assertLlmSpendableBalance(scope.userId)
   } catch (error) {
@@ -340,8 +363,8 @@ export async function proxyCodexResponsesRequest(params: {
     throw error
   }
   const upstream = await resolveCodexModelGatewayUpstream(scope)
-  const providerRequest = await readAndValidateBody({
-    request: params.request,
+  const providerRequest = normalizeAndValidateBody({
+    parsed: modelRequest.parsed,
     runtimeModelId: upstream.runtimeModelId,
     upstreamModelId: upstream.modelId,
   })

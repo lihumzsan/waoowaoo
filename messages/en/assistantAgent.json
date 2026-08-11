@@ -222,6 +222,8 @@
     "sendDecision": "Submit custom answer",
     "interactionSubmitting": "Processing...",
     "interactionSubmitErrorFallback": "This response could not be submitted. Refresh the conversation and try again.",
+    "contextCompacting": "Organizing the long conversation context…",
+    "contextCompactionFailed": "Conversation context compaction failed",
     "contextCompacted": "Compressed {count} earlier context records",
     "contextCompactedUnknown": "Earlier context was compressed"
   }

@@ -1,6 +1,7 @@
 import {
   AssistantRuntimeCapabilityTurnError,
   requireAssistantRuntimeCapabilityTurn,
+  requireAssistantRuntimeModelCapabilityTurn,
 } from '@/lib/assistant-runtime/capability-turn'
 import {
   CodexModelGatewayError,
@@ -21,6 +22,24 @@ export async function requireCodexModelGatewayActiveTurn(
     const active = await requireAssistantRuntimeCapabilityTurn({
       scope,
       ownerToken,
+    })
+    return { turnId: active.turnId, attempt: active.attempt }
+  } catch (error) {
+    if (!(error instanceof AssistantRuntimeCapabilityTurnError)) throw error
+    throw new CodexModelGatewayError('ACTIVE_TURN_REQUIRED', 403, error)
+  }
+}
+
+export async function requireCodexModelGatewayModelActiveTurn(
+  scope: CodexModelGatewayScope,
+  ownerToken: string,
+  runtimeTurnId: string,
+): Promise<{ readonly turnId: string; readonly attempt: number }> {
+  try {
+    const active = await requireAssistantRuntimeModelCapabilityTurn({
+      scope,
+      ownerToken,
+      runtimeTurnId,
     })
     return { turnId: active.turnId, attempt: active.attempt }
   } catch (error) {

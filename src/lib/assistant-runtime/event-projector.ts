@@ -243,6 +243,7 @@ export class AssistantRuntimeEventProjector {
   private persistenceFailureReason: string | null = null
   private skillsRefreshFailed = false
   private latestRuntimeFailure: AssistantRuntimeFailure | null = null
+  private activeCompactionItemId: string | null = null
   private persistenceTail: Promise<void> = Promise.resolve()
   private skillsRefreshTail: Promise<void> = Promise.resolve()
   private terminalResolve: ((value: AssistantRuntimeTerminalProjection) => void) | null = null
@@ -388,12 +389,7 @@ export class AssistantRuntimeEventProjector {
         // persistent assistant message view.
         return
       case 'thread/compacted':
-        this.upsertAndPublishDataPart('runtime-compaction', {
-          type: 'data-assistant-context-compacted',
-          id: 'runtime-compaction',
-          data: { replacedItemCount: 0 },
-        })
-        this.queueMessageSnapshot()
+        this.projectCompaction('completed')
         return
       case 'thread/tokenUsage/updated':
         this.consumeTokenUsage(params)
@@ -421,6 +417,9 @@ export class AssistantRuntimeEventProjector {
   private consumeRuntimeError(params: RuntimeJsonObject): void {
     const failure = normalizeAssistantRuntimeFailure(params.error)
     if (failure) this.latestRuntimeFailure = failure
+    if (this.activeCompactionItemId && params.willRetry !== true) {
+      this.projectCompaction('failed')
+    }
     // `willRetry=true` is an app-server-owned retry within the same Turn.
     // It is progress, not a second lifecycle or a Product Turn terminal fact.
   }
@@ -526,6 +525,11 @@ export class AssistantRuntimeEventProjector {
       return
     }
     const itemId = readString(item, 'id')
+    if (itemType === 'contextCompaction' && itemId) {
+      this.activeCompactionItemId = itemId
+      this.projectCompaction('running')
+      return
+    }
     const toolName = toolNameForItem(item)
     if (!itemId || !toolName) return
     const input = toolInputForItem(item)
@@ -576,12 +580,7 @@ export class AssistantRuntimeEventProjector {
       return
     }
     if (itemType === 'contextCompaction') {
-      this.upsertAndPublishDataPart('runtime-compaction', {
-        type: 'data-assistant-context-compacted',
-        id: 'runtime-compaction',
-        data: { replacedItemCount: 0 },
-      })
-      this.queueMessageSnapshot()
+      this.projectCompaction('completed')
       return
     }
     const part = finalToolPart(item)
@@ -635,11 +634,23 @@ export class AssistantRuntimeEventProjector {
       return
     }
     if (status === 'interrupted') {
+      if (this.activeCompactionItemId) this.projectCompaction('failed')
       this.finish({ status: 'interrupted', stopReason: 'runtime_interrupted' })
       return
     }
     const failure = normalizeAssistantRuntimeFailure(turn?.error) ?? this.latestRuntimeFailure
+    if (this.activeCompactionItemId) this.projectCompaction('failed')
     this.finish({ status: 'failed', stopReason: 'runtime_failed', failure })
+  }
+
+  private projectCompaction(status: 'running' | 'completed' | 'failed'): void {
+    this.upsertAndPublishDataPart('runtime-compaction', {
+      type: 'data-assistant-context-compacted',
+      id: 'runtime-compaction',
+      data: { status, replacedItemCount: 0 },
+    })
+    if (status !== 'running') this.activeCompactionItemId = null
+    this.queueMessageSnapshot()
   }
 
   private consumeTokenUsage(params: RuntimeJsonObject): void {

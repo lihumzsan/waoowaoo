@@ -571,9 +571,10 @@ export async function bindAssistantRuntimeTurn(input: {
 
 /**
  * Claims product execution immediately before app-server turn/start. The
- * native Turn id is not known yet, so model/MCP guards continue to require the
- * later binding. Cancellation and clear serialize with this claim on the same
- * Project/Thread/Turn locks.
+ * native Turn id is not known yet. The first authenticated model request may
+ * complete the binding through `bindAssistantRuntimeTurn`; MCP and other
+ * side-effect capabilities still require the bound identity. Cancellation and
+ * clear serialize with this claim on the same Project/Thread/Turn locks.
  */
 export async function claimAssistantRuntimeTurnStart(input: {
   readonly scope: AssistantRuntimeScope

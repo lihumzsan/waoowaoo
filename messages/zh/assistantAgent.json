@@ -222,6 +222,8 @@
     "sendDecision": "提交自定义答案",
     "interactionSubmitting": "处理中...",
     "interactionSubmitErrorFallback": "该响应暂时无法提交，请刷新对话后重试。",
+    "contextCompacting": "正在整理较长的对话上下文…",
+    "contextCompactionFailed": "对话上下文整理失败",
     "contextCompacted": "已压缩较早的 {count} 条上下文记录",
     "contextCompactedUnknown": "已压缩较早的上下文"
   }
