@@ -22,6 +22,7 @@ const frozenResourceSchema = z.object({
   resourceId: z.string().trim().min(1).max(32),
   workspacePath: z.string().trim().min(1).max(512),
   mediaType: z.enum(['image', 'audio', 'video']),
+  audioKind: z.enum(['music', 'sound']).optional(),
   schemaId: z.string().trim().min(1).max(96),
   inputHash: z.string().length(64),
   prompt: z.string().min(1).max(100_000)
@@ -54,6 +55,20 @@ const frozenResourceSchema = z.object({
       context.addIssue({ code: z.ZodIssueCode.custom, path: ['inputs'], message: `Unknown provider input position ${String(position)}.` })
     }
   }
+  if (resource.mediaType === 'audio' && resource.audioKind === undefined) {
+    context.addIssue({ code: 'custom', path: ['audioKind'], message: 'audioKind is required for audio resources.' })
+  }
+  if (resource.mediaType !== 'audio' && resource.audioKind !== undefined) {
+    context.addIssue({ code: 'custom', path: ['audioKind'], message: 'audioKind is forbidden for non-audio resources.' })
+  }
+  if (resource.audioKind === 'sound' && (
+    resource.inputs.length > 0
+    || resource.imageInputPositions.length > 0
+    || resource.audioInputPositions.length > 0
+    || resource.videoInputPositions.length > 0
+  )) {
+    context.addIssue({ code: 'custom', path: ['inputs'], message: 'Sound resources cannot declare provider references.' })
+  }
 })
 
 export const workspaceResourceGenerationTaskPayloadSchema = z.object({
@@ -63,6 +78,7 @@ export const workspaceResourceGenerationTaskPayloadSchema = z.object({
   imageModel: z.string().trim().min(1).optional(),
   videoModel: z.string().trim().min(1).optional(),
   musicModel: z.string().trim().min(1).optional(),
+  soundModel: z.string().trim().min(1).optional(),
   voiceModel: z.string().trim().min(1).optional(),
   previewText: z.string().trim().min(1).max(20_000).optional(),
   language: z.string().trim().min(1).max(32).optional(),
@@ -79,6 +95,7 @@ export const workspaceResourceGenerationTaskPayloadSchema = z.object({
   }).strict().refine((cue) => cue.endMs > cue.startMs, { message: 'scoreCue endMs must exceed startMs' }).optional(),
   count: z.literal(1),
   generationOptions: workspaceResourceGenerationOptionsSchema,
+  negativePrompt: z.string().trim().min(1).max(100_000).optional(),
 }).strict()
 
 const workspaceResourceGenerationTaskEnvelopeSchema = workspaceResourceGenerationTaskPayloadSchema.extend({
@@ -114,6 +131,7 @@ export function parseWorkspaceResourceGenerationTaskPayload(
     imageModel: parsed.imageModel,
     videoModel: parsed.videoModel,
     musicModel: parsed.musicModel,
+    soundModel: parsed.soundModel,
     voiceModel: parsed.voiceModel,
     previewText: parsed.previewText,
     language: parsed.language,
@@ -126,6 +144,7 @@ export function parseWorkspaceResourceGenerationTaskPayload(
     scoreCue: parsed.scoreCue,
     count: parsed.count,
     generationOptions: parsed.generationOptions,
+    negativePrompt: parsed.negativePrompt,
   })
 }
 
@@ -145,6 +164,7 @@ export function parseWorkspaceResourceGenerationRetrySource(
     imageModel: parsed.imageModel,
     videoModel: parsed.videoModel,
     musicModel: parsed.musicModel,
+    soundModel: parsed.soundModel,
     voiceModel: parsed.voiceModel,
     previewText: parsed.previewText,
     language: parsed.language,
@@ -157,6 +177,7 @@ export function parseWorkspaceResourceGenerationRetrySource(
     scoreCue: parsed.scoreCue,
     count: parsed.count,
     generationOptions: parsed.generationOptions,
+    negativePrompt: parsed.negativePrompt,
   })
 }
 

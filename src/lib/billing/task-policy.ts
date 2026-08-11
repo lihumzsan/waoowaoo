@@ -1,6 +1,7 @@
 import {
   calcImage,
   calcMusic,
+  calcSound,
   calcText,
   calcVideo,
   calcVoice,
@@ -175,6 +176,37 @@ function buildMusicTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillin
   }
 }
 
+function buildSoundTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillingInfo | null {
+  const resource = toRecord(payload?.resource)
+  if (readString(resource.audioKind) !== 'sound') return null
+  const model = pickFirstString([payload?.soundModel, payload?.modelId, payload?.model])
+  if (!model) return null
+  const durationSeconds = readNumber(payload?.durationSeconds)
+  if (durationSeconds === null || durationSeconds <= 0) return null
+  const outputFormat = readString(payload?.outputFormat)
+  const negativePrompt = readString(payload?.negativePrompt)
+  const quantity = Math.max(1, Math.floor(toNumber(payload?.count, 1)))
+  const metadata = {
+    durationSeconds,
+    ...(outputFormat ? { outputFormat } : {}),
+    ...(negativePrompt ? { negativePromptChars: negativePrompt.length } : {}),
+  }
+  return {
+    billable: true,
+    source: 'task',
+    taskType,
+    apiType: 'sound',
+    model,
+    quantity,
+    unit: 'call',
+    maxFrozenCost: toChargeableCredits(calcSound(model, quantity, metadata)),
+    pricingVersion: BUILTIN_PRICING_VERSION,
+    action: String(taskType),
+    metadata,
+    status: 'quoted',
+  }
+}
+
 function buildVoiceTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillingInfo | null {
   const model = pickFirstString([payload?.voiceModel, payload?.modelId, payload?.model])
   const previewText = readString(payload?.previewText)
@@ -215,6 +247,14 @@ export function buildDefaultTaskBillingInfo(taskType: TaskType, payload: AnyPayl
       return buildVideoTaskInfo(taskType, payload)
     case 'music':
       return buildMusicTaskInfo(taskType, payload)
+    case 'audio': {
+      const resource = toRecord(payload?.resource)
+      return readString(resource.audioKind) === 'sound'
+        ? buildSoundTaskInfo(taskType, payload)
+        : readString(resource.audioKind) === 'music'
+          ? buildMusicTaskInfo(taskType, payload)
+          : null
+    }
     case 'voice':
       return buildVoiceTaskInfo(taskType, payload)
     case 'text':

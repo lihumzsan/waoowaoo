@@ -13,7 +13,7 @@ export type TaskExecutionHandlerKey =
   | 'workspace_resource_video'
   | 'workspace_resource_video_merge'
 
-export type TaskBillingPolicy = 'none' | 'text' | 'image' | 'video' | 'music' | 'voice'
+export type TaskBillingPolicy = 'none' | 'text' | 'image' | 'video' | 'music' | 'audio' | 'voice'
 export type TaskExecutionProtocol = 'handler_result_checkpoint'
 export type TaskTerminalSuccessHandoff = 'handler_result_checkpoint'
 export type TaskTerminalOutputMaterializer = 'none' | 'workspace_resource'
@@ -95,7 +95,7 @@ export const TASK_DEFINITIONS = {
   ),
   [TASK_TYPE.WORKSPACE_RESOURCE_AUDIO]: definition(
     'workspace_resource_audio',
-    'music',
+    'audio',
     3,
     'image',
     'workspace_resources',

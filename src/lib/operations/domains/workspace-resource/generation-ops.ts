@@ -30,6 +30,7 @@ import {
 } from '@/lib/workspace-resource/generation-contract'
 import {
   audioGenerationBatchSchema,
+  type AudioGenerationKind,
   generationReferenceSchema,
   imageGenerationBatchSchema,
   videoGenerationBatchSchema,
@@ -239,6 +240,7 @@ async function modelForMedia(
   ctx: ProjectAgentOperationContext,
   mediaType: PlannedResource['mediaType'],
   assetKind: 'character' | 'location' | 'prop' | null,
+  audioKind?: AudioGenerationKind,
 ): Promise<string> {
   return await resolveSystemModelKey({
     userId: ctx.userId,
@@ -246,7 +248,7 @@ async function modelForMedia(
     purpose: mediaType === 'video'
       ? 'video'
       : mediaType === 'audio'
-        ? 'music'
+        ? audioKind === 'sound' ? 'sound' : 'music'
         : assetKind === 'character'
           ? 'character-image'
           : assetKind === 'location'
@@ -372,6 +374,7 @@ function throwMediaPreflightError(
 
 function validateReferenceCapabilities(input: {
   readonly mediaType: PlannedResource['mediaType']
+  readonly audioKind?: AudioGenerationKind
   readonly modelKey: string
   readonly references: readonly z.infer<typeof generationReferenceSchema>[]
 }): void {
@@ -466,13 +469,19 @@ function validateReferenceCapabilities(input: {
   }
 
   if (input.mediaType === 'audio') {
-    const maxVideos = resolveBuiltinCapabilitiesByModelKey('music', input.modelKey)?.music?.maxReferenceVideos ?? 0
-    if (videoReferences.length > maxVideos) {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'MUSIC_MODEL_VIDEO_REFERENCE_LIMIT_EXCEEDED',
-        field: 'references',
-        limit: maxVideos,
-      })
+    if (input.audioKind === 'sound') {
+      if (input.references.length > 0) {
+        throw new ApiError('INVALID_PARAMS', { code: 'SOUND_MODEL_REFERENCES_FORBIDDEN', field: 'references' })
+      }
+    } else {
+      const maxVideos = resolveBuiltinCapabilitiesByModelKey('music', input.modelKey)?.music?.maxReferenceVideos ?? 0
+      if (videoReferences.length > maxVideos) {
+        throw new ApiError('INVALID_PARAMS', {
+          code: 'MUSIC_MODEL_VIDEO_REFERENCE_LIMIT_EXCEEDED',
+          field: 'references',
+          limit: maxVideos,
+        })
+      }
     }
   }
 }
@@ -571,7 +580,7 @@ async function compileMediaExecution(input: {
         duration: item.durationSeconds,
         ...(aspectRatio ? { aspectRatio } : {}),
       }
-    } else {
+    } else if (item.audioKind === 'music') {
       const config = await getProjectModelConfig(input.ctx.projectId, input.ctx.userId)
       requested = {
         ...(config.capabilityDefaults[modelKey] ?? {}),
@@ -581,6 +590,15 @@ async function compileMediaExecution(input: {
         ...(item.genre ? { genre: item.genre } : {}),
         ...(item.mood ? { mood: item.mood } : {}),
         ...(item.bpm ? { bpm: item.bpm } : {}),
+      }
+    } else {
+      const config = await getProjectModelConfig(input.ctx.projectId, input.ctx.userId)
+      requested = {
+        ...(config.capabilityDefaults[modelKey] ?? {}),
+        ...(config.capabilityOverrides[modelKey] ?? {}),
+        durationSeconds: item.durationSeconds,
+        ...(item.negativePrompt ? { negativePrompt: item.negativePrompt } : {}),
+        outputFormat: 'mp3',
       }
     }
 
@@ -606,7 +624,7 @@ async function compileMediaExecution(input: {
     const preflight = await preflightMediaGenerationOptions({
       userId: input.ctx.userId,
       modelKey,
-      modality: item.mediaType === 'audio' ? 'music' : item.mediaType,
+      modality: item.mediaType === 'audio' ? item.audioKind : item.mediaType,
       options: preflightOptions,
       prompt,
     })
@@ -622,7 +640,7 @@ async function compileMediaExecution(input: {
     })
     preflightMediaProviderRoutes({
       selection: preflight.selection,
-      modality: item.mediaType === 'audio' ? 'music' : item.mediaType,
+      modality: item.mediaType === 'audio' ? item.audioKind : item.mediaType,
       options: frozenExecutionOptions,
       prompt,
     })
@@ -669,6 +687,7 @@ async function preflightFrozenRetry(input: {
   }))
   validateReferenceCapabilities({
     mediaType: input.mediaType,
+    audioKind: input.source.resource.audioKind,
     modelKey: input.modelKey,
     references,
   })
@@ -701,13 +720,13 @@ async function preflightFrozenRetry(input: {
     const preflight = await preflightMediaGenerationOptions({
       userId: input.ctx.userId,
       modelKey: input.modelKey,
-      modality: input.mediaType === 'audio' ? 'music' : input.mediaType,
+      modality: input.mediaType === 'audio' ? input.source.resource.audioKind! : input.mediaType,
       options,
       prompt: input.prompt,
     })
     preflightMediaProviderRoutes({
       selection: preflight.selection,
-      modality: input.mediaType === 'audio' ? 'music' : input.mediaType,
+      modality: input.mediaType === 'audio' ? input.source.resource.audioKind! : input.mediaType,
       options,
       prompt: input.prompt,
     })
@@ -722,14 +741,28 @@ function taskTypeForMedia(mediaType: PlannedResource['mediaType']): TaskType {
   return TASK_TYPE.WORKSPACE_RESOURCE_VIDEO
 }
 
-function modelPayload(mediaType: PlannedResource['mediaType'], modelKey: string): Record<string, string> {
+function modelPayload(
+  mediaType: PlannedResource['mediaType'],
+  modelKey: string,
+  audioKind?: AudioGenerationKind,
+): Record<string, string> {
   if (mediaType === 'image') return { imageModel: modelKey }
-  if (mediaType === 'audio') return { musicModel: modelKey }
+  if (mediaType === 'audio') return audioKind === 'sound' ? { soundModel: modelKey } : { musicModel: modelKey }
   return { videoModel: modelKey }
+}
+
+function modalityForMedia(
+  mediaType: PlannedResource['mediaType'],
+  audioKind?: AudioGenerationKind,
+): 'image' | 'video' | 'music' | 'sound' {
+  if (mediaType !== 'audio') return mediaType
+  if (!audioKind) throw new Error('WORKSPACE_RESOURCE_AUDIO_KIND_REQUIRED')
+  return audioKind
 }
 
 function generationInputFingerprint(input: {
   readonly mediaType: PlannedResource['mediaType']
+  readonly audioKind?: AudioGenerationKind
   readonly schemaId: string
   readonly modelKey: string
   readonly prompt: string
@@ -820,9 +853,12 @@ async function buildPlannedItem(input: {
       alternativeIndex: input.alternatives ? input.memberIndex : null,
     })
   const assetKind = item.mediaType === 'image' ? item.assetKind : null
-  const modelKey = await modelForMedia(input.ctx, mediaType, assetKind)
-  const publicReferences = item.references ?? []
-  validateReferenceCapabilities({ mediaType, modelKey, references: publicReferences })
+  const audioKind = item.mediaType === 'audio' ? item.audioKind : undefined
+  const modelKey = await modelForMedia(input.ctx, mediaType, assetKind, audioKind)
+  const publicReferences = item.mediaType === 'audio' && item.audioKind === 'sound'
+    ? []
+    : ('references' in item ? item.references ?? [] : [])
+  validateReferenceCapabilities({ mediaType, audioKind, modelKey, references: publicReferences })
   const references = await freezeReferences(input.ctx, publicReferences)
   await validateReferenceMediaCapabilities({
     ctx: input.ctx,
@@ -844,6 +880,7 @@ async function buildPlannedItem(input: {
     : undefined
   const inputHash = generationInputFingerprint({
     mediaType,
+    ...(audioKind ? { audioKind } : {}),
     schemaId,
     modelKey,
     prompt: compiled.prompt,
@@ -855,6 +892,7 @@ async function buildPlannedItem(input: {
     resourceId,
     workspacePath,
     mediaType,
+    ...(audioKind ? { audioKind } : {}),
     schemaId,
     inputHash,
     prompt: compiled.prompt,
@@ -875,10 +913,13 @@ async function buildPlannedItem(input: {
     }]),
     protocol: 'workspace_resource_generation_v1',
     resource: resourcePayload,
-    ...modelPayload(mediaType, modelKey),
+    ...modelPayload(mediaType, modelKey, audioKind),
     count: 1,
     generationOptions: compiled.generationOptions,
     ...(durationSeconds ? { durationSeconds } : {}),
+    ...(item.mediaType === 'audio' && item.audioKind === 'sound' && item.negativePrompt
+      ? { negativePrompt: item.negativePrompt }
+      : {}),
     ...(typeof compiled.generationOptions.vocalMode === 'string'
       ? { vocalMode: compiled.generationOptions.vocalMode as 'instrumental' | 'vocal' }
       : {}),
@@ -913,7 +954,7 @@ async function buildPlannedItem(input: {
       billingInfo: requirePlannedTaskBillingInfo({
         taskType,
         payload,
-        allowedApiTypes: [mediaType === 'audio' ? 'music' : mediaType],
+          allowedApiTypes: [modalityForMedia(mediaType, audioKind)],
       }),
     }),
     resource: {
@@ -1158,6 +1199,7 @@ async function loadFailedTasks(
       lifecycleProjection: buildWorkspaceResourceLifecycleProjection([{
         resourceId: resource.id,
         mediaType,
+        ...(source.resource.audioKind ? { audioKind: source.resource.audioKind } : {}),
         schemaId: resource.schemaId,
         name: workspaceResourceDisplayName({
           workspacePath: resource.workspacePath,
@@ -1188,10 +1230,11 @@ async function loadFailedTasks(
         toolCallId: ctx.toolCallId?.trim() || null,
         sourceTurnId: ctx.context.turnId?.trim() || null,
       },
-      ...modelPayload(mediaType, modelKey),
+      ...modelPayload(mediaType, modelKey, source.resource.audioKind),
       count: 1,
       generationOptions,
       ...(source.durationSeconds ? { durationSeconds: source.durationSeconds } : {}),
+      ...(source.negativePrompt ? { negativePrompt: source.negativePrompt } : {}),
       ...(source.vocalMode ? { vocalMode: source.vocalMode } : {}),
       ...(source.genre ? { genre: source.genre } : {}),
       ...(source.mood ? { mood: source.mood } : {}),
@@ -1210,7 +1253,7 @@ async function loadFailedTasks(
         billingInfo: requirePlannedTaskBillingInfo({
           taskType,
           payload,
-          allowedApiTypes: [mediaType === 'audio' ? 'music' : mediaType],
+          allowedApiTypes: [modalityForMedia(mediaType, source.resource.audioKind)],
         }),
         locale: resolveOperationLocale(ctx.context),
         dedupeKey: `rerun:${resource.id}:${resource.task.id}`,

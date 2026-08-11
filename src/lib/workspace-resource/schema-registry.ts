@@ -30,6 +30,7 @@ export const WORKSPACE_RESOURCE_SCHEMA = {
   VIDEO_SEGMENT: 'project.video_segment',
   COMPOSITE_VIDEO: 'project.composite_video',
   BGM_AUDIO: 'project.bgm_audio',
+  SOUND_EFFECT_AUDIO: 'project.sound_effect_audio',
   VOICE_REFERENCE: 'project.voice_reference',
   RENDERED_VIDEO: 'project.rendered_video',
   WEB_REFERENCE_IMAGE: 'project.web_reference_image',
@@ -128,6 +129,7 @@ export const WORKSPACE_RESOURCE_SCHEMA_IDS_BY_MEDIA = {
   ],
   audio: [
     WORKSPACE_RESOURCE_SCHEMA.BGM_AUDIO,
+    WORKSPACE_RESOURCE_SCHEMA.SOUND_EFFECT_AUDIO,
     WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
     WORKSPACE_RESOURCE_SCHEMA.UPLOAD_AUDIO,
   ],
