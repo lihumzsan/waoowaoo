@@ -329,7 +329,7 @@ export async function createTaskDurabilityFixture(): Promise<TaskDurabilityFixtu
       sourceId: `task-durability-source-${suffix}`,
       payloadHash: 'a'.repeat(64),
       requestId: `task-durability-origin-${suffix}`,
-      status: 'running',
+      status: 'waiting_approval',
       attempt: 1,
       contextJson: {
         locale: 'en',

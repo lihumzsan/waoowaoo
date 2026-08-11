@@ -333,6 +333,7 @@ describe('provider contract - Toonflow video', () => {
         status: 200,
         body: {
           code: 200,
+          message: '成功',
           data: {
             id: 'cgt-task-rights-789',
             status: 'failed',
@@ -351,7 +352,11 @@ describe('provider contract - Toonflow video', () => {
     expect(result).toMatchObject({
       status: 'failed',
       failure: {
-        native: { message: providerFailReason },
+        native: {
+          name: 'ProviderTerminalResult',
+          message: providerFailReason,
+          cause: { message: '成功' },
+        },
         interpretation: { code: 'CONTENT_RIGHTS_RESTRICTION' },
         recovery: { taskReplay: 'forbidden' },
       },

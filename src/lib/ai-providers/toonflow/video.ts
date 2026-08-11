@@ -465,7 +465,12 @@ export async function queryToonflowVideoStatus(input: {
         provider: 'toonflow',
         code: errorCode,
         message: providerFailReason || errorCode,
-        cause: envelope,
+        cause: {
+          name: 'ProviderTerminalResult',
+          message: providerFailReason || errorCode,
+          code: errorCode,
+          cause: envelope,
+        },
       }),
     }
   }

@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { ProjectAgentFollowUpBatchBinding } from '@/lib/operations/types'
 import { OPERATION_EXECUTION_MAX_TASKS } from '@/lib/temporal/operation-execution/contracts'
+import { lockAgentTurnEffectFence } from './effect-fence'
 
 const FOLLOW_UP_BATCH_MAX_MEMBERS = OPERATION_EXECUTION_MAX_TASKS
 
@@ -103,66 +104,16 @@ async function createFollowUpBatchInTransaction(params: {
   }
   const turnIdentity = await params.tx.projectAgentTurn.findUnique({
     where: { id: turnId },
-    select: { projectId: true, threadId: true },
+    select: { projectId: true, userId: true },
   })
   if (!turnIdentity) {
     throw new Error(`FOLLOW_UP_BATCH_TURN_NOT_FOUND:${turnId}`)
   }
-  const projects = await params.tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-    SELECT id
-    FROM projects
-    WHERE id = ${turnIdentity.projectId}
-    FOR UPDATE
-  `)
-  if (projects.length !== 1) {
-    throw new Error(
-      `FOLLOW_UP_BATCH_PROJECT_NOT_FOUND:${turnIdentity.projectId}`,
-    )
-  }
-  const threads = await params.tx.$queryRaw<
-    Array<{
-      id: string
-      projectId: string
-      userId: string
-      assistantId: string
-    }>
-  >(Prisma.sql`
-    SELECT id, projectId, userId, assistantId
-    FROM project_assistant_threads
-    WHERE id = ${turnIdentity.threadId}
-    FOR UPDATE
-  `)
-  const thread = threads[0] ?? null
-  const turns = await params.tx.$queryRaw<
-    Array<{
-      id: string
-      threadId: string
-      projectId: string
-      userId: string
-      status: string
-      contextJson: Prisma.JsonValue
-    }>
-  >(Prisma.sql`
-    SELECT id, threadId, projectId, userId, status, contextJson
-    FROM project_agent_turns
-    WHERE id = ${turnId}
-    FOR UPDATE
-  `)
-  const turn = turns[0] ?? null
-  if (!turn || turn.status !== 'running') {
-    throw new Error(
-      `FOLLOW_UP_BATCH_TURN_NOT_RUNNING:${turnId}:${turn?.status ?? 'missing'}`,
-    )
-  }
-  if (
-    !thread ||
-    thread.id !== turn.threadId ||
-    thread.projectId !== turn.projectId ||
-    thread.userId !== turn.userId ||
-    thread.assistantId !== 'workspace-command'
-  ) {
-    throw new Error(`FOLLOW_UP_BATCH_THREAD_SCOPE_DIVERGED:${turnId}`)
-  }
+  const turn = await lockAgentTurnEffectFence(params.tx, {
+    turnId,
+    projectId: turnIdentity.projectId,
+    userId: turnIdentity.userId,
+  })
   const tasks = await params.tx.$queryRaw<
     Array<{
       id: string

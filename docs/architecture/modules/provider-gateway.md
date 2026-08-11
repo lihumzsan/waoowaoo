@@ -112,6 +112,9 @@ Provider 差异只停留在 `ai-providers` 的实现、`ai-exec` 的统一执行
   `PROVIDER_SUBMISSION_REJECTED`，既谎报发生阶段又遮住版权限制等真实永久失败 → adapter 直接消费
   结构化 `failReason`，映射稳定 typed code；未知的已接受失败保持 `GENERATION_FAILED`，绝不伪装成
   提交拒绝或自动重提（PG-04/06/19）。
+- Toonflow 曾把整个轮询信封直接当作终态失败 cause；顶层“成功”只表示查询请求成功，却覆盖了 Task
+  的原生失败消息 → 查询信封与业务终态混成一个事实 → adapter 以 `failReason` 构造终态原生证据，
+  查询信封只作为嵌套 cause 保留（PG-04/19）。
 - Provider POST 的 5xx/429 曾被 fence 按 HTTP 状态猜成“明确未受理”，但这些状态不能证明供应商
   没创建任务，存在重复生成和扣费风险 → adapter 明确产出 disposition，普通异常一律
   `outcome_unknown`，fence 不再推断（PG-06）。

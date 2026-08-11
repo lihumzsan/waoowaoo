@@ -91,6 +91,9 @@ View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 pl
   可在选路与 handoff 之间改变事实 → 读与写不在同一临界区 → 三步合并为同一 transition（ARL-02）。
 - 取消首版只写取消标记，queued Turn 仍会被绑定，等待审批的晚到 accept 仍可签发 Grant 或写资源 →
   取消不是副作用 fence → 所有 effect 事务共享同一 Turn fence（ARL-13）。
+- 计费审批已让共享副作用 fence 接受 `waiting_approval`，FollowUpBatch 却仍保留只接受 `running` 的
+  旧裁决；Runtime 先恢复、projector 后落状态时，已获批的 Task 事务被整笔回滚 → 新生命周期状态漏接
+  共享裁判 → 批次绑定删除私有状态判断并复用同一 Turn effect fence（ARL-13）。
 - clear 首版只用于准入，未进入模型/MCP/effect guard，已 claim 的清空仍可能继续产生模型调用、
   付费任务或目录写入 → fence 覆盖面不完整 → clear 覆盖全部能力边界并按同一锁序检查（ARL-14）。
 - 工具 `item/started` 曾只存在于易失 SSE，只有完成才进入产品 View；进程退出或用户停止发生在工具
