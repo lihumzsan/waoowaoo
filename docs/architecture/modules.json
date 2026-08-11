@@ -41,7 +41,7 @@
     {
       "id": "free-product",
       "document": "docs/architecture/modules/free-product.md",
-      "title": "计费与审批",
+      "title": "Free product boundary",
       "sourcePaths": [
         "src/lib/operations",
         "src/lib/task",
