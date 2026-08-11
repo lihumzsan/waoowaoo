@@ -3,7 +3,7 @@ import type { LLMStreamKind } from '@/lib/llm-observe/types'
 import type { ChatMessageContent } from '@/lib/ai-registry/message-content'
 import { isReasoningEffort, type ReasoningEffort } from '@/lib/ai-registry/reasoning-effort'
 
-export type AiModality = 'llm' | 'vision' | 'image' | 'video' | 'music' | 'voice'
+export type AiModality = 'llm' | 'vision' | 'image' | 'video' | 'music' | 'sound' | 'voice'
 export type AiExecutionMode = 'sync' | 'async' | 'stream' | 'batch'
 export type AiVariantSubKind = 'official' | 'user-template'
 export type AiLlmProtocol =
@@ -206,7 +206,7 @@ export type AiLlmExecutionResult = {
   providerMetadata?: AiUnknownObject
 }
 
-export type UnifiedModelType = 'llm' | 'image' | 'video' | 'music' | 'voice'
+export type UnifiedModelType = 'llm' | 'image' | 'video' | 'music' | 'sound' | 'voice'
 export type CapabilityValue = string | number | boolean
 export type CapabilityOptionValue = CapabilityValue
 export type CapabilitySelections = Record<string, Record<string, CapabilityValue>>
@@ -301,6 +301,16 @@ export interface MusicCapabilities {
   fieldI18n?: CapabilityFieldI18nMap
 }
 
+export interface SoundCapabilities {
+  durationSecondsRange?: {
+    min: number
+    max: number
+  }
+  outputFormatOptions?: string[]
+  promptMaxChars?: number
+  fieldI18n?: CapabilityFieldI18nMap
+}
+
 export interface VoiceCapabilities {
   languageOptions?: string[]
   fieldI18n?: CapabilityFieldI18nMap
@@ -311,6 +321,7 @@ export interface ModelCapabilities {
   image?: ImageCapabilities
   video?: VideoCapabilities
   music?: MusicCapabilities
+  sound?: SoundCapabilities
   voice?: VoiceCapabilities
 }
 
@@ -319,6 +330,7 @@ const CAPABILITY_NAMESPACES = new Set<keyof ModelCapabilities>([
   'image',
   'video',
   'music',
+  'sound',
   'voice',
 ])
 
@@ -363,6 +375,13 @@ const MUSIC_ALLOWED_FIELDS = new Set<keyof MusicCapabilities>([
   'outputFormatOptions',
   'bpmOptions',
   'maxReferenceVideos',
+  'promptMaxChars',
+  'fieldI18n',
+])
+
+const SOUND_ALLOWED_FIELDS = new Set<keyof SoundCapabilities>([
+  'durationSecondsRange',
+  'outputFormatOptions',
   'promptMaxChars',
   'fieldI18n',
 ])
@@ -874,6 +893,52 @@ function validateMusicCapabilities(issues: CapabilityValidationIssue[], raw: unk
   })
 }
 
+function validateSoundCapabilities(issues: CapabilityValidationIssue[], raw: unknown) {
+  if (!isRecord(raw)) return
+
+  const durationSecondsRange = raw.durationSecondsRange
+  if (durationSecondsRange !== undefined) {
+    const validRange = isRecord(durationSecondsRange)
+      && typeof durationSecondsRange.min === 'number'
+      && Number.isFinite(durationSecondsRange.min)
+      && durationSecondsRange.min > 0
+      && typeof durationSecondsRange.max === 'number'
+      && Number.isFinite(durationSecondsRange.max)
+      && durationSecondsRange.max >= durationSecondsRange.min
+    if (!validRange) {
+      issues.push({
+        code: 'CAPABILITY_FIELD_INVALID',
+        field: 'capabilities.sound.durationSecondsRange',
+        message: 'durationSecondsRange must contain finite positive min/max values with max >= min',
+      })
+    }
+  }
+
+  const outputFormatOptions = raw.outputFormatOptions
+  if (outputFormatOptions !== undefined && !isStringArray(outputFormatOptions)) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.sound.outputFormatOptions',
+      message: 'outputFormatOptions must be a non-empty string array',
+    })
+  }
+
+  if (
+    raw.promptMaxChars !== undefined
+    && (!Number.isInteger(raw.promptMaxChars) || (raw.promptMaxChars as number) <= 0)
+  ) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.sound.promptMaxChars',
+      message: 'promptMaxChars must be a positive integer',
+    })
+  }
+
+  validateFieldI18nMap(issues, 'sound', raw.fieldI18n, {
+    outputFormat: isStringArray(outputFormatOptions) ? outputFormatOptions : undefined,
+  })
+}
+
 function validateVoiceCapabilities(issues: CapabilityValidationIssue[], raw: unknown) {
   if (!isRecord(raw)) return
 
@@ -952,18 +1017,21 @@ export function validateModelCapabilities(
   validateNamespaceShape(issues, 'image', (capabilities as ModelCapabilities).image)
   validateNamespaceShape(issues, 'video', (capabilities as ModelCapabilities).video)
   validateNamespaceShape(issues, 'music', (capabilities as ModelCapabilities).music)
+  validateNamespaceShape(issues, 'sound', (capabilities as ModelCapabilities).sound)
   validateNamespaceShape(issues, 'voice', (capabilities as ModelCapabilities).voice)
 
   validateNamespaceAllowedFields(issues, 'llm', (capabilities as ModelCapabilities).llm, LLM_ALLOWED_FIELDS)
   validateNamespaceAllowedFields(issues, 'image', (capabilities as ModelCapabilities).image, IMAGE_ALLOWED_FIELDS)
   validateNamespaceAllowedFields(issues, 'video', (capabilities as ModelCapabilities).video, VIDEO_ALLOWED_FIELDS)
   validateNamespaceAllowedFields(issues, 'music', (capabilities as ModelCapabilities).music, MUSIC_ALLOWED_FIELDS)
+  validateNamespaceAllowedFields(issues, 'sound', (capabilities as ModelCapabilities).sound, SOUND_ALLOWED_FIELDS)
   validateNamespaceAllowedFields(issues, 'voice', (capabilities as ModelCapabilities).voice, VOICE_ALLOWED_FIELDS)
 
   validateLLMCapabilities(issues, (capabilities as ModelCapabilities).llm)
   validateImageCapabilities(issues, (capabilities as ModelCapabilities).image)
   validateVideoCapabilities(issues, (capabilities as ModelCapabilities).video)
   validateMusicCapabilities(issues, (capabilities as ModelCapabilities).music)
+  validateSoundCapabilities(issues, (capabilities as ModelCapabilities).sound)
   validateVoiceCapabilities(issues, (capabilities as ModelCapabilities).voice)
 
   return issues

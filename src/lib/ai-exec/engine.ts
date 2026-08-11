@@ -49,7 +49,7 @@ import {
   wrapMediaProviderExecution,
 } from '@/lib/ai-exec/media-observe'
 
-export type AiMediaExecutionModality = Extract<AiModality, 'image' | 'video' | 'music' | 'voice'>
+export type AiMediaExecutionModality = Extract<AiModality, 'image' | 'video' | 'music' | 'sound' | 'voice'>
 
 export type AiImageExecutionOptions = {
   referenceImages?: string[]
@@ -93,6 +93,12 @@ export type AiMusicExecutionOptions = {
   /** Score only this window of the reference video (music_direction cue). */
   scoreWindowStartMs?: number
   scoreWindowEndMs?: number
+}
+
+export type AiSoundExecutionOptions = {
+  negativePrompt?: string
+  durationSeconds?: number
+  outputFormat?: 'mp3'
 }
 
 export type AiVoiceExecutionOptions = {
@@ -145,6 +151,13 @@ export type AiMediaExecutionInput =
     modelKey: string
     prompt: string
     options?: AiMusicExecutionOptions
+  }
+  | {
+    modality: 'sound'
+    userId: string
+    modelKey: string
+    prompt: string
+    options?: AiSoundExecutionOptions
   }
   | {
     modality: 'voice'
@@ -241,6 +254,29 @@ export async function executeMediaGeneration(
         }),
       }
     }
+    case 'sound': {
+      const modalityAdapter = adapter[input.modality]
+      if (!modalityAdapter) {
+        throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${routeSelection.provider}:${input.modality}`)
+      }
+      const options = normalizeMediaOptionsForSelection({
+        selection: routeSelection,
+        modality: input.modality,
+        options: input.options,
+        prompt: input.prompt,
+      }) as AiSoundExecutionOptions | undefined
+      return {
+        provider: routeSelection.provider,
+        modelKey: routeSelection.modelKey,
+        request: createMediaProviderRequestIdentity({ ...input, modelKey: routeSelection.modelKey }),
+        execute: async () => await modalityAdapter.execute({
+          userId: input.userId,
+          selection: routeSelection,
+          prompt: input.prompt,
+          options,
+        }),
+      }
+    }
     case 'voice': {
       const modalityAdapter = adapter[input.modality]
       if (!modalityAdapter) {
@@ -308,7 +344,7 @@ export async function executeMediaGeneration(
     })
   }
 
-  if ((input.modality !== 'music' && input.modality !== 'voice') || !result.async) return result
+  if ((input.modality !== 'music' && input.modality !== 'sound' && input.modality !== 'voice') || !result.async) return result
   const externalId = result.externalId?.trim()
   if (!externalId) throw new Error(`ASYNC_${input.modality.toUpperCase()}_EXTERNAL_ID_MISSING`)
   try {
@@ -436,6 +472,23 @@ export async function generateMusic(
 ): Promise<GenerateResult> {
   return await executeMediaGeneration({
     modality: 'music',
+    userId,
+    modelKey,
+    prompt,
+    options,
+  }, invocation, wait)
+}
+
+export async function generateSound(
+  userId: string,
+  modelKey: string,
+  prompt: string,
+  options?: AiSoundExecutionOptions,
+  invocation?: TaskProviderInvocation,
+  wait?: AsyncProviderWaitCallbacks,
+): Promise<GenerateResult> {
+  return await executeMediaGeneration({
+    modality: 'sound',
     userId,
     modelKey,
     prompt,

@@ -8,7 +8,7 @@ export interface BillingReceiptView {
   billingMode: BillingMode | null
   billable: boolean
   taskType?: TaskType
-  apiType?: 'image' | 'video' | 'music' | 'voice' | 'text'
+  apiType?: 'image' | 'video' | 'music' | 'sound' | 'voice' | 'text'
   model?: string
   quantity?: number
   unit?: 'token' | 'image' | 'video' | 'second' | 'call' | 'character'

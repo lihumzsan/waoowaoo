@@ -65,6 +65,13 @@ export function summarizeMediaRequestInput(input: AiMediaExecutionInput): Record
       durationSeconds: input.options?.durationSeconds ?? null,
       hasReferenceVideo: Boolean(input.options?.referenceVideoUrl),
     }
+  case 'sound':
+    return {
+      promptChars: input.prompt.length,
+      negativePromptChars: input.options?.negativePrompt?.length ?? 0,
+      durationSeconds: input.options?.durationSeconds ?? null,
+      outputFormat: input.options?.outputFormat ?? null,
+    }
   case 'voice':
     return {
       descriptionChars: input.description.length,

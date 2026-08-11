@@ -45,6 +45,7 @@ interface UserModelsPayload {
   image: UserModelOption[]
   video: UserModelOption[]
   music: UserModelOption[]
+  sound: UserModelOption[]
 }
 
 type SelectableUserModelType = Exclude<UnifiedModelType, 'voice'>
@@ -55,6 +56,7 @@ function isSelectableUserModelType(type: unknown): type is SelectableUserModelTy
     || type === 'image'
     || type === 'video'
     || type === 'music'
+    || type === 'sound'
   )
 }
 
@@ -213,6 +215,7 @@ export function createUserModelsOperations(): ProjectAgentOperationRegistryDraft
           image: [],
           video: [],
           music: [],
+          sound: [],
         }
 
         for (const model of modelSource.models) {
@@ -259,6 +262,7 @@ export function createUserModelsOperations(): ProjectAgentOperationRegistryDraft
           image: dedupeByModelKey(grouped.image),
           video: dedupeByModelKey(grouped.video),
           music: dedupeByModelKey(grouped.music),
+          sound: dedupeByModelKey(grouped.sound),
         } satisfies UserModelsPayload
       },
     },

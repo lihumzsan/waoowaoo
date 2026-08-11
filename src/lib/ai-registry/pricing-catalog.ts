@@ -28,6 +28,7 @@ export type PricingApiType =
   | 'image'
   | 'video'
   | 'music'
+  | 'sound'
   | 'voice'
 
 export interface BuiltinPricingTier {
@@ -77,6 +78,7 @@ function isPricingApiType(value: unknown): value is PricingApiType {
     || value === 'image'
     || value === 'video'
     || value === 'music'
+    || value === 'sound'
     || value === 'voice'
 }
 
@@ -194,7 +196,7 @@ function normalizePricingEntry(raw: unknown, filePath: string, index: number): B
 
   const apiTypeRaw = Reflect.get(raw, 'apiType')
   if (!isPricingApiType(apiTypeRaw)) {
-    throw new Error(`PRICING_CATALOG_INVALID: ${filePath}#${index}.apiType must be one of text/image/video/music/voice`)
+    throw new Error(`PRICING_CATALOG_INVALID: ${filePath}#${index}.apiType must be one of text/image/video/music/sound/voice`)
   }
 
   const provider = readTrimmedString(Reflect.get(raw, 'provider'))

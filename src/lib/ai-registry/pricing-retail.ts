@@ -36,6 +36,7 @@ export const RETAIL_MARKUP_BY_API_TYPE: Record<PricingApiType, number> = {
   image: 2.0,
   video: 1.8,
   music: 1.8,
+  sound: 1.8,
   voice: 1.8,
 }
 
@@ -51,6 +52,7 @@ const INTEGER_RETAIL_RATE_API_TYPES: ReadonlySet<PricingApiType> = new Set<Prici
   'image',
   'video',
   'music',
+  'sound',
 ])
 
 /**

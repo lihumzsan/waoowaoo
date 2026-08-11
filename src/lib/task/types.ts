@@ -75,7 +75,7 @@ export type TaskBillingInfo =
     billable: true
     source: 'task'
     taskType: TaskType
-    apiType: 'text' | 'image' | 'video' | 'music' | 'voice'
+    apiType: 'text' | 'image' | 'video' | 'music' | 'sound' | 'voice'
     model: string
     quantity: number
     unit: 'token' | 'image' | 'video' | 'second' | 'call' | 'character'

@@ -7,6 +7,7 @@ import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import {
   calcImage,
   calcMusic,
+  calcSound,
   calcText,
   calcTextWithCache,
   calcVideo,
@@ -177,6 +178,8 @@ function resolveCost(input: CostInput) {
       ))
     case 'music':
       return asMoney(calcMusic(input.model, input.quantity, input.metadata))
+    case 'sound':
+      return asMoney(calcSound(input.model, input.quantity, input.metadata))
     case 'voice':
       return asMoney(calcVoice(input.model, input.quantity))
     default:
@@ -490,7 +493,7 @@ function resolveTaskActual(
       }
     }
 
-    if (info.apiType === 'music') {
+    if (info.apiType === 'music' || info.apiType === 'sound') {
       return {
         actualCost: resolveCost({
           apiType: info.apiType,

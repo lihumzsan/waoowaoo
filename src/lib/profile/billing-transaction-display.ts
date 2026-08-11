@@ -8,6 +8,7 @@ export type ProfileBillingServiceTranslationKey =
   | 'apiTypes.image'
   | 'apiTypes.video'
   | 'apiTypes.music'
+  | 'apiTypes.sound'
   | 'apiTypes.voice'
   | 'apiTypes.other'
 
@@ -80,6 +81,8 @@ export function getProfileBillingServiceTranslationKey(
       return 'apiTypes.video'
     case 'music':
       return 'apiTypes.music'
+    case 'sound':
+      return 'apiTypes.sound'
     case 'voice':
       return 'apiTypes.voice'
   }
