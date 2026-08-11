@@ -123,6 +123,27 @@ export function readComfyUiOutput(value: unknown): ComfyUiOutput | null {
     : null
 }
 
+export function readComfyUiDeclaredNodeAudioOutput(
+  value: unknown,
+  expectedNodeId: string,
+): ComfyUiOutput | null {
+  const record = asComfyUiRecord(value)
+  if (!record) return null
+  const candidate = asComfyUiRecord(record[expectedNodeId])
+    ?? (readComfyUiString(record.nodeId) === expectedNodeId ? record : null)
+  if (!candidate) return null
+  const audio = candidate.audio
+  if (!Array.isArray(audio) || audio.length !== 1) return null
+  const file = asComfyUiRecord(audio[0])
+  const filename = readComfyUiString(file?.filename)
+  if (!filename || !/\.mp3$/iu.test(filename)) return null
+  return {
+    filename,
+    subfolder: readComfyUiString(file?.subfolder),
+    type: readComfyUiString(file?.type) || 'output',
+  }
+}
+
 export async function readComfyUiOutputData(input: {
   readonly baseUrl: string
   readonly output: ComfyUiOutput

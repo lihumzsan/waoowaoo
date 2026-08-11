@@ -78,7 +78,7 @@ describe('ComfyUI MOSS SoundEffect v2 contract', () => {
       prompt: soundInput.prompt,
       negative_prompt: soundInput.options?.negativePrompt,
       seconds: 5,
-      append_duration_suffix: false,
+      append_duration_suffix: true,
       preview: false,
     })
     expect(result.graph['30']?.inputs).not.toHaveProperty('references')
@@ -100,6 +100,21 @@ describe('ComfyUI MOSS SoundEffect v2 contract', () => {
       externalId: `COMFYUI:SOUND:${PROMPT_ID}`,
     })
     expect(server!.getRequests('POST', '/prompt')).toHaveLength(1)
+  })
+
+  it.each([401, 403, 404, 422])('classifies prompt HTTP %s as a typed rejection', async (status) => {
+    vi.stubEnv('COMFYUI_BASE_URL', server!.baseUrl)
+    defineValidPreflight()
+    server!.defineScenario({
+      method: 'POST',
+      path: '/prompt',
+      mode: 'success',
+      submitResponse: { status, body: { error: `reject-${String(status)}` } },
+    })
+    await expect(executeComfyUiMossSoundGeneration(soundInput)).rejects.toMatchObject({
+      name: 'ProviderSubmissionError',
+      code: 'PROVIDER_SUBMISSION_REJECTED',
+    })
   })
 
   it('reads an MP3 output through the shared job and /view protocol', async () => {
@@ -124,5 +139,21 @@ describe('ComfyUI MOSS SoundEffect v2 contract', () => {
     expect(result.status).toBe('completed')
     if (result.status !== 'completed') throw new Error('MOSS_RESULT_NOT_COMPLETED')
     expect(result.audioUrl).toMatch(/^data:audio\/mpeg;base64,/u)
+  })
+
+  it('rejects output from another node or multiple node-28 audio files', async () => {
+    vi.stubEnv('COMFYUI_BASE_URL', server!.baseUrl)
+    for (const outputs of [
+      { '30': { audio: [{ filename: 'wrong.mp3', subfolder: '', type: 'output' }] } },
+      { '28': { audio: [{ filename: 'one.mp3', subfolder: '', type: 'output' }, { filename: 'two.mp3', subfolder: '', type: 'output' }] } },
+    ]) {
+      server!.defineScenario({
+        method: 'GET',
+        path: `/api/jobs/${PROMPT_ID}`,
+        mode: 'success',
+        submitResponse: { status: 200, body: { status: 'completed', outputs } },
+      })
+      await expect(pollComfyUiMossSound(PROMPT_ID)).rejects.toThrow('COMFYUI_MOSS_AUDIO_OUTPUT_MISSING')
+    }
   })
 })

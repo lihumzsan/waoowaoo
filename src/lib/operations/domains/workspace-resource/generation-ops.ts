@@ -1177,9 +1177,11 @@ async function loadFailedTasks(
         resourceId: resource.id,
         workspacePath: resource.workspacePath,
         mediaType,
+        ...(source.resource.audioKind ? { audioKind: source.resource.audioKind } : {}),
         schemaId: resource.schemaId,
         inputHash: generationInputFingerprint({
           mediaType,
+          ...(source.resource.audioKind ? { audioKind: source.resource.audioKind } : {}),
           schemaId: resource.schemaId,
           modelKey,
           prompt,

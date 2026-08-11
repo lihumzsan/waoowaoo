@@ -9,7 +9,7 @@ import {
   COMFYUI_ACCEPTED_JOB_STATUSES,
   ComfyUiHttpError,
   readComfyUiHttpError,
-  readComfyUiOutput,
+  readComfyUiDeclaredNodeAudioOutput,
   readComfyUiOutputData,
   readComfyUiRequiredOptions,
   readComfyUiString,
@@ -50,8 +50,7 @@ export function buildMossSoundEffectPromptGraph(input: {
   readonly durationSeconds: number
   readonly seed: number
 }): { readonly profile: MossSoundEffectProfile; readonly graph: Record<string, { class_type: string; inputs: Record<string, unknown> }> } {
-  const prompt = input.prompt.trim()
-  if (!prompt) throw new Error('COMFYUI_MOSS_PROMPT_REQUIRED')
+  if (!input.prompt.trim()) throw new Error('COMFYUI_MOSS_PROMPT_REQUIRED')
   if (!Number.isInteger(input.durationSeconds) || input.durationSeconds < 1 || input.durationSeconds > 30) {
     throw new Error(`COMFYUI_MOSS_DURATION_INVALID:${String(input.durationSeconds)}`)
   }
@@ -59,11 +58,11 @@ export function buildMossSoundEffectPromptGraph(input: {
   const graph = copyGraph(MOSS_SOUNDEFFECT_V2_PROFILE)
   const generator = graph[MOSS_SOUNDEFFECT_V2_PROFILE.generatorNodeId]
   if (!generator) throw new Error('COMFYUI_MOSS_GENERATOR_NODE_MISSING')
-  generator.inputs.prompt = prompt
-  generator.inputs.negative_prompt = input.negativePrompt?.trim() ?? ''
+  generator.inputs.prompt = input.prompt
+  generator.inputs.negative_prompt = input.negativePrompt ?? ''
   generator.inputs.seconds = input.durationSeconds
   generator.inputs.seed = input.seed
-  generator.inputs.append_duration_suffix = false
+  generator.inputs.append_duration_suffix = true
   generator.inputs.preview = false
   return { profile: MOSS_SOUNDEFFECT_V2_PROFILE, graph }
 }
@@ -137,7 +136,7 @@ export async function executeComfyUiMossSoundGeneration(input: AiProviderSoundEx
     if (readComfyUiString(asComfyUiRecord(raw)?.prompt_id) !== promptId) throw new Error('COMFYUI_PROMPT_ID_MISMATCH')
     return { success: true, async: true, requestId: promptId, externalId: `COMFYUI:SOUND:${promptId}`, endpoint: 'moss-soundeffect-v2' }
   } catch (error) {
-    if (error instanceof ComfyUiHttpError && error.status === 400) throw promptRejection(error)
+    if (error instanceof ComfyUiHttpError && error.status >= 400 && error.status < 500) throw promptRejection(error)
     try {
       const probe = asComfyUiRecord(await requestComfyUiJson(baseUrl, `/api/jobs/${encodeURIComponent(promptId)}`))
       if (COMFYUI_ACCEPTED_JOB_STATUSES.has(readComfyUiString(probe?.status))) {
@@ -162,7 +161,7 @@ export async function pollComfyUiMossSound(promptId: string): Promise<MossSoundP
   if (status === 'cancelled') return { status: 'failed', failure: createProviderAsyncTaskFailure({ provider: 'comfyui', code: 'GENERATION_FAILED', message: 'ComfyUI MOSS job was cancelled', cause: record }) }
   if (status === 'failed') return { status: 'failed', failure: createProviderAsyncTaskFailure({ provider: 'comfyui', code: 'GENERATION_FAILED', message: readComfyUiHttpError(record?.execution_error), cause: record }) }
   if (status !== 'completed') throw new Error(`COMFYUI_JOB_STATUS_UNKNOWN:${status || '<missing>'}`)
-  const output: ComfyUiOutput | null = readComfyUiOutput(record?.outputs ?? record?.preview_output ?? record?.output)
+  const output: ComfyUiOutput | null = readComfyUiDeclaredNodeAudioOutput(record?.outputs ?? record?.preview_output ?? record?.output, '28')
   if (!output) throw new Error('COMFYUI_MOSS_AUDIO_OUTPUT_MISSING')
   return {
     status: 'completed',
