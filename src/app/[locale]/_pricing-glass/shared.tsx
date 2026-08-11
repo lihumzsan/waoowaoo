@@ -11,6 +11,7 @@ import {
 } from '@/lib/billing/credits'
 import { createClientApiError } from '@/lib/errors/client'
 import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
+import type { StripeWalletMethodId } from '@/lib/payments/stripe-wallet-methods'
 
 /* ----------------------------------------------------------------- */
 /* Recharge hook — talks to the real recharge config + Stripe checkout */
@@ -18,9 +19,9 @@ import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
 
 export interface RechargeConfig {
   enabled: boolean
-  /** Present only when the in-page WeChat QR flow can run. */
+  /** Present only when browser-side Stripe wallet confirmation can run. */
   publishableKey: string | null
-  wechatEnabled: boolean
+  walletMethods: readonly StripeWalletMethodId[]
   creditValueCurrency: string
   paymentCurrency: string
   minCredits: number
@@ -209,13 +210,16 @@ export function RechargeStatus({ status }: { status: RechargeState['status'] | S
 
 export function CustomRecharge({
   recharge,
-  wechat,
+  wallet,
   paymentOpen,
   className,
 }: {
   recharge: RechargeState
-  /** Omitted when WeChat is not configured; the option is then not offered. */
-  wechat?: { available: boolean; busy: boolean; start: (credits: number) => void }
+  wallet?: {
+    readonly isAvailable: (method: StripeWalletMethodId) => boolean
+    readonly busyMethod: StripeWalletMethodId | null
+    readonly start: (method: StripeWalletMethodId, credits: number) => void
+  }
   paymentOpen: boolean
   className?: string
 }) {
@@ -226,7 +230,10 @@ export function CustomRecharge({
   const bounds = recharge.config ? rechargeAmountBounds(recharge.config) : null
   const amountEntered = value.trim().length > 0
   const amountValid = estimatedCredits !== null
-  const anyBusy = recharge.busy || Boolean(wechat?.busy)
+  const anyBusy = recharge.busy || Boolean(wallet?.busyMethod)
+  const wechatAvailable = wallet?.isAvailable('wechat_pay') ?? false
+  const alipayAvailable = wallet?.isAvailable('alipay') ?? false
+  const anyWalletAvailable = wechatAvailable || alipayAvailable
   return (
     <div className={className}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -245,18 +252,32 @@ export function CustomRecharge({
             disabled={!paymentOpen}
           />
         </label>
-        {wechat?.available ? (
+        {wechatAvailable ? (
           <button
             type="button"
             disabled={!paymentOpen || anyBusy || !amountEntered || !amountValid}
             onClick={() => {
               if (!recharge.config) return
               const credits = resolveRechargeCredits(amountCny, recharge.config)
-              if (credits !== null) wechat.start(credits)
+              if (credits !== null) wallet?.start('wechat_pay', credits)
             }}
             className="glass-btn-base glass-btn-secondary h-12 px-5 text-sm disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {!paymentOpen ? t('paidBetaSoldOutCta') : wechat.busy ? t('checkoutBusy') : t('payWithWechat')}
+            {!paymentOpen ? t('paidBetaSoldOutCta') : wallet?.busyMethod === 'wechat_pay' ? t('checkoutBusy') : t('payWithWechat')}
+          </button>
+        ) : null}
+        {alipayAvailable ? (
+          <button
+            type="button"
+            disabled={!paymentOpen || anyBusy || !amountEntered || !amountValid}
+            onClick={() => {
+              if (!recharge.config) return
+              const credits = resolveRechargeCredits(amountCny, recharge.config)
+              if (credits !== null) wallet?.start('alipay', credits)
+            }}
+            className="glass-btn-base glass-btn-secondary h-12 px-5 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {!paymentOpen ? t('paidBetaSoldOutCta') : wallet?.busyMethod === 'alipay' ? t('checkoutBusy') : t('payWithAlipay')}
           </button>
         ) : null}
         <button
@@ -269,7 +290,7 @@ export function CustomRecharge({
             ? t('paidBetaSoldOutCta')
             : recharge.busy
               ? t('checkoutBusy')
-              : wechat?.available
+              : anyWalletAvailable
                 ? t('payWithCard')
                 : t('checkoutNow')}
         </button>

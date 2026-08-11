@@ -5,9 +5,10 @@ import { useTranslations } from 'next-intl'
 import GlassModalShell from '@/components/ui/primitives/GlassModalShell'
 import { AppIcon } from '@/components/ui/icons'
 import { WeChatIcon } from '@/components/ui/icons/WeChatIcon'
+import { AlipayIcon } from '@/components/ui/icons/AlipayIcon'
 import type { GlassPlan } from './content'
 import type { SubscriptionInterval } from '@/lib/billing/subscription-plans'
-import { WechatQrImage, type WechatRechargeState } from './wechat-recharge'
+import { WechatQrImage, type StripeWalletPaymentState } from './stripe-wallet-payment'
 import PaidBetaGroupAccess from '@/components/paid-beta/PaidBetaGroupAccess'
 import { apiFetch } from '@/lib/api-fetch'
 
@@ -18,10 +19,10 @@ import { apiFetch } from '@/lib/api-fetch'
  * redirect away from the site and asks for an email and a name that a QR scan
  * does not need. The methods are offered here instead, and the one that can
  * stay on the page does: WeChat renders its QR in this same dialog, and only
- * the card flow — which genuinely needs Stripe's hosted form — leaves.
+ * the card and Alipay authorization flows redirect to their secure pages.
  */
 
-export type PlanPaymentMethod = 'wechat' | 'card'
+export type PlanPaymentMethod = 'wechat_pay' | 'alipay' | 'card'
 
 type PlanQuote = {
   readonly amountCny: number
@@ -47,7 +48,7 @@ function MethodCard({
   busy,
   onClick,
 }: {
-  readonly icon: 'wechat' | 'card'
+  readonly icon: 'wechat_pay' | 'alipay' | 'card'
   readonly label: string
   readonly hint: string
   readonly busy: boolean
@@ -63,11 +64,17 @@ function MethodCard({
       <span
         className={cx(
           'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
-          icon === 'wechat' ? 'bg-[#07C160]' : 'bg-[var(--glass-accent-from)]',
+          icon === 'wechat_pay'
+            ? 'bg-[#07C160]'
+            : icon === 'alipay'
+              ? 'bg-[#1677FF]'
+              : 'bg-[var(--glass-accent-from)]',
         )}
       >
-        {icon === 'wechat' ? (
+        {icon === 'wechat_pay' ? (
           <WeChatIcon className="h-6 w-6 text-white" aria-hidden="true" />
+        ) : icon === 'alipay' ? (
+          <AlipayIcon className="h-6 w-6 text-white" aria-hidden="true" />
         ) : (
           <AppIcon name="card" className="h-5 w-5 text-white" aria-hidden="true" />
         )}
@@ -87,14 +94,14 @@ export function PlanPaymentDialog({
   plan,
   interval,
   onClose,
-  wechat,
+  wallet,
   cardBusy,
   onPayWithCard,
 }: {
   readonly plan: GlassPlan | null
   readonly interval: SubscriptionInterval
   readonly onClose: () => void
-  readonly wechat: WechatRechargeState
+  readonly wallet: StripeWalletPaymentState
   readonly cardBusy: boolean
   readonly onPayWithCard: () => void
 }) {
@@ -134,15 +141,16 @@ export function PlanPaymentDialog({
   }, [interval, plan])
 
   if (!plan) return null
-  const settled = wechat.settled
+  const settled = wallet.settled
   const quoteBusy = quote === null && !quoteError
-  const qr = wechat.payment
+  const qr = wallet.payment
+  const walletBusy = wallet.busyMethod !== null
 
   return (
     <GlassModalShell
       open
       onClose={onClose}
-      size="sm"
+      size="md"
       title={t('planDialogTitle', { plan: plan.label })}
       description={quote
         ? t('planDialogSummary', {
@@ -165,16 +173,28 @@ export function PlanPaymentDialog({
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 py-1 sm:grid-cols-2">
-          {wechat.available ? (
+        <div className="grid grid-cols-1 gap-3 py-1 sm:grid-cols-3">
+          {wallet.isAvailable('wechat_pay') ? (
             <MethodCard
-              icon="wechat"
+              icon="wechat_pay"
               label={t('payWithWechat')}
               hint={t('payWithWechatHint')}
-              busy={wechat.busy || cardBusy || quoteBusy || quoteError}
+              busy={walletBusy || cardBusy || quoteBusy || quoteError}
               onClick={() => {
-                setMethod('wechat')
-                wechat.start({ kind: 'plan', planId: plan.id, interval })
+                setMethod('wechat_pay')
+                wallet.start('wechat_pay', { kind: 'plan', planId: plan.id, interval })
+              }}
+            />
+          ) : null}
+          {wallet.isAvailable('alipay') ? (
+            <MethodCard
+              icon="alipay"
+              label={t('payWithAlipay')}
+              hint={t('payWithAlipayHint')}
+              busy={walletBusy || cardBusy || quoteBusy || quoteError}
+              onClick={() => {
+                setMethod('alipay')
+                wallet.start('alipay', { kind: 'plan', planId: plan.id, interval })
               }}
             />
           ) : null}
@@ -182,23 +202,23 @@ export function PlanPaymentDialog({
             icon="card"
             label={t('payWithCard')}
             hint={t('payWithCardHint')}
-            busy={wechat.busy || cardBusy || quoteBusy || quoteError}
+            busy={walletBusy || cardBusy || quoteBusy || quoteError}
             onClick={() => {
               setMethod('card')
               onPayWithCard()
             }}
           />
-          {method !== null && (wechat.busy || cardBusy) ? (
+          {method !== null && (walletBusy || cardBusy) ? (
             <p className="col-span-full mt-1 text-center text-[12px] text-[var(--glass-text-tertiary)]">
               {t('subscribeBusy')}
             </p>
           ) : null}
-          {wechat.status ? (
+          {wallet.status ? (
             <p
               className="col-span-full mt-1 text-center text-[12px]"
-              style={{ color: wechat.status.kind === 'error' ? 'var(--glass-tone-danger-fg)' : 'var(--glass-text-tertiary)' }}
+              style={{ color: wallet.status.kind === 'error' ? 'var(--glass-tone-danger-fg)' : 'var(--glass-text-tertiary)' }}
             >
-              {wechat.status.text}
+              {wallet.status.text}
             </p>
           ) : null}
         </div>

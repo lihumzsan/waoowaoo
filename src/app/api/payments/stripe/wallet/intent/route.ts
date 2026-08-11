@@ -2,38 +2,38 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
-import { getDeploymentConfig } from '@/lib/deployment/config'
-import { getDeploymentFeatures } from '@/lib/deployment/features'
-import {
-  createWechatPlanIntent,
-  createWechatRechargeIntent,
-} from '@/lib/payments/stripe-wechat-intent'
-import { isPaymentConfigurationError, readPaymentConfigurationErrorCode } from '@/lib/payments/config-errors'
-import { isPaidBetaPaymentUnavailableError } from '@/lib/paid-beta/campaign'
 import {
   subscriptionIntervalSchema,
   subscriptionPlanIdSchema,
 } from '@/lib/billing/subscription-plan-schema'
+import { getDeploymentConfig } from '@/lib/deployment/config'
+import { getDeploymentFeatures } from '@/lib/deployment/features'
+import { isPaidBetaPaymentUnavailableError } from '@/lib/paid-beta/campaign'
+import { isPaymentConfigurationError, readPaymentConfigurationErrorCode } from '@/lib/payments/config-errors'
+import {
+  createStripeWalletPlanIntent,
+  createStripeWalletRechargeIntent,
+} from '@/lib/payments/stripe-wallet-intent'
+import { STRIPE_WALLET_METHOD_IDS } from '@/lib/payments/stripe-wallet-methods'
 
-/**
- * Either a credit top-up or a plan term — both are one-off WeChat payments and
- * differ only in what the webhook does when the scan clears.
- */
-const wechatIntentSchema = z.union([
-  z.object({ kind: z.literal('recharge'), credits: z.number().int().positive() }),
+const walletMethodSchema = z.enum(STRIPE_WALLET_METHOD_IDS)
+const walletIntentSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('recharge'),
+    method: walletMethodSchema,
+    credits: z.number().int().positive(),
+  }),
   z.object({
     kind: z.literal('plan'),
+    method: walletMethodSchema,
     planId: subscriptionPlanIdSchema,
     interval: subscriptionIntervalSchema,
   }),
 ])
 
 /**
- * POST /api/payments/stripe/wechat/intent
- *
- * Returns a client secret the browser confirms to obtain a WeChat QR code. The
- * balance is not touched here — only the webhook credits it, so a user who
- * abandons the QR is never charged and never credited.
+ * Create a one-off Stripe wallet PaymentIntent. This route only validates and
+ * delegates; balance and plan writes remain exclusively in the webhook.
  */
 export const POST = apiHandler(async (request: NextRequest) => {
   const authResult = await requireUserAuth()
@@ -50,7 +50,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     throw new ApiError('INVALID_PARAMS', { code: 'BODY_PARSE_FAILED', field: 'body' })
   }
 
-  const parsed = wechatIntentSchema.safeParse(body)
+  const parsed = walletIntentSchema.safeParse(body)
   if (!parsed.success) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'PAYMENT_CHECKOUT_PAYLOAD_INVALID',
@@ -61,7 +61,8 @@ export const POST = apiHandler(async (request: NextRequest) => {
   let intent: { paymentIntentId: string; clientSecret: string; amountCny: number }
   try {
     if (parsed.data.kind === 'plan') {
-      const planIntent = await createWechatPlanIntent({
+      const planIntent = await createStripeWalletPlanIntent({
+        method: parsed.data.method,
         userId: authResult.session.user.id,
         planId: parsed.data.planId,
         interval: parsed.data.interval,
@@ -72,7 +73,8 @@ export const POST = apiHandler(async (request: NextRequest) => {
         amountCny: planIntent.amountCny,
       }
     } else {
-      const rechargeIntent = await createWechatRechargeIntent({
+      const rechargeIntent = await createStripeWalletRechargeIntent({
+        method: parsed.data.method,
         userId: authResult.session.user.id,
         credits: parsed.data.credits,
       })
@@ -93,10 +95,5 @@ export const POST = apiHandler(async (request: NextRequest) => {
     throw error
   }
 
-  return NextResponse.json({
-    success: true,
-    paymentIntentId: intent.paymentIntentId,
-    clientSecret: intent.clientSecret,
-    amountCny: intent.amountCny,
-  })
+  return NextResponse.json({ success: true, ...intent })
 })

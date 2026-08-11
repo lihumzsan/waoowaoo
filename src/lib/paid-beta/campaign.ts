@@ -5,7 +5,7 @@ export const PAID_BETA_CAMPAIGN_ID = 'paid-beta-wave-1'
 export const PAID_BETA_ATTEMPT_METADATA_KEY = 'paid_beta_attempt_id'
 export const PAID_BETA_SEAT_METADATA_KEY = 'paid_beta_seat_id'
 
-export type PaidBetaProviderKind = 'stripe_checkout' | 'stripe_wechat'
+export type PaidBetaProviderKind = 'stripe_checkout' | 'stripe_wechat' | 'stripe_alipay'
 
 export interface PaidBetaCampaignView {
   readonly id: string
@@ -91,6 +91,11 @@ const PROVIDER_ATTEMPT_TTL_MS: Record<PaidBetaProviderKind, number> = {
   // receives the request. The extra minute absorbs request and clock skew.
   stripe_checkout: 31 * 60 * 1000,
   stripe_wechat: 10 * 60 * 1000,
+  stripe_alipay: 10 * 60 * 1000,
+}
+
+function isPaidBetaProviderKind(value: string): value is PaidBetaProviderKind {
+  return Object.prototype.hasOwnProperty.call(PROVIDER_ATTEMPT_TTL_MS, value)
 }
 
 /**
@@ -247,7 +252,7 @@ export async function listStalePaidBetaPaymentAttempts(
     select: { id: true, providerKind: true, providerObjectId: true },
   })
   return rows.flatMap((row) => (
-    row.providerKind === 'stripe_checkout' || row.providerKind === 'stripe_wechat'
+    isPaidBetaProviderKind(row.providerKind)
       ? [{ ...row, providerKind: row.providerKind }]
       : []
   ))

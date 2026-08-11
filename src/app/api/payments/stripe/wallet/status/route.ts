@@ -4,16 +4,8 @@ import { apiHandler, ApiError } from '@/lib/api-errors'
 import { prisma } from '@/lib/prisma'
 
 /**
- * GET /api/payments/stripe/wechat/status?paymentIntentId=pi_...
- *
- * Answers one question: have these credits landed in this user's balance yet?
- *
- * It reads our ledger rather than Stripe, because the ledger is what the user
- * is waiting on — Stripe reporting the payment succeeded is not the same fact
- * as the credits being spendable. The webhook remains the only thing that
- * credits; this is how the open QR dialog learns it happened.
- *
- * Scoped by user id, so one user cannot poll another's payment.
+ * Project whether a wallet payment has reached this user's local ledger.
+ * Stripe state is deliberately not treated as spendable balance.
  */
 export const GET = apiHandler(async (request: NextRequest) => {
   const authResult = await requireUserAuth()
@@ -27,9 +19,6 @@ export const GET = apiHandler(async (request: NextRequest) => {
     })
   }
 
-  // A WeChat payment buys either credits or a plan term, and each writes its
-  // own ledger row under its own key. Checking only one of them leaves the
-  // dialog spinning after a payment that actually succeeded.
   const applied = await prisma.balanceTransaction.findFirst({
     where: {
       userId: authResult.session.user.id,

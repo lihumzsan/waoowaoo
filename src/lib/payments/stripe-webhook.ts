@@ -4,7 +4,7 @@ import { addBalanceWithTransaction, applyBalanceAdjustmentWithTransaction } from
 import { BillingOperationError } from '@/lib/billing/errors'
 import { toMoneyNumber } from '@/lib/billing/money'
 import { PLAN_PURCHASE_KIND } from './stripe-plan-purchase'
-import { WECHAT_PLAN_KIND, WECHAT_RECHARGE_KIND } from './stripe-wechat-intent'
+import { resolveStripeWalletMetadataKind } from './stripe-wallet-methods'
 import { applyPlanPurchaseInTransaction } from '@/lib/billing/plan-term-service'
 import {
   restorePlanPaymentReversalInTransaction,
@@ -226,23 +226,32 @@ function readPlanPaymentFacts(
 }
 
 /**
- * Credit a WeChat Pay top-up.
+ * Settle a raw wallet PaymentIntent.
  *
- * The QR flow has no Checkout session, so the PaymentIntent itself carries the
- * facts a session would have carried. Everything downstream stays the same:
- * the ledger row is keyed on the payment intent, which is what refunds already
- * look up, so a WeChat refund reverses exactly like a card one.
+ * Wallet flows have no Checkout session, so the PaymentIntent itself carries
+ * the facts a session would have carried. The ledger row remains keyed on the
+ * payment intent, which is also the identity used by refunds and disputes.
  */
-async function creditWechatPaymentIntent(
+async function creditWalletPaymentIntent(
   eventId: string,
   intent: Stripe.PaymentIntent,
   paidAt: Date,
 ): Promise<StripeWebhookHandleResult> {
   const metadata = intent.metadata ?? {}
+  const walletPayment = resolveStripeWalletMetadataKind(metadata.waoowaoo_kind)
 
-  // A plan bought with WeChat grants a term instead of permanent credits, so
-  // it branches here rather than crediting the balance.
-  if (metadata.waoowaoo_kind === WECHAT_PLAN_KIND) {
+  if (!walletPayment) {
+    return {
+      received: true,
+      action: 'ignored',
+      eventType: 'payment_intent',
+      objectId: intent.id,
+      reason: 'unmanaged_payment_intent',
+    }
+  }
+
+  // A plan bought with a wallet grants a term instead of permanent credits.
+  if (walletPayment.purpose === 'plan') {
     const userId = readString(metadata.user_id)
     const planId = readString(metadata.plan_id)
     const interval = readString(metadata.plan_interval)
@@ -284,16 +293,6 @@ async function creditWechatPaymentIntent(
     }
   }
 
-  if (metadata.waoowaoo_kind !== WECHAT_RECHARGE_KIND) {
-    return {
-      received: true,
-      action: 'ignored',
-      eventType: 'payment_intent',
-      objectId: intent.id,
-      reason: 'unmanaged_payment_intent',
-    }
-  }
-
   const userId = readString(metadata.user_id)
   if (!userId) throw new Error('STRIPE_CHECKOUT_METADATA_USER_ID_REQUIRED')
   const credits = readPositiveMetadataNumber(metadata, 'credits')
@@ -312,7 +311,7 @@ async function creditWechatPaymentIntent(
     })
     await addBalanceWithTransaction(tx, userId, credits, {
       type: 'recharge',
-      reason: 'stripe wechat pay recharge',
+      reason: walletPayment.method.rechargeLedgerReason,
       externalOrderId: intent.id,
       idempotencyKey: `stripe:payment_intent:${intent.id}`,
       relatedId: intent.id,
@@ -320,7 +319,7 @@ async function creditWechatPaymentIntent(
         provider: 'stripe',
         eventId,
         paymentIntentId: intent.id,
-        paymentMethod: 'wechat_pay',
+        paymentMethod: walletPayment.method.id,
         ...(receiptUrl ? { receiptUrl } : {}),
         credits,
         paymentAmountMinor,
@@ -695,7 +694,7 @@ export async function handleStripeWebhook(rawBody: string, signatureHeader: stri
   }
 
   if (event.type === 'payment_intent.succeeded') {
-    const result = await creditWechatPaymentIntent(
+    const result = await creditWalletPaymentIntent(
       eventId,
       event.data.object,
       new Date(event.created * 1000),

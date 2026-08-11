@@ -1,6 +1,10 @@
 import { getDeploymentConfig } from '@/lib/deployment/config'
 import { getDeploymentFeatures } from '@/lib/deployment/features'
 import { creditsToPaymentCny, creditsToPaymentMinorUnits } from '@/lib/billing/credits'
+import {
+  STRIPE_WALLET_METHOD_IDS,
+  type StripeWalletMethodId,
+} from './stripe-wallet-methods'
 
 export const CREDIT_VALUE_CURRENCY = 'CNY' as const
 export const STRIPE_PAYMENT_CURRENCY = 'CNY' as const
@@ -8,12 +12,10 @@ export const STRIPE_PAYMENT_CURRENCY = 'CNY' as const
 export interface RechargeConfig {
   enabled: boolean
   /**
-   * Browser-safe Stripe key, present only when WeChat's in-page QR flow can
-   * run. Absent means the client must not offer WeChat — it would have no way
-   * to confirm the PaymentIntent.
+   * Browser-safe Stripe key, present only when a wallet flow can run.
    */
   publishableKey: string | null
-  wechatEnabled: boolean
+  walletMethods: readonly StripeWalletMethodId[]
   creditValueCurrency: typeof CREDIT_VALUE_CURRENCY
   paymentCurrency: typeof STRIPE_PAYMENT_CURRENCY
   minCredits: number
@@ -49,7 +51,7 @@ function disabledRechargeConfig(): RechargeConfig {
   return {
     enabled: false,
     publishableKey: null,
-    wechatEnabled: false,
+    walletMethods: [],
     creditValueCurrency: CREDIT_VALUE_CURRENCY,
     paymentCurrency: STRIPE_PAYMENT_CURRENCY,
     minCredits: 0,
@@ -66,14 +68,14 @@ export function getRechargeConfig(): RechargeConfig {
     throw new Error('PAYMENT_MAX_CREDITS_LESS_THAN_MIN')
   }
 
-  // WeChat's in-page QR needs Stripe.js in the browser, which needs a
-  // publishable key. Without one the option is simply not offered rather than
-  // failing when the user clicks it.
+  // Wallet confirmation needs Stripe.js in the browser. Without a publishable
+  // key no wallet is offered; the server still validates account capability
+  // when it creates the provider object.
   const publishableKey = readOptionalKey('STRIPE_PUBLISHABLE_KEY')
   return {
     enabled: true,
     publishableKey,
-    wechatEnabled: publishableKey !== null,
+    walletMethods: publishableKey === null ? [] : STRIPE_WALLET_METHOD_IDS,
     creditValueCurrency: CREDIT_VALUE_CURRENCY,
     paymentCurrency: STRIPE_PAYMENT_CURRENCY,
     minCredits,

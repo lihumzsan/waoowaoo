@@ -14,7 +14,7 @@ import {
   usePlanPurchase,
   useCurrentPlan,
 } from './shared'
-import { useWechatRecharge, WechatQrDialog } from './wechat-recharge'
+import { StripeWalletDialog, useStripeWalletPayment } from './stripe-wallet-payment'
 import { PlanPaymentDialog } from './plan-payment-dialog'
 import type { PaidBetaCampaignView } from '@/lib/paid-beta/campaign'
 import { PublicBetaWaitlistForm } from './public-beta-waitlist'
@@ -233,7 +233,7 @@ export default function PricingGlassPageClient({
   // Nothing to do the moment credits land: the dialog shows its success state
   // and the page refreshes when the user closes it, so the confirmation is not
   // yanked away by a reload.
-  const wechat = useWechatRecharge(recharge.config, useCallback(() => {}, []))
+  const wallet = useStripeWalletPayment(recharge.config, useCallback(() => {}, []))
   const [interval, setInterval] = useState<SubscriptionInterval>('month')
   // Which plan's payment dialog is open. Clicking a card opens the choice
   // of method rather than committing to one.
@@ -321,14 +321,14 @@ export default function PricingGlassPageClient({
             <CustomRecharge
               recharge={recharge}
               paymentOpen={paidBetaCampaign.paymentOpen}
-              wechat={{
-                available: wechat.available,
-                busy: wechat.busy,
-                start: (credits) => wechat.start({ kind: 'recharge', credits }),
+              wallet={{
+                isAvailable: wallet.isAvailable,
+                busyMethod: wallet.busyMethod,
+                start: (method, credits) => wallet.start(method, { kind: 'recharge', credits }),
               }}
             />
           </div>
-          <RechargeStatus status={wechat.status} />
+          <RechargeStatus status={wallet.status} />
         </section>
 
         <section className="mt-14">
@@ -375,22 +375,29 @@ export default function PricingGlassPageClient({
         plan={payingFor}
         interval={interval}
         cardBusy={purchase.busy}
-        wechat={wechat}
+        wallet={wallet}
         onPayWithCard={() => {
           if (payingFor) purchase.start(payingFor.id, interval)
         }}
         onClose={() => {
-          const settled = wechat.settled !== null
+          const settled = wallet.settled !== null
           setPayingFor(null)
-          wechat.dismiss()
+          wallet.dismiss()
           if (settled) window.location.reload()
         }}
       />
-      {/* The top-up box has its own QR dialog; the plan dialog renders its own. */}
-      <WechatQrDialog
-        payment={payingFor ? null : wechat.payment}
-        settled={payingFor ? null : wechat.settled}
-        onClose={wechat.dismiss}
+      {/* Plan WeChat QR stays in the method dialog. Top-ups and Alipay returns
+          use the page-level wallet dialog because redirects do not preserve
+          local React dialog state. */}
+      <StripeWalletDialog
+        payment={payingFor ? null : wallet.payment}
+        settled={payingFor ? null : wallet.settled}
+        returnState={wallet.returnState}
+        onClose={() => {
+          const settled = wallet.settled !== null
+          wallet.dismiss()
+          if (settled) window.location.reload()
+        }}
       />
     </div>
   )

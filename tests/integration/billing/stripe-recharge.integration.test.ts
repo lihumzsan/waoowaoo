@@ -2,6 +2,10 @@ import Stripe from 'stripe'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { handleStripeWebhook } from '@/lib/payments/stripe-webhook'
 import { quotePlanPurchase } from '@/lib/payments/plan-purchase-quote'
+import {
+  getStripeWalletMethodConfig,
+  STRIPE_WALLET_METHOD_IDS,
+} from '@/lib/payments/stripe-wallet-methods'
 import { getBalance } from '@/lib/billing'
 import {
   attachPaidBetaProviderObject,
@@ -85,6 +89,35 @@ function paymentIntentEvent(input: {
           credits,
           credit_value_currency: 'CNY',
           payment_amount: (Number(credits) / 10).toFixed(2),
+          payment_currency: 'cny',
+        },
+      },
+    },
+  })
+}
+
+function walletPlanPaymentIntentEvent(input: {
+  paymentIntentId: string
+  userId: string
+  kind: string
+}) {
+  return JSON.stringify({
+    id: `evt_${input.paymentIntentId}`,
+    type: 'payment_intent.succeeded',
+    created: currentStripeTimestamp(),
+    data: {
+      object: {
+        id: input.paymentIntentId,
+        created: currentStripeTimestamp(),
+        amount: 7_900,
+        amount_received: 7_900,
+        currency: 'cny',
+        metadata: {
+          waoowaoo_kind: input.kind,
+          user_id: input.userId,
+          plan_id: 'lite',
+          plan_interval: 'month',
+          payment_amount: '79.00',
           payment_currency: 'cny',
         },
       },
@@ -361,21 +394,61 @@ describe('billing/stripe recharge integration', () => {
     })).toBe(2)
   })
 
-  it('credits a WeChat Pay top-up from its payment intent, and only once', async () => {
-    const user = await createTestUser()
-    const timestamp = currentStripeTimestamp()
-    const payload = paymentIntentEvent({ paymentIntentId: 'pi_wechat_ok', userId: user.id, credits: '250' })
-    const signature = signPayload(payload, timestamp)
+  it.each(STRIPE_WALLET_METHOD_IDS)(
+    'credits a %s top-up PaymentIntent exactly once',
+    async (methodId) => {
+      const user = await createTestUser()
+      const timestamp = currentStripeTimestamp()
+      const paymentIntentId = `pi_${methodId}_ok`
+      const payload = paymentIntentEvent({
+        paymentIntentId,
+        userId: user.id,
+        credits: '250',
+        kind: getStripeWalletMethodConfig(methodId).rechargeMetadataKind,
+      })
+      const signature = signPayload(payload, timestamp)
 
-    const first = await handleStripeWebhook(payload, signature)
-    expect(first).toMatchObject({ action: 'credited', credits: 250, objectId: 'pi_wechat_ok' })
-    await handleStripeWebhook(payload, signature)
+      const first = await handleStripeWebhook(payload, signature)
+      expect(first).toMatchObject({ action: 'credited', credits: 250, objectId: paymentIntentId })
+      await handleStripeWebhook(payload, signature)
 
-    expect((await getBalance(user.id)).balance).toBe(250)
-    expect(await prisma.balanceTransaction.count({
-      where: { userId: user.id, type: 'recharge', idempotencyKey: 'stripe:payment_intent:pi_wechat_ok' },
-    })).toBe(1)
-  })
+      expect((await getBalance(user.id)).balance).toBe(250)
+      const rows = await prisma.balanceTransaction.findMany({
+        where: { userId: user.id, type: 'recharge', idempotencyKey: `stripe:payment_intent:${paymentIntentId}` },
+        select: { billingMeta: true },
+      })
+      expect(rows).toHaveLength(1)
+      const billingMeta: unknown = JSON.parse(rows[0]?.billingMeta ?? '{}')
+      expect(billingMeta).toMatchObject({ paymentMethod: methodId })
+    },
+  )
+
+  it.each(STRIPE_WALLET_METHOD_IDS)(
+    'starts a plan term from a %s PaymentIntent exactly once',
+    async (methodId) => {
+      const user = await createTestUser()
+      const timestamp = currentStripeTimestamp()
+      const paymentIntentId = `pi_${methodId}_plan`
+      const payload = walletPlanPaymentIntentEvent({
+        paymentIntentId,
+        userId: user.id,
+        kind: getStripeWalletMethodConfig(methodId).planMetadataKind,
+      })
+      const signature = signPayload(payload, timestamp)
+
+      const first = await handleStripeWebhook(payload, signature)
+      const replay = await handleStripeWebhook(payload, signature)
+
+      expect(first).toMatchObject({ action: 'credited', credits: 800, objectId: paymentIntentId })
+      expect(replay).toMatchObject({ action: 'ignored', reason: 'plan_purchase_already_applied' })
+      const term = await prisma.subscription.findUniqueOrThrow({ where: { userId: user.id } })
+      expect(term).toMatchObject({ planId: 'lite', interval: 'month', currentTermKey: paymentIntentId })
+      expect((await getBalance(user.id)).subscriptionCredits).toBe(800)
+      expect(await prisma.balanceTransaction.count({
+        where: { userId: user.id, idempotencyKey: `stripe:plan:${paymentIntentId}` },
+      })).toBe(1)
+    },
+  )
 
   it('ignores the payment intent a card checkout also emits, so it cannot double credit', async () => {
     const user = await createTestUser()
