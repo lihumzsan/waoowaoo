@@ -51,7 +51,6 @@ function assertStoredExecution(
     projectId: string | null
     operationId: string
     planSnapshotId: string | null
-    approvalGrantId: string | null
     requestId: string
     status: string
     output: Prisma.JsonValue | null
@@ -74,7 +73,6 @@ function assertStoredExecution(
     row.projectId !== command.projectId ||
     row.operationId !== command.operationId ||
     row.planSnapshotId !== null ||
-    row.approvalGrantId !== null ||
     row.requestId !== command.operationRequestId ||
     (row.status !== 'executing' && row.status !== 'completed') ||
     row.normalizedInput === null ||
@@ -153,7 +151,6 @@ export async function executeDirectOperationTransaction(params: {
             projectId: command.projectId,
             operationId: command.operationId,
             planSnapshotId: null,
-            approvalGrantId: null,
             requestId: command.operationRequestId,
             status: 'executing',
           },

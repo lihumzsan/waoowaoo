@@ -2,7 +2,7 @@ import { existsSync, lstatSync, readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const ACTIVE_SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs'])
+const ACTIVE_SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.txt'])
 const FORBIDDEN_ACTIVE_PATHS = [
   'src/lib/billing',
   'src/lib/payments',
@@ -13,6 +13,10 @@ const FORBIDDEN_ACTIVE_PATHS = [
   'src/app/api/user/costs',
   'src/app/api/projects/[projectId]/costs',
   'src/app/[locale]/_pricing-glass',
+  'src/app/[locale]/pricing',
+  'src/app/api/operation-approval-grants',
+  'src/lib/query/use-asset-operation-billing-plan.ts',
+  'src/lib/user-api/api-config-pricing-display.ts',
   'src/components/billing',
   'src/components/paid-beta',
 ]
@@ -27,6 +31,7 @@ const FORBIDDEN_SCHEMA_NAMES = [
   'PaidBetaCampaign',
   'PaidBetaSeat',
   'PaidBetaPaymentAttempt',
+  'ApprovalGrant',
 ]
 const FORBIDDEN_SCHEMA_FIELDS = [
   'assistantBillingConfirmationRequired',
@@ -63,7 +68,9 @@ function walkActiveSources(rootDir, current = 'src', output = []) {
 }
 
 function hasActivePath(rootDir, relativePath) {
-  return existsSync(path.join(rootDir, relativePath))
+  const absolutePath = path.join(rootDir, relativePath)
+  if (!existsSync(absolutePath)) return false
+  return !lstatSync(absolutePath).isDirectory() || readdirSync(absolutePath).length > 0
 }
 
 function checkFreeProductContract({ rootDir }) {

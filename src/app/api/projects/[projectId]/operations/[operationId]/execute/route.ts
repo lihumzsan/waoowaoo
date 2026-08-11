@@ -21,9 +21,9 @@ export const POST = apiHandler(async (
 
   const body: unknown = await request.json()
   if (!isRecord(body) || !isRecord(body.input)) throw new ApiError('INVALID_PARAMS')
-  const approvalGrantId = typeof body.approvalGrantId === 'string' ? body.approvalGrantId.trim() : ''
+  const planSnapshotId = typeof body.planSnapshotId === 'string' ? body.planSnapshotId.trim() : ''
   const operationRequestId = typeof body.operationRequestId === 'string' ? body.operationRequestId.trim() : ''
-  if (!approvalGrantId || !operationRequestId) throw new ApiError('INVALID_PARAMS')
+  if (!planSnapshotId || !operationRequestId) throw new ApiError('INVALID_PARAMS')
   const headerRequestId = readOperationRequestId(request, {
     required: true,
     operationId,
@@ -38,7 +38,7 @@ export const POST = apiHandler(async (
     userId: authResult.session.user.id,
     input: {
       ...body.input,
-      approvalGrantId,
+      planSnapshotId,
       operationRequestId,
     },
     context: {

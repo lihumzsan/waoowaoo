@@ -865,15 +865,6 @@ function ProjectWorkspaceFolderCanvas({
           }}
         />
       ) : null}
-      {operationAction.pending ? (
-        <CanvasOperationConfirmationModal
-          plan={operationAction.pending.plan}
-          destructive={false}
-          executing={operationAction.phase === 'executing'}
-          onConfirm={() => { void operationAction.confirm() }}
-          onCancel={operationAction.cancel}
-        />
-      ) : null}
       {deleteAction.pending ? (
         <CanvasOperationConfirmationModal
           plan={null}

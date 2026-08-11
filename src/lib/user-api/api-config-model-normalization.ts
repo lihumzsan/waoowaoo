@@ -4,7 +4,7 @@ import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import type { StoredModel, StoredProvider } from './api-config-types'
 import { isRecord, isUnifiedModelType, readTrimmedString } from './api-config-shared'
 import { resolveProviderByIdOrKey } from './api-config-provider-normalization'
-import { resolveBuiltinCapabilities } from './api-config-pricing-display'
+import { resolveBuiltinCapabilities } from './api-config-capabilities'
 
 export function withBuiltinCapabilities(model: StoredModel): StoredModel {
   const capabilities = resolveBuiltinCapabilities(model.type, model.provider, model.modelId)

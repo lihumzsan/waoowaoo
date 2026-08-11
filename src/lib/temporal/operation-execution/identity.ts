@@ -8,13 +8,13 @@ import {
   type OperationExecutionCommandEnvelope,
 } from './contracts'
 
-const APPROVED_COMMAND_KEYS = [
-  'approvalGrantId',
+const PLANNED_COMMAND_KEYS = [
   'context',
   'executionId',
   'kind',
   'operationId',
   'operationRequestId',
+  'planSnapshotId',
   'projectId',
   'protocol',
   'source',
@@ -117,18 +117,18 @@ export function assertOperationExecutionCommand(
     'OPERATION_EXECUTION_SOURCE_INVALID',
     OPERATION_EXECUTION_MAX_SOURCE_LENGTH,
   )
-  if (command.kind === 'approved_plan') {
+  if (command.kind === 'planned') {
     requireExactKeys(
       command,
-      APPROVED_COMMAND_KEYS,
+      PLANNED_COMMAND_KEYS,
       'OPERATION_EXECUTION_COMMAND_FIELD_UNKNOWN',
     )
     requireIdentity(
-      command.approvalGrantId,
-      'OPERATION_EXECUTION_APPROVAL_GRANT_ID_INVALID',
+      command.planSnapshotId,
+      'OPERATION_EXECUTION_PLAN_SNAPSHOT_ID_INVALID',
     )
-    if (command.executionId !== command.approvalGrantId) {
-      fail('OPERATION_EXECUTION_APPROVAL_IDENTITY_DIVERGED')
+    if (command.executionId !== command.planSnapshotId) {
+      fail('OPERATION_EXECUTION_PLAN_IDENTITY_DIVERGED')
     }
   } else if (command.kind !== 'direct_task') {
     fail('OPERATION_EXECUTION_KIND_INVALID')

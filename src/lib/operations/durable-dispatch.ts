@@ -3,7 +3,7 @@ import { ApiError } from '@/lib/api-errors'
 import type { ProjectAgentContext } from '@/lib/project-agent/types'
 import {
   OPERATION_EXECUTION_PROTOCOL,
-  type ApprovedPlanOperationExecutionCommand,
+  type PlannedOperationExecutionCommand,
   type DirectTaskOperationExecutionCommand,
 } from '@/lib/temporal/operation-execution/contracts'
 import { executeOperationViaTemporal } from '@/lib/temporal/operation-execution/client'
@@ -173,7 +173,7 @@ export async function executeDirectTaskOperationViaTemporal(params: {
   }
 }
 
-export async function executeApprovedTaskOperationViaTemporal(params: {
+export async function executePlannedTaskOperationViaTemporal(params: {
   registry: ProjectAgentOperationRegistry
   operationId: string
   userId: string
@@ -207,14 +207,14 @@ export async function executeApprovedTaskOperationViaTemporal(params: {
       `OPERATION_EXECUTION_APPROVED_PLAN_REQUIRED:${params.operationId}`,
     )
   }
-  const command: ApprovedPlanOperationExecutionCommand = {
+  const command: PlannedOperationExecutionCommand = {
     protocol: OPERATION_EXECUTION_PROTOCOL,
-    kind: 'approved_plan',
-    executionId: params.invocation.approvalGrantId,
+    kind: 'planned',
+    executionId: params.invocation.planSnapshotId,
     userId: params.userId,
     projectId: params.projectId,
     operationId: params.operationId,
-    approvalGrantId: params.invocation.approvalGrantId,
+    planSnapshotId: params.invocation.planSnapshotId,
     operationRequestId: params.invocation.requestId,
     source: params.source,
     context: {

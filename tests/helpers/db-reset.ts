@@ -15,7 +15,6 @@ async function resetAgentTurnState() {
 
 async function resetOperationExecutionState() {
   await prisma.operationExecution.deleteMany()
-  await prisma.approvalGrant.deleteMany()
   await prisma.operationPlanSnapshot.deleteMany()
 }
 

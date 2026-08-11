@@ -82,7 +82,6 @@ type WorkflowTaskRow = {
   userId: string
   operationId: string | null
   operationSource: string | null
-  approvalGrantId: string | null
   operationExecutionId: string | null
   operationPlanTaskId: string | null
   operationRequestId: string | null
@@ -190,7 +189,6 @@ async function loadTaskRow(taskId: string): Promise<WorkflowTaskRow> {
       userId: true,
       operationId: true,
       operationSource: true,
-      approvalGrantId: true,
       operationExecutionId: true,
       operationPlanTaskId: true,
       operationRequestId: true,

@@ -12,7 +12,7 @@ import {
 } from '@/lib/agent-turn/tool-effect'
 import {
   buildDirectOperationInvocationIdentity,
-  executeApprovedTaskOperationViaTemporal,
+  executePlannedTaskOperationViaTemporal,
   executeDirectTaskOperationViaTemporal,
 } from '@/lib/operations/durable-dispatch'
 import { invokeProjectAgentOperation } from '@/lib/operations/invocation'
@@ -48,10 +48,7 @@ import type {
   WaoMcpElicitationResult,
   WaoMcpTrustedCallContext,
 } from './contracts'
-import {
-  issueWaoMcpApprovalGrant,
-  requireWaoMcpBrowserApproval,
-} from './approval-proof'
+import { requireWaoMcpBrowserApproval } from './approval-proof'
 import { WAO_MCP_APPROVAL_META_KEY } from './approval-contract'
 
 const logger = createScopedLogger({ module: 'wao-mcp.production-executor' })
@@ -404,21 +401,9 @@ async function authorizePlannedOperation(params: {
     params.signal.throwIfAborted()
   }
   await params.assertAuthorized()
-  const grant = await issueWaoMcpApprovalGrant({
-    userId: params.trusted.userId,
-    projectId: params.trusted.projectId,
-    turnId: params.trusted.turnId,
-    executionOwnerId: params.trusted.executionOwnerId,
-    approvalRequestId,
-    planSnapshotId: view.planSnapshotId,
-    requireBrowserProof: false,
-  })
-  if (!grant || grant.operationId !== params.operation.id) {
-    throw new Error(`WAO_MCP_APPROVAL_GRANT_DIVERGED:${params.operation.id}`)
-  }
   return {
-    approvalGrantId: grant.approvalGrantId,
-    requestId: grant.requestId,
+    planSnapshotId: view.planSnapshotId,
+    requestId: approvalRequestId,
   }
 }
 
@@ -451,7 +436,7 @@ async function executeOperation(params: {
     }
     params.signal.throwIfAborted()
     await params.assertAuthorized()
-    const result = await executeApprovedTaskOperationViaTemporal({
+    const result = await executePlannedTaskOperationViaTemporal({
       registry: params.registry,
       operationId: params.operation.id,
       userId: trusted.userId,

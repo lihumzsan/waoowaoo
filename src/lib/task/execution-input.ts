@@ -16,7 +16,6 @@ export type TaskExecutionDataSource = {
   userId: string
   operationId: string | null
   operationSource: string | null
-  approvalGrantId: string | null
   operationExecutionId: string | null
   operationPlanTaskId: string | null
   operationRequestId: string | null
@@ -84,7 +83,6 @@ export function buildTaskExecutionData(
     userId: source.userId,
     operationId: source.operationId,
     operationSource: source.operationSource,
-    approvalGrantId: source.approvalGrantId,
     operationExecutionId: source.operationExecutionId,
     operationPlanTaskId: source.operationPlanTaskId,
     operationRequestId: source.operationRequestId,

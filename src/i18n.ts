@@ -82,7 +82,7 @@ export default getRequestConfig(async ({ requestLocale, locale: localeOverride }
     return {
         locale,
         // Never inherit the deployment container's UTC zone as a user-facing
-        // default. Client billing Views refine this with the browser IANA zone.
+        // default. Client views refine this with the browser IANA zone.
         timeZone: DEFAULT_USER_TIME_ZONE,
         messages: {
             common: common.default,

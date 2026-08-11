@@ -23,7 +23,7 @@ export interface StoredModel {
   name: string
   type: UnifiedModelType
   provider: string
-  // Non-authoritative display field; billing always uses server pricing catalog.
+  // Provider metadata retained for user-owned API configuration only.
   price: number
   priceMin?: number
   priceMax?: number
@@ -32,16 +32,6 @@ export interface StoredModel {
   priceOutput?: number
   capabilities?: ModelCapabilities
 }
-
-export interface PricingDisplayItem {
-  min: number
-  max: number
-  label: string
-  input?: number
-  output?: number
-}
-
-export type PricingDisplayMap = Record<string, PricingDisplayItem>
 
 export interface DefaultModelsPayload {
   assistantModel?: string

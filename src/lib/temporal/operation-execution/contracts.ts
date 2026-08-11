@@ -9,14 +9,14 @@ export const OPERATION_EXECUTION_MAX_CANONICAL_BYTES = 256 * 1_024
 export const OPERATION_EXECUTION_MAX_SOURCE_LENGTH = 64
 export const OPERATION_EXECUTION_MAX_TASKS = 64
 
-export interface ApprovedPlanOperationExecutionCommand {
+export interface PlannedOperationExecutionCommand {
   protocol: typeof OPERATION_EXECUTION_PROTOCOL
-  kind: 'approved_plan'
+  kind: 'planned'
   executionId: string
   userId: string
   projectId: string
   operationId: string
-  approvalGrantId: string
+  planSnapshotId: string
   operationRequestId: string
   source: string
   context: DirectTaskOperationContextSnapshot
@@ -53,7 +53,7 @@ export interface DirectTaskOperationExecutionCommand {
 }
 
 export type OperationExecutionCommand =
-  ApprovedPlanOperationExecutionCommand | DirectTaskOperationExecutionCommand
+  PlannedOperationExecutionCommand | DirectTaskOperationExecutionCommand
 
 export interface OperationExecutionCommandEnvelope {
   commandId: string

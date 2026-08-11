@@ -70,7 +70,6 @@ describe('free product architecture contract', () => {
       }),
       'prisma/schema.prisma': [
         'model Task { id String @id }',
-        'model ApprovalGrant { id String @id }',
       ].join('\n'),
       'src/lib/task/submitter.ts': 'export const submit = true',
       'src/lib/operations/planning.ts': 'export const plan = true',

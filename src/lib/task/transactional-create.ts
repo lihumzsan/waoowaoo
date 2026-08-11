@@ -55,7 +55,6 @@ async function persistValidatedSubmittedTaskInTransaction(params: {
       dedupeKey: input.dedupeKey || null,
       operationId: input.operationId || null,
       operationSource: input.operationSource || null,
-      approvalGrantId: input.approvalGrantId ?? null,
       operationExecutionId: input.operationExecutionId ?? null,
       operationPlanTaskId: input.operationPlanTaskId ?? null,
       operationRequestId: input.operationRequestId || null,

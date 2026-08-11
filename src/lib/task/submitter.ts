@@ -123,7 +123,6 @@ export async function prepareTaskSubmissionInput(params: SubmitTaskParams): Prom
     dedupeKey: params.dedupeKey || null,
     operationId: params.operationId || null,
     operationSource: params.operationSource || null,
-    approvalGrantId: null,
     operationExecutionId: params.operationExecutionId ?? null,
     operationPlanTaskId: null,
     operationRequestId,

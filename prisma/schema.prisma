@@ -391,7 +391,6 @@ model Task {
   operationId          String?   @db.VarChar(128)
   operationSource      String?   @db.VarChar(64)
   operationRequestId   String?   @db.VarChar(128)
-  approvalGrantId      String?   @db.VarChar(191)
   operationExecutionId String?   @db.VarChar(191)
   operationPlanTaskId  String?   @db.VarChar(191)
   payload              Json?
@@ -409,7 +408,6 @@ model Task {
   childTasks           Task[]                    @relation("TaskChildren")
   events               TaskEvent[]
   executionCheckpoints TaskExecutionCheckpoint[]
-  approvalGrant        ApprovalGrant?            @relation(fields: [approvalGrantId], references: [id], onDelete: Restrict)
   operationExecution   OperationExecution?       @relation(fields: [operationExecutionId], references: [id], onDelete: Restrict)
   workspaceResources   WorkspaceResource[]
   followUpMemberships  FollowUpBatchMember[]
@@ -422,7 +420,6 @@ model Task {
   @@index([parentTaskId])
   @@index([projectId, status, updatedAt])
   @@index([projectId, operationId, updatedAt])
-  @@index([approvalGrantId])
   @@index([operationExecutionId])
   @@index([userId])
   @@map("tasks")
@@ -485,7 +482,6 @@ model OperationPlanSnapshot {
   planSnapshot              Json
   planHash                  String               @db.VarChar(64)
   createdAt                 DateTime             @default(now())
-  approvalGrants            ApprovalGrant[]
   executions                OperationExecution[]
 
   @@unique([userId, scopeKind, scopeId, operationId, apiRequestId], map: "operation_plan_snapshots_api_request_key")
@@ -493,37 +489,9 @@ model OperationPlanSnapshot {
   @@map("operation_plan_snapshots")
 }
 
-model ApprovalGrant {
-  id                  String                @id @default(uuid())
-  userId              String
-  scopeKind           String                @db.VarChar(32)
-  scopeId             String                @db.VarChar(191)
-  projectId           String?
-  operationId         String                @db.VarChar(128)
-  planSnapshotId      String
-  requestId           String                @db.VarChar(128)
-  inputHash           String                @db.VarChar(64)
-  planHash            String                @db.VarChar(64)
-  issuedAt            DateTime              @default(now())
-  revokedAt           DateTime?
-  consumedAt          DateTime?
-  consumedExecutionId String?               @db.VarChar(191)
-  version             Int                   @default(0)
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
-  planSnapshot        OperationPlanSnapshot @relation(fields: [planSnapshotId], references: [id], onDelete: Restrict)
-  executions          OperationExecution[]
-  tasks               Task[]
-
-  @@unique([planSnapshotId])
-  @@index([userId, scopeKind, scopeId, operationId])
-  @@index([consumedExecutionId])
-  @@map("approval_grants")
-}
-
 model OperationExecution {
   id                   String                 @id @default(uuid())
-  executionKind        String                 @default("approved_plan") @db.VarChar(32)
+  executionKind        String                 @default("planned") @db.VarChar(32)
   commandId            String?                @unique @db.VarChar(191)
   payloadHash          String?                @db.VarChar(64)
   contractRevision     String?                @db.VarChar(128)
@@ -536,7 +504,6 @@ model OperationExecution {
   projectId            String?
   operationId          String                 @db.VarChar(128)
   planSnapshotId       String?
-  approvalGrantId      String?                @unique
   requestId            String                 @db.VarChar(128)
   status               String                 @db.VarChar(32)
   output               Json?
@@ -544,7 +511,6 @@ model OperationExecution {
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
   planSnapshot         OperationPlanSnapshot? @relation(fields: [planSnapshotId], references: [id], onDelete: Restrict)
-  approvalGrant        ApprovalGrant?         @relation(fields: [approvalGrantId], references: [id], onDelete: Restrict)
   tasks                Task[]
   workspaceResources   WorkspaceResource[]    @relation("WorkspaceResourceOperationExecution")
   alternativeResources WorkspaceResource[]    @relation("WorkspaceResourceAlternativeGroupExecution")

@@ -6,9 +6,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/contexts/ToastContext'
 import type { OperationPlanView } from '@/lib/operations/planning'
 import {
-  executeApprovedCanvasOperation,
+  executePlannedCanvasOperation,
   fetchOperationPlanView,
-  issueOperationApprovalGrant,
 } from '@/lib/query/operation-plan-client'
 import { queryKeys } from '@/lib/query/keys'
 
@@ -24,7 +23,7 @@ interface PendingCanvasOperation extends CanvasOperationRequest {
   readonly plan: OperationPlanView
 }
 
-type CanvasOperationPhase = 'idle' | 'planning' | 'confirming' | 'executing'
+type CanvasOperationPhase = 'idle' | 'planning' | 'executing'
 
 export function useCanvasOperationAction(params: {
   readonly projectId: string
@@ -51,46 +50,31 @@ export function useCanvasOperationAction(params: {
         context,
         operationRequestId,
       })
+      if (!plan.planSnapshotId) throw new Error('OPERATION_PLAN_SNAPSHOT_ID_REQUIRED')
       setPending({ ...request, operationRequestId, plan })
-      setPhase('confirming')
-    } catch (error) {
-      setPending(null)
-      setPhase('idle')
-      busyRef.current = false
-      showError(error, t('failed'))
-    }
-  }, [context, params.projectId, phase, showError, t])
-
-  const confirm = useCallback(async () => {
-    if (!pending || phase !== 'confirming') return
-    try {
       setPhase('executing')
-      const grant = await issueOperationApprovalGrant(
-        pending.plan,
-        pending.operationRequestId,
-      )
-      await executeApprovedCanvasOperation({
+      await executePlannedCanvasOperation({
         projectId: params.projectId,
-        operationId: pending.operationId,
-        input: pending.input,
+        operationId: request.operationId,
+        input: request.input,
         context,
-        approvalGrantId: grant.approvalGrantId,
-        operationRequestId: grant.operationRequestId,
+        planSnapshotId: plan.planSnapshotId,
+        operationRequestId,
       })
       await queryClient.invalidateQueries({
         queryKey: queryKeys.project.workspaceResourcesAll(params.projectId),
       })
-      pending.onAccepted?.(pending.plan)
+      request.onAccepted?.(plan)
       setPending(null)
       setPhase('idle')
       busyRef.current = false
     } catch (error) {
-      // Keep the immutable plan and request identity so a user retry cannot
-      // silently approve or execute a different plan.
-      setPhase('confirming')
+      setPending(null)
+      setPhase('idle')
+      busyRef.current = false
       showError(error, t('failed'))
     }
-  }, [context, params.projectId, pending, phase, queryClient, showError, t])
+  }, [context, params.projectId, phase, queryClient, showError, t])
 
   const cancel = useCallback(() => {
     if (phase === 'executing') return
@@ -101,7 +85,6 @@ export function useCanvasOperationAction(params: {
 
   return {
     begin,
-    confirm,
     cancel,
     pending,
     phase,

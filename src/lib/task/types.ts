@@ -75,7 +75,6 @@ export type TaskExecutionData = {
   userId: string
   operationId?: string | null
   operationSource?: string | null
-  approvalGrantId?: string | null
   operationExecutionId?: string | null
   operationPlanTaskId?: string | null
   operationRequestId?: string | null
@@ -105,7 +104,6 @@ export type CreateTaskInput = {
   dedupeKey?: string | null
   operationId?: string | null
   operationSource?: string | null
-  approvalGrantId?: string | null
   operationExecutionId?: string | null
   operationPlanTaskId?: string | null
   operationRequestId?: string | null

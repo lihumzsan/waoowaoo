@@ -36,37 +36,20 @@ export async function fetchAssetOperationPlanView(params: {
   return await response.json() as OperationPlanView
 }
 
-export async function issueOperationApprovalGrant(plan: OperationPlanView, requestedOperationRequestId?: string) {
-  if (!plan.planSnapshotId) throw new Error('OPERATION_PLAN_SNAPSHOT_ID_REQUIRED')
-  const operationRequestId = requestedOperationRequestId ?? plan.operationRequestId ?? crypto.randomUUID()
-  if (plan.operationRequestId && plan.operationRequestId !== operationRequestId) throw new Error('OPERATION_PLAN_REQUEST_ID_DIVERGED')
-  const response = await apiFetch('/api/operation-approval-grants', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Idempotency-Key': operationRequestId },
-    body: JSON.stringify({ planSnapshotId: plan.planSnapshotId, operationRequestId }),
-  })
-  if (!response.ok) throw await readClientApiError(response)
-  const record = await response.json() as Record<string, unknown>
-  if (typeof record.approvalGrantId !== 'string' || record.operationRequestId !== operationRequestId) {
-    throw new Error('OPERATION_APPROVAL_GRANT_RESPONSE_DIVERGED')
-  }
-  return { approvalGrantId: record.approvalGrantId, operationRequestId }
-}
-
-export async function executeApprovedCanvasOperation(params: {
+export async function executePlannedCanvasOperation(params: {
   projectId: string
   operationId: string
   input: Readonly<Record<string, unknown>>
   context?: Readonly<Record<string, unknown>>
   operationRequestId: string
-  approvalGrantId: string
+  planSnapshotId: string
 }): Promise<unknown> {
   return await requestJsonWithError<unknown>(
     `/api/projects/${encodeURIComponent(params.projectId)}/operations/${encodeURIComponent(params.operationId)}/execute`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Idempotency-Key': params.operationRequestId },
-      body: JSON.stringify({ input: params.input, context: params.context ?? {}, approvalGrantId: params.approvalGrantId, operationRequestId: params.operationRequestId }),
+      body: JSON.stringify({ input: params.input, context: params.context ?? {}, planSnapshotId: params.planSnapshotId, operationRequestId: params.operationRequestId }),
     },
   )
 }

@@ -20,7 +20,6 @@ function preparePlannedTask(params: {
   projectId: string
   operationId: string
   operationSource: string
-  approvalGrantId: string
   operationExecutionId: string
   operationRequestId: string
 }): CreateTaskInput & {
@@ -56,7 +55,6 @@ function preparePlannedTask(params: {
     dedupeKey: params.task.dedupeKey ?? null,
     operationId: params.operationId,
     operationSource: params.operationSource,
-    approvalGrantId: params.approvalGrantId,
     operationExecutionId: params.operationExecutionId,
     operationPlanTaskId: params.task.id,
     operationRequestId: params.operationRequestId,
@@ -64,7 +62,6 @@ function preparePlannedTask(params: {
 }
 
 export async function submitApprovedOperationPlanTasks(params: {
-  approvalGrantId: string
   operationExecutionId: string
   transaction: Prisma.TransactionClient
   operationSource: string
@@ -76,7 +73,6 @@ export async function submitApprovedOperationPlanTasks(params: {
   if (
     !execution
     || execution.status !== 'committing'
-    || execution.approvalGrantId !== params.approvalGrantId
     || execution.planSnapshotId === null
   ) {
     throw new Error(`OPERATION_EXECUTION_AUTHORIZATION_INVALID:${params.operationExecutionId}`)
@@ -94,24 +90,10 @@ export async function submitApprovedOperationPlanTasks(params: {
       projectId: snapshot.plan.projectId,
       operationId: execution.operationId,
       operationSource: params.operationSource,
-      approvalGrantId: params.approvalGrantId,
       operationExecutionId: params.operationExecutionId,
       operationRequestId: execution.requestId,
     }),
   )
-  const grant = await tx.approvalGrant.findUnique({
-    where: { id: params.approvalGrantId },
-  })
-  if (
-    !grant
-    || grant.revokedAt
-    || !grant.consumedAt
-    || grant.consumedExecutionId !== params.operationExecutionId
-    || grant.version !== 1
-  ) {
-    throw new Error(`APPROVAL_GRANT_NOT_USABLE:${params.approvalGrantId}`)
-  }
-
   if (planned.length === 0) return new Map()
 
   const persisted = await persistSubmittedTaskBatchInTransaction({
@@ -127,7 +109,6 @@ export async function submitApprovedOperationPlanTasks(params: {
     requestId: execution.requestId,
     details: {
       operationExecutionId: params.operationExecutionId,
-      approvalGrantId: params.approvalGrantId,
       count: persisted.length,
       dedupedCount: persisted.filter(({ deduped }) => deduped).length,
       taskIds: persisted.map(({ task }) => task.id),

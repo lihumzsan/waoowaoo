@@ -7,9 +7,9 @@ import { assertOperationChannelAllowed } from '@/lib/operations/channel-policy'
 import { executeDirectOperationTransaction } from '@/lib/operations/durable-execution'
 import { invokeProjectAgentOperation } from '@/lib/operations/invocation'
 import {
-  ApprovedOperationExecutionReceiptError,
-  invokeApprovedOperationPlanWithReceipt,
-  loadApprovedOperationExecutionInput,
+  PlannedOperationExecutionReceiptError,
+  invokePlannedOperationWithReceipt,
+  loadPlannedOperationExecutionInput,
 } from '@/lib/operations/planned-operation-invocation'
 import { loadOperationPlanSnapshot } from '@/lib/operations/operation-plan-snapshot'
 import { createProjectAgentOperationRegistryForApi } from '@/lib/operations/registry'
@@ -51,7 +51,7 @@ function throwFailureNonRetryable(failure: FailureRecord): never {
 }
 
 function deterministicScheduleFailure(error: unknown): string | null {
-  if (error instanceof ApprovedOperationExecutionReceiptError) {
+  if (error instanceof PlannedOperationExecutionReceiptError) {
     return error.code
   }
   if (error instanceof WorkflowUpdateFailedError) {
@@ -151,10 +151,10 @@ function validateReceipt(
   }
 }
 
-async function executeApprovedPlanOperation(
+async function executePlannedOperation(
   input: ExecuteOperationActivityInput,
 ): Promise<OperationExecutionWorkflowReceipt> {
-  if (input.envelope.command.kind !== 'approved_plan') {
+  if (input.envelope.command.kind !== 'planned') {
     return failNonRetryable('OPERATION_EXECUTION_KIND_INVALID')
   }
   const command = input.envelope.command
@@ -171,16 +171,16 @@ async function executeApprovedPlanOperation(
     )
   }
   if (!isPlannedOperation(operation)) {
-    return failNonRetryable('OPERATION_EXECUTION_BILLABLE_PLAN_REQUIRED', command.operationId)
+    return failNonRetryable('OPERATION_EXECUTION_PLAN_REQUIRED', command.operationId)
   }
 
   const invocation = {
-    approvalGrantId: command.approvalGrantId,
+    planSnapshotId: command.planSnapshotId,
     requestId: command.operationRequestId,
   }
   let normalizedInput: unknown
   try {
-    normalizedInput = await loadApprovedOperationExecutionInput({
+    normalizedInput = await loadPlannedOperationExecutionInput({
       userId: command.userId,
       operationId: command.operationId,
       invocation,
@@ -192,26 +192,16 @@ async function executeApprovedPlanOperation(
   if (!parsedInput.success) {
     return failNonRetryable('OPERATION_EXECUTION_FROZEN_INPUT_INVALID', command.operationId)
   }
-  const grant = await prisma.approvalGrant.findUnique({
-    where: { id: command.approvalGrantId },
-    select: {
-      projectId: true,
-      planSnapshotId: true,
-    },
-  })
-  if (
-    !grant ||
-    grant.projectId !== command.projectId
-  ) {
-    return failNonRetryable('OPERATION_EXECUTION_PROJECT_SCOPE_DIVERGED', command.approvalGrantId)
-  }
-  const snapshot = await loadOperationPlanSnapshot(grant.planSnapshotId)
+  const snapshot = await loadOperationPlanSnapshot(command.planSnapshotId)
   if (!snapshot) {
-    return failNonRetryable('OPERATION_EXECUTION_PLAN_SNAPSHOT_MISSING', grant.planSnapshotId)
+    return failNonRetryable('OPERATION_EXECUTION_PLAN_SNAPSHOT_MISSING', command.planSnapshotId)
+  }
+  if (snapshot.projectId !== command.projectId) {
+    return failNonRetryable('OPERATION_EXECUTION_PROJECT_SCOPE_DIVERGED', command.planSnapshotId)
   }
   const locales = new Set(snapshot.plan.tasks.map((task) => task.locale))
   if (locales.size > 1) {
-    return failNonRetryable('OPERATION_EXECUTION_PLAN_LOCALE_DIVERGED', grant.planSnapshotId)
+    return failNonRetryable('OPERATION_EXECUTION_PLAN_LOCALE_DIVERGED', command.planSnapshotId)
   }
   const locale = [...locales][0]
   const followUpBatchBinding =
@@ -245,7 +235,7 @@ async function executeApprovedPlanOperation(
     followUpBatchBinding,
   }
   try {
-    const result = await invokeApprovedOperationPlanWithReceipt({
+    const result = await invokePlannedOperationWithReceipt({
       operation,
       ctx: context,
       normalizedInput: parsedInput.data,
@@ -288,7 +278,6 @@ async function directTaskReceipt(params: {
       task.operationId !== params.command.operationId ||
       task.operationExecutionId !== params.operationExecutionId ||
       task.operationRequestId !== params.command.operationRequestId ||
-      task.approvalGrantId !== null ||
       !isTaskType(task.type)
     ) {
       return failNonRetryable(
@@ -450,8 +439,8 @@ export async function executeOperation(
   heartbeatTimer.unref()
   try {
     const receipt =
-      input.envelope.command.kind === 'approved_plan'
-        ? await executeApprovedPlanOperation(input)
+      input.envelope.command.kind === 'planned'
+        ? await executePlannedOperation(input)
         : await executeDirectTaskOperation(input)
     for (const task of receipt.tasks) {
       const event = await prisma.taskEvent.findUnique({

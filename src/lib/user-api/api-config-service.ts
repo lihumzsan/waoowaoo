@@ -25,7 +25,7 @@ import {
 } from './api-config-model-normalization'
 import {
   resolveBuiltinCapabilities,
-} from './api-config-pricing-display'
+} from './api-config-capabilities'
 import {
   normalizeDefaultModelsInput,
   normalizeWorkflowConcurrencyInput,
@@ -109,7 +109,6 @@ export async function getUserApiConfig(userId: string) {
     defaultModels: enabledDefaultModels,
     capabilityDefaults,
     workflowConcurrency,
-    pricingDisplay: {},
     deployment: toPublicDeploymentConfig(deployment),
   }
 }

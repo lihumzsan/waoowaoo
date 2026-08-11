@@ -13,10 +13,18 @@ ALTER TABLE `operation_plan_snapshots`
   DROP COLUMN `quoteSnapshot`,
   DROP COLUMN `quoteHash`;
 
-ALTER TABLE `approval_grants`
-  DROP COLUMN `quoteHash`,
-  DROP COLUMN `quoteCeiling`,
-  DROP COLUMN `currency`;
+ALTER TABLE `tasks`
+  DROP FOREIGN KEY `tasks_approvalGrantId_fkey`,
+  DROP INDEX `tasks_approvalGrantId_idx`,
+  DROP COLUMN `approvalGrantId`;
+
+ALTER TABLE `operation_executions`
+  DROP FOREIGN KEY `operation_executions_approvalGrantId_fkey`,
+  DROP INDEX `operation_executions_approvalGrantId_key`,
+  DROP COLUMN `approvalGrantId`,
+  MODIFY `executionKind` VARCHAR(32) NOT NULL DEFAULT 'planned';
+
+DROP TABLE `approval_grants`;
 
 DROP TABLE `balance_transactions`;
 DROP TABLE `balance_freezes`;

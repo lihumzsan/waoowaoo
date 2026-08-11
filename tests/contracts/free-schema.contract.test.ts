@@ -18,7 +18,7 @@ describe('free product schema contract', () => {
     ]) {
       expect(schema).not.toMatch(new RegExp(`^\\s*${field}\\s+`, 'mu'))
     }
-    for (const model of ['User', 'Project', 'Task', 'OperationPlanSnapshot', 'ApprovalGrant', 'OperationExecution']) {
+    for (const model of ['User', 'Project', 'Task', 'OperationPlanSnapshot', 'OperationExecution']) {
       expect(schema).toMatch(new RegExp(`\\bmodel\\s+${model}\\b`))
     }
   })
