@@ -103,6 +103,10 @@ View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 pl
 - 刷新续流首版只补缺失的 text-start 而没有持久 watermark，bootstrap 还主动丢弃订阅期间的增量，
   刷新可长期显示截断尾段 → 用重建猜测代替持久前缀 → durable prefix 与 seq 同存，严格续号
   （ARL-11）。
+- durable prefix 首版又把每个模型增量都排成一次完整消息历史事务；长对话中旧前缀排队耗尽易失流
+  缓冲并阻塞 Turn 终态，刷新后长期显示输出中 → 已持久前缀与最新未发布前缀没有区分 → 同一消息只
+  保留最新未落库快照，并合并尚未被快照封口的相邻文字增量；分段边界仍按队列顺序持久化，终态只
+  等待当前写入和最终快照（ARL-07/11）。
 - 旧链路已建立稳定错误码与本地化边界，但 Runtime 切换后的终态持久化又固定写一个通用失败码并丢弃
   详情；第一次补救只枚举 Codex error enum，没有用真实 Provider 402 验证协议边界，`UnexpectedStatus`
   仍被官方 Runtime 降成 `other` → 同一可见性不变量换 writer 后又漏掉真实入口 → 模型网关把 Provider

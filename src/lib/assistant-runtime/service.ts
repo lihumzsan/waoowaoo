@@ -728,6 +728,7 @@ export class AssistantRuntimeService {
         sink: {
           reserveChunk: (chunk) => publisher.reserve(chunk),
           setMessageId: (messageId) => publisher.setMessageId(messageId),
+          sealChunksThrough: (watermark) => publisher.sealThrough(watermark),
           publishChunksThrough: async (watermark) => await publisher.publishThrough(watermark),
           publishViewChanged: async (reason) => await publishAgentSessionViewChanged({
             projectId: identity.projectId,

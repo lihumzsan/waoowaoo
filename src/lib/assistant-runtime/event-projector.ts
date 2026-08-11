@@ -46,6 +46,12 @@ type PendingTextPart = {
   completedPrefixLength: number
 }
 
+type PendingMessageSnapshot = {
+  readonly message: UIMessage
+  readonly watermark: number
+  readonly publishViewChanged: boolean
+}
+
 function isRecord(value: RuntimeJsonValue | undefined): value is RuntimeJsonObject {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
@@ -236,6 +242,8 @@ export class AssistantRuntimeEventProjector {
   private readonly partOrder: string[] = []
   private readonly pendingText = new Map<string, PendingTextPart>()
   private readonly progressByItem = new Map<string, string>()
+  private readonly pendingMessageSnapshots = new Map<string, PendingMessageSnapshot>()
+  private readonly scheduledMessageSnapshotDrains = new Set<string>()
   private latestStreamSeq = 0
   private segmentIndex = 0
   private terminalProjection: AssistantRuntimeTerminalProjection | null = null
@@ -289,6 +297,7 @@ export class AssistantRuntimeEventProjector {
     this.options.sink.setMessageId(this.buildAssistantMessageId())
     if (!boundaryMessage) return null
     this.queueCriticalPersistence(async () => {
+      this.options.sink.sealChunksThrough(watermark)
       await this.options.onMessageSnapshot(boundaryMessage)
       await this.options.sink.publishChunksThrough(watermark)
       await this.options.sink.publishViewChanged('runtime_steer_boundary').catch(() => undefined)
@@ -821,12 +830,29 @@ export class AssistantRuntimeEventProjector {
   private queueMessageSnapshot(publishViewChanged = true): void {
     const message = this.buildAssistantMessage()
     if (!message) return
-    const watermark = this.latestStreamSeq
+    const current = this.pendingMessageSnapshots.get(message.id)
+    this.pendingMessageSnapshots.set(message.id, {
+      message,
+      watermark: this.latestStreamSeq,
+      publishViewChanged: publishViewChanged || current?.publishViewChanged === true,
+    })
+    if (this.scheduledMessageSnapshotDrains.has(message.id)) return
+    this.scheduledMessageSnapshotDrains.add(message.id)
     this.queueCriticalPersistence(async () => {
-      await this.options.onMessageSnapshot(message)
-      await this.options.sink.publishChunksThrough(watermark)
-      if (publishViewChanged) {
-        await this.options.sink.publishViewChanged('runtime_item_completed').catch(() => undefined)
+      try {
+        while (true) {
+          const snapshot = this.pendingMessageSnapshots.get(message.id)
+          if (!snapshot) break
+          this.pendingMessageSnapshots.delete(message.id)
+          this.options.sink.sealChunksThrough(snapshot.watermark)
+          await this.options.onMessageSnapshot(snapshot.message)
+          await this.options.sink.publishChunksThrough(snapshot.watermark)
+          if (snapshot.publishViewChanged) {
+            await this.options.sink.publishViewChanged('runtime_item_completed').catch(() => undefined)
+          }
+        }
+      } finally {
+        this.scheduledMessageSnapshotDrains.delete(message.id)
       }
     }, 'message_snapshot_persistence_failed')
   }
