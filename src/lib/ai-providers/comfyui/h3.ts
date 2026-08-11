@@ -20,6 +20,7 @@ import {
   readComfyUiHttpError,
   readComfyUiOutput,
   readComfyUiOutputData,
+  readComfyUiRequiredOptions,
   readComfyUiString,
   requestComfyUiJson,
 } from './transport'
@@ -50,15 +51,6 @@ function promptRejection(error: ComfyUiHttpError): ProviderSubmissionError {
   })
 }
 
-function readOptions(info: unknown, className: string, field: string): string[] {
-  const definition = asComfyUiRecord(asComfyUiRecord(info)?.[className])
-  const input = asComfyUiRecord(definition?.input)
-  const required = asComfyUiRecord(input?.required)
-  const fieldValue = required?.[field]
-  if (!Array.isArray(fieldValue) || !Array.isArray(fieldValue[0])) return []
-  return fieldValue[0].filter((value): value is string => typeof value === 'string')
-}
-
 async function preflight(baseUrl: string): Promise<void> {
   const classes = H3_RUNTIME_PROFILES['h3-fast-first-frame'].requiredNodeClasses
   for (const className of classes) {
@@ -74,7 +66,7 @@ async function preflight(baseUrl: string): Promise<void> {
   ]
   for (const [className, field, expected] of expectedModels) {
     const info = await requestComfyUiJson(baseUrl, `/object_info/${encodeURIComponent(className)}`)
-    if (!readOptions(info, className, field).includes(expected)) throw new Error(`COMFYUI_MODEL_MISSING:${expected}`)
+    if (!readComfyUiRequiredOptions(info, className, field).includes(expected)) throw new Error(`COMFYUI_MODEL_MISSING:${expected}`)
   }
 }
 

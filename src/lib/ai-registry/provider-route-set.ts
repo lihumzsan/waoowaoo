@@ -129,7 +129,7 @@ export function resolveProviderRouteSet(
   if (selectedIndex === -1) {
     throw new Error(`PROVIDER_ROUTE_PRIMARY_MISSING:${declaration.logicalCapabilityId}:${selected.modelKey}`)
   }
-  if (modelType !== 'image' && modelType !== 'video' && modelType !== 'music') {
+  if (modelType !== 'image' && modelType !== 'video' && modelType !== 'music' && modelType !== 'sound') {
     throw new Error(`PROVIDER_ROUTE_MODALITY_UNSUPPORTED:${declaration.logicalCapabilityId}:${modelType}`)
   }
   const primary = members[selectedIndex]

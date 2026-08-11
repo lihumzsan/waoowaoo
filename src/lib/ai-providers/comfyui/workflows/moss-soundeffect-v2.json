@@ -1,0 +1,40 @@
+{
+  "29": {
+    "class_type": "MOSS_SoundEffectV2Loader",
+    "inputs": {
+      "model": "OpenMOSS-Team/MOSS-SoundEffect-v2.0",
+      "manual_model_path": "",
+      "device": "auto",
+      "dtype": "auto",
+      "weight_quantization": "auto",
+      "auto_download": false,
+      "local_files_only": true,
+      "revision": "",
+      "unload_comfy_models": true,
+      "disable_torch_compile": true
+    }
+  },
+  "30": {
+    "class_type": "MOSS_SoundEffectV2Generate",
+    "inputs": {
+      "moss_model": ["29", 0],
+      "prompt": "",
+      "negative_prompt": "",
+      "seconds": 5,
+      "num_inference_steps": 50,
+      "cfg_scale": 4,
+      "sigma_shift": 5,
+      "seed": 0,
+      "append_duration_suffix": "randomize",
+      "preview": false
+    }
+  },
+  "28": {
+    "class_type": "SaveAudioMP3",
+    "inputs": {
+      "audio": ["30", 0],
+      "filename_prefix": "audio/ComfyUI",
+      "quality": "V0"
+    }
+  }
+}

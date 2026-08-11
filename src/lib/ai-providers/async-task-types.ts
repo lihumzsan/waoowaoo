@@ -11,7 +11,7 @@ export type AsyncExternalIdProvider =
   | 'MUREKA'
   | 'COMFYUI'
 
-export type AsyncExternalIdType = 'VIDEO' | 'IMAGE' | 'MUSIC' | 'VOICE' | 'BATCH'
+export type AsyncExternalIdType = 'VIDEO' | 'IMAGE' | 'MUSIC' | 'SOUND' | 'VOICE' | 'BATCH'
 
 export interface AsyncDownloadHeaders {
   [name: string]: string

@@ -46,6 +46,15 @@ export function readComfyUiHttpError(value: unknown): string {
   ).slice(0, 512)
 }
 
+export function readComfyUiRequiredOptions(info: unknown, className: string, field: string): string[] {
+  const definition = asComfyUiRecord(asComfyUiRecord(info)?.[className])
+  const input = asComfyUiRecord(definition?.input)
+  const required = asComfyUiRecord(input?.required)
+  const fieldValue = required?.[field]
+  if (!Array.isArray(fieldValue) || !Array.isArray(fieldValue[0])) return []
+  return fieldValue[0].filter((value): value is string => typeof value === 'string')
+}
+
 export function buildComfyUiUrl(baseUrl: string, path: string): string {
   return `${baseUrl.replace(/\/+$/u, '')}${path}`
 }
