@@ -1,6 +1,5 @@
 'use client'
 import { logError as _ulogError } from '@/lib/logging/core'
-import JSZip from 'jszip'
 
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
@@ -253,6 +252,7 @@ export default function AssetHubPage() {
 
         setIsDownloading(true)
         try {
+            const { default: JSZip } = await import('jszip')
             const zip = new JSZip()
             // 并发 fetch 所有图片
             await Promise.all(

@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { signOut, useSession } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -37,7 +37,7 @@ function isProfileSectionEnabled(section: ProfileSection, features: PublicDeploy
   return section === 'security' || section === 'apiConfig'
 }
 
-export default function ProfilePage() {
+function ProfilePageContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -184,5 +184,13 @@ export default function ProfilePage() {
       </main>
 
     </div>
+  )
+}
+
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={<BrandPageLoading />}>
+      <ProfilePageContent />
+    </Suspense>
   )
 }

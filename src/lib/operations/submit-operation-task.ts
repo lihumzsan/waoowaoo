@@ -123,9 +123,6 @@ export async function submitOperationTaskBatch(
   if (!operationExecutionTransaction) {
     throw new Error('OPERATION_TASK_EXECUTION_TRANSACTION_REQUIRED')
   }
-  let persisted: Awaited<
-    ReturnType<typeof persistSubmittedTaskBatchInTransaction>
-  >
   const persist = async (
     tx: Prisma.TransactionClient,
   ): Promise<
@@ -148,7 +145,7 @@ export async function submitOperationTaskBatch(
       },
     })
   }
-  persisted = await persist(operationExecutionTransaction)
+  const persisted = await persist(operationExecutionTransaction)
   return await Promise.all(
     persisted.map(async ({ task, deduped }) => {
       if (!isTaskType(task.type))
