@@ -8,7 +8,6 @@ export type AsyncExternalIdProvider =
   | 'GOOGLE'
   | 'OPENROUTER'
   | 'TOONFLOW'
-  | 'MUREKA'
 
 export type AsyncExternalIdType = 'VIDEO' | 'IMAGE' | 'MUSIC' | 'VOICE' | 'BATCH'
 

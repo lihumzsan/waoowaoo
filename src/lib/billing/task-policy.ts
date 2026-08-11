@@ -12,6 +12,8 @@ import { getTaskDefinition } from '@/lib/task/definition'
 import type { TaskType } from '@/lib/task/types'
 import type { TaskBillingInfo } from './types'
 import { readImageRuntimeGenerationOptions } from '@/lib/image-generation/runtime-options'
+import { musicCompositionPlanDurationMs } from '@/lib/music/composition-plan'
+import { musicScoreGenerationOptionsSchema } from '@/lib/music/score-specification'
 
 type AnyPayload = Record<string, unknown> | null | undefined
 
@@ -143,21 +145,16 @@ function buildVideoTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillin
 function buildMusicTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillingInfo | null {
   const model = pickFirstString([payload?.musicModel, payload?.modelId, payload?.model])
   if (!model) return null
-  const durationSeconds = readNumber(payload?.durationSeconds)
-  if (durationSeconds === null || durationSeconds <= 0) return null
-  const outputFormat = readString(payload?.outputFormat)
-  const vocalMode = readString(payload?.vocalMode)
-  const genre = readString(payload?.genre)
-  const mood = readString(payload?.mood)
-  const bpm = readNumber(payload?.bpm)
+  const specification = musicScoreGenerationOptionsSchema.safeParse(payload?.generationOptions)
+  if (!specification.success) return null
+  const durationSeconds = musicCompositionPlanDurationMs(
+    specification.data.compositionPlan,
+  ) / 1000
   const quantity = Math.max(1, Math.floor(toNumber(payload?.count, 1)))
   const metadata = {
     durationSeconds,
-    ...(outputFormat ? { outputFormat } : {}),
-    ...(vocalMode ? { vocalMode } : {}),
-    ...(genre ? { genre } : {}),
-    ...(mood ? { mood } : {}),
-    ...(typeof bpm === 'number' ? { bpm } : {}),
+    generationMode: 'composition_plan',
+    outputFormat: specification.data.outputFormat,
   }
   return {
     billable: true,

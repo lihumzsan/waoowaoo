@@ -18,7 +18,9 @@ function frozenImageOptions(
 ): Record<string, string | number | boolean> {
   return Object.fromEntries(
     Object.entries(value).filter((entry): entry is [string, string | number | boolean] => (
-      entry[1] !== null
+      typeof entry[1] === 'string'
+      || typeof entry[1] === 'number'
+      || typeof entry[1] === 'boolean'
     )),
   )
 }
@@ -63,13 +65,15 @@ export async function handleWorkspaceResourceImageTask(
   ) {
     throw new Error(`WORKSPACE_RESOURCE_IMAGE_TASK_CONTRACT_INVALID:${data.taskId}`)
   }
+  const prompt = payload.resource.prompt
+  if (prompt === null) throw new Error(`WORKSPACE_RESOURCE_IMAGE_PROMPT_REQUIRED:${data.taskId}`)
   await reportTaskProgress(context, 20, { stage: 'workspace_resource_prepare' })
   const referenceImages = await loadImageReferences(context, payload)
   await reportTaskProgress(context, 45, { stage: 'workspace_resource_generate' })
   const source = await resolveImageSourceFromGeneration(context, {
     userId: data.userId,
     modelId: payload.resource.modelKey,
-    prompt: payload.resource.prompt,
+    prompt,
     options: {
       ...frozenImageOptions(payload.generationOptions),
       ...(referenceImages.length > 0 ? { referenceImages } : {}),

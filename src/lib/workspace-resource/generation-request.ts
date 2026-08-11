@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { OPERATION_EXECUTION_MAX_TASKS } from '@/lib/temporal/operation-execution/contracts'
+import { musicScoreCueRequestSchema } from '@/lib/music/score-specification'
 import { CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS } from './generation-contract'
 import {
   WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA,
@@ -47,7 +48,6 @@ const commonItemShape = {
   itemId: z.string().trim().min(1).max(191),
   name: resourceNameSchema,
   folderPath: folderPathSchema,
-  prompt: finalPromptSchema,
   count: z.number().int().min(1).max(6).default(1),
 } as const
 
@@ -58,6 +58,7 @@ const textList = (maxItems: number, maxLength: number) => z.array(
 export const imageGenerationItemSchema = z.object({
   ...commonItemShape,
   mediaType: z.literal('image'),
+  prompt: finalPromptSchema,
   schemaId: z.enum(WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.image),
   assetKind: z.enum(['character', 'location', 'prop']).nullable().default(null),
   references: z.array(generationReferenceSchema.extend({
@@ -87,28 +88,20 @@ export const imageGenerationItemSchema = z.object({
   }
 })
 
-export const audioGenerationItemSchema = z.object({
+export const audioGenerationItemSchema = musicScoreCueRequestSchema.safeExtend({
   ...commonItemShape,
   mediaType: z.literal('audio'),
-  prompt: finalPromptSchema.describe('Complete final provider-ready music prompt. Keep it within the injected productionCapabilities.music.promptTargetCharacters; the server rejects promptMaxCharacters and never appends option text.'),
   schemaId: z.enum(WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.audio),
   references: z.array(generationReferenceSchema.extend({
-    channel: z.enum(['context', 'video']),
-  }).strict()).max(16).optional(),
-  durationSeconds: z.number().int().min(1).max(600),
-  vocalMode: z.enum(['instrumental', 'vocal']).default('instrumental'),
-  genre: z.string().trim().min(1).max(200).optional(),
-  mood: z.string().trim().min(1).max(200).optional(),
-  bpm: z.number().int().min(20).max(300).optional(),
-  startSeconds: z.number().finite().nonnegative().optional(),
-  purpose: z.string().trim().min(1).max(4_000).optional(),
-  musicalDirection: z.string().trim().min(1).max(8_000).optional(),
-  dialogueSafety: z.string().trim().min(1).max(2_000).nullable().optional(),
+    channel: z.literal('context'),
+    role: z.literal('score_timeline'),
+  }).strict()).length(1),
 }).strict()
 
 export const videoGenerationItemSchema = z.object({
   ...commonItemShape,
   mediaType: z.literal('video'),
+  prompt: finalPromptSchema,
   schemaId: z.enum(WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.video),
   references: z.array(videoGenerationReferenceSchema).max(16).optional(),
   durationSeconds: z.number().int().min(1).max(CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS),
@@ -211,12 +204,12 @@ export const videoGenerationBatchOutputSchema = z.object({
 }).strict().superRefine(validateGenerationItems)
 
 export const audioGenerationBatchOutputSchema = z.object({
-  schemaVersion: z.literal(2),
+  schemaVersion: z.literal(3),
   outputKind: z.literal('audio_generation_batch'),
   batchId: z.string().trim().min(1).max(191),
   decision: z.enum(['produce', 'no_music']),
   overview: z.string().trim().min(1).max(12_000),
-  items: z.array(audioGenerationItemSchema).max(8),
+  items: z.array(audioGenerationItemSchema).max(OPERATION_EXECUTION_MAX_TASKS),
   globalContinuity: z.string().trim().max(8_000),
   assumptions: textList(64, 2_000),
   warnings: textList(64, 2_000),
@@ -227,13 +220,5 @@ export const audioGenerationBatchOutputSchema = z.object({
   if (batch.decision === 'no_music' && batch.items.length !== 0) {
     context.addIssue({ code: 'custom', path: ['items'], message: 'decision=no_music requires items to be empty.' })
   }
-  let previousEnd = 0
-  batch.items.forEach((item, index) => {
-    const start = item.startSeconds ?? previousEnd
-    if (start < previousEnd) {
-      context.addIssue({ code: 'custom', path: ['items', index, 'startSeconds'], message: 'Music cues must not overlap.' })
-    }
-    previousEnd = start + item.durationSeconds
-  })
   validateGenerationItems(batch, context)
 })

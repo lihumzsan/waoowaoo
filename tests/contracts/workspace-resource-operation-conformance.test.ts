@@ -227,7 +227,7 @@ describe('WorkspaceResource Operation registry conformance', () => {
     }] } }).success).toBe(true)
     expect(() => parseWorkspaceResourceGenerationTaskPayload({
       lifecycleProjection: { resources: [{ resourceId: 'res_output', mediaType: 'image', schemaId: 'generic.image', name: 'Derived' }] },
-      protocol: 'workspace_resource_generation_v1',
+      protocol: 'workspace_resource_generation_v2',
       resource: {
         resourceId: 'res_output', workspacePath: 'Derived-res_output', mediaType: 'image', schemaId: 'generic.image',
         inputHash: 'a'.repeat(64), prompt: 'Use every reference.', modelKey: 'openrouter::openai/gpt-image-2',

@@ -27,6 +27,7 @@ export const GOOGLE_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: 'lyria-3-pro-preview',
     capabilities: {
       music: {
+        generationModes: ['prompt'],
         durationSecondsOptions: [30, 60, 90, 120, 180],
         vocalModeOptions: ['instrumental', 'vocal'],
         outputFormatOptions: ['mp3', 'wav'],

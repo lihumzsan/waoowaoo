@@ -278,7 +278,22 @@ export interface VideoCapabilities {
   fieldI18n?: CapabilityFieldI18nMap
 }
 
+export type MusicGenerationMode = 'prompt' | 'composition_plan'
+
+export interface MusicCompositionPlanCapabilities {
+  maxChunks: number
+  minChunkDurationMs: number
+  maxChunkDurationMs: number
+  minPlanDurationMs: number
+  maxPlanDurationMs: number
+  maxPositiveStyles: number
+  maxNegativeStyles: number
+  contextAdherenceOptions: Array<'low' | 'medium' | 'high'>
+}
+
 export interface MusicCapabilities {
+  generationModes?: MusicGenerationMode[]
+  compositionPlan?: MusicCompositionPlanCapabilities
   durationSecondsOptions?: number[]
   durationSecondsRange?: {
     min: number
@@ -287,11 +302,6 @@ export interface MusicCapabilities {
   vocalModeOptions?: string[]
   outputFormatOptions?: string[]
   bpmOptions?: number[]
-  /**
-   * Whether and how many video Resource references this music model accepts as
-   * generation conditioning (video-to-soundtrack). Absent means unsupported.
-   */
-  maxReferenceVideos?: number
   /**
    * Provider wire limit for one generation prompt, in characters. Absent means
    * the provider publishes no such limit.
@@ -356,12 +366,13 @@ const VIDEO_ALLOWED_FIELDS = new Set<keyof VideoCapabilities>([
 ])
 
 const MUSIC_ALLOWED_FIELDS = new Set<keyof MusicCapabilities>([
+  'generationModes',
+  'compositionPlan',
   'durationSecondsOptions',
   'durationSecondsRange',
   'vocalModeOptions',
   'outputFormatOptions',
   'bpmOptions',
-  'maxReferenceVideos',
   'promptMaxChars',
   'fieldI18n',
 ])
@@ -788,6 +799,98 @@ function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unk
 function validateMusicCapabilities(issues: CapabilityValidationIssue[], raw: unknown) {
   if (!isRecord(raw)) return
 
+  const generationModes = raw.generationModes
+  const allowedGenerationModes: readonly MusicGenerationMode[] = ['prompt', 'composition_plan']
+  if (
+    generationModes !== undefined
+    && (!isStringArray(generationModes)
+      || generationModes.some((mode) => !allowedGenerationModes.includes(mode as MusicGenerationMode)))
+  ) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.music.generationModes',
+      message: 'generationModes must contain only prompt or composition_plan',
+      allowedValues: allowedGenerationModes,
+    })
+  }
+
+  const compositionPlan = raw.compositionPlan
+  if (compositionPlan !== undefined) {
+    if (!isRecord(compositionPlan)) {
+      issues.push({
+        code: 'CAPABILITY_FIELD_INVALID',
+        field: 'capabilities.music.compositionPlan',
+        message: 'compositionPlan must be an object',
+      })
+    } else {
+      const requiredPositiveIntegers = [
+        'maxChunks',
+        'minChunkDurationMs',
+        'maxChunkDurationMs',
+        'minPlanDurationMs',
+        'maxPlanDurationMs',
+        'maxPositiveStyles',
+        'maxNegativeStyles',
+      ] as const
+      for (const field of requiredPositiveIntegers) {
+        const value = compositionPlan[field]
+        if (!Number.isSafeInteger(value) || (value as number) <= 0) {
+          issues.push({
+            code: 'CAPABILITY_FIELD_INVALID',
+            field: `capabilities.music.compositionPlan.${field}`,
+            message: `${field} must be a positive integer`,
+          })
+        }
+      }
+      if (
+        typeof compositionPlan.minChunkDurationMs === 'number'
+        && typeof compositionPlan.maxChunkDurationMs === 'number'
+        && compositionPlan.maxChunkDurationMs < compositionPlan.minChunkDurationMs
+      ) {
+        issues.push({
+          code: 'CAPABILITY_FIELD_INVALID',
+          field: 'capabilities.music.compositionPlan.maxChunkDurationMs',
+          message: 'maxChunkDurationMs must be >= minChunkDurationMs',
+        })
+      }
+      if (
+        typeof compositionPlan.minPlanDurationMs === 'number'
+        && typeof compositionPlan.maxPlanDurationMs === 'number'
+        && compositionPlan.maxPlanDurationMs < compositionPlan.minPlanDurationMs
+      ) {
+        issues.push({
+          code: 'CAPABILITY_FIELD_INVALID',
+          field: 'capabilities.music.compositionPlan.maxPlanDurationMs',
+          message: 'maxPlanDurationMs must be >= minPlanDurationMs',
+        })
+      }
+      const adherenceOptions = compositionPlan.contextAdherenceOptions
+      if (
+        !isStringArray(adherenceOptions)
+        || adherenceOptions.some((value) => !['low', 'medium', 'high'].includes(value))
+      ) {
+        issues.push({
+          code: 'CAPABILITY_FIELD_INVALID',
+          field: 'capabilities.music.compositionPlan.contextAdherenceOptions',
+          message: 'contextAdherenceOptions must contain only low, medium, or high',
+          allowedValues: ['low', 'medium', 'high'],
+        })
+      }
+    }
+  }
+
+  if (
+    Array.isArray(generationModes)
+    && generationModes.includes('composition_plan')
+    && compositionPlan === undefined
+  ) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.music.compositionPlan',
+      message: 'compositionPlan capabilities are required when composition_plan is supported',
+    })
+  }
+
   const durationSecondsOptions = raw.durationSecondsOptions
   if (durationSecondsOptions !== undefined && !isNumberArray(durationSecondsOptions)) {
     issues.push({
@@ -839,17 +942,6 @@ function validateMusicCapabilities(issues: CapabilityValidationIssue[], raw: unk
       code: 'CAPABILITY_FIELD_INVALID',
       field: 'capabilities.music.bpmOptions',
       message: 'bpmOptions must be a finite number array',
-    })
-  }
-
-  if (
-    raw.maxReferenceVideos !== undefined
-    && (!Number.isInteger(raw.maxReferenceVideos) || (raw.maxReferenceVideos as number) <= 0)
-  ) {
-    issues.push({
-      code: 'CAPABILITY_FIELD_INVALID',
-      field: 'capabilities.music.maxReferenceVideos',
-      message: 'maxReferenceVideos must be a positive integer',
     })
   }
 

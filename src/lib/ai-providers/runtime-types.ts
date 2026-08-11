@@ -11,6 +11,7 @@ import type {
 import type { ReasoningEffort } from '@/lib/ai-registry/reasoning-effort'
 import type { ExternalOperationId } from '@/lib/external-operation/registry'
 import type { FailureRecord } from '@/lib/errors/failure'
+import type { MusicCompositionPlan } from '@/lib/music/composition-plan'
 
 export type GenerateResult = {
   readonly success: true
@@ -128,7 +129,9 @@ export type AiProviderMusicExecutionContext = {
     modelId: string
     modelKey: string
   }
-  prompt: string
+  generation:
+    | { readonly kind: 'prompt'; readonly prompt: string }
+    | { readonly kind: 'composition_plan'; readonly compositionPlan: MusicCompositionPlan }
   options?: {
     negativePrompt?: string
     durationSeconds?: number
@@ -137,11 +140,6 @@ export type AiProviderMusicExecutionContext = {
     mood?: string
     bpm?: number
     outputFormat?: 'mp3' | 'wav'
-    referenceVideoUrl?: string
-    referenceVideoDurationMs?: number
-    /** Score only this window of the reference video (music_direction cue). */
-    scoreWindowStartMs?: number
-    scoreWindowEndMs?: number
     [key: string]: unknown
   }
 }
@@ -192,7 +190,7 @@ export type AiProviderLlmSessionContext = {
   explicitSessionId?: string
 }
 
-export type AiProviderConnectionTestStepName = 'models' | 'textGen' | 'imageGen' | 'credits'
+export type AiProviderConnectionTestStepName = 'models' | 'textGen' | 'imageGen' | 'musicGen' | 'credits'
 
 export type AiProviderConnectionTestMessageKey =
   | 'connectionTest.authInvalid'

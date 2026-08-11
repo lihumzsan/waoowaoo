@@ -62,8 +62,9 @@ Episode、Chapter、Scene、Shot、Canon 都是用户目录与文件内容，不
 - **WR-15 — MCP 直接消费持久事实。** MCP Operation 直接从 Catalog、Version、Task 与配置读取权威
   状态；调用前后没有 Runtime 文件 flush/refresh，也没有“资源指针同步中”生命周期。工具提交成功
   后，pending/ready/failed 只由 Resource 与 Task View 表达。
-- **WR-16 — 创作内容不在服务端编译。** 专业 JSON 必须包含完整最终 Prompt、创作身份与创作参数；
-  Project 画幅与资产格式等系统参数由各自服务端 owner 解析，禁止 Agent 重复提交。
+- **WR-16 — 创作内容不在服务端编译。** 专业 JSON 必须包含完整最终 Provider-ready 创作输入、创作
+  身份与创作参数：图片/视频使用 Prompt，结构化音乐使用 Composition Plan 与 cue timing；Project
+  画幅与资产格式等系统参数由各自服务端 owner 解析，禁止 Agent 重复提交。
   Planner 在任何 Plan、报价、Resource 或 Task 副作用前严格校验、选择正式模型、解析精确引用并
   逐字冻结；禁止依据 schemaId 追加 Prompt、猜资产类型，或让调用方覆盖 Project 画幅。
 - **WR-17 — 项目生产上下文由系统实时注入。** 只读上下文由当前 Project 配置与生产 registry 的唯一

@@ -1,7 +1,11 @@
 import { AiOptionValidationError, normalizeAiOptions } from '@/lib/ai-exec/normalize'
 import { resolveAiProviderAdapter } from '@/lib/ai-providers'
 import type { MediaModality } from '@/lib/ai-providers/shared/option-schema'
-import type { AiResolvedSelection, AiUnknownObject } from '@/lib/ai-registry/types'
+import type {
+  AiResolvedSelection,
+  AiUnknownObject,
+  MusicGenerationMode,
+} from '@/lib/ai-registry/types'
 import {
   getProviderConfig,
   resolveModelSelection,
@@ -13,6 +17,7 @@ export function normalizeMediaOptionsForSelection(input: {
   readonly modality: MediaModality
   readonly options: unknown
   readonly prompt?: string
+  readonly musicGenerationMode?: MusicGenerationMode
 }): AiUnknownObject | undefined {
   const adapter = resolveAiProviderAdapter(input.selection.provider)
   const modalityAdapter = adapter[input.modality]
@@ -20,6 +25,24 @@ export function normalizeMediaOptionsForSelection(input: {
     throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${input.selection.provider}:${input.modality}`)
   }
   const descriptor = modalityAdapter.describe(input.selection)
+  if (input.modality === 'music') {
+    if (!input.musicGenerationMode) {
+      throw new AiOptionValidationError({
+        failure: 'invalid_option',
+        context: `${input.modality}:${input.selection.modelKey}`,
+        field: 'generationMode',
+        reason: 'required',
+      })
+    }
+    if (!descriptor.capabilities.music?.generationModes?.includes(input.musicGenerationMode)) {
+      throw new AiOptionValidationError({
+        failure: 'invalid_option',
+        context: `${input.modality}:${input.selection.modelKey}`,
+        field: 'generationMode',
+        reason: `unsupported_value=${input.musicGenerationMode}`,
+      })
+    }
+  }
   const options = normalizeAiOptions({
     schema: descriptor.optionSchema,
     options: input.options,
@@ -49,6 +72,7 @@ export async function preflightMediaGenerationOptions(input: {
   readonly modality: MediaModality
   readonly options: unknown
   readonly prompt?: string
+  readonly musicGenerationMode?: MusicGenerationMode
 }): Promise<{
   readonly selection: AiResolvedSelection
   readonly options: AiUnknownObject | undefined
@@ -64,6 +88,7 @@ export async function preflightMediaGenerationOptions(input: {
       modality: input.modality,
       options: input.options,
       prompt: input.prompt,
+      musicGenerationMode: input.musicGenerationMode,
     }),
   }
 }
@@ -79,6 +104,7 @@ export function preflightMediaProviderRoutes(input: {
   readonly modality: MediaModality
   readonly options: unknown
   readonly prompt?: string
+  readonly musicGenerationMode?: MusicGenerationMode
 }): void {
   const routeSet = resolveProviderRouteSet(input.modality, input.selection.modelKey)
   for (const route of routeSet.routes) {
@@ -92,6 +118,7 @@ export function preflightMediaProviderRoutes(input: {
       modality: input.modality,
       options: input.options,
       prompt: input.prompt,
+      musicGenerationMode: input.musicGenerationMode,
     })
   }
 }

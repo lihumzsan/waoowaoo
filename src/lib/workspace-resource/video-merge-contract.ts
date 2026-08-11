@@ -15,10 +15,6 @@ const videoMergeInputRefSchema = z.object({
 
 const videoMergeInputsSchema = z.array(videoMergeInputRefSchema).min(2).max(51)
   .refine(
-    (inputs) => inputs.filter((input) => input.role === 'bgm_audio').length <= 1,
-    { message: 'VIDEO_MERGE_BGM_INPUT_SINGLE' },
-  )
-  .refine(
     (inputs) => {
       const sourceCount = inputs.filter((input) => input.role === 'source_video').length
       return sourceCount >= 1 && sourceCount <= 50
@@ -37,8 +33,49 @@ export const workspaceResourceVideoMergeTaskPayloadSchema = z.object({
     inputHash: z.string().length(64),
     inputs: videoMergeInputsSchema,
     generationOptions: workspaceResourceGenerationOptionsSchema,
+    musicCues: z.array(z.object({
+      inputPosition: z.number().int().nonnegative(),
+      startMs: z.number().int().nonnegative(),
+      durationMs: z.number().int().positive(),
+      fadeInMs: z.number().int().nonnegative(),
+      fadeOutMs: z.number().int().nonnegative(),
+      gainDb: z.number().finite().min(-60).max(12),
+    }).strict().superRefine((cue, context) => {
+      if (cue.fadeInMs > cue.durationMs) {
+        context.addIssue({ code: 'custom', path: ['fadeInMs'], message: 'fadeInMs exceeds cue duration.' })
+      }
+      if (cue.fadeOutMs > cue.durationMs) {
+        context.addIssue({ code: 'custom', path: ['fadeOutMs'], message: 'fadeOutMs exceeds cue duration.' })
+      }
+    })).max(50),
     toolCallId: z.string().trim().min(1).nullable(),
-  }).strict(),
+  }).strict().superRefine((resource, context) => {
+    const bgmPositions = new Set(
+      resource.inputs
+        .filter((reference) => reference.role === 'bgm_audio')
+        .map((reference) => reference.position),
+    )
+    const cuePositions = resource.musicCues.map((cue) => cue.inputPosition)
+    if (
+      cuePositions.length !== bgmPositions.size
+      || new Set(cuePositions).size !== cuePositions.length
+      || cuePositions.some((position) => !bgmPositions.has(position))
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['musicCues'],
+        message: 'Every bgm_audio input must have exactly one frozen cue placement.',
+      })
+    }
+    const sourceCount = resource.inputs.filter((reference) => reference.role === 'source_video').length
+    if (resource.musicCues.length > 0 && sourceCount !== 1) {
+      context.addIssue({
+        code: 'custom',
+        path: ['musicCues'],
+        message: 'Music cues can only be placed onto one already-merged source video.',
+      })
+    }
+  }),
 }).strict()
 
 const workspaceResourceVideoMergeTaskEnvelopeSchema = workspaceResourceVideoMergeTaskPayloadSchema.extend({

@@ -197,7 +197,7 @@ async function planNewVoice(
           resourceId: resource.resourceId,
         }),
       }]),
-      protocol: 'workspace_resource_generation_v1' as const,
+      protocol: 'workspace_resource_generation_v2' as const,
       resource: {
         resourceId: resource.resourceId,
         workspacePath: resource.workspacePath,

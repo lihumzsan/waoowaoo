@@ -1,49 +1,31 @@
 import { describe, expect, it } from 'vitest'
-import {
-  normalizeMediaOptionsForSelection,
-} from '@/lib/ai-exec/media-preflight'
+import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
+import { normalizeMediaOptionsForSelection } from '@/lib/ai-exec/media-preflight'
 import { AiOptionValidationError } from '@/lib/ai-exec/normalize'
 
-const MUREKA_SELECTION = {
-  provider: 'mureka',
-  modelId: 'mureka-9',
-  modelKey: 'mureka::mureka-9',
+const ELEVENLABS_SELECTION = {
+  provider: 'elevenlabs',
+  modelId: 'music_v2',
+  modelKey: 'elevenlabs::music_v2',
   variantSubKind: 'official',
 } as const
 
 describe('media generation preflight', () => {
-  it('checks the exact frozen music prompt before provider execution', () => {
-    const options = {
-      durationSeconds: 60,
-      vocalMode: 'instrumental',
-      genre: 'industrial ambient',
-      mood: 'restrained',
-      bpm: 72,
-      outputFormat: 'mp3',
-    }
+  it('requires the selected music model to declare Composition Plan generation', () => {
+    ensureAiCatalogsRegistered()
     expect(normalizeMediaOptionsForSelection({
-      selection: MUREKA_SELECTION,
+      selection: ELEVENLABS_SELECTION,
       modality: 'music',
-      prompt: 'x'.repeat(1024),
-      options,
-    })).toMatchObject(options)
+      musicGenerationMode: 'composition_plan',
+      options: { outputFormat: 'mp3' },
+    })).toEqual({ outputFormat: 'mp3' })
 
-    try {
-      normalizeMediaOptionsForSelection({
-        selection: MUREKA_SELECTION,
-        modality: 'music',
-        prompt: 'x'.repeat(1025),
-        options,
-      })
-      throw new Error('Expected the frozen provider prompt to exceed its limit')
-    } catch (error) {
-      expect(error).toBeInstanceOf(AiOptionValidationError)
-      expect(error).toMatchObject({
-        failure: 'invalid_option',
-        field: 'prompt',
-        reason: 'max_chars_1024',
-      })
-    }
+    expect(() => normalizeMediaOptionsForSelection({
+      selection: ELEVENLABS_SELECTION,
+      modality: 'music',
+      musicGenerationMode: 'prompt',
+      prompt: 'legacy prompt',
+      options: { outputFormat: 'mp3' },
+    })).toThrow(AiOptionValidationError)
   })
-
 })

@@ -84,6 +84,7 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: FAL_LYRIA_3_PRO_MODEL_ID,
     capabilities: {
       music: {
+        generationModes: ['prompt'],
         durationSecondsRange: { min: 120, max: 180 },
         vocalModeOptions: ['instrumental', 'vocal'],
         outputFormatOptions: ['mp3'],

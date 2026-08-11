@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { taskRuntimePayloadEnvelopeShape } from '@/lib/task/progress-payload'
+import { musicScoreGenerationOptionsSchema } from '@/lib/music/score-specification'
 import type { WorkspaceResourceJsonValue } from './contracts'
 import { workspaceResourceLifecycleProjectionSchema } from './task-runtime-envelope'
 
@@ -13,9 +14,18 @@ export const workspaceResourceInputRefSchema = z.object({
   position: z.number().int().nonnegative(),
 }).strict()
 
+const workspaceResourceJsonValueSchema: z.ZodType<WorkspaceResourceJsonValue> = z.lazy(() => z.union([
+  z.string(),
+  z.number().finite(),
+  z.boolean(),
+  z.null(),
+  z.array(workspaceResourceJsonValueSchema),
+  z.record(z.string(), workspaceResourceJsonValueSchema),
+]))
+
 export const workspaceResourceGenerationOptionsSchema = z.record(
   z.string(),
-  z.union([z.string(), z.number(), z.boolean(), z.null()]),
+  workspaceResourceJsonValueSchema,
 )
 
 const frozenResourceSchema = z.object({
@@ -25,7 +35,8 @@ const frozenResourceSchema = z.object({
   schemaId: z.string().trim().min(1).max(96),
   inputHash: z.string().length(64),
   prompt: z.string().min(1).max(100_000)
-    .refine((value) => value.trim().length > 0, 'Prompt must contain non-whitespace content.'),
+    .refine((value) => value.trim().length > 0, 'Prompt must contain non-whitespace content.')
+    .nullable(),
   modelKey: z.string().trim().min(1).max(191),
   inputs: z.array(workspaceResourceInputRefSchema).max(16),
   // Shared task envelope must accept the largest declared image capability.
@@ -58,7 +69,7 @@ const frozenResourceSchema = z.object({
 
 export const workspaceResourceGenerationTaskPayloadSchema = z.object({
   lifecycleProjection: workspaceResourceLifecycleProjectionSchema,
-  protocol: z.literal('workspace_resource_generation_v1'),
+  protocol: z.literal('workspace_resource_generation_v2'),
   resource: frozenResourceSchema,
   imageModel: z.string().trim().min(1).optional(),
   videoModel: z.string().trim().min(1).optional(),
@@ -67,31 +78,98 @@ export const workspaceResourceGenerationTaskPayloadSchema = z.object({
   previewText: z.string().trim().min(1).max(20_000).optional(),
   language: z.string().trim().min(1).max(32).optional(),
   durationSeconds: z.number().int().min(1).max(600).optional(),
-  vocalMode: z.enum(['instrumental', 'vocal']).optional(),
-  genre: z.string().trim().min(1).max(200).optional(),
-  mood: z.string().trim().min(1).max(200).optional(),
-  bpm: z.number().int().min(20).max(300).optional(),
-  outputFormat: z.enum(['mp3', 'wav']).optional(),
-  scoreCue: z.object({
-    key: z.string().trim().min(1).max(191),
-    startMs: z.number().int().nonnegative(),
-    endMs: z.number().int().positive(),
-  }).strict().refine((cue) => cue.endMs > cue.startMs, { message: 'scoreCue endMs must exceed startMs' }).optional(),
   count: z.literal(1),
   generationOptions: workspaceResourceGenerationOptionsSchema,
-}).strict()
+}).strict().superRefine((payload, context) => {
+  if (payload.resource.mediaType === 'audio') {
+    const isMusic = Boolean(payload.musicModel)
+    const isVoice = Boolean(payload.voiceModel)
+    if (isMusic === isVoice) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['resource', 'mediaType'],
+        message: 'Audio generation must declare exactly one of musicModel or voiceModel.',
+      })
+      return
+    }
+    if (isVoice) {
+      if (payload.resource.prompt === null || payload.voiceModel !== payload.resource.modelKey) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['voiceModel'],
+          message: 'Voice generation requires a prompt and the frozen voiceModel.',
+        })
+      }
+      return
+    }
+    if (payload.resource.prompt !== null) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['resource', 'prompt'],
+        message: 'Composition Plan music Resources do not use a prompt.',
+      })
+    }
+    const musicOptions = musicScoreGenerationOptionsSchema.safeParse(payload.generationOptions)
+    if (!musicOptions.success) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['generationOptions'],
+        message: 'Audio generationOptions must contain one valid frozen music score specification.',
+      })
+    } else if (!payload.resource.inputs.some((reference) => (
+      reference.position === musicOptions.data.timelineInputPosition
+      && reference.role === 'score_timeline'
+    ))) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['generationOptions', 'timelineInputPosition'],
+        message: 'Music score timelineInputPosition must identify the frozen score_timeline input.',
+      })
+    }
+    if (payload.musicModel !== payload.resource.modelKey) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['musicModel'],
+        message: 'Audio generation requires the frozen musicModel.',
+      })
+    }
+    if (payload.durationSeconds !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['durationSeconds'],
+        message: 'Music duration is derived only from the Composition Plan.',
+      })
+    }
+    return
+  }
 
-const workspaceResourceGenerationTaskEnvelopeSchema = workspaceResourceGenerationTaskPayloadSchema.extend({
+  if (payload.resource.prompt === null) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['resource', 'prompt'],
+      message: 'Image and video generation require a prompt.',
+    })
+  }
+  if (payload.resource.mediaType === 'video' && payload.durationSeconds === undefined) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['durationSeconds'],
+      message: 'Video generation requires durationSeconds.',
+    })
+  }
+})
+
+const workspaceResourceGenerationTaskEnvelopeSchema = workspaceResourceGenerationTaskPayloadSchema.safeExtend({
   ...taskRuntimePayloadEnvelopeShape,
 }).strict()
 
-const workspaceResourceGenerationRetrySourceSchema = workspaceResourceGenerationTaskPayloadSchema.extend({
+const workspaceResourceGenerationRetrySourceSchema = workspaceResourceGenerationTaskPayloadSchema.safeExtend({
   resource: frozenResourceSchema.safeExtend({
     inputHash: z.string().trim().min(1).max(64),
   }),
 }).strict()
 
-const workspaceResourceGenerationRetrySourceEnvelopeSchema = workspaceResourceGenerationRetrySourceSchema.extend({
+const workspaceResourceGenerationRetrySourceEnvelopeSchema = workspaceResourceGenerationRetrySourceSchema.safeExtend({
   ...taskRuntimePayloadEnvelopeShape,
 }).strict()
 
@@ -118,12 +196,6 @@ export function parseWorkspaceResourceGenerationTaskPayload(
     previewText: parsed.previewText,
     language: parsed.language,
     durationSeconds: parsed.durationSeconds,
-    vocalMode: parsed.vocalMode,
-    genre: parsed.genre,
-    mood: parsed.mood,
-    bpm: parsed.bpm,
-    outputFormat: parsed.outputFormat,
-    scoreCue: parsed.scoreCue,
     count: parsed.count,
     generationOptions: parsed.generationOptions,
   })
@@ -149,12 +221,6 @@ export function parseWorkspaceResourceGenerationRetrySource(
     previewText: parsed.previewText,
     language: parsed.language,
     durationSeconds: parsed.durationSeconds,
-    vocalMode: parsed.vocalMode,
-    genre: parsed.genre,
-    mood: parsed.mood,
-    bpm: parsed.bpm,
-    outputFormat: parsed.outputFormat,
-    scoreCue: parsed.scoreCue,
     count: parsed.count,
     generationOptions: parsed.generationOptions,
   })

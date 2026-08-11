@@ -7,10 +7,9 @@ import { arkAdapter } from '@/lib/ai-providers/ark/adapter'
 import { arkAsyncTaskProvider } from '@/lib/ai-providers/ark/async-task'
 import { falAdapter } from '@/lib/ai-providers/fal/adapter'
 import { falAsyncTaskProvider } from '@/lib/ai-providers/fal/async-task'
+import { elevenLabsAdapter } from '@/lib/ai-providers/elevenlabs/adapter'
 import { googleAdapter } from '@/lib/ai-providers/google/adapter'
 import { geminiBatchAsyncTaskProvider, googleVideoAsyncTaskProvider } from '@/lib/ai-providers/google/async-task'
-import { murekaAdapter } from '@/lib/ai-providers/mureka/adapter'
-import { murekaAsyncTaskProvider } from '@/lib/ai-providers/mureka/async-task'
 import { openRouterAdapter } from '@/lib/ai-providers/openrouter/adapter'
 import { openAiAdapter } from '@/lib/ai-providers/openai/adapter'
 import { openRouterAsyncTaskProvider } from '@/lib/ai-providers/openrouter/async-task'
@@ -37,9 +36,9 @@ import {
 
 const runtimeProviderRegistry = new AiRegistry<AiProviderAdapter>([
   arkAdapter,
+  elevenLabsAdapter,
   falAdapter,
   googleAdapter,
-  murekaAdapter,
   openAiAdapter,
   openRouterAdapter,
   toonflowAdapter,
@@ -54,7 +53,6 @@ const asyncTaskProviderRegistry: AsyncTaskProviderRegistration[] = [
   arkAsyncTaskProvider,
   geminiBatchAsyncTaskProvider,
   googleVideoAsyncTaskProvider,
-  murekaAsyncTaskProvider,
   openRouterAsyncTaskProvider,
   toonflowAsyncTaskProvider,
 ]
@@ -68,7 +66,7 @@ export function resolveAsyncTaskProviderByExternalId(externalId: string): AsyncT
   if (!registration) {
     throw new Error(
       `无法识别的 externalId 格式: "${externalId}". ` +
-      `支持的格式: FAL:TYPE:endpoint:requestId, ARK:TYPE:requestId, GEMINI:BATCH:batchName, GOOGLE:VIDEO:operationName, OPENROUTER:VIDEO:requestId, TOONFLOW:VIDEO:taskICode, MUREKA:MUSIC:endpoint:taskId`,
+      `支持的格式: FAL:TYPE:endpoint:requestId, ARK:TYPE:requestId, GEMINI:BATCH:batchName, GOOGLE:VIDEO:operationName, OPENROUTER:VIDEO:requestId, TOONFLOW:VIDEO:taskICode`,
     )
   }
   return registration

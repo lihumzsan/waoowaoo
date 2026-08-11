@@ -9,7 +9,7 @@ import { getObjectBuffer, uploadObject } from '@/lib/storage'
 import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import {
   concatVideoMergeAudioClips,
-  muxVideoMergeAudio,
+  muxVideoMergeMusicCues,
   muxVideoMergeSourceAudio,
   renderVideoMergeClipAudio,
 } from '@/lib/video-compose/video-merge-audio'
@@ -48,23 +48,20 @@ export async function handleWorkspaceResourceVideoMergeTask(
     input: resource.reference,
     storageKey: resource.storageKey,
   }))
-  const bgmInput = payload.resource.inputs.find((input) => input.role === 'bgm_audio') ?? null
-  const [resolvedBgm] = bgmInput ? await resolveWorkspaceResourceInputMedia({
+  const inputByPosition = new Map(payload.resource.inputs.map((input) => [input.position, input]))
+  const bgmInputs = payload.resource.musicCues.map((cue) => {
+    const reference = inputByPosition.get(cue.inputPosition)
+    if (!reference || reference.role !== 'bgm_audio') {
+      throw new Error(`WORKSPACE_RESOURCE_VIDEO_MERGE_BGM_POSITION_INVALID:${String(cue.inputPosition)}`)
+    }
+    return reference
+  })
+  const resolvedBgm = bgmInputs.length > 0 ? await resolveWorkspaceResourceInputMedia({
     userId: data.userId,
     projectId: data.projectId,
-    references: [bgmInput],
+    references: bgmInputs,
     expectedMediaType: 'audio',
   }) : []
-  const bgmStorageKey = resolvedBgm?.storageKey ?? null
-  const rawBgmVolume = payload.resource.generationOptions['bgmVolume']
-  const bgmVolume = bgmInput
-    ? (typeof rawBgmVolume === 'number' && Number.isFinite(rawBgmVolume) && rawBgmVolume > 0 && rawBgmVolume <= 4
-        ? rawBgmVolume
-        : null)
-    : null
-  if (bgmInput && bgmVolume === null) {
-    throw new Error(`WORKSPACE_RESOURCE_VIDEO_MERGE_BGM_VOLUME_INVALID:${data.taskId}`)
-  }
 
   const workspaceDir = await mkdtemp(path.join(tmpdir(), `waoowaoo-resource-merge-${randomUUID()}-`))
   try {
@@ -132,10 +129,15 @@ export async function handleWorkspaceResourceVideoMergeTask(
       durationSeconds: stitchedDurationSeconds,
     })
     const outputPath = path.join(workspaceDir, 'merged.mp4')
-    if (bgmStorageKey && bgmVolume !== null) {
-      const bgmPath = path.join(workspaceDir, 'bgm-source')
-      await writeFile(bgmPath, await getObjectBuffer(bgmStorageKey))
-      await muxVideoMergeAudio({
+    if (resolvedBgm.length > 0) {
+      const musicCues = await Promise.all(resolvedBgm.map(async (bgm, index) => {
+        const placement = payload.resource.musicCues[index]
+        if (!placement) throw new Error(`WORKSPACE_RESOURCE_VIDEO_MERGE_BGM_PLACEMENT_MISSING:${String(index)}`)
+        const musicPath = path.join(workspaceDir, `bgm-source-${String(index)}`)
+        await writeFile(musicPath, await getObjectBuffer(bgm.storageKey))
+        return { ...placement, musicPath }
+      }))
+      await muxVideoMergeMusicCues({
         runCommand: createFfmpegCommandRunner({
           stage: 'workspace_resource_video_merge_mux',
           expectedDurationSeconds: stitchedDurationSeconds,
@@ -143,10 +145,9 @@ export async function handleWorkspaceResourceVideoMergeTask(
         stitchedPath,
         mainAudioPath,
         hasSourceAudio,
-        musicPath: bgmPath,
+        musicCues,
         outputPath,
         durationSeconds: stitchedDurationSeconds,
-        volume: bgmVolume,
       })
     } else {
       await muxVideoMergeSourceAudio({

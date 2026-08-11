@@ -120,6 +120,7 @@
     "models": "模型列表",
     "textGen": "文本生成",
     "imageGen": "图像生成",
+    "musicGen": "音乐生成",
     "credits": "余额检查",
     "skipped": "已跳过"
   },

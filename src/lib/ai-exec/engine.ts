@@ -36,7 +36,6 @@ import { resolveReasoningEffort } from '@/lib/ai-exec/reasoning-effort'
 import {
   createMediaProviderRequestIdentity,
   assertImageMediaReferencesUseHttps,
-  assertMusicMediaReferencesUseHttps,
   assertVideoMediaReferencesUseHttps,
 } from '@/lib/ai-exec/media-references'
 import {
@@ -54,6 +53,7 @@ import {
   summarizeMediaRequestInput,
   wrapMediaProviderExecution,
 } from '@/lib/ai-exec/media-observe'
+import type { MusicCompositionPlan } from '@/lib/music/composition-plan'
 
 export type AiMediaExecutionModality = Extract<AiModality, 'image' | 'video' | 'music' | 'voice'>
 
@@ -93,12 +93,6 @@ export type AiMusicExecutionOptions = {
   mood?: string
   bpm?: number
   outputFormat?: 'mp3' | 'wav'
-  /** Video conditioning input; only valid when the selected music model declares `maxReferenceVideos`. */
-  referenceVideoUrl?: string
-  referenceVideoDurationMs?: number
-  /** Score only this window of the reference video (music_direction cue). */
-  scoreWindowStartMs?: number
-  scoreWindowEndMs?: number
 }
 
 export type AiVoiceExecutionOptions = {
@@ -149,7 +143,9 @@ export type AiMediaExecutionInput =
     modality: 'music'
     userId: string
     modelKey: string
-    prompt: string
+    generation:
+      | { readonly kind: 'prompt'; readonly prompt: string }
+      | { readonly kind: 'composition_plan'; readonly compositionPlan: MusicCompositionPlan }
     options?: AiMusicExecutionOptions
   }
   | {
@@ -173,8 +169,6 @@ export async function executeMediaGeneration(
       imageUrl: input.imageUrl,
       options: input.options,
     })
-  } else if (input.modality === 'music') {
-    assertMusicMediaReferencesUseHttps(input.options)
   }
 
   const selection = await resolveModelSelection(input.userId, input.modelKey, input.modality)
@@ -244,7 +238,8 @@ export async function executeMediaGeneration(
         selection: routeSelection,
         modality: input.modality,
         options: input.options,
-        prompt: input.prompt,
+        prompt: input.generation.kind === 'prompt' ? input.generation.prompt : undefined,
+        musicGenerationMode: input.generation.kind,
       }) as AiMusicExecutionOptions | undefined
       return {
         provider: routeSelection.provider,
@@ -253,7 +248,7 @@ export async function executeMediaGeneration(
         execute: async () => await modalityAdapter.execute({
           userId: input.userId,
           selection: routeSelection,
-          prompt: input.prompt,
+          generation: input.generation,
           options,
         }),
       }
@@ -451,7 +446,9 @@ export async function generateVideo(
 export async function generateMusic(
   userId: string,
   modelKey: string,
-  prompt: string,
+  generation:
+    | { readonly kind: 'prompt'; readonly prompt: string }
+    | { readonly kind: 'composition_plan'; readonly compositionPlan: MusicCompositionPlan },
   options?: AiMusicExecutionOptions,
   invocation?: TaskProviderInvocation,
   wait?: AsyncProviderWaitCallbacks,
@@ -460,7 +457,7 @@ export async function generateMusic(
     modality: 'music',
     userId,
     modelKey,
-    prompt,
+    generation,
     options,
   }, invocation, wait)
 }

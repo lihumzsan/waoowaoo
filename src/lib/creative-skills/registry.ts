@@ -50,10 +50,10 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'music-direction': defineSkill({
     id: 'music-direction',
-    version: '2.2.0',
+    version: '3.0.0',
     title: '音乐与配乐设计',
-    summary: '从情绪诊断到整片连续配乐、配器、动态、留白和对白安全混音的设计方法。',
-    tags: ['music', 'bgm', 'score', 'audio', 'emotion'],
+    summary: '从剧情与真实成片时间线决定配乐窗口，并直接创作 Eleven Music v2 Composition Plan 与精确 cue 合成参数。',
+    tags: ['music', 'bgm', 'score', 'audio', 'composition-plan', 'timeline'],
   }),
 }
 

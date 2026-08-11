@@ -483,15 +483,15 @@ describe('provider invocation at-most-once DB integration', () => {
     await seedTask('provider-typed-validation-task')
     const validationExecute = vi.fn(async () => {
       throw new ProviderSubmissionError(
-        'MUSIC_PROMPT_TOO_LONG',
-        'Music prompt is 1035 characters; the model accepts at most 1024',
+        'PROVIDER_SUBMISSION_REJECTED',
+        'ElevenLabs rejected the music Composition Plan',
         {
           disposition: 'rejected',
-          provider: 'mureka',
-          details: { requested: 1035, allowed: 1024 },
+          provider: 'elevenlabs',
+          details: { httpStatus: 422, providerCode: 'bad_composition_plan' },
           cause: {
-            name: 'MurekaValidationError',
-            message: 'Music prompt is 1035 characters; the model accepts at most 1024',
+            name: 'ElevenLabsValidationError',
+            message: 'ElevenLabs rejected the music Composition Plan',
           },
         },
       )
@@ -501,12 +501,12 @@ describe('provider invocation at-most-once DB integration', () => {
     await expect(
       invoke('provider-typed-validation-task', validationExecute, 1),
     ).rejects.toMatchObject({
-      code: 'MUSIC_PROMPT_TOO_LONG',
-      details: { requested: 1035, allowed: 1024 },
+      code: 'PROVIDER_SUBMISSION_REJECTED',
+      details: { httpStatus: 422, providerCode: 'bad_composition_plan' },
       failure: { recovery: { operation: 'provider.submit', taskReplay: 'forbidden' } },
     })
     await expect(invoke('provider-typed-validation-task', laterAttempt, 2)).rejects.toMatchObject({
-      code: 'MUSIC_PROMPT_TOO_LONG',
+      code: 'PROVIDER_SUBMISSION_REJECTED',
       failure: { recovery: { operation: 'provider.submit', taskReplay: 'forbidden' } },
     })
 
@@ -523,14 +523,14 @@ describe('provider invocation at-most-once DB integration', () => {
         failure: {
           version: 2,
           native: {
-            name: 'MurekaValidationError',
-            message: 'Music prompt is 1035 characters; the model accepts at most 1024',
+            name: 'ElevenLabsValidationError',
+            message: 'ElevenLabs rejected the music Composition Plan',
           },
           interpretation: {
-            code: 'MUSIC_PROMPT_TOO_LONG',
-            details: { requested: 1035, allowed: 1024 },
+            code: 'PROVIDER_SUBMISSION_REJECTED',
+            details: { httpStatus: 422, providerCode: 'bad_composition_plan' },
           },
-          context: { system: 'provider', provider: 'mureka', phase: 'submit' },
+          context: { system: 'provider', provider: 'elevenlabs', phase: 'submit' },
           recovery: { taskReplay: 'forbidden' },
         },
       },

@@ -88,6 +88,8 @@ export function extractGoogleMusicResult(response: unknown): {
 }
 
 export async function executeGoogleMusicGeneration(input: AiProviderMusicExecutionContext): Promise<GenerateResult> {
+  if (input.generation.kind !== 'prompt') throw new Error('GOOGLE_MUSIC_GENERATION_MODE_UNSUPPORTED')
+  const prompt = input.generation.prompt
   const { apiKey } = await getProviderConfig(input.userId, input.selection.provider)
   const ai = new GoogleGenAI({ apiKey })
   const modelId = requireSelectedModelId(input.selection, 'google:music')
@@ -99,7 +101,7 @@ export async function executeGoogleMusicGeneration(input: AiProviderMusicExecuti
       GOOGLE_PROVIDER_PROXY_TARGET,
       async () => await ai.models.generateContent({
         model: modelId,
-        contents: [{ parts: [{ text: input.prompt }] }],
+        contents: [{ parts: [{ text: prompt }] }],
       }),
     ),
   }))

@@ -120,6 +120,7 @@
     "models": "Model List",
     "textGen": "Text Generation",
     "imageGen": "Image Generation",
+    "musicGen": "Music Generation",
     "credits": "Credits Check",
     "skipped": "Skipped"
   },

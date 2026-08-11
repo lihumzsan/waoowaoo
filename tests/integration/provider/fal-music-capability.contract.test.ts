@@ -70,7 +70,7 @@ describe('FAL Lyria continuous duration capability', () => {
     const result = await music.execute({
       userId: 'user-1',
       selection,
-      prompt,
+      generation: { kind: 'prompt', prompt },
       options: {
         durationSeconds: 149.5,
         vocalMode: 'instrumental',

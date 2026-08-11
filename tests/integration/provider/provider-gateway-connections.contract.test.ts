@@ -133,16 +133,24 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
       ])
     })
 
-    it('reports unsupported providers without a diagnose tester', async () => {
+    it('probes ElevenLabs credentials without spending on music generation', async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse({ tier: 'creator' }))
       const elevenlabs = await testProviderConnection({ apiType: 'elevenlabs', apiKey: 'k' })
       expect(elevenlabs).toEqual({
-        success: false,
-        steps: [{ name: 'models', status: 'fail', messageKey: 'connectionTest.providerError' }],
+        success: true,
+        steps: [
+          { name: 'credits', status: 'pass', messageKey: 'connectionTest.modelsOk' },
+          { name: 'musicGen', status: 'skip', messageKey: 'connectionTest.skippedSpend' },
+        ],
       })
+      const [input, init] = fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit]
+      expect(String(input)).toBe('https://api.elevenlabs.io/v1/user/subscription')
+      expect(init.method).toBe('GET')
+      expect(init.headers).toEqual({ 'xi-api-key': 'k' })
 
       const unknown = await testProviderConnection({ apiType: 'nope', apiKey: 'k' })
       expect(unknown.steps[0]?.messageKey).toBe('connectionTest.providerError')
-      expect(fetchMock.mock.calls).toEqual([])
+      expect(fetchMock.mock.calls).toHaveLength(1)
     })
   })
 })

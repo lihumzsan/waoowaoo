@@ -50,7 +50,7 @@ export const API_CONFIG_CATALOG_PROVIDERS: readonly ApiConfigCatalogProvider[] =
   { id: 'openrouter', name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1' },
   { id: 'fal', name: 'FAL' },
   { id: 'google', name: 'Google AI Studio' },
-  { id: 'mureka', name: 'Mureka', baseUrl: 'https://api.mureka.ai' },
+  { id: 'elevenlabs', name: 'ElevenLabs', baseUrl: 'https://api.elevenlabs.io' },
   { id: 'toonflow', name: 'Toonflow', baseUrl: 'https://api.toonflow.net/v1' },
 ]
 

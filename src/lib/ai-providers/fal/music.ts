@@ -25,7 +25,8 @@ export async function executeFalMusicGeneration(input: AiProviderMusicExecutionC
     throw new Error(`FAL_MUSIC_MODEL_UNSUPPORTED:${modelId}`)
   }
 
-  const prompt = input.prompt
+  if (input.generation.kind !== 'prompt') throw new Error('FAL_MUSIC_GENERATION_MODE_UNSUPPORTED')
+  const prompt = input.generation.prompt
   if (!prompt.trim()) throw new Error('FAL_MUSIC_PROMPT_REQUIRED')
   const negativePrompt = readTrimmedString(options.negativePrompt)
 

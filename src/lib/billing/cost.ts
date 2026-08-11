@@ -284,12 +284,24 @@ export function calcMusic(
   metadata?: BillingMetadata,
 ): number {
   const units = Math.max(1, normalizePositiveInteger(quantity))
+  const duration = resolveDurationSeconds(metadata)
   const pricing = resolveCatalogPricing({
     apiType: 'music',
     model,
     selections: toCapabilitySelections(metadata),
   })
-  return roundCredits(units * pricing.amount)
+  const pricingUnit = pricing.mode === 'flat' ? pricing.unit ?? 'per_call' : pricing.unit
+  if (pricingUnit === 'per_second' && duration === null) {
+    throw new BillingOperationError(
+      'BILLING_CAPABILITY_PRICE_NOT_FOUND',
+      `BILLING_CAPABILITY_PRICE_NOT_FOUND: music ${model} requires duration`,
+      { apiType: 'music', model },
+    )
+  }
+  const unitCost = pricingUnit === 'per_second'
+    ? pricing.amount * normalizePositiveNumber(duration || 0)
+    : pricing.amount
+  return roundCredits(units * unitCost)
 }
 
 export function calcVoice(model: string, characters: number): number {

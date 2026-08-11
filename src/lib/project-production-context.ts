@@ -22,20 +22,20 @@ export type ProjectProductionCapabilities = {
   } | null
   readonly music: {
     readonly modelKey: string
-    readonly promptMaxCharacters: number
-    readonly promptTargetCharacters: number
-    readonly durationSecondsOptions: readonly number[]
-    readonly durationSecondsRange: {
-      readonly min: number
-      readonly max: number
-    } | null
-    readonly vocalModeOptions: readonly string[]
-    readonly maxReferenceVideos: number
+    readonly generationMode: 'composition_plan'
+    readonly maxChunks: number
+    readonly minChunkDurationMs: number
+    readonly maxChunkDurationMs: number
+    readonly minPlanDurationMs: number
+    readonly maxPlanDurationMs: number
+    readonly maxPositiveStyles: number
+    readonly maxNegativeStyles: number
+    readonly contextAdherenceOptions: readonly ('low' | 'medium' | 'high')[]
   } | null
 }
 
 export type ProjectProductionContext = {
-  readonly schemaVersion: 4
+  readonly schemaVersion: 5
   readonly version: string
   readonly project: {
     readonly projectId: string
@@ -92,32 +92,21 @@ function resolveProductionCapabilities(config: ProjectModelConfig): ProjectProdu
   const music = config.musicModel
     ? resolveBuiltinCapabilitiesByModelKey('music', config.musicModel)?.music
     : undefined
-  const durationSecondsRange = music?.durationSecondsRange
-    ? {
-        min: Math.ceil(music.durationSecondsRange.min),
-        max: Math.floor(music.durationSecondsRange.max),
-      }
-    : null
-  const durationSecondsOptions = Array.from(new Set(
-    (music?.durationSecondsOptions ?? []).filter((duration): duration is number => (
-      Number.isInteger(duration) && duration > 0
-    )),
-  )).sort((left, right) => left - right)
-  const promptMaxCharacters = Math.min(music?.promptMaxChars ?? 100_000, 100_000)
+  const compositionPlan = music?.compositionPlan
   const musicCapabilities = config.musicModel
-    && music
-    && (durationSecondsRange !== null || durationSecondsOptions.length > 0)
+    && music?.generationModes?.includes('composition_plan')
+    && compositionPlan
       ? {
         modelKey: config.musicModel,
-        promptMaxCharacters,
-        promptTargetCharacters: Math.max(
-          1,
-          Math.min(500, Math.floor(promptMaxCharacters * 0.6)),
-        ),
-        durationSecondsOptions,
-        durationSecondsRange,
-        vocalModeOptions: music.vocalModeOptions ?? [],
-        maxReferenceVideos: music.maxReferenceVideos ?? 0,
+        generationMode: 'composition_plan' as const,
+        maxChunks: compositionPlan.maxChunks,
+        minChunkDurationMs: compositionPlan.minChunkDurationMs,
+        maxChunkDurationMs: compositionPlan.maxChunkDurationMs,
+        minPlanDurationMs: compositionPlan.minPlanDurationMs,
+        maxPlanDurationMs: compositionPlan.maxPlanDurationMs,
+        maxPositiveStyles: compositionPlan.maxPositiveStyles,
+        maxNegativeStyles: compositionPlan.maxNegativeStyles,
+        contextAdherenceOptions: compositionPlan.contextAdherenceOptions,
       }
     : null
 
@@ -147,7 +136,7 @@ export async function readProjectProductionContext(input: {
   ])
   if (!project) throw new ProjectProductionContextError()
   const value: Omit<ProjectProductionContext, 'version'> = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     project: {
       projectId: project.id,
       name: project.name,
