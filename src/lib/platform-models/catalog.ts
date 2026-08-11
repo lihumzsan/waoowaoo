@@ -1,7 +1,6 @@
 import { composeModelKey } from '@/lib/ai-registry/selection'
 import type { UnifiedModelType } from '@/lib/ai-registry/types'
 import {
-  PLATFORM_DEFAULT_MODEL_KEYS,
   PLATFORM_MODEL_INPUTS,
   type PlatformDefaultModelField,
 } from '@/lib/ai-registry/platform-models'
@@ -39,11 +38,13 @@ function toPlatformModel(input: PlatformModelPreset): StoredModel {
   }
 }
 
-function readEnvModelKey(field: PlatformDefaultModelField): string | null {
+function requireEnvModelKey(field: PlatformDefaultModelField): string {
   const raw = process.env[PLATFORM_DEFAULT_MODEL_ENV[field]]
-  if (typeof raw !== 'string') return null
-  const trimmed = raw.trim()
-  return trimmed || null
+  const trimmed = typeof raw === 'string' ? raw.trim() : ''
+  if (!trimmed) {
+    throw new Error(`PLATFORM_DEFAULT_MODEL_ENV_MISSING: ${PLATFORM_DEFAULT_MODEL_ENV[field]}`)
+  }
+  return trimmed
 }
 
 export function getPlatformModels(): StoredModel[] {
@@ -65,8 +66,8 @@ export function getPlatformDefaultModels(): Required<DefaultModelsPayload> {
   const byKey = new Map(models.map((model) => [model.modelKey, model]))
   const defaults = {} as Required<DefaultModelsPayload>
 
-  for (const field of Object.keys(PLATFORM_DEFAULT_MODEL_KEYS) as PlatformDefaultModelField[]) {
-    const modelKey = readEnvModelKey(field) || PLATFORM_DEFAULT_MODEL_KEYS[field]
+  for (const field of Object.keys(PLATFORM_DEFAULT_MODEL_TYPES) as PlatformDefaultModelField[]) {
+    const modelKey = requireEnvModelKey(field)
     const model = byKey.get(modelKey)
     if (!model) {
       throw new Error(`PLATFORM_DEFAULT_MODEL_NOT_FOUND: ${field}=${modelKey}`)

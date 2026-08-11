@@ -14,7 +14,6 @@ export const TOONFLOW_SEEDANCE_2_MODEL_ID = 'seedance-2.0'
 export const TOONFLOW_SEEDANCE_2_WIRE_MODEL = 'Seedance 2.0'
 export const TOONFLOW_SEEDANCE_2_FAST_MODEL_ID = 'seedance-2.0-fast'
 export const TOONFLOW_SEEDANCE_2_FAST_WIRE_MODEL = 'Seedance 2.0 fast'
-export const TOONFLOW_PLATFORM_DEFAULT_VIDEO_MODEL_KEY = `toonflow::${TOONFLOW_SEEDANCE_2_MODEL_ID}`
 
 export const TOONFLOW_SEEDANCE_2_DURATION_OPTIONS = [
   4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,

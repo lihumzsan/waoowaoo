@@ -1,8 +1,6 @@
 import type { PlatformModelPreset } from '@/lib/platform-models/types'
 
 export const GOOGLE_GEMINI_3_5_FLASH_MODEL_ID = 'gemini-3.5-flash'
-export const GOOGLE_PLATFORM_DEFAULT_ANALYSIS_MODEL_KEY = `google::${GOOGLE_GEMINI_3_5_FLASH_MODEL_ID}`
-export const GOOGLE_PLATFORM_DEFAULT_MUSIC_MODEL_KEY = 'google::lyria-3-pro-preview'
 
 export const GOOGLE_PLATFORM_MODEL_PRESETS = [
   { provider: 'google', modelId: GOOGLE_GEMINI_3_5_FLASH_MODEL_ID, name: 'Gemini 3.5 Flash', type: 'llm' },
