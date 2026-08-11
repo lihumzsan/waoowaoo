@@ -39,6 +39,7 @@
   "editDefault": "Edit Model",
   "videoDefault": "Video Model",
   "musicDefault": "Music Model",
+  "soundDefault": "Environmental Sound Model",
   "selectDefault": "Select",
   "defaultModelDesc": {
     "assistantModel": "Handles project assistant chat, tool planning, and collaborative responses.",
@@ -47,7 +48,8 @@
     "characterModel": "Generate character portraits and appearance references from script descriptions",
     "locationModel": "Generate scene environments and spatial references from script descriptions",
     "editModel": "Perform localized edits, style adjustments and refinements on existing images",
-    "musicModel": "Generate background music and scoring assets for project edits"
+    "musicModel": "Generate background music and scoring assets for project edits",
+    "soundModel": "Generate environmental, action, and ambience sound effects"
   },
   "defaultModelSection": {
     "coreFoundation": "Assistant, Text Analysis & Video",
@@ -77,7 +79,9 @@
     "videoTitle": "No video models available",
     "videoDescription": "Go to the provider pool below, configure a video model, and enable it first.",
     "musicTitle": "No music models available",
-    "musicDescription": "Go to the provider pool below, configure a music model, and enable it first."
+    "musicDescription": "Go to the provider pool below, configure a music model, and enable it first.",
+    "soundTitle": "No environmental sound models available",
+    "soundDescription": "Configure and enable an environmental sound model first."
   },
   "providerPool": "Provider Pool",
   "dragToSort": "Drag to sort",
@@ -102,6 +106,7 @@
   "typeImage": "Image",
   "typeVideo": "Video",
   "typeMusic": "Music / Score",
+  "typeSound": "Environmental Sound",
   "audioSubMusic": "Music",
   "apiKeyLabel": "API Key",
   "apiType": "API Type",

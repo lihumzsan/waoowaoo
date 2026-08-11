@@ -23,6 +23,7 @@ const ALLOWED_FIELDS: ReadonlyArray<string> = [
   'editModel',
   'videoModel',
   'musicModel',
+  'soundModel',
   'videoRatio',
   'assistantBillingConfirmationRequired',
 ]
@@ -35,6 +36,7 @@ const PLATFORM_MODEL_FIELDS = new Set([
   'editModel',
   'videoModel',
   'musicModel',
+  'soundModel',
 ])
 
 const modelKeyPreferenceSchema = z.string().trim().min(1).nullable()
@@ -48,6 +50,7 @@ const updateUserPreferenceInputSchema = z.object({
   editModel: modelKeyPreferenceSchema.optional(),
   videoModel: modelKeyPreferenceSchema.optional(),
   musicModel: modelKeyPreferenceSchema.optional(),
+  soundModel: modelKeyPreferenceSchema.optional(),
   videoRatio: z.string().trim().min(1).optional()
     .describe('Default output aspect ratio, for example 16:9 or 9:16.'),
   assistantBillingConfirmationRequired: z.boolean().optional()

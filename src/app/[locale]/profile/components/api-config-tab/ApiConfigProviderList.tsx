@@ -30,6 +30,7 @@ interface DefaultModels {
   editModel?: string
   videoModel?: string
   musicModel?: string
+  soundModel?: string
 }
 
 interface ApiConfigProviderListProps {

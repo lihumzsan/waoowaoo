@@ -44,6 +44,10 @@ const TypeIcon = ({
       return (
         <AppIcon name="audioWave" className={className} />
       )
+    case 'sound':
+      return (
+        <AppIcon name="audioWave" className={className} />
+      )
   }
 }
 
@@ -57,18 +61,21 @@ const typeLabel = (type: ProviderCardModelType, t: ProviderCardTranslator) => {
       return t('typeVideo')
     case 'music':
       return t('typeMusic')
+    case 'sound':
+      return t('typeSound')
   }
 }
 
 type ProviderCardVisibleType = ProviderCardModelType
 
-const MODEL_TYPES: readonly ProviderCardVisibleType[] = ['llm', 'image', 'video', 'music']
+const MODEL_TYPES: readonly ProviderCardVisibleType[] = ['llm', 'image', 'video', 'music', 'sound']
 
 export function getAddableModelTypesForProvider(providerId: string): ProviderCardModelType[] {
   const providerKey = getProviderKey(providerId)
   if (providerKey === 'openrouter') return ['llm', 'image', 'video']
   if (providerKey === 'fal') return ['image', 'video']
   if (providerKey === 'google') return ['llm', 'image', 'video', 'music']
+  if (providerKey === 'comfyui') return ['sound']
   if (providerKey === 'ark') return ['llm', 'image', 'video']
   return []
 }

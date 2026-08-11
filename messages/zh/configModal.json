@@ -14,6 +14,7 @@
   "editModel": "修图/编辑模型",
   "videoModel": "视频模型",
   "musicModel": "音乐模型",
+  "soundModel": "环境音效模型",
   "videoResolution": "视频分辨率",
   "fetchModelsFailed": "获取用户模型列表失败",
   "placeholder": "请输入...",

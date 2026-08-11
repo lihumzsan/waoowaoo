@@ -113,6 +113,7 @@ export interface ProjectModelConfig {
   editModel: string | null
   videoModel: string | null
   musicModel: string | null
+  soundModel: string | null
   videoRatio: string | null
   capabilityDefaults: CapabilitySelections
   capabilityOverrides: CapabilitySelections
@@ -126,6 +127,7 @@ export interface UserModelConfig {
   editModel: string | null
   videoModel: string | null
   musicModel: string | null
+  soundModel: string | null
   capabilityDefaults: CapabilitySelections
 }
 
@@ -171,6 +173,7 @@ export async function getProjectModelConfig(
       editModel: platformDefaults.editModel,
       videoModel: platformDefaults.videoModel,
       musicModel: platformDefaults.musicModel,
+      soundModel: platformDefaults.soundModel,
       videoRatio: projectData?.videoRatio ?? null,
       capabilityDefaults: getPlatformCapabilityDefaults(),
       capabilityOverrides: {},
@@ -189,6 +192,7 @@ export async function getProjectModelConfig(
     editModel: extractModelKey(projectData?.editModel) || extractModelKey(userPref?.editModel) || null,
     videoModel: extractModelKey(projectData?.videoModel) || extractModelKey(userPref?.videoModel) || null,
     musicModel: extractModelKey(projectData?.musicModel) || extractModelKey(userPref?.musicModel) || null,
+    soundModel: extractModelKey(projectData?.soundModel) || extractModelKey(userPref?.soundModel) || null,
     videoRatio: projectData?.videoRatio ?? null,
     capabilityDefaults: parseCapabilitySelections(userPref?.capabilityDefaults),
     capabilityOverrides: parseCapabilitySelections(projectData?.capabilityOverrides),
@@ -211,6 +215,7 @@ export async function getUserModelConfig(userId: string): Promise<UserModelConfi
       editModel: platformDefaults.editModel,
       videoModel: platformDefaults.videoModel,
       musicModel: platformDefaults.musicModel,
+      soundModel: platformDefaults.soundModel,
       capabilityDefaults: getPlatformCapabilityDefaults(),
     }
   }
@@ -227,12 +232,13 @@ export async function getUserModelConfig(userId: string): Promise<UserModelConfi
     editModel: extractModelKey(userPref?.editModel) || null,
     videoModel: extractModelKey(userPref?.videoModel) || null,
     musicModel: extractModelKey(userPref?.musicModel) || null,
+    soundModel: extractModelKey(userPref?.soundModel) || null,
     capabilityDefaults: parseCapabilitySelections(userPref?.capabilityDefaults),
   }
 }
 
 export function resolveModelCapabilityGenerationOptions(input: {
-  modelType: 'llm' | 'image' | 'video'
+  modelType: 'llm' | 'image' | 'video' | 'music' | 'sound'
   modelKey: string
   capabilityDefaults?: CapabilitySelections
   capabilityOverrides?: CapabilitySelections
@@ -297,6 +303,7 @@ export function checkRequiredModels(
     editModel: '修图/编辑模型',
     videoModel: '视频模型',
     musicModel: '音乐模型',
+    soundModel: '环境音效模型',
   }
 
   for (const field of requiredFields) {

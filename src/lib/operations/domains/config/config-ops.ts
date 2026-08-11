@@ -32,6 +32,7 @@ const MODEL_FIELDS = [
   'editModel',
   'videoModel',
   'musicModel',
+  'soundModel',
 ] as const
 
 const CLOUD_PROJECT_CONFIG_FIELDS = ['videoRatio'] as const
@@ -43,6 +44,7 @@ const MODEL_FIELD_TO_TYPE: Record<typeof MODEL_FIELDS[number], UnifiedModelType>
   editModel: 'image',
   videoModel: 'video',
   musicModel: 'music',
+  soundModel: 'sound',
 }
 
 const projectModelKeySchema = z.string().trim().min(1).nullable()
@@ -60,6 +62,7 @@ const updateProjectConfigInputSchema = z.object({
   editModel: projectModelKeySchema.optional(),
   videoModel: projectModelKeySchema.optional(),
   musicModel: projectModelKeySchema.optional(),
+  soundModel: projectModelKeySchema.optional(),
   videoRatio: projectVideoRatioSchema.optional()
     .describe('Explicit project output aspect ratio, for example 16:9 or 9:16.'),
   capabilityOverrides: capabilitySelectionCommandSchema.optional(),
@@ -256,6 +259,7 @@ function getNextProjectModelMap(
     editModel: string | null
     videoModel: string | null
     musicModel: string | null
+    soundModel: string | null
   },
   updates: Record<string, unknown>,
 ): Record<string, CapabilityModelContext> {
@@ -363,6 +367,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
             editModel: true,
             videoModel: true,
             musicModel: true,
+            soundModel: true,
           },
         })
         if (!projectData) {
@@ -379,6 +384,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
           editModel: projectData.editModel,
           videoModel: projectData.videoModel,
           musicModel: projectData.musicModel,
+          soundModel: projectData.soundModel,
         }, {})
         const cleanedOverrides = sanitizeCapabilityOverrides(storedOverrides, modelContextMap)
 
@@ -439,6 +445,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
             editModel: true,
             videoModel: true,
             musicModel: true,
+            soundModel: true,
           },
         })
         if (!currentProjectConfig) {

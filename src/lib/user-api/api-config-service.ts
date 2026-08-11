@@ -65,6 +65,7 @@ export async function getUserApiConfig(userId: string) {
       editModel: true,
       videoModel: true,
       musicModel: true,
+      soundModel: true,
       capabilityDefaults: true,
       analysisConcurrency: true,
       imageConcurrency: true,
@@ -95,6 +96,7 @@ export async function getUserApiConfig(userId: string) {
     editModel: pref?.editModel || '',
     videoModel: pref?.videoModel || '',
     musicModel: pref?.musicModel || '',
+    soundModel: pref?.soundModel || '',
   }
   const defaultModels = billingMode === 'OFF'
     ? rawDefaults
@@ -171,6 +173,7 @@ export async function putUserApiConfig(
       editModel: true,
       videoModel: true,
       musicModel: true,
+      soundModel: true,
     },
   })
   const existingProviders = parseStoredProviders(existingPref?.customProviders)
@@ -245,6 +248,9 @@ export async function putUserApiConfig(
     if (normalizedDefaults.musicModel !== undefined) {
       updateData.musicModel = normalizedDefaults.musicModel || null
     }
+    if (normalizedDefaults.soundModel !== undefined) {
+      updateData.soundModel = normalizedDefaults.soundModel || null
+    }
   }
 
   if (normalizedModels !== undefined) {
@@ -259,6 +265,7 @@ export async function putUserApiConfig(
       editModel: existingPref?.editModel || '',
       videoModel: existingPref?.videoModel || '',
       musicModel: existingPref?.musicModel || '',
+      soundModel: existingPref?.soundModel || '',
     }
     const nextDefaults = {
       ...existingDefaults,

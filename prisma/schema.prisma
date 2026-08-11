@@ -214,6 +214,7 @@ model Project {
   imageModel                String?
   videoModel                String?
   musicModel                String?
+  soundModel                String?
   videoRatio                String?
   characterModel            String?
   locationModel             String?
@@ -318,6 +319,7 @@ model UserPreference {
   editModel                            String? // 用户配置的修图模型
   videoModel                           String? // 用户配置的视频模型
   musicModel                           String? // 用户配置的音乐/配乐模型
+  soundModel                           String? // 用户配置的环境音效模型
   analysisConcurrency                  Int? // 分析流程并发上限
   imageConcurrency                     Int? // 图像流程并发上限
   videoConcurrency                     Int? // 视频流程并发上限

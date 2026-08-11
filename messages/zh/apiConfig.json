@@ -39,6 +39,7 @@
   "editDefault": "修图模型",
   "videoDefault": "视频模型",
   "musicDefault": "音乐/配乐模型",
+  "soundDefault": "环境音效模型",
   "selectDefault": "请选择",
   "defaultModelDesc": {
     "assistantModel": "负责项目助手对话、工具调用规划与用户协作响应。",
@@ -47,7 +48,8 @@
     "characterModel": "根据剧本描述生成角色形象与外观参考图",
     "locationModel": "根据剧本描述生成场景环境与空间参考图",
     "editModel": "对已有图片进行局部修改、风格调整与精修",
-    "musicModel": "为剪辑生成背景音乐与配乐素材"
+    "musicModel": "为剪辑生成背景音乐与配乐素材",
+    "soundModel": "为项目生成环境声、动作声和氛围音效"
   },
   "defaultModelSection": {
     "coreFoundation": "Assistant、文本分析与视频能力",
@@ -77,7 +79,9 @@
     "videoTitle": "暂无可选视频模型",
     "videoDescription": "请先去下方厂商资源池配置视频模型并开启模型。",
     "musicTitle": "暂无可选音乐模型",
-    "musicDescription": "请先去下方厂商资源池配置音乐/配乐模型并开启模型。"
+    "musicDescription": "请先去下方厂商资源池配置音乐/配乐模型并开启模型。",
+    "soundTitle": "暂无可选环境音效模型",
+    "soundDescription": "请先配置并启用环境音效模型。"
   },
   "providerPool": "厂商资源池",
   "dragToSort": "拖拽排序",
@@ -102,6 +106,7 @@
   "typeImage": "图像",
   "typeVideo": "视频",
   "typeMusic": "音乐/配乐",
+  "typeSound": "环境音效",
   "audioSubMusic": "音乐",
   "apiKeyLabel": "API Key",
   "apiType": "API 类型",

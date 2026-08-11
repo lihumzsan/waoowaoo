@@ -20,7 +20,7 @@ const apiConfigInputSchema = z.object({
   models: z.array(z.object({
     modelId: z.string().trim().min(1).describe('Provider model ID.'),
     name: z.string().trim().min(1).describe('User-visible model name.'),
-    type: z.enum(['llm', 'image', 'video', 'music'])
+    type: z.enum(['llm', 'image', 'video', 'music', 'sound'])
       .describe('The model modality implemented by this model.'),
     provider: z.string().trim().min(1).describe('Exact configured provider ID.'),
   }).strict()).optional(),
@@ -32,6 +32,7 @@ const apiConfigInputSchema = z.object({
     editModel: modelKeySchema.optional(),
     videoModel: modelKeySchema.optional(),
     musicModel: modelKeySchema.optional(),
+    soundModel: modelKeySchema.optional(),
   }).strict().optional(),
   capabilityDefaults: capabilitySelectionCommandSchema.optional(),
   workflowConcurrency: z.object({

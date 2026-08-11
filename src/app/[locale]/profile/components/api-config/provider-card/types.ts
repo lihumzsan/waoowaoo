@@ -9,6 +9,7 @@ export interface ProviderCardDefaultModels {
   editModel?: string
   videoModel?: string
   musicModel?: string
+  soundModel?: string
 }
 
 export interface ProviderCardProps {
@@ -35,7 +36,7 @@ export interface ModelFormState {
   modelId: string
 }
 
-export type ProviderCardModelType = 'llm' | 'image' | 'video' | 'music'
+export type ProviderCardModelType = 'llm' | 'image' | 'video' | 'music' | 'sound'
 
 export type ProviderCardGroupedModels = Partial<Record<ProviderCardModelType, CustomModel[]>>
 

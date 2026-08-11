@@ -67,6 +67,10 @@ export function getPlatformMusicGenerationOptions(): Record<string, CapabilityVa
   return options
 }
 
+export function getPlatformSoundGenerationOptions(): Record<string, CapabilityValue> {
+  return { outputFormat: 'mp3' }
+}
+
 function resolveModelKey(purpose: PlatformRuntimePurpose): string {
   const defaults = getPlatformDefaultModels()
   switch (purpose) {
@@ -82,6 +86,8 @@ function resolveModelKey(purpose: PlatformRuntimePurpose): string {
       return defaults.videoModel
     case 'music':
       return defaults.musicModel
+    case 'sound':
+      return defaults.soundModel
     case 'voice-design':
       return PLATFORM_VOICE_DESIGN_MODEL_KEY
   }
@@ -97,6 +103,8 @@ function resolveGenerationOptions(purpose: PlatformRuntimePurpose): Record<strin
       return getPlatformVideoGenerationOptions()
     case 'music':
       return getPlatformMusicGenerationOptions()
+    case 'sound':
+      return getPlatformSoundGenerationOptions()
     case 'analysis':
     case 'voice-design':
       return {}
@@ -129,6 +137,7 @@ export function getPlatformCapabilityDefaults(): CapabilitySelections {
   const imageOptions = platformImageOptions()
   const videoOptions = getPlatformVideoGenerationOptions()
   const musicOptions = getPlatformMusicGenerationOptions()
+  const soundOptions = getPlatformSoundGenerationOptions()
 
   for (const purpose of ['character-image', 'location-image', 'edit-image'] as const) {
     const plan = getPlatformRuntimePlan(purpose)
@@ -145,6 +154,7 @@ export function getPlatformCapabilityDefaults(): CapabilitySelections {
   }
   assignCapabilityDefault(defaults, getPlatformRuntimePlan('video').modelKey, videoOptions)
   assignCapabilityDefault(defaults, getPlatformRuntimePlan('music').modelKey, musicOptions)
+  assignCapabilityDefault(defaults, getPlatformRuntimePlan('sound').modelKey, soundOptions)
 
   return defaults
 }
