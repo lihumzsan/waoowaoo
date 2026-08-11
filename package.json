@@ -12,6 +12,7 @@
     "dev": "cross-env WAO_DEV_ENV_FILE=.env sh scripts/dev-docker.sh",
     "dev:infra": "docker compose up -d mysql redis temporal-create-namespace",
     "dev:cloud": "npm run env:cloud:check:dev && npm run runtime:sms:smoke && cross-env WAO_DEV_ENV_FILE=.env.cloud.local sh scripts/dev-docker.sh",
+    "dev:cloud:rebuild": "npm run env:cloud:check:dev && npm run runtime:sms:smoke && cross-env WAO_DEV_ENV_FILE=.env.cloud.local WAO_DEV_FORCE_REBUILD=1 sh scripts/dev-docker.sh",
     "dev:local": "npm run dev:infra && npm run storage:init && cross-env CODEX_RUNTIME_DRIVER=local concurrently --kill-others \"npm run dev:next\" \"npm run dev:temporal-worker\"",
     "dev:next": "cross-env NODE_OPTIONS=\"--no-deprecation\" next dev --turbopack -H 0.0.0.0",
     "dev:next:cloud": "node scripts/run-with-env.mjs .env.cloud.local -- node_modules/next/dist/bin/next dev --turbopack -H 0.0.0.0",
