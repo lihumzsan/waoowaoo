@@ -95,7 +95,9 @@ export const workspaceResourceGenerationTaskPayloadSchema = z.object({
   }).strict().refine((cue) => cue.endMs > cue.startMs, { message: 'scoreCue endMs must exceed startMs' }).optional(),
   count: z.literal(1),
   generationOptions: workspaceResourceGenerationOptionsSchema,
-  negativePrompt: z.string().trim().min(1).max(100_000).optional(),
+  negativePrompt: z.string().max(100_000)
+    .refine((value) => value.trim().length > 0, 'negativePrompt must contain non-whitespace content.')
+    .optional(),
 }).strict()
 
 const workspaceResourceGenerationTaskEnvelopeSchema = workspaceResourceGenerationTaskPayloadSchema.extend({

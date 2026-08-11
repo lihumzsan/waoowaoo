@@ -7,6 +7,9 @@ import {
 } from '@/lib/ai-providers/comfyui/moss'
 import { COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_ID, COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_KEY } from '@/lib/ai-providers/comfyui/models'
 import type { AiProviderSoundExecutionContext } from '@/lib/ai-providers/runtime-types'
+import { workspaceResourceGenerationTaskPayloadSchema } from '@/lib/workspace-resource/generation-contract'
+import { soundGenerationItemSchema } from '@/lib/workspace-resource/generation-request'
+import { WORKSPACE_RESOURCE_SCHEMA } from '@/lib/workspace-resource/schema-registry'
 import { startScenarioServer } from '../helpers/fakes/scenario-server'
 
 const PROMPT_ID = '00000000-0000-4000-8000-000000000002'
@@ -55,6 +58,54 @@ describe('ComfyUI MOSS SoundEffect v2 contract', () => {
       })
     }
   }
+
+  it('preserves negative prompt whitespace at the generation request boundary', () => {
+    const negativePrompt = '  music, speech, singing\n'
+    const item = soundGenerationItemSchema.parse({
+      itemId: 'sound-rain',
+      name: 'Rain',
+      folderPath: null,
+      mediaType: 'audio',
+      audioKind: 'sound',
+      prompt: soundInput.prompt,
+      schemaId: WORKSPACE_RESOURCE_SCHEMA.SOUND_EFFECT_AUDIO,
+      durationSeconds: 5,
+      negativePrompt,
+    })
+    const graph = buildMossSoundEffectPromptGraph({
+      prompt: item.prompt,
+      negativePrompt: item.negativePrompt,
+      durationSeconds: item.durationSeconds,
+      seed: 42,
+    })
+
+    expect(item.negativePrompt).toBe(negativePrompt)
+    expect(graph.graph['30']?.inputs.negative_prompt).toBe(negativePrompt)
+  })
+
+  it('preserves negative prompt whitespace in the frozen task payload', () => {
+    const negativePrompt = '\nno music or speech  '
+    const payload = workspaceResourceGenerationTaskPayloadSchema.parse({
+      lifecycleProjection: {
+        resources: [{
+          resourceId: 'sound-rain', mediaType: 'audio',
+          schemaId: WORKSPACE_RESOURCE_SCHEMA.SOUND_EFFECT_AUDIO, name: 'Rain',
+        }],
+      },
+      protocol: 'workspace_resource_generation_v1',
+      resource: {
+        resourceId: 'sound-rain', workspacePath: 'Rain-sound-rain', mediaType: 'audio', audioKind: 'sound',
+        schemaId: WORKSPACE_RESOURCE_SCHEMA.SOUND_EFFECT_AUDIO, inputHash: 'a'.repeat(64),
+        prompt: soundInput.prompt, modelKey: COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_KEY,
+        inputs: [], imageInputPositions: [], audioInputPositions: [], videoInputPositions: [],
+        toolCallId: null, sourceTurnId: null,
+      },
+      soundModel: COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_KEY,
+      durationSeconds: 5, outputFormat: 'mp3', count: 1, generationOptions: {}, negativePrompt,
+    })
+
+    expect(payload.negativePrompt).toBe(negativePrompt)
+  })
 
   it('compiles the checked-in API graph without UI-only prompt nodes or references', () => {
     const result = buildMossSoundEffectPromptGraph({

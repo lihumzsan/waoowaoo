@@ -114,7 +114,9 @@ export const soundGenerationItemSchema = z.object({
   prompt: finalPromptSchema.describe('Complete final provider-ready environmental sound prompt. The server freezes it verbatim.'),
   schemaId: z.literal(WORKSPACE_RESOURCE_SCHEMA.SOUND_EFFECT_AUDIO),
   durationSeconds: z.number().int().min(1).max(30),
-  negativePrompt: z.string().trim().min(1).max(100_000).optional(),
+  negativePrompt: z.string().max(100_000)
+    .refine((value) => value.trim().length > 0, 'negativePrompt must contain non-whitespace content.')
+    .optional(),
 }).strict()
 
 export const audioGenerationItemSchema = z.discriminatedUnion('audioKind', [
