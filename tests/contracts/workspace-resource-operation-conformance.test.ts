@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createProjectAgentOperationRegistryForApi } from '@/lib/operations/registry'
+import { prepareProjectAgentOperationInput } from '@/lib/operations/invocation'
 import { OPERATION_EXECUTION_MAX_TASKS } from '@/lib/temporal/operation-execution/contracts'
 import { parseWorkspaceResourceGenerationTaskPayload } from '@/lib/workspace-resource/generation-contract'
 import {
@@ -77,6 +78,83 @@ describe('WorkspaceResource Operation registry conformance', () => {
       workspacePath: '分集/第001集',
     }).success).toBe(true)
     expect(deleteResource.inputSchema.safeParse({ path: '分集/第001集' }).success).toBe(false)
+  })
+
+  it('publishes exact project video config commands and canonicalizes them at the Tool boundary', async () => {
+    const operation = createProjectAgentOperationRegistryForApi().update_project_config
+    if (!operation) throw new Error('update_project_config missing')
+    const context = {
+      request: {} as never,
+      requestId: 'config-contract-test',
+      userId: 'config-contract-user',
+      projectId: 'config-contract-project',
+      context: {},
+      source: 'contract-test',
+      writer: null,
+      toolCallId: null,
+      activityId: null,
+    }
+
+    expect(operation.channels).toEqual({ tool: true, api: true, mcp: true })
+    expect(operation.toolInputSchema.required).toEqual(['change'])
+    expect(operation.toolInputSchema.properties.change).toMatchObject({
+      oneOf: expect.arrayContaining([
+        expect.objectContaining({
+          properties: expect.objectContaining({
+            kind: { const: 'video_model' },
+          }),
+          required: ['kind', 'value'],
+        }),
+      ]),
+    })
+    await expect(prepareProjectAgentOperationInput({
+      channel: 'tool',
+      operation,
+      context,
+      input: { change: { kind: 'video_model', value: 'comfyui::minimax-h3-fast' } },
+    })).resolves.toMatchObject({ input: { videoModel: 'comfyui::minimax-h3-fast' } })
+    await expect(prepareProjectAgentOperationInput({
+      channel: 'tool',
+      operation,
+      context,
+      input: { change: { kind: 'video_ratio', value: '9:16' } },
+    })).resolves.toMatchObject({ input: { videoRatio: '9:16' } })
+    expect(operation.inputSchema.safeParse({
+      videoModel: 'comfyui::minimax-h3-fast',
+    }).success).toBe(true)
+  })
+
+  it('rejects hidden config fields and non-video models at the Tool boundary', async () => {
+    const operation = createProjectAgentOperationRegistryForApi().update_project_config
+    if (!operation) throw new Error('update_project_config missing')
+    const context = {
+      request: {} as never,
+      requestId: 'config-contract-rejection-test',
+      userId: 'config-contract-user',
+      projectId: 'config-contract-project',
+      context: {},
+      source: 'contract-test',
+      writer: null,
+      toolCallId: null,
+      activityId: null,
+    }
+
+    await expect(prepareProjectAgentOperationInput({
+      channel: 'tool',
+      operation,
+      context,
+      input: { characterModel: 'codex::gpt-image-2' },
+    })).rejects.toMatchObject({
+      details: expect.objectContaining({ code: 'OPERATION_INPUT_INVALID' }),
+    })
+    await expect(prepareProjectAgentOperationInput({
+      channel: 'tool',
+      operation,
+      context,
+      input: { change: { kind: 'video_model', value: 'codex::gpt-image-2' } },
+    })).rejects.toMatchObject({
+      details: expect.objectContaining({ code: 'PROJECT_VIDEO_MODEL_NOT_AVAILABLE' }),
+    })
   })
 
   it('accepts independent video items and caps their expanded Task count', () => {

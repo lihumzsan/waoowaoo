@@ -8,13 +8,17 @@ import {
 } from '@/lib/ai-registry/types'
 import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
 import { resolveBuiltinModelContext, getCapabilityOptionFields, validateCapabilitySelectionsPayload, type CapabilityModelContext } from '@/lib/ai-registry/capabilities-catalog'
-import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import type {
+  ProjectAgentOperationRegistryDraft,
+  ProjectAgentToolInputSchema,
+} from '@/lib/operations/types'
 import { getDeploymentConfig, isCloudDeployment, toPublicDeploymentConfig } from '@/lib/deployment/config'
 import {
   capabilitySelectionCommandSchema,
   capabilitySelectionCommandToSelections,
 } from '@/lib/ai-registry/capability-selection-command'
 import { defineOperation } from '@/lib/operations/define-operation'
+import { resolveModelSelection } from '@/lib/user-api/runtime-config'
 import {
   isProjectVideoRatio,
   PROJECT_VIDEO_RATIO_VALUES,
@@ -60,6 +64,80 @@ const updateProjectConfigInputSchema = z.object({
     .describe('Explicit project output aspect ratio, for example 16:9 or 9:16.'),
   capabilityOverrides: capabilitySelectionCommandSchema.optional(),
 }).strict()
+
+const updateProjectConfigToolCommandSchema = z.object({
+  change: z.discriminatedUnion('kind', [
+    z.object({
+      kind: z.literal('video_model'),
+      value: z.string().trim().min(1),
+    }).strict(),
+    z.object({
+      kind: z.literal('video_ratio'),
+      value: projectVideoRatioSchema,
+    }).strict(),
+  ]),
+}).strict()
+
+const updateProjectConfigToolInputSchema: ProjectAgentToolInputSchema = {
+  type: 'object',
+  properties: {
+    change: {
+      oneOf: [
+        {
+          type: 'object',
+          properties: {
+            kind: { const: 'video_model' },
+            value: {
+              type: 'string',
+              minLength: 1,
+              description: 'Exact provider::modelId video model key returned by list_user_models.',
+            },
+          },
+          required: ['kind', 'value'],
+          additionalProperties: false,
+        },
+        {
+          type: 'object',
+          properties: {
+            kind: { const: 'video_ratio' },
+            value: {
+              type: 'string',
+              enum: [...PROJECT_VIDEO_RATIO_VALUES],
+              minLength: 1,
+              description: 'Exact project output aspect ratio decided by the user, such as 16:9 or 9:16.',
+            },
+          },
+          required: ['kind', 'value'],
+          additionalProperties: false,
+        },
+      ],
+      description: 'One exact project video configuration change.',
+    },
+  },
+  required: ['change'],
+  additionalProperties: false,
+}
+
+async function requireProjectVideoModel(userId: string, modelKey: string): Promise<string> {
+  try {
+    const selection = await resolveModelSelection(userId, modelKey, 'video')
+    return selection.modelKey
+  } catch (error) {
+    if (
+      error instanceof Error
+      && (
+        error.message.startsWith('MODEL_KEY_INVALID:')
+        || error.message.startsWith('MODEL_NOT_FOUND:')
+      )
+    ) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'PROJECT_VIDEO_MODEL_NOT_AVAILABLE',
+        field: 'videoModel',
+      })
+    }
+    throw error
+  }
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -316,7 +394,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
       id: 'update_project_config',
       summary: 'Persist explicit project model, capability and output aspect-ratio configuration.',
       intent: 'act',
-      toolContractRevision: 'update_project_config/v1',
+      toolContractRevision: 'update_project_config/v2',
       channels: { tool: true, api: true, mcp: true },
       effects: {
         writes: true,
@@ -329,18 +407,15 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
         longRunning: false,
       },
       confirmation: { kind: 'none', required: false },
-      toolInputSchema: {
-        type: 'object',
-        properties: {
-          videoRatio: {
-            type: 'string',
-            enum: [...PROJECT_VIDEO_RATIO_VALUES],
-            minLength: 1,
-            description: 'Exact project output aspect ratio decided by the user, such as 16:9 or 9:16.',
-          },
+      toolInputSchema: updateProjectConfigToolInputSchema,
+      toolInputCanonicalizer: {
+        inputSchema: updateProjectConfigToolCommandSchema,
+        canonicalize: async (ctx, input) => {
+          const command = updateProjectConfigToolCommandSchema.parse(input)
+          return command.change.kind === 'video_model'
+            ? { videoModel: await requireProjectVideoModel(ctx.userId, command.change.value) }
+            : { videoRatio: command.change.value }
         },
-        required: ['videoRatio'],
-        additionalProperties: false,
       },
       inputSchema: updateProjectConfigInputSchema,
       outputSchema: z.unknown(),
