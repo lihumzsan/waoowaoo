@@ -45,7 +45,7 @@ describe('ComfyUI MOSS SoundEffect v2 contract', () => {
   function defineValidPreflight() {
     for (const className of MOSS_SOUNDEFFECT_V2_PROFILE.requiredNodeClasses) {
       const required = className === 'MOSS_SoundEffectV2Loader'
-        ? { model: [['OpenMOSS-Team/MOSS-SoundEffect-v2.0']] }
+        ? { model: ['COMBO', { options: ['OpenMOSS-Team/MOSS-SoundEffect-v2.0'] }] }
         : {}
       server!.defineScenario({
         method: 'GET',
