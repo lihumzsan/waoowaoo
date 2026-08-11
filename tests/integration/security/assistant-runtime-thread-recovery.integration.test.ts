@@ -182,7 +182,7 @@ const testPersistence: RuntimeSessionPersistence = {
 
 function testModel(project: { readonly id: string; readonly name: string }): AssistantRuntimeModelConfiguration {
   const projectProductionContext: ProjectProductionContext = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     version: 'test',
     project: {
       projectId: project.id,
@@ -192,7 +192,7 @@ function testModel(project: { readonly id: string; readonly name: string }): Ass
       videoResolution: '1080p',
       imageResolution: '1024x1024',
     },
-    productionCapabilities: { video: null, music: null },
+    productionCapabilities: { video: null, music: null, sound: null },
   }
   return {
     modelKey: 'codex::gpt-5.5',

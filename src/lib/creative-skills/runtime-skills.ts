@@ -65,7 +65,7 @@ export const CREATIVE_RUNTIME_SKILL_REGISTRY: Readonly<
     title: '音乐与配乐设计',
     description: '完成音乐设计和最终音乐提示词，形成 audio_generation_batch 专业结果。',
     skillIds: ['creative-core', 'music-direction'],
-    executionFacts: 'Use only the non-null productionCapabilities.music facts injected by the Wao system. Never guess capability limits.',
+    executionFacts: 'Use only the non-null productionCapabilities.music facts for BGM or productionCapabilities.sound facts for environmental sound effects, as selected by each item audioKind. Never guess capability limits.',
   }),
 }
 

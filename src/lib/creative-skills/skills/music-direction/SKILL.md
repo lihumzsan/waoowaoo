@@ -119,3 +119,14 @@ Instrumental cinematic score built on one restrained two-note motif and a steady
 ## 边界
 
 本 Skill 提供音乐创作方法、最终生成提示词和批次中显式的时长与音乐参数。模型选择、能力校验、媒体提交、计费、Task 与终态由确定性执行层负责。
+
+## 环境音效模式
+
+当目标是环境音效而不是 BGM 时，仍使用同一个 `audio_generation_batch`，但每个 item 必须显式填写 `audioKind: "sound"` 与 `schemaId: "project.sound_effect_audio"`。音效 prompt 只描述一个可独立听见的环境事件或连续声场：地点、声源、距离、空间反射、强弱变化和需要保留的自然底噪；不要写旋律、和声、节拍、歌词或配器。
+
+- 只从系统注入的 `productionCapabilities.sound` 读取能力。`promptTargetCharacters` 是保守写作目标，`promptMaxCharacters` 是硬拒绝线；能力为空时停止提交，不得猜测模型、时长或格式。
+- `durationSeconds` 必须落在注入的范围内，默认选择能完整听出事件起承转合的最短时长；每个 item 只能生成一个 sound cue，不把多个不相关事件拼进同一条指令。
+- 生成格式固定为 `mp3`。环境音效不接受参考视频、参考音频或其他输入；如果场景需要多个事件，拆成多个有明确时间窗口的 item，由后续具备装配能力的流程决定摆放。
+- `negativePrompt` 只用于排除音乐、人声、对白、歌唱、节拍循环、合成器铺底、爆音削波和不需要的机械噪声；不要用它补充正向事件描述。
+
+音效自检：是否只有一个可识别声场或事件？是否写明空间与距离而非抽象气氛词？是否在 `productionCapabilities.sound` 的字符、时长和 `mp3` 能力内？是否显式标记 `audioKind` 和 `schemaId`，且没有任何 references？

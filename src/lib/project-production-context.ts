@@ -32,10 +32,20 @@ export type ProjectProductionCapabilities = {
     readonly vocalModeOptions: readonly string[]
     readonly maxReferenceVideos: number
   } | null
+  readonly sound: {
+    readonly modelKey: string
+    readonly promptMaxCharacters: number
+    readonly promptTargetCharacters: number
+    readonly durationSecondsRange: {
+      readonly min: number
+      readonly max: number
+    } | null
+    readonly outputFormatOptions: readonly string[]
+  } | null
 }
 
 export type ProjectProductionContext = {
-  readonly schemaVersion: 4
+  readonly schemaVersion: 5
   readonly version: string
   readonly project: {
     readonly projectId: string
@@ -119,9 +129,31 @@ function resolveProductionCapabilities(config: ProjectModelConfig): ProjectProdu
         vocalModeOptions: music.vocalModeOptions ?? [],
         maxReferenceVideos: music.maxReferenceVideos ?? 0,
       }
-    : null
+      : null
 
-  return { video: videoCapabilities, music: musicCapabilities }
+  const sound = config.soundModel
+    ? resolveBuiltinCapabilitiesByModelKey('sound', config.soundModel)?.sound
+    : undefined
+  const soundDurationSecondsRange = sound?.durationSecondsRange
+    ? {
+        min: Math.ceil(sound.durationSecondsRange.min),
+        max: Math.floor(sound.durationSecondsRange.max),
+      }
+    : null
+  const soundPromptMaxCharacters = Math.min(sound?.promptMaxChars ?? 100_000, 100_000)
+  const soundCapabilities = config.soundModel
+    && sound
+    && soundDurationSecondsRange !== null
+      ? {
+        modelKey: config.soundModel,
+        promptMaxCharacters: soundPromptMaxCharacters,
+        promptTargetCharacters: Math.max(1, Math.min(500, Math.floor(soundPromptMaxCharacters * 0.6))),
+        durationSecondsRange: soundDurationSecondsRange,
+        outputFormatOptions: sound.outputFormatOptions ?? ['mp3'],
+      }
+      : null
+
+  return { video: videoCapabilities, music: musicCapabilities, sound: soundCapabilities }
 }
 
 function contextVersion(value: Omit<ProjectProductionContext, 'version'>): string {
@@ -147,7 +179,7 @@ export async function readProjectProductionContext(input: {
   ])
   if (!project) throw new ProjectProductionContextError()
   const value: Omit<ProjectProductionContext, 'version'> = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     project: {
       projectId: project.id,
       name: project.name,
