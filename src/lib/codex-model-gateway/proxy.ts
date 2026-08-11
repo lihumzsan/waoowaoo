@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readRequestBufferWithLimit } from '@/lib/http/body-limits'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { createScopedLogger } from '@/lib/logging/core'
@@ -12,6 +13,17 @@ import { projectCodexProviderResponse } from './error-projection'
 import { assertLlmSpendableBalance } from '@/lib/billing/llm-balance-gate'
 import { InsufficientBalanceError } from '@/lib/billing/errors'
 import { attachOpenRouterRealtimeBilling } from './openrouter-realtime-billing'
+import { resolveAiProviderAdapter } from '@/lib/ai-providers'
+import { getDeploymentConfig } from '@/lib/deployment/config'
+import { AppError } from '@/lib/errors/app-error'
+import { projectProviderCredentialOwnership } from '@/lib/errors/failure'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
+import {
+  cancelCodexProviderAttempt,
+  claimCodexProviderAttempt,
+  failCodexProviderAttempt,
+} from './provider-attempt'
+import { observeCodexProviderSuccessResponse } from './provider-response-observer'
 
 const CODEX_MODEL_REQUEST_MAX_BYTES = 16 * 1024 * 1024
 
@@ -183,6 +195,19 @@ export async function proxyCodexResponsesRequest(params: {
   const accept = requestedAccept.includes('text/event-stream')
     ? 'text/event-stream'
     : 'application/json'
+  const providerAttempt = await claimCodexProviderAttempt({
+    projectId: scope.projectId,
+    userId: scope.userId,
+    turnId: activeTurn.turnId,
+    runtimeAttempt: activeTurn.attempt,
+    providerKey: 'openrouter',
+    modelKey: upstream.modelKey,
+    requestHash: createHash('sha256')
+      .update(body)
+      .update('\0', 'utf8')
+      .update(accept, 'utf8')
+      .digest('hex'),
+  })
 
   let response: Response
   try {
@@ -197,8 +222,20 @@ export async function proxyCodexResponsesRequest(params: {
       redirect: 'error',
       signal: params.request.signal,
     })
-  } catch {
-    params.request.signal.throwIfAborted()
+  } catch (error: unknown) {
+    if (params.request.signal.aborted) {
+      await cancelCodexProviderAttempt(providerAttempt)
+      params.request.signal.throwIfAborted()
+    }
+    const sourceFailure = projectProviderCredentialOwnership(
+      resolveAiProviderAdapter('openrouter').failure.normalize({
+        error,
+        phase: 'submit',
+        operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
+      }),
+      getDeploymentConfig().providerCredentialMode,
+    )
+    await failCodexProviderAttempt(providerAttempt, { failure: sourceFailure })
     gatewayLogger.warn({
       action: 'codex_gateway.provider_request_failed',
       message: 'Codex model Provider request failed before receiving a response',
@@ -209,11 +246,46 @@ export async function proxyCodexResponsesRequest(params: {
         modelKey: upstream.modelKey,
       },
     })
-    throw new CodexModelGatewayError('PROVIDER_REQUEST_FAILED', 500)
+    throw new CodexModelGatewayError(
+      'PROVIDER_REQUEST_FAILED',
+      500,
+      AppError.fromFailure(sourceFailure, error),
+    )
   }
   const headerGenerationId = response.headers.get('x-generation-id')
-  const projection = await projectCodexProviderResponse(response)
+  const providerRequestId = readProviderRequestId(response)
+  let projection: Awaited<ReturnType<typeof projectCodexProviderResponse>>
+  try {
+    projection = await projectCodexProviderResponse(response)
+  } catch (error: unknown) {
+    const sourceFailure = projectProviderCredentialOwnership(
+      resolveAiProviderAdapter('openrouter').failure.normalize({
+        error,
+        phase: 'result',
+        operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
+      }),
+      getDeploymentConfig().providerCredentialMode,
+    )
+    await failCodexProviderAttempt(providerAttempt, {
+      failure: sourceFailure,
+      providerStatus: response.status,
+      providerRequestId,
+      providerGenerationId: headerGenerationId,
+    })
+    throw new CodexModelGatewayError(
+      'PROVIDER_REQUEST_FAILED',
+      500,
+      AppError.fromFailure(sourceFailure, error),
+    )
+  }
   if (projection.failureKind) {
+    if (!projection.failure) throw new Error('CODEX_PROVIDER_PROJECTED_FAILURE_MISSING')
+    await failCodexProviderAttempt(providerAttempt, {
+      failure: projection.failure,
+      providerStatus: projection.providerStatus,
+      providerRequestId,
+      providerGenerationId: headerGenerationId,
+    })
     gatewayLogger.warn({
       action: 'codex_gateway.provider_response_failed',
       message: 'Codex model Provider returned a non-success response',
@@ -225,15 +297,22 @@ export async function proxyCodexResponsesRequest(params: {
         providerStatus: projection.providerStatus,
         providerCode: projection.providerCode,
         providerErrorType: projection.providerErrorType,
-        providerRequestId: readProviderRequestId(response),
+        providerRequestId,
         providerGenerationId: headerGenerationId,
         failureKind: projection.failureKind,
       },
     })
   }
   if (projection.failureKind) return projection.response
-  return attachOpenRouterRealtimeBilling({
+  const observedResponse = await observeCodexProviderSuccessResponse({
     response: projection.response,
+    attempt: providerAttempt,
+    requestSignal: params.request.signal,
+    providerRequestId,
+    headerGenerationId,
+  })
+  return attachOpenRouterRealtimeBilling({
+    response: observedResponse,
     headerGenerationId,
     userId: scope.userId,
     projectId: scope.projectId,

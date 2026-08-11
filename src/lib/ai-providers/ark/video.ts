@@ -1,12 +1,15 @@
 import { logInfo as _ulogInfo } from '@/lib/logging/core'
 import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import type { AiProviderVideoExecutionContext } from '@/lib/ai-providers/runtime-types'
-import { fetchWithRetry } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
 import { normalizeVideoReferenceImages } from '@/lib/video-generation/reference-images'
 import { AppError } from '@/lib/errors/app-error'
+import {
+  fetchProviderWithRetry,
+  readProviderJsonResponse,
+} from '@/lib/ai-providers/failure'
 import { throwArkSubmissionError } from './error'
 
 export interface ArkVideoTaskRequest {
@@ -289,23 +292,32 @@ export async function arkCreateVideoTask(
   _ulogInfo(`${logPrefix} 创建视频任务, 模型: ${request.model}`)
   let response: Response
   try {
-    response = await fetchWithRetry(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
+    response = await fetchProviderWithRetry({
+      url,
+      provider: 'ark',
+      phase: 'submit',
+      options: {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(request),
+        operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
+        timeoutMs,
+        scope: 'ark:video:create',
+        fetchFn: fetchWithProviderProxy,
       },
-      body: JSON.stringify(request),
-      operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
-      timeoutMs,
-      scope: 'ark:video:create',
-      fetchFn: fetchWithProviderProxy,
     })
   } catch (error: unknown) {
     throwArkSubmissionError(error)
   }
 
-  const data = (await response.json()) as { id?: unknown; [key: string]: unknown }
+  const data = await readProviderJsonResponse<{ id?: unknown; [key: string]: unknown }>({
+    response,
+    provider: 'ark',
+    phase: 'submit',
+  })
   const taskId = typeof data.id === 'string' ? data.id : ''
   _ulogInfo(`${logPrefix} 视频任务创建成功, taskId: ${taskId}`)
   return { ...data, id: taskId }
@@ -320,16 +332,25 @@ export async function arkQueryVideoTask(
   const { apiKey, baseUrl, timeoutMs } = options
   const url = `${baseUrl.replace(/\/+$/, '')}/contents/generations/tasks/${taskId}`
 
-  const response = await fetchWithRetry(url, {
-    operation: EXTERNAL_OPERATION.PROVIDER_POLL,
-    method: 'GET',
-    headers: { Authorization: `Bearer ${apiKey}` },
-    timeoutMs,
-    scope: 'ark:video:query',
-    fetchFn: fetchWithProviderProxy,
+  const response = await fetchProviderWithRetry({
+    url,
+    provider: 'ark',
+    phase: 'poll',
+    options: {
+      operation: EXTERNAL_OPERATION.PROVIDER_POLL,
+      method: 'GET',
+      headers: { Authorization: `Bearer ${apiKey}` },
+      timeoutMs,
+      scope: 'ark:video:query',
+      fetchFn: fetchWithProviderProxy,
+    },
   })
 
-  return (await response.json()) as ArkVideoTaskResponse
+  return await readProviderJsonResponse<ArkVideoTaskResponse>({
+    response,
+    provider: 'ark',
+    phase: 'poll',
+  })
 }
 
 export async function executeArkVideoGeneration(input: AiProviderVideoExecutionContext) {
@@ -553,7 +574,7 @@ export async function executeArkVideoGeneration(input: AiProviderVideoExecutionC
   }
 
   return {
-    success: true,
+    success: true as const,
     async: true,
     requestId: taskId,
     externalId: `ARK:VIDEO:${taskId}`,

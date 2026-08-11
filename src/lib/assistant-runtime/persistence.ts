@@ -6,7 +6,7 @@ import { safeValidateUIMessages, type UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
 import { buildAgentTurnAssistantMessageId } from '@/lib/agent-turn/stream-publisher'
 import { projectErrorForModel } from '@/lib/errors/projection'
-import { parseFailureRecord } from '@/lib/errors/failure'
+import { augmentFailureRecord, parseFailureRecord, type FailureRecord } from '@/lib/errors/failure'
 import { parseProjectAgentPlanSnapshot } from '@/lib/project-agent/plan'
 import type {
   AssistantRuntimeInteractionView,
@@ -1192,12 +1192,50 @@ export async function settleAssistantRuntimeTurn(input: {
       !turn
       || turn.threadId !== thread.id
       || turn.runtimeTurnId !== input.identity.runtimeTurnId
+      || turn.attempt !== input.identity.attempt
     ) {
       throw new Error('ASSISTANT_RUNTIME_SETTLEMENT_SCOPE_DIVERGED')
+    }
+    let terminalFailure: FailureRecord | null = input.projection.failure ?? null
+    if (input.projection.status === 'failed') {
+      const latestProviderAttempt = await tx.projectAgentProviderAttempt.findFirst({
+        where: {
+          turnId: turn.id,
+          runtimeAttempt: turn.attempt,
+        },
+        orderBy: { sequence: 'desc' },
+        select: {
+          id: true,
+          sequence: true,
+          status: true,
+          failure: true,
+        },
+      })
+      if (latestProviderAttempt?.status === 'failed') {
+        const sourceFailure = parseFailureRecord(latestProviderAttempt.failure)
+        if (!sourceFailure) {
+          throw new Error('ASSISTANT_RUNTIME_PROVIDER_ATTEMPT_FAILURE_INVALID')
+        }
+        terminalFailure = augmentFailureRecord(sourceFailure, {
+          context: { system: 'runtime', provider: 'codex', phase: 'turn' },
+          details: {
+            providerAttemptId: latestProviderAttempt.id,
+            providerAttemptSequence: latestProviderAttempt.sequence.toString(),
+          },
+          message: input.projection.failure?.native.message,
+        })
+      }
+    }
+    if (input.projection.status === 'failed' && !terminalFailure) {
+      throw new Error('ASSISTANT_RUNTIME_TERMINAL_FAILURE_REQUIRED')
     }
     if (TERMINAL_TURN_STATUSES.includes(turn.status as (typeof TERMINAL_TURN_STATUSES)[number])) {
       const projectedMessageId = input.projection.assistantMessage?.id ?? null
       if (turn.status !== input.projection.status) {
+        throw new Error('ASSISTANT_RUNTIME_SETTLEMENT_REPLAY_DIVERGED')
+      }
+      const storedFailure = turn.failure === null ? null : parseFailureRecord(turn.failure)
+      if (!isDeepStrictEqual(storedFailure, terminalFailure)) {
         throw new Error('ASSISTANT_RUNTIME_SETTLEMENT_REPLAY_DIVERGED')
       }
       if (turn.assistantMessageId === projectedMessageId) return
@@ -1242,7 +1280,7 @@ export async function settleAssistantRuntimeTurn(input: {
         status: input.projection.status,
         assistantMessageId: input.projection.assistantMessage?.id ?? null,
         stopReason: input.projection.stopReason,
-        failure: input.projection.failure ? toJson(input.projection.failure) : Prisma.DbNull,
+        failure: terminalFailure ? toJson(terminalFailure) : Prisma.DbNull,
         finishedAt: new Date(),
       },
     })

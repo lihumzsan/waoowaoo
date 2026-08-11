@@ -12,6 +12,7 @@ import { geminiBatchAsyncTaskProvider, googleVideoAsyncTaskProvider } from '@/li
 import { murekaAdapter } from '@/lib/ai-providers/mureka/adapter'
 import { murekaAsyncTaskProvider } from '@/lib/ai-providers/mureka/async-task'
 import { openRouterAdapter } from '@/lib/ai-providers/openrouter/adapter'
+import { openAiAdapter } from '@/lib/ai-providers/openai/adapter'
 import { openRouterAsyncTaskProvider } from '@/lib/ai-providers/openrouter/async-task'
 import { toonflowAdapter } from '@/lib/ai-providers/toonflow/adapter'
 import { toonflowAsyncTaskProvider } from '@/lib/ai-providers/toonflow/async-task'
@@ -24,6 +25,12 @@ import type { AiLlmExecutionResult, AiLlmMessage } from '@/lib/ai-registry/types
 import type { ModelMessage } from 'ai'
 import { flattenChatMessageContent } from '@/lib/ai-registry/message-content'
 import {
+  assertProviderFailureAdapterIdentity,
+  runCapturedProviderOperation,
+} from '@/lib/ai-providers/failure'
+import type { AiProviderFailurePhase } from '@/lib/ai-providers/runtime-types'
+import type { ExternalOperationId } from '@/lib/external-operation/registry'
+import {
   resolveRegisteredLlmProtocol,
   resolveRegisteredPublicReasoningMode,
 } from '@/lib/ai-registry/llm-protocol'
@@ -33,9 +40,14 @@ const runtimeProviderRegistry = new AiRegistry<AiProviderAdapter>([
   falAdapter,
   googleAdapter,
   murekaAdapter,
+  openAiAdapter,
   openRouterAdapter,
   toonflowAdapter,
 ])
+
+for (const adapter of runtimeProviderRegistry.getAdapters()) {
+  assertProviderFailureAdapterIdentity(adapter.providerKey, adapter.failure)
+}
 
 const asyncTaskProviderRegistry: AsyncTaskProviderRegistration[] = [
   falAsyncTaskProvider,
@@ -46,6 +58,10 @@ const asyncTaskProviderRegistry: AsyncTaskProviderRegistration[] = [
   openRouterAsyncTaskProvider,
   toonflowAsyncTaskProvider,
 ]
+
+for (const registration of asyncTaskProviderRegistry) {
+  resolveAiProviderAdapter(registration.providerKey)
+}
 
 export function resolveAsyncTaskProviderByExternalId(externalId: string): AsyncTaskProviderRegistration {
   const registration = asyncTaskProviderRegistry.find((candidate) => candidate.canParseExternalId(externalId))
@@ -66,12 +82,35 @@ export function resolveAsyncTaskProviderByCode(providerCode: AsyncExternalIdProv
   return registration
 }
 
+export function listRegisteredAsyncTaskProviders(): readonly AsyncTaskProviderRegistration[] {
+  return [...asyncTaskProviderRegistry]
+}
+
 export function resolveAiProviderAdapter(providerId: string): AiProviderAdapter {
   return runtimeProviderRegistry.getAdapterByProviderId(providerId)
 }
 
 export function tryResolveAiProviderAdapter(providerId: string): AiProviderAdapter | null {
   return runtimeProviderRegistry.tryGetAdapterByProviderId(providerId)
+}
+
+export function listRegisteredAiProviderAdapters(): readonly AiProviderAdapter[] {
+  return runtimeProviderRegistry.getAdapters()
+}
+
+export async function runRegisteredProviderOperation<T>(input: {
+  readonly providerId: string
+  readonly phase: AiProviderFailurePhase
+  readonly operation?: ExternalOperationId
+  readonly run: () => Promise<T>
+}): Promise<T> {
+  const adapter = resolveAiProviderAdapter(input.providerId)
+  return await runCapturedProviderOperation({
+    adapter: adapter.failure,
+    phase: input.phase,
+    operation: input.operation,
+    run: input.run,
+  })
 }
 
 export function createRegisteredLanguageModel(input: AiProviderLanguageModelRequestContext) {

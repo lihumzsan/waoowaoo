@@ -1,7 +1,7 @@
 import type { AiProviderAdapter } from '@/lib/ai-providers/runtime-types'
 import { describeMediaVariantBase } from '@/lib/ai-providers/shared/media-adapter'
 import { createArkLanguageModel, prepareArkTextModelMessages } from './language-model'
-import { arkConnectionTester } from './connection-test'
+import { arkConnectionTester, arkFailureAdapter } from './connection-test'
 import { executeArkImageGeneration } from './image'
 import { resolveArkOptionSchema } from './models'
 import { executeArkVideoGeneration } from './video'
@@ -23,6 +23,7 @@ function describeArkMediaVariant(
 
 export const arkAdapter: AiProviderAdapter = {
   providerKey: 'ark',
+  failure: arkFailureAdapter,
   image: {
     describe: (selection) => describeArkMediaVariant('image', selection),
     execute: executeArkImageGeneration,

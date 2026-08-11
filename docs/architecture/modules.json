@@ -239,12 +239,17 @@
         "src/lib/external-operation",
         "src/lib/storage",
         "src/lib/api-errors.ts",
+        "src/lib/ai-providers/failure.ts",
+        "src/lib/codex-model-gateway/provider-attempt.ts",
+        "src/lib/codex-model-gateway/provider-response-observer.ts",
+        "src/lib/assistant-runtime/persistence.ts",
         "src/lib/adapters/operation-error-normalizer.ts",
         "src/lib/media-process.ts",
         "scripts/diagnose-project.ts",
         "scripts/task-error-stats.ts",
         "scripts/check-failure-governance.ts",
-        "prisma/migrations/20260807130000_failure_record_v2"
+        "prisma/migrations/20260807130000_failure_record_v2",
+        "prisma/migrations/20260811120000_add_project_agent_provider_attempt"
       ]
     },
     {

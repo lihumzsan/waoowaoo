@@ -9,9 +9,11 @@ import type {
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import {
-  FetchStatusError,
-  fetchWithRetry,
-} from '@/lib/retry'
+  captureProviderHttpFailure,
+  fetchProviderWithRetry,
+  ProviderHttpError,
+  readProviderJsonResponse,
+} from '@/lib/ai-providers/failure'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { getErrorSpec, type UnifiedErrorCode } from '@/lib/errors/codes'
 import { createScopedLogger } from '@/lib/logging/core'
@@ -114,7 +116,7 @@ function classifyToonflowError(input: {
   status?: number
   phase: 'submit' | 'poll'
   diagnosticMessage?: string
-  cause?: unknown
+  cause: unknown
 }): Error {
   const code = input.code ?? input.status ?? null
   const diagnosticMessage = input.diagnosticMessage?.trim().slice(
@@ -174,15 +176,11 @@ function classifyToonflowError(input: {
 }
 
 function throwToonflowFetchError(error: unknown, phase: 'submit' | 'poll'): never {
-  if (error instanceof FetchStatusError) {
-    let payload: unknown = null
-    try {
-      payload = JSON.parse(error.responseText) as unknown
-    } catch {}
-    const envelope = asRecord(payload)
+  if (error instanceof ProviderHttpError) {
+    const envelope = asRecord(error.errorEnvelope)
     throw classifyToonflowError({
       code: readNumericCode(envelope?.code),
-      status: error.status,
+      status: error.statusCode,
       phase,
       diagnosticMessage: readDiagnosticMessage(envelope),
       cause: error,
@@ -211,12 +209,17 @@ async function postToonflowJson(input: {
       cache: 'no-store',
     }
     if (input.phase === 'submit') {
-      response = await fetchWithRetry(url, {
-        ...request,
-        timeoutMs: TOONFLOW_SUBMIT_TIMEOUT_MS,
-        operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
-        scope: 'toonflow:video:submit',
-        fetchFn: fetchWithProviderProxy,
+      response = await fetchProviderWithRetry({
+        url,
+        provider: 'toonflow',
+        phase: 'submit',
+        options: {
+          ...request,
+          timeoutMs: TOONFLOW_SUBMIT_TIMEOUT_MS,
+          operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
+          scope: 'toonflow:video:submit',
+          fetchFn: fetchWithProviderProxy,
+        },
       })
     } else {
       response = await fetchWithProviderProxy(url, {
@@ -224,13 +227,21 @@ async function postToonflowJson(input: {
         signal: AbortSignal.timeout(TOONFLOW_STATUS_TIMEOUT_MS),
       })
       if (!response.ok) {
-        throw new FetchStatusError(response.status, await response.text())
+        throw await captureProviderHttpFailure({
+          response,
+          provider: 'toonflow',
+          phase: 'poll',
+        })
       }
     }
   } catch (error) {
     throwToonflowFetchError(error, input.phase)
   }
-  return await response.json() as unknown
+  return await readProviderJsonResponse({
+    response,
+    provider: 'toonflow',
+    phase: input.phase,
+  })
 }
 
 function requireCanonicalTaskCode(value: unknown): string {
@@ -406,6 +417,12 @@ export async function submitToonflowVideoTask(input: {
       code,
       phase: 'submit',
       diagnosticMessage: readDiagnosticMessage(envelope),
+      cause: {
+        name: 'ToonflowSubmissionResponse',
+        message: readDiagnosticMessage(envelope) || 'Toonflow rejected the request',
+        code,
+        errorEnvelope: envelope,
+      },
     })
   }
   return requireCanonicalTaskCode(envelope?.data)
@@ -430,6 +447,12 @@ export async function queryToonflowVideoStatus(input: {
       code,
       phase: 'poll',
       diagnosticMessage: readDiagnosticMessage(envelope),
+      cause: {
+        name: 'ToonflowPollResponse',
+        message: readDiagnosticMessage(envelope) || 'Toonflow poll request failed',
+        code,
+        errorEnvelope: envelope,
+      },
     })
   }
   const data = asRecord(envelope?.data)

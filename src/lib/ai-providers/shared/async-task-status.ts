@@ -23,15 +23,11 @@ export function createProviderAsyncTaskFailure(input: {
   readonly provider: string
   readonly code: UnifiedErrorCode
   readonly message: string
-  readonly cause?: unknown
+  readonly cause: unknown
   readonly details?: FailureDetails
 }): FailureRecord {
   return createFailureRecord(input.code, input.message, {
-    cause: input.cause ?? {
-      name: 'ProviderTerminalResult',
-      message: input.message,
-      code: input.code,
-    },
+    cause: input.cause,
     details: input.details,
     context: { system: 'provider', provider: input.provider, phase: 'poll' },
     operation: EXTERNAL_OPERATION.PROVIDER_TERMINAL_RESULT,

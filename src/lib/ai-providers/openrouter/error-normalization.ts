@@ -15,6 +15,9 @@ import {
 } from '@openrouter/sdk/models/errors'
 import { AppError } from '@/lib/errors/app-error'
 import type { UnifiedErrorCode } from '@/lib/errors/codes'
+import { augmentFailureRecord } from '@/lib/errors/failure'
+import { createAiProviderFailureAdapter } from '@/lib/ai-providers/failure'
+import type { AiProviderFailureAdapter } from '@/lib/ai-providers/runtime-types'
 
 const ERROR_FIELD_LIMIT = 1_000
 
@@ -68,6 +71,9 @@ export function classifyOpenRouterMachineErrorCode(value: unknown): UnifiedError
   }
   if (['rate_limit', 'rate_limit_exceeded', 'too_many_requests'].includes(code)) return 'RATE_LIMIT'
   if (['request_timeout', 'network_error', 'edge_network_timeout'].includes(code)) return 'NETWORK_ERROR'
+  if (['context_length_exceeded', 'context_window_exceeded', 'max_tokens_exceeded', 'string_too_long', 'token_limit_exceeded'].includes(code)) {
+    return 'CONTEXT_BUDGET_EXCEEDED'
+  }
   if (['server_error', 'internal_server_error', 'provider_overloaded', 'service_unavailable'].includes(code)) {
     return 'EXTERNAL_ERROR'
   }
@@ -75,6 +81,60 @@ export function classifyOpenRouterMachineErrorCode(value: unknown): UnifiedError
     return 'PROVIDER_SUBMISSION_REJECTED'
   }
   return null
+}
+
+function readMachineTokens(value: unknown): readonly unknown[] {
+  const record = asRecord(value)
+  if (!record) return []
+  const error = asRecord(record.error)
+  const metadata = asRecord(error?.metadata) ?? asRecord(record.metadata)
+  const envelope = asRecord(record.envelope)
+  return [
+    record.code,
+    record.type,
+    record.errorType,
+    record.error_type,
+    error?.code,
+    error?.type,
+    error?.error_type,
+    metadata?.code,
+    metadata?.type,
+    metadata?.error_type,
+    metadata?.provider_code,
+    metadata?.provider_error_code,
+    envelope?.code,
+    envelope?.type,
+    envelope?.errorType,
+  ]
+}
+
+function classifyOpenRouterFailureSource(value: unknown): UnifiedErrorCode | null {
+  let current: unknown = value
+  const seen = new Set<unknown>()
+  for (let depth = 0; depth < 10; depth += 1) {
+    if (!current || typeof current !== 'object' || seen.has(current)) return null
+    seen.add(current)
+    for (const token of readMachineTokens(current)) {
+      const code = classifyOpenRouterMachineErrorCode(token)
+      if (code) return code
+    }
+    current = (current as { readonly cause?: unknown }).cause
+  }
+  return null
+}
+
+const baseOpenRouterFailureAdapter = createAiProviderFailureAdapter('openrouter')
+
+/** The only OpenRouter machine-code interpretation capability. */
+export const openRouterFailureAdapter: AiProviderFailureAdapter = {
+  providerKey: 'openrouter',
+  normalize: (input) => {
+    const failure = baseOpenRouterFailureAdapter.normalize(input)
+    const code = classifyOpenRouterFailureSource(input.error)
+    return code && code !== failure.interpretation.code
+      ? augmentFailureRecord(failure, { code })
+      : failure
+  },
 }
 
 type OpenRouterSdkErrorShape = {

@@ -1,4 +1,16 @@
-import { readResponseBufferWithLimit } from '@/lib/http/body-limits'
+import { resolveAiProviderAdapter } from '@/lib/ai-providers'
+import {
+  ProviderHttpError,
+  readProviderJsonResponse,
+} from '@/lib/ai-providers/failure'
+import { getDeploymentConfig } from '@/lib/deployment/config'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
+import type { UnifiedErrorCode } from '@/lib/errors/codes'
+import {
+  augmentFailureRecord,
+  projectProviderCredentialOwnership,
+  type FailureRecord,
+} from '@/lib/errors/failure'
 
 const CODEX_PROVIDER_ERROR_MAX_BYTES = 64 * 1024
 
@@ -17,6 +29,7 @@ export type CodexProviderResponseProjection = {
   readonly providerStatus: number
   readonly providerCode: string | null
   readonly providerErrorType: string | null
+  readonly failure: FailureRecord | null
 }
 
 type ProviderErrorMetadata = {
@@ -25,20 +38,24 @@ type ProviderErrorMetadata = {
   readonly errorType: string | null
   readonly providerCode: string | null
   readonly message: string | null
+  readonly source: ProviderHttpError
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
-function projectTransparentProviderResponse(response: Response): Response {
+function projectTransparentProviderResponse(
+  response: Response,
+  body: BodyInit | null = response.body,
+): Response {
   const headers = new Headers()
   const contentType = response.headers.get('content-type')?.trim()
   const retryAfter = response.headers.get('retry-after')?.trim()
   if (contentType) headers.set('Content-Type', contentType)
   if (retryAfter) headers.set('Retry-After', retryAfter)
   headers.set('Cache-Control', 'no-store')
-  return new Response(response.body, {
+  return new Response(body, {
     status: response.status,
     statusText: response.statusText,
     headers,
@@ -73,39 +90,124 @@ function readNestedProviderError(value: unknown): Record<string, unknown> | null
 }
 
 async function readProviderErrorMetadata(response: Response): Promise<ProviderErrorMetadata> {
+  let parsed: unknown
   try {
-    const body = await readResponseBufferWithLimit(
-      response.clone(),
-      CODEX_PROVIDER_ERROR_MAX_BYTES,
-      'Codex provider error response',
-    )
-    const parsed: unknown = JSON.parse(body.toString('utf8'))
-    if (!isRecord(parsed) || !isRecord(parsed.error)) {
-      return { code: null, type: null, errorType: null, providerCode: null, message: null }
-    }
-    const errorMetadata = isRecord(parsed.error.metadata) ? parsed.error.metadata : null
-    const topLevelMetadata = isRecord(parsed.metadata) ? parsed.metadata : null
-    const nestedProviderError = readNestedProviderError(errorMetadata?.raw)
+    parsed = await readProviderJsonResponse({
+      response,
+      provider: 'openrouter',
+      phase: 'submit',
+      maxBytes: CODEX_PROVIDER_ERROR_MAX_BYTES,
+    })
+  } catch (error: unknown) {
+    if (!(error instanceof ProviderHttpError)) throw error
     return {
-      code: boundedProviderErrorToken(parsed.error.code)
-        ?? boundedProviderErrorToken(nestedProviderError?.code),
-      type: boundedProviderErrorToken(parsed.error.type)
-        ?? boundedProviderErrorToken(nestedProviderError?.type),
-      errorType: boundedProviderErrorToken(parsed.error_type)
-        ?? boundedProviderErrorToken(parsed.error.error_type)
-        ?? boundedProviderErrorToken(errorMetadata?.error_type)
-        ?? boundedProviderErrorToken(topLevelMetadata?.error_type)
-        ?? boundedProviderErrorToken(nestedProviderError?.error_type),
-      providerCode: boundedProviderErrorToken(errorMetadata?.provider_code)
-        ?? boundedProviderErrorToken(errorMetadata?.provider_error_code)
-        ?? boundedProviderErrorToken(topLevelMetadata?.provider_code)
-        ?? boundedProviderErrorToken(topLevelMetadata?.provider_error_code)
-        ?? boundedProviderErrorToken(nestedProviderError?.code),
-      message: boundedProviderErrorMessage(nestedProviderError?.message)
-        ?? boundedProviderErrorMessage(parsed.error.message),
+      code: null,
+      type: null,
+      errorType: null,
+      providerCode: null,
+      message: error.message,
+      source: error,
     }
-  } catch {
-    return { code: null, type: null, errorType: null, providerCode: null, message: null }
+  }
+  const root = isRecord(parsed) ? parsed : null
+  const error = isRecord(root?.error) ? root.error : null
+  const errorMetadata = isRecord(error?.metadata) ? error.metadata : null
+  const topLevelMetadata = isRecord(root?.metadata) ? root.metadata : null
+  const nestedProviderError = readNestedProviderError(errorMetadata?.raw)
+  const code = boundedProviderErrorToken(error?.code)
+    ?? boundedProviderErrorToken(nestedProviderError?.code)
+  const type = boundedProviderErrorToken(error?.type)
+    ?? boundedProviderErrorToken(nestedProviderError?.type)
+  const errorType = boundedProviderErrorToken(root?.error_type)
+    ?? boundedProviderErrorToken(error?.error_type)
+    ?? boundedProviderErrorToken(errorMetadata?.error_type)
+    ?? boundedProviderErrorToken(topLevelMetadata?.error_type)
+    ?? boundedProviderErrorToken(nestedProviderError?.error_type)
+  const providerCode = boundedProviderErrorToken(errorMetadata?.provider_code)
+    ?? boundedProviderErrorToken(errorMetadata?.provider_error_code)
+    ?? boundedProviderErrorToken(topLevelMetadata?.provider_code)
+    ?? boundedProviderErrorToken(topLevelMetadata?.provider_error_code)
+    ?? boundedProviderErrorToken(nestedProviderError?.code)
+  const message = boundedProviderErrorMessage(nestedProviderError?.message)
+    ?? boundedProviderErrorMessage(error?.message)
+    ?? boundedProviderErrorMessage(root?.message)
+  const source = new ProviderHttpError({
+    provider: 'openrouter',
+    phase: 'submit',
+    statusCode: response.status,
+    requestId: response.headers.get('x-request-id')?.trim()
+      || response.headers.get('x-oai-request-id')?.trim()
+      || response.headers.get('cf-ray')?.trim()
+      || null,
+    code: providerCode ?? code ?? errorType ?? type,
+    contentType: response.headers.get('content-type')?.trim() || null,
+    errorEnvelope: parsed,
+    diagnosticText: message,
+  })
+  return { code, type, errorType, providerCode, message, source }
+}
+
+function unifiedCodeForFailure(
+  kind: CodexProviderFailureKind,
+  providerStatus: number,
+): UnifiedErrorCode {
+  switch (kind) {
+    case 'billing_required':
+      return 'PROVIDER_BILLING_REQUIRED'
+    case 'configuration_unavailable':
+      return providerStatus === 404 ? 'MODEL_NOT_OPEN' : 'PROVIDER_AUTH_INVALID'
+    case 'context_exceeded':
+      return 'CONTEXT_BUDGET_EXCEEDED'
+    case 'policy_rejected':
+      return 'SENSITIVE_CONTENT'
+    case 'rate_limited':
+      return 'RATE_LIMIT'
+    case 'request_rejected':
+      return 'PROVIDER_SUBMISSION_REJECTED'
+    case 'temporarily_unavailable':
+      return 'EXTERNAL_ERROR'
+  }
+}
+
+function capturedFailure(input: {
+  readonly metadata: ProviderErrorMetadata
+  readonly kind: CodexProviderFailureKind
+  readonly providerStatus: number
+}): FailureRecord {
+  const normalized = resolveAiProviderAdapter('openrouter').failure.normalize({
+    error: input.metadata.source,
+    phase: 'submit',
+    operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
+  })
+  const projected = augmentFailureRecord(normalized, {
+    code: unifiedCodeForFailure(input.kind, input.providerStatus),
+    details: {
+      providerStatus: input.providerStatus,
+      providerCode: input.metadata.providerCode ?? input.metadata.code ?? input.metadata.type,
+      providerErrorType: input.metadata.errorType,
+    },
+  })
+  return projectProviderCredentialOwnership(
+    projected,
+    getDeploymentConfig().providerCredentialMode,
+  )
+}
+
+function failedProjection(input: Omit<CodexProviderResponseProjection, 'failure'> & {
+  readonly metadata: ProviderErrorMetadata
+}): CodexProviderResponseProjection {
+  if (!input.failureKind) throw new Error('CODEX_PROVIDER_FAILURE_KIND_REQUIRED')
+  return {
+    response: input.response,
+    failureKind: input.failureKind,
+    providerStatus: input.providerStatus,
+    providerCode: input.providerCode,
+    providerErrorType: input.providerErrorType,
+    failure: capturedFailure({
+      metadata: input.metadata,
+      kind: input.failureKind,
+      providerStatus: input.providerStatus,
+    }),
   }
 }
 
@@ -224,6 +326,7 @@ export async function projectCodexProviderResponse(
       providerStatus,
       providerCode: null,
       providerErrorType: null,
+      failure: null,
     }
   }
 
@@ -234,7 +337,7 @@ export async function projectCodexProviderResponse(
     providerStatus === 402
     || hasProviderErrorToken(metadata, PROVIDER_BILLING_ERROR_TOKENS)
   ) {
-    return {
+    return failedProjection({
       response: canonicalCodexErrorResponse({
         source: response,
         status: 429,
@@ -246,10 +349,11 @@ export async function projectCodexProviderResponse(
       providerStatus,
       providerCode,
       providerErrorType,
-    }
+      metadata,
+    })
   }
   if (hasProviderErrorToken(metadata, PROVIDER_POLICY_ERROR_TOKENS)) {
-    return {
+    return failedProjection({
       response: canonicalCodexStreamFailureResponse({
         code: 'cyber_policy',
         message: metadata.message,
@@ -258,10 +362,11 @@ export async function projectCodexProviderResponse(
       providerStatus,
       providerCode,
       providerErrorType,
-    }
+      metadata,
+    })
   }
   if (hasProviderErrorToken(metadata, PROVIDER_CONTEXT_ERROR_TOKENS)) {
-    return {
+    return failedProjection({
       response: canonicalCodexStreamFailureResponse({
         code: 'context_length_exceeded',
         message: metadata.message,
@@ -270,19 +375,26 @@ export async function projectCodexProviderResponse(
       providerStatus,
       providerCode,
       providerErrorType,
-    }
+      metadata,
+    })
   }
   if (providerStatus === 429) {
-    return {
-      response: projectTransparentProviderResponse(response),
+    return failedProjection({
+      response: projectTransparentProviderResponse(
+        response,
+        typeof metadata.source.errorEnvelope === 'string'
+          ? metadata.source.errorEnvelope
+          : JSON.stringify(metadata.source.errorEnvelope),
+      ),
       failureKind: 'rate_limited',
       providerStatus,
       providerCode,
       providerErrorType,
-    }
+      metadata,
+    })
   }
   if (hasProviderErrorToken(metadata, PROVIDER_OVERLOAD_ERROR_TOKENS)) {
-    return {
+    return failedProjection({
       response: canonicalCodexErrorResponse({
         source: response,
         status: 503,
@@ -294,10 +406,11 @@ export async function projectCodexProviderResponse(
       providerStatus,
       providerCode,
       providerErrorType,
-    }
+      metadata,
+    })
   }
   if (providerStatus === 401 || providerStatus === 403 || providerStatus === 404) {
-    return {
+    return failedProjection({
       response: canonicalCodexErrorResponse({
         source: response,
         status: 503,
@@ -309,10 +422,11 @@ export async function projectCodexProviderResponse(
       providerStatus,
       providerCode,
       providerErrorType,
-    }
+      metadata,
+    })
   }
   if (providerStatus >= 400 && providerStatus < 500) {
-    return {
+    return failedProjection({
       response: canonicalCodexErrorResponse({
         source: response,
         status: 400,
@@ -324,10 +438,11 @@ export async function projectCodexProviderResponse(
       providerStatus,
       providerCode,
       providerErrorType,
-    }
+      metadata,
+    })
   }
   if (providerStatus >= 500) {
-    return {
+    return failedProjection({
       response: canonicalCodexErrorResponse({
         source: response,
         status: 503,
@@ -339,9 +454,10 @@ export async function projectCodexProviderResponse(
       providerStatus,
       providerCode,
       providerErrorType,
-    }
+      metadata,
+    })
   }
-  return {
+  return failedProjection({
     response: canonicalCodexErrorResponse({
       source: response,
       status: 500,
@@ -353,5 +469,6 @@ export async function projectCodexProviderResponse(
     providerStatus,
     providerCode,
     providerErrorType,
-  }
+    metadata,
+  })
 }

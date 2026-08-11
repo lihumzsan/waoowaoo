@@ -5,6 +5,10 @@ import { getErrorMessage } from '@/lib/ai-providers/shared/helpers'
 import { describeUnknownError } from '@/lib/errors/normalize'
 import { AppError } from '@/lib/errors/app-error'
 import { createProviderAsyncTaskFailure } from '@/lib/ai-providers/shared/async-task-status'
+import {
+  captureProviderHttpFailure,
+  readProviderJsonResponse,
+} from '@/lib/ai-providers/failure'
 import { readArkErrorCode, toArkPollHttpError } from './error'
 
 interface UnknownRecord {
@@ -55,17 +59,20 @@ export async function querySeedanceVideoStatus(
     )
 
     if (!queryResponse.ok) {
-      const errorText = await queryResponse.text()
       logInternal('Seedance', 'ERROR', `Status query failed: ${queryResponse.status}`)
-      throw toArkPollHttpError(queryResponse.status, errorText)
+      throw toArkPollHttpError(await captureProviderHttpFailure({
+        response: queryResponse,
+        provider: 'ark',
+        phase: 'poll',
+      }))
     }
 
-    const queryData = await queryResponse.json() as {
+    const queryData = await readProviderJsonResponse<{
       status?: unknown
       usage?: { total_tokens?: unknown }
       content?: unknown
       error?: { code?: unknown; message?: unknown }
-    }
+    }>({ response: queryResponse, provider: 'ark', phase: 'poll' })
     const status = queryData.status
     const actualVideoTokens = typeof queryData.usage?.total_tokens === 'number'
       ? queryData.usage.total_tokens

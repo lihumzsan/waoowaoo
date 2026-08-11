@@ -1,5 +1,4 @@
 import { createScopedLogger } from '@/lib/logging/core'
-import { FetchStatusError } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { buildFalQueueUrl } from './base-url'
 import { AppError } from '@/lib/errors/app-error'
@@ -7,6 +6,11 @@ import type { UnifiedErrorCode } from '@/lib/errors/codes'
 import { createProviderAsyncTaskFailure } from '@/lib/ai-providers/shared/async-task-status'
 import type { FailureRecord } from '@/lib/errors/failure'
 import { submitFalQueueRequest } from './submission'
+import {
+  captureProviderHttpFailure,
+  ProviderHttpError,
+  readProviderJsonResponse,
+} from '@/lib/ai-providers/failure'
 
 const falLogger = createScopedLogger({ module: 'ai-provider.fal', provider: 'fal' })
 
@@ -63,17 +67,9 @@ function readFalQueueResultUrl(resultData: unknown): string | undefined {
   return candidates.find((candidate): candidate is string => typeof candidate === 'string' && candidate.length > 0)
 }
 
-function readFalErrorType(errorText: string): string | null {
-  let parsed: unknown
-  // Stryker disable BlockStatement: malformed JSON is intentionally normalized to the same absent-type result.
-  try {
-    parsed = JSON.parse(errorText)
-  } catch {
-    return null
-  }
-  // Stryker restore BlockStatement
-  if (parsed === null) return null
-  const detail = (parsed as { detail?: unknown }).detail
+function readFalErrorType(payload: unknown): string | null {
+  if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return null
+  const detail = (payload as { detail?: unknown }).detail
   if (!Array.isArray(detail)) return null
   const first = detail[0]
   if (first === null || first === undefined) return null
@@ -81,17 +77,17 @@ function readFalErrorType(errorText: string): string | null {
   return typeof errorType === 'string' ? errorType : null
 }
 
-function toFalHttpAppError(error: FetchStatusError): AppError | null {
-  if (error.status === 401 || error.status === 403) {
+function toFalHttpAppError(error: ProviderHttpError): AppError | null {
+  if (error.statusCode === 401 || error.statusCode === 403) {
     return new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'fal', cause: error })
   }
-  if (error.status === 402) {
+  if (error.statusCode === 402) {
     return new AppError('PROVIDER_BILLING_REQUIRED', undefined, { provider: 'fal', cause: error })
   }
-  if (error.status === 429) {
+  if (error.statusCode === 429) {
     return new AppError('RATE_LIMIT', undefined, { provider: 'fal', cause: error })
   }
-  if (error.status === 422 && readFalErrorType(error.responseText) === 'content_policy_violation') {
+  if (error.statusCode === 422 && readFalErrorType(error.errorEnvelope) === 'content_policy_violation') {
     return new AppError('SENSITIVE_CONTENT', undefined, { provider: 'fal', cause: error })
   }
   return null
@@ -112,9 +108,9 @@ function codeFromFalFailureToken(error: string): UnifiedErrorCode {
   }
 }
 
-function parseFalResultFetchError(status: number, errorText: string): FalQueueStatus | null {
-  if (status === 422) {
-    const errorType = readFalErrorType(errorText)
+function parseFalResultFetchError(source: ProviderHttpError): FalQueueStatus | null {
+  if (source.statusCode === 422) {
+    const errorType = readFalErrorType(source.errorEnvelope)
     const errorCode = errorType === 'content_policy_violation'
       ? 'SENSITIVE_CONTENT'
       : 'PROVIDER_SUBMISSION_REJECTED'
@@ -128,7 +124,7 @@ function parseFalResultFetchError(status: number, errorText: string): FalQueueSt
     falLogger.error({
       action: 'fal.queue.failed',
       message: 'FAL result fetch returned a terminal 422 response',
-      details: { httpStatus: status, errorType, errorMessage },
+      details: { httpStatus: source.statusCode, errorType, errorMessage },
     })
     return {
       status: 'COMPLETED',
@@ -138,13 +134,13 @@ function parseFalResultFetchError(status: number, errorText: string): FalQueueSt
         provider: 'fal',
         code: errorCode,
         message: errorMessage,
-        cause: new FetchStatusError(status, errorText),
+        cause: source,
       }),
     }
   }
 
-  if (status === 500) {
-    const errorDetail = readFalErrorType(errorText) === 'downstream_service_error'
+  if (source.statusCode === 500) {
+    const errorDetail = readFalErrorType(source.errorEnvelope) === 'downstream_service_error'
       ? 'FAL 下游服务错误：上游模型处理失败'
       : '下游服务错误'
 
@@ -152,9 +148,9 @@ function parseFalResultFetchError(status: number, errorText: string): FalQueueSt
     falLogger.error({
       action: 'fal.queue.failed',
       message: 'FAL result fetch returned 500; preserving the transport failure',
-      details: { httpStatus: status, errorDetail },
+      details: { httpStatus: source.statusCode, errorDetail },
     })
-    throw new FetchStatusError(status, errorDetail)
+    throw source
   }
 
   return null
@@ -176,16 +172,19 @@ export async function queryFalStatus(endpoint: string, requestId: string, apiKey
   })
 
   if (!response.ok) {
-    const errorText = await response.text()
-    const statusError = new FetchStatusError(response.status, errorText)
-    throw toFalHttpAppError(statusError) ?? statusError
+    const source = await captureProviderHttpFailure({
+      response,
+      provider: 'fal',
+      phase: 'poll',
+    })
+    throw toFalHttpAppError(source) ?? source
   }
 
-  const data = await response.json() as {
+  const data = await readProviderJsonResponse<{
     status?: unknown
     response_url?: unknown
     error?: unknown
-  }
+  }>({ response, provider: 'fal', phase: 'poll' })
   const status = data.status
 
   if (status !== 'IN_QUEUE' && status !== 'IN_PROGRESS' && status !== 'COMPLETED' && status !== 'FAILED') {
@@ -222,7 +221,11 @@ export async function queryFalStatus(endpoint: string, requestId: string, apiKey
     })
 
     if (resultResponse.ok) {
-      const resultData = await resultResponse.json()
+      const resultData = await readProviderJsonResponse({
+        response: resultResponse,
+        provider: 'fal',
+        phase: 'result',
+      })
       const mediaUrl = readFalQueueResultUrl(resultData)
 
       // Stryker disable next-line StringLiteral,ObjectLiteral,BooleanLiteral: observability text does not change media validation.
@@ -254,7 +257,11 @@ export async function queryFalStatus(endpoint: string, requestId: string, apiKey
       }
     }
 
-    const errorText = await resultResponse.text()
+    const source = await captureProviderHttpFailure({
+      response: resultResponse,
+      provider: 'fal',
+      phase: 'result',
+    })
     // Stryker disable next-line StringLiteral,ObjectLiteral,MethodExpression: observability text does not change error classification.
     falLogger.error({
       action: 'fal.queue.failed',
@@ -263,16 +270,15 @@ export async function queryFalStatus(endpoint: string, requestId: string, apiKey
         endpoint,
         requestId,
         httpStatus: resultResponse.status,
-        errorSnippet: errorText.slice(0, 300),
+        errorSnippet: source.message.slice(0, 300),
       },
     })
-    const terminalError = parseFalResultFetchError(resultResponse.status, errorText)
+    const terminalError = parseFalResultFetchError(source)
     if (terminalError) {
       return terminalError
     }
 
-    const statusError = new FetchStatusError(resultResponse.status, errorText)
-    throw toFalHttpAppError(statusError) ?? statusError
+    throw toFalHttpAppError(source) ?? source
   }
 
   if (status === 'FAILED') {
@@ -330,7 +336,11 @@ export async function cancelFalTask(endpoint: string, requestId: string, apiKey:
     return
   }
 
-  const errorText = await response.text()
+  const source = await captureProviderHttpFailure({
+    response,
+    provider: 'fal',
+    phase: 'cancel',
+  })
   if (response.status >= 400 && response.status < 500) {
     // Stryker disable next-line StringLiteral,ObjectLiteral,MethodExpression: observability text does not change the tolerated outcome.
     falLogger.warn({
@@ -340,10 +350,10 @@ export async function cancelFalTask(endpoint: string, requestId: string, apiKey:
         endpoint,
         requestId,
         httpStatus: response.status,
-        errorSnippet: errorText.slice(0, 300),
+        errorSnippet: source.message.slice(0, 300),
       },
     })
     return
   }
-  throw new FetchStatusError(response.status, errorText)
+  throw source
 }

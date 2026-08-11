@@ -7,6 +7,7 @@
  * caller from reaching for its own client when it wants one more knob.
  */
 import { createOpenAIWebSearchProvider } from '@/lib/ai-providers/openai/hosted-web-search'
+import { runRegisteredProviderOperation } from '@/lib/ai-providers'
 import type {
   NormalizedWebSearchRequest,
   WebSearchResponse,
@@ -24,8 +25,12 @@ export async function executeOpenAIHostedWebSearch(input: {
     apiKey: input.apiKey,
     model: input.model,
   })
-  return provider.search(input.request, {
-    signal: input.signal,
-    onUsage: input.onUsage,
+  return await runRegisteredProviderOperation({
+    providerId: 'openai',
+    phase: 'search',
+    run: async () => await provider.search(input.request, {
+      signal: input.signal,
+      onUsage: input.onUsage,
+    }),
   })
 }

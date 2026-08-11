@@ -5,9 +5,12 @@ import type {
 } from '@/lib/ai-providers/async-task-types'
 import { normalizeAsyncPollResult } from '@/lib/ai-providers/async-task-types'
 import { createProviderAsyncTaskFailure } from '@/lib/ai-providers/shared/async-task-status'
-import { FetchStatusError } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { buildMurekaUrl } from './base-url'
+import {
+  captureProviderHttpFailure,
+  readProviderJsonResponse,
+} from '@/lib/ai-providers/failure'
 
 const MUREKA_QUERY_ENDPOINTS = ['song', 'instrumental'] as const
 
@@ -72,6 +75,7 @@ function readMurekaResultUrl(choices: unknown): string {
 
 export const murekaAsyncTaskProvider: AsyncTaskProviderRegistration = {
   providerCode: 'MUREKA',
+  providerKey: 'mureka',
   canParseExternalId: (externalId) => externalId.startsWith('MUREKA:'),
   parseExternalId: parseMurekaExternalId,
   formatExternalId: formatMurekaExternalId,
@@ -88,9 +92,17 @@ export const murekaAsyncTaskProvider: AsyncTaskProviderRegistration = {
       },
     )
     if (!response.ok) {
-      throw new FetchStatusError(response.status, await response.text())
+      throw await captureProviderHttpFailure({
+        response,
+        provider: 'mureka',
+        phase: 'poll',
+      })
     }
-    const data = await response.json() as MurekaTaskResponse
+    const data = await readProviderJsonResponse<MurekaTaskResponse>({
+      response,
+      provider: 'mureka',
+      phase: 'poll',
+    })
     const status = readMurekaStatus(data.status)
 
     if (status === 'succeeded') {

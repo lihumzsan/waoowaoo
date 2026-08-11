@@ -19,7 +19,8 @@
         "unavailable": "当前无法执行此操作"
       },
       "errors": {
-        "unknown": "这个资源生成失败，你可以重新尝试。"
+        "unknown": "这个资源生成失败，你可以重新尝试。",
+        "providerDiagnostic": "服务商原始错误：{message}"
       },
       "preview": {
         "position": "{current} / {total}",

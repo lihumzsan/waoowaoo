@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client'
 import { safeValidateUIMessages, type UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
 import { buildAgentTurnAssistantMessageId } from '@/lib/agent-turn/stream-publisher'
-import { parseFailureRecord } from '@/lib/errors/failure'
+import { hasProviderFailureEvidence, parseFailureRecord } from '@/lib/errors/failure'
 import type { RuntimeJsonValue } from '@/lib/codex-runtime/runtime-adapter'
 import {
   parseProjectAgentPlanSnapshot,
@@ -51,6 +51,7 @@ function toTurnView(row: {
   readonly updatedAt: Date
 }): AssistantRuntimeSessionTurnView {
   const status = parseTurnStatus(row.status)
+  const failure = parseFailureRecord(row.failure)
   return {
     turnId: row.id,
     requestId: row.requestId,
@@ -65,7 +66,10 @@ function toTurnView(row: {
       ? buildAgentTurnAssistantMessageId({ turnId: row.id, attempt: row.attempt })
       : null),
     stopReason: row.stopReason,
-    errorCode: parseFailureRecord(row.failure)?.interpretation.code ?? null,
+    errorCode: failure?.interpretation.code ?? null,
+    errorDiagnostic: failure && hasProviderFailureEvidence(failure)
+      ? failure.native.message
+      : null,
     cancelReason: row.cancelReason,
     startedAt: row.startedAt?.toISOString() ?? null,
     finishedAt: row.finishedAt?.toISOString() ?? null,

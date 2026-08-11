@@ -81,6 +81,7 @@
   "PROJECT_DELETE_ACTIVE_EXECUTION": "该项目仍有进行中的助手工作、待处理确认或生成任务，请先完成或取消后再删除项目。",
   "PROJECT_AGENT_AI_TURN_PROTOCOL_REQUIRED": "助手已完成前一步工作，但在仍有可用的 AI 引导步骤时停止。请发送一条新指令继续；服务端不会自动执行下一步。",
   "referenceId": "参考编号：{id}",
+  "providerDiagnostic": "服务商原始错误：{message}",
   "networkOffline": "网络已断开，请检查连接；尚未提交的操作不会自动发送。",
   "networkRestored": "网络已恢复",
   "sseDisconnected": "实时连接已中断，正在重新连接；已经提交的任务不会丢失。",

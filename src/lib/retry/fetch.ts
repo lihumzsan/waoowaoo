@@ -63,6 +63,7 @@ export type FetchWithRetryOptions = RequestInit & {
   readonly timeoutMs?: number
   readonly scope?: string
   readonly fetchFn?: typeof fetch
+  readonly httpErrorFactory?: (response: Response) => Promise<Error>
 }
 
 export async function fetchWithRetry(url: string, options: FetchWithRetryOptions): Promise<Response> {
@@ -71,6 +72,7 @@ export async function fetchWithRetry(url: string, options: FetchWithRetryOptions
     operation,
     scope = `fetch:${url}`,
     fetchFn = fetch,
+    httpErrorFactory,
     ...requestOptions
   } = options
 
@@ -80,6 +82,7 @@ export async function fetchWithRetry(url: string, options: FetchWithRetryOptions
     run: async () => {
       const response = await fetchWithTimeout(url, requestOptions, timeoutMs, fetchFn)
       if (!response.ok) {
+        if (httpErrorFactory) throw await httpErrorFactory(response)
         const responseText = await response.text()
         throw new FetchStatusError(response.status, responseText)
       }

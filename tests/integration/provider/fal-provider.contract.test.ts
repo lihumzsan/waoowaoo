@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { falAsyncTaskProvider } from '@/lib/ai-providers/fal/async-task'
 import { queryFalStatus, submitFalTask } from '@/lib/ai-providers/fal/queue'
 import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
-import { FetchStatusError } from '@/lib/retry'
+import { ProviderHttpError } from '@/lib/ai-providers/failure'
 import { startScenarioServer } from '../../helpers/fakes/scenario-server'
 
 describe('provider contract - fal queue', () => {
@@ -75,9 +75,9 @@ describe('provider contract - fal queue', () => {
       captured = error
     }
 
-    expect(captured).toBeInstanceOf(FetchStatusError)
+    expect(captured).toBeInstanceOf(ProviderHttpError)
     expect(captured).not.toBeInstanceOf(ProviderSubmissionError)
-    expect(captured).toMatchObject({ status: 503 })
+    expect(captured).toMatchObject({ statusCode: 503 })
 
     const requests = server!.getRequests('POST', '/fal/fal-ai/nano-banana-pro')
     expect(requests).toHaveLength(1)
@@ -129,7 +129,7 @@ describe('provider contract - fal queue', () => {
         code: testCase.code,
         disposition: 'rejected',
         failure: {
-          native: { name: 'FetchStatusError', statusCode: testCase.status },
+          native: { name: 'ProviderHttpError', statusCode: testCase.status },
           interpretation: { details: {
             providerCode: testCase.providerCode,
             httpStatus: testCase.status,
@@ -158,9 +158,9 @@ describe('provider contract - fal queue', () => {
       } catch (error) {
         captured = error
       }
-      expect(captured).toBeInstanceOf(FetchStatusError)
+      expect(captured).toBeInstanceOf(ProviderHttpError)
       expect(captured).not.toBeInstanceOf(ProviderSubmissionError)
-      expect(captured).toMatchObject({ status })
+      expect(captured).toMatchObject({ statusCode: status })
     }
   })
 
@@ -189,7 +189,7 @@ describe('provider contract - fal queue', () => {
     await expect(
       queryFalStatus('fal-ai/veo3.1/fast/image-to-video', 'req_video_1', 'fal-key-2'),
     ).rejects.toMatchObject({
-      status: 503,
+      statusCode: 503,
     })
 
     const second = await queryFalStatus('fal-ai/veo3.1/fast/image-to-video', 'req_video_1', 'fal-key-2')
@@ -221,9 +221,12 @@ describe('provider contract - fal queue', () => {
       capturedError = error
     }
 
-    expect(capturedError).toMatchObject({ status: 500 })
+    expect(capturedError).toMatchObject({
+      statusCode: 500,
+      errorEnvelope: { detail: [{ type: 'downstream_service_error' }] },
+    })
     expect(capturedError).toBeInstanceOf(Error)
-    expect((capturedError as Error).message).toContain('status 500')
+    expect((capturedError as Error).message).toBe('downstream_service_error')
   })
 
   it('marks a failed status response as failed with explicit provider error', async () => {

@@ -338,20 +338,6 @@ export async function resolveImageSourceFromGeneration(
       { provider: providerKey || null, cause: error },
     )
   }
-  if (!result.success) {
-    throw new AppError(
-      'GENERATION_FAILED',
-      [
-        'IMAGE_GENERATION_FAILED',
-        `modelKey=${params.modelId}`,
-        providerKey ? `providerKey=${providerKey}` : 'providerKey=<unset>',
-        `options=${jsonStringifySafe(summarizeImageGenerationOptions(finalOptions))}`,
-        `error=${result.error || '<empty>'}`,
-      ].join(' '),
-      { provider: providerKey || null },
-    )
-  }
-
   if (result.imageUrl) {
     logger.info({
       message: 'image source generation completed',
@@ -452,10 +438,6 @@ export async function resolveVideoSourceFromGeneration(
         { key: 'media:video:primary' },
       ),
   )
-  if (!result.success) {
-    throw new Error(result.error || 'Video generation failed')
-  }
-
   if (result.videoUrl) {
     logger.info({
       message: 'video source generation completed',

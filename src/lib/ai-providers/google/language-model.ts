@@ -59,11 +59,12 @@ export function validateGoogleLanguageModelResult(
   if (result.text.trim()) return
   if (result.termination.kind === 'safety') {
     const reason = result.termination.rawReason || 'SAFETY'
-    throw googleSafetyTerminalError(reason)
+    throw googleSafetyTerminalError(reason, result)
   }
   if (context.executionMode === 'vision') return
   throw new AppError('EMPTY_RESPONSE', 'Google Gemini returned an empty text response, please retry', {
     provider: 'google',
     details: { rawReason: result.termination.rawReason },
+    cause: result,
   })
 }

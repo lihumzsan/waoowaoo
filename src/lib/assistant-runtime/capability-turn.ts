@@ -25,6 +25,7 @@ export type AssistantRuntimeCapabilityTurn = {
   readonly requestId: string
   readonly runtimeTurnId: string
   readonly executionOwnerId: string
+  readonly attempt: number
   readonly contextJson: unknown
 }
 
@@ -73,6 +74,7 @@ export async function requireAssistantRuntimeCapabilityTurn(input: {
       contextJson: true,
       threadId: true,
       runtimeTurnId: true,
+      attempt: true,
       thread: { select: { id: true } },
     },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -102,6 +104,7 @@ export async function requireAssistantRuntimeCapabilityTurn(input: {
     requestId: requireIdentity(turn.requestId),
     runtimeTurnId,
     executionOwnerId,
+    attempt: turn.attempt,
     contextJson: turn.contextJson,
   }
 }

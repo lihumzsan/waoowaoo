@@ -1,4 +1,7 @@
-import { tryResolveAiProviderAdapter } from '@/lib/ai-providers'
+import {
+  runRegisteredProviderOperation,
+  tryResolveAiProviderAdapter,
+} from '@/lib/ai-providers'
 import type {
   AiProviderConnectionTestReport,
   AiProviderConnectionTestStep,
@@ -25,7 +28,8 @@ export async function testProviderConnection(payload: TestProviderPayload): Prom
     }
   }
 
-  const diagnose = tryResolveAiProviderAdapter(payload.apiType)?.connectionTest?.diagnose
+  const adapter = tryResolveAiProviderAdapter(payload.apiType)
+  const diagnose = adapter?.connectionTest?.diagnose
   if (!diagnose) {
     return {
       success: false,
@@ -33,9 +37,13 @@ export async function testProviderConnection(payload: TestProviderPayload): Prom
     }
   }
 
-  return await diagnose({
-    apiKey,
-    baseUrl: payload.baseUrl,
-    llmModel: payload.llmModel,
+  return await runRegisteredProviderOperation({
+    providerId: adapter.providerKey,
+    phase: 'connection',
+    run: async () => await diagnose({
+      apiKey,
+      baseUrl: payload.baseUrl,
+      llmModel: payload.llmModel,
+    }),
   })
 }

@@ -1,7 +1,10 @@
 import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
+import {
+  captureProviderHttpFailure,
+  ProviderHttpError,
+} from '@/lib/ai-providers/failure'
 import { AppError } from '@/lib/errors/app-error'
 import type { UnifiedErrorCode } from '@/lib/errors/codes'
-import { FetchStatusError } from '@/lib/retry'
 
 type UnknownRecord = Record<string, unknown>
 
@@ -51,18 +54,10 @@ function readStructuredArkError(value: unknown): {
   }
 }
 
-function parsePayload(responseText: string): unknown {
-  try {
-    return JSON.parse(responseText) as unknown
-  } catch {
-    return responseText
-  }
-}
-
 function arkSubmissionRejection(input: {
   readonly status: number
   readonly payload: unknown
-  readonly cause?: unknown
+  readonly cause: unknown
 }): ProviderSubmissionError | null {
   const mappedCode = readArkErrorCode(input.payload)
   const structured = readStructuredArkError(input.payload)
@@ -95,10 +90,10 @@ function arkSubmissionRejection(input: {
 
 export function throwArkSubmissionError(error: unknown): never {
   if (error instanceof ProviderSubmissionError) throw error
-  if (error instanceof FetchStatusError) {
+  if (error instanceof ProviderHttpError) {
     const rejection = arkSubmissionRejection({
-      status: error.status,
-      payload: parsePayload(error.responseText),
+      status: error.statusCode,
+      payload: error.errorEnvelope,
       cause: error,
     })
     if (rejection) throw rejection
@@ -108,27 +103,31 @@ export function throwArkSubmissionError(error: unknown): never {
 
 export async function assertArkSubmissionResponse(response: Response): Promise<void> {
   if (response.ok) return
-  const responseText = await response.clone().text()
+  const source = await captureProviderHttpFailure({
+    response,
+    provider: 'ark',
+    phase: 'submit',
+  })
   const rejection = arkSubmissionRejection({
     status: response.status,
-    payload: parsePayload(responseText),
-    cause: new FetchStatusError(response.status, responseText),
+    payload: source.errorEnvelope,
+    cause: source,
   })
   if (rejection) throw rejection
+  throw source
 }
 
-export function toArkPollHttpError(status: number, responseText: string): Error {
-  const statusError = new FetchStatusError(status, responseText)
-  const providerCode = readArkErrorCode(parsePayload(responseText))
+export function toArkPollHttpError(source: ProviderHttpError): Error {
+  const providerCode = readArkErrorCode(source.errorEnvelope)
   const code = providerCode
-    ?? (status === 401 || status === 403
+    ?? (source.statusCode === 401 || source.statusCode === 403
       ? 'PROVIDER_AUTH_INVALID'
-      : status === 402
+      : source.statusCode === 402
         ? 'PROVIDER_BILLING_REQUIRED'
-        : status === 429
+        : source.statusCode === 429
           ? 'RATE_LIMIT'
           : null)
   return code
-    ? new AppError(code, undefined, { provider: 'ark', cause: statusError })
-    : statusError
+    ? new AppError(code, undefined, { provider: 'ark', cause: source })
+    : source
 }

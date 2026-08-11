@@ -1,6 +1,7 @@
 import {
   resolveAsyncTaskProviderByCode,
   resolveAsyncTaskProviderByExternalId,
+  runRegisteredProviderOperation,
 } from '@/lib/ai-providers'
 import type {
   AsyncExternalIdProvider,
@@ -34,13 +35,18 @@ export async function pollAsyncTask(
   return await withRetry({
     operation: EXTERNAL_OPERATION.PROVIDER_POLL,
     scope: `media:poll:${externalId}`,
-    run: async () => await registration.poll({
-      parsed,
-      context: {
-        userId,
-        getProviderConfig,
-        getUserModels,
-      },
+    run: async () => await runRegisteredProviderOperation({
+      providerId: registration.providerKey,
+      phase: 'poll',
+      operation: EXTERNAL_OPERATION.PROVIDER_POLL,
+      run: async () => await registration.poll({
+        parsed,
+        context: {
+          userId,
+          getProviderConfig,
+          getUserModels,
+        },
+      }),
     }),
   })
 }
@@ -65,13 +71,18 @@ export async function cancelAsyncTask(
   await withRetry({
     operation: EXTERNAL_OPERATION.PROVIDER_CANCEL,
     scope: `media:cancel:${externalId}`,
-    run: async () => await registration.cancel!({
-      parsed,
-      context: {
-        userId,
-        getProviderConfig,
-        getUserModels,
-      },
+    run: async () => await runRegisteredProviderOperation({
+      providerId: registration.providerKey,
+      phase: 'cancel',
+      operation: EXTERNAL_OPERATION.PROVIDER_CANCEL,
+      run: async () => await registration.cancel!({
+        parsed,
+        context: {
+          userId,
+          getProviderConfig,
+          getUserModels,
+        },
+      }),
     }),
   })
   return 'canceled'

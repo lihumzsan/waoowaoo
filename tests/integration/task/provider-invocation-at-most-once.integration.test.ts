@@ -227,7 +227,11 @@ describe('provider invocation at-most-once DB integration', () => {
       throw new ProviderSubmissionError(
         'PROVIDER_BILLING_REQUIRED',
         'primary account hard limit',
-        { disposition: 'pre_accept_rejected', provider: 'openrouter' },
+        {
+          disposition: 'pre_accept_rejected',
+          provider: 'openrouter',
+          cause: { name: 'ProviderRejection', message: 'primary account hard limit' },
+        },
       )
     })
     const secondary = vi.fn(async () => ({
@@ -485,6 +489,10 @@ describe('provider invocation at-most-once DB integration', () => {
           disposition: 'rejected',
           provider: 'mureka',
           details: { requested: 1035, allowed: 1024 },
+          cause: {
+            name: 'MurekaValidationError',
+            message: 'Music prompt is 1035 characters; the model accepts at most 1024',
+          },
         },
       )
     })
@@ -515,7 +523,7 @@ describe('provider invocation at-most-once DB integration', () => {
         failure: {
           version: 2,
           native: {
-            name: 'ProviderSubmissionError',
+            name: 'MurekaValidationError',
             message: 'Music prompt is 1035 characters; the model accepts at most 1024',
           },
           interpretation: {

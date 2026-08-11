@@ -6,7 +6,7 @@ import {
   integerRangeValidator,
   nonEmptyStringValidator,
 } from '@/lib/ai-providers/shared/option-schema'
-import { googleConnectionTester } from './connection-test'
+import { googleConnectionTester, googleFailureAdapter } from './connection-test'
 import { executeGoogleImageGeneration } from './image'
 import {
   createGoogleSdkLanguageModel,
@@ -45,6 +45,7 @@ function describeGoogleMediaVariant(
 
 export const googleAdapter: AiProviderAdapter = {
   providerKey: 'google',
+  failure: googleFailureAdapter,
   image: {
     describe: (selection) => describeGoogleMediaVariant('image', selection),
     execute: executeGoogleImageGeneration,

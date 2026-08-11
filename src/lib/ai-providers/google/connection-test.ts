@@ -1,13 +1,18 @@
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import {
-  classifyConnectionProbeFailure,
-  connectionTestFailureMessageKey,
+  projectConnectionTestFailure,
 } from '@/lib/ai-providers/shared/connection-test'
+import {
+  captureProviderHttpFailure,
+  createAiProviderFailureAdapter,
+} from '@/lib/ai-providers/failure'
 import type {
   AiProviderConnectionTester,
   AiProviderConnectionTestStep,
 } from '@/lib/ai-providers/runtime-types'
 import { GOOGLE_PROVIDER_PROXY_TARGET } from './proxy-target'
+
+export const googleFailureAdapter = createAiProviderFailureAdapter('google')
 
 async function probeGoogleModels(apiKey: string): Promise<Response> {
   return await fetchWithProviderProxy(
@@ -20,8 +25,11 @@ export const googleConnectionTester: AiProviderConnectionTester = {
   testLlm: async (input) => {
     const response = await probeGoogleModels(input.apiKey)
     if (!response.ok) {
-      const error = await response.text()
-      throw new Error(`Google AI probe failed (${response.status}): ${error}`)
+      throw await captureProviderHttpFailure({
+        response,
+        provider: 'google',
+        phase: 'connection',
+      })
     }
     return {}
   },
@@ -30,13 +38,18 @@ export const googleConnectionTester: AiProviderConnectionTester = {
     try {
       const response = await probeGoogleModels(input.apiKey)
       if (!response.ok) {
-        steps.push({ name: 'models', status: 'fail', messageKey: classifyConnectionProbeFailure(response.status) })
+        const failure = await captureProviderHttpFailure({
+          response,
+          provider: 'google',
+          phase: 'connection',
+        })
+        steps.push({ name: 'models', status: 'fail', ...projectConnectionTestFailure(googleFailureAdapter, failure) })
         return { success: false, steps }
       }
       steps.push({ name: 'models', status: 'pass', messageKey: 'connectionTest.modelsOk' })
       return { success: true, steps }
     } catch (error) {
-      steps.push({ name: 'models', status: 'fail', messageKey: connectionTestFailureMessageKey(error) })
+      steps.push({ name: 'models', status: 'fail', ...projectConnectionTestFailure(googleFailureAdapter, error) })
       return { success: false, steps }
     }
   },

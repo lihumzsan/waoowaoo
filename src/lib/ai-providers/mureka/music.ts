@@ -4,8 +4,12 @@ import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import type { AiProviderMusicExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
-import { FetchStatusError, fetchWithRetry } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
+import {
+  fetchProviderWithRetry,
+  ProviderHttpError,
+  readProviderJsonResponse,
+} from '@/lib/ai-providers/failure'
 import { buildMurekaUrl } from './base-url'
 import { MUREKA_9_MODEL_ID, MUREKA_MUSIC_PROMPT_MAX_CHARS } from './models'
 
@@ -85,7 +89,7 @@ function classifyMurekaMachineCode(code: string | null): MurekaSubmissionFailure
 function throwMurekaSubmissionFailure(input: {
   readonly payload: unknown
   readonly status?: number
-  readonly cause?: unknown
+  readonly cause: unknown
 }): void {
   const machineCode = readMurekaErrorCode(input.payload)
   const failure = classifyMurekaMachineCode(machineCode)
@@ -106,12 +110,12 @@ function throwMurekaSubmissionFailure(input: {
 }
 
 function throwMurekaFetchError(error: unknown): never {
-  if (error instanceof FetchStatusError) {
-    let payload: unknown = null
-    try {
-      payload = JSON.parse(error.responseText) as unknown
-    } catch {}
-    throwMurekaSubmissionFailure({ payload, status: error.status, cause: error })
+  if (error instanceof ProviderHttpError) {
+    throwMurekaSubmissionFailure({
+      payload: error.errorEnvelope,
+      status: error.statusCode,
+      cause: error,
+    })
   }
   throw error
 }
@@ -145,23 +149,42 @@ async function postMurekaJson(input: {
 }): Promise<unknown> {
   let response: Response
   try {
-    response = await fetchWithRetry(buildMurekaUrl(input.path, input.baseUrl), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${input.apiKey}`,
+    response = await fetchProviderWithRetry({
+      url: buildMurekaUrl(input.path, input.baseUrl),
+      provider: 'mureka',
+      phase: 'submit',
+      options: {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${input.apiKey}`,
+        },
+        body: JSON.stringify(input.payload),
+        operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
+        cache: 'no-store',
+        scope: input.scope,
+        fetchFn: fetchWithProviderProxy,
       },
-      body: JSON.stringify(input.payload),
-      operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
-      cache: 'no-store',
-      scope: input.scope,
-      fetchFn: fetchWithProviderProxy,
     })
   } catch (error) {
     throwMurekaFetchError(error)
   }
-  const payload = await response.json() as unknown
-  throwMurekaSubmissionFailure({ payload, status: response.status })
+  const payload = await readProviderJsonResponse({
+    response,
+    provider: 'mureka',
+    phase: 'submit',
+  })
+  throwMurekaSubmissionFailure({
+    payload,
+    status: response.status,
+    cause: {
+      name: 'MurekaHttpResponse',
+      message: readMurekaHttpErrorMessage(payload) ?? 'Mureka submission response',
+      code: readMurekaErrorCode(payload),
+      statusCode: response.status,
+      errorEnvelope: payload,
+    },
+  })
   return payload
 }
 
@@ -175,22 +198,41 @@ async function uploadMurekaSoundtrackVideo(input: {
   form.set('url', input.videoUrl)
   let response: Response
   try {
-    response = await fetchWithRetry(buildMurekaUrl('/v1/files/upload', input.baseUrl), {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${input.apiKey}`,
+    response = await fetchProviderWithRetry({
+      url: buildMurekaUrl('/v1/files/upload', input.baseUrl),
+      provider: 'mureka',
+      phase: 'submit',
+      options: {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${input.apiKey}`,
+        },
+        body: form,
+        operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
+        cache: 'no-store',
+        scope: 'mureka:music:upload',
+        fetchFn: fetchWithProviderProxy,
       },
-      body: form,
-      operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
-      cache: 'no-store',
-      scope: 'mureka:music:upload',
-      fetchFn: fetchWithProviderProxy,
     })
   } catch (error) {
     throwMurekaFetchError(error)
   }
-  const data = await response.json() as { id?: unknown }
-  throwMurekaSubmissionFailure({ payload: data, status: response.status })
+  const data = await readProviderJsonResponse<{ id?: unknown }>({
+    response,
+    provider: 'mureka',
+    phase: 'submit',
+  })
+  throwMurekaSubmissionFailure({
+    payload: data,
+    status: response.status,
+    cause: {
+      name: 'MurekaHttpResponse',
+      message: readMurekaHttpErrorMessage(data) ?? 'Mureka upload response',
+      code: readMurekaErrorCode(data),
+      statusCode: response.status,
+      errorEnvelope: data,
+    },
+  })
   const fileId = readEntityId(data.id)
   if (!fileId) {
     throw new Error('MUREKA_UPLOAD_RESPONSE_FILE_ID_MISSING')

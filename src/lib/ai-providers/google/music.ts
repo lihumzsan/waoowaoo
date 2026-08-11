@@ -79,9 +79,12 @@ export function extractGoogleMusicResult(response: unknown): {
 
   const finishReason = getFinishReason(safe)
   if (isSafetyFinishReason(finishReason)) {
-    throw googleSafetyTerminalError(finishReason)
+    throw googleSafetyTerminalError(finishReason, safe)
   }
-  throw new AppError('EMPTY_RESPONSE', 'Google returned no audio', { provider: 'google' })
+  throw new AppError('EMPTY_RESPONSE', 'Google returned no audio', {
+    provider: 'google',
+    cause: safe,
+  })
 }
 
 export async function executeGoogleMusicGeneration(input: AiProviderMusicExecutionContext): Promise<GenerateResult> {

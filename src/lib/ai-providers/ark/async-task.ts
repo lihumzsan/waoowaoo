@@ -18,6 +18,7 @@ function parseArkExternalId(externalId: string): ParsedAsyncExternalId {
 
 export const arkAsyncTaskProvider: AsyncTaskProviderRegistration = {
   providerCode: 'ARK',
+  providerKey: 'ark',
   canParseExternalId: (externalId) => externalId.startsWith('ARK:'),
   parseExternalId: parseArkExternalId,
   formatExternalId: (input) => `ARK:${input.type}:${input.requestId}`,

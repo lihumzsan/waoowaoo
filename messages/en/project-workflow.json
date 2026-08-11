@@ -19,7 +19,8 @@
         "unavailable": "This action is unavailable"
       },
       "errors": {
-        "unknown": "This Resource could not be generated. You can retry it."
+        "unknown": "This Resource could not be generated. You can retry it.",
+        "providerDiagnostic": "Provider error: {message}"
       },
       "preview": {
         "position": "{current} / {total}",

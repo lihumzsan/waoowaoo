@@ -2,8 +2,12 @@ import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
 import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import { getErrorSpec, type UnifiedErrorCode } from '@/lib/errors/codes'
 import { AppError } from '@/lib/errors/app-error'
+import {
+  fetchProviderWithRetry,
+  ProviderHttpError,
+  readProviderJsonResponse,
+} from '@/lib/ai-providers/failure'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
-import { FetchStatusError, fetchWithRetry } from '@/lib/retry'
 import { buildFalQueueUrl } from './base-url'
 
 const FAL_SUBMIT_DIAGNOSTIC_MAX_LENGTH = 512
@@ -94,18 +98,10 @@ function readFalSubmissionFailure(value: unknown): FalSubmissionFailure | null {
   return null
 }
 
-function parseJson(value: string): unknown {
-  try {
-    return JSON.parse(value) as unknown
-  } catch {
-    return null
-  }
-}
-
 function throwFalSubmissionFailure(input: {
   readonly payload: unknown
   readonly httpStatus: number | null
-  readonly cause?: unknown
+  readonly cause: unknown
 }): void {
   const failure = readFalSubmissionFailure(input.payload)
   if (!failure) return
@@ -132,34 +128,52 @@ export async function submitFalQueueRequest(input: {
 
   let response: Response
   try {
-    response = await fetchWithRetry(buildFalQueueUrl(input.endpoint), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Key ${input.apiKey}`,
+    response = await fetchProviderWithRetry({
+      url: buildFalQueueUrl(input.endpoint),
+      provider: 'fal',
+      phase: 'submit',
+      options: {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Key ${input.apiKey}`,
+        },
+        body: JSON.stringify(input.payload),
+        operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
+        cache: 'no-store',
+        scope: input.scope,
+        fetchFn: fetchWithProviderProxy,
       },
-      body: JSON.stringify(input.payload),
-      operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
-      cache: 'no-store',
-      scope: input.scope,
-      fetchFn: fetchWithProviderProxy,
     })
-  } catch (error) {
-    if (error instanceof FetchStatusError) {
+  } catch (error: unknown) {
+    if (error instanceof ProviderHttpError) {
       throwFalSubmissionFailure({
-        payload: parseJson(error.responseText),
-        httpStatus: error.status,
+        payload: error.errorEnvelope,
+        httpStatus: error.statusCode,
         cause: error,
       })
     }
     throw error
   }
 
-  const payload = await response.json() as unknown
+  const payload = await readProviderJsonResponse({
+    response,
+    provider: 'fal',
+    phase: 'submit',
+  })
   const envelope = asRecord(payload)
   const requestId = readString(envelope?.request_id)
   if (requestId) return requestId
 
-  throwFalSubmissionFailure({ payload, httpStatus: response.status })
+  throwFalSubmissionFailure({
+    payload,
+    httpStatus: response.status,
+    cause: {
+      name: 'FalSubmissionResponse',
+      message: 'FAL submission response did not contain a request id',
+      statusCode: response.status,
+      errorEnvelope: payload,
+    },
+  })
   throw new Error('FAL_SUBMIT_RESPONSE_REQUEST_ID_MISSING')
 }

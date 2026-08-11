@@ -63,7 +63,11 @@ describe('provider contract - Google submission disposition', () => {
 
     await expect(assertGoogleSubmissionResponse(new Response(JSON.stringify({
       message: 'bare client error',
-    }), { status: 400 }))).resolves.toBeUndefined()
+    }), { status: 400 }))).rejects.toMatchObject({
+      name: 'ProviderHttpError',
+      statusCode: 400,
+      errorEnvelope: { message: 'bare client error' },
+    })
     await expect(assertGoogleSubmissionResponse(new Response(JSON.stringify({
       error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'rate limited' },
     }), { status: 429 }))).resolves.toBeUndefined()
@@ -73,7 +77,11 @@ describe('provider contract - Google submission disposition', () => {
   })
 
   it('treats an explicit 2xx safety finish as a rejected terminal result', () => {
-    expect(googleSafetyTerminalError('SAFETY')).toMatchObject({
+    expect(googleSafetyTerminalError('SAFETY', {
+      name: 'GoogleTerminalResult',
+      message: 'blocked',
+      code: 'SAFETY',
+    })).toMatchObject({
       name: 'ProviderSubmissionError',
       code: 'SENSITIVE_CONTENT',
       disposition: 'rejected',

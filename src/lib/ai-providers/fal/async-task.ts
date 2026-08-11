@@ -37,6 +37,7 @@ function formatFalExternalId(input: FormatAsyncExternalIdInput): string {
 
 export const falAsyncTaskProvider: AsyncTaskProviderRegistration = {
   providerCode: 'FAL',
+  providerKey: 'fal',
   canParseExternalId: (externalId) => externalId.startsWith('FAL:'),
   parseExternalId: parseFalExternalId,
   formatExternalId: formatFalExternalId,

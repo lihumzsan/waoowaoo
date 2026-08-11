@@ -16,13 +16,13 @@ import {
 export async function requireCodexModelGatewayActiveTurn(
   scope: CodexModelGatewayScope,
   ownerToken: string,
-): Promise<{ readonly turnId: string }> {
+): Promise<{ readonly turnId: string; readonly attempt: number }> {
   try {
     const active = await requireAssistantRuntimeCapabilityTurn({
       scope,
       ownerToken,
     })
-    return { turnId: active.turnId }
+    return { turnId: active.turnId, attempt: active.attempt }
   } catch (error) {
     if (!(error instanceof AssistantRuntimeCapabilityTurnError)) throw error
     throw new CodexModelGatewayError('ACTIVE_TURN_REQUIRED', 403, error)

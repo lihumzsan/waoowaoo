@@ -11,7 +11,10 @@ import type {
   ChatMessage,
 } from '@/lib/ai-registry/types'
 import { resolveModelSelection } from '@/lib/user-api/runtime-config'
-import { resolveAiProviderAdapter } from '@/lib/ai-providers'
+import {
+  resolveAiProviderAdapter,
+  runRegisteredProviderOperation,
+} from '@/lib/ai-providers'
 import { normalizeMediaOptionsForSelection } from '@/lib/ai-exec/media-preflight'
 import { runLlmCompletion, runLlmStream } from '@/lib/ai-exec/llm/completion-runner'
 import {
@@ -294,7 +297,12 @@ export async function executeMediaGeneration(
           phase: 'execute',
           requestSummary: () => summarizeMediaRequestInput(input),
         },
-        route.execute,
+        async () => await runRegisteredProviderOperation({
+          providerId: route.provider,
+          phase: 'submit',
+          operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
+          run: route.execute,
+        }),
         summarizeGenerateResult,
       ),
     }

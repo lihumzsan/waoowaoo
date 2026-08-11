@@ -104,6 +104,7 @@ export interface AsyncTaskPollInput {
 
 export interface AsyncTaskProviderRegistration {
   providerCode: AsyncExternalIdProvider
+  providerKey: string
   canParseExternalId: (externalId: string) => boolean
   parseExternalId: (externalId: string) => ParsedAsyncExternalId
   formatExternalId: (input: FormatAsyncExternalIdInput) => string

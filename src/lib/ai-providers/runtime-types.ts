@@ -9,9 +9,11 @@ import type {
   AiLlmProviderConfig,
 } from '@/lib/ai-registry/types'
 import type { ReasoningEffort } from '@/lib/ai-registry/reasoning-effort'
+import type { ExternalOperationId } from '@/lib/external-operation/registry'
+import type { FailureRecord } from '@/lib/errors/failure'
 
 export type GenerateResult = {
-  success: boolean
+  readonly success: true
   imageUrl?: string
   imageUrls?: string[]
   imageBase64?: string
@@ -20,11 +22,31 @@ export type GenerateResult = {
   audioBase64?: string
   audioMimeType?: string
   metadata?: Record<string, unknown>
-  error?: string
   requestId?: string
   async?: boolean
   endpoint?: string
   externalId?: string
+}
+
+export type AiProviderFailurePhase =
+  | 'submit'
+  | 'poll'
+  | 'cancel'
+  | 'result'
+  | 'stream'
+  | 'connection'
+  | 'search'
+
+export type AiProviderFailureNormalizationInput = {
+  readonly error: unknown
+  readonly phase: AiProviderFailurePhase
+  readonly operation?: ExternalOperationId
+  readonly attempts?: number
+}
+
+export type AiProviderFailureAdapter = {
+  readonly providerKey: string
+  readonly normalize: (input: AiProviderFailureNormalizationInput) => FailureRecord
 }
 
 export type AiProviderLanguageModelContext = {
@@ -189,6 +211,7 @@ export type AiProviderConnectionTestStep = {
   status: 'pass' | 'fail' | 'skip'
   messageKey: AiProviderConnectionTestMessageKey
   model?: string
+  diagnostic?: string
 }
 
 export type AiProviderConnectionTestReport = {
@@ -214,6 +237,7 @@ export type AiProviderConnectionTester = {
 
 export interface AiProviderAdapter {
   readonly providerKey: string
+  readonly failure: AiProviderFailureAdapter
   image?: AiProviderMediaModalityAdapter<'image'>
   video?: AiProviderMediaModalityAdapter<'video'>
   music?: AiProviderMediaModalityAdapter<'music'>

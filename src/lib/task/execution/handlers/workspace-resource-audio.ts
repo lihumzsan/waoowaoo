@@ -120,9 +120,6 @@ export async function handleWorkspaceResourceAudioTask(context: TaskExecutionCon
       },
     },
   )
-  if (!generated.success) {
-    throw new Error(generated.error || 'MUSIC_GENERATE_PROVIDER_FAILED')
-  }
   const providerRoute = await requireTaskProviderRouteSelection(context, invocationKey)
 
   await reportTaskProgress(context, 85, { stage: 'persist_music' })

@@ -133,6 +133,14 @@ describe('Codex provider request normalization', () => {
 
     expect(projected.failureKind).toBe(expectedKind)
     expect(projected.providerStatus).toBe(providerStatus)
+    expect(projected.failure).toMatchObject({
+      version: 2,
+      native: {
+        message: 'provider-private-message',
+        statusCode: providerStatus,
+      },
+      context: { system: 'provider', provider: 'openrouter', phase: 'submit' },
+    })
     expect(projected.response.status).toBe(expectedStatus)
     expect(await projected.response.text()).toContain(`\"code\":\"${expectedCode}\"`)
   })
@@ -152,6 +160,11 @@ describe('Codex provider request normalization', () => {
     expect(projected.providerStatus).toBe(400)
     expect(projected.providerCode).toBe('invalid_prompt')
     expect(projected.providerErrorType).toBe('invalid_request')
+    expect(projected.failure?.native).toMatchObject({
+      message: 'Item ctc_123 was provided without its required output.',
+      code: 'invalid_prompt',
+      statusCode: 400,
+    })
     expect(projected.response.status).toBe(400)
     expect(await projected.response.text()).toContain(
       'Item ctc_123 was provided without its required output.',
@@ -178,6 +191,11 @@ describe('Codex provider request normalization', () => {
 
     expect(projected.failureKind).toBe('request_rejected')
     expect(projected.providerCode).toBe('invalid_encrypted_content')
+    expect(projected.failure?.native).toMatchObject({
+      message: 'Encrypted content item_id did not match the target item id.',
+      code: 'invalid_encrypted_content',
+      statusCode: 400,
+    })
     expect(projected.response.status).toBe(400)
     expect(await projected.response.text()).toContain(
       'Encrypted content item_id did not match the target item id.',
@@ -195,5 +213,48 @@ describe('Codex provider request normalization', () => {
     expect(projected.failureKind).toBe('rate_limited')
     expect(projected.response.status).toBe(429)
     expect(projected.response.headers.get('retry-after')).toBe('12')
+  })
+
+  it('keeps an unknown future JSON envelope unknown without losing its HTTP fact', async () => {
+    const projected = await projectCodexProviderResponse(Response.json({
+      future_error: {
+        identity: 'FUTURE_418',
+        diagnostic: 'new envelope shape',
+      },
+    }, {
+      status: 418,
+      headers: { 'x-request-id': 'future-request-418' },
+    }))
+
+    expect(projected.failureKind).toBe('request_rejected')
+    expect(projected.failure).toMatchObject({
+      version: 2,
+      native: {
+        name: 'ProviderHttpError',
+        message: 'Provider returned HTTP 418',
+        statusCode: 418,
+        requestId: 'future-request-418',
+      },
+    })
+    expect(JSON.stringify(projected.failure)).toContain('FUTURE_418')
+  })
+
+  it('preserves bounded non-JSON diagnostics and records oversized bodies explicitly', async () => {
+    const textFailure = await projectCodexProviderResponse(new Response(
+      'upstream proxy rejected this request',
+      { status: 502, headers: { 'content-type': 'text/plain' } },
+    ))
+    expect(textFailure.failure?.native).toMatchObject({
+      message: 'upstream proxy rejected this request',
+      statusCode: 502,
+    })
+
+    const oversized = await projectCodexProviderResponse(new Response(
+      'x'.repeat(70 * 1024),
+      { status: 502, headers: { 'content-type': 'text/plain' } },
+    ))
+    expect(oversized.failure?.native.message).toContain('could not be read within 65536 bytes')
+    expect(oversized.failure?.native.statusCode).toBe(502)
+    expect(oversized.failure?.native.cause).not.toBeNull()
   })
 })

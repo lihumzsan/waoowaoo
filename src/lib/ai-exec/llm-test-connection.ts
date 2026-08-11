@@ -1,5 +1,8 @@
 import { ApiError } from '@/lib/api-errors'
-import { tryResolveAiProviderAdapter } from '@/lib/ai-providers'
+import {
+  runRegisteredProviderOperation,
+  tryResolveAiProviderAdapter,
+} from '@/lib/ai-providers'
 import type { AiProviderLlmConnectionInput, AiProviderLlmConnectionResult } from '@/lib/ai-providers/runtime-types'
 
 export interface LlmConnectionTestResult {
@@ -45,10 +48,14 @@ function resolveLlmConnectionTester(
 export async function testLlmConnection(payload: TestConnectionPayload): Promise<LlmConnectionTestResult> {
   const provider = normalizeProvider(payload)
   const testLlm = resolveLlmConnectionTester(provider)
-  const tested = await testLlm({
-    apiKey: requireApiKey(payload),
-    baseUrl: typeof payload.baseUrl === 'string' ? payload.baseUrl.trim() : undefined,
-    model: typeof payload.model === 'string' ? payload.model.trim() : undefined,
+  const tested = await runRegisteredProviderOperation({
+    providerId: provider,
+    phase: 'connection',
+    run: async () => await testLlm({
+      apiKey: requireApiKey(payload),
+      baseUrl: typeof payload.baseUrl === 'string' ? payload.baseUrl.trim() : undefined,
+      model: typeof payload.model === 'string' ? payload.model.trim() : undefined,
+    }),
   })
 
   return {

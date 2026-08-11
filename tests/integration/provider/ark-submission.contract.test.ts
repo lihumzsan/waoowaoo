@@ -7,7 +7,7 @@ import {
   arkCreateVideoTask,
   type ArkVideoTaskRequest,
 } from '@/lib/ai-providers/ark/video'
-import { FetchStatusError } from '@/lib/retry'
+import { ProviderHttpError } from '@/lib/ai-providers/failure'
 import { startScenarioServer } from '../../helpers/fakes/scenario-server'
 
 const videoRequest: ArkVideoTaskRequest = {
@@ -65,7 +65,7 @@ describe('provider contract - Ark submission disposition', () => {
         code: testCase.code,
         disposition: 'rejected',
         failure: {
-          native: { name: 'FetchStatusError', statusCode: testCase.status },
+          native: { name: 'ProviderHttpError', statusCode: testCase.status },
           interpretation: { details: { httpStatus: testCase.status } },
           frames: [{ system: 'provider', provider: 'ark', phase: 'submit' }],
           recovery: { operation: 'provider.submit', taskReplay: 'forbidden' },
@@ -91,7 +91,8 @@ describe('provider contract - Ark submission disposition', () => {
       } catch (error) {
         captured = error
       }
-      expect(captured).toBeInstanceOf(FetchStatusError)
+      expect(captured).toBeInstanceOf(ProviderHttpError)
+      expect(captured).toMatchObject({ statusCode: status })
       expect(captured).not.toBeInstanceOf(ProviderSubmissionError)
     }
 

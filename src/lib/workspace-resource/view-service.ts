@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { stableArgsFingerprint } from '@/lib/project-agent/stable-args-hash'
-import { parseFailureRecord } from '@/lib/errors/failure'
+import { hasProviderFailureEvidence, parseFailureRecord } from '@/lib/errors/failure'
 import { resolvePublicModelName } from '@/lib/ai-exec/model-presentation'
 import { readWorkspaceResourceTextContent } from './content-store'
 import type {
@@ -405,7 +405,14 @@ async function loadViews(
       taskId: row.taskId,
       error: (() => {
         const failure = parseFailureRecord(row.task?.failure)
-        return failure ? { code: failure.interpretation.code } : null
+        return failure
+          ? {
+              code: failure.interpretation.code,
+              diagnostic: hasProviderFailureEvidence(failure)
+                ? failure.native.message
+                : null,
+            }
+          : null
       })(),
       deletedAt: row.deletedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),

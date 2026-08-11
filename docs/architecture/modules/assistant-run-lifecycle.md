@@ -62,8 +62,9 @@ View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 pl
   旧 owner 之后不能续租或释放新连接。恢复不得依赖等待 TTL。
 - **ARL-17 — 错误与继续动作都由持久事实裁决。** projector 只按钉死协议读取错误事件，将最终失败
   一次性写为稳定 code；UI 不解析流内容、日志或 Provider 文案猜原因。仍可重试的 attempt 不是产品
-  Turn 终态。已进入 Runtime 且非用户取消的失败只能以新 source identity 创建新 Turn；只有从未
-  进入 Runtime 的消息才允许忠实重发。
+  Turn 终态。模型网关必须先把每次 Provider attempt 的一手失败持久化，再把终态交给 Runtime；最终
+  projector 只引用与 Turn 终态对应且未被后续成功取代的 source attempt。已进入 Runtime 且非用户
+  取消的失败只能以新 source identity 创建新 Turn；只有从未进入 Runtime 的消息才允许忠实重发。
 - **ARL-18 — 工具输出与长期 Task 展示分权。** projector 只把结构化结果作为业务输出；transport
   外壳与工具完成不能把异步提交解释成媒体成功。聊天保留本 Turn 的调用与错误，但不永久渲染项目
   Task 批次状态；资源与 Task 状态只由正式 View 展示。已删除的中间提交工具即使仍存在于历史消息，
@@ -74,7 +75,7 @@ View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 pl
 
 ## 权威入口
 
-- 产品 Turn/View/projector：`src/lib/assistant-runtime/**`
+- 产品 Turn/View/projector：`src/lib/assistant-runtime/**`；Provider attempt：`src/lib/codex-model-gateway/**`
 - placement / ownership / 恢复：`src/lib/codex-runtime/runtime-session-manager.ts`
 - Task 接力：`src/lib/agent-turn/**`
 - 准入与命令：`/api/projects/[projectId]/assistant/**`
@@ -110,7 +111,9 @@ View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 pl
 - 网关错误投影随后仍只用自造的嵌套 `error.type/code` 信封验收；OpenRouter Responses 把稳定原因放在
   顶层 `error_type`，导致真实 400 再次丢失原生诊断并被兜底伪装成 `slow_down` → 协议 smoke 没覆盖实际
   Provider skin，且兜底改变了错误语义 → 网关必须读取各受支持 skin 的稳定 typed 字段、携带有界脱敏
-  原生 message，并把未知请求拒绝投影为非可用性错误（ARL-17/FG-01）。
+  原生 message，并把未知请求拒绝投影为非可用性错误。该修复仍只覆盖投影，Gateway transport/stream
+  的一手失败没有 attempt owner，projector 只能从二手 Runtime 错误重造原因 → 每次请求先 claim
+  Provider attempt，终态先落 source FailureRecord 再交给 Runtime（ARL-17/FG-01/04）。
 - Runtime 中断可留下只有摘要、没有加密载荷的 reasoning item；首版网关把所有历史 item 原样重放，
   下一个完整 reasoning 的加密载荷因此被 Provider 判定为绑定了错误 identity，旧诊断防线又只看到网关
   的泛化外层错误 → Provider 请求边界只重放具有可验证加密载荷的 reasoning，并从有界原生错误信封读取

@@ -78,7 +78,10 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
     const generatedImages = (response as ImagenResponse).generatedImages
     const imageBytes = generatedImages?.[0]?.image?.imageBytes
     if (!imageBytes) {
-      throw new AppError('EMPTY_RESPONSE', 'Imagen returned no image', { provider: 'google' })
+      throw new AppError('EMPTY_RESPONSE', 'Imagen returned no image', {
+        provider: 'google',
+        cause: response,
+      })
     }
     return {
       success: true,
@@ -142,10 +145,13 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
 
   const finishReason = candidate?.finishReason
   if (finishReason === 'IMAGE_SAFETY' || finishReason === 'SAFETY') {
-    throw googleSafetyTerminalError(finishReason)
+    throw googleSafetyTerminalError(finishReason, response)
   }
 
-  throw new AppError('EMPTY_RESPONSE', 'Gemini returned no image', { provider: 'google' })
+  throw new AppError('EMPTY_RESPONSE', 'Gemini returned no image', {
+    provider: 'google',
+    cause: response,
+  })
 }
 
 export async function executeGoogleImageGeneration(input: AiProviderImageExecutionContext): Promise<GenerateResult> {

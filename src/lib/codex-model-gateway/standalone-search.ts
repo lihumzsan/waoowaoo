@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readRequestBufferWithLimit } from '@/lib/http/body-limits'
 import { createScopedLogger } from '@/lib/logging/core'
 import {
@@ -8,12 +9,28 @@ import {
 import { settleRealtimeLlmUsage } from '@/lib/billing/llm-realtime-settlement'
 import { assertLlmSpendableBalance } from '@/lib/billing/llm-balance-gate'
 import { InsufficientBalanceError } from '@/lib/billing/errors'
-import { isWebSearchError, searchWeb, type WebSearchUsage } from '@/lib/web-search'
+import {
+  createConfiguredWebSearchProvider,
+  isWebSearchError,
+  resolveWebSearchModel,
+  searchWeb,
+  type WebSearchUsage,
+} from '@/lib/web-search'
+import { composeModelKey } from '@/lib/ai-registry/selection'
+import { resolveAiProviderAdapter } from '@/lib/ai-providers'
+import { getDeploymentConfig } from '@/lib/deployment/config'
+import { projectProviderCredentialOwnership } from '@/lib/errors/failure'
 import {
   CODEX_MODEL_GATEWAY_ASSISTANT_ID,
   CodexModelGatewayError,
 } from './contracts'
 import { requireCodexModelGatewayActiveTurn } from './active-turn-guard'
+import {
+  cancelCodexProviderAttempt,
+  claimCodexProviderAttempt,
+  failCodexProviderAttempt,
+  succeedCodexProviderAttempt,
+} from './provider-attempt'
 
 /**
  * Codex's standalone web search boundary.
@@ -255,20 +272,51 @@ export async function proxyCodexStandaloneSearchRequest(input: {
     ? parsed.id.trim()
     : buildBrief(searchRequest).slice(0, 191)
 
-  let usage: WebSearchUsage | null = null
+  let configuredProvider: ReturnType<typeof createConfiguredWebSearchProvider>
+  let searchModel: string
   try {
-    const response = await searchWeb({
+    configuredProvider = createConfiguredWebSearchProvider()
+    searchModel = resolveWebSearchModel()
+  } catch (error: unknown) {
+    if (isWebSearchError(error) && error.code === 'WEB_SEARCH_UNAVAILABLE') {
+      throw new CodexModelGatewayError('PROVIDER_CONFIG_UNAVAILABLE', 503, error)
+    }
+    throw error
+  }
+  const providerAttempt = await claimCodexProviderAttempt({
+    projectId: scope.projectId,
+    userId: scope.userId,
+    turnId: activeTurn.turnId,
+    runtimeAttempt: activeTurn.attempt,
+    providerKey: 'openai',
+    modelKey: composeModelKey('openai', searchModel),
+    requestHash: createHash('sha256').update(body).digest('hex'),
+  })
+
+  let usage: WebSearchUsage | null = null
+  let response: Awaited<ReturnType<typeof searchWeb>>
+  try {
+    response = await searchWeb({
       request: { query: buildBrief(searchRequest), allowedDomains: [...searchRequest.allowedDomains] },
       signal: input.request.signal,
+      provider: configuredProvider,
       onUsage: (value) => { usage = value },
     })
-    await recordSearchUsage({ usage, userId: scope.userId, projectId: scope.projectId, turnId: activeTurn.turnId, requestId })
-    return Response.json(projectSearchResponse({
-      report: response.report,
-      sources: response.sources,
-      images: response.images,
-    }))
-  } catch (error) {
+  } catch (error: unknown) {
+    if (input.request.signal.aborted) {
+      await cancelCodexProviderAttempt(providerAttempt)
+      await recordSearchUsage({ usage, userId: scope.userId, projectId: scope.projectId, turnId: activeTurn.turnId, requestId })
+      input.request.signal.throwIfAborted()
+    }
+    const sourceFailure = projectProviderCredentialOwnership(
+      resolveAiProviderAdapter('openai').failure.normalize({ error, phase: 'search' }),
+      getDeploymentConfig().providerCredentialMode,
+    )
+    await failCodexProviderAttempt(providerAttempt, {
+      failure: sourceFailure,
+      providerStatus: sourceFailure.native.statusCode,
+      providerRequestId: sourceFailure.native.requestId,
+    })
     await recordSearchUsage({ usage, userId: scope.userId, projectId: scope.projectId, turnId: activeTurn.turnId, requestId })
     if (isWebSearchError(error)) {
       // A missing credential is a configuration fault the operator must see;
@@ -281,4 +329,11 @@ export async function proxyCodexStandaloneSearchRequest(input: {
     }
     throw error
   }
+  await succeedCodexProviderAttempt(providerAttempt, { providerStatus: 200 })
+  await recordSearchUsage({ usage, userId: scope.userId, projectId: scope.projectId, turnId: activeTurn.turnId, requestId })
+  return Response.json(projectSearchResponse({
+    report: response.report,
+    sources: response.sources,
+    images: response.images,
+  }))
 }

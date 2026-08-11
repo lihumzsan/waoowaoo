@@ -1,5 +1,6 @@
 import { ApiError } from '@google/genai'
 import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
+import { ProviderHttpError, readProviderJsonResponse } from '@/lib/ai-providers/failure'
 import type { UnifiedErrorCode } from '@/lib/errors/codes'
 
 type UnknownRecord = Record<string, unknown>
@@ -22,7 +23,7 @@ function createGoogleSubmissionError(input: {
   readonly status: number
   readonly message: string
   readonly providerCode?: string | number | null
-  readonly cause?: unknown
+  readonly cause: unknown
 }): ProviderSubmissionError {
   return new ProviderSubmissionError(
     codeForGoogleStatus(input.status),
@@ -60,28 +61,47 @@ export async function captureGoogleSdkSubmission<T>(submit: () => Promise<T>): P
 export async function assertGoogleSubmissionResponse(response: Response): Promise<void> {
   if (!EXPLICIT_GOOGLE_REJECTION_STATUSES.has(response.status)) return
 
-  let payload: unknown = null
-  try {
-    payload = await response.clone().json() as unknown
-  } catch {
-    return
-  }
+  const payload = await readProviderJsonResponse({
+    response,
+    provider: 'google',
+    phase: 'submit',
+  })
   const error = asRecord(asRecord(payload)?.error)
   const providerCode = typeof error?.code === 'number' || typeof error?.code === 'string'
     ? error.code
     : null
   const providerStatus = typeof error?.status === 'string' ? error.status.trim() : ''
   const message = typeof error?.message === 'string' ? error.message.trim() : ''
-  if (providerCode === null || !providerStatus || !message) return
+  if (providerCode === null || !providerStatus || !message) {
+    throw new ProviderHttpError({
+      provider: 'google',
+      phase: 'submit',
+      statusCode: response.status,
+      requestId: response.headers.get('x-request-id'),
+      contentType: response.headers.get('content-type'),
+      diagnosticText: message || `Google returned an unrecognized HTTP ${String(response.status)} error response`,
+      errorEnvelope: payload,
+    })
+  }
 
   throw createGoogleSubmissionError({
     status: response.status,
     message,
     providerCode,
+    cause: {
+      name: 'GoogleHttpError',
+      message,
+      code: providerCode,
+      statusCode: response.status,
+      errorEnvelope: payload,
+    },
   })
 }
 
-export function googleSafetyTerminalError(finishReason: string): ProviderSubmissionError {
+export function googleSafetyTerminalError(
+  finishReason: string,
+  cause: unknown,
+): ProviderSubmissionError {
   return new ProviderSubmissionError(
     'SENSITIVE_CONTENT',
     'Google blocked generation by policy',
@@ -90,6 +110,7 @@ export function googleSafetyTerminalError(finishReason: string): ProviderSubmiss
       provider: 'google',
       details: { finishReason },
       context: { system: 'provider', provider: 'google', phase: 'result' },
+      cause,
     },
   )
 }

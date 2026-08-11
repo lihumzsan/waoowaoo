@@ -841,13 +841,19 @@ export default function WorkspaceAssistantPanel({
     (id: string) => tErrors('referenceId', { id }),
     [tErrors],
   )
+  const formatFailureDiagnostic = useCallback(
+    (message: string) => tErrors('providerDiagnostic', { message }),
+    [tErrors],
+  )
   const runFailureView = resolveWorkspaceAssistantFailureView({
     facts: {
       code: currentTurn?.errorCode?.trim() || null,
       requestId: currentTurn?.requestId?.trim() || null,
+      diagnostic: currentTurn?.errorDiagnostic?.trim() || null,
     },
     localizeCode: localizeErrorCode,
     formatReference: formatFailureReference,
+    formatDiagnostic: formatFailureDiagnostic,
     unknownFallback: unknownFailureFallback,
   })
   const composerFailureView =
@@ -857,6 +863,7 @@ export default function WorkspaceAssistantPanel({
           facts: parseWorkspaceAssistantFailureText(assistantRuntime.error.message),
           localizeCode: localizeErrorCode,
           formatReference: formatFailureReference,
+          formatDiagnostic: formatFailureDiagnostic,
           unknownFallback: unknownFailureFallback,
         })
   // Undelivered marker + resend draft are derived from persisted facts only:

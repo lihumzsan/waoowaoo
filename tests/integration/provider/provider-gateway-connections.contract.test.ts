@@ -60,7 +60,11 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
 
       fetchMock.mockResolvedValueOnce(new Response('denied', { status: 403 }))
       await expect(testLlmConnection({ provider: 'google', apiKey: 'bad' }))
-        .rejects.toThrow('Google AI probe failed (403): denied')
+        .rejects.toMatchObject({
+          name: 'ProviderHttpError',
+          message: 'denied',
+          statusCode: 403,
+        })
     })
 
     it('rejects providers without an LLM connection tester', async () => {
@@ -80,7 +84,12 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
 
       expect(result.success).toBe(false)
       expect(result.steps).toEqual([
-        { name: 'models', status: 'fail', messageKey: 'connectionTest.authInvalid' },
+        {
+          name: 'models',
+          status: 'fail',
+          messageKey: 'connectionTest.authInvalid',
+          diagnostic: 'nope',
+        },
         {
           name: 'textGen',
           status: 'skip',
@@ -115,7 +124,12 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
 
       expect(result.success).toBe(false)
       expect(result.steps).toEqual([
-        { name: 'models', status: 'fail', messageKey: 'connectionTest.authInvalid' },
+        {
+          name: 'models',
+          status: 'fail',
+          messageKey: 'connectionTest.authInvalid',
+          diagnostic: 'fal returned an empty JSON response',
+        },
       ])
     })
 

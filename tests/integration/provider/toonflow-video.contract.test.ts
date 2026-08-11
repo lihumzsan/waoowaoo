@@ -179,7 +179,7 @@ describe('provider contract - Toonflow video', () => {
       code: 'PROVIDER_BILLING_REQUIRED',
       failure: {
         native: {
-          name: 'FetchStatusError',
+          name: 'ProviderHttpError',
           message: expect.stringContaining(providerMessage),
           statusCode: 400,
         },
@@ -230,7 +230,7 @@ describe('provider contract - Toonflow video', () => {
       code: 'PROVIDER_SUBMISSION_REJECTED',
       failure: {
         native: {
-          name: 'ProviderSubmissionError',
+          name: 'ToonflowSubmissionResponse',
           message: providerMessage.slice(0, 512),
         },
         interpretation: { code: 'PROVIDER_SUBMISSION_REJECTED' },

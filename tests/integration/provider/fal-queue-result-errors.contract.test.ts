@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { FetchStatusError } from '@/lib/retry'
+import { ProviderHttpError } from '@/lib/ai-providers/failure'
 import { queryFalStatus, submitFalTask } from '@/lib/ai-providers/fal/queue'
 import { startScenarioServer } from '../../helpers/fakes/scenario-server'
 import type { FakeResponseSpec } from '../../helpers/fakes/scenario-server'
@@ -187,7 +187,7 @@ describe('provider contract - fal queue result and failure boundaries', () => {
         completed: true,
         failed: true,
         failure: {
-          native: { name: 'FetchStatusError', statusCode: 422 },
+          native: { name: 'ProviderHttpError', statusCode: 422 },
           interpretation: {
             code: testCase.id === 'policy'
               ? 'SENSITIVE_CONTENT'
@@ -205,10 +205,9 @@ describe('provider contract - fal queue result and failure boundaries', () => {
         id: 'downstream',
         status: 500,
         body: { detail: [{ type: 'downstream_service_error' }] },
-        message: 'FAL 下游服务错误：上游模型处理失败',
       },
-      { id: 'generic-500', status: 500, body: 'not-json', message: '下游服务错误' },
-      { id: 'conflict', status: 409, body: 'request conflict', message: 'request conflict' },
+      { id: 'generic-500', status: 500, body: 'not-json' },
+      { id: 'conflict', status: 409, body: 'request conflict' },
     ] as const
 
     for (const testCase of cases) {
@@ -225,9 +224,11 @@ describe('provider contract - fal queue result and failure boundaries', () => {
         submitResponse: { status: testCase.status, body: testCase.body },
       })
       const promise = queryFalStatus('fal-ai/model', `request-${testCase.id}`, 'key')
-      await expect(promise).rejects.toBeInstanceOf(FetchStatusError)
-      await expect(promise).rejects.toMatchObject({ status: testCase.status })
-      await expect(promise).rejects.toMatchObject({ responseText: testCase.message })
+      await expect(promise).rejects.toBeInstanceOf(ProviderHttpError)
+      await expect(promise).rejects.toMatchObject({
+        statusCode: testCase.status,
+        errorEnvelope: testCase.body,
+      })
     }
   })
 

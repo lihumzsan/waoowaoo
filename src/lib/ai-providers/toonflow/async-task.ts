@@ -25,6 +25,7 @@ function parseToonflowExternalId(externalId: string): ParsedAsyncExternalId {
 
 export const toonflowAsyncTaskProvider: AsyncTaskProviderRegistration = {
   providerCode: 'TOONFLOW',
+  providerKey: 'toonflow',
   canParseExternalId: (externalId) => externalId.startsWith('TOONFLOW:'),
   parseExternalId: parseToonflowExternalId,
   formatExternalId: (input) => `TOONFLOW:${input.type}:${input.requestId}`,

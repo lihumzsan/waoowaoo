@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { executeMurekaMusicGeneration } from '@/lib/ai-providers/mureka/music'
 import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
-import { FetchStatusError } from '@/lib/retry'
+import { ProviderHttpError } from '@/lib/ai-providers/failure'
 import { startScenarioServer } from '../../helpers/fakes/scenario-server'
 
 const getProviderConfigMock = vi.hoisted(() => vi.fn())
@@ -134,7 +134,7 @@ describe('provider contract - Mureka music', () => {
         disposition: testCase.disposition,
         provider: 'mureka',
         failure: {
-          native: { name: 'FetchStatusError' },
+          native: { name: 'ProviderHttpError' },
           interpretation: { details: { providerCode: testCase.machineCode } },
           frames: [{ system: 'provider', provider: 'mureka', phase: 'submit' }],
           recovery: { operation: 'provider.submit', taskReplay: 'forbidden' },
@@ -163,9 +163,9 @@ describe('provider contract - Mureka music', () => {
       } catch (error) {
         captured = error
       }
-      expect(captured).toBeInstanceOf(FetchStatusError)
+      expect(captured).toBeInstanceOf(ProviderHttpError)
       expect(captured).not.toBeInstanceOf(ProviderSubmissionError)
-      expect(captured).toMatchObject({ status })
+      expect(captured).toMatchObject({ statusCode: status })
     }
   })
 

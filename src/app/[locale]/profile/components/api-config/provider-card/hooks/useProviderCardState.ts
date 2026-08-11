@@ -25,6 +25,7 @@ interface KeyTestStep {
   status: KeyTestStepStatus
   messageKey: `connectionTest.${string}`
   model?: string
+  diagnostic?: string
 }
 type KeyTestStatus = 'idle' | 'testing' | 'passed' | 'failed'
 interface UseProviderCardStateParams {

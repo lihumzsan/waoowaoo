@@ -111,11 +111,34 @@ model ProjectAgentTurn {
   thread             ProjectAssistantThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
   toolEffects        AgentToolEffect[]
   interactions       AgentTurnInteraction[]
+  providerAttempts   ProjectAgentProviderAttempt[]
 
   @@unique([threadId, sourceKind, sourceId])
   @@index([threadId, status, createdAt])
   @@index([projectId, userId, status, createdAt])
   @@map("project_agent_turns")
+}
+
+model ProjectAgentProviderAttempt {
+  sequence             BigInt           @id @default(autoincrement())
+  id                   String           @unique @db.VarChar(191)
+  turnId               String
+  runtimeAttempt       Int
+  providerKey          String           @db.VarChar(64)
+  modelKey             String           @db.VarChar(191)
+  requestHash          String           @db.VarChar(64)
+  status               String           @default("started") @db.VarChar(32)
+  providerStatus       Int?
+  providerRequestId    String?          @db.VarChar(256)
+  providerGenerationId String?          @db.VarChar(256)
+  failure              Json?
+  startedAt            DateTime         @default(now())
+  finishedAt           DateTime?
+  turn                 ProjectAgentTurn @relation(fields: [turnId], references: [id], onDelete: Cascade)
+
+  @@index([turnId, runtimeAttempt, sequence])
+  @@index([status, startedAt])
+  @@map("project_agent_provider_attempts")
 }
 
 model AgentToolEffect {

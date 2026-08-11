@@ -9,6 +9,7 @@ import {
 import { resolveOpenRouterOptionSchema } from './models'
 import { buildOpenRouterSessionId, normalizeOpenRouterSessionId } from './session'
 import { executeOpenRouterVideoGeneration } from './video'
+import { openRouterFailureAdapter } from './error-normalization'
 
 function describeOpenRouterMediaVariant(
   modality: 'image' | 'video',
@@ -24,6 +25,7 @@ function describeOpenRouterMediaVariant(
 
 export const openRouterAdapter: AiProviderAdapter = {
   providerKey: 'openrouter',
+  failure: openRouterFailureAdapter,
   image: {
     describe: (selection) => describeOpenRouterMediaVariant('image', selection),
     execute: executeOpenRouterImageGeneration,

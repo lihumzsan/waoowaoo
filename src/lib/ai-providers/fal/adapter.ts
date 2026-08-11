@@ -1,6 +1,6 @@
 import type { AiProviderAdapter } from '@/lib/ai-providers/runtime-types'
 import { describeMediaVariantBase } from '@/lib/ai-providers/shared/media-adapter'
-import { falConnectionTester } from './connection-test'
+import { falConnectionTester, falFailureAdapter } from './connection-test'
 import { executeFalImageGeneration } from './image'
 import { executeFalMusicGeneration } from './music'
 import { executeFalVoiceGeneration } from './voice'
@@ -21,6 +21,7 @@ function describeFalMediaVariant(
 
 export const falAdapter: AiProviderAdapter = {
   providerKey: 'fal',
+  failure: falFailureAdapter,
   image: {
     describe: (selection) => describeFalMediaVariant('image', selection),
     execute: executeFalImageGeneration,

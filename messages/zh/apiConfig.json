@@ -124,6 +124,7 @@
     "skipped": "已跳过"
   },
   "connectionTest": {
+    "providerDiagnostic": "服务商原始错误：{message}",
     "authInvalid": "鉴权失败，请检查 API Key 及其权限。",
     "emptyResponse": "供应商返回了空响应。",
     "modelsOk": "供应商已接受当前凭据。",

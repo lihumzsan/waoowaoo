@@ -9,6 +9,7 @@ import { createScopedLogger } from '@/lib/logging/core'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { AppError } from '@/lib/errors/app-error'
 import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
+import { ProviderHttpError, readProviderJsonResponse } from '@/lib/ai-providers/failure'
 import {
   classifyOpenRouterMachineErrorCode,
   isOpenRouterSensitiveRejection,
@@ -60,22 +61,33 @@ type OpenRouterLanguageErrorEnvelope = {
   readonly message: string
   readonly errorType: string | null
   readonly metadata: Record<string, unknown> | null
+  readonly raw: unknown
 }
 
 async function readOpenRouterLanguageErrorEnvelope(
   response: Response,
 ): Promise<OpenRouterLanguageErrorEnvelope | null> {
   if (!OPENROUTER_REJECTED_RESPONSE_STATUSES.has(response.status)) return null
-  let body: unknown
-  try {
-    body = await response.clone().json() as unknown
-  } catch {
-    return null
-  }
+  const body = await readProviderJsonResponse({
+    response,
+    provider: 'openrouter',
+    phase: 'submit',
+  })
   const envelope = asRecord(body)
   const error = asRecord(envelope?.error)
   const message = readLimitedString(error?.message)
-  if (!error || !message) return null
+  if (!error || !message) {
+    throw new ProviderHttpError({
+      provider: 'openrouter',
+      phase: 'submit',
+      statusCode: response.status,
+      requestId: readOptionalHeader(response.headers, 'x-request-id')
+        ?? readOptionalHeader(response.headers, 'cf-ray'),
+      contentType: response.headers.get('content-type'),
+      diagnosticText: `OpenRouter returned an unrecognized HTTP ${String(response.status)} error response`,
+      errorEnvelope: body,
+    })
+  }
   const metadata = asRecord(error.metadata)
   return {
     message,
@@ -83,6 +95,7 @@ async function readOpenRouterLanguageErrorEnvelope(
       ?? readLimitedString(error.type)
       ?? readLimitedString(error.code),
     metadata,
+    raw: body,
   }
 }
 
@@ -113,6 +126,13 @@ function throwOpenRouterLanguageSubmissionRejection(input: {
         ...(input.envelope.errorType
           ? { providerErrorType: input.envelope.errorType }
           : {}),
+      },
+      cause: {
+        name: 'OpenRouterHttpError',
+        message: input.envelope.message,
+        code: input.envelope.errorType,
+        statusCode: input.response.status,
+        errorEnvelope: input.envelope.raw,
       },
     },
   )
@@ -211,18 +231,21 @@ export function validateOpenRouterLanguageModelResult(
         textChars: result.text.length,
         reasoningChars: result.reasoning.length,
       },
+      cause: result,
     })
   }
   if (context.executionMode === 'stream' && result.termination.kind === 'safety') {
     throw new AppError('SENSITIVE_CONTENT', 'OpenRouter blocked the response for safety reasons', {
       provider: 'openrouter',
       details: { rawReason: result.termination.rawReason },
+      cause: result,
     })
   }
   if (context.executionMode === 'stream' && result.termination.kind === 'unknown') {
     throw new AppError('EXTERNAL_ERROR', 'OpenRouter stream ended without a recognized final status', {
       provider: 'openrouter',
       details: { rawReason: result.termination.rawReason },
+      cause: result,
     })
   }
   if (!result.text.trim()) {
@@ -233,6 +256,7 @@ export function validateOpenRouterLanguageModelResult(
         textChars: 0,
         reasoningChars: result.reasoning.length,
       },
+      cause: result,
     })
   }
 }

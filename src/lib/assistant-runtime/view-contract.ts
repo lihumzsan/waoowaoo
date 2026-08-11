@@ -21,6 +21,7 @@ export type AssistantRuntimeSessionTurnView = {
   readonly assistantMessageId: string | null
   readonly stopReason: string | null
   readonly errorCode: string | null
+  readonly errorDiagnostic: string | null
   readonly cancelReason: string | null
   readonly startedAt: string | null
   readonly finishedAt: string | null

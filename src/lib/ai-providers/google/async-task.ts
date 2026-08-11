@@ -32,6 +32,7 @@ function parseGoogleExternalId(externalId: string): ParsedAsyncExternalId {
 
 export const geminiBatchAsyncTaskProvider: AsyncTaskProviderRegistration = {
   providerCode: 'GEMINI',
+  providerKey: 'google',
   canParseExternalId: (externalId) => externalId.startsWith('GEMINI:'),
   parseExternalId: parseGeminiExternalId,
   formatExternalId: (input) => `GEMINI:${input.type}:${input.requestId}`,
@@ -49,6 +50,7 @@ export const geminiBatchAsyncTaskProvider: AsyncTaskProviderRegistration = {
 
 export const googleVideoAsyncTaskProvider: AsyncTaskProviderRegistration = {
   providerCode: 'GOOGLE',
+  providerKey: 'google',
   canParseExternalId: (externalId) => externalId.startsWith('GOOGLE:'),
   parseExternalId: parseGoogleExternalId,
   formatExternalId: (input) => `GOOGLE:${input.type}:${input.requestId}`,

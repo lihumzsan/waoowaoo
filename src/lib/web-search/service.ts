@@ -86,8 +86,9 @@ export function createConfiguredWebSearchProvider(
 /**
  * Validates the request against the public contract before any network call, so
  * a malformed model-authored brief is a typed request failure instead of a
- * wasted paid round trip. `provider` is injectable for contract tests only;
- * production always resolves it from configuration.
+ * wasted paid round trip. Production callers either resolve the configured
+ * provider here or inject the result of `createConfiguredWebSearchProvider`
+ * when they need to claim a durable provider attempt before the network call.
  */
 export async function searchWeb(input: {
   readonly request: WebSearchRequest

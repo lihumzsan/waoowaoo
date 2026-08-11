@@ -22,6 +22,7 @@ import {
   reconcileAiSdkStreamFinal,
   type AiSdkLanguageModelResult,
 } from '@/lib/ai-exec/llm/result-projector'
+import { runRegisteredProviderOperation } from '@/lib/ai-providers'
 
 export type AiSdkRunnerInput = {
   providerKey: string
@@ -166,7 +167,11 @@ async function runStream(input: AiSdkRunnerInput): Promise<AiLlmExecutionResult>
 }
 
 export async function runAiSdkLanguageModel(input: AiSdkRunnerInput): Promise<AiLlmExecutionResult> {
-  return input.executionMode === 'stream'
-    ? await runStream(input)
-    : await runSync(input)
+  return await runRegisteredProviderOperation({
+    providerId: input.selection.provider,
+    phase: input.executionMode === 'stream' ? 'stream' : 'submit',
+    run: async () => input.executionMode === 'stream'
+      ? await runStream(input)
+      : await runSync(input),
+  })
 }

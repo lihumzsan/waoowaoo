@@ -3,9 +3,12 @@ import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import type { AiProviderImageExecutionContext } from '@/lib/ai-providers/runtime-types'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
-import { fetchWithRetry } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { AppError } from '@/lib/errors/app-error'
+import {
+  fetchProviderWithRetry,
+  readProviderJsonResponse,
+} from '@/lib/ai-providers/failure'
 import { throwArkSubmissionError } from './error'
 
 const DEFAULT_TIMEOUT_MS = 60 * 1000
@@ -54,23 +57,32 @@ export async function arkImageGeneration(
 
   let response: Response
   try {
-    response = await fetchWithRetry(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
+    response = await fetchProviderWithRetry({
+      url,
+      provider: 'ark',
+      phase: 'submit',
+      options: {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(request),
+        operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
+        timeoutMs,
+        scope: 'ark:image',
+        fetchFn: fetchWithProviderProxy,
       },
-      body: JSON.stringify(request),
-      operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
-      timeoutMs,
-      scope: 'ark:image',
-      fetchFn: fetchWithProviderProxy,
     })
   } catch (error: unknown) {
     throwArkSubmissionError(error)
   }
 
-  const data = (await response.json()) as ArkImageGenerationResponse
+  const data = await readProviderJsonResponse<ArkImageGenerationResponse>({
+    response,
+    provider: 'ark',
+    phase: 'result',
+  })
   _ulogInfo(`${logPrefix} 图片生成成功`)
   return data
 }
@@ -186,7 +198,7 @@ export async function executeArkImageGeneration(input: AiProviderImageExecutionC
   }
 
   return {
-    success: true,
+    success: true as const,
     imageUrl,
     ...(imageUrls.length > 1 ? { imageUrls } : {}),
   }

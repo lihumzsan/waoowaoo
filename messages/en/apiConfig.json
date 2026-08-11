@@ -124,6 +124,7 @@
     "skipped": "Skipped"
   },
   "connectionTest": {
+    "providerDiagnostic": "Provider error: {message}",
     "authInvalid": "Authentication failed. Check the API key and its permissions.",
     "emptyResponse": "The provider returned an empty response.",
     "modelsOk": "The provider accepted the credentials.",

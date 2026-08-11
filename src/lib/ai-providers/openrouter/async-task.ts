@@ -18,6 +18,7 @@ function parseOpenRouterExternalId(externalId: string): ParsedAsyncExternalId {
 
 export const openRouterAsyncTaskProvider: AsyncTaskProviderRegistration = {
   providerCode: 'OPENROUTER',
+  providerKey: 'openrouter',
   canParseExternalId: (externalId) => externalId.startsWith('OPENROUTER:'),
   parseExternalId: parseOpenRouterExternalId,
   formatExternalId: (input) => `OPENROUTER:${input.type}:${input.requestId}`,

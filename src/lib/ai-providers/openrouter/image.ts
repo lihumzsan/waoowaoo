@@ -189,6 +189,7 @@ async function projectStreamingImage(
           provider: 'openrouter',
           details: { providerErrorType: code },
           context: { system: 'provider', provider: 'openrouter', phase: 'result' },
+          cause: event,
         },
       )
     }

@@ -32,4 +32,8 @@ export class AiRegistry<TAdapter extends AiProviderAdapter> {
     const providerKey = getProviderKey(providerId).toLowerCase()
     return this.adapters.get(providerKey) ?? null
   }
+
+  public getAdapters(): readonly TAdapter[] {
+    return [...this.adapters.values()]
+  }
 }
