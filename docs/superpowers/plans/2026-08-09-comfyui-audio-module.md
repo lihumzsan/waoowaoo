@@ -1,5 +1,7 @@
 # ComfyUI Audio Module Implementation Plan
 
+> **Status (2026-08-11): Superseded.** Do not execute this plan. Its Stable Audio workflows, `environment` discriminator, reference-input behavior, duration range, and default-music changes are outside the approved scope. The authoritative implementation plan is `docs/superpowers/plans/2026-08-11-moss-soundeffect-integration.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task with verification checkpoints.
 
 **Goal:** Integrate the two user-verified Stable Audio 3 ComfyUI workflows into Wao through one explicit `create_audio` entry that supports only instrumental music and environment sound.
