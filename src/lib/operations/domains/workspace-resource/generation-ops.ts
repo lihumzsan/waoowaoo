@@ -90,6 +90,13 @@ import { describeUnknownError } from '@/lib/errors/normalize'
 
 const MAX_BATCH_ITEMS = OPERATION_EXECUTION_MAX_TASKS
 const MEDIA_GENERATION_PLAN_CONTRACT_REVISION = 'workspace-resource-generation-batch/v8'
+const CAPABILITY_SELECTION_FAILURE_PREFIXES = [
+  'CAPABILITY_SELECTION_INVALID:',
+  'CAPABILITY_FIELD_INVALID:',
+  'CAPABILITY_VALUE_NOT_ALLOWED:',
+  'CAPABILITY_REQUIRED:',
+  'CAPABILITY_MODEL_UNSUPPORTED:',
+] as const
 
 const workspaceResourceJsonValueSchema: z.ZodType<WorkspaceResourceJsonValue> = z.lazy(() => z.union([
   z.string(),
@@ -363,10 +370,18 @@ function throwMediaPreflightError(
       mediaType: input.mediaType,
     })
   }
+  const reason = describeUnknownError(error)
+  if (CAPABILITY_SELECTION_FAILURE_PREFIXES.some((prefix) => reason.startsWith(prefix))) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'MEDIA_GENERATION_CAPABILITY_INVALID',
+      field: input.mediaType,
+      reason,
+    })
+  }
   throw new ApiError('INVALID_PARAMS', {
     code: 'MEDIA_GENERATION_PREFLIGHT_FAILED',
     field: input.mediaType,
-    reason: describeUnknownError(error),
+    reason,
   })
 }
 

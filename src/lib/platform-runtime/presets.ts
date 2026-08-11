@@ -5,6 +5,10 @@ import { PLATFORM_VOICE_DESIGN_MODEL_KEY } from '@/lib/ai-registry/voice-design-
 import { findBuiltinCapabilities } from '@/lib/ai-registry/capabilities-catalog'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
+import {
+  COMFYUI_H3_DEFAULT_GENERATION_OPTIONS,
+  COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
+} from '@/lib/ai-providers/comfyui/models'
 
 export type PlatformRuntimePurpose = SystemModelPurpose
 
@@ -143,6 +147,11 @@ export function getPlatformCapabilityDefaults(): CapabilitySelections {
     }
     assignCapabilityDefault(defaults, plan.modelKey, compatibleImageOptions)
   }
+  assignCapabilityDefault(
+    defaults,
+    COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
+    COMFYUI_H3_DEFAULT_GENERATION_OPTIONS,
+  )
   assignCapabilityDefault(defaults, getPlatformRuntimePlan('video').modelKey, videoOptions)
   assignCapabilityDefault(defaults, getPlatformRuntimePlan('music').modelKey, musicOptions)
 

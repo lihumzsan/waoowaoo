@@ -1,7 +1,12 @@
+import type { CapabilityValue } from '@/lib/ai-registry/types'
 import type { PlatformModelPreset } from '@/lib/platform-models/types'
 
 export const COMFYUI_H3_MODEL_ID = 'minimax-h3-fast'
 export const COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY = `comfyui::${COMFYUI_H3_MODEL_ID}`
+export const COMFYUI_H3_DEFAULT_GENERATION_OPTIONS = {
+  resolution: '720p',
+  generateAudio: true,
+} as const satisfies Record<string, CapabilityValue>
 
 const ZERO_PRICE = { mode: 'flat' as const, unit: 'per_call' as const, flatAmount: 0 }
 

@@ -106,6 +106,23 @@ function parseCapabilitySelections(raw: string | null | undefined): CapabilitySe
   }
 }
 
+function mergeCapabilitySelections(
+  builtInDefaults: CapabilitySelections,
+  configuredDefaults: CapabilitySelections,
+): CapabilitySelections {
+  const merged: CapabilitySelections = {}
+  for (const [modelKey, selections] of Object.entries(builtInDefaults)) {
+    merged[modelKey] = { ...selections }
+  }
+  for (const [modelKey, selections] of Object.entries(configuredDefaults)) {
+    merged[modelKey] = {
+      ...(merged[modelKey] ?? {}),
+      ...selections,
+    }
+  }
+  return merged
+}
+
 export interface ProjectModelConfig {
   analysisModel: string | null
   characterModel: string | null
@@ -190,7 +207,10 @@ export async function getProjectModelConfig(
     videoModel: extractModelKey(projectData?.videoModel) || extractModelKey(userPref?.videoModel) || null,
     musicModel: extractModelKey(projectData?.musicModel) || extractModelKey(userPref?.musicModel) || null,
     videoRatio: projectData?.videoRatio ?? null,
-    capabilityDefaults: parseCapabilitySelections(userPref?.capabilityDefaults),
+    capabilityDefaults: mergeCapabilitySelections(
+      getPlatformCapabilityDefaults(),
+      parseCapabilitySelections(userPref?.capabilityDefaults),
+    ),
     capabilityOverrides: parseCapabilitySelections(projectData?.capabilityOverrides),
   }
 }
@@ -227,7 +247,10 @@ export async function getUserModelConfig(userId: string): Promise<UserModelConfi
     editModel: extractModelKey(userPref?.editModel) || null,
     videoModel: extractModelKey(userPref?.videoModel) || null,
     musicModel: extractModelKey(userPref?.musicModel) || null,
-    capabilityDefaults: parseCapabilitySelections(userPref?.capabilityDefaults),
+    capabilityDefaults: mergeCapabilitySelections(
+      getPlatformCapabilityDefaults(),
+      parseCapabilitySelections(userPref?.capabilityDefaults),
+    ),
   }
 }
 
