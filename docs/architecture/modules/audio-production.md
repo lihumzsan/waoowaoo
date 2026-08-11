@@ -30,6 +30,10 @@ JSON 专业结果，并把同一 items 直接提交给 `create_audio`。系统�
   演唱模式与精确引用；格式、模型和 provider option 由服务端 registry/config 决定并在 Plan 前校验。
   Planner 不拼接 Prompt，只校验并逐字冻结；handler 与 provider adapter 只消费冻结结果，不得追加参数文案。
 
+## Sound-effect invariant
+
+- **AP-08 — Environmental sound is a first-class audio kind.** A sound item must carry `audioKind: "sound"` and `schemaId: "project.sound_effect_audio"`, resolve only `productionCapabilities.sound`, use the declared duration range and `mp3` output, and contain no media references. It shares the `audio_generation_batch` and `create_audio` boundary with BGM but never inherits BGM-only fields or semantics.
+
 ## 权威入口
 
 - 创作知识：`src/lib/creative-skills/skills/music-direction/SKILL.md`

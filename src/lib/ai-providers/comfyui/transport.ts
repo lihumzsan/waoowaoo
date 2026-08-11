@@ -51,8 +51,16 @@ export function readComfyUiRequiredOptions(info: unknown, className: string, fie
   const input = asComfyUiRecord(definition?.input)
   const required = asComfyUiRecord(input?.required)
   const fieldValue = required?.[field]
-  if (!Array.isArray(fieldValue) || !Array.isArray(fieldValue[0])) return []
-  return fieldValue[0].filter((value): value is string => typeof value === 'string')
+  if (!Array.isArray(fieldValue)) return []
+  const directOptions = fieldValue[0]
+  if (Array.isArray(directOptions)) {
+    return directOptions.filter((value): value is string => typeof value === 'string')
+  }
+  const metadata = asComfyUiRecord(fieldValue[1])
+  const options = metadata?.options
+  return Array.isArray(options)
+    ? options.filter((value): value is string => typeof value === 'string')
+    : []
 }
 
 export function buildComfyUiUrl(baseUrl: string, path: string): string {
