@@ -18,7 +18,7 @@ import {
   capabilitySelectionCommandToSelections,
 } from '@/lib/ai-registry/capability-selection-command'
 import { defineOperation } from '@/lib/operations/define-operation'
-import { resolveModelSelection } from '@/lib/user-api/runtime-config'
+import { requireSelectableVideoModel } from '@/lib/model-access/selectable-video-model'
 import {
   isProjectVideoRatio,
   PROJECT_VIDEO_RATIO_VALUES,
@@ -116,27 +116,6 @@ const updateProjectConfigToolInputSchema: ProjectAgentToolInputSchema = {
   },
   required: ['change'],
   additionalProperties: false,
-}
-
-async function requireProjectVideoModel(userId: string, modelKey: string): Promise<string> {
-  try {
-    const selection = await resolveModelSelection(userId, modelKey, 'video')
-    return selection.modelKey
-  } catch (error) {
-    if (
-      error instanceof Error
-      && (
-        error.message.startsWith('MODEL_KEY_INVALID:')
-        || error.message.startsWith('MODEL_NOT_FOUND:')
-      )
-    ) {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'PROJECT_VIDEO_MODEL_NOT_AVAILABLE',
-        field: 'videoModel',
-      })
-    }
-    throw error
-  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -410,10 +389,10 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
       toolInputSchema: updateProjectConfigToolInputSchema,
       toolInputCanonicalizer: {
         inputSchema: updateProjectConfigToolCommandSchema,
-        canonicalize: async (ctx, input) => {
+        canonicalize: async (_ctx, input) => {
           const command = updateProjectConfigToolCommandSchema.parse(input)
           return command.change.kind === 'video_model'
-            ? { videoModel: await requireProjectVideoModel(ctx.userId, command.change.value) }
+            ? { videoModel: command.change.value }
             : { videoRatio: command.change.value }
         },
       },
@@ -422,10 +401,13 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
       executeInTransaction: async (ctx, input, transaction) => {
         const deployment = getDeploymentConfig()
         const cloudDeployment = isCloudDeployment(deployment)
-        const body: Record<string, unknown> = input
+        const body: Record<string, unknown> = { ...input }
         assertNoLegacyStyleFields(body)
         if (cloudDeployment) {
           assertCloudProjectConfigFields(body)
+        }
+        if (input.videoModel !== undefined && input.videoModel !== null) {
+          body.videoModel = await requireSelectableVideoModel(ctx.userId, input.videoModel)
         }
 
         const currentProjectConfig = await transaction.project.findUnique({

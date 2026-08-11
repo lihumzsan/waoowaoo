@@ -1,8 +1,16 @@
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
-import { getDeploymentConfig, isPlatformProviderCredentialMode } from '@/lib/deployment/config'
-import { getPlatformDefaultModelCatalog, getPlatformModels } from '@/lib/platform-models/catalog'
+import {
+  getDeploymentConfig,
+  isPlatformProviderCredentialMode,
+  isSelfHostedUserProviderCredentialMode,
+} from '@/lib/deployment/config'
+import {
+  getPlatformDefaultModelCatalog,
+  getPlatformModels,
+  getSelectableLocalVideoModels,
+} from '@/lib/platform-models/catalog'
 import {
   type CapabilityValue,
   type ModelCapabilities,
@@ -150,6 +158,7 @@ function hasStoredProviderApiKey(provider: StoredProvider): boolean {
 
 async function resolveModelSource(userId: string): Promise<{
   deploymentMode: 'platform-key' | 'user-key'
+  localVideoOnly: boolean
   models: StoredModel[]
   providers: StoredProvider[]
 }> {
@@ -157,6 +166,7 @@ async function resolveModelSource(userId: string): Promise<{
   if (isPlatformProviderCredentialMode(deployment)) {
     return {
       deploymentMode: 'platform-key',
+      localVideoOnly: false,
       models: getPlatformDefaultModelCatalog(),
       providers: [],
     }
@@ -169,6 +179,7 @@ async function resolveModelSource(userId: string): Promise<{
 
   return {
     deploymentMode: 'user-key',
+    localVideoOnly: isSelfHostedUserProviderCredentialMode(deployment),
     models: [
       ...getPlatformModels().filter((model) => model.provider === 'comfyui'),
       ...parseStoredModels(pref?.customModels),
@@ -196,6 +207,10 @@ export function createUserModelsOperations(): ProjectAgentOperationRegistryDraft
       outputSchema: z.unknown(),
       execute: async (ctx) => {
         const modelSource = await resolveModelSource(ctx.userId)
+        const selectableLocalVideoModelKeys = modelSource.localVideoOnly
+          ? new Set(getSelectableLocalVideoModels().map((model) => model.modelKey))
+          : null
+        const listedLocalVideoModelKeys = new Set<string>()
         const providerNameMap = new Map<string, string>()
         const providerIdsWithApiKey = new Set<string>()
         modelSource.providers.forEach((provider) => {
@@ -221,6 +236,13 @@ export function createUserModelsOperations(): ProjectAgentOperationRegistryDraft
           const modelType = model.type
           const modelKey = toModelKey(model)
           if (!modelKey) continue
+          if (modelType === 'video' && selectableLocalVideoModelKeys) {
+            if (
+              !selectableLocalVideoModelKeys.has(modelKey)
+              || listedLocalVideoModelKeys.has(modelKey)
+            ) continue
+            listedLocalVideoModelKeys.add(modelKey)
+          }
 
           const provider = toProvider(model)
           if (!provider) continue

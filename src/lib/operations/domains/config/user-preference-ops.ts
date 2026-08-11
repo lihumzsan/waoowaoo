@@ -1,8 +1,14 @@
 import { z } from 'zod'
 import { Prisma } from '@prisma/client'
 import { ApiError } from '@/lib/api-errors'
-import { getDeploymentConfig, isPlatformProviderCredentialMode, toPublicDeploymentConfig } from '@/lib/deployment/config'
+import {
+  getDeploymentConfig,
+  isPlatformProviderCredentialMode,
+  isSelfHostedUserProviderCredentialMode,
+  toPublicDeploymentConfig,
+} from '@/lib/deployment/config'
 import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
+import { requireSelectableVideoModel } from '@/lib/model-access/selectable-video-model'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 
@@ -135,7 +141,7 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
       executeInTransaction: async (ctx, input, transaction) => {
         const deployment = getDeploymentConfig()
         await lockUserPreferenceOwner(transaction, ctx.userId)
-        const body: Record<string, unknown> = input
+        const body: Record<string, unknown> = { ...input }
         if (isPlatformProviderCredentialMode(deployment)) {
           const attemptedModelField = Object.keys(body).find((field) => PLATFORM_MODEL_FIELDS.has(field))
           if (attemptedModelField) {
@@ -144,6 +150,13 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
               field: attemptedModelField,
             })
           }
+        }
+        if (
+          isSelfHostedUserProviderCredentialMode(deployment)
+          && input.videoModel !== undefined
+          && input.videoModel !== null
+        ) {
+          body.videoModel = await requireSelectableVideoModel(ctx.userId, input.videoModel)
         }
 
         const updateData: Record<string, unknown> = {}

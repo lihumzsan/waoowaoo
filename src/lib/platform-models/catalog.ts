@@ -50,6 +50,12 @@ export function getPlatformModels(): StoredModel[] {
   return PLATFORM_MODEL_INPUTS.map(toPlatformModel)
 }
 
+export function getSelectableLocalVideoModels(): StoredModel[] {
+  return getPlatformModels().filter((model) => (
+    model.type === 'video' && model.provider === 'comfyui'
+  ))
+}
+
 export function getPlatformDefaultModelCatalog(): StoredModel[] {
   const defaults = getPlatformDefaultModels()
   const modelsByKey = new Map(getPlatformModels().map((model) => [model.modelKey, model]))

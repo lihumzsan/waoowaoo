@@ -67,6 +67,12 @@ export function isUserProviderCredentialMode(config: DeploymentConfig = getDeplo
   return config.providerCredentialMode === 'user-key'
 }
 
+export function isSelfHostedUserProviderCredentialMode(
+  config: DeploymentConfig = getDeploymentConfig(),
+): boolean {
+  return !isCloudDeployment(config) && isUserProviderCredentialMode(config)
+}
+
 export function toPublicDeploymentConfig(config: DeploymentConfig = getDeploymentConfig()) {
   return {
     edition: config.edition,

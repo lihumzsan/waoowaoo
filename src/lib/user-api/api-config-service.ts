@@ -12,7 +12,12 @@ import { ApiError } from '@/lib/api-errors'
 import { buildApiConfigServerCatalog } from '@/lib/ai-registry/api-config-catalog'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { getBillingMode } from '@/lib/billing/mode'
-import { getDeploymentConfig, toPublicDeploymentConfig } from '@/lib/deployment/config'
+import {
+  getDeploymentConfig,
+  isSelfHostedUserProviderCredentialMode,
+  toPublicDeploymentConfig,
+} from '@/lib/deployment/config'
+import { requireSelectableVideoModel } from '@/lib/model-access/selectable-video-model'
 import { normalizeWorkflowConcurrencyConfig } from '@/lib/workflow-concurrency'
 import { getDefaultWorkflowConcurrencyConfig } from '@/lib/workflow-concurrency-env'
 import type { ApiConfigPutBody, DefaultModelsPayload } from './api-config-types'
@@ -130,6 +135,7 @@ export async function putUserApiConfig(
   client: Pick<Prisma.TransactionClient, 'userPreference'> = prisma,
 ) {
   assertUserProviderConfigurationAvailable()
+  const deployment = getDeploymentConfig()
   if (!isRecord(body)) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'BODY_PARSE_FAILED',
@@ -240,7 +246,12 @@ export async function putUserApiConfig(
       updateData.editModel = normalizedDefaults.editModel || null
     }
     if (normalizedDefaults.videoModel !== undefined) {
-      updateData.videoModel = normalizedDefaults.videoModel || null
+      updateData.videoModel = (
+        normalizedDefaults.videoModel
+        && isSelfHostedUserProviderCredentialMode(deployment)
+      )
+        ? await requireSelectableVideoModel(userId, normalizedDefaults.videoModel)
+        : normalizedDefaults.videoModel || null
     }
     if (normalizedDefaults.musicModel !== undefined) {
       updateData.musicModel = normalizedDefaults.musicModel || null

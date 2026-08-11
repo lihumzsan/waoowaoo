@@ -124,7 +124,7 @@ describe('WorkspaceResource Operation registry conformance', () => {
     }).success).toBe(true)
   })
 
-  it('rejects hidden config fields and non-video models at the Tool boundary', async () => {
+  it('rejects hidden config fields while leaving final video availability to the transaction writer', async () => {
     const operation = createProjectAgentOperationRegistryForApi().update_project_config
     if (!operation) throw new Error('update_project_config missing')
     const context = {
@@ -152,9 +152,7 @@ describe('WorkspaceResource Operation registry conformance', () => {
       operation,
       context,
       input: { change: { kind: 'video_model', value: 'codex::gpt-image-2' } },
-    })).rejects.toMatchObject({
-      details: expect.objectContaining({ code: 'PROJECT_VIDEO_MODEL_NOT_AVAILABLE' }),
-    })
+    })).resolves.toMatchObject({ input: { videoModel: 'codex::gpt-image-2' } })
   })
 
   it('accepts independent video items and caps their expanded Task count', () => {

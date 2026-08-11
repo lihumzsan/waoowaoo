@@ -9,8 +9,13 @@ import {
   validateProjectDraft,
   type ProjectDraftInput,
 } from '@/lib/projects/validation'
-import { getDeploymentConfig, isPlatformProviderCredentialMode } from '@/lib/deployment/config'
+import {
+  getDeploymentConfig,
+  isPlatformProviderCredentialMode,
+  isSelfHostedUserProviderCredentialMode,
+} from '@/lib/deployment/config'
 import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
+import { requireSelectableVideoModel } from '@/lib/model-access/selectable-video-model'
 import {
   requireProjectAgentOperationRequest,
   type ProjectAgentOperationRegistryDraft,
@@ -213,6 +218,12 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
           : await transaction.userPreference.findUnique({
               where: { userId: ctx.userId },
             })
+        const inheritedVideoModel = (
+          userPreference?.videoModel
+          && isSelfHostedUserProviderCredentialMode(deployment)
+        )
+          ? await requireSelectableVideoModel(ctx.userId, userPreference.videoModel)
+          : userPreference?.videoModel ?? null
 
         let project = await transaction.project.create({
           data: {
@@ -233,7 +244,7 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
               characterModel: userPreference.characterModel,
               locationModel: userPreference.locationModel,
               editModel: userPreference.editModel,
-              videoModel: userPreference.videoModel,
+              videoModel: inheritedVideoModel,
               musicModel: userPreference.musicModel,
               videoResolution: userPreference.videoResolution,
               imageResolution: userPreference.imageResolution,

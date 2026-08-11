@@ -11,9 +11,13 @@ import { prisma } from '@/lib/prisma'
 import { decryptApiKey } from '@/lib/crypto-utils'
 import { isApiConfigCatalogProviderId } from '@/lib/ai-registry/api-config-catalog'
 import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
-import { getDeploymentConfig, isPlatformProviderCredentialMode } from '@/lib/deployment/config'
+import {
+  getDeploymentConfig,
+  isPlatformProviderCredentialMode,
+  isSelfHostedUserProviderCredentialMode,
+} from '@/lib/deployment/config'
 import PLATFORM_PROVIDER_ENV from '@/lib/deployment/platform-provider-env.json'
-import { getPlatformModels } from '@/lib/platform-models/catalog'
+import { getPlatformModels, getSelectableLocalVideoModels } from '@/lib/platform-models/catalog'
 import type { UnifiedModelType } from '@/lib/ai-registry/types'
 import { isUnifiedModelType } from '@/lib/user-api/api-config-shared'
 import { AppError } from '@/lib/errors/app-error'
@@ -224,6 +228,9 @@ async function readUserConfig(userId: string): Promise<{ models: CustomModel[]; 
 
 function getDirectRuntimePlatformModels(mediaType?: ModelMediaType): CustomModel[] {
   const deployment = getDeploymentConfig()
+  if (mediaType === 'video' && isSelfHostedUserProviderCredentialMode(deployment)) {
+    return getSelectableLocalVideoModels()
+  }
   if (mediaType === 'voice' || isPlatformProviderCredentialMode(deployment)) {
     return [...getPlatformModels()]
   }
@@ -240,7 +247,11 @@ async function getRuntimeModels(userId: string, mediaType?: ModelMediaType): Pro
   // (用户配置面不存在 voice 类型)。provider 凭证仍按部署模式解析:
   // user-key 部署用用户自己的 FAL provider key,缺失时报 PROVIDER_NOT_FOUND/API_KEY_MISSING,
   // 而不是误导性的 MODEL_NOT_FOUND。
-  if (mediaType === 'voice' || isPlatformProviderCredentialMode(deployment)) {
+  if (
+    mediaType === 'voice'
+    || (mediaType === 'video' && isSelfHostedUserProviderCredentialMode(deployment))
+    || isPlatformProviderCredentialMode(deployment)
+  ) {
     return directPlatformModels
   }
 
@@ -263,7 +274,7 @@ export async function resolveModelSelection(
   model: string,
   mediaType: ModelMediaType,
 ): Promise<ModelSelection> {
-  const directPlatformModels = getDirectRuntimePlatformModels()
+  const directPlatformModels = getDirectRuntimePlatformModels(mediaType)
   if (findModelByKey(directPlatformModels, model)) {
     return resolveRuntimeModelSelection(directPlatformModels, model, mediaType)
   }
