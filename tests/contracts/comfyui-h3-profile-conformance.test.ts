@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
+import { findBuiltinCapabilities, resolveGenerationOptionsForModel } from '@/lib/ai-registry/capabilities-catalog'
+import { COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES, COMFYUI_H3_MODEL_ID } from '@/lib/ai-providers/comfyui/models'
 import { H3_RUNTIME_PROFILES, resolveH3Dimensions, resolveH3DurationFrames } from '@/lib/ai-providers/comfyui/profiles'
 
 describe('ComfyUI H3 profile math', () => {
@@ -8,11 +11,42 @@ describe('ComfyUI H3 profile math', () => {
     expect(resolveH3DurationFrames(15)).toBe(362)
   })
 
-  it('preserves aspect ratio while rounding dimensions to multiples of 32', () => {
-    const dimensions = resolveH3Dimensions({ resolution: '480p', aspectRatio: '16:9' })
-    expect(dimensions).toEqual({ width: 832, height: 480 })
-    expect(dimensions.width % 32).toBe(0)
-    expect(dimensions.height % 32).toBe(0)
+  it('resolves ResolutionSelector Mi-pixel areas for 16:9 dimensions', () => {
+    expect(resolveH3Dimensions({ resolution: '480p', aspectRatio: '16:9' })).toEqual({ width: 864, height: 480 })
+    expect(resolveH3Dimensions({ resolution: '720p', aspectRatio: '16:9' })).toEqual({ width: 1376, height: 768 })
+  })
+
+  it('declares the generation modes supplied by the H3 workspace flow', () => {
+    const h3 = COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES.find((entry) => entry.modelId === COMFYUI_H3_MODEL_ID)
+    expect(h3?.capabilities.video.generationModeOptions).toEqual(['normal', 'firstlastframe'])
+  })
+
+  it('compiles the H3 normal 10-second selection through the production resolver', () => {
+    ensureAiCatalogsRegistered()
+    const capabilities = findBuiltinCapabilities('video', 'comfyui', COMFYUI_H3_MODEL_ID)
+    if (!capabilities) throw new Error('COMFYUI_H3_CAPABILITIES_MISSING')
+    const resolved = resolveGenerationOptionsForModel({
+      modelType: 'video',
+      modelKey: `comfyui::${COMFYUI_H3_MODEL_ID}`,
+      capabilities,
+      capabilityDefaults: {
+        [`comfyui::${COMFYUI_H3_MODEL_ID}`]: {
+          resolution: '720p',
+          generateAudio: true,
+        },
+      },
+      runtimeSelections: {
+        generationMode: 'normal',
+        duration: 10,
+      },
+    })
+    expect(resolved.issues).toEqual([])
+    expect(resolved.options).toMatchObject({
+      generationMode: 'normal',
+      duration: 10,
+      resolution: '720p',
+      generateAudio: true,
+    })
   })
 
   it('keeps both production profiles wired to the verified H3 node and output', () => {

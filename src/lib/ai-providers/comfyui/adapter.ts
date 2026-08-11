@@ -1,7 +1,8 @@
 import type { AiProviderAdapter } from '@/lib/ai-providers/runtime-types'
 import { describeMediaVariantBase } from '@/lib/ai-providers/shared/media-adapter'
 import { buildMediaOptionSchema, booleanValidator, enumValidator, integerRangeValidator } from '@/lib/ai-providers/shared/option-schema'
-import { executeComfyUiH3VideoGeneration, COMFYUI_H3_MODEL_ID } from './h3'
+import { COMFYUI_H3_MODEL_ID } from './models'
+import { executeComfyUiH3VideoGeneration } from './h3'
 
 const H3_ASPECT_RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16', '9:21'] as const
 

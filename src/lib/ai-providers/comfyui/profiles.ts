@@ -114,7 +114,7 @@ export function resolveH3Dimensions(input: {
       ? 1.0
       : unsupportedOption('resolution', input.resolution)
   const [ratioWidth, ratioHeight] = parseAspectRatio(input.aspectRatio)
-  const area = megapixels * 1_000_000
+  const area = megapixels * 1024 * 1024
   const width = Math.sqrt(area * (ratioWidth / ratioHeight))
   const height = area / width
   return { width: roundToMultiple(width, 32), height: roundToMultiple(height, 32) }

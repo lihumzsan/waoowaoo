@@ -1,8 +1,11 @@
 import { AppError } from '@/lib/errors/app-error'
+import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
 import { createProviderAsyncTaskFailure } from '@/lib/ai-providers/shared/async-task-status'
 import type { AiProviderVideoExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 import type { FailureRecord } from '@/lib/errors/failure'
+import { readResponseBufferWithLimit } from '@/lib/http/body-limits'
 import { readComfyUiBaseUrl } from './config'
+import { COMFYUI_H3_MODEL_ID } from './models'
 import {
   buildH3PromptGraph,
   H3_MODELS,
@@ -12,8 +15,22 @@ import {
   type H3Resolution,
 } from './profiles'
 
-export const COMFYUI_H3_MODEL_ID = 'minimax-h3-fast'
 export const COMFYUI_H3_MODEL_KEY = `comfyui::${COMFYUI_H3_MODEL_ID}`
+
+const COMFYUI_H3_MAX_VIDEO_BYTES = 100 * 1024 * 1024
+const COMFYUI_ACCEPTED_JOB_STATUSES = new Set(['pending', 'in_progress', 'completed', 'failed', 'cancelled'])
+
+class ComfyUiHttpError extends Error {
+  readonly status: number
+  readonly payload: unknown
+
+  constructor(status: number, payload: unknown) {
+    super(`COMFYUI_HTTP_${status}:${readHttpError(payload)}`)
+    this.name = 'ComfyUiHttpError'
+    this.status = status
+    this.payload = payload
+  }
+}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
@@ -46,8 +63,31 @@ async function requestJson(baseUrl: string, path: string, init?: RequestInit): P
   const text = await response.text()
   let payload: unknown = null
   try { payload = text ? JSON.parse(text) as unknown : null } catch { payload = text }
-  if (!response.ok) throw new Error(`COMFYUI_HTTP_${response.status}:${readHttpError(payload)}`)
+  if (!response.ok) throw new ComfyUiHttpError(response.status, payload)
   return payload
+}
+
+function preAcceptRejected(error: unknown): ProviderSubmissionError {
+  const message = error instanceof Error ? error.message : String(error)
+  return new ProviderSubmissionError('PROVIDER_SUBMISSION_REJECTED', message.slice(0, 512), {
+    disposition: 'pre_accept_rejected',
+    provider: 'comfyui',
+    externalId: null,
+    details: error instanceof ComfyUiHttpError
+      ? { httpStatus: error.status, payload: error.payload }
+      : { diagnostic: message.slice(0, 512) },
+    cause: error,
+  })
+}
+
+function promptRejection(error: ComfyUiHttpError): ProviderSubmissionError {
+  return new ProviderSubmissionError('PROVIDER_SUBMISSION_REJECTED', readHttpError(error.payload), {
+    disposition: 'rejected',
+    provider: 'comfyui',
+    externalId: null,
+    details: { httpStatus: error.status, payload: error.payload },
+    cause: error,
+  })
 }
 
 function readOptions(info: unknown, className: string, field: string): string[] {
@@ -121,25 +161,36 @@ function buildGraph(input: AiProviderVideoExecutionContext, promptId: string): {
 
 export async function executeComfyUiH3VideoGeneration(input: AiProviderVideoExecutionContext): Promise<GenerateResult> {
   const promptId = crypto.randomUUID()
-  const baseUrl = readComfyUiBaseUrl()
-  const built = buildGraph(input, promptId)
-  await preflight(baseUrl)
-  let raw: unknown
+  let baseUrl: string
+  let built: ReturnType<typeof buildGraph>
   try {
-    raw = await requestJson(baseUrl, '/prompt', {
+    baseUrl = readComfyUiBaseUrl()
+    built = buildGraph(input, promptId)
+    await preflight(baseUrl)
+  } catch (error) {
+    throw preAcceptRejected(error)
+  }
+  try {
+    const raw = await requestJson(baseUrl, '/prompt', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt: built.graph, prompt_id: promptId }),
     })
+    if (readString(asRecord(raw)?.prompt_id) !== promptId) throw new Error('COMFYUI_PROMPT_ID_MISMATCH')
+    return { success: true, async: true, requestId: promptId, externalId: `COMFYUI:VIDEO:${promptId}`, endpoint: built.profileId }
   } catch (error) {
+    if (error instanceof ComfyUiHttpError && error.status === 400) {
+      throw promptRejection(error)
+    }
     try {
       const probe = asRecord(await requestJson(baseUrl, `/api/jobs/${encodeURIComponent(promptId)}`))
-      if (readString(probe?.status)) return { success: true, async: true, requestId: promptId, externalId: `COMFYUI:VIDEO:${promptId}`, endpoint: built.profileId }
+      const status = readString(probe?.status)
+      if (COMFYUI_ACCEPTED_JOB_STATUSES.has(status)) {
+        return { success: true, async: true, requestId: promptId, externalId: `COMFYUI:VIDEO:${promptId}`, endpoint: built.profileId }
+      }
     } catch { /* Preserve the original accepted/unknown boundary below. */ }
     throw new Error(`COMFYUI_SUBMIT_OUTCOME_UNKNOWN:${error instanceof Error ? error.message : String(error)}`)
   }
-  if (readString(asRecord(raw)?.prompt_id) !== promptId) throw new Error('COMFYUI_PROMPT_ID_MISMATCH')
-  return { success: true, async: true, requestId: promptId, externalId: `COMFYUI:VIDEO:${promptId}`, endpoint: built.profileId }
 }
 
 type ComfyUiOutput = { filename: string; subfolder: string; type: string }
@@ -164,9 +215,16 @@ function readOutput(value: unknown): ComfyUiOutput | null {
 
 async function readVideoData(baseUrl: string, output: ComfyUiOutput): Promise<string> {
   const query = new URLSearchParams({ filename: output.filename, subfolder: output.subfolder, type: output.type })
-  const response = await fetch(buildUrl(baseUrl, `/view?${query.toString()}`), { signal: AbortSignal.timeout(120_000), cache: 'no-store' })
+  const response = await fetch(buildUrl(baseUrl, `/view?${query.toString()}`), {
+    signal: AbortSignal.timeout(120_000),
+    cache: 'no-store',
+    redirect: 'error',
+  })
   if (!response.ok) throw new Error(`COMFYUI_OUTPUT_HTTP_${response.status}`)
-  return `data:video/mp4;base64,${Buffer.from(await response.arrayBuffer()).toString('base64')}`
+  const contentType = (response.headers.get('content-type') || '').split(';', 1)[0]!.trim().toLowerCase()
+  if (contentType !== 'video/mp4') throw new Error(`COMFYUI_OUTPUT_CONTENT_TYPE_INVALID:${contentType || '<missing>'}`)
+  const buffer = await readResponseBufferWithLimit(response, COMFYUI_H3_MAX_VIDEO_BYTES, 'ComfyUI H3 video')
+  return `data:${contentType};base64,${buffer.toString('base64')}`
 }
 
 export type ComfyUiPollResult =
