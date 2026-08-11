@@ -390,7 +390,7 @@ async function authorizePlannedOperation(params: {
     throw new Error(`WAO_MCP_OPERATION_PLAN_ID_MISSING:${params.operation.id}`)
   }
   params.signal.throwIfAborted()
-  {
+  if (params.operation.confirmation.kind === 'destructive') {
     const decision = await params.elicit(approvalElicitation({
       approvalRequestId,
       operationId: params.operation.id,
