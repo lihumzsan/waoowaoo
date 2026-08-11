@@ -14,7 +14,7 @@ import {
 import { loadOperationPlanSnapshot } from '@/lib/operations/operation-plan-snapshot'
 import { createProjectAgentOperationRegistryForApi } from '@/lib/operations/registry'
 import {
-  isBillablePlannedOperation,
+  isPlannedOperation,
   type ProjectAgentOperationContext,
 } from '@/lib/operations/types'
 import { prisma } from '@/lib/prisma'
@@ -170,7 +170,7 @@ async function executeApprovedPlanOperation(
       command.operationId,
     )
   }
-  if (!isBillablePlannedOperation(operation)) {
+  if (!isPlannedOperation(operation)) {
     return failNonRetryable('OPERATION_EXECUTION_BILLABLE_PLAN_REQUIRED', command.operationId)
   }
 

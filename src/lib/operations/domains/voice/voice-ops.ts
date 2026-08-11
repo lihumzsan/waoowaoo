@@ -20,7 +20,6 @@ import { defineOperation } from '@/lib/operations/define-operation'
 import { resolveOperationLocale } from '@/lib/operations/environment-input'
 import {
   createPlannedTask,
-  requirePlannedTaskBillingInfo,
   submitPlannedOperationTasks,
   type OperationPlan,
   type PlannedTask,
@@ -227,11 +226,6 @@ async function planNewVoice(
       payload,
       locale: resolveOperationLocale(ctx.context),
       dedupeKey: `generate_voice:${resource.resourceId}:${inputHash}`,
-      billingInfo: requirePlannedTaskBillingInfo({
-        taskType: TASK_TYPE.WORKSPACE_RESOURCE_VOICE,
-        payload,
-        allowedApiTypes: ['voice'],
-      }),
     })
   })
   return {
@@ -307,11 +301,6 @@ async function planRetryVoice(
       payload,
       locale: resolveOperationLocale(ctx.context),
       dedupeKey: `generate_voice:retry:${resource.resourceId}:${resource.sourceTask.id}`,
-      billingInfo: requirePlannedTaskBillingInfo({
-        taskType: TASK_TYPE.WORKSPACE_RESOURCE_VOICE,
-        payload,
-        allowedApiTypes: ['voice'],
-      }),
     })
   })
   return {
@@ -439,7 +428,6 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
       effects: {
         writes: true,
         workspaceResourceImpact: 'none',
-        billable: true,
         destructive: false,
         overwrite: false,
         bulk: true,
@@ -454,17 +442,8 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
         outputMediaTypes: ['audio'],
         outputSchemaIds: [WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE],
         placement: 'required',
-        alternativeGeneration: {
-          kind: 'request_count',
-          mediaKind: 'voice',
-          requestKind: 'new',
-          defaultSchemaId: WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
-          minCount: 1,
-          maxCount: 6,
-          inputLimits: { promptMaxLength: 4_000, previewTextMaxLength: 10_000 },
-        },
       },
-      confirmation: { kind: 'billable_media', required: true },
+      confirmation: { kind: 'none', required: false },
       planContractRevision: 'voice-generation/v9',
       inputSchema: generateVoiceInputSchema,
       outputSchema: generateVoiceOutputSchema,

@@ -1,6 +1,4 @@
 import type { Prisma } from '@prisma/client'
-import { addBalanceWithTransaction } from '@/lib/billing/ledger'
-import { resolveSignupGrantCredits } from '@/lib/billing/signup-grant'
 
 export interface AuthAccountIdentityInput {
   type: 'credentials' | 'oauth'
@@ -48,30 +46,6 @@ export async function createAuthUser(
       image: true,
     },
   })
-
-  await tx.userBalance.create({
-    data: {
-      userId: user.id,
-      balance: 0,
-      subscriptionCredits: 0,
-      subscriptionExpiresAt: null,
-      frozenAmount: 0,
-      totalSpent: 0,
-    },
-  })
-
-  // New accounts start with enough credit to run one real generation end to
-  // end. Nobody buys a plan before seeing the product work once, and a signup
-  // that lands on an empty balance cannot show them.
-  const signupGrant = resolveSignupGrantCredits()
-  if (signupGrant > 0) {
-    await addBalanceWithTransaction(tx, user.id, signupGrant, {
-      type: 'adjust',
-      reason: 'signup welcome credits',
-      operatorId: 'signup-grant',
-      idempotencyKey: `signup:${user.id}`,
-    })
-  }
 
   if (input.account) {
     await tx.account.create({

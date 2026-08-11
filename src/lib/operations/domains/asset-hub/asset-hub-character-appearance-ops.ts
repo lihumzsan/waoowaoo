@@ -57,7 +57,6 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
       effects: {
         writes: true,
         workspaceResourceImpact: 'global_assets',
-        billable: false,
         destructive: false,
         overwrite: true,
         bulk: false,
@@ -122,7 +121,6 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
       effects: {
         writes: true,
         workspaceResourceImpact: 'global_assets',
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,
@@ -177,7 +175,6 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
       effects: {
         writes: true,
         workspaceResourceImpact: 'global_assets',
-        billable: false,
         destructive: true,
         overwrite: false,
         bulk: false,

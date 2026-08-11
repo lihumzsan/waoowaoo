@@ -1,22 +1,17 @@
 import type { NextRequest } from 'next/server'
 import { getRequestId } from '@/lib/api-errors'
-import { ApiError } from '@/lib/api-errors'
 import {
   prepareTaskSubmissionInput,
   type SubmitTaskResult,
 } from '@/lib/task/submitter'
 import {
   isTaskType,
-  type TaskBillingInfo,
   type TaskType,
 } from '@/lib/task/types'
-import { buildDefaultTaskBillingInfo, isBillableTaskType } from '@/lib/billing'
 import type { Locale } from '@/i18n/routing'
 import type { Prisma } from '@prisma/client'
 import type { ProjectAgentFollowUpBatchBinding } from '@/lib/operations/types'
 import { persistSubmittedTaskBatchInTransaction } from '@/lib/task/transactional-create'
-import { buildBillingReceiptView } from '@/lib/billing/task-billing-view'
-import { InsufficientBalanceError } from '@/lib/billing'
 
 export function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -39,8 +34,6 @@ export interface OperationTaskSubmissionParams {
   payload: Record<string, unknown>
   dedupeKey?: string | null
   locale: Locale
-  billingInfo?: TaskBillingInfo | null
-  billingInfoSource?: 'auto' | 'planned'
   decoratePayload?: boolean
   onTaskCreatedInTransaction?: (
     tx: Prisma.TransactionClient,
@@ -58,12 +51,6 @@ async function prepareOperationTaskSubmission(
     throw new Error('OPERATION_TASK_REQUEST_ID_REQUIRED')
   }
   const locale = params.locale
-  const billingInfo =
-    params.billingInfo !== undefined
-      ? params.billingInfo
-      : isBillableTaskType(params.type)
-        ? buildDefaultTaskBillingInfo(params.type, params.payload)
-        : null
   const payload =
     params.decoratePayload === false
       ? params.payload
@@ -90,8 +77,6 @@ async function prepareOperationTaskSubmission(
     targetId: params.targetId,
     payload,
     dedupeKey: params.dedupeKey || null,
-    billingInfo,
-    billingInfoSource: params.billingInfoSource,
     operationId: params.operationId,
     operationSource: params.source,
     operationExecutionId: params.operationExecutionId,
@@ -112,17 +97,10 @@ export async function submitOperationTaskBatch(
   const prepared = await Promise.all(
     submissions.map(prepareOperationTaskSubmission),
   )
-  const billingMode = prepared[0]?.prepared.billingMode
-  if (
-    !billingMode ||
-    prepared.some((item) => item.prepared.billingMode !== billingMode)
-  ) {
-    throw new Error('OPERATION_TASK_BATCH_BILLING_MODE_MISMATCH')
-  }
-  const operationId = prepared[0]?.prepared.input.operationId?.trim() ?? ''
+  const operationId = prepared[0]?.prepared.operationId?.trim() ?? ''
   if (
     !operationId ||
-    prepared.some((item) => item.prepared.input.operationId !== operationId)
+    prepared.some((item) => item.prepared.operationId !== operationId)
   ) {
     throw new Error('OPERATION_TASK_BATCH_OPERATION_ID_MISMATCH')
   }
@@ -155,8 +133,7 @@ export async function submitOperationTaskBatch(
   > => {
     return await persistSubmittedTaskBatchInTransaction({
       tx,
-      inputs: prepared.map((item) => item.prepared.input),
-      billingMode,
+      inputs: prepared.map((item) => item.prepared),
       onBatchCreatedInTransaction: async (transaction, tasks) => {
         for (const [index, stored] of tasks.entries()) {
           await prepared[index]?.onTaskCreatedInTransaction?.(
@@ -171,18 +148,7 @@ export async function submitOperationTaskBatch(
       },
     })
   }
-  try {
-    persisted = await persist(operationExecutionTransaction)
-  } catch (error) {
-    if (error instanceof InsufficientBalanceError) {
-      throw new ApiError('INSUFFICIENT_BALANCE', {
-        message: error.message,
-        required: error.required,
-        available: error.available,
-      }, { cause: error })
-    }
-    throw error
-  }
+  persisted = await persist(operationExecutionTransaction)
   return await Promise.all(
     persisted.map(async ({ task, deduped }) => {
       if (!isTaskType(task.type))
@@ -194,9 +160,6 @@ export async function submitOperationTaskBatch(
         taskType: task.type,
         status: task.status,
         deduped,
-        billingReceiptView: await buildBillingReceiptView(
-          (task.billingInfo || null) as TaskBillingInfo | null,
-        ),
       } satisfies SubmitTaskResult
     }),
   )

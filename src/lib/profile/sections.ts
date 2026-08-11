@@ -1,8 +1,8 @@
-export const PROFILE_SECTIONS = ['overview', 'security', 'apiConfig', 'billing'] as const
+export const PROFILE_SECTIONS = ['security', 'apiConfig'] as const
 
 export type ProfileSection = typeof PROFILE_SECTIONS[number]
 
-export const DEFAULT_PROFILE_SECTION: ProfileSection = 'overview'
+export const DEFAULT_PROFILE_SECTION: ProfileSection = 'security'
 
 export function isProfileSection(value: string): value is ProfileSection {
   return PROFILE_SECTIONS.includes(value as ProfileSection)

@@ -1,16 +1,7 @@
-import { createScopedLogger } from '@/lib/logging/core'
-import { type CreateTaskInput, type TaskBillingInfo, type TaskType } from './types'
-import {
-  buildDefaultTaskBillingInfo,
-  getBillingMode,
-  isBillableTaskType,
-} from '@/lib/billing'
-import { ApiError } from '@/lib/api-errors'
+import { type CreateTaskInput, type TaskType } from './types'
 import { getTaskFlowMeta } from '@/lib/llm-observe/stage-pipeline'
 import type { Locale } from '@/i18n/routing'
 import { buildTaskProgressGroupId, withTaskProgressGroupPayload } from './progress-group'
-import type { BillingReceiptView } from '@/lib/billing/task-billing-view'
-import { requiresBillableMediaApproval } from '@/lib/billing/media-approval-policy'
 import type { Prisma } from '@prisma/client'
 
 export function toObject(value: unknown): Record<string, unknown> {
@@ -26,7 +17,6 @@ export interface SubmitTaskResult {
   taskType: TaskType
   status: string
   deduped: boolean
-  billingReceiptView?: BillingReceiptView | null
 }
 
 export function normalizeTaskPayload(type: TaskType, payload?: Record<string, unknown> | null) {
@@ -90,8 +80,6 @@ export type SubmitTaskParams = {
   targetId: string
   payload?: Record<string, unknown> | null
   dedupeKey?: string | null
-  billingInfo?: TaskBillingInfo | null
-  billingInfoSource?: 'auto' | 'planned'
   requestId?: string | null
   operationId?: string | null
   operationSource?: string | null
@@ -103,18 +91,7 @@ export type SubmitTaskParams = {
   ) => Promise<void>
 }
 
-export async function prepareTaskSubmissionInput(params: SubmitTaskParams): Promise<{
-  readonly input: CreateTaskInput
-  readonly billingMode: Awaited<ReturnType<typeof getBillingMode>>
-}> {
-  const logger = createScopedLogger({
-    module: 'task.submitter',
-    action: 'task.submit',
-    requestId: params.requestId || undefined,
-    projectId: params.projectId,
-    userId: params.userId,
-  })
-
+export async function prepareTaskSubmissionInput(params: SubmitTaskParams): Promise<CreateTaskInput> {
   const operationRequestId = params.operationRequestId || params.requestId || null
   const progressGroupId = buildTaskProgressGroupId({
     operationId: params.operationId || null,
@@ -135,37 +112,6 @@ export async function prepareTaskSubmissionInput(params: SubmitTaskParams): Prom
       },
     },
   }
-  const computedBillingInfo = isBillableTaskType(params.type)
-    ? buildDefaultTaskBillingInfo(params.type, normalizedPayload)
-    : null
-  const resolvedBillingInfo = params.billingInfoSource === 'planned'
-    ? params.billingInfo || computedBillingInfo || null
-    : computedBillingInfo || params.billingInfo || null
-
-  if (requiresBillableMediaApproval(resolvedBillingInfo)) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'BILLABLE_MEDIA_APPROVED_PLAN_SUBMITTER_REQUIRED',
-      message: `billable media Task must be created by the approved operation plan authority: ${params.type}`,
-    })
-  }
-
-  const billingMode = await getBillingMode()
-  if (isBillableTaskType(params.type) && resolvedBillingInfo?.billable !== true) {
-    if (billingMode === 'ENFORCE') {
-      throw new ApiError('INVALID_PARAMS', {
-        message: `missing server-generated billingInfo for billable task type: ${params.type}`,
-      })
-    }
-    logger.warn({
-      action: 'task.submit.billing_info_missing_non_enforce',
-      message: `missing billingInfo ignored in ${billingMode} mode`,
-      details: {
-        type: params.type,
-        billingMode,
-      },
-    })
-  }
-
   const taskInput = {
     userId: params.userId,
     projectId: params.projectId,
@@ -175,7 +121,6 @@ export async function prepareTaskSubmissionInput(params: SubmitTaskParams): Prom
     targetId: params.targetId,
     payload: normalizedPayload,
     dedupeKey: params.dedupeKey || null,
-    billingInfo: resolvedBillingInfo || null,
     operationId: params.operationId || null,
     operationSource: params.operationSource || null,
     approvalGrantId: null,
@@ -183,5 +128,5 @@ export async function prepareTaskSubmissionInput(params: SubmitTaskParams): Prom
     operationPlanTaskId: null,
     operationRequestId,
   } satisfies CreateTaskInput
-  return { input: taskInput, billingMode }
+  return taskInput
 }

@@ -29,7 +29,6 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
       intent: 'query',
       effects: {
         writes: false,
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,
@@ -71,7 +70,6 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
       effects: {
         writes: true,
         workspaceResourceImpact: 'global_assets',
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,
@@ -144,7 +142,6 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
       intent: 'query',
       effects: {
         writes: false,
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,
@@ -175,7 +172,6 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
       effects: {
         writes: true,
         workspaceResourceImpact: 'global_assets',
-        billable: false,
         destructive: false,
         overwrite: true,
         bulk: false,

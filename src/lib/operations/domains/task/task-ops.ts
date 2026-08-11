@@ -140,7 +140,6 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
       channels: { tool: false, api: true, mcp: false },
       effects: {
         writes: false,
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,
@@ -170,7 +169,6 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
       channels: { tool: false, api: true, mcp: false },
       effects: {
         writes: false,
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,
@@ -208,7 +206,6 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
       channels: { tool: false, api: true, mcp: false },
       effects: {
         writes: false,
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,
@@ -244,7 +241,6 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
       effects: {
         writes: true,
         workspaceResourceImpact: 'none',
-        billable: false,
         destructive: true,
         overwrite: true,
         bulk: false,

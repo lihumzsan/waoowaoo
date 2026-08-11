@@ -6,15 +6,10 @@ import type { ComponentProps } from 'react'
 import { useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
-import BillingActionButton from '@/components/billing/BillingActionButton'
 import {
   MediaAttachmentChips,
   TextAttachmentChips,
 } from '@/components/project-assistant/AttachmentChips'
-import {
-  buildBillingActionQuotePreviewFromQuote,
-  type BillingActionQuotePreview,
-} from '@/lib/billing/action-quote-preview'
 import type { OperationPlanView } from '@/lib/operations/planning'
 import { MarkdownTextPart } from './MarkdownTextPart'
 import { readProjectAssistantTextAttachmentsFromMetadata } from '@/lib/project-agent/text-attachments'
@@ -26,7 +21,6 @@ import {
   useWorkspaceAssistantHasRunningSurface,
 } from './WorkspaceAssistantReasoning'
 import { WORKSPACE_ASSISTANT_HIDDEN_TRACE_TOOL_NAMES } from './workspace-assistant-run-trace'
-import { summarizeBillingActionItems, type BillingActionItemSummary } from './billing-action-items'
 import { WorkspaceAssistantToolCallCard } from './WorkspaceAssistantToolCall'
 import {
   AssistantContextCompactedDataCard,
@@ -61,69 +55,6 @@ export function resolveProgressStageLabel(
   return `MISSING_MESSAGE:${raw}`
 }
 
-function translateBillingActionItemSummary(
-  item: BillingActionItemSummary,
-  t: AssistantAgentTranslator,
-): string {
-  switch (item.key) {
-    case 'image':
-      return t('cards.billingActionImageItems', { count: item.quantity })
-    case 'video':
-      return t('cards.billingActionVideoItems', { count: item.quantity })
-    case 'music':
-      return t('cards.billingActionMusicItems', { count: item.quantity })
-    case 'voiceCharacters':
-      return t('cards.billingActionVoiceCharacterItems', { count: item.quantity })
-    case 'musicSeconds':
-      return t('cards.billingActionMusicSecondItems', { count: item.quantity })
-    case 'videoSeconds':
-      return t('cards.billingActionVideoSecondItems', { count: item.quantity })
-  }
-}
-
-function buildBillingActionSummaryLabel(
-  quote: OperationPlanView['quote'],
-  t: AssistantAgentTranslator,
-): string | null {
-  const items = summarizeBillingActionItems(quote.items)
-  if (items.length === 0) return null
-  const separator = t('cards.billingActionListSeparator')
-  const label = items.map((item) => translateBillingActionItemSummary(item, t)).join(separator)
-  return t('cards.billingActionSummary', { items: label })
-}
-
-function buildAssistantBillingQuotePreview(params: {
-  readonly quote: OperationPlanView['quote']
-  readonly actionLabel: string | null
-  readonly t: AssistantAgentTranslator
-}): BillingActionQuotePreview | null {
-  const { quote, actionLabel, t } = params
-  return buildBillingActionQuotePreviewFromQuote({
-    quote,
-    withCredits: (values) =>
-      actionLabel
-        ? t('cards.billingActionQuoteWithCredits', { action: actionLabel, cost: values.cost })
-        : t('cards.billingQuoteWithCredits', values),
-    withoutCredits: (values) =>
-      actionLabel
-        ? t('cards.billingActionQuoteWithoutCredits', { action: actionLabel })
-        : t('cards.billingQuoteWithoutCredits', values),
-  })
-}
-
-function BillingQuoteBlock(props: { preview: BillingActionQuotePreview | null }) {
-  const preview = props.preview
-  if (!preview) return null
-  return (
-    <div className="mt-4 flex items-center gap-3 text-xs">
-      <span className="shrink-0 whitespace-nowrap tabular-nums text-[var(--glass-text-tertiary)]">
-        {preview.fullLabel}
-      </span>
-      <span className="h-px flex-1 bg-slate-200" />
-    </div>
-  )
-}
-
 type ConfirmationActionDecision = 'idle' | 'confirming' | 'cancelling' | 'settled'
 
 export function ConfirmationActionCard(props: {
@@ -143,20 +74,7 @@ export function ConfirmationActionCard(props: {
   // both actions, and any submission failure is consumed here (the panel-level
   // control error shows the localized notice) instead of escaping to React.
   const [decision, setDecision] = React.useState<ConfirmationActionDecision>('idle')
-  const members = props.members.map((member) => {
-    const quote = member.operationPlan?.quote ?? null
-    const quoteActionLabel = quote ? buildBillingActionSummaryLabel(quote, t) : null
-    return {
-      ...member,
-      quotePreview: quote
-        ? buildAssistantBillingQuotePreview({
-            quote,
-            actionLabel: quoteActionLabel,
-            t,
-          })
-        : null,
-    }
-  })
+  const members = props.members
   const submitDecision = (kind: 'confirm' | 'cancel'): void => {
     setDecision((current) => {
       if (current !== 'idle') return current
@@ -190,24 +108,18 @@ export function ConfirmationActionCard(props: {
                 {detail}
               </div>
             ))}
-            <BillingQuoteBlock preview={member.quotePreview} />
           </div>
         ))}
       </div>
       <div className="mt-3 flex gap-2">
-        <BillingActionButton
+        <button
           type="button"
-          icon="arrowRight"
-          label={
-            decision === 'confirming' ? t('cards.interactionSubmitting') : t('cards.confirmContinue')
-          }
-          quote={members.length === 1 ? (members[0]?.quotePreview ?? null) : null}
-          className="flex-1 rounded-xl py-2 text-sm"
+          className="flex-1 rounded-xl bg-[var(--glass-accent)] px-3 py-2 text-sm text-white"
           disabled={locked}
           onClick={() => {
             submitDecision('confirm')
           }}
-        />
+        >{decision === 'confirming' ? t('cards.interactionSubmitting') : t('cards.confirmContinue')}</button>
         {!props.retryOnly ? <button
           type="button"
           disabled={locked}

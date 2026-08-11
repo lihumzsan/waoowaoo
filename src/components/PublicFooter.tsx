@@ -7,7 +7,6 @@ import { fetchPublicDeploymentFeatures } from '@/lib/deployment/public-client'
 import type { PublicDeploymentFeatures } from '@/lib/deployment/public-client'
 
 const FOOTER_LINKS = [
-  { href: '/pricing', labelKey: 'pricing' },
   { href: '/terms', labelKey: 'terms' },
   { href: '/privacy', labelKey: 'privacy' },
   { href: '/refund-policy', labelKey: 'refundPolicy' },

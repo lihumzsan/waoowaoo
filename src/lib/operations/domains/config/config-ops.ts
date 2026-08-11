@@ -335,7 +335,6 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
       channels: { tool: false, api: true },
       effects: {
         writes: false,
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,
@@ -405,7 +404,6 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
       effects: {
         writes: true,
         workspaceResourceImpact: 'project_data',
-        billable: false,
         destructive: false,
         overwrite: true,
         bulk: false,

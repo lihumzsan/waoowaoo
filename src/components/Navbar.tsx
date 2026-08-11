@@ -5,7 +5,6 @@ import type { CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { signOut, useSession } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
-import { apiFetch } from '@/lib/api-fetch'
 import LanguageSwitcher from './LanguageSwitcher'
 import { AppIcon } from '@/components/ui/icons'
 import { BrandLogoShape } from '@/components/ui/icons/BrandLogoShape'
@@ -20,17 +19,12 @@ import {
 import NavbarAccountMenu, { NavbarUserAvatar } from './navbar/NavbarAccountMenu'
 import {
   buildNavbarSettingsMenuItems,
-  isNavbarBalancePayload,
-  readNavbarPlan,
   shouldCloseNavbarSettingsMenu,
-  type NavbarUserBalance,
 } from './navbar/account-menu-model'
 
 // 单测/调用方契约:纯投影 helper 的权威实现在 navbar/account-menu-model.ts。
 export {
   buildNavbarSettingsMenuItems,
-  formatCompactCreditAmount,
-  formatCreditAmount,
   shouldCloseNavbarSettingsMenu,
   type NavbarSettingsMenuItem,
 } from './navbar/account-menu-model'
@@ -83,20 +77,15 @@ export default function Navbar({
   const [mounted, setMounted] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsMenuStyle, setSettingsMenuStyle] = useState<CSSProperties | null>(null)
-  const [balance, setBalance] = useState<NavbarUserBalance | null>(null)
   const settingsTriggerRef = useRef<HTMLDivElement>(null)
   const settingsMenuRef = useRef<HTMLDivElement>(null)
   const downloadLogsHref = '/api/admin/download-logs'
   const settingsMenuId = 'navbar-settings-menu'
 
-  const showPricingLink = deploymentFeatures?.showPricingPage === true
-  const showRecharge = deploymentFeatures?.showRecharge === true
-  const showBilling = deploymentFeatures?.showBilling === true
   const showDownloadLogs = deploymentFeatures?.showDownloadLogs === true
   const userName = session?.user?.name ?? t('profile')
   const userEmail = session?.user?.email ?? null
   const userImage = session?.user?.image ?? null
-  const creditsUnit = t('account.creditsUnit')
   const settingsMenuItems = buildNavbarSettingsMenuItems(deploymentFeatures, {
     apiConfig: t('settingsMenu.apiConfig'),
     personalCenter: t('settingsMenu.personalCenter'),
@@ -136,38 +125,6 @@ export default function Navbar({
       cancelled = true
     }
   }, [])
-
-  useEffect(() => {
-    // 仅在计费已启用（cloud 版 showBilling=true）时拉取余额；
-    // 本地/自托管版计费整体关闭，无余额概念，不显示。
-    if (!session || !showBilling) {
-      setBalance(null)
-      return
-    }
-    let cancelled = false
-    apiFetch('/api/user/balance')
-      .then(async (response) => {
-        if (!response.ok) return
-        const payload: unknown = await response.json()
-        if (!cancelled && isNavbarBalancePayload(payload)) {
-          setBalance({
-            currency: payload.currency,
-            balance: payload.balance,
-            frozenAmount: payload.frozenAmount,
-            totalSpent: payload.totalSpent,
-            health: payload.health,
-            referenceClipsRemaining: payload.referenceClipsRemaining,
-            plan: readNavbarPlan((payload as { subscription?: unknown }).subscription),
-          })
-        }
-      })
-      .catch(() => {
-        /* 余额获取失败时静默降级，不阻塞导航栏 */
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [session, showBilling])
 
   useEffect(() => {
     if (!settingsOpen) return
@@ -324,14 +281,6 @@ export default function Navbar({
               </>
             ) : (
               <>
-                {showPricingLink ? (
-                  <Link
-                    href={{ pathname: '/pricing' }}
-                    className="glass-selection-control rounded-full px-2.5 py-1.5 text-sm font-medium"
-                  >
-                    {t('pricing')}
-                  </Link>
-                ) : null}
                 <Link
                   href={{ pathname: '/auth/signin' }}
                   className="glass-btn-base glass-btn-cta rounded-full px-4 py-2 text-sm font-medium"
@@ -364,10 +313,6 @@ export default function Navbar({
           userName={userName}
           userEmail={userEmail}
           userImage={userImage}
-          balance={balance}
-          creditsUnit={creditsUnit}
-          showBilling={showBilling}
-          showRecharge={showRecharge}
           showDownloadLogs={showDownloadLogs}
           showUpdateCheck={showUpdateCheck}
           manualChecking={manualChecking}

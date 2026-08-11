@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto'
 import { ApiError } from '@/lib/api-errors'
 import { createScopedLogger } from '@/lib/logging/core'
 import { normalizeOperationExecutionToolError } from '@/lib/adapters/operation-error-normalizer'
-import { formatBillingActionCost } from '@/lib/billing/action-quote-preview'
 import {
   canonicalJson,
   hashCanonicalJson,
@@ -28,14 +27,13 @@ import {
   type OperationPlanView,
 } from '@/lib/operations/planning'
 import {
-  isBillablePlannedOperation,
+  isPlannedOperation,
   type JsonObject,
   type OperationMutationReceipt,
   type ProjectAgentOperationContext,
   type ProjectAgentOperationDefinition,
   type ProjectAgentOperationRegistry,
 } from '@/lib/operations/types'
-import { readAssistantBillingConfirmationRequired } from '@/lib/project-agent/billing-confirmation'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import {
   normalizeProjectAgentLocale,
@@ -247,7 +245,6 @@ function projectPersistedPlanView(
     operationId: snapshot.operationId,
     kind: snapshot.plan.kind,
     taskCount: snapshot.plan.tasks.length,
-    quote: snapshot.quote,
     tasks: snapshot.plan.tasks.map((task) => ({
       id: task.id,
       taskType: task.taskType,
@@ -257,7 +254,6 @@ function projectPersistedPlanView(
     planSnapshotId: snapshot.id,
     inputHash: snapshot.inputHash,
     planHash: snapshot.planHash,
-    quoteHash: snapshot.quoteHash,
   }
 }
 
@@ -266,18 +262,15 @@ function approvalElicitation(params: {
   readonly operationId: string
   readonly locale: string | null | undefined
   readonly plan: OperationPlanView | null
-  readonly kind: 'billable' | 'destructive'
+  readonly kind: 'planned' | 'destructive'
   readonly destructiveInputSummary?: string
 }): WaoMcpElicitationRequest {
   const locale = normalizeProjectAgentLocale(params.locale)
   const operationTitle = localizeProjectAgentOperationTitle(params.operationId, locale)
   const planSummary = params.plan
     ? (() => {
-        const quote = params.plan.quote
-        const cost = quote.showCredits
-          && typeof quote.totalMaxFrozenCost === 'number'
-          ? formatBillingActionCost(quote.totalMaxFrozenCost)
-          : null
+        const quote = { mediaTaskCount: params.plan.taskCount }
+        const cost = null
         if (locale === 'en') {
           return cost
             ? `${String(params.plan.taskCount)} tasks (${String(quote.mediaTaskCount)} media), maximum ${cost} credits`
@@ -295,7 +288,7 @@ function approvalElicitation(params: {
         params.destructiveInputSummary
           ? `Exact target: ${params.destructiveInputSummary}`
           : null,
-        params.kind === 'billable'
+        params.kind === 'planned'
           ? 'Approving authorizes the displayed immutable production plan and its quoted ceiling.'
           : 'Approving authorizes this destructive operation.',
       ].filter((value): value is string => Boolean(value)).join('\n')
@@ -305,7 +298,7 @@ function approvalElicitation(params: {
         params.destructiveInputSummary
           ? `精确目标：${params.destructiveInputSummary}`
           : null,
-        params.kind === 'billable'
+        params.kind === 'planned'
           ? '确认后将授权执行上述不可变生产计划及其报价上限。'
           : '确认后将授权执行此删除操作。',
       ].filter((value): value is string => Boolean(value)).join('\n')
@@ -332,7 +325,7 @@ function elicitationApproved(result: WaoMcpElicitationResult): boolean {
   return result.action === 'accept' && result.content?.confirmed === true
 }
 
-async function authorizeBillableOperation(params: {
+async function authorizePlannedOperation(params: {
   readonly operation: ProjectAgentOperationDefinition
   readonly input: Readonly<Record<string, unknown>>
   readonly trusted: ReturnType<typeof normalizeTrustedContext>
@@ -396,17 +389,14 @@ async function authorizeBillableOperation(params: {
   if (!view.planSnapshotId) {
     throw new Error(`WAO_MCP_OPERATION_PLAN_ID_MISSING:${params.operation.id}`)
   }
-  const confirmationRequired = await readAssistantBillingConfirmationRequired(
-    params.trusted.userId,
-  )
   params.signal.throwIfAborted()
-  if (confirmationRequired) {
+  {
     const decision = await params.elicit(approvalElicitation({
       approvalRequestId,
       operationId: params.operation.id,
       locale: params.context.locale,
       plan: view,
-      kind: 'billable',
+      kind: 'planned',
     }))
     if (!elicitationApproved(decision)) return null
     params.signal.throwIfAborted()
@@ -421,7 +411,7 @@ async function authorizeBillableOperation(params: {
     executionOwnerId: params.trusted.executionOwnerId,
     approvalRequestId,
     planSnapshotId: view.planSnapshotId,
-    requireBrowserProof: confirmationRequired,
+    requireBrowserProof: false,
   })
   if (!grant || grant.operationId !== params.operation.id) {
     throw new Error(`WAO_MCP_APPROVAL_GRANT_DIVERGED:${params.operation.id}`)
@@ -446,8 +436,8 @@ async function executeOperation(params: {
   let executionInput = params.input
   let destructiveApprovalVerified = params.context.destructiveApproved === true
 
-  if (isBillablePlannedOperation(params.operation)) {
-    const invocation = params.context.approvedInvocation ?? await authorizeBillableOperation({
+  if (isPlannedOperation(params.operation)) {
+    const invocation = params.context.approvedInvocation ?? await authorizePlannedOperation({
       operation: params.operation,
       input: params.input,
       trusted,

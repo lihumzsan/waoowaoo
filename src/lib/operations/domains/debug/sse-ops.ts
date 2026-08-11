@@ -144,7 +144,6 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
       intent: 'query',
       effects: {
         writes: false,
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,

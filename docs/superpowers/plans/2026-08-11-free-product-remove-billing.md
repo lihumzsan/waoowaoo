@@ -245,7 +245,7 @@
 
 **Files:**
 - Modify: `prisma/schema.prisma`
-- Create: `prisma/migrations/20260811160000_remove_billing/migration.sql`
+- Create: `prisma/migrations/20260811130000_remove_billing_schema/migration.sql`
 - Modify: `src/lib/paid-beta/**` only where payment ownership is removed
 - Test: `tests/contracts/free-schema.contract.test.ts`
 
@@ -284,7 +284,7 @@
 
 - [ ] **Step 6: Commit the schema phase.**
 
-  Run: `git add prisma/schema.prisma prisma/migrations/20260811160000_remove_billing/migration.sql src/lib/paid-beta tests/contracts/free-schema.contract.test.ts && git commit -m "refactor(data): remove billing schema facts"`
+  Run: `git add prisma/schema.prisma prisma/migrations/20260811130000_remove_billing_schema/migration.sql src/lib/paid-beta tests/contracts/free-schema.contract.test.ts && git commit -m "refactor(data): remove billing schema facts"`
 
 ### Task 6: Replace the architecture module and make the guard merge-safe
 

@@ -15,7 +15,7 @@ import { queryKeys } from '@/lib/query/keys'
 export interface CanvasOperationRequest {
   readonly operationId: string
   readonly input: Readonly<Record<string, unknown>>
-  readonly confirmation: 'billable_media'
+  readonly confirmation: 'none'
   readonly onAccepted?: (plan: OperationPlanView | null) => void
 }
 

@@ -13,11 +13,12 @@ import {
   splitPlannedOperationInvocation,
   type PlannedOperationInvocation,
 } from './planned-operation-invocation'
-import type {
-  OperationMutationReceipt,
-  ProjectAgentOperationContext,
-  ProjectAgentOperationDefinition,
-  ProjectAgentOperationRegistry,
+import {
+  isPlannedOperation,
+  type OperationMutationReceipt,
+  type ProjectAgentOperationContext,
+  type ProjectAgentOperationDefinition,
+  type ProjectAgentOperationRegistry,
 } from './types'
 import { assertAssistantToolWriteAuthority } from './write-authority'
 import { assertOperationChannelAllowed, type OperationInvocationChannel } from './channel-policy'
@@ -195,7 +196,6 @@ export async function invokeProjectAgentOperation(params: {
     (params.channel !== 'tool' ||
       (operation.intent !== 'act' && operation.intent !== 'plan') ||
       !operation.effects.writes ||
-      operation.effects.billable ||
       operation.effects.externalSideEffects ||
       operation.effects.longRunning ||
       (
@@ -226,7 +226,7 @@ export async function invokeProjectAgentOperation(params: {
         projectId: params.context.projectId,
       })
     : []
-  if (affectedResources.length > 0 && operation.confirmation.kind === 'billable_media') {
+  if (affectedResources.length > 0 && isPlannedOperation(operation)) {
     throw new Error(`OPERATION_RESOURCE_TASK_TERMINAL_REQUIRED:${operation.id}`)
   }
   if (affectedResources.length > 0 && !operation.executeInTransaction) {
@@ -247,14 +247,14 @@ export async function invokeProjectAgentOperation(params: {
 
   let parsedOutputData: unknown
   let mutationReceipt: OperationMutationReceipt | null = null
-  if (operation.confirmation.kind === 'billable_media') {
-    throw new Error(`OPERATION_BILLABLE_DURABLE_EXECUTION_REQUIRED:${operation.id}`)
+  if (isPlannedOperation(operation)) {
+    throw new Error(`OPERATION_PLAN_EXECUTION_REQUIRED:${operation.id}`)
   } else {
     if (prepared.invocation) {
       throw new ApiError('INVALID_PARAMS', {
         code: 'APPROVAL_GRANT_NOT_APPLICABLE',
         operationId: operation.id,
-        message: 'approval provenance is only valid for billable media operations',
+        message: 'approval provenance is only valid for planned operation execution',
       })
     }
     const executeInTransaction = operation.executeInTransaction
@@ -321,7 +321,7 @@ export async function invokeProjectAgentOperation(params: {
     } else {
       const execute = operation.execute
       if (!execute) {
-        throw new Error(`DIRECT_OPERATION_EXECUTOR_MISSING:${operation.id}`)
+        throw new Error(`DIRECT_OPERATION_EXECUTOR_MISSING:${params.operationId}`)
       }
       const result = await execute(params.context, parsedInput)
       parsedOutputData = parseOutput(result)

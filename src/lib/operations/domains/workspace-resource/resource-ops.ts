@@ -121,7 +121,6 @@ const restoreResourceOutputSchema = z.object({
 
 const readEffects = {
   writes: false,
-  billable: false,
   destructive: false,
   overwrite: false,
   bulk: false,
@@ -133,7 +132,6 @@ function writeEffects(input: { readonly destructive: boolean; readonly overwrite
   return {
     writes: true,
     workspaceResourceImpact: 'workspace_resources' as const,
-    billable: false,
     destructive: input.destructive,
     overwrite: input.overwrite,
     bulk: input.bulk,

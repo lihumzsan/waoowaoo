@@ -55,7 +55,6 @@ export function createWorkspaceResourceUploadedMediaOperations(): ProjectAgentOp
       effects: {
         writes: true,
         workspaceResourceImpact: 'workspace_resources',
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,

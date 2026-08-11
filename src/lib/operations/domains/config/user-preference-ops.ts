@@ -78,7 +78,6 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
       effects: {
         writes: true,
         workspaceResourceImpact: 'none',
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,
@@ -122,7 +121,6 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
       effects: {
         writes: true,
         workspaceResourceImpact: 'none',
-        billable: false,
         destructive: false,
         overwrite: true,
         bulk: false,

@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
-import { toMoneyNumber, type MoneyValue } from '@/lib/billing/money'
 import { resolveTaskLocale } from '@/lib/task/resolve-locale'
 import {
   formatProjectValidationIssue,
@@ -35,7 +34,6 @@ function readProjectDraftBody(body: unknown): ProjectDraftInput {
 
 const EFFECTS_QUERY = {
   writes: false,
-  billable: false,
   destructive: false,
   overwrite: false,
   bulk: false,
@@ -46,7 +44,6 @@ const EFFECTS_QUERY = {
 const EFFECTS_WRITE = {
   writes: true,
   workspaceResourceImpact: 'none',
-  billable: false,
   destructive: false,
   overwrite: false,
   bulk: false,
@@ -58,7 +55,7 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
   return {
     list_projects: defineOperation({
       id: 'list_projects',
-      summary: 'List user projects with pagination, cost and basic stats.',
+      summary: 'List user projects with pagination and basic stats.',
       intent: 'query',
       channels: { tool: false, api: true },
       effects: EFFECTS_QUERY,
@@ -101,14 +98,7 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
         })
 
         const projectIds = projects.map((project) => project.id)
-        const [costsByProject, resourceCounts] = await Promise.all([
-          projectIds.length === 0
-            ? []
-            : prisma.usageCost.groupBy({
-                by: ['projectId'],
-                where: { projectId: { in: projectIds } },
-                _sum: { cost: true },
-              }),
+        const [resourceCounts] = await Promise.all([
           projectIds.length === 0
             ? []
             : prisma.workspaceResource.groupBy({
@@ -121,13 +111,6 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
                 _count: { _all: true },
               }),
         ])
-
-        const costMap = new Map(
-          (costsByProject as Array<{ projectId: string; _sum: { cost: MoneyValue } }>).map((item) => [
-            item.projectId,
-            toMoneyNumber(item._sum.cost),
-          ]),
-        )
 
         const statsMap = new Map<string, {
           resources: number
@@ -152,7 +135,6 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
 
         const projectsWithStats = projects.map((project) => ({
           ...project,
-          totalCost: costMap.get(project.id) ?? 0,
           stats: statsMap.get(project.id) ?? {
             resources: 0,
             folders: 0,

@@ -45,7 +45,7 @@ function mergeConfirmation(
     confirmation?: Omit<OperationConfirmation, 'kind'> & {
       kind?: OperationApprovalKind
     }
-    effects: { billable: boolean; destructive: boolean; overwrite: boolean }
+    effects: { destructive: boolean; overwrite: boolean }
   },
   defaults: OperationPackDefaults,
 ): OperationConfirmation {
@@ -57,9 +57,7 @@ function mergeConfirmation(
       ? 'none'
       : operation.effects.destructive || operation.effects.overwrite
         ? 'destructive'
-        : operation.effects.billable
-          ? 'billable_media'
-          : 'destructive')
+        : 'none')
   return {
     kind,
     required,
@@ -136,7 +134,7 @@ export function withOperationPack(
       : undefined
     const toolContractRevision =
       channels.tool && operation.effects.writes
-        ? operation.confirmation?.kind === 'billable_media'
+        ? typeof operation.plan === 'function' && typeof operation.commit === 'function'
           ? planContractRevision
           : operation.assistantWriteAuthority?.kind
               === 'temporal_operation_execution'

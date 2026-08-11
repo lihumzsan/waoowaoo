@@ -7,78 +7,34 @@ import Navbar from '@/components/Navbar'
 import AccountSecurityTab from './components/AccountSecurityTab'
 import ApiConfigTab from './components/ApiConfigTab'
 import ProfileSidebar, { type ProfileSectionItem } from './components/ProfileSidebar'
-import ProfileOverviewSection, { type ProfileBalanceSummary } from './components/ProfileOverviewSection'
-import ProfileBillingSection, {
-  type ProfileProjectCostDetail,
-  type ProfileProjectCostSummary,
-} from './components/ProfileBillingSection'
-import { type ProfileTransactionItem } from './components/ProfileTransactionsTable'
 import { BrandPageLoading } from '@/components/ui/BrandLoading'
 import { AppIcon } from '@/components/ui/icons'
 import { useRouter } from '@/i18n/navigation'
 import { readProfileSectionParam, type ProfileSection } from '@/lib/profile/sections'
 import { apiFetch } from '@/lib/api-fetch'
-import { readClientApiError } from '@/lib/errors/client'
-import { useToast } from '@/contexts/ToastContext'
-import PaidBetaCheckoutSuccessDialog from '@/components/paid-beta/PaidBetaCheckoutSuccessDialog'
 import {
   isPublicDeploymentFeatures,
   type PublicDeploymentFeatures,
 } from '@/lib/deployment/public-client'
-import {
-  DEFAULT_USER_TIME_ZONE,
-  resolveBrowserUserTimeZone,
-} from '@/lib/user-time-zone'
 
 type DeploymentPayload = {
   features?: PublicDeploymentFeatures
-  billingMode?: string
-}
-
-type TransactionsPayload = {
-  transactions?: ProfileTransactionItem[]
-}
-
-type ProjectCostsPayload = {
-  total?: number
-  byProject?: ProfileProjectCostSummary[]
-}
-
-type ProjectCostDetailsPayload = {
-  records?: ProfileProjectCostDetail[]
 }
 
 function isDeploymentPayload(value: unknown): value is DeploymentPayload {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
-function isBalancePayload(value: unknown): value is ProfileBalanceSummary {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function isTransactionsPayload(value: unknown): value is TransactionsPayload {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function isProjectCostsPayload(value: unknown): value is ProjectCostsPayload {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function isProjectCostDetailsPayload(value: unknown): value is ProjectCostDetailsPayload {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
 function getDefaultProfileSection(features: PublicDeploymentFeatures): ProfileSection {
-  if (features.showBilling) return 'overview'
   if (features.showAccountSecurity) return 'security'
   if (features.showApiConfig) return 'apiConfig'
-  return 'overview'
+  return 'security'
 }
 
 function isProfileSectionEnabled(section: ProfileSection, features: PublicDeploymentFeatures): boolean {
   if (section === 'security') return features.showAccountSecurity
   if (section === 'apiConfig') return features.showApiConfig
-  return features.showBilling
+  return section === 'security' || section === 'apiConfig'
 }
 
 export default function ProfilePage() {
@@ -87,7 +43,6 @@ export default function ProfilePage() {
   const searchParams = useSearchParams()
   const t = useTranslations('profile')
   const tc = useTranslations('common')
-  const { showError } = useToast()
   if (!searchParams) {
     throw new Error('ProfilePage requires searchParams')
   }
@@ -96,24 +51,11 @@ export default function ProfilePage() {
 
   const [deploymentFeatures, setDeploymentFeatures] = useState<PublicDeploymentFeatures | null>(null)
   const [deploymentLoadFailed, setDeploymentLoadFailed] = useState(false)
-  const [balance, setBalance] = useState<ProfileBalanceSummary | null>(null)
-  const [transactions, setTransactions] = useState<ProfileTransactionItem[]>([])
-  const [projectCosts, setProjectCosts] = useState<ProfileProjectCostSummary[]>([])
-  const [totalProjectCost, setTotalProjectCost] = useState(0)
-  const [paymentNotice, setPaymentNotice] = useState<string | null>(null)
-  const [userTimeZone, setUserTimeZone] = useState(DEFAULT_USER_TIME_ZONE)
   const isSigningOutRef = useRef(false)
   const activeSection = deploymentFeatures
     && !isProfileSectionEnabled(urlSection, deploymentFeatures)
     ? getDefaultProfileSection(deploymentFeatures)
     : urlSection
-  const checkoutSucceeded = searchParams.get('payment') === 'success'
-    || searchParams.get('plan') === 'success'
-  const checkoutSessionId = checkoutSucceeded ? searchParams.get('session_id') : null
-
-  useEffect(() => {
-    setUserTimeZone(resolveBrowserUserTimeZone())
-  }, [])
 
   const handleSignOut = useCallback(async () => {
     isSigningOutRef.current = true
@@ -168,89 +110,6 @@ export default function ProfilePage() {
     )
   }, [deploymentFeatures, router, urlSection])
 
-  const loadBalance = useCallback(async () => {
-    try {
-      const response = await apiFetch('/api/user/balance')
-      if (!response.ok) throw await readClientApiError(response)
-      const payload: unknown = await response.json()
-      if (!isBalancePayload(payload)) throw new Error('BALANCE_RESPONSE_INVALID')
-      setBalance(payload)
-    } catch (error) {
-      showError(error, t('balanceLoadFailed'))
-    }
-  }, [showError, t])
-
-  const loadTransactions = useCallback(async () => {
-    try {
-      const response = await apiFetch('/api/user/transactions?pageSize=20')
-      if (!response.ok) throw await readClientApiError(response)
-      const payload: unknown = await response.json()
-      if (!isTransactionsPayload(payload) || !Array.isArray(payload.transactions)) {
-        throw new Error('TRANSACTIONS_RESPONSE_INVALID')
-      }
-      setTransactions(payload.transactions)
-    } catch (error) {
-      showError(error, t('transactionsLoadFailed'))
-    }
-  }, [showError, t])
-
-  const loadProjectCosts = useCallback(async () => {
-    try {
-      const response = await apiFetch('/api/user/costs')
-      if (!response.ok) throw await readClientApiError(response)
-      const payload: unknown = await response.json()
-      if (
-        !isProjectCostsPayload(payload)
-        || typeof payload.total !== 'number'
-        || !Array.isArray(payload.byProject)
-      ) {
-        throw new Error('PROJECT_COSTS_RESPONSE_INVALID')
-      }
-      setTotalProjectCost(payload.total)
-      setProjectCosts(payload.byProject)
-    } catch (error) {
-      showError(error, t('projectCostsLoadFailed'))
-    }
-  }, [showError, t])
-
-  const loadProjectCostDetails = useCallback(async (
-    projectId: string,
-  ): Promise<readonly ProfileProjectCostDetail[]> => {
-    try {
-      const query = new URLSearchParams({ projectId, pageSize: '100' })
-      const response = await apiFetch(`/api/user/costs/details?${query.toString()}`)
-      if (!response.ok) throw await readClientApiError(response)
-      const payload: unknown = await response.json()
-      if (!isProjectCostDetailsPayload(payload) || !Array.isArray(payload.records)) {
-        throw new Error('PROJECT_COST_DETAILS_RESPONSE_INVALID')
-      }
-      return payload.records
-    } catch (error) {
-      showError(error, t('projectCostDetailsLoadFailed'))
-      return []
-    }
-  }, [showError, t])
-
-  useEffect(() => {
-    if (!session || deploymentFeatures?.showBilling !== true) return
-    void loadBalance()
-    void loadTransactions()
-    void loadProjectCosts()
-  }, [session, deploymentFeatures, loadBalance, loadTransactions, loadProjectCosts])
-
-  useEffect(() => {
-    const paymentStatus = searchParams.get('payment')
-    if (paymentStatus === 'success') {
-      setPaymentNotice(t('recharge.successNotice'))
-    } else if (paymentStatus === 'cancel') {
-      setPaymentNotice(t('recharge.cancelNotice'))
-    } else if (searchParams.get('plan') === 'success') {
-      setPaymentNotice(t('recharge.planSuccessNotice'))
-    } else if (searchParams.get('plan') === 'cancel') {
-      setPaymentNotice(t('recharge.cancelNotice'))
-    }
-  }, [searchParams, t])
-
   if (deploymentLoadFailed) {
     throw new Error('PROFILE_DEPLOYMENT_FEATURES_UNAVAILABLE')
   }
@@ -259,21 +118,12 @@ export default function ProfilePage() {
     return <BrandPageLoading />
   }
 
-  const noBillingText = t('openSourceNoBilling')
-  const showBilling = deploymentFeatures?.showBilling === true
-  const showRecharge = deploymentFeatures?.showRecharge === true
   const sectionItems: ProfileSectionItem[] = [
-    ...(deploymentFeatures?.showBilling === true
-      ? [{ section: 'overview' as const, icon: 'user' as const, label: t('accountOverview') }]
-      : []),
     ...(deploymentFeatures?.showAccountSecurity === true
       ? [{ section: 'security' as const, icon: 'lock' as const, label: t('accountSecurity.title') }]
       : []),
     ...(deploymentFeatures?.showApiConfig === true
       ? [{ section: 'apiConfig' as const, icon: 'settingsHexAlt' as const, label: t('apiConfig') }]
-      : []),
-    ...(deploymentFeatures?.showBilling === true
-      ? [{ section: 'billing' as const, icon: 'receipt' as const, label: t('accountTransactions') }]
       : []),
   ]
 
@@ -323,48 +173,15 @@ export default function ProfilePage() {
               <div className="glass-surface-elevated overflow-hidden">
                 <ApiConfigTab />
               </div>
-            ) : activeSection === 'overview' && showBilling ? (
-              <ProfileOverviewSection
-                balance={balance}
-                transactions={transactions}
-                timeZone={userTimeZone}
-                showUpgrade={showRecharge}
-                paymentNotice={paymentNotice}
-                onViewAllTransactions={() => handleSectionChange('billing')}
-              />
-            ) : activeSection === 'billing' && showBilling ? (
-              <ProfileBillingSection
-                transactions={transactions}
-                projectCosts={projectCosts}
-                totalProjectCost={totalProjectCost}
-                timeZone={userTimeZone}
-                currency={balance?.currency}
-                onLoadProjectDetails={loadProjectCostDetails}
-                onRefresh={() => {
-                  void loadBalance()
-                  void loadTransactions()
-                  void loadProjectCosts()
-                }}
-              />
             ) : (
               <div className="glass-surface-elevated flex min-h-64 flex-col items-center justify-center px-6 py-16 text-center">
-                <AppIcon name="receipt" className="mb-4 h-12 w-12 text-[var(--glass-text-tertiary)]" />
-                <p className="text-base font-semibold text-[var(--glass-text-primary)]">{noBillingText}</p>
+                <AppIcon name="user" className="mb-4 h-12 w-12 text-[var(--glass-text-tertiary)]" />
+                <p className="text-base font-semibold text-[var(--glass-text-primary)]">{t('pageTitle')}</p>
               </div>
             )}
           </div>
         </div>
       </main>
-
-      <PaidBetaCheckoutSuccessDialog
-        providerObjectId={checkoutSessionId}
-        onClose={() => {
-          router.replace(
-            { pathname: '/profile', query: { section: activeSection } },
-            { scroll: false },
-          )
-        }}
-      />
 
     </div>
   )

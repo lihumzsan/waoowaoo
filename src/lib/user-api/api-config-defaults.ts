@@ -1,6 +1,5 @@
 import { ApiError } from '@/lib/api-errors'
 import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
-import type { PricingApiType } from '@/lib/ai-registry/pricing-catalog'
 import {
   DEFAULT_ANALYSIS_WORKFLOW_CONCURRENCY,
   DEFAULT_IMAGE_WORKFLOW_CONCURRENCY,
@@ -9,28 +8,7 @@ import {
 } from '@/lib/workflow-concurrency'
 import type { DefaultModelField, DefaultModelsPayload, StoredModel, WorkflowConcurrencyPayload } from './api-config-types'
 import { DEFAULT_MODEL_FIELDS } from './api-config-types'
-import { getProviderKey, isRecord, readTrimmedString } from './api-config-shared'
-import { hasBuiltinPricingForModel } from './api-config-model-normalization'
-
-const DEFAULT_FIELD_TO_PRICING_API_TYPE: Readonly<Record<DefaultModelField, PricingApiType>> = {
-  assistantModel: 'text',
-  analysisModel: 'text',
-  characterModel: 'image',
-  locationModel: 'image',
-  editModel: 'image',
-  videoModel: 'video',
-  musicModel: 'music',
-  soundModel: 'sound',
-}
-
-const BILLABLE_MODEL_TYPE_TO_PRICING_API_TYPE: Readonly<Record<StoredModel['type'], PricingApiType | null>> = {
-  llm: 'text',
-  image: 'image',
-  video: 'video',
-  music: 'music',
-  sound: 'sound',
-  voice: 'voice',
-}
+import { isRecord, readTrimmedString } from './api-config-shared'
 
 const DEFAULT_FIELD_TO_MODEL_TYPE: Readonly<Record<DefaultModelField, StoredModel['type']>> = {
   assistantModel: 'llm',
@@ -42,8 +20,6 @@ const DEFAULT_FIELD_TO_MODEL_TYPE: Readonly<Record<DefaultModelField, StoredMode
   musicModel: 'music',
   soundModel: 'sound',
 }
-
-const OPTIONAL_PRICING_PROVIDER_KEYS = new Set<string>()
 
 function validateDefaultModelKey(field: DefaultModelField, value: unknown): string | null {
   // Contract anchor: default model key must be provider::modelId
@@ -133,69 +109,6 @@ export function normalizeWorkflowConcurrencyInput(rawWorkflowConcurrency: unknow
   }
 
   return normalized
-}
-
-export function validateDefaultModelPricing(defaultModels: DefaultModelsPayload) {
-  for (const field of DEFAULT_MODEL_FIELDS) {
-    const modelKey = defaultModels[field]
-    if (!modelKey) continue
-
-    const parsed = parseModelKeyStrict(modelKey)
-    if (!parsed) continue
-    if (OPTIONAL_PRICING_PROVIDER_KEYS.has(getProviderKey(parsed.provider))) continue
-    const apiType = DEFAULT_FIELD_TO_PRICING_API_TYPE[field]
-
-    if (!hasBuiltinPricingForModel(apiType, parsed.provider, parsed.modelId)) {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'DEFAULT_MODEL_PRICING_NOT_CONFIGURED',
-        field: `defaultModels.${field}`,
-        modelKey: parsed.modelKey,
-        apiType,
-      })
-    }
-  }
-}
-
-function isModelPricedForBilling(model: StoredModel): boolean {
-  const apiType = BILLABLE_MODEL_TYPE_TO_PRICING_API_TYPE[model.type]
-  if (!apiType) return true
-  if (OPTIONAL_PRICING_PROVIDER_KEYS.has(getProviderKey(model.provider))) return true
-  return hasBuiltinPricingForModel(apiType, model.provider, model.modelId)
-}
-
-export function sanitizeModelsForBilling(models: StoredModel[]): StoredModel[] {
-  return models.filter((model) => isModelPricedForBilling(model))
-}
-
-export function sanitizeDefaultModelsForBilling(defaultModels: DefaultModelsPayload): DefaultModelsPayload {
-  const sanitized: DefaultModelsPayload = {}
-
-  for (const field of DEFAULT_MODEL_FIELDS) {
-    const rawModelKey = defaultModels[field]
-    if (rawModelKey === undefined) continue
-    const modelKey = readTrimmedString(rawModelKey)
-    if (!modelKey) {
-      sanitized[field] = ''
-      continue
-    }
-
-    const parsed = parseModelKeyStrict(modelKey)
-    if (!parsed) {
-      sanitized[field] = ''
-      continue
-    }
-    if (OPTIONAL_PRICING_PROVIDER_KEYS.has(getProviderKey(parsed.provider))) {
-      sanitized[field] = parsed.modelKey
-      continue
-    }
-
-    const apiType = DEFAULT_FIELD_TO_PRICING_API_TYPE[field]
-    sanitized[field] = hasBuiltinPricingForModel(apiType, parsed.provider, parsed.modelId)
-      ? parsed.modelKey
-      : ''
-  }
-
-  return sanitized
 }
 
 function hasCandidateModelsForField(field: DefaultModelField, models: StoredModel[]): boolean {

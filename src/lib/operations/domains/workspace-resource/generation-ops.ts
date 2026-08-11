@@ -70,7 +70,6 @@ import {
 } from '@/lib/operations/project-video-ratio-policy'
 import {
   createPlannedTask,
-  requirePlannedTaskBillingInfo,
   submitPlannedOperationTasks,
   type OperationPlan,
   type PlannedTask,
@@ -133,7 +132,6 @@ const videoMediaRequestSchema = z.object({
 
 const rerunFailedItemsInputSchema = z.object({
   resourceIds: z.array(z.string().trim().min(1).max(32)).min(1).max(MAX_BATCH_ITEMS),
-  maxBudgetCredits: z.number().finite().positive().optional(),
 }).strict().superRefine((value, context) => {
   if (new Set(value.resourceIds).size !== value.resourceIds.length) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['resourceIds'], message: 'resourceIds must be unique' })
@@ -208,7 +206,6 @@ const productionPlanMetadataSchema = z.object({
 const MEDIA_EFFECTS = {
   writes: true,
   workspaceResourceImpact: 'none',
-  billable: true,
   destructive: false,
   overwrite: false,
   bulk: true,
@@ -751,15 +748,6 @@ function modelPayload(
   return { videoModel: modelKey }
 }
 
-function modalityForMedia(
-  mediaType: PlannedResource['mediaType'],
-  audioKind?: AudioGenerationKind,
-): 'image' | 'video' | 'music' | 'sound' {
-  if (mediaType !== 'audio') return mediaType
-  if (!audioKind) throw new Error('WORKSPACE_RESOURCE_AUDIO_KIND_REQUIRED')
-  return audioKind
-}
-
 function generationInputFingerprint(input: {
   readonly mediaType: PlannedResource['mediaType']
   readonly audioKind?: AudioGenerationKind
@@ -951,11 +939,6 @@ async function buildPlannedItem(input: {
       dedupeKey: input.existingTarget
         ? `${input.operationId}:revise_failed:${resourceId}:${input.existingTarget.sourceTaskId}:${inputHash}`
         : `${input.operationId}:${resourceId}:${inputHash}`,
-      billingInfo: requirePlannedTaskBillingInfo({
-        taskType,
-        payload,
-          allowedApiTypes: [modalityForMedia(mediaType, audioKind)],
-      }),
     }),
     resource: {
       resourceId,
@@ -979,21 +962,6 @@ function requestIdentity(ctx: ProjectAgentOperationContext, operationId: string,
     ctx.context.turnId?.trim() || 'no-turn',
     ctx.toolCallId?.trim() || ctx.requestId?.trim() || stableArgsHash(value),
   ].join(':')
-}
-
-function assertBudget(tasks: readonly PlannedTask[], maxBudgetCredits: number | undefined): void {
-  if (maxBudgetCredits === undefined) return
-  const frozen = tasks.reduce((total, task) => (
-    task.billingInfo.billable ? total + task.billingInfo.maxFrozenCost : total
-  ), 0)
-  if (frozen > maxBudgetCredits) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'WORKSPACE_RESOURCE_BATCH_BUDGET_EXCEEDED',
-      field: 'maxBudgetCredits',
-      requiredCredits: frozen,
-      maxBudgetCredits,
-    })
-  }
 }
 
 function buildPlan(input: {
@@ -1056,7 +1024,6 @@ async function planNewMedia(
     }))
   )))
   assertUniqueWorkspaceResourcePaths(built.map((entry) => entry.resource.workspacePath))
-  assertBudget(built.map((entry) => entry.task), request.maxBudgetCredits)
   return buildPlan({
     ctx,
     operationId,
@@ -1136,7 +1103,6 @@ async function planReviseFailedVideo(
       },
     })
   }))
-  assertBudget(built.map((entry) => entry.task), request.maxBudgetCredits)
   return buildPlan({
     ctx,
     operationId: 'create_video',
@@ -1250,11 +1216,6 @@ async function loadFailedTasks(
         targetType: 'WorkspaceResource',
         targetId: resource.id,
         payload,
-        billingInfo: requirePlannedTaskBillingInfo({
-          taskType,
-          payload,
-          allowedApiTypes: [modalityForMedia(mediaType, source.resource.audioKind)],
-        }),
         locale: resolveOperationLocale(ctx.context),
         dedupeKey: `rerun:${resource.id}:${resource.task.id}`,
       }),
@@ -1277,7 +1238,6 @@ async function planRetry(
   ctx: ProjectAgentOperationContext,
   operationId: string,
   resourceIds: readonly string[],
-  maxBudgetCredits?: number,
 ): Promise<OperationPlan> {
   const built = await loadFailedTasks(ctx, resourceIds)
   const expectedType = operationId === 'create_image'
@@ -1290,7 +1250,6 @@ async function planRetry(
   if (expectedType && built.some((entry) => entry.resource.mediaType !== expectedType)) {
     throw new Error(`WORKSPACE_RESOURCE_RETRY_MEDIA_TYPE_INVALID:${operationId}`)
   }
-  assertBudget(built.map((entry) => entry.task), maxBudgetCredits)
   return buildPlan({
     ctx,
     operationId,
@@ -1399,8 +1358,6 @@ function mediaOperationBase(input: {
   readonly operationId: 'create_image' | 'create_audio' | 'create_video'
   readonly mediaType: PlannedResource['mediaType']
   readonly schemaIds: readonly string[]
-  readonly defaultSchemaId: string
-  readonly mediaKind: 'image' | 'music' | 'video'
   readonly durationSeconds?: { readonly min: number; readonly max: number }
 }) {
   return {
@@ -1419,20 +1376,8 @@ function mediaOperationBase(input: {
       outputMediaTypes: [input.mediaType],
       outputSchemaIds: input.schemaIds,
       placement: 'required',
-      alternativeGeneration: {
-        kind: 'request_count',
-        mediaKind: input.mediaKind,
-        requestKind: 'new',
-        defaultSchemaId: input.defaultSchemaId,
-        minCount: 1,
-        maxCount: 6,
-        inputLimits: {
-          promptMaxLength: 100_000,
-          ...(input.durationSeconds ? { durationSeconds: input.durationSeconds } : {}),
-        },
-      },
     },
-    confirmation: { kind: 'billable_media', required: true },
+    confirmation: { kind: 'none', required: false },
     planContractRevision: MEDIA_GENERATION_PLAN_CONTRACT_REVISION,
     outputSchema: mediaOutputSchema,
   } as const
@@ -1449,7 +1394,6 @@ export function createWorkspaceResourceGenerationOperations(): ProjectAgentOpera
       effects: {
         writes: true,
         workspaceResourceImpact: 'workspace_resources',
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,
@@ -1571,9 +1515,7 @@ export function createWorkspaceResourceGenerationOperations(): ProjectAgentOpera
       ...mediaOperationBase({
         operationId: 'create_image',
         mediaType: 'image',
-        mediaKind: 'image',
         schemaIds: WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.image,
-        defaultSchemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_IMAGE,
       }),
       inputSchema: imageMediaRequestSchema,
       plan: async (ctx, value) => value.request.kind === 'retry'
@@ -1585,9 +1527,7 @@ export function createWorkspaceResourceGenerationOperations(): ProjectAgentOpera
       ...mediaOperationBase({
         operationId: 'create_audio',
         mediaType: 'audio',
-        mediaKind: 'music',
         schemaIds: WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.audio,
-        defaultSchemaId: WORKSPACE_RESOURCE_SCHEMA.BGM_AUDIO,
         durationSeconds: { min: 1, max: 600 },
       }),
       inputSchema: audioMediaRequestSchema,
@@ -1600,9 +1540,7 @@ export function createWorkspaceResourceGenerationOperations(): ProjectAgentOpera
       ...mediaOperationBase({
         operationId: 'create_video',
         mediaType: 'video',
-        mediaKind: 'video',
         schemaIds: WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.video,
-        defaultSchemaId: WORKSPACE_RESOURCE_SCHEMA.VIDEO_SEGMENT,
         durationSeconds: { min: 1, max: CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS },
       }),
       inputSchema: videoMediaRequestSchema,
@@ -1620,7 +1558,7 @@ export function createWorkspaceResourceGenerationOperations(): ProjectAgentOpera
       channels: { tool: true, api: true, mcp: true },
       effects: MEDIA_EFFECTS,
       resourceContract: { kind: 'none', reason: 'reruns existing failed Resource identities without creating new Resources' },
-      confirmation: { kind: 'billable_media', required: true },
+      confirmation: { kind: 'none', required: false },
       planContractRevision: MEDIA_GENERATION_PLAN_CONTRACT_REVISION,
       inputSchema: rerunFailedItemsInputSchema,
       outputSchema: mediaOutputSchema,
@@ -1628,7 +1566,6 @@ export function createWorkspaceResourceGenerationOperations(): ProjectAgentOpera
         ctx,
         'rerun_failed_production_items',
         input.resourceIds,
-        input.maxBudgetCredits,
       ),
       commit: async (ctx, _input, plan) => await commitProductionPlan(ctx, 'rerun_failed_production_items', plan),
     }),

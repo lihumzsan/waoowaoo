@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { isBillableTaskType } from '@/lib/billing/task-policy'
 import { TASK_DEFINITIONS } from '@/lib/task/definition'
 import { TASK_TYPE } from '@/lib/task/types'
 import { getTaskMaxAttempts } from '@/lib/task/retry-policy'
@@ -13,7 +12,7 @@ describe('TaskDefinition conformance', () => {
       const definition = TASK_DEFINITIONS[taskType]
       expect(getTaskMaxAttempts(taskType)).toBe(definition.maxAttempts)
       expect(definition.executionHandler.length).toBeGreaterThan(0)
-      expect(isBillableTaskType(taskType)).toBe(definition.billingPolicy !== 'none')
+      expect('billingPolicy' in definition).toBe(false)
       expect(definition.executionProtocol).toBe('handler_result_checkpoint')
       expect(definition.terminalSuccessHandoff).toBe('handler_result_checkpoint')
       expect(definition.submissionTargetOwnership).toBe('none')

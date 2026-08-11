@@ -51,7 +51,6 @@ import {
   resolveRegisteredPublicReasoningMode,
 } from '@/lib/ai-registry/llm-protocol'
 import { resolveProviderRouteSet } from '@/lib/ai-registry/provider-route-set'
-import { listBuiltinPricingCatalog } from '@/lib/ai-registry/pricing-catalog'
 import {
   getPlatformDefaultModelCatalog,
   getPlatformModels,
@@ -160,9 +159,6 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
     const capabilities = new Set(listBuiltinCapabilityCatalog()
       .filter((entry) => entry.provider === 'openrouter' && entry.modelType === 'llm')
       .map((entry) => entry.modelId))
-    const pricing = new Set(listBuiltinPricingCatalog()
-      .filter((entry) => entry.provider === 'openrouter' && entry.apiType === 'text')
-      .map((entry) => entry.modelId))
     const apiConfig = new Set(listApiConfigCatalogModels()
       .filter((model) => model.provider === 'openrouter' && model.type === 'llm')
       .map((model) => model.modelId))
@@ -172,13 +168,12 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
 
     for (const model of OPENROUTER_LLM_MODEL_DEFINITIONS) {
       expect(capabilities.has(model.modelId)).toBe(true)
-      expect(pricing.has(model.modelId)).toBe(model.pricingUsdPerMillion !== null)
       expect(apiConfig.has(model.modelId)).toBe(model.showInApiConfig)
       expect(platform.has(model.modelId)).toBe(model.showInPlatform)
     }
   })
 
-  it('publishes only priced and capable platform defaults', () => {
+  it('publishes only capable platform defaults', () => {
     const defaults = getPlatformDefaultModelCatalog()
     for (const model of defaults) {
       if (model.type === 'llm') {
@@ -188,11 +183,6 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
       }
       expect(listBuiltinCapabilityCatalog().some((entry) => (
         entry.modelType === model.type
-        && entry.provider === model.provider
-        && entry.modelId === model.modelId
-      ))).toBe(true)
-      expect(listBuiltinPricingCatalog().some((entry) => (
-        entry.apiType === (model.type === 'llm' ? 'text' : model.type)
         && entry.provider === model.provider
         && entry.modelId === model.modelId
       ))).toBe(true)

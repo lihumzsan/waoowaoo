@@ -20,7 +20,6 @@ import { validateProjectDraft, type ProjectUpdateInput } from '@/lib/projects/va
 import {
   type WorkspaceProjectListItem,
 } from '@/lib/projects/workspace-list-item'
-import { formatCredits } from '@/lib/billing/credits'
 import {
   requestOperationMutationVoidWithError,
 } from '@/lib/query/mutations/mutation-shared'
@@ -35,14 +34,6 @@ interface Pagination {
 }
 
 const PAGE_SIZE = 7 // 加上新建项目按钮正好8个，4列布局下2行
-const DEFAULT_BILLING_CURRENCY = 'CREDITS'
-
-function formatProjectCost(amount: number, currency = DEFAULT_BILLING_CURRENCY): string {
-  if (currency === 'USD') return `$${amount.toFixed(2)}`
-  if (currency === 'CREDITS') return `${formatCredits(amount)} credits`
-  return `${amount.toFixed(2)} ${currency}`
-}
-
 function toProjectValidationMessage(
   issue: ReturnType<typeof validateProjectDraft>,
   t: ReturnType<typeof useTranslations>,
@@ -501,11 +492,6 @@ export default function WorkspacePage() {
                       <AppIcon name="clock" className="w-3 h-3" />
                       {formatDate(project.updatedAt)}
                     </div>
-                    {project.totalCost !== undefined && project.totalCost > 0 && (
-                      <span className="text-[11px] font-mono font-medium text-[var(--glass-text-secondary)]">
-                        {formatProjectCost(project.totalCost)}
-                      </span>
-                    )}
                   </div>
                 </div>
               </Link>

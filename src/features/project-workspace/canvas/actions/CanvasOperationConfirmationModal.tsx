@@ -21,7 +21,6 @@ export function CanvasOperationConfirmationModal({
   readonly onCancel: () => void
 }) {
   const t = useTranslations('projectWorkflow.canvas.workspace.operationConfirm')
-  const cost = plan?.quote.showCredits ? plan.quote.totalMaxFrozenCost ?? 0 : null
 
   return (
     <GlassModalShell
@@ -62,9 +61,6 @@ export function CanvasOperationConfirmationModal({
           <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-200">
             <span className="text-sm text-[var(--glass-text-secondary)]">
               {t('taskCount', { count: plan.taskCount })}
-            </span>
-            <span className="text-sm font-semibold tabular-nums text-[var(--glass-text-primary)]">
-              {cost === null ? t('priceHidden') : t('priceCredits', { cost })}
             </span>
           </div>
         </div>

@@ -10,7 +10,7 @@ import {
   executeApprovedTaskOperationViaTemporal,
   executeDirectTaskOperationViaTemporal,
 } from '@/lib/operations/durable-dispatch'
-import { isBillablePlannedOperation } from '@/lib/operations/types'
+import { isPlannedOperation } from '@/lib/operations/types'
 import {
   extractPrismaMissingColumn,
 } from '@/lib/adapters/operation-error-normalizer'
@@ -91,7 +91,7 @@ export async function executeProjectAgentOperationFromApi(
   }
 
   try {
-    if (operation && isBillablePlannedOperation(operation)) {
+    if (operation && isPlannedOperation(operation)) {
       const prepared = await prepareProjectAgentOperationInput({
         channel: 'api',
         operation,

@@ -16,10 +16,6 @@ export function requireOfficialCloudPublicPage(): void {
   requireOfficialCloudFeature(readDeploymentFeatures().showOfficialPublicPages)
 }
 
-export function requireOfficialCloudPricingPage(): void {
-  requireOfficialCloudFeature(readDeploymentFeatures().showPricingPage)
-}
-
 export function requireOfficialCloudLegalPage(): void {
   requireOfficialCloudFeature(readDeploymentFeatures().showLegalPages)
 }

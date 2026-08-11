@@ -5,7 +5,6 @@ import path from 'node:path'
 const COMMON_REQUIRED_KEYS = [
   'DEPLOYMENT_EDITION',
   'PROVIDER_CREDENTIAL_MODE',
-  'BILLING_MODE',
   'NEXTAUTH_URL',
   'NEXTAUTH_SECRET',
   'CRON_SECRET',
@@ -206,10 +205,6 @@ if (env.DEPLOYMENT_EDITION !== 'cloud') {
 if (env.PROVIDER_CREDENTIAL_MODE !== 'platform-key') {
   missing.push('PROVIDER_CREDENTIAL_MODE=platform-key')
 }
-if (env.BILLING_MODE !== 'ENFORCE') {
-  missing.push('BILLING_MODE=ENFORCE')
-}
-
 if (env.CODEX_RUNTIME_DRIVER !== 'docker') {
   missing.push('CODEX_RUNTIME_DRIVER=docker')
 }

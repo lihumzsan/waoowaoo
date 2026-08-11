@@ -182,7 +182,6 @@ export type AiLlmUsage = {
   cachedInputTokens?: number
   cacheWriteTokens?: number
   cacheHitRate?: number
-  providerCostCredits?: number
 }
 
 export type AiLlmTermination = {

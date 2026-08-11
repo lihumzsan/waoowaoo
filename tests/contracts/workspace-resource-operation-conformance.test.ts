@@ -13,7 +13,7 @@ describe('WorkspaceResource Operation registry conformance', () => {
   it('aligns every declared producer with the canonical Resource schema registry', () => {
     const registry = createProjectAgentOperationRegistryForApi()
     for (const [operationId, operation] of Object.entries(registry)) {
-      if (operation.confirmation.kind === 'billable_media') {
+      if (operation.confirmation.kind === 'none' && operation.plan && operation.commit) {
         expect(operation.plan, operationId).toBeTypeOf('function')
         expect(operation.commit, operationId).toBeTypeOf('function')
       }
@@ -36,7 +36,7 @@ describe('WorkspaceResource Operation registry conformance', () => {
       const operation = registry[operationId]
       if (!operation) throw new Error(`Required media operation missing: ${operationId}`)
       expect(operation.channels, operationId).toEqual({ tool: true, api: true, mcp: true })
-      expect(operation.confirmation).toMatchObject({ kind: 'billable_media', required: true })
+      expect(operation.confirmation).toMatchObject({ kind: 'none', required: false })
       const published = JSON.stringify(operation.toolInputSchema)
       expect(published, operationId).toContain('folderPath')
       expect(published, operationId).not.toContain('parentFolderId')

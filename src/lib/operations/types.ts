@@ -168,7 +168,6 @@ export type OperationModelResultRetention =
   (typeof OPERATION_MODEL_RESULT_RETENTIONS)[number]
 
 type OperationEffectFlags = {
-  billable: boolean
   destructive: boolean
   overwrite: boolean
   bulk: boolean
@@ -194,7 +193,7 @@ export type AssistantOperationWriteAuthority = {
   followUpPolicy: 'after_all_terminal' | 'none'
 }
 
-export type OperationApprovalKind = 'none' | 'billable_media' | 'destructive'
+export type OperationApprovalKind = 'none' | 'destructive'
 
 export interface OperationConfirmation {
   kind: OperationApprovalKind
@@ -371,10 +370,9 @@ type DirectOperationBehavior<Input, Output> =
   | NonTransactionalDirectOperationBehavior<Input, Output>
   | TransactionalDirectOperationBehavior<Input, Output>
 
-type BillablePlannedOperationBehavior<Input, Output> = {
-  confirmation: Omit<OperationConfirmation, 'kind'> & {
-    kind: 'billable_media'
-    required: true
+type PlannedOperationBehavior<Input, Output> = {
+  confirmation: OperationConfirmation & {
+    kind: 'none' | 'destructive'
   }
   /**
    * Revision of the server-owned plan/commit contract consumed across the
@@ -397,7 +395,7 @@ export type ProjectAgentOperationDefinitionBase<
 > = ProjectAgentOperationDefinitionFields<Input, Output> &
   (
     | DirectOperationBehavior<Input, Output>
-    | BillablePlannedOperationBehavior<Input, Output>
+    | PlannedOperationBehavior<Input, Output>
   )
 
 type NormalizedOperationFields = {
@@ -417,31 +415,28 @@ type NormalizedDirectOperationBehavior<Input, Output> = DirectOperationBehavior<
   confirmation: OperationConfirmation & { kind: 'none' | 'destructive' }
 }
 
-type NormalizedBillableOperationBehavior<Input, Output> =
-  BillablePlannedOperationBehavior<Input, Output> & {
-    confirmation: OperationConfirmation & {
-      kind: 'billable_media'
-      required: true
-    }
+type NormalizedPlannedOperationBehavior<Input, Output> =
+  PlannedOperationBehavior<Input, Output> & {
+    confirmation: OperationConfirmation & { kind: 'none' | 'destructive' }
   }
 
-export type BillableProjectAgentOperationDefinition<
+export type PlannedProjectAgentOperationDefinition<
   Input = unknown,
   Output = unknown,
 > = ProjectAgentOperationDefinitionFields<Input, Output> &
   NormalizedOperationFields &
-  NormalizedBillableOperationBehavior<Input, Output>
+  NormalizedPlannedOperationBehavior<Input, Output>
 
 export type ProjectAgentOperationDefinition<Input = unknown, Output = unknown> =
   | (ProjectAgentOperationDefinitionFields<Input, Output> &
       NormalizedOperationFields &
       NormalizedDirectOperationBehavior<Input, Output>)
-  | BillableProjectAgentOperationDefinition<Input, Output>
+  | PlannedProjectAgentOperationDefinition<Input, Output>
 
-export function isBillablePlannedOperation<Input, Output>(
+export function isPlannedOperation<Input, Output>(
   operation: ProjectAgentOperationDefinition<Input, Output>,
-): operation is BillableProjectAgentOperationDefinition<Input, Output> {
-  return operation.confirmation.kind === 'billable_media'
+): operation is PlannedProjectAgentOperationDefinition<Input, Output> {
+  return typeof operation.plan === 'function' && typeof operation.commit === 'function'
 }
 
 export type ProjectAgentOperationRegistryDraft = Record<

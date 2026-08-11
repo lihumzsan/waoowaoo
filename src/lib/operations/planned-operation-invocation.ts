@@ -4,7 +4,7 @@ import { ApiError } from '@/lib/api-errors'
 import { prisma } from '@/lib/prisma'
 import { lockAgentTurnEffectFence } from '@/lib/agent-turn/effect-fence'
 import {
-  isBillablePlannedOperation,
+  isPlannedOperation,
   type ProjectAgentOperationContext,
   type ProjectAgentOperationDefinition,
 } from './types'
@@ -218,9 +218,6 @@ export async function issueApprovalGrantGroupInTransaction(
         requestId: request.requestId,
         inputHash: snapshot.inputHash,
         planHash: snapshot.planHash,
-        quoteHash: snapshot.quoteHash,
-        quoteCeiling: snapshot.quote.totalMaxFrozenCost ?? null,
-        currency: snapshot.quote.currency ?? null,
       },
     })
     issued.push({
@@ -350,7 +347,6 @@ function assertGrantMatchesSnapshot(params: {
     requestId: string
     inputHash: string
     planHash: string
-    quoteHash: string
     revokedAt: Date | null
   }
   requestId: string
@@ -364,7 +360,6 @@ function assertGrantMatchesSnapshot(params: {
   if (
     params.grant.inputHash !== params.snapshot.inputHash ||
     params.grant.planHash !== params.snapshot.planHash ||
-    params.grant.quoteHash !== params.snapshot.quoteHash ||
     params.grant.revokedAt
   ) {
     throw new ApiError('CONFLICT', { code: 'APPROVAL_GRANT_NOT_USABLE' })
@@ -410,7 +405,7 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
   normalizedInput: Input
   invocation: PlannedOperationInvocation
 }): Promise<Output> {
-  if (!isBillablePlannedOperation(params.operation)) {
+  if (!isPlannedOperation(params.operation)) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'APPROVAL_GRANT_NOT_APPLICABLE',
     })

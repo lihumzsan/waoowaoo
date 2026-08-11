@@ -3,7 +3,6 @@ import {
   hashOperationPlanArtifacts,
   type OperationPlanArtifactHashes,
 } from './operation-plan-snapshot'
-import { quoteOperationPlan } from './planning'
 import { freezeProjectVideoRatioIntoPlan } from './project-video-ratio-policy'
 
 export type OperationPlanArtifactKey = keyof OperationPlanArtifactHashes
@@ -12,7 +11,7 @@ export function changedOperationPlanArtifacts(
   snapshot: OperationPlanArtifactHashes,
   current: OperationPlanArtifactHashes,
 ): OperationPlanArtifactKey[] {
-  return (['inputHash', 'planHash', 'quoteHash'] as const).filter((key) => snapshot[key] !== current[key])
+  return (['inputHash', 'planHash'] as const).filter((key) => snapshot[key] !== current[key])
 }
 
 export async function buildCurrentOperationPlanArtifactHashes<Input>(params: {
@@ -29,10 +28,8 @@ export async function buildCurrentOperationPlanArtifactHashes<Input>(params: {
     executionAuthorization: null,
   }, params.normalizedInput)
   const currentPlan = await freezeProjectVideoRatioIntoPlan(rawCurrentPlan)
-  const currentQuote = await quoteOperationPlan(currentPlan)
   return hashOperationPlanArtifacts({
     normalizedInput: params.normalizedInput,
     plan: currentPlan,
-    quote: currentQuote,
   })
 }

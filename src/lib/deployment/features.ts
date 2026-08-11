@@ -5,12 +5,7 @@ export type PasswordAuthIdentity = 'username' | 'phone'
 
 export interface DeploymentFeatures {
   showOfficialPublicPages: boolean
-  showPricingPage: boolean
   showLegalPages: boolean
-  showRecharge: boolean
-  showSubscription: boolean
-  showBilling: boolean
-  showPublicBetaWaitlist: boolean
   showApiConfig: boolean
   showAccountSecurity: boolean
   showGoogleOAuth: boolean
@@ -27,12 +22,7 @@ type EditionDeploymentFeatures = Omit<DeploymentFeatures, 'showApiConfig'>
 
 const SELF_HOSTED_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   showOfficialPublicPages: false,
-  showPricingPage: false,
   showLegalPages: false,
-  showRecharge: false,
-  showSubscription: false,
-  showBilling: false,
-  showPublicBetaWaitlist: false,
   showAccountSecurity: false,
   showGoogleOAuth: false,
   showWechatOfficialAuth: false,
@@ -46,12 +36,7 @@ const SELF_HOSTED_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
 
 const CLOUD_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   showOfficialPublicPages: true,
-  showPricingPage: true,
   showLegalPages: true,
-  showRecharge: true,
-  showSubscription: true,
-  showBilling: true,
-  showPublicBetaWaitlist: true,
   showAccountSecurity: true,
   showGoogleOAuth: true,
   showWechatOfficialAuth: true,

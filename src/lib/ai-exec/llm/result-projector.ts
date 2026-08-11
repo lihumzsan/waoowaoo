@@ -4,7 +4,6 @@ import type {
   LanguageModelUsage,
   ProviderMetadata,
 } from 'ai'
-import { usdToCredits } from '@/lib/ai-registry/pricing-currency'
 import type {
   AiLlmExecutionResult,
   AiLlmTermination,
@@ -61,13 +60,6 @@ function projectTermination(finishReason: FinishReason, rawFinishReason?: string
   }
 }
 
-function readOpenRouterCost(providerMetadata: ProviderMetadata | undefined): number | null {
-  const openRouter = isRecord(providerMetadata?.openrouter) ? providerMetadata.openrouter : null
-  const usage = isRecord(openRouter?.usage) ? openRouter.usage : null
-  const cost = usage?.cost
-  return typeof cost === 'number' && Number.isFinite(cost) && cost >= 0 ? cost : null
-}
-
 function projectUsage(
   usage: LanguageModelUsage,
   providerMetadata: ProviderMetadata | undefined,
@@ -77,7 +69,6 @@ function projectUsage(
   const totalTokens = toTokenCount(usage.totalTokens) || promptTokens + completionTokens
   const cachedInputTokens = toTokenCount(usage.inputTokenDetails.cacheReadTokens)
   const cacheWriteTokens = toTokenCount(usage.inputTokenDetails.cacheWriteTokens)
-  const openRouterCostUsd = readOpenRouterCost(providerMetadata)
   return {
     promptTokens,
     completionTokens,
@@ -86,9 +77,6 @@ function projectUsage(
     ...(cacheWriteTokens > 0 ? { cacheWriteTokens } : {}),
     ...(cachedInputTokens > 0 && promptTokens > 0
       ? { cacheHitRate: cachedInputTokens / promptTokens }
-      : {}),
-    ...(openRouterCostUsd !== null
-      ? { providerCostCredits: usdToCredits(openRouterCostUsd) }
       : {}),
   }
 }
@@ -186,7 +174,6 @@ export function parseStoredAiLlmExecutionResult(value: unknown): AiLlmExecutionR
   const cachedInputTokens = parseOptionalNonNegativeNumber(value.usage.cachedInputTokens, 'usage.cachedInputTokens')
   const cacheWriteTokens = parseOptionalNonNegativeNumber(value.usage.cacheWriteTokens, 'usage.cacheWriteTokens')
   const cacheHitRate = parseOptionalNonNegativeNumber(value.usage.cacheHitRate, 'usage.cacheHitRate')
-  const providerCostCredits = parseOptionalNonNegativeNumber(value.usage.providerCostCredits, 'usage.providerCostCredits')
 
   return {
     schemaVersion: 1,
@@ -203,7 +190,6 @@ export function parseStoredAiLlmExecutionResult(value: unknown): AiLlmExecutionR
       ...(cachedInputTokens !== undefined ? { cachedInputTokens } : {}),
       ...(cacheWriteTokens !== undefined ? { cacheWriteTokens } : {}),
       ...(cacheHitRate !== undefined ? { cacheHitRate } : {}),
-      ...(providerCostCredits !== undefined ? { providerCostCredits } : {}),
     },
     response: {
       ...(parseOptionalString(value.response.id, 'response.id') !== undefined

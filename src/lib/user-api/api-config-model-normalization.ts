@@ -1,20 +1,10 @@
 import { ApiError } from '@/lib/api-errors'
 import { composeModelKey, parseModelKeyStrict } from '@/lib/ai-registry/selection'
-import { findBuiltinPricingCatalogEntry, type PricingApiType } from '@/lib/ai-registry/pricing-catalog'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import type { StoredModel, StoredProvider } from './api-config-types'
 import { isRecord, isUnifiedModelType, readTrimmedString } from './api-config-shared'
 import { resolveProviderByIdOrKey } from './api-config-provider-normalization'
 import { resolveBuiltinCapabilities } from './api-config-pricing-display'
-
-const BILLABLE_MODEL_TYPE_TO_PRICING_API_TYPE: Readonly<Record<StoredModel['type'], PricingApiType | null>> = {
-  llm: 'text',
-  image: 'image',
-  video: 'video',
-  music: 'music',
-  sound: 'sound',
-  voice: 'voice',
-}
 
 export function withBuiltinCapabilities(model: StoredModel): StoredModel {
   const capabilities = resolveBuiltinCapabilities(model.type, model.provider, model.modelId)
@@ -118,27 +108,6 @@ export function validateModelProviderTypeSupport(models: StoredModel[], provider
   void providers
 }
 
-export function hasBuiltinPricingForModel(apiType: PricingApiType, provider: string, modelId: string): boolean {
-  // findBuiltinPricingCatalogEntry handles providerKey stripping and alias fallback internally
-  return !!findBuiltinPricingCatalogEntry(apiType, provider, modelId)
-}
-
-export function validateBillableModelPricing(models: StoredModel[]) {
-  for (let index = 0; index < models.length; index += 1) {
-    const model = models[index]
-    const apiType = BILLABLE_MODEL_TYPE_TO_PRICING_API_TYPE[model.type]
-    if (!apiType) continue
-
-    if (!hasBuiltinPricingForModel(apiType, model.provider, model.modelId)) {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'MODEL_PRICING_NOT_CONFIGURED',
-        field: `models[${index}].modelId`,
-        modelKey: model.modelKey,
-        apiType,
-      })
-    }
-  }
-}
 
 export function parseStoredModels(rawModels: string | null | undefined): StoredModel[] {
   if (!rawModels) return []

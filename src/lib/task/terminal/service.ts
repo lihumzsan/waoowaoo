@@ -2,12 +2,7 @@ import { Prisma } from '@prisma/client'
 import type { FailureRecord } from '@/lib/errors/failure'
 import { prisma } from '@/lib/prisma'
 import { createScopedLogger } from '@/lib/logging/core'
-import {
-  rollbackTaskBillingInTransaction,
-  settleTaskBillingInTransaction,
-} from '@/lib/billing'
 import { projectTaskTargetTerminalInTransaction } from '@/lib/task/target-failure-sync'
-import { parseTaskBillingInfo } from '@/lib/task/billing-info'
 import {
   parseTaskHandlerCheckpointOutput,
   type TaskHandlerCheckpointOutput,
@@ -19,7 +14,6 @@ import {
   isTaskType,
   TASK_EVENT_TYPE,
   TASK_STATUS,
-  type TaskBillingInfo,
   type TaskType,
 } from '@/lib/task/types'
 import {
@@ -46,7 +40,6 @@ type TerminalTaskRow = {
   status: string
   attempt: number
   payload: unknown
-  billingInfo: unknown
   operationId: string | null
   operationExecutionId: string | null
   updatedAt: Date
@@ -116,7 +109,7 @@ async function loadLockedTask(
 ): Promise<TerminalTaskRow | null> {
   const rows = await tx.$queryRaw<TerminalTaskRow[]>(Prisma.sql`
     SELECT id, userId, projectId, type, targetType, targetId,
-           status, attempt, payload, billingInfo, operationId, operationExecutionId, updatedAt
+           status, attempt, payload, operationId, operationExecutionId, updatedAt
     FROM tasks
     WHERE id = ${taskId}
     FOR UPDATE
@@ -185,11 +178,6 @@ export async function commitTaskTerminal(
       }
 
       const taskType = requireTaskType(task.type)
-      const currentBillingInfo = parseTaskBillingInfo(
-        task.billingInfo,
-        taskType,
-      )
-      let nextBillingInfo = currentBillingInfo
       let failure: FailureRecord | null = null
       let completedOutput: TaskHandlerCheckpointOutput | null = null
       let materializedOutput: Record<string, unknown> | null = null
@@ -207,19 +195,6 @@ export async function commitTaskTerminal(
         )
           throw new Error(`TASK_TERMINAL_CHECKPOINT_INVALID:${task.id}`)
         completedOutput = parseTaskHandlerCheckpointOutput(checkpoint.output)
-        nextBillingInfo = (await settleTaskBillingInTransaction(
-          tx,
-          {
-            id: task.id,
-            projectId: task.projectId,
-            userId: task.userId,
-            billingInfo: currentBillingInfo,
-          },
-          {
-            result: completedOutput.result ?? undefined,
-            textUsage: completedOutput.textUsage,
-          },
-        )) as TaskBillingInfo | null
         materializedOutput =
           await materializeWorkspaceResourceTaskTerminalInTransaction(tx, {
             kind: 'completed',
@@ -289,11 +264,6 @@ export async function commitTaskTerminal(
             readyFollowUpBatchIds: [],
           }
         }
-        nextBillingInfo = (await rollbackTaskBillingInTransaction(tx, {
-          id: task.id,
-          userId: task.userId,
-          billingInfo: currentBillingInfo,
-        })) as TaskBillingInfo | null
       }
 
       const finishedAt = new Date()
@@ -308,11 +278,6 @@ export async function commitTaskTerminal(
               ? toJson(completedOutput?.result)
               : undefined,
           failure: failure ? toJson(failure) : Prisma.DbNull,
-          billingInfo: toJson(nextBillingInfo),
-          billedAt:
-            nextBillingInfo?.billable && nextBillingInfo.status === 'settled'
-              ? finishedAt
-              : null,
           finishedAt,
           dedupeKey: null,
         },
@@ -349,7 +314,6 @@ export async function commitTaskTerminal(
           ...toObject(intent.eventPayload),
           ...(completedOutput?.result ?? {}),
           ...(materializedOutput ?? {}),
-          billing: nextBillingInfo,
           ...(failure ? { errorCode: failure.interpretation.code } : {}),
           terminalSource:
             intent.kind === 'completed' ? 'worker' : intent.source,

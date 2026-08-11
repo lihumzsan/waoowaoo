@@ -1,5 +1,4 @@
 import { Prisma, type Task } from '@prisma/client'
-import { prepareTaskBillingInTransaction } from '@/lib/billing'
 import { resolveWorkspaceResourceRefs } from '@/lib/workspace-resource/resource-impact'
 import { getTaskDefinition } from './definition'
 import { buildTaskLifecycleEventPayload } from './publisher'
@@ -8,9 +7,7 @@ import { projectTaskLifecyclePayload } from './result-projection'
 import {
   TASK_EVENT_TYPE,
   TASK_STATUS,
-  type BillingMode,
   type CreateTaskInput,
-  type TaskBillingInfo,
   type WorkspaceResourceRef,
 } from './types'
 
@@ -36,7 +33,6 @@ type PersistedSubmittedTask = {
 async function persistValidatedSubmittedTaskInTransaction(params: {
   readonly tx: Prisma.TransactionClient
   readonly input: CreateTaskInput & { readonly id?: string }
-  readonly billingMode: BillingMode
   readonly affectedResources: readonly WorkspaceResourceRef[]
   readonly onTaskCreatedInTransaction?: (
     tx: Prisma.TransactionClient,
@@ -65,26 +61,10 @@ async function persistValidatedSubmittedTaskInTransaction(params: {
       operationRequestId: input.operationRequestId || null,
       payload: toJson(input.payload),
       executionFingerprint: createTaskExecutionFingerprint(input),
-      billingInfo: toJson(input.billingInfo),
       queuedAt: new Date(),
     },
   })
-  const preparedBilling = input.billingInfo === null || input.billingInfo === undefined
-    ? null
-    : await prepareTaskBillingInTransaction(
-      params.tx,
-      {
-        id: task.id,
-        userId: task.userId,
-        projectId: task.projectId,
-        billingInfo: input.billingInfo,
-      },
-      params.billingMode,
-    ) as TaskBillingInfo | null
-  const stored = await params.tx.task.update({
-    where: { id: task.id },
-    data: { billingInfo: toJson(preparedBilling) },
-  })
+  const stored = task
 
   await params.onTaskCreatedInTransaction?.(params.tx, stored)
 
@@ -107,7 +87,6 @@ async function persistValidatedSubmittedTaskInTransaction(params: {
         payload: projectTaskLifecyclePayload(input.type, {
           ...(input.payload || {}),
           parentTaskId: input.parentTaskId || null,
-          billing: preparedBilling,
           trace: { requestId: input.operationRequestId || null },
         }),
       })),
@@ -119,7 +98,6 @@ async function persistValidatedSubmittedTaskInTransaction(params: {
 export async function persistSubmittedTaskInTransaction(params: {
   readonly tx: Prisma.TransactionClient
   readonly input: CreateTaskInput & { readonly id?: string }
-  readonly billingMode: BillingMode
   readonly onTaskCreatedInTransaction?: (
     tx: Prisma.TransactionClient,
     task: { id: string },
@@ -208,7 +186,6 @@ async function lockExistingBatchTaskById(
 export async function persistSubmittedTaskBatchInTransaction(params: {
   readonly tx: Prisma.TransactionClient
   readonly inputs: readonly (CreateTaskInput & { readonly id?: string })[]
-  readonly billingMode: BillingMode
   readonly onBatchCreatedInTransaction?: (
     tx: Prisma.TransactionClient,
     orderedTasks: readonly PersistedBatchTask[],
@@ -245,7 +222,6 @@ export async function persistSubmittedTaskBatchInTransaction(params: {
       const persisted = await persistValidatedSubmittedTaskInTransaction({
         tx: params.tx,
         input,
-        billingMode: params.billingMode,
         affectedResources,
       })
       ordered.push({ ...persisted, deduped: false })

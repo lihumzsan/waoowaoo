@@ -31,7 +31,6 @@ const PROJECT_AGENT_OPERATION_TITLE_COPY: Record<string, ProjectAgentOperationTi
   get_user_preference: { zh: '读取用户偏好', en: 'Read user preference' },
   update_user_preference: { zh: '更新用户偏好', en: 'Update user preference' },
   list_user_models: { zh: '查看可用模型', en: 'List available models' },
-  list_user_transactions: { zh: '查看交易记录', en: 'List transactions' },
   delete_asset: { zh: '删除资产', en: 'Delete asset' },
   generate_character_image: { zh: '生成角色图片', en: 'Generate character image' },
   generate_location_image: { zh: '生成场景图片', en: 'Generate location image' },

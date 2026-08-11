@@ -50,7 +50,6 @@ export function createUserApiConfigOperations(): ProjectAgentOperationRegistryDr
       intent: 'query',
       effects: {
         writes: false,
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,
@@ -68,7 +67,6 @@ export function createUserApiConfigOperations(): ProjectAgentOperationRegistryDr
       effects: {
         writes: true,
         workspaceResourceImpact: 'none',
-        billable: false,
         destructive: false,
         overwrite: true,
         bulk: false,

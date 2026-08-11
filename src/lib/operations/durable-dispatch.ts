@@ -12,7 +12,7 @@ import type {
   ProjectAgentOperationDefinition,
   ProjectAgentOperationRegistry,
 } from './types'
-import { isBillablePlannedOperation } from './types'
+import { isPlannedOperation } from './types'
 import type { PlannedOperationInvocation } from './planned-operation-invocation'
 import {
   prepareProjectAgentOperationInput,
@@ -202,7 +202,7 @@ export async function executeApprovedTaskOperationViaTemporal(params: {
       message: `operation not found: ${params.operationId}`,
     })
   }
-  if (!isBillablePlannedOperation(operation)) {
+  if (!isPlannedOperation(operation)) {
     throw new Error(
       `OPERATION_EXECUTION_APPROVED_PLAN_REQUIRED:${params.operationId}`,
     )

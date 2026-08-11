@@ -23,7 +23,6 @@ const LIFECYCLE_FLOW_FIELDS = [
   'displayMode',
   'message',
   'trace',
-  'billing',
   'parentTaskId',
   'terminalSource',
   'errorCode',

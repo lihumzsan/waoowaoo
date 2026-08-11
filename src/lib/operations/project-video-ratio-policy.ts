@@ -68,8 +68,6 @@ export async function readProjectVideoRatioSnapshot(input: {
 function containsProjectImageOrVideoTask(plan: OperationPlan): boolean {
   if (plan.metadata?.[PROJECT_VIDEO_RATIO_REQUIRED_METADATA_KEY] === false) return false
   return plan.tasks.some((task) => {
-    if (!task.billingInfo.billable) return false
-    if (task.billingInfo.apiType !== 'image' && task.billingInfo.apiType !== 'video') return false
     if (
       task.taskType !== TASK_TYPE.WORKSPACE_RESOURCE_IMAGE
       && task.taskType !== TASK_TYPE.WORKSPACE_RESOURCE_VIDEO

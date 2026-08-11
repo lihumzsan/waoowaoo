@@ -1,5 +1,4 @@
 import { resolveTaskLocaleFromBody } from './resolve-locale'
-import { parseTaskBillingInfo } from './billing-info'
 import {
   isTaskType,
   type TaskExecutionData,
@@ -14,7 +13,6 @@ export type TaskExecutionDataSource = {
   targetType: string
   targetId: string
   payload: unknown
-  billingInfo: unknown
   userId: string
   operationId: string | null
   operationSource: string | null
@@ -83,7 +81,6 @@ export function buildTaskExecutionData(
     targetType: source.targetType,
     targetId: source.targetId,
     payload,
-    billingInfo: parseTaskBillingInfo(source.billingInfo, type),
     userId: source.userId,
     operationId: source.operationId,
     operationSource: source.operationSource,

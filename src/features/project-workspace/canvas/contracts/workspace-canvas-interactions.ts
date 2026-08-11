@@ -26,10 +26,10 @@ export type WorkspaceCanvasNodeActionKey =
  * Operation input in the View prevents the renderer from rebuilding frozen
  * references, scope, or retry facts.
  */
-export interface WorkspaceCanvasBillableOperationView {
+export interface WorkspaceCanvasMediaOperationView {
   readonly kind: Exclude<WorkspaceCanvasResourceOperationKind, 'delete'>
   readonly operationId: string
-  readonly confirmation: 'billable_media'
+  readonly confirmation: 'none'
   readonly input: WorkspaceResourceJsonObject
 }
 
@@ -45,7 +45,7 @@ export interface WorkspaceCanvasDeleteOperationView {
 }
 
 export type WorkspaceCanvasResourceOperationView =
-  | WorkspaceCanvasBillableOperationView
+  | WorkspaceCanvasMediaOperationView
   | WorkspaceCanvasDeleteOperationView
 
 /**

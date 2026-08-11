@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import { withRetry } from '@/lib/retry'
-import { TASK_STATUS, type TaskBillingInfo, type TaskStatus } from './types'
+import { TASK_STATUS, type TaskStatus } from './types'
 import { projectPersistedTaskProgressPayload } from './progress-payload'
 
 const taskModel = prisma.task
@@ -16,7 +16,7 @@ function toObject(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>
 }
 
-function toNullableJson(value?: Prisma.InputJsonValue | Record<string, unknown> | TaskBillingInfo | null) {
+function toNullableJson(value?: Prisma.InputJsonValue | Record<string, unknown> | null) {
   if (value === undefined) return undefined
   if (value === null) return Prisma.JsonNull
   return value as Prisma.InputJsonValue

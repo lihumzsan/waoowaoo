@@ -4,12 +4,7 @@ export type PublicDeploymentFeatures = DeploymentFeatures
 
 const BOOLEAN_DEPLOYMENT_FEATURE_KEYS = [
   'showOfficialPublicPages',
-  'showPricingPage',
   'showLegalPages',
-  'showRecharge',
-  'showSubscription',
-  'showBilling',
-  'showPublicBetaWaitlist',
   'showApiConfig',
   'showAccountSecurity',
   'showGoogleOAuth',

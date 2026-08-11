@@ -180,7 +180,7 @@ function resourceCard(resourceView: WorkspaceResourceView): WorkspaceResourceCar
     return [{
       kind: action.kind,
       operationId: action.operationId,
-      confirmation: 'billable_media' as const,
+      confirmation: 'none' as const,
       input: action.input,
     }]
   })

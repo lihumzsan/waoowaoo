@@ -54,7 +54,6 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
       effects: {
         writes: true,
         workspaceResourceImpact: 'none',
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: true,

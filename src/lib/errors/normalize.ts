@@ -1,8 +1,3 @@
-import {
-  BillingOperationError,
-  InsufficientBalanceError,
-  type BillingOperationErrorCode,
-} from '@/lib/billing/errors'
 import type { ExternalOperationId } from '@/lib/external-operation/registry'
 import {
   getPrismaErrorCode,
@@ -112,43 +107,6 @@ function inferCodeFromPrismaCode(prismaCode: string): UnifiedErrorCode {
   return 'INTERNAL_ERROR'
 }
 
-function codeFromBillingOperation(errorCode: BillingOperationErrorCode): UnifiedErrorCode {
-  switch (errorCode) {
-    case 'BILLING_ADJUSTMENT_IDEMPOTENCY_CONFLICT':
-    case 'BILLING_FREEZE_NOT_PENDING':
-    case 'BILLING_FREEZE_OWNERSHIP_MISMATCH':
-    case 'BILLING_BALANCE_DEBIT_CONFLICT':
-    case 'BILLING_IDEMPOTENT_ALREADY_CONFIRMED':
-    case 'BILLING_IDEMPOTENT_IN_PROGRESS':
-    case 'BILLING_IDEMPOTENT_ROLLED_BACK':
-    case 'BILLING_USAGE_REPLAY_DIVERGED':
-      return 'CONFLICT'
-    case 'BILLING_INVALID_ADJUSTMENT_AMOUNT':
-    case 'BILLING_INVALID_API_TYPE':
-    case 'BILLING_INVALID_CHARGED_AMOUNT':
-    case 'BILLING_INVALID_DELTA':
-    case 'BILLING_INVALID_FREEZE':
-    case 'BILLING_INVALID_FREEZE_AMOUNT':
-    case 'BILLING_INVALID_PROJECT':
-    case 'BILLING_INVALID_USAGE_IDENTITY':
-    case 'BILLING_UNKNOWN_VIDEO_CAPABILITY_COMBINATION':
-    case 'BILLING_UNKNOWN_VIDEO_RESOLUTION':
-      return 'INVALID_PARAMS'
-    case 'BILLING_CAPABILITY_PRICE_NOT_FOUND':
-    case 'BILLING_BALANCE_NOT_FOUND':
-    case 'BILLING_CONFIRM_FAILED':
-    case 'BILLING_FREEZE_EXPAND_FAILED':
-    case 'BILLING_FREEZE_FAILED':
-    case 'BILLING_PRICING_MODEL_AMBIGUOUS':
-    case 'BILLING_UNKNOWN_MODEL':
-      return 'INTERNAL_ERROR'
-    default: {
-      const exhaustive: never = errorCode
-      return exhaustive
-    }
-  }
-}
-
 function inferInterpretation(input: unknown, fallbackCode: UnifiedErrorCode): UnifiedErrorCode {
   const errorLike = (input || {}) as ErrorLike
   const message = toMessage(errorLike.message ?? input)
@@ -161,8 +119,6 @@ function inferInterpretation(input: unknown, fallbackCode: UnifiedErrorCode): Un
   const prismaCode = getPrismaErrorCode(input)
   if (prismaCode) return inferCodeFromPrismaCode(prismaCode)
   if (isLikelyPrismaDisconnectError(input)) return 'EXTERNAL_ERROR'
-  if (input instanceof InsufficientBalanceError) return 'INSUFFICIENT_BALANCE'
-  if (input instanceof BillingOperationError) return codeFromBillingOperation(input.code)
   const resolvedCode = resolveUnifiedErrorCode(errorLike.code)
   if (resolvedCode) return resolvedCode
   if (isModelNotOpenCode(errorLike.code)) return 'MODEL_NOT_OPEN'
@@ -178,9 +134,6 @@ function inferredDetails(input: unknown): Record<string, unknown> | null {
     ? errorLike.details as Record<string, unknown>
     : {}
   const prismaCode = getPrismaErrorCode(input)
-  if (input instanceof InsufficientBalanceError) {
-    return { ...details, required: input.required, available: input.available }
-  }
   return prismaCode ? { ...details, prismaCode } : Object.keys(details).length > 0 ? details : null
 }
 

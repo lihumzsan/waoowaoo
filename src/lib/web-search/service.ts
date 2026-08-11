@@ -15,7 +15,6 @@ import {
 import { executeOpenAIHostedWebSearch } from '@/lib/ai-exec/hosted-web-search'
 import { OPENAI_WEB_SEARCH_MODEL_ID } from '@/lib/ai-providers/openai/models'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
-import { findBuiltinPricingCatalogEntry } from '@/lib/ai-registry/pricing-catalog'
 import { WebSearchError } from './errors'
 import type { WebSearchProvider } from './provider'
 
@@ -40,15 +39,6 @@ export function resolveWebSearchModel(
     throw new WebSearchError('WEB_SEARCH_UNAVAILABLE', {
       provider: 'openai',
       reason: `${OPENAI_WEB_SEARCH_MODEL_ENV} must be a bare OpenAI model id, not a routed model key`,
-    })
-  }
-  // Usage settles from the pricing catalog after the response, so an unpriced
-  // override would fail only after the Provider has already been paid. Refuse
-  // it while the request is still free.
-  if (!findBuiltinPricingCatalogEntry('text', 'openai', configured)) {
-    throw new WebSearchError('WEB_SEARCH_UNAVAILABLE', {
-      provider: 'openai',
-      reason: `${OPENAI_WEB_SEARCH_MODEL_ENV}=${configured} has no registered price`,
     })
   }
   return configured

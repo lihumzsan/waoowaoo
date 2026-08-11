@@ -10,7 +10,6 @@ export const dynamic = 'force-dynamic'
 
 const OFFICIAL_PUBLIC_PATHS = [
   '',
-  '/pricing',
   '/terms',
   '/privacy',
   '/refund-policy',

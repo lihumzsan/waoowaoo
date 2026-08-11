@@ -1,12 +1,11 @@
-import { PricingGlassPageContent } from '../_pricing-glass/page-content'
+import { redirect } from '@/i18n/navigation'
 import type { Locale } from '@/i18n/routing'
 
-export const dynamic = 'force-dynamic'
-
-export default async function PricingPage({
+export default async function PricingRedirect({
   params,
 }: {
   readonly params: Promise<{ readonly locale: Locale }>
 }) {
-  return <PricingGlassPageContent params={params} />
+  const { locale } = await params
+  redirect({ href: '/', locale })
 }

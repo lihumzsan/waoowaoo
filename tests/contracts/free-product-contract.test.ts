@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -25,6 +25,21 @@ afterEach(() => {
 })
 
 describe('free product architecture contract', () => {
+  it('routes the active execution and schema boundary through free-product architecture', () => {
+    const modules = JSON.parse(readFileSync(path.resolve(process.cwd(), 'docs/architecture/modules.json'), 'utf8')) as {
+      modules: Array<{ id: string; document: string; sourcePaths: string[] }>
+    }
+    const freeProduct = modules.modules.find((module) => module.id === 'free-product')
+    expect(freeProduct?.document).toBe('docs/architecture/modules/free-product.md')
+    expect(freeProduct?.sourcePaths).toEqual(expect.arrayContaining([
+      'src/lib/operations',
+      'src/lib/task',
+      'prisma/schema.prisma',
+      'scripts/check-free-product-contract.mjs',
+    ]))
+    expect(modules.modules.some((module) => module.id === 'billing-approval')).toBe(false)
+  })
+
   it('rejects billing owners and payment dependencies in active production sources', () => {
     const rootDir = createFixture({
       'package.json': JSON.stringify({

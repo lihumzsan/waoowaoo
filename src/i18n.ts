@@ -29,7 +29,6 @@ export default getRequestConfig(async ({ requestLocale, locale: localeOverride }
         workspace,
         workspaceDetail,
         profile,
-        billing,
         apiTypes,
         video,
         assets,
@@ -46,8 +45,6 @@ export default getRequestConfig(async ({ requestLocale, locale: localeOverride }
         home,
         assistantAgent,
         legal,
-        pricing,
-        paidBeta,
         announcements,
         contact
     ] = await Promise.all([
@@ -62,7 +59,6 @@ export default getRequestConfig(async ({ requestLocale, locale: localeOverride }
         import(`../messages/${locale}/workspace.json`),
         import(`../messages/${locale}/workspaceDetail.json`),
         import(`../messages/${locale}/profile.json`),
-        import(`../messages/${locale}/billing.json`),
         import(`../messages/${locale}/apiTypes.json`),
         import(`../messages/${locale}/video.json`),
         import(`../messages/${locale}/assets.json`),
@@ -79,8 +75,6 @@ export default getRequestConfig(async ({ requestLocale, locale: localeOverride }
         import(`../messages/${locale}/home.json`),
         import(`../messages/${locale}/assistantAgent.json`),
         import(`../messages/${locale}/legal.json`),
-        import(`../messages/${locale}/pricing.json`),
-        import(`../messages/${locale}/paidBeta.json`),
         import(`../messages/${locale}/announcements.json`),
         import(`../messages/${locale}/contact.json`)
     ]);
@@ -102,7 +96,6 @@ export default getRequestConfig(async ({ requestLocale, locale: localeOverride }
             workspace: workspace.default,
             workspaceDetail: workspaceDetail.default,
             profile: profile.default,
-            billing: billing.default,
             apiTypes: apiTypes.default,
             video: video.default,
             assets: assets.default,
@@ -119,8 +112,6 @@ export default getRequestConfig(async ({ requestLocale, locale: localeOverride }
             home: home.default,
             assistantAgent: assistantAgent.default,
             legal: legal.default,
-            pricing: pricing.default,
-            paidBeta: paidBeta.default,
             announcements: announcements.default,
             contact: contact.default
         }

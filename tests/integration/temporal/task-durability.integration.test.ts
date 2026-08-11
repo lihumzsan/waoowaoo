@@ -427,9 +427,6 @@ describe('Temporal Task terminal and follow-up durability', () => {
         task,
         terminalEvents,
         checkpoint,
-        freeze,
-        refundTransactions,
-        consumeTransactions,
         resource,
         history,
       ] = await Promise.all([
@@ -440,7 +437,6 @@ describe('Temporal Task terminal and follow-up durability', () => {
             attempt: true,
             progress: true,
             failure: true,
-            billingInfo: true,
           },
         }),
         prisma.taskEvent.findMany({
@@ -458,22 +454,6 @@ describe('Temporal Task terminal and follow-up durability', () => {
             id: true,
             stepKey: true,
             state: true,
-          },
-        }),
-        prisma.balanceFreeze.findUniqueOrThrow({
-          where: { id: fixture.freezeId },
-          select: { status: true },
-        }),
-        prisma.balanceTransaction.count({
-          where: {
-            freezeId: fixture.freezeId,
-            type: 'refund',
-          },
-        }),
-        prisma.balanceTransaction.count({
-          where: {
-            freezeId: fixture.freezeId,
-            type: 'consume',
           },
         }),
         prisma.workspaceResource.findUniqueOrThrow({
@@ -494,10 +474,6 @@ describe('Temporal Task terminal and follow-up durability', () => {
         attempt: 1,
         progress: 100,
         failure: null,
-        billingInfo: {
-          status: 'settled',
-          freezeId: fixture.freezeId,
-        },
       })
       expect(terminalEvents).toHaveLength(1)
       expect(terminalEvents[0]?.eventType).toBe(TASK_EVENT_TYPE.COMPLETED)
@@ -506,9 +482,6 @@ describe('Temporal Task terminal and follow-up durability', () => {
         stepKey: '__handler_result__',
         state: 'ready',
       })
-      expect(freeze.status).toBe('confirmed')
-      expect(refundTransactions).toBe(0)
-      expect(consumeTransactions).toBe(1)
       expect(resource).toEqual({
         status: 'ready',
         currentVersion: 1,

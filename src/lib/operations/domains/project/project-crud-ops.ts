@@ -90,7 +90,6 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
       channels: { tool: false, api: true },
       effects: {
         writes: false,
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,
@@ -116,7 +115,6 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
       effects: {
         writes: true,
         workspaceResourceImpact: 'project_data',
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,
@@ -192,7 +190,6 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
       effects: {
         writes: true,
         workspaceResourceImpact: 'none',
-        billable: false,
         destructive: true,
         overwrite: true,
         bulk: true,

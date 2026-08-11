@@ -1,13 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import type { TextUsageEntry } from '@/lib/billing/runtime-usage'
 
 export const TASK_HANDLER_RESULT_STEP_KEY = '__handler_result__'
 
 export type TaskHandlerCheckpointOutput = {
   result: Record<string, unknown> | null
-  textUsage: TextUsageEntry[]
 }
 
 function canonicalize(value: unknown): unknown {
@@ -31,25 +29,6 @@ export async function loadTaskExecutionFingerprint(taskId: string): Promise<stri
   return task.executionFingerprint
 }
 
-function parseTextUsage(value: unknown): TextUsageEntry[] {
-  if (!Array.isArray(value)) throw new Error('TASK_EXECUTION_CHECKPOINT_USAGE_INVALID')
-  return value.map((item) => {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) {
-      throw new Error('TASK_EXECUTION_CHECKPOINT_USAGE_ENTRY_INVALID')
-    }
-    const record = item as Record<string, unknown>
-    const valid = typeof record.model === 'string' && record.model.trim().length > 0
-      && typeof record.inputTokens === 'number' && Number.isSafeInteger(record.inputTokens) && record.inputTokens >= 0
-      && typeof record.outputTokens === 'number' && Number.isSafeInteger(record.outputTokens) && record.outputTokens >= 0
-      && (record.cachedInputTokens === undefined || (typeof record.cachedInputTokens === 'number' && Number.isSafeInteger(record.cachedInputTokens) && record.cachedInputTokens >= 0))
-      && (record.cacheWriteTokens === undefined || (typeof record.cacheWriteTokens === 'number' && Number.isSafeInteger(record.cacheWriteTokens) && record.cacheWriteTokens >= 0))
-      && (record.cacheHitRate === undefined || (typeof record.cacheHitRate === 'number' && Number.isFinite(record.cacheHitRate) && record.cacheHitRate >= 0 && record.cacheHitRate <= 1))
-      && (record.providerCostCredits === undefined || (typeof record.providerCostCredits === 'number' && Number.isFinite(record.providerCostCredits) && record.providerCostCredits >= 0))
-    if (!valid) throw new Error('TASK_EXECUTION_CHECKPOINT_USAGE_ENTRY_INVALID')
-    return record as unknown as TextUsageEntry
-  })
-}
-
 export function parseTaskHandlerCheckpointOutput(value: unknown): TaskHandlerCheckpointOutput {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('TASK_EXECUTION_CHECKPOINT_OUTPUT_INVALID')
@@ -60,7 +39,6 @@ export function parseTaskHandlerCheckpointOutput(value: unknown): TaskHandlerChe
   }
   return {
     result: record.result as Record<string, unknown> | null,
-    textUsage: parseTextUsage(record.textUsage),
   }
 }
 
