@@ -11,8 +11,10 @@ import {
   succeedCodexProviderAttempt,
   type CodexProviderAttemptIdentity,
 } from './provider-attempt'
+import { createScopedLogger } from '@/lib/logging/core'
 
 const MAX_SSE_EVENT_CHARS = 20 * 1024 * 1024
+const providerObserverLogger = createScopedLogger({ module: 'codex-gateway.model' })
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -99,7 +101,15 @@ export async function observeCodexProviderSuccessResponse(input: {
   readonly requestSignal: AbortSignal
   readonly providerRequestId: string | null
   readonly headerGenerationId: string | null
+  readonly projectId?: string
+  readonly userId?: string
+  readonly turnId?: string
+  readonly modelKey?: string
+  readonly responseStartedAt?: number
 }): Promise<Response> {
+  const turnId = input.turnId ?? input.attempt.turnId
+  const modelKey = input.modelKey ?? input.attempt.modelKey
+  const responseStartedAt = input.responseStartedAt ?? Date.now()
   const contentType = input.response.headers.get('content-type')?.toLowerCase() ?? ''
   if (!contentType.includes('text/event-stream')) {
     let payload: unknown
@@ -163,14 +173,34 @@ export async function observeCodexProviderSuccessResponse(input: {
 
   const reader = input.response.body.getReader()
   const decoder = new TextDecoder()
-  const encoder = new TextEncoder()
   let buffer = ''
   let terminalObserved = false
   let settlementStarted = false
+  let firstProviderEventObserved = false
+  let firstPullObserved = false
+  let firstChunkObserved = false
 
   const consumeBlock = async (block: string): Promise<void> => {
     const payload = readSseData(block)
     if (!isRecord(payload)) return
+    if (!firstProviderEventObserved) {
+      firstProviderEventObserved = true
+      providerObserverLogger.info({
+        action: 'codex_gateway.provider_first_event',
+        message: 'Codex model Provider first SSE event received',
+        ...(input.projectId ? { projectId: input.projectId } : {}),
+        ...(input.userId ? { userId: input.userId } : {}),
+        details: {
+          turnId,
+          providerAttemptId: input.attempt.id,
+          modelKey,
+          elapsedMs: Date.now() - responseStartedAt,
+          eventType: readString(payload.type, 256),
+          providerRequestId: input.providerRequestId,
+          providerGenerationId: responseIdentity(payload, input.headerGenerationId),
+        },
+      })
+    }
     if (payload.type === 'response.failed') {
       const source = streamFailureSource(payload)
       settlementStarted = true
@@ -197,12 +227,47 @@ export async function observeCodexProviderSuccessResponse(input: {
   const stream = new ReadableStream<Uint8Array>({
     async pull(controller) {
       try {
+        if (!firstPullObserved) {
+          firstPullObserved = true
+          providerObserverLogger.info({
+            action: 'codex_gateway.provider_stream_pull_started',
+            message: 'Codex model Provider response stream consumption started',
+            ...(input.projectId ? { projectId: input.projectId } : {}),
+            ...(input.userId ? { userId: input.userId } : {}),
+            details: {
+              turnId,
+              providerAttemptId: input.attempt.id,
+              modelKey,
+              elapsedMs: Date.now() - responseStartedAt,
+              providerRequestId: input.providerRequestId,
+              providerGenerationId: input.headerGenerationId,
+            },
+          })
+        }
         const next = await reader.read()
+        if (!firstChunkObserved) {
+          firstChunkObserved = true
+          providerObserverLogger.info({
+            action: 'codex_gateway.provider_first_chunk',
+            message: 'Codex model Provider first response stream chunk received',
+            ...(input.projectId ? { projectId: input.projectId } : {}),
+            ...(input.userId ? { userId: input.userId } : {}),
+            details: {
+              turnId,
+              providerAttemptId: input.attempt.id,
+              modelKey,
+              elapsedMs: Date.now() - responseStartedAt,
+              done: next.done,
+              chunkBytes: next.done ? 0 : next.value.byteLength,
+              providerRequestId: input.providerRequestId,
+              providerGenerationId: input.headerGenerationId,
+            },
+          })
+        }
         if (next.done) {
           buffer += decoder.decode()
           if (buffer) {
             await consumeBlock(buffer)
-            controller.enqueue(encoder.encode(buffer))
             buffer = ''
           }
           if (!terminalObserved) {
@@ -226,7 +291,6 @@ export async function observeCodexProviderSuccessResponse(input: {
           const frame = buffer.slice(0, end)
           buffer = buffer.slice(end)
           await consumeBlock(frame.slice(0, -delimiter[0].length))
-          controller.enqueue(encoder.encode(frame))
         }
         if (buffer.length > MAX_SSE_EVENT_CHARS) {
           const source = {
@@ -244,7 +308,14 @@ export async function observeCodexProviderSuccessResponse(input: {
           terminalObserved = true
           await reader.cancel(source)
           controller.error(new Error('CODEX_PROVIDER_STREAM_EVENT_TOO_LARGE', { cause: source }))
+          return
         }
+        // Successful Provider streams are byte-transparent. Observation keeps
+        // its own parsing buffer but must never wait for a complete SSE frame
+        // before forwarding a network chunk: large events routinely span
+        // multiple chunks, and withholding a partial frame creates a
+        // backpressure deadlock between the Runtime and the Provider.
+        controller.enqueue(next.value)
       } catch (error: unknown) {
         if (!terminalObserved && !settlementStarted) {
           settlementStarted = true

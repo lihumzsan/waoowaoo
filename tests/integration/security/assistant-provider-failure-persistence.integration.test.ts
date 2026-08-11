@@ -292,8 +292,22 @@ describe('Assistant Provider source failure persistence', () => {
         },
       },
     }
+    const terminalFrame = `data: ${JSON.stringify(terminalPayload)}\n\n`
+    const splitAt = terminalFrame.indexOf('response.failed') + 'response.'.length
+    const firstChunk = terminalFrame.slice(0, splitAt)
+    const secondChunk = terminalFrame.slice(splitAt)
+    const chunks = [firstChunk, secondChunk]
     const observed = await observeCodexProviderSuccessResponse({
-      response: new Response(`data: ${JSON.stringify(terminalPayload)}\n\n`, {
+      response: new Response(new ReadableStream<Uint8Array>({
+        pull(controller) {
+          const chunk = chunks.shift()
+          if (chunk === undefined) {
+            controller.close()
+            return
+          }
+          controller.enqueue(new TextEncoder().encode(chunk))
+        },
+      }), {
         status: 200,
         headers: { 'content-type': 'text/event-stream' },
       }),
@@ -302,8 +316,14 @@ describe('Assistant Provider source failure persistence', () => {
       providerRequestId: 'provider-stream-request',
       headerGenerationId: null,
     })
-    const firstFrame = await observed.body?.getReader().read()
-    expect(new TextDecoder().decode(firstFrame?.value)).toContain('response.failed')
+    if (!observed.body) throw new Error('OBSERVED_PROVIDER_STREAM_BODY_MISSING')
+    const reader = observed.body.getReader()
+    const firstFrame = await reader.read()
+    expect(new TextDecoder().decode(firstFrame?.value)).toBe(firstChunk)
+    while (!(await reader.read()).done) {
+      // The observer must see the terminal frame before the persisted attempt
+      // is asserted below; the first partial chunk must still be forwarded.
+    }
 
     const stored = await prisma.projectAgentProviderAttempt.findUniqueOrThrow({
       where: { id: attempt.id },

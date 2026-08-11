@@ -29,8 +29,77 @@ const CODEX_MODEL_REQUEST_MAX_BYTES = 16 * 1024 * 1024
 
 const gatewayLogger = createScopedLogger({ module: 'codex-gateway.model' })
 
+type ProviderRequestDiagnostics = {
+  readonly bodyBytes: number
+  readonly inputItems: number
+  readonly inputTypeCounts: Readonly<Record<string, number>>
+  readonly toolDefinitions: number
+  readonly toolStructure: ReadonlyArray<{
+    readonly type: string | null
+    readonly name: string | null
+    readonly fields: readonly string[]
+    readonly formatType: string | null
+    readonly formatFields: readonly string[]
+    readonly formatBytes: number
+    readonly grammarDefinitionCharacters: number
+    readonly descriptionCharacters: number
+    readonly parametersBytes: number
+  }>
+  readonly instructionCharacters: number
+  readonly topLevelFields: readonly string[]
+  readonly include: readonly string[]
+  readonly parallelToolCalls: boolean | null
+  readonly toolChoiceType: string | null
+  readonly reasoningFields: readonly string[]
+  readonly reasoningEffort: string | null
+  readonly reasoningSummary: string | null
+  readonly reasoningContextType: string
+  readonly reasoningContextValue: string | null
+  readonly reasoningContextFields: readonly string[]
+  readonly reasoningContextBytes: number
+  readonly textFields: readonly string[]
+  readonly textVerbosity: string | null
+  readonly clientMetadataFields: readonly string[]
+  readonly promptCacheKeyCharacters: number
+}
+
+function providerToolStructure(toolValue: unknown): ProviderRequestDiagnostics['toolStructure'][number] {
+  const tool = isRecord(toolValue) ? toolValue : {}
+  const format = isRecord(tool.format) ? tool.format : {}
+  return {
+    type: typeof tool.type === 'string' ? tool.type : null,
+    name: typeof tool.name === 'string' ? tool.name : null,
+    fields: Object.keys(tool).sort(),
+    formatType: typeof format.type === 'string' ? format.type : null,
+    formatFields: Object.keys(format).sort(),
+    formatBytes: tool.format === undefined
+      ? 0
+      : Buffer.byteLength(JSON.stringify(tool.format), 'utf8'),
+    grammarDefinitionCharacters: typeof format.definition === 'string'
+      ? format.definition.length
+      : 0,
+    descriptionCharacters: typeof tool.description === 'string'
+      ? tool.description.length
+      : 0,
+    parametersBytes: tool.parameters === undefined
+      ? 0
+      : Buffer.byteLength(JSON.stringify(tool.parameters), 'utf8'),
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function providerInputTypeCounts(values: readonly unknown[]): Readonly<Record<string, number>> {
+  const counts: Record<string, number> = {}
+  for (const value of values) {
+    const type = isRecord(value) && typeof value.type === 'string'
+      ? value.type
+      : 'unknown'
+    counts[type] = (counts[type] ?? 0) + 1
+  }
+  return counts
 }
 
 function validateResponsesEndpoint(request: Request): void {
@@ -69,13 +138,23 @@ function isUnreplayableReasoningItem(item: Record<string, unknown>): boolean {
     && (typeof item.encrypted_content !== 'string' || !item.encrypted_content.trim())
 }
 
+function readAdditionalTools(item: Record<string, unknown>): readonly unknown[] | null {
+  if (item.type !== 'additional_tools') return null
+  if (item.role !== 'developer' || !Array.isArray(item.tools) || item.tools.length === 0) {
+    throw new CodexModelGatewayError('REQUEST_BODY_INVALID', 400)
+  }
+  return item.tools
+}
+
 /**
  * Codex may append current-Turn developer context after Product View history.
  * OpenRouter's Anthropic-compatible routes translate that item to a mid-history
  * system message and reject the otherwise valid Responses request. The gateway
  * is the single provider adaptation boundary, so it lifts every instruction
- * message into the canonical top-level `instructions` field while preserving
- * all user, assistant, tool and reasoning items in their original order.
+ * message into canonical top-level `instructions`. Codex 0.146 also emits its
+ * tool registry as an `additional_tools` developer item; Responses Providers
+ * require those definitions in the top-level `tools` field. All remaining
+ * user, assistant, tool and replayable reasoning items preserve their order.
  */
 export function normalizeCodexProviderRequest(body: Record<string, unknown>): void {
   const topLevel = body.instructions
@@ -84,13 +163,23 @@ export function normalizeCodexProviderRequest(body: Record<string, unknown>): vo
   }
   if (!Array.isArray(body.input)) return
 
+  if (body.tools !== undefined && !Array.isArray(body.tools)) {
+    throw new CodexModelGatewayError('REQUEST_BODY_INVALID', 400)
+  }
+
   const instructions = typeof topLevel === 'string' && topLevel.trim()
     ? [topLevel]
     : []
+  const tools = Array.isArray(body.tools) ? [...body.tools] : []
   const input: unknown[] = []
   for (const item of body.input) {
     if (!isRecord(item)) {
       input.push(item)
+      continue
+    }
+    const additionalTools = readAdditionalTools(item)
+    if (additionalTools) {
+      tools.push(...additionalTools)
       continue
     }
     // With `store: false`, only encrypted reasoning output is a replayable
@@ -104,13 +193,17 @@ export function normalizeCodexProviderRequest(body: Record<string, unknown>): vo
   }
   body.input = input
   if (instructions.length > 0) body.instructions = instructions.join('\n\n')
+  if (tools.length > 0) body.tools = tools
 }
 
 async function readAndValidateBody(params: {
   readonly request: Request
   readonly runtimeModelId: string
   readonly upstreamModelId: string
-}): Promise<Buffer> {
+}): Promise<{
+  readonly body: Buffer
+  readonly diagnostics: ProviderRequestDiagnostics
+}> {
   const contentType = params.request.headers.get('content-type')?.toLowerCase()
     || ''
   if (!contentType.startsWith('application/json')) {
@@ -140,7 +233,69 @@ async function readAndValidateBody(params: {
   }
   normalizeCodexProviderRequest(parsed)
   parsed.model = params.upstreamModelId
-  return Buffer.from(JSON.stringify(parsed), 'utf8')
+  const normalizedBody = Buffer.from(JSON.stringify(parsed), 'utf8')
+  return {
+    body: normalizedBody,
+    diagnostics: {
+      bodyBytes: normalizedBody.byteLength,
+      inputItems: Array.isArray(parsed.input) ? parsed.input.length : 0,
+      inputTypeCounts: Array.isArray(parsed.input)
+        ? providerInputTypeCounts(parsed.input)
+        : {},
+      toolDefinitions: Array.isArray(parsed.tools) ? parsed.tools.length : 0,
+      toolStructure: Array.isArray(parsed.tools)
+        ? parsed.tools.map(providerToolStructure)
+        : [],
+      instructionCharacters: typeof parsed.instructions === 'string'
+        ? parsed.instructions.length
+        : 0,
+      topLevelFields: Object.keys(parsed).sort(),
+      include: Array.isArray(parsed.include)
+        ? parsed.include.filter((entry): entry is string => typeof entry === 'string')
+        : [],
+      parallelToolCalls: typeof parsed.parallel_tool_calls === 'boolean'
+        ? parsed.parallel_tool_calls
+        : null,
+      toolChoiceType: typeof parsed.tool_choice === 'string'
+        ? parsed.tool_choice
+        : isRecord(parsed.tool_choice) && typeof parsed.tool_choice.type === 'string'
+          ? parsed.tool_choice.type
+          : null,
+      reasoningFields: isRecord(parsed.reasoning) ? Object.keys(parsed.reasoning).sort() : [],
+      reasoningEffort: isRecord(parsed.reasoning) && typeof parsed.reasoning.effort === 'string'
+        ? parsed.reasoning.effort
+        : null,
+      reasoningSummary: isRecord(parsed.reasoning) && typeof parsed.reasoning.summary === 'string'
+        ? parsed.reasoning.summary
+        : null,
+      reasoningContextType: isRecord(parsed.reasoning)
+        ? Array.isArray(parsed.reasoning.context)
+          ? 'array'
+          : parsed.reasoning.context === null
+            ? 'null'
+            : typeof parsed.reasoning.context
+        : 'missing',
+      reasoningContextValue: isRecord(parsed.reasoning) && typeof parsed.reasoning.context === 'string'
+        ? parsed.reasoning.context
+        : null,
+      reasoningContextFields: isRecord(parsed.reasoning) && isRecord(parsed.reasoning.context)
+        ? Object.keys(parsed.reasoning.context).sort()
+        : [],
+      reasoningContextBytes: isRecord(parsed.reasoning) && parsed.reasoning.context !== undefined
+        ? Buffer.byteLength(JSON.stringify(parsed.reasoning.context), 'utf8')
+        : 0,
+      textFields: isRecord(parsed.text) ? Object.keys(parsed.text).sort() : [],
+      textVerbosity: isRecord(parsed.text) && typeof parsed.text.verbosity === 'string'
+        ? parsed.text.verbosity
+        : null,
+      clientMetadataFields: isRecord(parsed.client_metadata)
+        ? Object.keys(parsed.client_metadata).sort()
+        : [],
+      promptCacheKeyCharacters: typeof parsed.prompt_cache_key === 'string'
+        ? parsed.prompt_cache_key.length
+        : 0,
+    },
+  }
 }
 
 function readProviderRequestId(response: Response): string | null {
@@ -185,11 +340,12 @@ export async function proxyCodexResponsesRequest(params: {
     throw error
   }
   const upstream = await resolveCodexModelGatewayUpstream(scope)
-  const body = await readAndValidateBody({
+  const providerRequest = await readAndValidateBody({
     request: params.request,
     runtimeModelId: upstream.runtimeModelId,
     upstreamModelId: upstream.modelId,
   })
+  const { body } = providerRequest
   const requestedAccept = params.request.headers.get('accept')?.toLowerCase()
     || ''
   const accept = requestedAccept.includes('text/event-stream')
@@ -207,6 +363,20 @@ export async function proxyCodexResponsesRequest(params: {
       .update('\0', 'utf8')
       .update(accept, 'utf8')
       .digest('hex'),
+  })
+  const providerRequestStartedAt = Date.now()
+  gatewayLogger.info({
+    action: 'codex_gateway.provider_request_started',
+    message: 'Codex model request is being sent to the Provider',
+    projectId: scope.projectId,
+    userId: scope.userId,
+    details: {
+      turnId: activeTurn.turnId,
+      providerAttemptId: providerAttempt.id,
+      modelKey: upstream.modelKey,
+      accept,
+      ...providerRequest.diagnostics,
+    },
   })
 
   let response: Response
@@ -254,6 +424,24 @@ export async function proxyCodexResponsesRequest(params: {
   }
   const headerGenerationId = response.headers.get('x-generation-id')
   const providerRequestId = readProviderRequestId(response)
+  gatewayLogger.info({
+    action: 'codex_gateway.provider_response_headers',
+    message: 'Codex model Provider response headers received',
+    projectId: scope.projectId,
+    userId: scope.userId,
+    details: {
+      turnId: activeTurn.turnId,
+      providerAttemptId: providerAttempt.id,
+      modelKey: upstream.modelKey,
+      elapsedMs: Date.now() - providerRequestStartedAt,
+      providerStatus: response.status,
+      providerRequestId,
+      providerGenerationId: headerGenerationId,
+      contentType: response.headers.get('content-type'),
+      contentEncoding: response.headers.get('content-encoding'),
+      contentLength: response.headers.get('content-length'),
+    },
+  })
   let projection: Awaited<ReturnType<typeof projectCodexProviderResponse>>
   try {
     projection = await projectCodexProviderResponse(response)
@@ -310,6 +498,11 @@ export async function proxyCodexResponsesRequest(params: {
     requestSignal: params.request.signal,
     providerRequestId,
     headerGenerationId,
+    projectId: scope.projectId,
+    userId: scope.userId,
+    turnId: activeTurn.turnId,
+    modelKey: upstream.modelKey,
+    responseStartedAt: providerRequestStartedAt,
   })
   return attachOpenRouterRealtimeBilling({
     response: observedResponse,
