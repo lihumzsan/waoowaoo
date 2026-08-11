@@ -71,7 +71,6 @@ function applicationEnvironment(testServices: TestServiceEndpoints): NodeJS.Proc
   return {
     ...process.env,
     NODE_ENV: 'development',
-    BILLING_MODE: 'OFF',
     DEPLOYMENT_EDITION: 'self-hosted',
     PROVIDER_CREDENTIAL_MODE: 'platform-key',
     DATABASE_URL: testServices.databaseUrl,

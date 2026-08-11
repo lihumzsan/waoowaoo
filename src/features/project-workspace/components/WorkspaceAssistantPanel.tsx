@@ -52,7 +52,6 @@ import {
   WorkspaceAssistantThreadMessage,
 } from './workspace-assistant/WorkspaceAssistantRenderers'
 import { WorkspaceAssistantPlanCard } from './workspace-assistant/WorkspaceAssistantPlanCard'
-import { WorkspaceAssistantSettings } from './workspace-assistant/WorkspaceAssistantSettings'
 import { WorkspaceAssistantComposer } from './workspace-assistant/WorkspaceAssistantComposer'
 import { WorkspaceAssistantRepeatedToolCallGroupProvider } from './workspace-assistant/WorkspaceAssistantToolCall'
 import { WorkspaceAssistantRunningSurfaceProvider } from './workspace-assistant/WorkspaceAssistantReasoning'
@@ -128,12 +127,7 @@ function WorkspaceAssistantRunFailureNotice({
             {failure.technical}
           </div>
         ) : null}
-        {failure.action === 'recharge' ? (
-          <UserErrorActionLink
-            action={failure.action}
-            className="mt-1.5 inline-flex rounded-md border border-[var(--glass-tone-warning-fg)]/30 bg-white/70 px-2 py-1 text-xs font-medium text-[var(--glass-tone-warning-fg)] transition-colors hover:bg-white"
-          />
-        ) : action ? (
+        {action ? (
           <button
             type="button"
             disabled={action.pending}
@@ -959,7 +953,6 @@ export default function WorkspaceAssistantPanel({
                   key={projectId}
                   className="relative flex h-full min-h-0 flex-col"
                 >
-                <WorkspaceAssistantSettings />
                 <ThreadPrimitive.Viewport
                   autoScroll
                   className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 pb-4 pt-12"

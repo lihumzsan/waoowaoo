@@ -3,6 +3,8 @@ import { describeMediaVariantBase } from '@/lib/ai-providers/shared/media-adapte
 import { buildMediaOptionSchema, booleanValidator, enumValidator, integerRangeValidator } from '@/lib/ai-providers/shared/option-schema'
 import { COMFYUI_H3_MODEL_ID } from './models'
 import { executeComfyUiH3VideoGeneration } from './h3'
+import { COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_ID } from './models'
+import { executeComfyUiMossSoundGeneration } from './moss'
 
 const H3_ASPECT_RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16', '9:21'] as const
 
@@ -29,5 +31,25 @@ export const comfyuiAdapter: AiProviderAdapter = {
       }),
     }),
     execute: executeComfyUiH3VideoGeneration,
+  },
+  sound: {
+    describe: (selection) => describeMediaVariantBase({
+      modality: 'sound',
+      selection,
+      executionMode: 'async',
+      optionSchema: buildMediaOptionSchema('sound', {
+        allowedKeys: ['negativePrompt', 'durationSeconds', 'outputFormat'],
+        required: ['durationSeconds', 'outputFormat'],
+        excludedKeys: ['referenceImages', 'referenceAudios', 'referenceVideos'],
+        validators: {
+          durationSeconds: integerRangeValidator({ min: 1, max: 30 }),
+          outputFormat: enumValidator(['mp3']),
+        },
+        objectValidators: [() => selection.modelId === COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_ID
+          ? { ok: true }
+          : { ok: false, reason: 'unsupported_model' }],
+      }),
+    }),
+    execute: executeComfyUiMossSoundGeneration,
   },
 }

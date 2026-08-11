@@ -12,15 +12,12 @@ import {
   getSelectableLocalVideoModels,
 } from '@/lib/platform-models/catalog'
 import {
-  type CapabilityValue,
   type ModelCapabilities,
   type UnifiedModelType,
 } from '@/lib/ai-registry/types'
 import { composeModelKey, parseModelKeyStrict } from '@/lib/ai-registry/selection'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { findBuiltinCapabilities } from '@/lib/ai-registry/capabilities-catalog'
-import { findBuiltinPricingCatalogEntry } from '@/lib/ai-registry/pricing-catalog'
-import { type VideoPricingTier } from '@/lib/ai-registry/video-capabilities'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 
 type StoredModelType = UnifiedModelType | string
@@ -45,7 +42,6 @@ interface UserModelOption {
   provider?: string
   providerName?: string
   capabilities?: ModelCapabilities
-  videoPricingTiers?: VideoPricingTier[]
 }
 
 interface UserModelsPayload {
@@ -53,6 +49,7 @@ interface UserModelsPayload {
   image: UserModelOption[]
   video: UserModelOption[]
   music: UserModelOption[]
+  sound: UserModelOption[]
 }
 
 type SelectableUserModelType = Exclude<UnifiedModelType, 'voice'>
@@ -63,6 +60,7 @@ function isSelectableUserModelType(type: unknown): type is SelectableUserModelTy
     || type === 'image'
     || type === 'video'
     || type === 'music'
+    || type === 'sound'
   )
 }
 
@@ -104,12 +102,6 @@ function dedupeByModelKey(items: UserModelOption[]): UserModelOption[] {
     seen.add(item.value)
     return true
   })
-}
-
-function cloneVideoPricingTiers(rawTiers: Array<{ when: Record<string, CapabilityValue> }>): VideoPricingTier[] {
-  return rawTiers.map((tier) => ({
-    when: { ...tier.when },
-  }))
 }
 
 function parseStoredModels(rawModels: string | null | undefined): StoredModel[] {
@@ -196,7 +188,6 @@ export function createUserModelsOperations(): ProjectAgentOperationRegistryDraft
       intent: 'query',
       effects: {
         writes: false,
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,
@@ -228,6 +219,7 @@ export function createUserModelsOperations(): ProjectAgentOperationRegistryDraft
           image: [],
           video: [],
           music: [],
+          sound: [],
         }
 
         for (const model of modelSource.models) {
@@ -265,12 +257,6 @@ export function createUserModelsOperations(): ProjectAgentOperationRegistryDraft
               option.capabilities = capabilities
             }
 
-            if (modelType === 'video') {
-              const pricingEntry = findBuiltinPricingCatalogEntry('video', provider, modelId)
-              if (pricingEntry?.retail.mode === 'capability' && Array.isArray(pricingEntry.retail.tiers)) {
-                option.videoPricingTiers = cloneVideoPricingTiers(pricingEntry.retail.tiers)
-              }
-            }
           }
 
           grouped[modelType].push(option)
@@ -281,6 +267,7 @@ export function createUserModelsOperations(): ProjectAgentOperationRegistryDraft
           image: dedupeByModelKey(grouped.image),
           video: dedupeByModelKey(grouped.video),
           music: dedupeByModelKey(grouped.music),
+          sound: dedupeByModelKey(grouped.sound),
         } satisfies UserModelsPayload
       },
     },

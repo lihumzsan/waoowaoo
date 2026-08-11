@@ -87,11 +87,12 @@ export const imageGenerationItemSchema = z.object({
   }
 })
 
-export const audioGenerationItemSchema = z.object({
+export const musicGenerationItemSchema = z.object({
   ...commonItemShape,
   mediaType: z.literal('audio'),
-  prompt: finalPromptSchema.describe('Complete final provider-ready music prompt. Keep it within the injected productionCapabilities.music.promptTargetCharacters; the server rejects promptMaxCharacters and never appends option text.'),
-  schemaId: z.enum(WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.audio),
+  audioKind: z.literal('music'),
+  prompt: finalPromptSchema.describe('Complete final provider-ready music prompt. The server freezes it verbatim.'),
+  schemaId: z.literal(WORKSPACE_RESOURCE_SCHEMA.BGM_AUDIO),
   references: z.array(generationReferenceSchema.extend({
     channel: z.enum(['context', 'video']),
   }).strict()).max(16).optional(),
@@ -105,6 +106,25 @@ export const audioGenerationItemSchema = z.object({
   musicalDirection: z.string().trim().min(1).max(8_000).optional(),
   dialogueSafety: z.string().trim().min(1).max(2_000).nullable().optional(),
 }).strict()
+
+export const soundGenerationItemSchema = z.object({
+  ...commonItemShape,
+  mediaType: z.literal('audio'),
+  audioKind: z.literal('sound'),
+  prompt: finalPromptSchema.describe('Complete final provider-ready environmental sound prompt. The server freezes it verbatim.'),
+  schemaId: z.literal(WORKSPACE_RESOURCE_SCHEMA.SOUND_EFFECT_AUDIO),
+  durationSeconds: z.number().int().min(1).max(30),
+  negativePrompt: z.string().max(100_000)
+    .refine((value) => value.trim().length > 0, 'negativePrompt must contain non-whitespace content.')
+    .optional(),
+}).strict()
+
+export const audioGenerationItemSchema = z.discriminatedUnion('audioKind', [
+  musicGenerationItemSchema,
+  soundGenerationItemSchema,
+])
+
+export type AudioGenerationKind = 'music' | 'sound'
 
 export const videoGenerationItemSchema = z.object({
   ...commonItemShape,
@@ -211,10 +231,10 @@ export const videoGenerationBatchOutputSchema = z.object({
 }).strict().superRefine(validateGenerationItems)
 
 export const audioGenerationBatchOutputSchema = z.object({
-  schemaVersion: z.literal(2),
+  schemaVersion: z.literal(3),
   outputKind: z.literal('audio_generation_batch'),
   batchId: z.string().trim().min(1).max(191),
-  decision: z.enum(['produce', 'no_music']),
+  decision: z.enum(['produce', 'no_audio']),
   overview: z.string().trim().min(1).max(12_000),
   items: z.array(audioGenerationItemSchema).max(8),
   globalContinuity: z.string().trim().max(8_000),
@@ -224,11 +244,11 @@ export const audioGenerationBatchOutputSchema = z.object({
   if (batch.decision === 'produce' && batch.items.length === 0) {
     context.addIssue({ code: 'custom', path: ['items'], message: 'decision=produce requires at least one item.' })
   }
-  if (batch.decision === 'no_music' && batch.items.length !== 0) {
-    context.addIssue({ code: 'custom', path: ['items'], message: 'decision=no_music requires items to be empty.' })
+  if (batch.decision === 'no_audio' && batch.items.length !== 0) {
+    context.addIssue({ code: 'custom', path: ['items'], message: 'decision=no_audio requires items to be empty.' })
   }
   let previousEnd = 0
-  batch.items.forEach((item, index) => {
+  batch.items.filter((item) => item.audioKind === 'music').forEach((item, index) => {
     const start = item.startSeconds ?? previousEnd
     if (start < previousEnd) {
       context.addIssue({ code: 'custom', path: ['items', index, 'startSeconds'], message: 'Music cues must not overlap.' })

@@ -11,7 +11,6 @@ import { encryptApiKey } from '@/lib/crypto-utils'
 import { ApiError } from '@/lib/api-errors'
 import { buildApiConfigServerCatalog } from '@/lib/ai-registry/api-config-catalog'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
-import { getBillingMode } from '@/lib/billing/mode'
 import {
   getDeploymentConfig,
   isSelfHostedUserProviderCredentialMode,
@@ -26,23 +25,17 @@ import { parseStoredProviders, normalizeProvidersInput } from './api-config-prov
 import {
   normalizeModelList,
   parseStoredModels,
-  validateBillableModelPricing,
   validateModelProviderConsistency,
   validateModelProviderTypeSupport,
 } from './api-config-model-normalization'
 import {
-  buildPricingDisplayMap,
   resolveBuiltinCapabilities,
-  withDisplayPricing,
-} from './api-config-pricing-display'
+} from './api-config-capabilities'
 import {
   normalizeDefaultModelsInput,
   normalizeWorkflowConcurrencyInput,
   sanitizeDefaultModelsAgainstModels,
-  sanitizeDefaultModelsForBilling,
-  sanitizeModelsForBilling,
   validateDefaultModelsAgainstModels,
-  validateDefaultModelPricing,
 } from './api-config-defaults'
 import {
   parseStoredCapabilitySelections,
@@ -70,6 +63,7 @@ export async function getUserApiConfig(userId: string) {
       editModel: true,
       videoModel: true,
       musicModel: true,
+      soundModel: true,
       capabilityDefaults: true,
       analysisConcurrency: true,
       imageConcurrency: true,
@@ -85,12 +79,9 @@ export async function getUserApiConfig(userId: string) {
     hasApiKey: Boolean(provider.apiKey),
   }))
 
-  const billingMode = await getBillingMode()
   const deployment = getDeploymentConfig()
   const parsedModels = parseStoredModels(pref?.customModels)
-  const models = billingMode === 'OFF' ? parsedModels : sanitizeModelsForBilling(parsedModels)
-  const pricingDisplay = buildPricingDisplayMap()
-  const pricedModels = models.map((model) => withDisplayPricing(model, pricingDisplay))
+  const models = parsedModels
 
   const rawDefaults: DefaultModelsPayload = {
     assistantModel: pref?.assistantModel || '',
@@ -100,10 +91,9 @@ export async function getUserApiConfig(userId: string) {
     editModel: pref?.editModel || '',
     videoModel: pref?.videoModel || '',
     musicModel: pref?.musicModel || '',
+    soundModel: pref?.soundModel || '',
   }
-  const defaultModels = billingMode === 'OFF'
-    ? rawDefaults
-    : sanitizeDefaultModelsForBilling(rawDefaults)
+  const defaultModels = rawDefaults
   const enabledDefaultModels = sanitizeDefaultModelsAgainstModels(defaultModels, models)
   const capabilityDefaults = sanitizeCapabilitySelectionsAgainstModels(
     parseStoredCapabilitySelections(pref?.capabilityDefaults, 'capabilityDefaults'),
@@ -116,7 +106,7 @@ export async function getUserApiConfig(userId: string) {
   }, getDefaultWorkflowConcurrencyConfig())
 
   return {
-    models: pricedModels,
+    models,
     providers,
     catalog: buildApiConfigServerCatalog({
       resolveCapabilities: (model) => resolveBuiltinCapabilities(model.type, model.provider, model.modelId),
@@ -124,7 +114,6 @@ export async function getUserApiConfig(userId: string) {
     defaultModels: enabledDefaultModels,
     capabilityDefaults,
     workflowConcurrency,
-    pricingDisplay,
     deployment: toPublicDeploymentConfig(deployment),
   }
 }
@@ -163,7 +152,6 @@ export async function putUserApiConfig(
   const normalizedWorkflowConcurrency = payload.workflowConcurrency === undefined
     ? undefined
     : normalizeWorkflowConcurrencyInput(payload.workflowConcurrency)
-  const billingMode = await getBillingMode()
   const updateData: Record<string, unknown> = {}
   const existingPref = await client.userPreference.findUnique({
     where: { userId },
@@ -177,6 +165,7 @@ export async function putUserApiConfig(
       editModel: true,
       videoModel: true,
       musicModel: true,
+      soundModel: true,
     },
   })
   const existingProviders = parseStoredProviders(existingPref?.customProviders)
@@ -187,9 +176,6 @@ export async function putUserApiConfig(
   if (normalizedModels !== undefined) {
     validateModelProviderConsistency(normalizedModels, providerSourceForValidation)
     validateModelProviderTypeSupport(normalizedModels, providerSourceForValidation)
-    if (billingMode !== 'OFF') {
-      validateBillableModelPricing(normalizedModels)
-    }
   }
 
   if (normalizedModels !== undefined) {
@@ -223,13 +209,8 @@ export async function putUserApiConfig(
   }
 
   if (normalizedDefaults !== undefined) {
-    const modelSource = billingMode === 'OFF'
-      ? (normalizedModels ?? existingModels)
-      : sanitizeModelsForBilling(normalizedModels ?? existingModels)
+    const modelSource = normalizedModels ?? existingModels
     validateDefaultModelsAgainstModels(normalizedDefaults, modelSource)
-    if (billingMode !== 'OFF') {
-      validateDefaultModelPricing(normalizedDefaults)
-    }
     if (normalizedDefaults.assistantModel !== undefined) {
       updateData.assistantModel = normalizedDefaults.assistantModel || null
     }
@@ -256,12 +237,13 @@ export async function putUserApiConfig(
     if (normalizedDefaults.musicModel !== undefined) {
       updateData.musicModel = normalizedDefaults.musicModel || null
     }
+    if (normalizedDefaults.soundModel !== undefined) {
+      updateData.soundModel = normalizedDefaults.soundModel || null
+    }
   }
 
   if (normalizedModels !== undefined) {
-    const modelSource = billingMode === 'OFF'
-      ? normalizedModels
-      : sanitizeModelsForBilling(normalizedModels)
+    const modelSource = normalizedModels
     const existingDefaults: DefaultModelsPayload = {
       assistantModel: existingPref?.assistantModel || '',
       analysisModel: existingPref?.analysisModel || '',
@@ -270,6 +252,7 @@ export async function putUserApiConfig(
       editModel: existingPref?.editModel || '',
       videoModel: existingPref?.videoModel || '',
       musicModel: existingPref?.musicModel || '',
+      soundModel: existingPref?.soundModel || '',
     }
     const nextDefaults = {
       ...existingDefaults,

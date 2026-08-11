@@ -29,8 +29,8 @@ const ALLOWED_FIELDS: ReadonlyArray<string> = [
   'editModel',
   'videoModel',
   'musicModel',
+  'soundModel',
   'videoRatio',
-  'assistantBillingConfirmationRequired',
 ]
 
 const PLATFORM_MODEL_FIELDS = new Set([
@@ -41,6 +41,7 @@ const PLATFORM_MODEL_FIELDS = new Set([
   'editModel',
   'videoModel',
   'musicModel',
+  'soundModel',
 ])
 
 const modelKeyPreferenceSchema = z.string().trim().min(1).nullable()
@@ -54,10 +55,9 @@ const updateUserPreferenceInputSchema = z.object({
   editModel: modelKeyPreferenceSchema.optional(),
   videoModel: modelKeyPreferenceSchema.optional(),
   musicModel: modelKeyPreferenceSchema.optional(),
+  soundModel: modelKeyPreferenceSchema.optional(),
   videoRatio: z.string().trim().min(1).optional()
     .describe('Default output aspect ratio, for example 16:9 or 9:16.'),
-  assistantBillingConfirmationRequired: z.boolean().optional()
-    .describe('Whether billable Assistant operations must pause for an immutable quote approval.'),
 }).strict()
 
 async function lockUserPreferenceOwner(
@@ -81,7 +81,6 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
       effects: {
         writes: true,
         workspaceResourceImpact: 'none',
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,
@@ -125,7 +124,6 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
       effects: {
         writes: true,
         workspaceResourceImpact: 'none',
-        billable: false,
         destructive: false,
         overwrite: true,
         bulk: false,

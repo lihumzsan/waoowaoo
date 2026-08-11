@@ -13,7 +13,6 @@ export type TaskExecutionHandlerKey =
   | 'workspace_resource_video'
   | 'workspace_resource_video_merge'
 
-export type TaskBillingPolicy = 'none' | 'text' | 'image' | 'video' | 'music' | 'voice'
 export type TaskExecutionProtocol = 'handler_result_checkpoint'
 export type TaskTerminalSuccessHandoff = 'handler_result_checkpoint'
 export type TaskTerminalOutputMaterializer = 'none' | 'workspace_resource'
@@ -24,7 +23,6 @@ export type TaskLifecyclePayloadProjection = 'full' | 'reference'
 
 export type TaskDefinition = {
   executionHandler: TaskExecutionHandlerKey
-  billingPolicy: TaskBillingPolicy
   maxAttempts: number
   schedulerClass: TaskSchedulerClass | null
   executionProtocol: TaskExecutionProtocol
@@ -47,7 +45,6 @@ export type TaskDefinition = {
 
 function definition(
   executionHandler: TaskExecutionHandlerKey,
-  billingPolicy: TaskBillingPolicy,
   maxAttempts: number,
   schedulerClass: TaskSchedulerClass | null,
   terminalResourceImpact: WorkspaceResourceImpact,
@@ -62,7 +59,6 @@ function definition(
 ): TaskDefinition {
   return {
     executionHandler,
-    billingPolicy,
     maxAttempts,
     schedulerClass,
     executionProtocol: 'handler_result_checkpoint',
@@ -82,7 +78,6 @@ function definition(
 export const TASK_DEFINITIONS = {
   [TASK_TYPE.WORKSPACE_RESOURCE_IMAGE]: definition(
     'workspace_resource_image',
-    'image',
     3,
     'image',
     'workspace_resources',
@@ -95,7 +90,6 @@ export const TASK_DEFINITIONS = {
   ),
   [TASK_TYPE.WORKSPACE_RESOURCE_AUDIO]: definition(
     'workspace_resource_audio',
-    'music',
     3,
     'image',
     'workspace_resources',
@@ -108,7 +102,6 @@ export const TASK_DEFINITIONS = {
   ),
   [TASK_TYPE.WORKSPACE_RESOURCE_VOICE]: definition(
     'workspace_resource_voice',
-    'voice',
     3,
     'image',
     'workspace_resources',
@@ -121,7 +114,6 @@ export const TASK_DEFINITIONS = {
   ),
   [TASK_TYPE.WORKSPACE_RESOURCE_VIDEO]: definition(
     'workspace_resource_video',
-    'video',
     3,
     'video',
     'workspace_resources',
@@ -134,7 +126,6 @@ export const TASK_DEFINITIONS = {
   ),
   [TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE]: definition(
     'workspace_resource_video_merge',
-    'none',
     1,
     'video',
     'workspace_resources',

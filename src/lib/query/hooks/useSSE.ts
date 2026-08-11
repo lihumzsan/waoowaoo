@@ -42,6 +42,10 @@ function connectionIdStorageKey(projectId: string): string {
 }
 
 function readOrCreateConnectionId(projectId: string): string {
+  // Client Components are rendered on the server during static generation.
+  // The effect that opens EventSource never runs there, so a stable placeholder
+  // keeps the render side-effect free until the browser establishes its session.
+  if (typeof window === 'undefined') return 'server-render'
   const storage = window.sessionStorage
   const key = connectionIdStorageKey(projectId)
   const existing = storage?.getItem(key)

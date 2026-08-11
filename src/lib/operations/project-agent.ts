@@ -10,7 +10,6 @@ import { createAssetHubLocationLibraryOperations } from './domains/asset-hub/ass
 import { createAssetHubPickerOperations } from './domains/asset-hub/asset-hub-picker-ops'
 import { createUserPreferenceOperations } from './domains/config/user-preference-ops'
 import { createUserModelsOperations } from './domains/config/user-models-ops'
-import { createUserBillingOperations } from './domains/billing/user-billing-ops'
 import { createUserApiConfigOperations } from './domains/config/user-api-config-ops'
 import { createWorkspaceResourceGenerationOperations } from './domains/workspace-resource/generation-ops'
 import { createWorkspaceResourceOperations } from './domains/workspace-resource/resource-ops'
@@ -71,11 +70,6 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
     }),
     ...withOperationPack(createUserModelsOperations(), {
       groupPath: ['config', 'models'],
-      channels: API_ONLY,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createUserBillingOperations(), {
-      groupPath: ['billing'],
       channels: API_ONLY,
       confirmation: CONFIRM_NONE,
     }),

@@ -26,7 +26,7 @@ export async function loadOperationExecutionOutput(params: {
       executionKind: true,
       commandId: true,
       payloadHash: true,
-      approvalGrantId: true,
+      planSnapshotId: true,
       requestId: true,
       status: true,
       output: true,
@@ -39,9 +39,10 @@ export async function loadOperationExecutionOutput(params: {
     || execution.projectId !== params.command.projectId
     || execution.operationId !== params.command.operationId
     || (
-      params.command.kind === 'approved_plan'
-        ? execution.approvalGrantId !== params.command.approvalGrantId
-        : execution.approvalGrantId !== null
+      params.command.kind === 'planned'
+        ? execution.planSnapshotId !== params.command.planSnapshotId
+          || execution.executionKind !== 'planned'
+        : execution.planSnapshotId !== null
           || execution.executionKind !== 'direct_task'
           || execution.commandId !== envelope.commandId
           || execution.payloadHash !== envelope.payloadHash

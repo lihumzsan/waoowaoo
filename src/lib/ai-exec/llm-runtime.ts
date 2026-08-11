@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto'
-import { recordTextUsage as recordBillingTextUsage } from '@/lib/billing/runtime-usage'
 import { resolveModelSelection } from '@/lib/user-api/runtime-config'
 import { createScopedLogger } from '@/lib/logging/core'
 import { getLogContext } from '@/lib/logging/context'
@@ -141,15 +140,8 @@ export function logLlmRawOutput(params: {
 }
 
 export function recordLlmUsage(model: string, usage: AiLlmUsage) {
-  recordBillingTextUsage({
-    model,
-    inputTokens: usage.promptTokens,
-    outputTokens: usage.completionTokens,
-    cachedInputTokens: usage.cachedInputTokens,
-    cacheWriteTokens: usage.cacheWriteTokens,
-    cacheHitRate: usage.cacheHitRate,
-    providerCostCredits: usage.providerCostCredits,
-  })
+  void model
+  void usage
 }
 
 export interface ResolvedLlmRuntimeModel {

@@ -1,7 +1,5 @@
 import { randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
-import { addBalance } from '@/lib/billing'
-import { freezeBalance } from '@/lib/billing/ledger'
 import { createAgentFollowUpBatchBinding } from '@/lib/agent-turn/follow-up-batch'
 import { createFailureRecord } from '@/lib/errors/failure'
 import type { WorkspaceResourceInputRef } from '@/lib/workspace-resource/contracts'
@@ -17,7 +15,6 @@ import { submitOperationTaskBatch } from '@/lib/operations/submit-operation-task
 import { buildTaskWorkflowId } from '@/lib/temporal/identity'
 import {
   TASK_TYPE,
-  type TaskBillingInfo,
 } from '@/lib/task/types'
 import { prisma } from '../../../helpers/prisma'
 
@@ -45,7 +42,6 @@ export interface TaskLateCancelFixture {
   readonly projectId: string
   readonly taskId: string
   readonly checkpointId: string
-  readonly freezeId: string
   readonly mediaObjectId: string
   readonly mediaObjectIds: readonly string[]
   readonly resourceId: string
@@ -465,53 +461,6 @@ export async function createTaskLateCancelFixture(): Promise<TaskLateCancelFixtu
     select: { targetId: true },
   })
 
-  const balanceAdded = await addBalance(userId, 10, {
-    reason: 'Task late cancel durability fixture',
-    idempotencyKey: `task-late-cancel-balance-${suffix}`,
-  })
-  if (!balanceAdded) {
-    throw new Error('TASK_LATE_CANCEL_BALANCE_SETUP_FAILED')
-  }
-  const freeze = await freezeBalance(userId, 1, {
-    source: 'task',
-    taskId,
-    idempotencyKey: `task-late-cancel-freeze-${suffix}`,
-    metadata: {
-      projectId,
-      taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
-      action: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
-      apiType: 'video',
-      model: 'task-late-cancel-model',
-      quantity: 1,
-      unit: 'video',
-    },
-  })
-  if (freeze.status !== 'frozen') {
-    throw new Error(`TASK_LATE_CANCEL_FREEZE_SETUP_FAILED:${freeze.status}`)
-  }
-  const billingInfo = {
-    billable: true,
-    source: 'task',
-    taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
-    apiType: 'video',
-    model: 'task-late-cancel-model',
-    quantity: 1,
-    unit: 'video',
-    maxFrozenCost: 1,
-    pricingVersion: 'task-late-cancel-v1',
-    action: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
-    billingKey: taskId,
-    freezeId: freeze.freezeId,
-    modeSnapshot: 'ENFORCE',
-    status: 'frozen',
-  } satisfies TaskBillingInfo
-  await prisma.task.update({
-    where: { id: taskId },
-    data: {
-      billingInfo: billingInfo as Prisma.InputJsonValue,
-    },
-  })
-
   const media = await ensureMediaObjectFromStorageKey(
     `tests/temporal/task-late-cancel/${suffix}.mp4`,
     {
@@ -531,7 +480,6 @@ export async function createTaskLateCancelFixture(): Promise<TaskLateCancelFixtu
     projectId,
     taskId,
     checkpointId: checkpoint.id,
-    freezeId: freeze.freezeId,
     mediaObjectId: media.id,
     mediaObjectIds: [...sourceVideos.mediaObjectIds, media.id],
     resourceId: task.targetId,
@@ -551,12 +499,6 @@ export async function removeTaskLateCancelFixture(
     where: { id: fixture.taskId },
   })
   await prisma.mediaObject.deleteMany({ where: { id: { in: [...fixture.mediaObjectIds] } } })
-  await prisma.balanceTransaction.deleteMany({
-    where: { userId: fixture.userId },
-  })
-  await prisma.balanceFreeze.deleteMany({
-    where: { id: fixture.freezeId },
-  })
   await prisma.project.deleteMany({
     where: { id: fixture.projectId },
   })

@@ -12,7 +12,7 @@ import {
 } from './default-model-empty-state'
 
 // ---------- types ----------
-type ModelType = 'llm' | 'image' | 'video' | 'music'
+type ModelType = 'llm' | 'image' | 'video' | 'music' | 'sound'
 
 interface ModelOption {
     modelKey: string
@@ -30,6 +30,7 @@ type DefaultModelField =
     | 'editModel'
     | 'videoModel'
     | 'musicModel'
+    | 'soundModel'
 
 interface DefaultModelCardsProps {
     t: (key: string) => string
@@ -41,6 +42,7 @@ interface DefaultModelCardsProps {
         editModel?: string
         videoModel?: string
         musicModel?: string
+        soundModel?: string
     }
     getEnabledModelsByType: (type: ModelType) => ModelOption[]
     parseModelKey: (key: string | undefined | null) => { provider: string; modelId: string } | null
@@ -353,6 +355,7 @@ export function DefaultModelCards(allProps: DefaultModelCardsProps) {
     const analysisModel = resolveModel('analysisModel', 'llm', defaultModels, getEnabledModelsByType, parseModelKey, encodeModelKey)
     const videoModel = resolveModel('videoModel', 'video', defaultModels, getEnabledModelsByType, parseModelKey, encodeModelKey)
     const musicModel = resolveModel('musicModel', 'music', defaultModels, getEnabledModelsByType, parseModelKey, encodeModelKey)
+    const soundModel = resolveModel('soundModel', 'sound', defaultModels, getEnabledModelsByType, parseModelKey, encodeModelKey)
 
     const pipelineItems: Array<{
         field: DefaultModelField
@@ -546,6 +549,17 @@ export function DefaultModelCards(allProps: DefaultModelCardsProps) {
                         <SmartSelector
                             field="musicModel" modelType="music"
                             options={musicModel.options} normalizedKey={musicModel.normalizedKey} current={musicModel.current}
+                            placeholder={t('defaultModelSection.extPlaceholder')}
+                            locale={locale} t={t} props={allProps}
+                        />
+                    </div>
+
+                    {/* Environmental sound */}
+                    <div className="glass-surface glass-card-shadow-soft p-5 rounded-2xl bg-gradient-to-br from-[var(--glass-bg-surface)] to-transparent">
+                        <h4 className="text-[13px] font-semibold text-[var(--glass-text-primary)] mb-4">{t('defaultModelSection.extSound')}</h4>
+                        <SmartSelector
+                            field="soundModel" modelType="sound"
+                            options={soundModel.options} normalizedKey={soundModel.normalizedKey} current={soundModel.current}
                             placeholder={t('defaultModelSection.extPlaceholder')}
                             locale={locale} t={t} props={allProps}
                         />

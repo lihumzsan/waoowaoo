@@ -6,12 +6,7 @@ import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { Link } from '@/i18n/navigation'
 import LanguageSwitcher from '@/components/LanguageSwitcher'
-import {
-  computeNavbarBalanceRatio,
-  formatCreditAmount,
-  type NavbarSettingsMenuItem,
-  type NavbarUserBalance,
-} from './account-menu-model'
+import type { NavbarSettingsMenuItem } from './account-menu-model'
 
 // Raycast/Arc 风格账户菜单卡:头像 + 邮箱、余额进度、渐变升级 CTA、
 // 图标菜单项与内嵌语言切换。能力可见性完全来自传入的 features 投影。
@@ -23,10 +18,6 @@ interface NavbarAccountMenuProps {
   userName: string
   userEmail: string | null
   userImage: string | null
-  balance: NavbarUserBalance | null
-  creditsUnit: string
-  showBilling: boolean
-  showRecharge: boolean
   showDownloadLogs: boolean
   showUpdateCheck: boolean
   manualChecking: boolean
@@ -82,10 +73,6 @@ export default function NavbarAccountMenu({
   userName,
   userEmail,
   userImage,
-  balance,
-  creditsUnit,
-  showBilling,
-  showRecharge,
   showDownloadLogs,
   showUpdateCheck,
   manualChecking,
@@ -119,67 +106,7 @@ export default function NavbarAccountMenu({
       </div>
 
       {/* 余额:大数字 + 进度条 + 升级 CTA */}
-      {balance ? (
-        <div className="mx-0.5 mb-1 rounded-xl border border-[var(--glass-stroke-soft)] bg-white/70 px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
-          <div className="flex items-center justify-between gap-2">
-            <span className="flex items-center gap-1.5 text-xs font-medium text-[var(--glass-text-secondary)]">
-              <AppIcon name="coins" className="h-3.5 w-3.5" />
-              {t('account.balance')}
-            </span>
-            {showRecharge ? (
-              <Link
-                href="/pricing"
-                onClick={onClose}
-                className="glass-btn-base glass-btn-cta rounded-full px-3 py-1 text-xs font-semibold"
-              >
-                <AppIcon name="sparkles" className="h-3 w-3" />
-                {t('account.upgrade')}
-              </Link>
-            ) : null}
-          </div>
-          <div className="glass-num mt-1.5 text-xl font-bold tracking-tight text-[var(--glass-text-primary)]">
-            {formatCreditAmount(balance.balance, creditsUnit)}
-          </div>
-          {/* A bought term simply stops when it runs out, so the reminder has
-              to arrive before it does. */}
-          {balance.plan?.expiringSoon ? (
-            <div className="mt-1.5 text-[11px] font-medium text-[var(--glass-warning,#f5a524)]">
-              {balance.plan.daysLeft > 0
-                ? t('account.planExpiringSoon', { days: balance.plan.daysLeft })
-                : t('account.planExpired')}
-            </div>
-          ) : null}
-          {balance.health === 'ok' ? null : (
-            <div
-              className={`mt-1.5 text-[11px] font-medium ${
-                balance.health === 'empty'
-                  ? 'text-[var(--glass-danger,#e5484d)]'
-                  : 'text-[var(--glass-warning,#f5a524)]'
-              }`}
-            >
-              {balance.health === 'empty'
-                ? t('account.emptyBalance')
-                : t('account.lowBalance', { clips: balance.referenceClipsRemaining })}
-            </div>
-          )}
-          {showBilling ? (
-            <>
-              <div className="glass-meter-track mt-2.5" aria-hidden="true">
-                <div
-                  className="glass-meter-fill"
-                  style={{ width: `${Math.round(computeNavbarBalanceRatio(balance) * 100)}%` }}
-                />
-              </div>
-              <div className="glass-num mt-2 flex items-center justify-between text-[11px] text-[var(--glass-text-tertiary)]">
-                <span>{t('account.frozen')} {formatCreditAmount(balance.frozenAmount, creditsUnit)}</span>
-                <span>{t('account.totalSpent')} {formatCreditAmount(balance.totalSpent, creditsUnit)}</span>
-              </div>
-            </>
-          ) : null}
-        </div>
-      ) : null}
-
-      {settingsMenuItems.length > 0 || balance ? (
+      {settingsMenuItems.length > 0 ? (
         <div className="mx-2 my-1.5 h-px bg-[var(--glass-stroke-base)]" />
       ) : null}
 

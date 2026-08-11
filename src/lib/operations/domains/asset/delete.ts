@@ -67,7 +67,6 @@ export function createAssetDeleteOperations(): ProjectAgentOperationRegistryDraf
       effects: {
         writes: true,
         workspaceResourceImpact: 'global_assets',
-        billable: false,
         destructive: true,
         overwrite: false,
         bulk: false,

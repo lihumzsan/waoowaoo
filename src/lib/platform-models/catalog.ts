@@ -16,6 +16,7 @@ const PLATFORM_DEFAULT_MODEL_TYPES: Record<PlatformDefaultModelField, UnifiedMod
   editModel: 'image',
   videoModel: 'video',
   musicModel: 'music',
+  soundModel: 'sound',
 }
 
 const PLATFORM_DEFAULT_MODEL_ENV: Record<PlatformDefaultModelField, string> = {
@@ -26,6 +27,7 @@ const PLATFORM_DEFAULT_MODEL_ENV: Record<PlatformDefaultModelField, string> = {
   editModel: 'PLATFORM_DEFAULT_EDIT_MODEL',
   videoModel: 'PLATFORM_DEFAULT_VIDEO_MODEL',
   musicModel: 'PLATFORM_DEFAULT_MUSIC_MODEL',
+  soundModel: 'PLATFORM_DEFAULT_SOUND_MODEL',
 }
 
 function toPlatformModel(input: PlatformModelPreset): StoredModel {

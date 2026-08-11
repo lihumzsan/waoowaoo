@@ -27,7 +27,9 @@ export function normalizeMediaOptionsForSelection(input: {
   })
   const promptMaxChars = input.modality === 'music'
     ? descriptor.capabilities.music?.promptMaxChars
-    : undefined
+    : input.modality === 'sound'
+      ? descriptor.capabilities.sound?.promptMaxChars
+      : undefined
   if (
     promptMaxChars !== undefined
     && typeof input.prompt === 'string'

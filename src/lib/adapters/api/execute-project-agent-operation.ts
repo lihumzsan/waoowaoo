@@ -7,10 +7,10 @@ import {
 } from '@/lib/operations/invocation'
 import {
   buildDirectOperationInvocationIdentity,
-  executeApprovedTaskOperationViaTemporal,
+  executePlannedTaskOperationViaTemporal,
   executeDirectTaskOperationViaTemporal,
 } from '@/lib/operations/durable-dispatch'
-import { isBillablePlannedOperation } from '@/lib/operations/types'
+import { isPlannedOperation } from '@/lib/operations/types'
 import {
   extractPrismaMissingColumn,
 } from '@/lib/adapters/operation-error-normalizer'
@@ -91,7 +91,7 @@ export async function executeProjectAgentOperationFromApi(
   }
 
   try {
-    if (operation && isBillablePlannedOperation(operation)) {
+    if (operation && isPlannedOperation(operation)) {
       const prepared = await prepareProjectAgentOperationInput({
         channel: 'api',
         operation,
@@ -100,12 +100,12 @@ export async function executeProjectAgentOperationFromApi(
       })
       if (!prepared.invocation) {
         throw new ApiError('INVALID_PARAMS', {
-          code: 'OPERATION_APPROVAL_GRANT_REQUIRED',
+          code: 'OPERATION_PLAN_SNAPSHOT_REQUIRED',
           operationId: operation.id,
-          message: 'approve the immutable operation plan before execution',
+          message: 'execute the immutable operation plan snapshot',
         })
       }
-      const result = await executeApprovedTaskOperationViaTemporal({
+      const result = await executePlannedTaskOperationViaTemporal({
         registry,
         operationId: operation.id,
         userId: params.userId,

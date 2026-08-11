@@ -16,7 +16,6 @@ export function createAssetHubFolderOperations(): ProjectAgentOperationRegistryD
       intent: 'query',
       effects: {
         writes: false,
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,
@@ -41,7 +40,6 @@ export function createAssetHubFolderOperations(): ProjectAgentOperationRegistryD
       effects: {
         writes: true,
         workspaceResourceImpact: 'global_assets',
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,
@@ -74,7 +72,6 @@ export function createAssetHubFolderOperations(): ProjectAgentOperationRegistryD
       effects: {
         writes: true,
         workspaceResourceImpact: 'global_assets',
-        billable: false,
         destructive: false,
         overwrite: true,
         bulk: false,
@@ -115,7 +112,6 @@ export function createAssetHubFolderOperations(): ProjectAgentOperationRegistryD
       effects: {
         writes: true,
         workspaceResourceImpact: 'global_assets',
-        billable: false,
         destructive: true,
         overwrite: false,
         bulk: true,

@@ -384,7 +384,6 @@ export function createAssetHubApiOperations(): ProjectAgentOperationRegistryDraf
       effects: {
         writes: true,
         workspaceResourceImpact: 'none',
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,
@@ -428,7 +427,6 @@ export function createAssetHubApiOperations(): ProjectAgentOperationRegistryDraf
       effects: {
         writes: true,
         workspaceResourceImpact: 'global_assets',
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,
@@ -480,7 +478,6 @@ export function createAssetHubApiOperations(): ProjectAgentOperationRegistryDraf
       effects: {
         writes: true,
         workspaceResourceImpact: 'global_assets',
-        billable: false,
         destructive: false,
         overwrite: true,
         bulk: false,
@@ -537,7 +534,6 @@ export function createAssetHubApiOperations(): ProjectAgentOperationRegistryDraf
       effects: {
         writes: true,
         workspaceResourceImpact: 'global_assets',
-        billable: false,
         destructive: true,
         overwrite: false,
         bulk: false,
@@ -575,7 +571,6 @@ export function createAssetHubApiOperations(): ProjectAgentOperationRegistryDraf
       effects: {
         writes: true,
         workspaceResourceImpact: 'global_assets',
-        billable: false,
         destructive: false,
         overwrite: true,
         bulk: false,

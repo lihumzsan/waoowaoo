@@ -214,6 +214,7 @@ model Project {
   imageModel                String?
   videoModel                String?
   musicModel                String?
+  soundModel                String?
   videoRatio                String?
   characterModel            String?
   locationModel             String?
@@ -225,7 +226,6 @@ model Project {
   updatedAt                 DateTime                         @default(now()) @updatedAt
   lastAccessedAt            DateTime?
   user                      User                             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  usageCosts                UsageCost[]
   assistantThreads          ProjectAssistantThread[]
   assistantMessageCommands  ProjectAssistantMessageCommand[]
   mutationBatches           MutationBatch[]
@@ -247,32 +247,6 @@ model Session {
   @@map("session")
 }
 
-model UsageCost {
-  id             String   @id @default(uuid())
-  projectId      String
-  userId         String
-  apiType        String
-  model          String
-  action         String
-  quantity       Int
-  unit           String
-  /// Exact retail usage in credits. LLM rows keep six decimal places while
-  /// the balance ledger remains integer-only.
-  cost           Decimal  @db.Decimal(18, 6)
-  /// Whole credits actually removed from the balance when this fact settled.
-  chargedCredits Int      @default(0)
-  metadata       String?  @db.Text
-  createdAt      DateTime @default(now())
-  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([apiType])
-  @@index([createdAt])
-  @@index([projectId])
-  @@index([userId])
-  @@map("usage_costs")
-}
-
 model User {
   id                   String                @id @default(uuid())
   name                 String                @unique(map: "User_name_key")
@@ -285,12 +259,7 @@ model User {
   accounts             Account[]
   projects             Project[]
   sessions             Session[]
-  usageCosts           UsageCost[]
-  llmBillingMeter      LlmBillingMeter?
-  balance              UserBalance?
-  subscription         Subscription?
   preferences          UserPreference?
-  paidBetaSeats        PaidBetaSeat[]
   announcementReceipts AnnouncementReceipt[]
 
   // 资产中心
@@ -309,25 +278,25 @@ model User {
 }
 
 model UserPreference {
-  id                                   String   @id @default(uuid())
-  userId                               String   @unique
-  assistantModel                       String? // 用户配置的 Assistant 对话模型（nullable，必须配置后才能使用）
-  analysisModel                        String? // 用户配置的分析模型（nullable，必须配置后才能使用）
-  characterModel                       String? // 用户配置的角色图片模型
-  locationModel                        String? // 用户配置的场景图片模型
-  editModel                            String? // 用户配置的修图模型
-  videoModel                           String? // 用户配置的视频模型
-  musicModel                           String? // 用户配置的音乐/配乐模型
-  analysisConcurrency                  Int? // 分析流程并发上限
-  imageConcurrency                     Int? // 图像流程并发上限
-  videoConcurrency                     Int? // 视频流程并发上限
-  videoRatio                           String   @default("9:16")
-  videoResolution                      String   @default("720p")
-  createdAt                            DateTime @default(now())
-  updatedAt                            DateTime @default(now()) @updatedAt
-  imageResolution                      String   @default("2K")
-  capabilityDefaults                   String?  @db.Text
-  assistantBillingConfirmationRequired Boolean  @default(true)
+  id                  String   @id @default(uuid())
+  userId              String   @unique
+  assistantModel      String? // 用户配置的 Assistant 对话模型（nullable，必须配置后才能使用）
+  analysisModel       String? // 用户配置的分析模型（nullable，必须配置后才能使用）
+  characterModel      String? // 用户配置的角色图片模型
+  locationModel       String? // 用户配置的场景图片模型
+  editModel           String? // 用户配置的修图模型
+  videoModel          String? // 用户配置的视频模型
+  musicModel          String? // 用户配置的音乐/配乐模型
+  soundModel          String? // 用户配置的环境音效模型
+  analysisConcurrency Int? // 分析流程并发上限
+  imageConcurrency    Int? // 图像流程并发上限
+  videoConcurrency    Int? // 视频流程并发上限
+  videoRatio          String   @default("9:16")
+  videoResolution     String   @default("720p")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @default(now()) @updatedAt
+  imageResolution     String   @default("2K")
+  capabilityDefaults  String?  @db.Text
 
   // API Key 配置（极简版）
   llmBaseUrl  String? @default("https://openrouter.ai/api/v1")
@@ -356,40 +325,6 @@ model VerificationToken {
   @@map("verificationtoken")
 }
 
-model UserBalance {
-  id                    String    @id @default(uuid())
-  userId                String    @unique
-  /// Permanent pool: top-ups and manual grants. Never expires.
-  balance               Int       @default(0)
-  /// Subscription pool: granted each period, expires at `subscriptionExpiresAt`
-  /// and is always consumed before `balance` so it is not wasted.
-  subscriptionCredits   Int       @default(0)
-  subscriptionExpiresAt DateTime?
-  frozenAmount          Int       @default(0)
-  totalSpent            Int       @default(0)
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @default(now()) @updatedAt
-  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("user_balances")
-}
-
-/// Per-user rounding carry for realtime LLM settlement. Provider generations
-/// settle one by one, but the integer credit ledger only moves when cumulative
-/// exact retail usage crosses a whole-credit boundary.
-model LlmBillingMeter {
-  userId                     String   @id
-  prepaidMicrocredits        BigInt   @default(0)
-  totalRetailMicrocredits    BigInt   @default(0)
-  totalChargedCredits        Int      @default(0)
-  totalUncoveredMicrocredits BigInt   @default(0)
-  createdAt                  DateTime @default(now())
-  updatedAt                  DateTime @default(now()) @updatedAt
-  user                       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("llm_billing_meters")
-}
-
 /// One user's subscription. A user has at most one; changing plan updates this
 /// row rather than creating a second one, so there is never a second opinion
 /// about which plan is in force.
@@ -400,109 +335,14 @@ model LlmBillingMeter {
 /// renewing charge on Stripe. Every later payment starts a new paid term and
 /// updates this projection, so a user is on exactly one plan at a time and
 /// there is never a second opinion about which.
-model Subscription {
-  id                 String              @id @default(uuid())
-  userId             String              @unique
-  planId             String              @db.VarChar(32)
-  interval           String              @db.VarChar(8)
-  /// Canonical identity of the paid term currently projected by this row.
-  currentTermKey     String              @db.VarChar(128)
-  /// `active` while the paid term covers today; `expired` once it does not.
-  status             String              @db.VarChar(32)
-  /// Start of the current paid term. Monthly grants are counted from here.
-  currentPeriodStart DateTime
-  /// End of what has been paid for. Grants stop at this boundary.
-  currentPeriodEnd   DateTime
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @default(now()) @updatedAt
-  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  grants             SubscriptionGrant[]
-
-  @@index([status])
-  @@map("subscriptions")
-}
-
-/// One credit grant for one month of a subscription. `periodIndex` counts
-/// months from the start of the paid term, so a yearly subscription grants
-/// twelve times from a single payment. The unique key makes a replayed or
-/// retried grant a no-op instead of free credits.
-model SubscriptionGrant {
-  id             String       @id @default(uuid())
-  subscriptionId String
-  /// Paid-term identity. Period indexes restart at zero for every new term.
-  termKey        String       @db.VarChar(128)
-  periodIndex    Int
-  planId         String       @db.VarChar(32)
-  credits        Int
-  expiresAt      DateTime
-  grantedAt      DateTime     @default(now())
-  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-
-  @@unique([subscriptionId, termKey, periodIndex])
-  @@index([expiresAt])
-  @@map("subscription_grants")
-}
-
 /// One bounded paid-beta wave. The row is the only capacity and lifecycle
 /// owner; payment routes consume its View instead of carrying their own flags.
-model PaidBetaCampaign {
-  id                    String         @id @db.VarChar(64)
-  status                String         @db.VarChar(16)
-  capacity              Int
-  startsAt              DateTime
-  endsAt                DateTime?
-  legacyPaymentCutoffAt DateTime
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @default(now()) @updatedAt
-  seats                 PaidBetaSeat[]
-
-  @@index([status, startsAt, endsAt])
-  @@map("paid_beta_campaigns")
-}
-
 /// A person occupying one seat in one paid-beta wave. `campaignId + userId`
 /// is the canonical participant identity, so repeat purchases never consume a
 /// second seat.
-model PaidBetaSeat {
-  id         String                   @id @default(uuid())
-  campaignId String                   @db.VarChar(64)
-  userId     String
-  status     String                   @db.VarChar(16)
-  paidAt     DateTime?
-  releasedAt DateTime?
-  createdAt  DateTime                 @default(now())
-  updatedAt  DateTime                 @default(now()) @updatedAt
-  campaign   PaidBetaCampaign         @relation(fields: [campaignId], references: [id], onDelete: Restrict)
-  user       User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  attempts   PaidBetaPaymentAttempt[]
-
-  @@unique([campaignId, userId])
-  @@index([campaignId, status, createdAt])
-  @@index([userId, status])
-  @@map("paid_beta_seats")
-}
-
 /// A provider-side attempt that belongs to a reserved seat. The provider
 /// object identity lets card redirects and webhook replays converge on the
 /// same local fact without interpreting URLs or UI state.
-model PaidBetaPaymentAttempt {
-  id               String       @id @default(uuid())
-  seatId           String
-  providerKind     String       @db.VarChar(32)
-  providerObjectId String?      @unique @db.VarChar(191)
-  status           String       @db.VarChar(16)
-  expiresAt        DateTime
-  paidAt           DateTime?
-  terminalAt       DateTime?
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @default(now()) @updatedAt
-  seat             PaidBetaSeat @relation(fields: [seatId], references: [id], onDelete: Cascade)
-
-  @@index([seatId, status, expiresAt])
-  @@index([status, expiresAt])
-  @@map("paid_beta_payment_attempts")
-}
-
 /// One explicit request to be contacted when the public beta opens.
 /// `campaignId + phoneE164` is the canonical identity, so retries and
 /// concurrent submissions cannot create duplicate contact records.
@@ -536,57 +376,6 @@ model AnnouncementReceipt {
   @@map("announcement_receipts")
 }
 
-model BalanceFreeze {
-  id                 String    @id @default(uuid())
-  userId             String
-  amount             Int
-  /// Portion of `amount` taken from the subscription pool. The remainder came
-  /// from the permanent pool. Settlement and rollback return each portion to
-  /// the pool it came from.
-  subscriptionAmount Int       @default(0)
-  status             String    @default("pending")
-  source             String?   @db.VarChar(64)
-  taskId             String?
-  requestId          String?
-  idempotencyKey     String?   @unique
-  metadata           String?   @db.Text
-  expiresAt          DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @default(now()) @updatedAt
-
-  @@index([userId])
-  @@index([status])
-  @@index([taskId])
-  @@map("balance_freezes")
-}
-
-model BalanceTransaction {
-  id              String   @id @default(uuid())
-  userId          String
-  type            String
-  amount          Int
-  balanceAfter    Int
-  description     String?  @db.Text
-  relatedId       String?
-  freezeId        String?
-  operatorId      String?  @db.VarChar(64)
-  externalOrderId String?  @db.VarChar(128)
-  idempotencyKey  String?  @db.VarChar(128)
-  projectId       String?  @db.VarChar(128) // 关联项目 ID，用于流水展示项目名
-  taskType        String?  @db.VarChar(64) // 任务类型 key（与 action 一致），用于前端 i18n
-  billingMeta     String?  @db.Text // 计费详情 JSON: { quantity, unit, model, resolution, duration, tokens... }
-  createdAt       DateTime @default(now())
-
-  @@unique([userId, type, idempotencyKey])
-  @@index([userId])
-  @@index([type])
-  @@index([createdAt])
-  @@index([freezeId])
-  @@index([externalOrderId])
-  @@index([projectId])
-  @@map("balance_transactions")
-}
-
 model Task {
   id                   String    @id @default(uuid())
   userId               String
@@ -602,15 +391,12 @@ model Task {
   operationId          String?   @db.VarChar(128)
   operationSource      String?   @db.VarChar(64)
   operationRequestId   String?   @db.VarChar(128)
-  approvalGrantId      String?   @db.VarChar(191)
   operationExecutionId String?   @db.VarChar(191)
   operationPlanTaskId  String?   @db.VarChar(191)
   payload              Json?
   executionFingerprint String?   @db.VarChar(64)
   result               Json?
   failure              Json?
-  billingInfo          Json?
-  billedAt             DateTime?
   queuedAt             DateTime  @default(now())
   startedAt            DateTime?
   finishedAt           DateTime?
@@ -622,7 +408,6 @@ model Task {
   childTasks           Task[]                    @relation("TaskChildren")
   events               TaskEvent[]
   executionCheckpoints TaskExecutionCheckpoint[]
-  approvalGrant        ApprovalGrant?            @relation(fields: [approvalGrantId], references: [id], onDelete: Restrict)
   operationExecution   OperationExecution?       @relation(fields: [operationExecutionId], references: [id], onDelete: Restrict)
   workspaceResources   WorkspaceResource[]
   followUpMemberships  FollowUpBatchMember[]
@@ -635,7 +420,6 @@ model Task {
   @@index([parentTaskId])
   @@index([projectId, status, updatedAt])
   @@index([projectId, operationId, updatedAt])
-  @@index([approvalGrantId])
   @@index([operationExecutionId])
   @@index([userId])
   @@map("tasks")
@@ -697,10 +481,7 @@ model OperationPlanSnapshot {
   inputHash                 String               @db.VarChar(64)
   planSnapshot              Json
   planHash                  String               @db.VarChar(64)
-  quoteSnapshot             Json
-  quoteHash                 String               @db.VarChar(64)
   createdAt                 DateTime             @default(now())
-  approvalGrants            ApprovalGrant[]
   executions                OperationExecution[]
 
   @@unique([userId, scopeKind, scopeId, operationId, apiRequestId], map: "operation_plan_snapshots_api_request_key")
@@ -708,40 +489,9 @@ model OperationPlanSnapshot {
   @@map("operation_plan_snapshots")
 }
 
-model ApprovalGrant {
-  id                  String                @id @default(uuid())
-  userId              String
-  scopeKind           String                @db.VarChar(32)
-  scopeId             String                @db.VarChar(191)
-  projectId           String?
-  operationId         String                @db.VarChar(128)
-  planSnapshotId      String
-  requestId           String                @db.VarChar(128)
-  inputHash           String                @db.VarChar(64)
-  planHash            String                @db.VarChar(64)
-  quoteHash           String                @db.VarChar(64)
-  quoteCeiling        Int?
-  currency            String?               @db.VarChar(16)
-  issuedAt            DateTime              @default(now())
-  revokedAt           DateTime?
-  consumedAt          DateTime?
-  consumedExecutionId String?               @db.VarChar(191)
-  version             Int                   @default(0)
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
-  planSnapshot        OperationPlanSnapshot @relation(fields: [planSnapshotId], references: [id], onDelete: Restrict)
-  executions          OperationExecution[]
-  tasks               Task[]
-
-  @@unique([planSnapshotId])
-  @@index([userId, scopeKind, scopeId, operationId])
-  @@index([consumedExecutionId])
-  @@map("approval_grants")
-}
-
 model OperationExecution {
   id                   String                 @id @default(uuid())
-  executionKind        String                 @default("approved_plan") @db.VarChar(32)
+  executionKind        String                 @default("planned") @db.VarChar(32)
   commandId            String?                @unique @db.VarChar(191)
   payloadHash          String?                @db.VarChar(64)
   contractRevision     String?                @db.VarChar(128)
@@ -754,7 +504,6 @@ model OperationExecution {
   projectId            String?
   operationId          String                 @db.VarChar(128)
   planSnapshotId       String?
-  approvalGrantId      String?                @unique
   requestId            String                 @db.VarChar(128)
   status               String                 @db.VarChar(32)
   output               Json?
@@ -762,7 +511,6 @@ model OperationExecution {
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
   planSnapshot         OperationPlanSnapshot? @relation(fields: [planSnapshotId], references: [id], onDelete: Restrict)
-  approvalGrant        ApprovalGrant?         @relation(fields: [approvalGrantId], references: [id], onDelete: Restrict)
   tasks                Task[]
   workspaceResources   WorkspaceResource[]    @relation("WorkspaceResourceOperationExecution")
   alternativeResources WorkspaceResource[]    @relation("WorkspaceResourceAlternativeGroupExecution")

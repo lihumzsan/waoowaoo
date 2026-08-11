@@ -1,13 +1,11 @@
 import { createHash } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { createScopedLogger } from '@/lib/logging/core'
-import { getBillingMode } from '@/lib/billing'
-import { buildBillingReceiptView } from '@/lib/billing/task-billing-view'
 import { loadOperationPlanSnapshot } from '@/lib/operations/operation-plan-snapshot'
 import type { PlannedTask } from '@/lib/operations/planning'
 import { buildTaskProgressGroupId, withTaskProgressGroupPayload } from './progress-group'
 import { normalizeTaskPayload, toObject, type SubmitTaskResult } from './submitter'
-import { isTaskType, type CreateTaskInput, type TaskBillingInfo } from './types'
+import { isTaskType, type CreateTaskInput } from './types'
 import { persistSubmittedTaskBatchInTransaction } from './transactional-create'
 
 const logger = createScopedLogger({ module: 'task.submitter' })
@@ -22,13 +20,11 @@ function preparePlannedTask(params: {
   projectId: string
   operationId: string
   operationSource: string
-  approvalGrantId: string
   operationExecutionId: string
   operationRequestId: string
 }): CreateTaskInput & {
   id: string
   payload: Record<string, unknown>
-  billingInfo: TaskBillingInfo
 } {
   const progressGroupId = buildTaskProgressGroupId({
     operationId: params.operationId,
@@ -57,10 +53,8 @@ function preparePlannedTask(params: {
     targetId: params.task.target.targetId,
     payload,
     dedupeKey: params.task.dedupeKey ?? null,
-    billingInfo: params.task.billingInfo,
     operationId: params.operationId,
     operationSource: params.operationSource,
-    approvalGrantId: params.approvalGrantId,
     operationExecutionId: params.operationExecutionId,
     operationPlanTaskId: params.task.id,
     operationRequestId: params.operationRequestId,
@@ -68,7 +62,6 @@ function preparePlannedTask(params: {
 }
 
 export async function submitApprovedOperationPlanTasks(params: {
-  approvalGrantId: string
   operationExecutionId: string
   transaction: Prisma.TransactionClient
   operationSource: string
@@ -80,7 +73,6 @@ export async function submitApprovedOperationPlanTasks(params: {
   if (
     !execution
     || execution.status !== 'committing'
-    || execution.approvalGrantId !== params.approvalGrantId
     || execution.planSnapshotId === null
   ) {
     throw new Error(`OPERATION_EXECUTION_AUTHORIZATION_INVALID:${params.operationExecutionId}`)
@@ -98,32 +90,15 @@ export async function submitApprovedOperationPlanTasks(params: {
       projectId: snapshot.plan.projectId,
       operationId: execution.operationId,
       operationSource: params.operationSource,
-      approvalGrantId: params.approvalGrantId,
       operationExecutionId: params.operationExecutionId,
       operationRequestId: execution.requestId,
     }),
   )
-  const billingMode = await getBillingMode()
-
-  const grant = await tx.approvalGrant.findUnique({
-    where: { id: params.approvalGrantId },
-  })
-  if (
-    !grant
-    || grant.revokedAt
-    || !grant.consumedAt
-    || grant.consumedExecutionId !== params.operationExecutionId
-    || grant.version !== 1
-  ) {
-    throw new Error(`APPROVAL_GRANT_NOT_USABLE:${params.approvalGrantId}`)
-  }
-
   if (planned.length === 0) return new Map()
 
   const persisted = await persistSubmittedTaskBatchInTransaction({
     tx,
     inputs: planned,
-    billingMode,
   })
   logger.info({
     action: 'task.submit.persisted',
@@ -134,7 +109,6 @@ export async function submitApprovedOperationPlanTasks(params: {
     requestId: execution.requestId,
     details: {
       operationExecutionId: params.operationExecutionId,
-      approvalGrantId: params.approvalGrantId,
       count: persisted.length,
       dedupedCount: persisted.filter(({ deduped }) => deduped).length,
       taskIds: persisted.map(({ task }) => task.id),
@@ -146,7 +120,6 @@ export async function submitApprovedOperationPlanTasks(params: {
       taskType: task.type,
       operationPlanTaskId: task.operationPlanTaskId,
       status: task.status,
-      billingInfo: task.billingInfo,
       deduped,
   })))
 }
@@ -157,7 +130,6 @@ async function buildSubmitTaskResults(
     taskType: string
     operationPlanTaskId: string | null
     status: string
-    billingInfo: Prisma.JsonValue | null
     deduped: boolean
   }>,
 ): Promise<Map<string, SubmitTaskResult>> {
@@ -165,7 +137,6 @@ async function buildSubmitTaskResults(
   for (const task of stored) {
     if (!task.operationPlanTaskId) throw new Error(`OPERATION_PLAN_TASK_ID_MISSING:${task.id}`)
     if (!isTaskType(task.taskType)) throw new Error(`TASK_TYPE_UNSUPPORTED:${task.taskType}`)
-    const billingInfo = task.billingInfo as TaskBillingInfo | null
     result.set(task.operationPlanTaskId, {
       success: true,
       async: true,
@@ -173,7 +144,6 @@ async function buildSubmitTaskResults(
       taskType: task.taskType,
       status: task.status,
       deduped: task.deduped,
-      billingReceiptView: await buildBillingReceiptView(billingInfo),
     })
   }
   return result

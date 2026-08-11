@@ -6,9 +6,18 @@ import type {
   RuntimeUserInput,
 } from '@/lib/codex-runtime/runtime-adapter'
 import type { FailureRecord } from '@/lib/errors/failure'
-import type { LlmUsageFact } from '@/lib/billing/llm-usage'
 
 export const ASSISTANT_RUNTIME_ASSISTANT_ID = 'workspace-command' as const
+
+export interface AssistantRuntimeUsageFact {
+  readonly phase: string
+  readonly modelKey: string
+  readonly inputTokens: number
+  readonly outputTokens: number
+  readonly cachedInputTokens: number
+  readonly requestCount: number
+  readonly toolCalls: number
+}
 
 export class AssistantRuntimeProjectBusyError extends Error {
   constructor() {
@@ -159,5 +168,5 @@ export type AssistantRuntimeTerminalProjection = {
   readonly stopReason: string
   readonly failure: FailureRecord | null
   readonly assistantMessage: UIMessage | null
-  readonly usage: LlmUsageFact | null
+  readonly usage: AssistantRuntimeUsageFact | null
 }

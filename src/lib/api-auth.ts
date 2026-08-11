@@ -221,6 +221,7 @@ export async function requireProjectAuth(projectId: string): Promise<ProjectAuth
         editModel?: string | null
         videoModel?: string | null
         musicModel?: string | null
+        soundModel?: string | null
         [key: string]: unknown
     }
     const processedProjectData = {
@@ -231,6 +232,7 @@ export async function requireProjectAuth(projectId: string): Promise<ProjectAuth
         editModel: extractModelKey(rawProjectData.editModel),
         videoModel: extractModelKey(rawProjectData.videoModel),
         musicModel: extractModelKey(rawProjectData.musicModel),
+        soundModel: extractModelKey(rawProjectData.soundModel),
     }
 
     return {

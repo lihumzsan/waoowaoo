@@ -25,7 +25,6 @@ import {
     DEFAULT_WORKFLOW_CONCURRENCY,
     mergeModelsForDisplay,
     mergeProvidersForDisplay,
-    parsePricingDisplayMap,
     parseWorkflowConcurrency,
     replaceDefaultModelKey,
     type DefaultModels,
@@ -103,7 +102,6 @@ export function useProviders(): UseProvidersReturn {
         if (!data.catalog) {
             throw new Error('API_CONFIG_CATALOG_MISSING')
         }
-        const pricingDisplay = parsePricingDisplayMap(data.pricingDisplay)
         const catalogProviders = data.catalog.providers
         const catalogModels = data.catalog.models
         catalogProviderIdsRef.current = new Set(catalogProviders.map((provider) => provider.id))
@@ -116,7 +114,7 @@ export function useProviders(): UseProvidersReturn {
 
         const savedProviders: Provider[] = data.providers || []
         setProviders(mergeProvidersForDisplay(savedProviders, serverCatalogProviders))
-        setModels(mergeModelsForDisplay(data.models || [], catalogModels, pricingDisplay))
+        setModels(mergeModelsForDisplay(data.models || [], catalogModels))
         if (data.defaultModels) setDefaultModels(data.defaultModels)
         setWorkflowConcurrency(parseWorkflowConcurrency(data.workflowConcurrency))
         if (data.capabilityDefaults && typeof data.capabilityDefaults === 'object') {

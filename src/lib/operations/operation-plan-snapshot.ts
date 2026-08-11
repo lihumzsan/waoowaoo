@@ -3,7 +3,6 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import {
   assertOperationPlanTaskResourceScopes,
-  type BillingQuoteView,
   type OperationPlan,
   type OperationPlanView,
   type PlannedTask,
@@ -66,7 +65,6 @@ function parsePlannedTask(value: unknown): PlannedTask {
   const record = readRecord(value, 'tasks[]')
   const target = readRecord(record.target, 'tasks[].target')
   const payload = readRecord(record.payload, 'tasks[].payload')
-  const billingInfo = readRecord(record.billingInfo, 'tasks[].billingInfo') as PlannedTask['billingInfo']
   const locale = readString(record, 'locale') as PlannedTask['locale']
   return {
     id: readString(record, 'id'),
@@ -76,7 +74,6 @@ function parsePlannedTask(value: unknown): PlannedTask {
       targetId: readString(target, 'targetId'),
     },
     payload,
-    billingInfo,
     locale,
     dedupeKey: readNullableString(record, 'dedupeKey'),
   }
@@ -182,25 +179,20 @@ export interface PersistedOperationPlanSnapshot {
   inputHash: string
   plan: OperationPlan
   planHash: string
-  quote: BillingQuoteView
-  quoteHash: string
 }
 
 export interface OperationPlanArtifactHashes {
   readonly inputHash: string
   readonly planHash: string
-  readonly quoteHash: string
 }
 
 export function hashOperationPlanArtifacts(params: {
   readonly normalizedInput: unknown
   readonly plan: OperationPlan
-  readonly quote: BillingQuoteView
 }): OperationPlanArtifactHashes {
   return {
     inputHash: hashCanonicalJson(params.normalizedInput),
     planHash: hashCanonicalJson(params.plan),
-    quoteHash: hashCanonicalJson(params.quote),
   }
 }
 
@@ -208,15 +200,11 @@ function parsePersistedOperationPlanSnapshot(
   record: OperationPlanSnapshotRow,
 ): PersistedOperationPlanSnapshot {
   const plan = parseOperationPlan(record.planSnapshot)
-  const quote = readRecord(record.quoteSnapshot, 'quoteSnapshot') as unknown as BillingQuoteView
   if (hashCanonicalJson(record.normalizedInput) !== record.inputHash) {
     throw new Error(`OPERATION_PLAN_INPUT_HASH_MISMATCH:${record.id}`)
   }
   if (hashCanonicalJson(record.planSnapshot) !== record.planHash) {
     throw new Error(`OPERATION_PLAN_HASH_MISMATCH:${record.id}`)
-  }
-  if (hashCanonicalJson(record.quoteSnapshot) !== record.quoteHash) {
-    throw new Error(`OPERATION_QUOTE_HASH_MISMATCH:${record.id}`)
   }
   if (
     (record.apiRequestId === null) !== (record.apiRequestContextHash === null)
@@ -237,8 +225,6 @@ function parsePersistedOperationPlanSnapshot(
     inputHash: record.inputHash,
     plan,
     planHash: record.planHash,
-    quote,
-    quoteHash: record.quoteHash,
   }
 }
 
@@ -248,7 +234,6 @@ function assertApiRequestReplayMatches(params: {
   readonly inputHash: string
   readonly apiRequestContextHash?: string
   readonly planHash?: string
-  readonly quoteHash?: string
 }): void {
   const snapshot = params.snapshot
   if (
@@ -259,7 +244,6 @@ function assertApiRequestReplayMatches(params: {
       && snapshot.apiRequestContextHash !== params.apiRequestContextHash
     )
     || (params.planHash !== undefined && snapshot.planHash !== params.planHash)
-    || (params.quoteHash !== undefined && snapshot.quoteHash !== params.quoteHash)
   ) {
     throw new ApiError('CONFLICT', {
       code: 'OPERATION_PLAN_REQUEST_REPLAY_DIVERGED',
@@ -309,7 +293,6 @@ export async function persistOperationPlanSnapshot(params: {
   plan: OperationPlan
   executionContractRevision: string
   normalizedInput: unknown
-  quote: BillingQuoteView
   apiRequestId?: string | null
   apiRequestContext?: unknown
 }): Promise<PersistedOperationPlanSnapshot> {
@@ -333,11 +316,9 @@ export async function persistOperationPlanSnapshot(params: {
     ? hashCanonicalJson(params.apiRequestContext ?? {})
     : null
   const planSnapshot = toInputJson(params.plan)
-  const quoteSnapshot = toInputJson(params.quote)
-  const { inputHash, planHash, quoteHash } = hashOperationPlanArtifacts({
+  const { inputHash, planHash } = hashOperationPlanArtifacts({
     normalizedInput,
     plan: params.plan,
-    quote: params.quote,
   })
   const snapshotData = {
     id: randomUUID(),
@@ -353,8 +334,6 @@ export async function persistOperationPlanSnapshot(params: {
     inputHash,
     planSnapshot,
     planHash,
-    quoteSnapshot,
-    quoteHash,
   }
   try {
     const created = await prisma.operationPlanSnapshot.create({ data: snapshotData })
@@ -384,7 +363,6 @@ export async function persistOperationPlanSnapshot(params: {
       inputHash,
       ...(apiRequestContextHash ? { apiRequestContextHash } : {}),
       planHash,
-      quoteHash,
     })
     return snapshot
   }
@@ -409,6 +387,5 @@ export function attachPersistedPlanIdentity(view: OperationPlanView, snapshot: P
     planSnapshotId: snapshot.id,
     inputHash: snapshot.inputHash,
     planHash: snapshot.planHash,
-    quoteHash: snapshot.quoteHash,
   }
 }

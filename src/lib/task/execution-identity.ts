@@ -19,7 +19,6 @@ export function createTaskExecutionFingerprint(input: CreateTaskInput): string {
     payload: input.payload ?? null,
     operationId: input.operationId ?? null,
     operationSource: input.operationSource ?? null,
-    approvalGrantId: input.approvalGrantId ?? null,
     operationExecutionId: input.operationExecutionId ?? null,
     operationPlanTaskId: input.operationPlanTaskId ?? null,
     operationRequestId: input.operationRequestId ?? null,

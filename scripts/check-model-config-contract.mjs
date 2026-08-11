@@ -7,14 +7,16 @@ const PROJECT_MODEL_FIELDS = [
   'locationModel',
   'editModel',
   'videoModel',
+  'musicModel',
+  'soundModel',
 ]
 const USER_MODEL_FIELDS = [
   'assistantModel',
   ...PROJECT_MODEL_FIELDS,
 ]
 const MAX_SAMPLES = 200
-const CAPABILITY_NAMESPACES = new Set(['llm', 'image', 'video', 'music', 'voice'])
-const MODEL_TYPES = new Set(['llm', 'image', 'video', 'music', 'voice'])
+const CAPABILITY_NAMESPACES = new Set(['llm', 'image', 'video', 'music', 'sound', 'voice'])
+const MODEL_TYPES = new Set(['llm', 'image', 'video', 'music', 'sound', 'voice'])
 const CAPABILITY_NAMESPACE_ALLOWED_FIELDS = {
   llm: new Set(['reasoningEffortOptions', 'fieldI18n']),
   image: new Set(['resolutionOptions', 'qualityOptions', 'fieldI18n']),
@@ -25,7 +27,8 @@ const CAPABILITY_NAMESPACE_ALLOWED_FIELDS = {
     'supportGenerateAudio',
     'fieldI18n',
   ]),
-  music: new Set(['durationSecondsOptions', 'vocalModeOptions', 'outputFormatOptions', 'bpmOptions', 'fieldI18n']),
+  music: new Set(['durationSecondsOptions', 'durationSecondsRange', 'vocalModeOptions', 'outputFormatOptions', 'bpmOptions', 'maxReferenceVideos', 'promptMaxChars', 'fieldI18n']),
+  sound: new Set(['durationSecondsRange', 'outputFormatOptions', 'promptMaxChars', 'fieldI18n']),
   voice: new Set(['languageOptions', 'fieldI18n']),
 }
 
@@ -46,6 +49,9 @@ const CAPABILITY_NAMESPACE_I18N_FIELDS = {
     vocalMode: 'vocalModeOptions',
     outputFormat: 'outputFormatOptions',
     bpm: 'bpmOptions',
+  },
+  sound: {
+    outputFormat: 'outputFormatOptions',
   },
   voice: { language: 'languageOptions' },
 }
@@ -292,6 +298,31 @@ function validateCapabilities(modelType, capabilities) {
     }
   }
 
+  const sound = capabilities.sound
+  if (sound !== undefined) {
+    if (!isRecord(sound)) {
+      pushIssue(issues, 'capabilities.sound', 'sound capabilities must be an object')
+    } else {
+      validateAllowedFields(issues, 'sound', sound)
+      if (sound.durationSecondsRange !== undefined && (!isRecord(sound.durationSecondsRange)
+        || typeof sound.durationSecondsRange.min !== 'number'
+        || typeof sound.durationSecondsRange.max !== 'number'
+        || !Number.isFinite(sound.durationSecondsRange.min)
+        || !Number.isFinite(sound.durationSecondsRange.max)
+        || sound.durationSecondsRange.min <= 0
+        || sound.durationSecondsRange.max < sound.durationSecondsRange.min)) {
+        pushIssue(issues, 'capabilities.sound.durationSecondsRange', 'must contain finite positive min/max values with max >= min')
+      }
+      if (sound.outputFormatOptions !== undefined && !isStringArray(sound.outputFormatOptions)) {
+        pushIssue(issues, 'capabilities.sound.outputFormatOptions', 'must be string array')
+      }
+      if (sound.promptMaxChars !== undefined && (!Number.isInteger(sound.promptMaxChars) || sound.promptMaxChars <= 0)) {
+        pushIssue(issues, 'capabilities.sound.promptMaxChars', 'must be positive integer')
+      }
+      validateFieldI18nMap(issues, 'sound', sound)
+    }
+  }
+
   return issues
 }
 
@@ -330,6 +361,8 @@ async function main() {
       locationModel: true,
       editModel: true,
       videoModel: true,
+      musicModel: true,
+      soundModel: true,
     },
   })
 
@@ -423,6 +456,8 @@ async function main() {
       locationModel: true,
       editModel: true,
       videoModel: true,
+      musicModel: true,
+      soundModel: true,
     },
   })
 

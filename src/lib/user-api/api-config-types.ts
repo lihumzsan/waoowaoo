@@ -7,6 +7,7 @@ export type DefaultModelField =
   | 'editModel'
   | 'videoModel'
   | 'musicModel'
+  | 'soundModel'
 
 export interface StoredProvider {
   id: string
@@ -22,7 +23,7 @@ export interface StoredModel {
   name: string
   type: UnifiedModelType
   provider: string
-  // Non-authoritative display field; billing always uses server pricing catalog.
+  // Provider metadata retained for user-owned API configuration only.
   price: number
   priceMin?: number
   priceMax?: number
@@ -32,16 +33,6 @@ export interface StoredModel {
   capabilities?: ModelCapabilities
 }
 
-export interface PricingDisplayItem {
-  min: number
-  max: number
-  label: string
-  input?: number
-  output?: number
-}
-
-export type PricingDisplayMap = Record<string, PricingDisplayItem>
-
 export interface DefaultModelsPayload {
   assistantModel?: string
   analysisModel?: string
@@ -50,6 +41,7 @@ export interface DefaultModelsPayload {
   editModel?: string
   videoModel?: string
   musicModel?: string
+  soundModel?: string
 }
 
 export interface WorkflowConcurrencyPayload {
@@ -74,10 +66,12 @@ export const DEFAULT_MODEL_FIELDS: DefaultModelField[] = [
   'editModel',
   'videoModel',
   'musicModel',
+  'soundModel',
 ]
 export const CAPABILITY_MODEL_TYPES: readonly UnifiedModelType[] = [
   'image',
   'video',
   'llm',
   'music',
+  'sound',
 ]

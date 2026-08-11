@@ -16,7 +16,6 @@ const creatableKindSchema = z.enum(ASSET_CREATABLE_KINDS satisfies ReadonlyArray
 
 const EFFECTS_QUERY = {
   writes: false,
-  billable: false,
   destructive: false,
   overwrite: false,
   bulk: false,
@@ -27,7 +26,6 @@ const EFFECTS_QUERY = {
 const EFFECTS_WRITE = {
   writes: true,
   workspaceResourceImpact: 'global_assets',
-  billable: false,
   destructive: false,
   overwrite: false,
   bulk: false,
@@ -38,7 +36,6 @@ const EFFECTS_WRITE = {
 const EFFECTS_WRITE_OVERWRITE = {
   writes: true,
   workspaceResourceImpact: 'global_assets',
-  billable: false,
   destructive: false,
   overwrite: true,
   bulk: false,

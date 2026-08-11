@@ -21,7 +21,6 @@ export function createUserApiConfigConnectionDiagnosticOperations(): ProjectAgen
       intent: 'act',
       effects: {
         writes: false,
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,
@@ -49,7 +48,6 @@ export function createUserApiConfigConnectionDiagnosticOperations(): ProjectAgen
       intent: 'act',
       effects: {
         writes: false,
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,

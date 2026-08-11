@@ -167,7 +167,6 @@ export function createMediaUploadApiOperations(): ProjectAgentOperationRegistryD
       intent: 'query',
       effects: {
         writes: false,
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,
@@ -261,7 +260,6 @@ export function createMediaUploadApiOperations(): ProjectAgentOperationRegistryD
         // Only bytes and the shared MediaObject registration are written; no
         // Resource exists until register_uploaded_media materializes one.
         workspaceResourceImpact: 'none',
-        billable: false,
         destructive: false,
         overwrite: false,
         bulk: false,

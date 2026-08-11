@@ -173,7 +173,7 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
     } else {
       throw new Error(`PROJECT_AGENT_OPERATION_RESOURCE_CONTRACT_KIND_INVALID:${operationId}`)
     }
-    const keys = ['writes', 'billable', 'destructive', 'overwrite', 'bulk', 'externalSideEffects', 'longRunning'] as const
+    const keys = ['writes', 'destructive', 'overwrite', 'bulk', 'externalSideEffects', 'longRunning'] as const
     for (const key of keys) {
       if (effects[key] !== true && effects[key] !== false) {
         throw new Error(`PROJECT_AGENT_OPERATION_EFFECTS_INVALID:${operationId}:${key}`)
@@ -204,22 +204,23 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
     if (confirmation.required !== true && confirmation.required !== false) {
       throw new Error(`PROJECT_AGENT_OPERATION_CONFIRMATION_REQUIRED_INVALID:${operationId}`)
     }
-    if (confirmation.kind !== 'none' && confirmation.kind !== 'billable_media' && confirmation.kind !== 'destructive') {
+    if (confirmation.kind !== 'none' && confirmation.kind !== 'destructive') {
       throw new Error(`PROJECT_AGENT_OPERATION_CONFIRMATION_KIND_INVALID:${operationId}`)
     }
     if ((confirmation.kind === 'none') !== (confirmation.required === false)) {
       throw new Error(`PROJECT_AGENT_OPERATION_CONFIRMATION_KIND_REQUIRED_MISMATCH:${operationId}`)
     }
-    if (confirmation.kind === 'billable_media') {
+    const hasPlannedExecutor = typeof op.plan === 'function' || typeof op.commit === 'function'
+    if (hasPlannedExecutor) {
       mustTrimmedString(op.planContractRevision, 'PLAN_CONTRACT_REVISION')
       if (typeof op.plan !== 'function' || typeof op.commit !== 'function') {
-        throw new Error(`PROJECT_AGENT_BILLABLE_OPERATION_PLAN_COMMIT_REQUIRED:${operationId}`)
+        throw new Error(`PROJECT_AGENT_OPERATION_PLAN_COMMIT_REQUIRED:${operationId}`)
       }
       if (
         op.execute !== undefined
         || op.executeInTransaction !== undefined
       ) {
-        throw new Error(`PROJECT_AGENT_BILLABLE_OPERATION_EXECUTOR_FORBIDDEN:${operationId}`)
+        throw new Error(`PROJECT_AGENT_OPERATION_EXECUTOR_FORBIDDEN:${operationId}`)
       }
     } else {
       if (op.planContractRevision !== undefined) {
@@ -263,8 +264,7 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
       effects.writes === true
       && effects.workspaceResourceImpact !== WORKSPACE_RESOURCE_IMPACT.NONE
       && (
-        confirmation.kind === 'billable_media'
-        || typeof op.executeInTransaction !== 'function'
+        (typeof op.plan !== 'function' && typeof op.executeInTransaction !== 'function')
       )
     ) {
       throw new Error(

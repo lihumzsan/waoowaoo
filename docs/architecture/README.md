@@ -19,7 +19,6 @@ npm run architecture:impact -- <准备修改的文件或目录>
 | --- | --- |
 | 执行许可、长期 Task 调度、恢复与跨系统交接 | [Temporal 持久执行边界](modules/durable-execution.md) |
 | Task 提交、attempt、Provider 幂等与终态 | [Temporal 异步 Task 生命周期](modules/async-task-lifecycle.md) |
-| 报价、审批、扣费、余额与订阅 | [计费与审批](modules/billing-approval.md) |
 | provider/模型选择、异步轮询、外部失败与出站边界 | [Provider Gateway](modules/provider-gateway.md) |
 | 资源身份、内容版本、Lineage、Placement 与工作区写回 | [Workspace Resource 树](modules/workspace-resource.md) |
 | 全局 Asset Hub 的 owner、kind、variant 与媒体访问边界 | [资产 Scope 所有权](modules/asset-scope-ownership.md) |

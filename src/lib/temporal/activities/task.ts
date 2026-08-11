@@ -7,7 +7,6 @@ import {
   heartbeat,
 } from '@temporalio/activity'
 import { Prisma } from '@prisma/client'
-import { withTextUsageCollection, type TextUsageEntry } from '@/lib/billing/runtime-usage'
 import { getUserWorkflowConcurrencyConfig } from '@/lib/config-service'
 import {
   createFailureRecord,
@@ -80,11 +79,9 @@ type WorkflowTaskRow = {
   targetType: string
   targetId: string
   payload: unknown
-  billingInfo: unknown
   userId: string
   operationId: string | null
   operationSource: string | null
-  approvalGrantId: string | null
   operationExecutionId: string | null
   operationPlanTaskId: string | null
   operationRequestId: string | null
@@ -189,11 +186,9 @@ async function loadTaskRow(taskId: string): Promise<WorkflowTaskRow> {
       targetType: true,
       targetId: true,
       payload: true,
-      billingInfo: true,
       userId: true,
       operationId: true,
       operationSource: true,
-      approvalGrantId: true,
       operationExecutionId: true,
       operationPlanTaskId: true,
       operationRequestId: true,
@@ -721,10 +716,7 @@ export async function runTaskAttempt(input: RunTaskAttemptInput): Promise<RunTas
   }
 
   try {
-    let executed: {
-      result: TaskExecutionResult
-      textUsage: TextUsageEntry[]
-    }
+    let executed: TaskExecutionResult
     try {
       executed = await withLogContext(
         {
@@ -735,8 +727,7 @@ export async function runTaskAttempt(input: RunTaskAttemptInput): Promise<RunTas
           projectId: data.projectId,
           userId: data.userId,
         },
-        async () =>
-          await withTextUsageCollection(async () => await executeTaskHandler(executionContext)),
+        async () => await executeTaskHandler(executionContext),
       )
     } catch (error) {
       if (activityContext.cancellationSignal.aborted) {
@@ -797,8 +788,7 @@ export async function runTaskAttempt(input: RunTaskAttemptInput): Promise<RunTas
       taskId: input.taskId,
       inputFingerprint,
       output: {
-        result: executed.result ?? null,
-        textUsage: executed.textUsage,
+        result: executed ?? null,
       },
     })
     return {

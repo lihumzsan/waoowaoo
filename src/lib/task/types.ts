@@ -63,33 +63,6 @@ export function isTaskType(value: unknown): value is TaskType {
   return typeof value === 'string' && TASK_TYPE_VALUES.has(value)
 }
 
-export type BillingMode = 'OFF' | 'SHADOW' | 'ENFORCE'
-
-export type TaskBillingInfo =
-  | {
-    billable: false
-    source?: 'task'
-    status?: 'skipped'
-  }
-  | {
-    billable: true
-    source: 'task'
-    taskType: TaskType
-    apiType: 'text' | 'image' | 'video' | 'music' | 'voice'
-    model: string
-    quantity: number
-    unit: 'token' | 'image' | 'video' | 'second' | 'call' | 'character'
-    maxFrozenCost: number
-    pricingVersion?: string
-    action: string
-    metadata?: Record<string, unknown>
-    billingKey?: string
-    freezeId?: string | null
-    modeSnapshot?: BillingMode | null
-    status?: 'skipped' | 'quoted' | 'frozen' | 'settled' | 'rolled_back' | 'failed'
-    chargedCost?: number
-  }
-
 export type TaskExecutionData = {
   taskId: string
   parentTaskId?: string | null
@@ -99,11 +72,9 @@ export type TaskExecutionData = {
   targetType: string
   targetId: string
   payload?: Record<string, unknown> | null
-  billingInfo?: TaskBillingInfo | null
   userId: string
   operationId?: string | null
   operationSource?: string | null
-  approvalGrantId?: string | null
   operationExecutionId?: string | null
   operationPlanTaskId?: string | null
   operationRequestId?: string | null
@@ -131,10 +102,8 @@ export type CreateTaskInput = {
   targetId: string
   payload?: Record<string, unknown> | null
   dedupeKey?: string | null
-  billingInfo?: TaskBillingInfo | null
   operationId?: string | null
   operationSource?: string | null
-  approvalGrantId?: string | null
   operationExecutionId?: string | null
   operationPlanTaskId?: string | null
   operationRequestId?: string | null

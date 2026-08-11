@@ -1,9 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { TASK_STATUS, TASK_TYPE, type CreateTaskInput } from '@/lib/task/types'
 import { tryUpdateTaskProgress } from '@/lib/task/service'
 import { persistSubmittedTaskBatchInTransaction } from '@/lib/task/transactional-create'
 import { prisma } from '../../helpers/prisma'
-import { resetBillingState } from '../../helpers/db-reset'
 import { createTestProject, createTestUser } from '../../helpers/billing-fixtures'
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -47,16 +46,11 @@ async function persistBatch(
   return await prisma.$transaction(async (tx) => await persistSubmittedTaskBatchInTransaction({
     tx,
     inputs,
-    billingMode: 'OFF',
     onBatchCreatedInTransaction,
   }))
 }
 
 describe('transactional Task batch dedupe', () => {
-  beforeEach(async () => {
-    await resetBillingState()
-  })
-
   it('creates the Task and its Created event in one transaction', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)
@@ -140,7 +134,6 @@ describe('transactional Task batch dedupe', () => {
       return await persistSubmittedTaskBatchInTransaction({
         tx,
         inputs: [{ ...input, id: created.task.id }],
-        billingMode: 'OFF',
       })
     })).rejects.toThrow('TASK_BATCH_TERMINAL_DEDUPE_COLLISION')
   })

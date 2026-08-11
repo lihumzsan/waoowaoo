@@ -10,7 +10,6 @@ export type UserErrorAction =
   | 'contact_support'
   | 'new_conversation'
   | 'open_provider_settings'
-  | 'recharge'
   | 'relogin'
   | 'retry'
   | 'revise_input'
@@ -169,7 +168,6 @@ export function projectModelErrorDetails(
 
 function resolveUserAction(code: UnifiedErrorCode): UserErrorAction {
   if (code === 'UNAUTHORIZED') return 'relogin'
-  if (code === 'INSUFFICIENT_BALANCE') return 'recharge'
   if (
     code === 'MODEL_NOT_CONFIGURED'
     || code === 'MODEL_NOT_OPEN'
@@ -204,8 +202,7 @@ function resolveModelAction(
     || code === 'PLATFORM_PROVIDER_UNAVAILABLE'
   ) return 'wait'
   if (
-    code === 'INSUFFICIENT_BALANCE'
-    || code === 'MODEL_NOT_CONFIGURED'
+    code === 'MODEL_NOT_CONFIGURED'
     || code === 'MODEL_NOT_OPEN'
     || code === 'MODEL_NOT_REGISTERED'
     || code === 'PROJECT_AGENT_ASSISTANT_MODEL_INVALID'

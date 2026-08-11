@@ -54,16 +54,6 @@ export interface CustomModel {
     capabilities?: ModelCapabilities
 }
 
-export interface PricingDisplayItem {
-    min: number
-    max: number
-    label: string
-    input?: number
-    output?: number
-}
-
-export type PricingDisplayMap = Record<string, PricingDisplayItem>
-
 // API 配置响应
 export interface ApiConfig {
     models: CustomModel[]
@@ -77,6 +67,7 @@ export interface ApiConfig {
         editModel?: string
         videoModel?: string
         musicModel?: string
+        soundModel?: string
     }
     capabilityDefaults?: CapabilitySelections
     workflowConcurrency?: {
@@ -84,7 +75,6 @@ export interface ApiConfig {
         image: number
         video: number
     }
-    pricingDisplay?: PricingDisplayMap
     deployment?: {
         edition: 'self-hosted' | 'cloud'
         providerCredentialMode: 'user-key' | 'platform-key'

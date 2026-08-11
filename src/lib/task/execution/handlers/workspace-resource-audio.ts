@@ -1,4 +1,4 @@
-import { generateMusic } from '@/lib/ai-exec/engine'
+import { generateMusic, generateSound } from '@/lib/ai-exec/engine'
 import {
   parseWorkspaceResourceGenerationTaskPayload,
   type WorkspaceResourceGenerationTaskPayload,
@@ -56,88 +56,115 @@ export async function handleWorkspaceResourceAudioTask(context: TaskExecutionCon
     throw new Error(`WORKSPACE_RESOURCE_TASK_TARGET_INVALID:${data.targetType}`)
   }
   const payload = parseWorkspaceResourceGenerationTaskPayload(data.payload ?? {})
-  if (
-    payload.resource.resourceId !== data.targetId ||
-    payload.resource.mediaType !== 'audio' ||
-    payload.musicModel !== payload.resource.modelKey
-  ) {
-    throw new Error(`WORKSPACE_RESOURCE_MUSIC_TASK_CONTRACT_INVALID:${data.taskId}`)
+  const audioKind = payload.resource.audioKind
+  if (!audioKind) {
+    throw new Error(`WORKSPACE_RESOURCE_AUDIO_KIND_REQUIRED:${data.taskId}`)
   }
-  const musicModel = payload.resource.modelKey
+  if (payload.resource.resourceId !== data.targetId || payload.resource.mediaType !== 'audio') {
+    throw new Error(`WORKSPACE_RESOURCE_AUDIO_TASK_CONTRACT_INVALID:${data.taskId}`)
+  }
+  const selectedModel = audioKind === 'sound' ? payload.soundModel : payload.musicModel
+  if (selectedModel !== payload.resource.modelKey) {
+    throw new Error(`WORKSPACE_RESOURCE_${audioKind.toUpperCase()}_TASK_CONTRACT_INVALID:${data.taskId}`)
+  }
+  const model = payload.resource.modelKey
   const prompt = payload.resource.prompt
   const durationSeconds = payload.durationSeconds
   if (!durationSeconds || durationSeconds <= 0) {
-    throw new Error('MUSIC_GENERATE_DURATIONSECONDS_INVALID')
+    throw new Error(`${audioKind.toUpperCase()}_GENERATE_DURATIONSECONDS_INVALID`)
   }
 
-  const videoReference = await loadMusicVideoReference(context, payload)
+  const videoReference = audioKind === 'music'
+    ? await loadMusicVideoReference(context, payload)
+    : null
   const options = payload.generationOptions
-  await reportTaskProgress(context, 20, { stage: 'generate_music_submit' })
+  if (audioKind === 'sound' && options.outputFormat !== 'mp3') {
+    throw new Error('SOUND_GENERATE_OUTPUT_FORMAT_INVALID')
+  }
+  await reportTaskProgress(context, 20, {
+    stage: audioKind === 'sound' ? 'generate_sound_submit' : 'generate_music_submit',
+  })
 
-  const invocationKey = 'media:music:primary'
-  const generated = await generateMusic(
-    data.userId,
-    musicModel,
-    prompt,
-    {
-      durationSeconds,
-      ...(typeof options.negativePrompt === 'string'
-        ? { negativePrompt: options.negativePrompt }
-        : {}),
-      ...(options.vocalMode === 'instrumental' || options.vocalMode === 'vocal'
-        ? { vocalMode: options.vocalMode }
-        : {}),
-      ...(typeof options.genre === 'string' ? { genre: options.genre } : {}),
-      ...(typeof options.mood === 'string' ? { mood: options.mood } : {}),
-      ...(typeof options.bpm === 'number' ? { bpm: options.bpm } : {}),
-      ...(options.outputFormat === 'mp3' || options.outputFormat === 'wav'
-        ? { outputFormat: options.outputFormat }
-        : {}),
-      ...(videoReference
-        ? {
-            referenceVideoUrl: videoReference.url,
-            referenceVideoDurationMs:
-              videoReference.durationMs ?? Math.round(durationSeconds * 1000),
-            ...(payload.scoreCue
-              ? {
-                  scoreWindowStartMs: payload.scoreCue.startMs,
-                  scoreWindowEndMs: payload.scoreCue.endMs,
-                }
-              : {}),
-          }
-        : {}),
+  const invocationKey = audioKind === 'sound' ? 'media:sound:primary' : 'media:music:primary'
+  const wait = {
+    beforePoll: async () => await assertTaskActive(context, 'polling_external'),
+    onPending: async ({ elapsedRatio, phase }: { elapsedRatio: number; phase: string }) => {
+      const progress = 30 + Math.floor((80 - 30) * elapsedRatio)
+      await reportTaskProgress(context, progress, {
+        stage: 'polling_external',
+        externalPhase: phase,
+      })
+      await assertTaskActive(context, 'polling_external_wait')
     },
-    { key: invocationKey },
-    {
-      beforePoll: async () => await assertTaskActive(context, 'polling_external'),
-      onPending: async ({ elapsedRatio, phase }) => {
-        const progress = 30 + Math.floor((80 - 30) * elapsedRatio)
-        await reportTaskProgress(context, progress, {
-          stage: 'polling_external',
-          externalPhase: phase,
-        })
-        await assertTaskActive(context, 'polling_external_wait')
-      },
-    },
-  )
+  }
+  const generated = audioKind === 'sound'
+    ? await generateSound(
+        data.userId,
+        model,
+        prompt,
+        {
+          durationSeconds,
+          negativePrompt: payload.negativePrompt,
+          outputFormat: 'mp3',
+        },
+        { key: invocationKey },
+        wait,
+      )
+    : await generateMusic(
+        data.userId,
+        model,
+        prompt,
+        {
+          durationSeconds,
+          ...(typeof options.negativePrompt === 'string'
+            ? { negativePrompt: options.negativePrompt }
+            : {}),
+          ...(options.vocalMode === 'instrumental' || options.vocalMode === 'vocal'
+            ? { vocalMode: options.vocalMode }
+            : {}),
+          ...(typeof options.genre === 'string' ? { genre: options.genre } : {}),
+          ...(typeof options.mood === 'string' ? { mood: options.mood } : {}),
+          ...(typeof options.bpm === 'number' ? { bpm: options.bpm } : {}),
+          ...(options.outputFormat === 'mp3' || options.outputFormat === 'wav'
+            ? { outputFormat: options.outputFormat }
+            : {}),
+          ...(videoReference
+            ? {
+                referenceVideoUrl: videoReference.url,
+                referenceVideoDurationMs:
+                  videoReference.durationMs ?? Math.round(durationSeconds * 1000),
+                ...(payload.scoreCue
+                  ? {
+                      scoreWindowStartMs: payload.scoreCue.startMs,
+                      scoreWindowEndMs: payload.scoreCue.endMs,
+                    }
+                  : {}),
+              }
+            : {}),
+        },
+        { key: invocationKey },
+        wait,
+      )
   if (!generated.success) {
-    throw new Error(generated.error || 'MUSIC_GENERATE_PROVIDER_FAILED')
+    throw new Error(generated.error || `${audioKind.toUpperCase()}_GENERATE_PROVIDER_FAILED`)
   }
   const providerRoute = await requireTaskProviderRouteSelection(context, invocationKey)
 
-  await reportTaskProgress(context, 85, { stage: 'persist_music' })
+  await reportTaskProgress(context, 85, {
+    stage: audioKind === 'sound' ? 'persist_sound' : 'persist_music',
+  })
   const audio = await loadGeneratedAudio({
     audioBase64: generated.audioBase64,
     audioUrl: generated.audioUrl,
     mimeType: generated.audioMimeType,
-    label: 'generated music',
-    errorPrefix: 'MUSIC_GENERATE',
+    label: audioKind === 'sound' ? 'generated sound effect' : 'generated music',
+    errorPrefix: audioKind === 'sound' ? 'SOUND_GENERATE' : 'MUSIC_GENERATE',
   })
   const storageKey = await uploadObject(
     audio.buffer,
     buildTaskArtifactStorageKey({
       taskId: data.taskId,
-      artifact: 'music:primary',
+      artifact: audioKind === 'sound' ? 'sound:primary' : 'music:primary',
       extension: extensionFromAudioMimeType(audio.mimeType),
     }),
     audio.mimeType,
@@ -145,7 +172,7 @@ export async function handleWorkspaceResourceAudioTask(context: TaskExecutionCon
   const media = await ensureMediaObjectFromStorageKey(storageKey, {
     mimeType: audio.mimeType,
     sizeBytes: audio.buffer.byteLength,
-    durationMs: videoReference?.durationMs ?? durationSeconds * 1000,
+    durationMs: durationSeconds * 1000,
   })
 
   return {
@@ -153,7 +180,9 @@ export async function handleWorkspaceResourceAudioTask(context: TaskExecutionCon
     audioUrl: media.url,
     storageKey,
     modelKey: providerRoute.modelKey,
-    musicModel: providerRoute.modelKey,
+    ...(audioKind === 'sound'
+      ? { soundModel: providerRoute.modelKey }
+      : { musicModel: providerRoute.modelKey }),
     provider: providerRoute.provider,
     metadata: generated.metadata || {},
   }

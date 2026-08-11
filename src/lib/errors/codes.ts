@@ -267,20 +267,6 @@ export const ERROR_CATALOG = {
     userMessageKey: 'errors.PROVIDER_SUBMISSION_OUTCOME_UNKNOWN',
     defaultMessage: 'Provider submission outcome is unknown',
   },
-  INSUFFICIENT_BALANCE: {
-    httpStatus: 402,
-    retryable: false,
-    category: ERROR_CATEGORY.BILLING,
-    userMessageKey: 'errors.INSUFFICIENT_BALANCE',
-    defaultMessage: 'Insufficient balance',
-  },
-  PAID_BETA_SOLD_OUT: defineErrorSpec(
-    'PAID_BETA_SOLD_OUT',
-    409,
-    false,
-    ERROR_CATEGORY.BILLING,
-    'This paid-beta wave is full',
-  ),
   PUBLIC_BETA_WAITLIST_INVALID_INPUT: defineErrorSpec(
     'PUBLIC_BETA_WAITLIST_INVALID_INPUT',
     400,

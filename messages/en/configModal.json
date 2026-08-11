@@ -14,6 +14,7 @@
   "editModel": "Edit Model",
   "videoModel": "Video Model",
   "musicModel": "Music Model",
+  "soundModel": "Environmental Sound Model",
   "videoResolution": "Video Resolution",
   "fetchModelsFailed": "Failed to fetch user model list",
   "placeholder": "Please enter...",
