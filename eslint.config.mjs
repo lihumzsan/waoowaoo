@@ -15,6 +15,7 @@ const eslintConfig = [
     ignores: [
       "node_modules/**",
       ".agent/**",
+      ".runtime/**",
       ".next/**",
       ".next-golden/**",
       ".next-security/**",
