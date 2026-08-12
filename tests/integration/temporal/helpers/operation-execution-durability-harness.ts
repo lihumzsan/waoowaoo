@@ -14,7 +14,7 @@ import type {
 } from '@/lib/temporal/operation-execution/contracts'
 import {
   activateTestWorkerVersion,
-  TEST_WORKER_DEPLOYMENT_OPTIONS,
+  buildTestWorkerDeploymentOptions,
 } from './versioned-worker'
 
 interface Deferred<T> {
@@ -87,6 +87,7 @@ export async function startOperationExecutionDurabilityWorker(input: {
 }): Promise<OperationExecutionDurabilityWorker> {
   requireTemporalTestRuntime()
   const config = getTemporalRuntimeConfig()
+  const taskQueue = config.taskQueue
   const connection = await NativeConnection.connect(
     buildTemporalConnectionOptions(config),
   )
@@ -112,7 +113,7 @@ export async function startOperationExecutionDurabilityWorker(input: {
   const worker = await Worker.create({
     connection,
     namespace: config.namespace,
-    taskQueue: config.taskQueue,
+    taskQueue,
     workflowsPath: resolve(
       process.cwd(),
       'src/lib/temporal/workflows/index.ts',
@@ -121,15 +122,22 @@ export async function startOperationExecutionDurabilityWorker(input: {
       executeOperation,
       resolveTaskSchedulerAdmission,
     },
-    workerDeploymentOptions: TEST_WORKER_DEPLOYMENT_OPTIONS,
+    workerDeploymentOptions: buildTestWorkerDeploymentOptions(
+      'operation-durability',
+    ),
     shutdownGraceTime: '5 seconds',
   })
   const run = worker.run()
-  await activateTestWorkerVersion(connection, config.namespace)
+  await activateTestWorkerVersion(
+    connection,
+    config.namespace,
+    taskQueue,
+    'operation-durability',
+  )
   let closed = false
 
   return {
-    taskQueue: config.taskQueue,
+    taskQueue,
     async waitForPostCommitAcknowledgementLoss() {
       return await within(
         acknowledgementLoss.promise,

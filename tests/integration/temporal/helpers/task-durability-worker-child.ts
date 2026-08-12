@@ -12,7 +12,8 @@ import type {
 } from '@/lib/temporal/task/contracts'
 import {
   activateTestWorkerVersion,
-  TEST_WORKER_DEPLOYMENT_OPTIONS,
+  buildTestTaskQueue,
+  buildTestWorkerDeploymentOptions,
 } from './versioned-worker'
 
 const READY_MARKER = '[task-durability-worker] READY'
@@ -27,6 +28,7 @@ async function main(): Promise<void> {
     throw new Error('TASK_DURABILITY_CHILD_RUNTIME_REQUIRED')
   }
   const config = getTemporalRuntimeConfig()
+  const taskQueue = buildTestTaskQueue(config.taskQueue, 'task-durability')
   const connection = await NativeConnection.connect(
     buildTemporalConnectionOptions(config),
   )
@@ -60,7 +62,7 @@ async function main(): Promise<void> {
     const worker = await Worker.create({
       connection,
       namespace: config.namespace,
-      taskQueue: config.taskQueue,
+      taskQueue,
       workflowsPath: resolve(
         process.cwd(),
         'src/lib/temporal/workflows/index.ts',
@@ -71,11 +73,18 @@ async function main(): Promise<void> {
       },
       maxHeartbeatThrottleInterval: '50 milliseconds',
       defaultHeartbeatThrottleInterval: '50 milliseconds',
-      workerDeploymentOptions: TEST_WORKER_DEPLOYMENT_OPTIONS,
+      workerDeploymentOptions: buildTestWorkerDeploymentOptions(
+        'task-durability',
+      ),
       shutdownGraceTime: '5 seconds',
     })
     const run = worker.run()
-    await activateTestWorkerVersion(connection, config.namespace)
+    await activateTestWorkerVersion(
+      connection,
+      config.namespace,
+      taskQueue,
+      'task-durability',
+    )
     console.log(READY_MARKER)
     await run
   } finally {

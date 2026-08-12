@@ -4,6 +4,7 @@ import {
 } from 'node:child_process'
 import { once } from 'node:events'
 import { resolve } from 'node:path'
+import { buildTestTaskQueue } from './versioned-worker'
 
 const READY_MARKER = '[task-durability-worker] READY'
 const BLOCKED_MARKER =
@@ -58,8 +59,14 @@ async function within<T>(
 }
 
 export function startTaskDurabilityChildWorker(): TaskDurabilityChildWorker {
-  const taskQueue = process.env.TEMPORAL_TASK_QUEUE?.trim()
-  if (!taskQueue) throw new Error('TASK_DURABILITY_CHILD_TASK_QUEUE_REQUIRED')
+  const configuredTaskQueue = process.env.TEMPORAL_TASK_QUEUE?.trim()
+  if (!configuredTaskQueue) {
+    throw new Error('TASK_DURABILITY_CHILD_TASK_QUEUE_REQUIRED')
+  }
+  const taskQueue = buildTestTaskQueue(
+    configuredTaskQueue,
+    'task-durability',
+  )
   const child = spawn(
     process.execPath,
     [

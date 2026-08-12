@@ -30,7 +30,8 @@ import type {
 } from '@/lib/temporal/task/contracts'
 import {
   activateTestWorkerVersion,
-  TEST_WORKER_DEPLOYMENT_OPTIONS,
+  buildTestTaskQueue,
+  buildTestWorkerDeploymentOptions,
 } from './versioned-worker'
 
 interface Deferred<T> {
@@ -256,21 +257,29 @@ export interface TaskQueuedCancelWorkerHarness {
 export async function startTaskProductionWorker(): Promise<TaskProductionWorkerHarness> {
   requireTemporalTestRuntime()
   const config = getTemporalRuntimeConfig()
+  const taskQueue = buildTestTaskQueue(config.taskQueue, 'task-durability')
   const connection = await NativeConnection.connect(buildTemporalConnectionOptions(config))
   const worker = await Worker.create({
     connection,
     namespace: config.namespace,
-    taskQueue: config.taskQueue,
+    taskQueue,
     workflowsPath: resolve(process.cwd(), 'src/lib/temporal/workflows/index.ts'),
     activities: productionActivities,
-    workerDeploymentOptions: TEST_WORKER_DEPLOYMENT_OPTIONS,
+    workerDeploymentOptions: buildTestWorkerDeploymentOptions(
+      'task-durability',
+    ),
     shutdownGraceTime: '5 seconds',
   })
   const run = worker.run()
-  await activateTestWorkerVersion(connection, config.namespace)
+  await activateTestWorkerVersion(
+    connection,
+    config.namespace,
+    taskQueue,
+    'task-durability',
+  )
   let closed = false
   return {
-    taskQueue: config.taskQueue,
+    taskQueue,
     async close() {
       if (closed) return
       closed = true
@@ -289,6 +298,7 @@ export async function startTaskQueuedCancelWorker(input: {
 }): Promise<TaskQueuedCancelWorkerHarness> {
   requireTemporalTestRuntime()
   const config = getTemporalRuntimeConfig()
+  const taskQueue = buildTestTaskQueue(config.taskQueue, 'task-durability')
   const connection = await NativeConnection.connect(buildTemporalConnectionOptions(config))
   const capacityHeld = deferred<void>()
   const releaseHolder = deferred<void>()
@@ -322,17 +332,24 @@ export async function startTaskQueuedCancelWorker(input: {
   const worker = await Worker.create({
     connection,
     namespace: config.namespace,
-    taskQueue: config.taskQueue,
+    taskQueue,
     workflowsPath: resolve(process.cwd(), 'src/lib/temporal/workflows/index.ts'),
     activities: {
       ...productionActivities,
       runTaskAttempt,
     },
-    workerDeploymentOptions: TEST_WORKER_DEPLOYMENT_OPTIONS,
+    workerDeploymentOptions: buildTestWorkerDeploymentOptions(
+      'task-durability',
+    ),
     shutdownGraceTime: '5 seconds',
   })
   const run = worker.run()
-  await activateTestWorkerVersion(connection, config.namespace)
+  await activateTestWorkerVersion(
+    connection,
+    config.namespace,
+    taskQueue,
+    'task-durability',
+  )
   let closed = false
   const release = (): void => {
     if (released) return
@@ -340,7 +357,7 @@ export async function startTaskQueuedCancelWorker(input: {
     releaseHolder.resolve()
   }
   return {
-    taskQueue: config.taskQueue,
+    taskQueue,
     async waitForCapacityHeld() {
       await within(capacityHeld.promise, 30_000, 'TASK_QUEUED_CANCEL_CAPACITY_HOLDER_TIMEOUT')
     },
@@ -364,6 +381,7 @@ export async function startTaskLateCancelWorker(input: {
 }): Promise<TaskLateCancelWorkerHarness> {
   requireTemporalTestRuntime()
   const config = getTemporalRuntimeConfig()
+  const taskQueue = buildTestTaskQueue(config.taskQueue, 'task-durability')
   const connection = await NativeConnection.connect(buildTemporalConnectionOptions(config))
   const checkpointCommitted = deferred<void>()
   const cancellationAcknowledged = deferred<void>()
@@ -409,20 +427,27 @@ export async function startTaskLateCancelWorker(input: {
   const worker = await Worker.create({
     connection,
     namespace: config.namespace,
-    taskQueue: config.taskQueue,
+    taskQueue,
     workflowsPath: resolve(process.cwd(), 'src/lib/temporal/workflows/index.ts'),
     activities: {
       ...productionActivities,
       runTaskAttempt,
     },
-    workerDeploymentOptions: TEST_WORKER_DEPLOYMENT_OPTIONS,
+    workerDeploymentOptions: buildTestWorkerDeploymentOptions(
+      'task-durability',
+    ),
     shutdownGraceTime: '5 seconds',
   })
   const run = worker.run()
-  await activateTestWorkerVersion(connection, config.namespace)
+  await activateTestWorkerVersion(
+    connection,
+    config.namespace,
+    taskQueue,
+    'task-durability',
+  )
   let closed = false
   return {
-    taskQueue: config.taskQueue,
+    taskQueue,
     async waitForHandlerCheckpointCommit() {
       await within(
         checkpointCommitted.promise,
@@ -456,6 +481,7 @@ export async function startTaskDurabilityWorker(input: {
 }): Promise<TaskDurabilityWorkerHarness> {
   requireTemporalTestRuntime()
   const config = getTemporalRuntimeConfig()
+  const taskQueue = buildTestTaskQueue(config.taskQueue, 'task-durability')
   const connection = await NativeConnection.connect(buildTemporalConnectionOptions(config))
   const followUpServer = await startFollowUpAdmissionServer()
   const terminalFault = deferred<TaskTerminalReceipt>()
@@ -498,14 +524,16 @@ export async function startTaskDurabilityWorker(input: {
     worker = await Worker.create({
       connection,
       namespace: config.namespace,
-      taskQueue: config.taskQueue,
+      taskQueue,
       workflowsPath: resolve(process.cwd(), 'src/lib/temporal/workflows/index.ts'),
       activities: {
         ...productionActivities,
         commitTaskTerminal,
         notifyTaskFollowUp,
       },
-      workerDeploymentOptions: TEST_WORKER_DEPLOYMENT_OPTIONS,
+      workerDeploymentOptions: buildTestWorkerDeploymentOptions(
+        'task-durability',
+      ),
       shutdownGraceTime: '5 seconds',
     })
   } catch (error) {
@@ -513,7 +541,12 @@ export async function startTaskDurabilityWorker(input: {
     throw error
   }
   const run = worker.run()
-  await activateTestWorkerVersion(connection, config.namespace)
+  await activateTestWorkerVersion(
+    connection,
+    config.namespace,
+    taskQueue,
+    'task-durability',
+  )
   let closed = false
 
   const releaseNotification = (): void => {
@@ -523,7 +556,7 @@ export async function startTaskDurabilityWorker(input: {
   }
 
   return {
-    taskQueue: config.taskQueue,
+    taskQueue,
     async waitForTerminalPostCommitFault() {
       return await within(terminalFault.promise, 30_000, 'TASK_TERMINAL_POST_COMMIT_FAULT_TIMEOUT')
     },
