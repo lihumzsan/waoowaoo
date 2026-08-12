@@ -61,20 +61,21 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # One immutable image contains both entrypoints, but Compose runs Web and each
 # Temporal Worker slot as separate containers. They never share a process or
 # failure domain. The Worker is currently executed from TypeScript through tsx.
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
+COPY --chown=node:node --from=builder /app/node_modules ./node_modules
+COPY --chown=node:node --from=builder /app/package.json ./package.json
 
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/src ./src
-COPY --from=builder /app/scripts ./scripts
-COPY --from=builder /app/standards ./standards
-COPY --from=builder /app/messages ./messages
-COPY --from=builder /app/tsconfig.json ./tsconfig.json
-COPY --from=builder /app/next.config.ts ./next.config.ts
-COPY --from=builder /app/src/middleware.ts ./src/middleware.ts
-COPY --from=builder /app/postcss.config.mjs ./postcss.config.mjs
+COPY --chown=node:node --from=builder /app/.next ./.next
+COPY --chown=node:node --from=builder /app/public ./public
+COPY --chown=node:node --from=builder /app/prisma ./prisma
+COPY --chown=node:node --from=builder /app/src ./src
+COPY --chown=node:node --from=builder /app/scripts ./scripts
+COPY --chown=node:node --from=builder /app/standards ./standards
+COPY --chown=node:node --from=builder /app/messages ./messages
+COPY --chown=node:node --from=builder /app/tsconfig.json ./tsconfig.json
+COPY --chown=node:node --from=builder /app/tsconfig.runtime-scripts.json ./tsconfig.runtime-scripts.json
+COPY --chown=node:node --from=builder /app/next.config.ts ./next.config.ts
+COPY --chown=node:node --from=builder /app/src/middleware.ts ./src/middleware.ts
+COPY --chown=node:node --from=builder /app/postcss.config.mjs ./postcss.config.mjs
 
 # The Web process starts one short-lived, restricted Codex container only while
 # a project is active. The Docker daemon remains a host concern; this image only
@@ -83,7 +84,7 @@ COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 
 RUN mkdir -p /app/data /app/logs \
     && touch /app/.env \
-    && chown -R node:node /app
+    && chown -R node:node /app/data /app/logs /app/.env
 
 COPY --chown=root:root docker-entrypoint.sh /usr/local/bin/waoowaoo-entrypoint
 RUN chmod 0755 /usr/local/bin/waoowaoo-entrypoint
