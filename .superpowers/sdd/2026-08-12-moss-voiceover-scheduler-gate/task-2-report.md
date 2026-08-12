@@ -2,7 +2,7 @@
 
 Status: implementation complete; targeted real-MySQL topology test passed after explicitly using the dynamically allocated test MySQL port. The required combined integration command remains partial because the existing dedupe test assumes an empty database without registering its own reset hook.
 
-Commit hashes: pending.
+Commit hashes: `eeea1295cf286d5882396c690dbe4b9af64d7557` (amended below to include this finalized report).
 
 Commands and results:
 
