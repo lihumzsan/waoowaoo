@@ -24,6 +24,32 @@ function expectBillableInfo(
   return info
 }
 
+function buildMusicBillingInfo(): TaskBillingInfo | null {
+  return buildDefaultTaskBillingInfo(TASK_TYPE.WORKSPACE_RESOURCE_AUDIO, {
+    musicModel: 'google::lyria-3-pro-preview',
+    generationOptions: {
+      kind: 'music_score_v1',
+      compositionPlan: {
+        chunks: [
+          {
+            text: '[Test score]',
+            durationMs: 5_000,
+            positiveStyles: ['cinematic underscore'],
+            negativeStyles: ['vocals'],
+            contextAdherence: 'high',
+          },
+        ],
+      },
+      startMs: 0,
+      fadeInMs: 0,
+      fadeOutMs: 0,
+      gainDb: 0,
+      timelineInputPosition: 0,
+      outputFormat: 'mp3',
+    },
+  })
+}
+
 describe('billing/service integration', () => {
   beforeEach(async () => {
     await resetBillingState()
@@ -35,10 +61,7 @@ describe('billing/service integration', () => {
     const project = await createTestProject(user.id)
     await seedBalance(user.id, 10)
 
-    const info = buildDefaultTaskBillingInfo(TASK_TYPE.WORKSPACE_RESOURCE_AUDIO, {
-      musicModel: 'google::lyria-3-pro-preview',
-      durationSeconds: 5,
-    })!
+    const info = buildMusicBillingInfo()
     const result = await prisma.$transaction(
       async (tx) =>
         await prepareTaskBillingInTransaction(
@@ -63,10 +86,7 @@ describe('billing/service integration', () => {
     const project = await createTestProject(user.id)
     await seedBalance(user.id, 10)
 
-    const info = buildDefaultTaskBillingInfo(TASK_TYPE.WORKSPACE_RESOURCE_AUDIO, {
-      musicModel: 'google::lyria-3-pro-preview',
-      durationSeconds: 5,
-    })!
+    const info = buildMusicBillingInfo()
     const taskId = randomUUID()
     const prepared = expectBillableInfo(
       await prisma.$transaction(
@@ -119,10 +139,7 @@ describe('billing/service integration', () => {
     const project = await createTestProject(user.id)
     await seedBalance(user.id, 10)
 
-    const info = buildDefaultTaskBillingInfo(TASK_TYPE.WORKSPACE_RESOURCE_AUDIO, {
-      musicModel: 'google::lyria-3-pro-preview',
-      durationSeconds: 5,
-    })!
+    const info = buildMusicBillingInfo()
     const taskId = randomUUID()
     const prepared = expectBillableInfo(
       await prisma.$transaction(
@@ -276,10 +293,7 @@ describe('billing/service integration', () => {
     const project = await createTestProject(user.id)
     await seedBalance(user.id, 10)
 
-    const info = buildDefaultTaskBillingInfo(TASK_TYPE.WORKSPACE_RESOURCE_AUDIO, {
-      musicModel: 'google::lyria-3-pro-preview',
-      durationSeconds: 5,
-    })!
+    const info = buildMusicBillingInfo()
     const taskId = randomUUID()
     const prepared = expectBillableInfo(
       await prisma.$transaction(
