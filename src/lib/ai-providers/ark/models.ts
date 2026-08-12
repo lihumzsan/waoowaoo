@@ -28,6 +28,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: 'doubao-seedance-2-0-260128',
     capabilities: {
       video: {
+        promptProfile: 'generic_v1',
         supportedInputModes: ['text_to_video', 'first_frame', 'first_last_frame', 'reference'],
         supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
@@ -52,6 +53,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: 'doubao-seedance-2-0-fast-260128',
     capabilities: {
       video: {
+        promptProfile: 'generic_v1',
         supportedInputModes: ['text_to_video', 'first_frame', 'first_last_frame', 'reference'],
         supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
@@ -76,6 +78,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: 'doubao-seedance-1-0-pro-fast-251015',
     capabilities: {
       video: {
+        promptProfile: 'generic_v1',
         generationModeOptions: ['normal'],
         durationOptions: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
         resolutionOptions: ['480p', '720p', '1080p'],
@@ -91,6 +94,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: 'doubao-seedance-1-0-pro-fast-251015-batch',
     capabilities: {
       video: {
+        promptProfile: 'generic_v1',
         generationModeOptions: ['normal'],
         durationOptions: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
         resolutionOptions: ['480p', '720p', '1080p'],
@@ -106,6 +110,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: 'doubao-seedance-1-0-pro-250528',
     capabilities: {
       video: {
+        promptProfile: 'generic_v1',
         generationModeOptions: ['normal', 'firstlastframe'],
         durationOptions: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
         resolutionOptions: ['480p', '720p', '1080p'],
@@ -121,6 +126,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: 'doubao-seedance-1-0-pro-250528-batch',
     capabilities: {
       video: {
+        promptProfile: 'generic_v1',
         generationModeOptions: ['normal', 'firstlastframe'],
         durationOptions: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
         resolutionOptions: ['480p', '720p', '1080p'],
@@ -136,6 +142,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: 'doubao-seedance-1-0-lite-i2v-250428',
     capabilities: {
       video: {
+        promptProfile: 'generic_v1',
         generationModeOptions: ['normal', 'firstlastframe'],
         durationOptions: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
         resolutionOptions: ['480p', '720p', '1080p'],
@@ -151,6 +158,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: 'doubao-seedance-1-0-lite-i2v-250428-batch',
     capabilities: {
       video: {
+        promptProfile: 'generic_v1',
         generationModeOptions: ['normal', 'firstlastframe'],
         durationOptions: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
         resolutionOptions: ['480p', '720p', '1080p'],
@@ -166,6 +174,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: 'doubao-seedance-1-5-pro-251215',
     capabilities: {
       video: {
+        promptProfile: 'generic_v1',
         generationModeOptions: ['normal', 'firstlastframe'],
         generateAudioOptions: [true, false],
         durationOptions: [4, 5, 6, 7, 8, 9, 10, 11, 12],
@@ -182,6 +191,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: 'doubao-seedance-1-5-pro-251215-batch',
     capabilities: {
       video: {
+        promptProfile: 'generic_v1',
         generationModeOptions: ['normal', 'firstlastframe'],
         generateAudioOptions: [true, false],
         durationOptions: [4, 5, 6, 7, 8, 9, 10, 11, 12],

@@ -259,7 +259,15 @@ export type VideoInputMode =
   | 'first_last_frame'
   | 'reference'
 
+export const VIDEO_PROMPT_PROFILES = [
+  'generic_v1',
+  'minimax_h3_v1',
+] as const
+
+export type VideoPromptProfile = (typeof VIDEO_PROMPT_PROFILES)[number]
+
 export interface VideoCapabilities {
+  promptProfile: VideoPromptProfile
   supportedInputModes?: VideoInputMode[]
   supportsTextToVideo?: boolean
   generationModeOptions?: string[]
@@ -349,6 +357,7 @@ const IMAGE_ALLOWED_FIELDS = new Set<keyof ImageCapabilities>([
 ])
 
 const VIDEO_ALLOWED_FIELDS = new Set<keyof VideoCapabilities>([
+  'promptProfile',
   'supportedInputModes',
   'supportsTextToVideo',
   'generationModeOptions',
@@ -640,6 +649,14 @@ function validateImageCapabilities(issues: CapabilityValidationIssue[], raw: unk
 
 function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unknown) {
   if (!isRecord(raw)) return
+
+  if (!VIDEO_PROMPT_PROFILES.includes(raw.promptProfile as VideoPromptProfile)) {
+    issues.push(makeAllowedIssue(
+      'capabilities.video.promptProfile',
+      raw.promptProfile,
+      VIDEO_PROMPT_PROFILES,
+    ))
+  }
 
   const supportedInputModes = raw.supportedInputModes
   const validInputModes = new Set<VideoInputMode>([
@@ -982,7 +999,17 @@ export function validateModelCapabilities(
   const issues: CapabilityValidationIssue[] = []
   const expectedNamespace: keyof ModelCapabilities = modelType
 
-  if (capabilities === undefined || capabilities === null) return issues
+  if (capabilities === undefined || capabilities === null) {
+    if (modelType === 'video') {
+      issues.push({
+        code: 'CAPABILITY_NAMESPACE_INVALID',
+        field: 'capabilities.video',
+        allowedValues: ['video'],
+        message: 'Video capabilities namespace is required',
+      })
+    }
+    return issues
+  }
   if (!isRecord(capabilities)) {
     issues.push({
       code: 'CAPABILITY_SHAPE_INVALID',
@@ -990,6 +1017,15 @@ export function validateModelCapabilities(
       message: 'capabilities must be an object',
     })
     return issues
+  }
+
+  if (modelType === 'video' && capabilities.video === undefined) {
+    issues.push({
+      code: 'CAPABILITY_NAMESPACE_INVALID',
+      field: 'capabilities.video',
+      allowedValues: ['video'],
+      message: 'Video capabilities namespace is required',
+    })
   }
 
   for (const namespace of Object.keys(capabilities)) {

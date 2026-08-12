@@ -3,11 +3,12 @@ import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabili
 import { getProjectModelConfig, type ProjectModelConfig } from '@/lib/config-service'
 import { prisma } from '@/lib/prisma'
 import { CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS } from '@/lib/workspace-resource/generation-contract'
-import type { VideoInputMode } from '@/lib/ai-registry/types'
+import type { VideoInputMode, VideoPromptProfile } from '@/lib/ai-registry/types'
 
 export type ProjectProductionCapabilities = {
   readonly video: {
     readonly modelKey: string
+    readonly promptProfile: VideoPromptProfile
     readonly aspectRatio: string
     readonly allowedSegmentDurationsSeconds: readonly number[]
     readonly minSegmentDurationSeconds: number
@@ -45,7 +46,7 @@ export type ProjectProductionCapabilities = {
 }
 
 export type ProjectProductionContext = {
-  readonly schemaVersion: 5
+  readonly schemaVersion: 6
   readonly version: string
   readonly project: {
     readonly projectId: string
@@ -65,7 +66,7 @@ export class ProjectProductionContextError extends Error {
   }
 }
 
-function resolveProductionCapabilities(config: ProjectModelConfig): ProjectProductionCapabilities {
+export function resolveProjectProductionCapabilities(config: ProjectModelConfig): ProjectProductionCapabilities {
   const video = config.videoModel
     ? resolveBuiltinCapabilitiesByModelKey('video', config.videoModel)?.video
     : undefined
@@ -85,6 +86,7 @@ function resolveProductionCapabilities(config: ProjectModelConfig): ProjectProdu
     && maxSegmentDurationSeconds !== undefined
     ? {
         modelKey: config.videoModel,
+        promptProfile: video.promptProfile,
         aspectRatio: config.videoRatio,
         allowedSegmentDurationsSeconds,
         minSegmentDurationSeconds,
@@ -179,7 +181,7 @@ export async function readProjectProductionContext(input: {
   ])
   if (!project) throw new ProjectProductionContextError()
   const value: Omit<ProjectProductionContext, 'version'> = {
-    schemaVersion: 5,
+    schemaVersion: 6,
     project: {
       projectId: project.id,
       name: project.name,
@@ -188,7 +190,7 @@ export async function readProjectProductionContext(input: {
       videoResolution: project.videoResolution,
       imageResolution: project.imageResolution,
     },
-    productionCapabilities: resolveProductionCapabilities(modelConfig),
+    productionCapabilities: resolveProjectProductionCapabilities(modelConfig),
   }
   return { ...value, version: contextVersion(value) }
 }

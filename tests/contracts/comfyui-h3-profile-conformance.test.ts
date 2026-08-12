@@ -19,6 +19,7 @@ describe('ComfyUI H3 profile math', () => {
   it('declares the generation modes supplied by the H3 workspace flow', () => {
     const h3 = COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES.find((entry) => entry.modelId === COMFYUI_H3_MODEL_ID)
     expect(h3?.capabilities.video.generationModeOptions).toEqual(['normal', 'firstlastframe'])
+    expect(h3?.capabilities.video.promptProfile).toBe('minimax_h3_v1')
   })
 
   it('compiles the H3 normal 10-second selection through the production resolver', () => {
