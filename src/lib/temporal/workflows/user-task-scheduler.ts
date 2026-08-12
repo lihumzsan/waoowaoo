@@ -15,6 +15,10 @@ import {
 import type { WorkflowConcurrencyConfig } from '@/lib/workflow-concurrency'
 import { encodeTemporalFailure, temporalInvariantFailure } from '../failure'
 import {
+  resolveRequiredSuccessDependencyDecision,
+  retainSchedulerCompletions,
+} from '../task/dependency-gate'
+import {
   USER_TASK_SCHEDULER_UPDATE_NAME,
   type ScheduledTaskReceipt,
   type ScheduledTaskRequest,
@@ -124,6 +128,20 @@ function validateScheduledTask(
   if (request.task.userId !== schedulerUserId) {
     fail('TASK_SCHEDULER_USER_MISMATCH', schedulerUserId, request.task.userId)
   }
+  if (!Array.isArray(request.dependsOnTaskIds)) {
+    fail('TASK_SCHEDULER_DEPENDENCIES_INVALID')
+  }
+  let previousTaskId: string | null = null
+  for (const dependencyTaskId of request.dependsOnTaskIds) {
+    requireNonEmpty(dependencyTaskId, 'TASK_SCHEDULER_DEPENDENCY_TASK_ID_INVALID')
+    if (dependencyTaskId === request.task.taskId) {
+      fail('TASK_SCHEDULER_DEPENDENCY_SELF_REFERENCE', dependencyTaskId)
+    }
+    if (previousTaskId !== null && dependencyTaskId <= previousTaskId) {
+      fail('TASK_SCHEDULER_DEPENDENCIES_NOT_CANONICAL')
+    }
+    previousTaskId = dependencyTaskId
+  }
 }
 
 function sameScheduledTask(left: ScheduledTaskRequest, right: ScheduledTaskRequest): boolean {
@@ -133,7 +151,11 @@ function sameScheduledTask(left: ScheduledTaskRequest, right: ScheduledTaskReque
     left.task.schedulerWorkflowId === right.task.schedulerWorkflowId &&
     left.task.taskId === right.task.taskId &&
     left.task.userId === right.task.userId &&
-    left.task.taskType === right.task.taskType
+    left.task.taskType === right.task.taskType &&
+    left.dependsOnTaskIds.length === right.dependsOnTaskIds.length &&
+    left.dependsOnTaskIds.every(
+      (dependencyTaskId, index) => dependencyTaskId === right.dependsOnTaskIds[index],
+    )
   )
 }
 
@@ -225,9 +247,46 @@ export async function userTaskSchedulerWorkflow(
   const queued: SchedulerQueuedTask[] = []
   const capacityActive = new Map<string, ScheduledChild>()
   const completions = new Map<string, SchedulerCompletionSummary>()
+  const completionByTaskId = new Map<string, SchedulerCompletionSummary>()
   const enqueueDedupe = new Map<string, SchedulerEnqueueDedupeEntry>()
   const taskWorkflowToEnqueueId = new Map<string, string>()
   const pendingEnqueues = new Map<string, PendingEnqueueValidation>()
+
+  const recordCompletion = (completion: SchedulerCompletionSummary): void => {
+    requireNonEmpty(completion.taskId, 'TASK_SCHEDULER_COMPLETION_TASK_ID_INVALID')
+    requireNonEmpty(
+      completion.taskWorkflowId,
+      'TASK_SCHEDULER_COMPLETION_WORKFLOW_ID_INVALID',
+    )
+    if (
+      !isTerminalStatus(completion.status) ||
+      !Number.isSafeInteger(completion.terminalEventId) ||
+      completion.terminalEventId <= 0
+    ) {
+      fail('TASK_SCHEDULER_COMPLETION_STATUS_INVALID')
+    }
+    const existingByWorkflowId = completions.get(completion.taskWorkflowId)
+    const existingByTaskId = completionByTaskId.get(completion.taskId)
+    for (const existing of [existingByWorkflowId, existingByTaskId]) {
+      if (
+        existing &&
+        (existing.taskId !== completion.taskId ||
+          existing.taskWorkflowId !== completion.taskWorkflowId ||
+          existing.status !== completion.status ||
+          existing.terminalEventId !== completion.terminalEventId ||
+          existing.cancellation?.requestId !== completion.cancellation?.requestId ||
+          existing.cancellation?.reason !== completion.cancellation?.reason)
+      ) {
+        fail(
+          'TASK_SCHEDULER_COMPLETION_REPLAY_DIVERGED',
+          completion.taskId,
+          completion.taskWorkflowId,
+        )
+      }
+    }
+    completions.set(completion.taskWorkflowId, { ...completion })
+    completionByTaskId.set(completion.taskId, { ...completion })
+  }
 
   const restoreEntry = (entry: SchedulerEnqueueDedupeEntry): void => {
     validateScheduledTask(input.workflowId, input.userId, entry.request)
@@ -270,17 +329,7 @@ export async function userTaskSchedulerWorkflow(
       ) {
         fail('TASK_SCHEDULER_COMPLETION_STATUS_INVALID')
       }
-      const existing = completions.get(completion.taskWorkflowId)
-      if (
-        existing &&
-        (existing.status !== completion.status ||
-          existing.terminalEventId !== completion.terminalEventId ||
-          existing.cancellation?.requestId !== completion.cancellation?.requestId ||
-          existing.cancellation?.reason !== completion.cancellation?.reason)
-      ) {
-        fail('TASK_SCHEDULER_COMPLETION_REPLAY_DIVERGED', completion.taskWorkflowId)
-      }
-      completions.set(completion.taskWorkflowId, { ...completion })
+      recordCompletion(completion)
     }
     for (const entry of input.continuation.recentEnqueues) restoreEntry(entry)
     for (const item of input.continuation.queued) {
@@ -351,7 +400,7 @@ export async function userTaskSchedulerWorkflow(
     }
     pendingEnqueues.set(request.enqueueId, pendingValidation)
     taskWorkflowToEnqueueId.set(request.task.workflowId, request.enqueueId)
-    void schedulerActivities.resolveTaskSchedulerAdmission(request.task).then(
+    void schedulerActivities.resolveTaskSchedulerAdmission(request).then(
       (admission) => {
         if (
           !admission ||
@@ -377,12 +426,42 @@ export async function userTaskSchedulerWorkflow(
         }
         enqueueDedupe.set(request.enqueueId, entry)
         if (admission.kind === 'already_terminal') {
-          completions.set(request.task.workflowId, {
+          recordCompletion({
+            taskId: request.task.taskId,
             taskWorkflowId: request.task.workflowId,
             status: admission.result.status,
             terminalEventId: admission.result.terminal.terminalEventId,
           })
         } else {
+          const admittedDependencyTaskIds = new Set<string>()
+          for (const dependency of admission.dependencies) {
+            if (
+              !dependency ||
+              typeof dependency !== 'object' ||
+              !request.dependsOnTaskIds.includes(dependency.taskId) ||
+              admittedDependencyTaskIds.has(dependency.taskId)
+            ) {
+              fail('TASK_SCHEDULER_DEPENDENCY_ADMISSION_DIVERGED')
+            }
+            requireNonEmpty(
+              dependency.taskWorkflowId,
+              'TASK_SCHEDULER_DEPENDENCY_WORKFLOW_ID_INVALID',
+            )
+            admittedDependencyTaskIds.add(dependency.taskId)
+            if (dependency.state === 'terminal') {
+              recordCompletion({
+                taskId: dependency.taskId,
+                taskWorkflowId: dependency.taskWorkflowId,
+                status: dependency.status,
+                terminalEventId: dependency.terminalEventId,
+              })
+            } else if (dependency.state !== 'pending') {
+              fail('TASK_SCHEDULER_DEPENDENCY_ADMISSION_STATE_INVALID')
+            }
+          }
+          if (admittedDependencyTaskIds.size !== request.dependsOnTaskIds.length) {
+            fail('TASK_SCHEDULER_DEPENDENCY_ADMISSION_DIVERGED')
+          }
           queued.push({
             request,
             schedulerClass: admission.schedulerClass,
@@ -477,7 +556,8 @@ export async function userTaskSchedulerWorkflow(
         })
       }
       entry.state = 'canceled'
-      completions.set(request.scheduledTask.task.workflowId, {
+      recordCompletion({
+        taskId: request.scheduledTask.task.taskId,
         taskWorkflowId: request.scheduledTask.task.workflowId,
         status: 'canceled',
         terminalEventId: terminal.terminalEventId,
@@ -508,6 +588,7 @@ export async function userTaskSchedulerWorkflow(
       if (!child || child.request.task.taskId !== release.taskId) {
         const completion = completions.get(release.taskWorkflowId)
         if (
+          completion?.taskId === release.taskId &&
           completion?.status === release.status &&
           completion.terminalEventId === release.terminalEventId
         ) {
@@ -519,7 +600,8 @@ export async function userTaskSchedulerWorkflow(
       const entry = enqueueDedupe.get(child.request.enqueueId)
       if (!entry) fail('TASK_SCHEDULER_ENQUEUE_STATE_MISSING')
       entry.state = release.status
-      completions.set(release.taskWorkflowId, {
+      recordCompletion({
+        taskId: release.taskId,
         taskWorkflowId: release.taskWorkflowId,
         status: release.status,
         terminalEventId: release.terminalEventId,
@@ -566,21 +648,74 @@ export async function userTaskSchedulerWorkflow(
     schedulerClass === null ||
     capacityCounts(capacityActive)[schedulerClass] < slotLimits[schedulerClass]
 
+  const queueDecision = (item: SchedulerQueuedTask) =>
+    resolveRequiredSuccessDependencyDecision(
+      item.request.dependsOnTaskIds,
+      completionByTaskId,
+    )
+
   const startQueuedTasks = async (): Promise<void> => {
     while (true) {
-      const queueIndex = queued.findIndex((item) => hasAvailableSlot(item.schedulerClass))
+      const queueIndex = queued.findIndex((item) => {
+        const decision = queueDecision(item)
+        return (
+          decision.kind === 'cancel' ||
+          (decision.kind === 'run' && hasAvailableSlot(item.schedulerClass))
+        )
+      })
       if (queueIndex < 0) return
       const [item] = queued.splice(queueIndex, 1)
       if (!item) return
       const taskWorkflowId = item.request.task.workflowId
+      const decision = queueDecision(item)
+      const entry = enqueueDedupe.get(item.request.enqueueId)
+      if (!entry) fail('TASK_SCHEDULER_ENQUEUE_STATE_MISSING')
+      if (decision.kind === 'cancel') {
+        const terminal = await schedulerActivities.commitTaskTerminal({
+          kind: 'canceled',
+          workflowId: taskWorkflowId,
+          taskId: item.request.task.taskId,
+          reason: 'TASK_DEPENDENCY_FAILED',
+          source: 'system',
+          dependency: {
+            requirement: 'required_success',
+            sourceTaskIds: decision.failedTaskIds,
+          },
+        })
+        if (
+          terminal.taskId !== item.request.task.taskId ||
+          terminal.status !== 'canceled' ||
+          !Number.isSafeInteger(terminal.terminalEventId) ||
+          terminal.terminalEventId <= 0
+        ) {
+          fail('TASK_SCHEDULER_DEPENDENCY_CANCEL_TERMINAL_DIVERGED', taskWorkflowId)
+        }
+        for (const batchId of terminal.readyFollowUpBatchIds) {
+          await schedulerActivities.notifyTaskFollowUp({
+            workflowId: taskWorkflowId,
+            taskId: item.request.task.taskId,
+            batchId,
+            terminal,
+          })
+        }
+        entry.state = 'canceled'
+        recordCompletion({
+          taskId: item.request.task.taskId,
+          taskWorkflowId,
+          status: 'canceled',
+          terminalEventId: terminal.terminalEventId,
+        })
+        continue
+      }
+      if (decision.kind !== 'run') {
+        fail('TASK_SCHEDULER_QUEUE_ACTION_DIVERGED', taskWorkflowId)
+      }
       const childState: ScheduledChild = {
         request: item.request,
         schedulerClass: item.schedulerClass,
         sequence: item.sequence,
       }
       capacityActive.set(taskWorkflowId, childState)
-      const entry = enqueueDedupe.get(item.request.enqueueId)
-      if (!entry) fail('TASK_SCHEDULER_ENQUEUE_STATE_MISSING')
       entry.state = 'running'
       try {
         await startChild(taskWorkflow, {
@@ -599,7 +734,8 @@ export async function userTaskSchedulerWorkflow(
         validateTaskResult(taskWorkflowId, item.request.task.taskId, result)
         capacityActive.delete(taskWorkflowId)
         entry.state = result.status
-        completions.set(taskWorkflowId, {
+        recordCompletion({
+          taskId: item.request.task.taskId,
           taskWorkflowId,
           status: result.status,
           terminalEventId: result.terminal.terminalEventId,
@@ -617,8 +753,14 @@ export async function userTaskSchedulerWorkflow(
   }
 
   const buildContinuation = (): UserTaskSchedulerContinuationState => {
-    const recentCompletions = [...completions.values()]
-      .slice(-RECENT_DEDUPE_LIMIT)
+    const queuedDependencyTaskIds = new Set(
+      queued.flatMap((item) => [...item.request.dependsOnTaskIds]),
+    )
+    const recentCompletions = retainSchedulerCompletions({
+      queuedDependencyTaskIds,
+      completions: [...completions.values()],
+      replayLimit: RECENT_DEDUPE_LIMIT,
+    })
       .map((completion) => ({ ...completion }))
     const retainedCompletedWorkflowIds = new Set(
       recentCompletions.map((completion) => completion.taskWorkflowId),
@@ -651,7 +793,13 @@ export async function userTaskSchedulerWorkflow(
     await condition(
       () =>
         (workflowInfo().continueAsNewSuggested && allHandlersFinished()) ||
-        queued.some((item) => hasAvailableSlot(item.schedulerClass)),
+        queued.some((item) => {
+          const decision = queueDecision(item)
+          return (
+            decision.kind === 'cancel' ||
+            (decision.kind === 'run' && hasAvailableSlot(item.schedulerClass))
+          )
+        }),
     )
   }
 }

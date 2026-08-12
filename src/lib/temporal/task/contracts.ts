@@ -130,6 +130,10 @@ export type CommitTaskTerminalInput =
       kind: 'canceled'
       reason: string
       source: 'user' | 'system'
+      dependency?: {
+        requirement: 'required_success'
+        sourceTaskIds: readonly string[]
+      }
     })
 
 export interface NotifyTaskFollowUpInput {
@@ -224,6 +228,7 @@ export interface SchedulerEnqueueDedupeEntry {
 }
 
 export interface SchedulerCompletionSummary {
+  taskId: string
   taskWorkflowId: string
   status: TaskWorkflowTerminalStatus
   terminalEventId: number
