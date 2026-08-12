@@ -188,13 +188,6 @@ async function createFollowUpBatchInTransaction(params: {
   ) {
     throw new Error(`FOLLOW_UP_BATCH_TASK_SCOPE_DIVERGED:${executionKey}`)
   }
-  if (
-    tasks.every(
-      (task) => task.status !== 'queued' && task.status !== 'processing',
-    )
-  ) {
-    throw new Error(`FOLLOW_UP_BATCH_WITHOUT_PENDING_TASK:${executionKey}`)
-  }
   const batchId = buildFollowUpBatchId(executionKey)
   const existing = await params.tx.followUpBatch.findUnique({
     where: { executionKey },
@@ -221,6 +214,14 @@ async function createFollowUpBatchInTransaction(params: {
       throw new Error(`FOLLOW_UP_BATCH_REPLAY_DIVERGED:${executionKey}`)
     }
     return existing.id
+  }
+  const inactiveTask = tasks.find(
+    (task) => task.status !== 'queued' && task.status !== 'processing',
+  )
+  if (inactiveTask) {
+    throw new Error(
+      `FOLLOW_UP_BATCH_MEMBER_NOT_ACTIVE:${executionKey}:${inactiveTask.id}:${inactiveTask.status}`,
+    )
   }
   const context = parseContext(turn.contextJson)
   await params.tx.followUpBatch.create({
