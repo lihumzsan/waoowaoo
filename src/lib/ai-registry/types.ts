@@ -999,7 +999,17 @@ export function validateModelCapabilities(
   const issues: CapabilityValidationIssue[] = []
   const expectedNamespace: keyof ModelCapabilities = modelType
 
-  if (capabilities === undefined || capabilities === null) return issues
+  if (capabilities === undefined || capabilities === null) {
+    if (modelType === 'video') {
+      issues.push({
+        code: 'CAPABILITY_NAMESPACE_INVALID',
+        field: 'capabilities.video',
+        allowedValues: ['video'],
+        message: 'Video capabilities namespace is required',
+      })
+    }
+    return issues
+  }
   if (!isRecord(capabilities)) {
     issues.push({
       code: 'CAPABILITY_SHAPE_INVALID',
@@ -1007,6 +1017,15 @@ export function validateModelCapabilities(
       message: 'capabilities must be an object',
     })
     return issues
+  }
+
+  if (modelType === 'video' && capabilities.video === undefined) {
+    issues.push({
+      code: 'CAPABILITY_NAMESPACE_INVALID',
+      field: 'capabilities.video',
+      allowedValues: ['video'],
+      message: 'Video capabilities namespace is required',
+    })
   }
 
   for (const namespace of Object.keys(capabilities)) {

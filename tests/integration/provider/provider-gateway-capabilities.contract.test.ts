@@ -27,6 +27,7 @@ import {
 import { afterEach } from 'vitest'
 import { generateText, streamText } from 'ai'
 import { listBuiltinCapabilityCatalog } from '@/lib/ai-registry/capabilities-catalog'
+import { COMFYUI_H3_MODEL_ID } from '@/lib/ai-providers/comfyui/models'
 import {
   OPENROUTER_CLAUDE_FABLE_5_MODEL_ID,
   OPENROUTER_CLAUDE_SONNET_5_MODEL_ID,
@@ -753,12 +754,15 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
   })
 
   describe('asset-reference multi-reference video capability comes from the catalog', () => {
-    it('declares one explicit valid prompt profile for every production video model', () => {
+    it('declares the H3 profile only for H3 and the generic profile for every other production video model', () => {
       const videoEntries = listBuiltinCapabilityCatalog().filter((entry) => entry.modelType === 'video')
       expect(videoEntries.length).toBeGreaterThan(0)
 
       for (const entry of videoEntries) {
-      expect(['generic_v1', 'minimax_h3_v1']).toContain(entry.capabilities?.video?.promptProfile)
+        const expectedProfile = entry.provider === 'comfyui' && entry.modelId === COMFYUI_H3_MODEL_ID
+          ? 'minimax_h3_v1'
+          : 'generic_v1'
+        expect(entry.capabilities?.video?.promptProfile).toBe(expectedProfile)
       }
     })
 
