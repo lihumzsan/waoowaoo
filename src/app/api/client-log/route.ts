@@ -34,6 +34,29 @@ const MAX_URL_LENGTH = 1_000
 const MAX_USER_AGENT_LENGTH = 400
 const MAX_ID_LENGTH = 128
 
+const EXTENSION_SOURCE_PATTERN = /(?:chrome|moz|safari-web)-extension:\/\//iu
+const SENSITIVE_KEY_VALUE_PATTERN = /(["']?(?:access[_-]?token|refresh[_-]?token|token|authorization|cookie|password|secret|api[_-]?key)["']?\s*[:=]\s*["']?)[^\s,"'}]+/giu
+const BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9._~+\/-]+=*/giu
+const JWT_PATTERN = /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/gu
+
+function sanitizeClientDiagnosticText(value: string): string {
+  return value
+    .replace(SENSITIVE_KEY_VALUE_PATTERN, '$1[REDACTED]')
+    .replace(BEARER_PATTERN, 'Bearer [REDACTED]')
+    .replace(JWT_PATTERN, '[REDACTED_JWT]')
+}
+
+function sanitizeClientUrl(value: string): string {
+  try {
+    const url = new URL(value)
+    url.search = ''
+    url.hash = ''
+    return url.toString()
+  } catch {
+    return value.split(/[?#]/u, 1)[0] ?? ''
+  }
+}
+
 const CLIENT_ERROR_KINDS = ['error', 'unhandledrejection', 'react-render'] as const
 type ClientErrorKind = (typeof CLIENT_ERROR_KINDS)[number]
 
@@ -120,6 +143,16 @@ export const POST = apiHandler(async (request: NextRequest) => {
     throwApiError('INVALID_PARAMS', { message: 'Client log payload failed validation' })
   }
 
+  if (
+    EXTENSION_SOURCE_PATTERN.test(payload.message)
+    || (payload.stack ? EXTENSION_SOURCE_PATTERN.test(payload.stack) : false)
+  ) {
+    return NextResponse.json({ success: true })
+  }
+
+  const safeMessage = sanitizeClientDiagnosticText(payload.message)
+  const safeStack = payload.stack ? sanitizeClientDiagnosticText(payload.stack) : undefined
+
   // 只记白名单字段。客户端上传的 requestId/projectId 未经校验，
   // 只进入 details，不写入日志上下文的权威 requestId/projectId 列。
   const logger = createScopedLogger({
@@ -128,18 +161,18 @@ export const POST = apiHandler(async (request: NextRequest) => {
   })
   logger.error({
     action: 'client.error',
-    message: payload.message,
+    message: safeMessage,
     details: {
       kind: payload.kind,
-      url: payload.url,
+      url: sanitizeClientUrl(payload.url),
       userAgent: payload.userAgent,
       ...(payload.requestId ? { clientRequestId: payload.requestId } : {}),
       ...(payload.projectId ? { clientProjectId: payload.projectId } : {}),
     },
     error: {
       name: `client.${payload.kind}`,
-      message: payload.message,
-      ...(payload.stack ? { stack: payload.stack } : {}),
+      message: safeMessage,
+      ...(safeStack ? { stack: safeStack } : {}),
     },
   })
 
