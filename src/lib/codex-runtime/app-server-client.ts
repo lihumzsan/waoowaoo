@@ -492,6 +492,10 @@ export class CodexAppServerClient implements RuntimeAdapter {
     })
   }
 
+  hasPendingServerRequest(requestId: RuntimeRequestId): boolean {
+    return !this.closed && this.pendingServerRequests.has(requestId)
+  }
+
   async respondToServerRequest(response: RuntimeServerRequestResponse): Promise<void> {
     this.assertUsable()
     if (!this.pendingServerRequests.has(response.id)) {

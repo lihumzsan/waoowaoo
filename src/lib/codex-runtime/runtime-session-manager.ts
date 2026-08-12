@@ -435,6 +435,19 @@ export class RuntimeSessionManager {
     await session.container.runtime.respondToServerRequest(response)
   }
 
+  async hasPendingServerRequest(
+    scopeValue: RuntimeSessionScope,
+    requestId: RuntimeServerRequestResponse['id'],
+  ): Promise<boolean> {
+    const scope = normalizeScope(scopeValue)
+    const slot = this.slots.get(buildRuntimeSessionScopeId(scope))
+    if (!slot) return false
+    const session = await slot.entry
+    if (session.status !== 'ready') return false
+    const ownsScope = await session.ownership.assertCurrent().then(() => true, () => false)
+    return ownsScope && session.container.runtime.hasPendingServerRequest(requestId)
+  }
+
   touch(scopeValue: RuntimeSessionScope): void {
     const scope = normalizeScope(scopeValue)
     const slot = this.slots.get(buildRuntimeSessionScopeId(scope))

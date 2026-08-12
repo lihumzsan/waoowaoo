@@ -198,12 +198,12 @@ export function ConfirmationActionCard(props: {
         <BillingActionButton
           type="button"
           icon="arrowRight"
-          label={
-            decision === 'confirming' ? t('cards.interactionSubmitting') : t('cards.confirmContinue')
-          }
+          label={decision === 'confirming' || props.retryOnly
+            ? t('cards.interactionSubmitting')
+            : t('cards.confirmContinue')}
           quote={members.length === 1 ? (members[0]?.quotePreview ?? null) : null}
           className="flex-1 rounded-xl py-2 text-sm"
-          disabled={locked}
+          disabled={locked || props.retryOnly}
           onClick={() => {
             submitDecision('confirm')
           }}

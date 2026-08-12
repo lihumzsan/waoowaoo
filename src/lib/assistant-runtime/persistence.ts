@@ -1017,7 +1017,10 @@ export async function decideAssistantRuntimeInteraction(input: {
   readonly turnId: string
   readonly interactionId: string
   readonly response: unknown
-}): Promise<{ readonly runtimeRequestId: string; readonly replayed: boolean }> {
+}): Promise<{
+  readonly runtimeRequestId: string
+  readonly deliveryRequired: boolean
+}> {
   const responseRequestId = runtimeResponseRequestId(input.response)
   return await prisma.$transaction(async (tx) => {
     await lockProjectScope(tx, input.scope)
@@ -1047,7 +1050,13 @@ export async function decideAssistantRuntimeInteraction(input: {
       if (!isDeepStrictEqual(interaction.responseJson, input.response)) {
         throw new Error('ASSISTANT_RUNTIME_INTERACTION_RESPONSE_DIVERGED')
       }
-      return { runtimeRequestId: interaction.runtimeRequestId, replayed: true }
+      if (interaction.status === 'delivery_pending') {
+        return { runtimeRequestId: interaction.runtimeRequestId, deliveryRequired: true }
+      }
+      if (interaction.status === 'decided' || interaction.status === 'resolved') {
+        return { runtimeRequestId: interaction.runtimeRequestId, deliveryRequired: false }
+      }
+      throw new Error(`ASSISTANT_RUNTIME_INTERACTION_NOT_PENDING:${interaction.status}`)
     }
     if (interaction.status !== 'pending') {
       throw new Error(`ASSISTANT_RUNTIME_INTERACTION_NOT_PENDING:${interaction.status}`)
@@ -1055,12 +1064,96 @@ export async function decideAssistantRuntimeInteraction(input: {
     await tx.agentTurnInteraction.update({
       where: { id: interaction.id },
       data: {
-        status: 'decided',
+        status: 'delivery_pending',
         responseJson: toJson(input.response),
         version: { increment: 1 },
       },
     })
-    return { runtimeRequestId: interaction.runtimeRequestId, replayed: false }
+    return { runtimeRequestId: interaction.runtimeRequestId, deliveryRequired: true }
+  })
+}
+
+export async function markAssistantRuntimeInteractionDelivered(input: {
+  readonly scope: AssistantRuntimeScope
+  readonly threadId: string
+  readonly turnId: string
+  readonly interactionId: string
+  readonly runtimeRequestId: string
+}): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await lockProjectScope(tx, input.scope)
+    const thread = await lockThread(tx, input.scope, input.threadId)
+    const interaction = await tx.agentTurnInteraction.findUnique({
+      where: { id: input.interactionId },
+      include: { turn: true },
+    })
+    if (
+      !interaction
+      || interaction.turnId !== input.turnId
+      || interaction.turn.threadId !== thread.id
+      || interaction.runtimeRequestId !== input.runtimeRequestId
+    ) {
+      throw new Error('ASSISTANT_RUNTIME_INTERACTION_SCOPE_DIVERGED')
+    }
+    if (interaction.status === 'decided' || interaction.status === 'resolved') return
+    if (interaction.status !== 'delivery_pending') {
+      throw new Error(`ASSISTANT_RUNTIME_INTERACTION_DELIVERY_INVALID:${interaction.status}`)
+    }
+    await tx.agentTurnInteraction.update({
+      where: { id: interaction.id },
+      data: { status: 'decided', version: { increment: 1 } },
+    })
+  })
+}
+
+export async function expireAssistantRuntimeInteraction(input: {
+  readonly scope: AssistantRuntimeScope
+  readonly threadId: string
+  readonly turnId: string
+  readonly interactionId: string
+  readonly runtimeRequestId: string
+}): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await lockProjectScope(tx, input.scope)
+    const thread = await lockThread(tx, input.scope, input.threadId)
+    const rows = await tx.$queryRaw<ProjectAgentTurn[]>(Prisma.sql`
+      SELECT * FROM project_agent_turns WHERE id = ${input.turnId} FOR UPDATE
+    `)
+    const turn = rows[0]
+    if (!turn || turn.threadId !== thread.id) {
+      throw new Error('ASSISTANT_RUNTIME_INTERACTION_SCOPE_DIVERGED')
+    }
+    const interaction = await tx.agentTurnInteraction.findUnique({
+      where: { id: input.interactionId },
+    })
+    if (
+      !interaction
+      || interaction.turnId !== turn.id
+      || interaction.runtimeRequestId !== input.runtimeRequestId
+    ) {
+      throw new Error('ASSISTANT_RUNTIME_INTERACTION_SCOPE_DIVERGED')
+    }
+    if (
+      interaction.status === 'pending'
+      || interaction.status === 'delivery_pending'
+      || interaction.status === 'decided'
+    ) {
+      await tx.agentTurnInteraction.update({
+        where: { id: interaction.id },
+        data: { status: 'cancelled', resolvedAt: new Date(), version: { increment: 1 } },
+      })
+    }
+    if (turn.status === 'waiting_approval') {
+      await tx.projectAgentTurn.update({
+        where: { id: turn.id },
+        data: {
+          status: 'interrupted',
+          stopReason: 'runtime_interaction_expired',
+          failure: Prisma.DbNull,
+          finishedAt: new Date(),
+        },
+      })
+    }
   })
 }
 
@@ -1091,7 +1184,7 @@ export async function resolveAssistantRuntimeInteraction(input: {
       },
     })
     if (!interaction || interaction.status === 'resolved' || interaction.status === 'cancelled') return
-    if (interaction.status !== 'decided') {
+    if (interaction.status !== 'delivery_pending' && interaction.status !== 'decided') {
       throw new Error('ASSISTANT_RUNTIME_INTERACTION_RESOLVED_WITHOUT_DECISION')
     }
     await tx.agentTurnInteraction.update({
@@ -1272,7 +1365,7 @@ export async function settleAssistantRuntimeTurn(input: {
       })
     }
     await tx.agentTurnInteraction.updateMany({
-      where: { turnId: turn.id, status: { in: ['pending', 'decided'] } },
+      where: { turnId: turn.id, status: { in: ['pending', 'delivery_pending', 'decided'] } },
       data: { status: 'cancelled', resolvedAt: new Date() },
     })
     await tx.projectAgentTurn.update({
@@ -1307,7 +1400,7 @@ export async function requestAssistantRuntimeInterrupt(input: {
       throw new Error('ASSISTANT_RUNTIME_INTERRUPT_REQUEST_DIVERGED')
     }
     await tx.agentTurnInteraction.updateMany({
-      where: { turnId: turn.id, status: { in: ['pending', 'decided'] } },
+      where: { turnId: turn.id, status: { in: ['pending', 'delivery_pending', 'decided'] } },
       data: { status: 'cancelled', resolvedAt: new Date() },
     })
     if (turn.status === 'queued' && turn.runtimeTurnId === null) {
@@ -1417,7 +1510,7 @@ export async function clearAssistantRuntimeThread(input: {
       },
     })
     await tx.agentTurnInteraction.updateMany({
-      where: { turn: { threadId: thread.id }, status: { in: ['pending', 'decided'] } },
+      where: { turn: { threadId: thread.id }, status: { in: ['pending', 'delivery_pending', 'decided'] } },
       data: { status: 'cancelled', resolvedAt: new Date() },
     })
     await tx.projectAgentTurn.updateMany({
@@ -1507,7 +1600,7 @@ export async function markAssistantRuntimeProjectTurnsInterrupted(input: {
       }
     }
     await tx.agentTurnInteraction.updateMany({
-      where: { turnId: { in: ids }, status: { in: ['pending', 'decided'] } },
+      where: { turnId: { in: ids }, status: { in: ['pending', 'delivery_pending', 'decided'] } },
       data: { status: 'cancelled', resolvedAt: new Date() },
     })
     await tx.projectAgentTurn.updateMany({

@@ -125,6 +125,10 @@ View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 pl
 - Runtime 恢复曾把数据库消息重新注入新 Thread；失败 Turn 的最新用户消息尚未投影时，恢复上下文会
   回到更早约束 → 产品 View 被误作模型 history writer → Product Thread 在首个 Turn 前绑定，后续只
   resume 持久 Codex Thread，View 永不参与模型历史恢复（ARL-07）。
+- 原生交互首版先持久化用户决定再写 Runtime 管道，却没有在原生 request 随超时、重启或部署消失时
+  关闭持久交互；旧卡片因而长期保持 decided/waiting 并允许重复点击 → 响应前验证当前 placement 的
+  原生 request，无法交付时由既有恢复 writer 终结 Turn 与交互，UI 不再把 decided 解释为可重试按钮
+  （ARL-04/07）。
 - Codex 切换曾把 `turn/plan/updated` 写回旧版 Thread 级计划本，停止后的 Plan 因而残留并可能被下一
   Turn 误认；旧实现只替换了事件来源，没有重新核对事实 scope → Plan 改由精确 Turn identity 写入，
   终态不再进入当前 View（ARL-03）。

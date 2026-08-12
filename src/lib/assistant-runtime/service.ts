@@ -45,9 +45,11 @@ import {
   claimAssistantRuntimeThreadClear,
   clearAssistantRuntimeThread,
   decideAssistantRuntimeInteraction,
+  expireAssistantRuntimeInteraction,
   failAssistantRuntimeBoundTurnStart,
   failAssistantRuntimeTurnStart,
   getOrCreateAssistantRuntimeThread,
+  markAssistantRuntimeInteractionDelivered,
   loadAssistantRuntimeTaskFollowUp,
   markAssistantRuntimeSteerUncertain,
   persistAssistantRuntimeInteraction,
@@ -235,6 +237,11 @@ export class AssistantRuntimeService {
       if (replay?.outcome === 'resume_queued') {
         return await this.submitExclusive(normalizedCommand, prepared, clientPayloadHash)
       }
+      // A restarted Web process has no in-memory placement. Ensuring it before
+      // selecting start/steer invokes the existing abandoned-Turn reconciler,
+      // so a durable waiting_approval row can never keep a new message busy
+      // after its native request disappeared.
+      await this.ensureRuntimeForAdmission(normalizedCommand)
       const active = await resolveAssistantRuntimeMessageTarget(normalizedCommand)
       if (!active) {
         return await this.submitExclusive(normalizedCommand, prepared, clientPayloadHash)
@@ -445,6 +452,7 @@ export class AssistantRuntimeService {
   private async respondToServerRequestExclusive(
     command: AssistantRuntimeServerRequestCommand,
   ): Promise<void> {
+    const runtimeRequestId = String(command.response.id)
     const decision = await decideAssistantRuntimeInteraction({
       scope: command,
       threadId: command.threadId,
@@ -452,16 +460,61 @@ export class AssistantRuntimeService {
       interactionId: command.interactionId,
       response: command.response,
     })
-    if (String(command.response.id) !== decision.runtimeRequestId) {
+    if (runtimeRequestId !== decision.runtimeRequestId) {
       throw new Error('ASSISTANT_RUNTIME_INTERACTION_RESPONSE_ID_DIVERGED')
     }
-    await this.manager.respondToServerRequest(runtimeScope(command), command.response)
+    if (!decision.deliveryRequired) {
+      await publishAgentSessionViewChanged({
+        ...command,
+        attempt: null,
+        reason: 'runtime_server_request_response_replayed',
+      })
+      return
+    }
+    const requestIsLive = await this.manager.hasPendingServerRequest(
+      runtimeScope(command),
+      command.response.id,
+    )
+    if (!requestIsLive) {
+      await this.expireServerRequest(command, runtimeRequestId)
+      throw new Error('ASSISTANT_RUNTIME_INTERACTION_EXPIRED')
+    }
+    try {
+      await this.manager.respondToServerRequest(runtimeScope(command), command.response)
+    } catch {
+      await this.expireServerRequest(command, decision.runtimeRequestId)
+      throw new Error('ASSISTANT_RUNTIME_INTERACTION_EXPIRED')
+    }
+    await markAssistantRuntimeInteractionDelivered({
+      scope: command,
+      threadId: command.threadId,
+      turnId: command.turnId,
+      interactionId: command.interactionId,
+      runtimeRequestId: decision.runtimeRequestId,
+    })
     await publishAgentSessionViewChanged({
       ...command,
       attempt: null,
-      reason: decision.replayed
-        ? 'runtime_server_request_response_replayed'
-        : 'runtime_server_request_response_sent',
+      reason: 'runtime_server_request_response_sent',
+    })
+  }
+
+  private async expireServerRequest(
+    command: AssistantRuntimeServerRequestCommand,
+    runtimeRequestId: string,
+  ): Promise<void> {
+    await this.manager.stop(runtimeScope(command), 'recover').catch(() => undefined)
+    await expireAssistantRuntimeInteraction({
+      scope: command,
+      threadId: command.threadId,
+      turnId: command.turnId,
+      interactionId: command.interactionId,
+      runtimeRequestId,
+    })
+    await publishAgentSessionViewChanged({
+      ...command,
+      attempt: null,
+      reason: 'runtime_server_request_expired',
     })
   }
 

@@ -95,7 +95,10 @@ function parseInteraction(row: {
   readonly responseJson: Prisma.JsonValue | null
   readonly createdAt: Date
 }): AssistantRuntimePendingInteractionView {
-  if (!row.runtimeRequestId || (row.status !== 'pending' && row.status !== 'decided')) {
+  if (
+    !row.runtimeRequestId
+    || (row.status !== 'pending' && row.status !== 'delivery_pending' && row.status !== 'decided')
+  ) {
     throw new Error(`ASSISTANT_RUNTIME_VIEW_INTERACTION_INVALID:${row.id}`)
   }
   if (!row.payloadJson || typeof row.payloadJson !== 'object' || Array.isArray(row.payloadJson)) {
@@ -120,7 +123,7 @@ function parseInteraction(row: {
     method: payload.method,
     params: payload.params as RuntimeJsonValue,
     response: row.responseJson as RuntimeJsonValue | null,
-    status: row.status,
+    status: row.status === 'pending' ? 'pending' : 'decided',
     createdAt: row.createdAt.toISOString(),
   }
 }
@@ -173,7 +176,10 @@ export async function getAssistantRuntimeSessionView(
         take: RECENT_TURN_LIMIT,
       }),
       tx.agentTurnInteraction.findMany({
-        where: { turn: { threadId: thread.id }, status: { in: ['pending', 'decided'] } },
+        where: {
+          turn: { threadId: thread.id },
+          status: { in: ['pending', 'delivery_pending', 'decided'] },
+        },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       }),
       tx.followUpBatch.findMany({

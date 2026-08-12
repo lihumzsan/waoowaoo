@@ -194,6 +194,7 @@ export function mapProjectAgentCommandError(error: unknown): ApiError {
       || agentTurnCode.endsWith('_NOT_FOUND')
       || agentTurnCode.endsWith('_NOT_READY')
       || agentTurnCode.endsWith('_NOT_PENDING')
+      || agentTurnCode.endsWith('_EXPIRED')
       || agentTurnCode.endsWith('_REJECTED')
       || agentTurnCode.endsWith('_REPLAY_DIVERGED')
       || agentTurnCode.endsWith('_RESPONSE_DIVERGED')
