@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import { createScopedLogger } from '@/lib/logging/core'
 import { loadOperationPlanSnapshot } from '@/lib/operations/operation-plan-snapshot'
 import type { PlannedTask } from '@/lib/operations/planning'
+import { persistPlannedTaskEdgesInTransaction } from './dependencies/persistence'
 import { buildTaskProgressGroupId, withTaskProgressGroupPayload } from './progress-group'
 import { normalizeTaskPayload, toObject, type SubmitTaskResult } from './submitter'
 import { isTaskType, type CreateTaskInput } from './types'
@@ -99,6 +100,15 @@ export async function submitApprovedOperationPlanTasks(params: {
   const persisted = await persistSubmittedTaskBatchInTransaction({
     tx,
     inputs: planned,
+  })
+  await persistPlannedTaskEdgesInTransaction({
+    tx,
+    operationExecutionId: params.operationExecutionId,
+    taskEdges: snapshot.plan.taskEdges ?? [],
+    persistedTasks: persisted.map(({ task }) => ({
+      id: task.id,
+      operationPlanTaskId: task.operationPlanTaskId,
+    })),
   })
   logger.info({
     action: 'task.submit.persisted',

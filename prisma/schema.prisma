@@ -411,6 +411,8 @@ model Task {
   operationExecution   OperationExecution?       @relation(fields: [operationExecutionId], references: [id], onDelete: Restrict)
   workspaceResources   WorkspaceResource[]
   followUpMemberships  FollowUpBatchMember[]
+  dependencyTargets    TaskDependency[]          @relation("TaskDependencyTarget")
+  dependencySources    TaskDependency[]          @relation("TaskDependencySource")
 
   @@unique([operationExecutionId, operationPlanTaskId])
   @@index([status])
@@ -423,6 +425,23 @@ model Task {
   @@index([operationExecutionId])
   @@index([userId])
   @@map("tasks")
+}
+
+model TaskDependency {
+  id                   String             @id @default(uuid())
+  operationExecutionId String             @db.VarChar(191)
+  targetTaskId         String
+  sourceTaskId         String
+  requirement          String             @db.VarChar(32)
+  createdAt            DateTime           @default(now())
+  operationExecution   OperationExecution @relation(fields: [operationExecutionId], references: [id], onDelete: Cascade)
+  targetTask           Task               @relation("TaskDependencyTarget", fields: [targetTaskId], references: [id], onDelete: Cascade)
+  sourceTask           Task               @relation("TaskDependencySource", fields: [sourceTaskId], references: [id], onDelete: Cascade)
+
+  @@unique([targetTaskId, sourceTaskId])
+  @@index([operationExecutionId, targetTaskId])
+  @@index([sourceTaskId])
+  @@map("task_dependencies")
 }
 
 model FollowUpBatch {
@@ -512,6 +531,7 @@ model OperationExecution {
   updatedAt            DateTime               @updatedAt
   planSnapshot         OperationPlanSnapshot? @relation(fields: [planSnapshotId], references: [id], onDelete: Restrict)
   tasks                Task[]
+  taskDependencies     TaskDependency[]
   workspaceResources   WorkspaceResource[]    @relation("WorkspaceResourceOperationExecution")
   alternativeResources WorkspaceResource[]    @relation("WorkspaceResourceAlternativeGroupExecution")
 
