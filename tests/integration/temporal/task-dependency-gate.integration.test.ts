@@ -7,7 +7,7 @@ import {
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { connectTemporalClient } from '@/lib/temporal/client'
 import { buildTaskWorkflowId, buildUserTaskSchedulerWorkflowId } from '@/lib/temporal/identity'
-import { buildScheduledTaskRequest } from '@/lib/temporal/task-client'
+import { buildScheduledTaskRequest } from '@/lib/temporal/task/scheduled-request-builder'
 import {
   USER_TASK_SCHEDULER_UPDATE_NAME,
   type ScheduledTaskRequest,

@@ -11,7 +11,7 @@ import {
   isTaskDependencyTopologyDivergedError,
   validateTaskSchedulerAdmission,
 } from '@/lib/temporal/task/scheduled-request'
-import { buildScheduledTaskRequest } from '@/lib/temporal/task-client'
+import { buildScheduledTaskRequest } from '@/lib/temporal/task/scheduled-request-builder'
 import { buildUserTaskSchedulerWorkflowId } from '@/lib/temporal/identity'
 import { persistSubmittedTaskBatchInTransaction } from '@/lib/task/transactional-create'
 import { TASK_STATUS, TASK_TYPE, type CreateTaskInput } from '@/lib/task/types'
@@ -98,6 +98,7 @@ describe('Persisted Task dependency topology projection', () => {
       projectId: 'project-1',
       operationExecutionId,
       operationPlanTaskId: '02:mix',
+      operationExecution: { executionKind: 'planned' },
       type: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
     }
     const source = {
@@ -106,6 +107,7 @@ describe('Persisted Task dependency topology projection', () => {
       projectId: 'project-1',
       operationExecutionId,
       operationPlanTaskId: '01:narration',
+      operationExecution: { executionKind: 'planned' },
       type: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
     }
 
@@ -130,6 +132,7 @@ describe('Persisted Task dependency topology projection', () => {
       projectId: 'project-1',
       operationExecutionId,
       operationPlanTaskId: '02:mix',
+      operationExecution: { executionKind: 'planned' },
       type: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
     }
     const source = {
@@ -138,6 +141,7 @@ describe('Persisted Task dependency topology projection', () => {
       projectId: 'project-1',
       operationExecutionId,
       operationPlanTaskId: '01:narration',
+      operationExecution: { executionKind: 'planned' },
       type: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
     }
 
@@ -161,6 +165,7 @@ describe('Persisted Task dependency topology projection', () => {
       projectId: 'project-1',
       operationExecutionId: 'operation-execution-1',
       operationPlanTaskId: null,
+      operationExecution: { executionKind: 'planned' },
       type: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
     }
     const source = {
@@ -169,6 +174,7 @@ describe('Persisted Task dependency topology projection', () => {
       projectId: 'project-1',
       operationExecutionId: 'operation-execution-1',
       operationPlanTaskId: '01:narration',
+      operationExecution: { executionKind: 'planned' },
       type: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
     }
     expect(() => projectPersistedTaskReference({
@@ -192,6 +198,7 @@ describe('Persisted Task dependency topology projection', () => {
       projectId: 'project-1',
       operationExecutionId,
       operationPlanTaskId: '02:mix',
+      operationExecution: { executionKind: 'planned' },
       type: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
     }
     const source = {
@@ -200,6 +207,7 @@ describe('Persisted Task dependency topology projection', () => {
       projectId: 'project-1',
       operationExecutionId,
       operationPlanTaskId: null,
+      operationExecution: { executionKind: 'planned' },
       type: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
     }
 
@@ -224,6 +232,7 @@ describe('Persisted Task dependency topology projection', () => {
         projectId: 'project-1',
         operationExecutionId: 'direct-execution-1',
         operationPlanTaskId: null,
+        operationExecution: { executionKind: 'direct_task' },
         type: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
       },
       dependencies: [],
@@ -233,6 +242,75 @@ describe('Persisted Task dependency topology projection', () => {
       taskType: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
       dependsOnTaskIds: [],
     })
+  })
+
+  it('rejects a planned root Task without Plan identity even when it has no dependencies', () => {
+    expect(() => projectPersistedTaskReference({
+      task: {
+        id: 'planned-root-task',
+        userId: 'user-1',
+        projectId: 'project-1',
+        operationExecutionId: 'planned-execution-1',
+        operationPlanTaskId: null,
+        operationExecution: { executionKind: 'planned' },
+        type: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
+      },
+      dependencies: [],
+    })).toThrow(/^TASK_DEPENDENCY_TOPOLOGY_DIVERGED/)
+  })
+
+  it('accepts only explicit unscoped, direct, or planned execution identity shapes', () => {
+    const base = {
+      id: 'identity-task',
+      userId: 'user-1',
+      projectId: 'project-1',
+      type: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
+    }
+    expect(projectPersistedTaskReference({
+      task: {
+        ...base,
+        operationExecutionId: null,
+        operationPlanTaskId: null,
+        operationExecution: null,
+      },
+      dependencies: [],
+    })).toMatchObject({ taskId: base.id, dependsOnTaskIds: [] })
+    expect(projectPersistedTaskReference({
+      task: {
+        ...base,
+        operationExecutionId: 'planned-execution-1',
+        operationPlanTaskId: '01:root',
+        operationExecution: { executionKind: 'planned' },
+      },
+      dependencies: [],
+    })).toMatchObject({ taskId: base.id, dependsOnTaskIds: [] })
+    expect(() => projectPersistedTaskReference({
+      task: {
+        ...base,
+        operationExecutionId: 'missing-relation-execution',
+        operationPlanTaskId: null,
+        operationExecution: null,
+      },
+      dependencies: [],
+    })).toThrow(/^TASK_DEPENDENCY_TOPOLOGY_DIVERGED/)
+    expect(() => projectPersistedTaskReference({
+      task: {
+        ...base,
+        operationExecutionId: null,
+        operationPlanTaskId: null,
+        operationExecution: { executionKind: 'direct_task' },
+      },
+      dependencies: [],
+    })).toThrow(/^TASK_DEPENDENCY_TOPOLOGY_DIVERGED/)
+    expect(() => projectPersistedTaskReference({
+      task: {
+        ...base,
+        operationExecutionId: 'unknown-execution',
+        operationPlanTaskId: null,
+        operationExecution: { executionKind: 'unknown' },
+      },
+      dependencies: [],
+    })).toThrow(/^TASK_DEPENDENCY_TOPOLOGY_DIVERGED/)
   })
 
   it('rejects non-canonical complete Scheduler admission request identities', () => {

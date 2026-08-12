@@ -3,7 +3,7 @@ import type { PersistedTaskReference } from '@/lib/temporal/task/contracts'
 import { TaskDependencyTopologyDivergedError } from '@/lib/temporal/task/scheduled-request'
 import { isTaskType, type TaskType } from '@/lib/task/types'
 
-type DependencyClient = Pick<PrismaClient, 'task' | 'taskDependency'>
+type DependencyClient = Pick<PrismaClient, 'task' | 'taskDependency' | 'operationExecution'>
 
 export type PersistedTaskRow = {
   readonly id: string
@@ -11,6 +11,9 @@ export type PersistedTaskRow = {
   readonly projectId: string
   readonly operationExecutionId: string | null
   readonly operationPlanTaskId: string | null
+  readonly operationExecution: {
+    readonly executionKind: string
+  } | null
   readonly type: string
 }
 
@@ -32,9 +35,13 @@ function requireTaskType(task: PersistedTaskRow): TaskType {
   return task.type
 }
 
-function requireOperationTask(task: PersistedTaskRow, operationExecutionId: string): void {
+function requirePlannedOperationTask(
+  task: PersistedTaskRow,
+  operationExecutionId: string,
+): void {
   if (
     task.operationExecutionId !== operationExecutionId ||
+    task.operationExecution?.executionKind !== 'planned' ||
     !task.operationPlanTaskId ||
     task.operationPlanTaskId.trim() !== task.operationPlanTaskId
   ) {
@@ -51,9 +58,9 @@ function requireDependencyTopology(params: {
   if (!operationExecutionId) {
     topologyDiverged(target.id, 'OPERATION_TASK_IDENTITY_INVALID')
   }
-  requireOperationTask(target, operationExecutionId)
-  requireOperationTask(dependency.targetTask, operationExecutionId)
-  requireOperationTask(dependency.sourceTask, operationExecutionId)
+  requirePlannedOperationTask(target, operationExecutionId)
+  requirePlannedOperationTask(dependency.targetTask, operationExecutionId)
+  requirePlannedOperationTask(dependency.sourceTask, operationExecutionId)
   if (
     dependency.requirement !== 'required_success' ||
     dependency.targetTaskId !== target.id ||
@@ -79,23 +86,29 @@ export function projectPersistedTaskReference(params: {
   readonly task: PersistedTaskRow
   readonly dependencies: readonly PersistedDependencyRow[]
 }): PersistedTaskReference {
-  if (params.dependencies.length > 0) {
-    if (!params.task.operationExecutionId) {
+  const { task } = params
+  if (task.operationExecutionId === null) {
+    if (
+      task.operationExecution !== null ||
+      task.operationPlanTaskId !== null ||
+      params.dependencies.length > 0
+    ) {
       topologyDiverged(params.task.id, 'OPERATION_TASK_IDENTITY_INVALID')
     }
-    requireOperationTask(params.task, params.task.operationExecutionId)
-  } else if (params.task.operationPlanTaskId !== null) {
-    if (!params.task.operationExecutionId) {
-      topologyDiverged(params.task.id, 'OPERATION_TASK_IDENTITY_INVALID')
-    }
-    requireOperationTask(params.task, params.task.operationExecutionId)
   } else if (
-    params.task.operationExecutionId !== null && (
-      params.task.operationExecutionId.length === 0 ||
-      params.task.operationExecutionId.trim() !== params.task.operationExecutionId
-    )
+    task.operationExecutionId.length === 0 ||
+    task.operationExecutionId.trim() !== task.operationExecutionId ||
+    !task.operationExecution
   ) {
-    topologyDiverged(params.task.id, 'OPERATION_TASK_IDENTITY_INVALID')
+    topologyDiverged(task.id, 'OPERATION_TASK_IDENTITY_INVALID')
+  } else if (task.operationExecution.executionKind === 'direct_task') {
+    if (task.operationPlanTaskId !== null || params.dependencies.length > 0) {
+      topologyDiverged(params.task.id, 'OPERATION_TASK_IDENTITY_INVALID')
+    }
+  } else if (task.operationExecution.executionKind === 'planned') {
+    requirePlannedOperationTask(task, task.operationExecutionId)
+  } else {
+    topologyDiverged(task.id, 'OPERATION_EXECUTION_KIND_INVALID')
   }
   const dependsOnTaskIds = params.dependencies
     .map((dependency) => {
@@ -120,8 +133,9 @@ const persistedTaskSelect = {
   projectId: true,
   operationExecutionId: true,
   operationPlanTaskId: true,
+  operationExecution: { select: { executionKind: true } },
   type: true,
-} as const
+} as const satisfies Prisma.TaskSelect
 
 export const persistedDependencySelect = {
   operationExecutionId: true,
@@ -152,12 +166,19 @@ export async function buildPersistedTaskReferencesForOperationExecution(
   client: DependencyClient,
   operationExecutionId: string,
 ): Promise<readonly PersistedTaskReference[]> {
+  const execution = await client.operationExecution.findUnique({
+    where: { id: operationExecutionId },
+    select: { executionKind: true },
+  })
+  if (execution?.executionKind !== 'planned') {
+    topologyDiverged(operationExecutionId, 'OPERATION_EXECUTION_KIND_INVALID')
+  }
   const tasks = await client.task.findMany({
     where: { operationExecutionId },
     select: persistedTaskSelect,
     orderBy: { operationPlanTaskId: 'asc' },
   })
-  for (const task of tasks) requireOperationTask(task, operationExecutionId)
+  for (const task of tasks) requirePlannedOperationTask(task, operationExecutionId)
   const taskIds = tasks.map((task) => task.id)
   const dependencies = await client.taskDependency.findMany({
     where: {

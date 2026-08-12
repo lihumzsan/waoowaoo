@@ -6,10 +6,9 @@ import {
   WorkflowUpdateFailedError,
   type WorkflowClient,
 } from '@temporalio/client'
-import { isTaskType } from '@/lib/task/types'
 import { getTemporalClient } from './client'
 import { getTemporalRuntimeConfig } from './config'
-import { buildTaskWorkflowId, buildUserTaskSchedulerWorkflowId } from './identity'
+import { buildScheduledTaskRequest } from './task/scheduled-request-builder'
 import {
   TASK_WORKFLOW_UPDATE_NAME,
   USER_TASK_SCHEDULER_UPDATE_NAME,
@@ -65,39 +64,6 @@ function requireIdentity(value: string, code: string): string {
 
 function hash(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('base64url')
-}
-
-function taskWorkflowInput(reference: PersistedTaskReference): TaskWorkflowInput {
-  const taskId = requireIdentity(reference.taskId, 'TASK_ID_INVALID')
-  const userId = requireIdentity(reference.userId, 'TASK_USER_ID_INVALID')
-  if (!isTaskType(reference.taskType)) {
-    throw new Error(`TASK_TYPE_INVALID:${String(reference.taskType)}`)
-  }
-  return {
-    workflowId: buildTaskWorkflowId(taskId),
-    schedulerWorkflowId: buildUserTaskSchedulerWorkflowId(userId),
-    taskId,
-    userId,
-    taskType: reference.taskType,
-  }
-}
-
-export function buildScheduledTaskRequest(
-  reference: PersistedTaskReference,
-): ScheduledTaskRequest {
-  const task = taskWorkflowInput(reference)
-  const dependsOnTaskIds = reference.dependsOnTaskIds.map((dependencyTaskId) =>
-    requireIdentity(dependencyTaskId, 'TASK_DEPENDENCY_TASK_ID_INVALID'),
-  )
-  if (
-    dependsOnTaskIds.includes(task.taskId) ||
-    new Set(dependsOnTaskIds).size !== dependsOnTaskIds.length
-  ) {
-    throw new Error('TASK_DEPENDENCY_TOPOLOGY_DIVERGED')
-  }
-  dependsOnTaskIds.sort()
-  const enqueueId = `task-enqueue:v1:${hash(task.taskId)}`
-  return { enqueueId, task, dependsOnTaskIds }
 }
 
 function buildScheduleCommand(reference: PersistedTaskReference): {
