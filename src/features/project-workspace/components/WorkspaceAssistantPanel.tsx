@@ -969,14 +969,14 @@ export default function WorkspaceAssistantPanel({
                 <WorkspaceAssistantSettings />
                 <ThreadPrimitive.Viewport
                   autoScroll
-                  className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 pb-4 pt-12"
+                  className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-6 pb-4 pt-12"
                   style={WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE}
                 >
                   <WorkspaceAssistantRunningSurfaceProvider
                     activeTurn={assistantRuntime.replyInFlight}
                   >
-                    <div className="min-w-0">
-                      <div className="space-y-3">
+                    <div className="mx-auto min-w-0 w-full max-w-[40rem]">
+                      <div className="space-y-6">
                           <ThreadPrimitive.Messages>
                             {() => (
                               <WorkspaceAssistantThreadMessage

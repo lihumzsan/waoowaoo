@@ -100,24 +100,47 @@ function WorkspaceMarkdownLink(props: { readonly href?: string; readonly childre
   return <span className="break-words text-[var(--glass-text-tertiary)]">{props.children}</span>
 }
 
+function MarkdownStrong(props: { readonly children?: React.ReactNode }) {
+  return (
+    <strong className="font-semibold text-[var(--glass-text-primary)]">
+      {props.children}
+    </strong>
+  )
+}
+
+function MarkdownParagraph(props: { readonly children?: React.ReactNode }) {
+  const children = React.Children.toArray(props.children)
+  const isStandaloneStrong = children.length === 1
+    && React.isValidElement(children[0])
+    && children[0].type === MarkdownStrong
+
+  if (isStandaloneStrong) {
+    return (
+      <p className="mb-3 mt-6 text-lg font-semibold leading-7 text-[var(--glass-text-primary)] first:mt-0 first:text-xl first:leading-8 last:mb-0">
+        {props.children}
+      </p>
+    )
+  }
+
+  return <p className="mb-4 leading-7 last:mb-0">{props.children}</p>
+}
+
 const markdownComponents: Components = {
-  p: ({ children }) => (
-    <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>
-  ),
+  p: MarkdownParagraph,
   ul: ({ children }) => (
-    <ul className="mb-2 list-disc pl-5 last:mb-0">{children}</ul>
+    <ul className="mb-4 list-disc pl-6 leading-7 last:mb-0">{children}</ul>
   ),
   ol: ({ children }) => (
-    <ol className="mb-2 list-decimal pl-5 last:mb-0">{children}</ol>
+    <ol className="mb-4 list-decimal pl-6 leading-7 last:mb-0">{children}</ol>
   ),
   li: ({ children }) => (
-    <li className="mb-1 last:mb-0">{children}</li>
+    <li className="mb-2 last:mb-0">{children}</li>
   ),
   code: ({ children, className }) => {
     const isInline = !className
     if (isInline) {
       return (
-        <code className="whitespace-normal rounded bg-[var(--glass-bg-surface)] px-1.5 py-0.5 text-xs font-mono text-[var(--glass-text-primary)] [overflow-wrap:anywhere]">
+        <code className="whitespace-normal rounded bg-[var(--glass-bg-surface)] px-1.5 py-0.5 font-mono text-[0.9em] leading-[1.5] text-[var(--glass-text-primary)] [overflow-wrap:anywhere]">
           {children}
         </code>
       )
@@ -129,43 +152,41 @@ const markdownComponents: Components = {
     )
   },
   pre: ({ children }) => (
-    <pre className="mb-2 max-w-full overflow-x-auto rounded-xl bg-[var(--glass-bg-surface)] p-3 text-xs font-mono text-[var(--glass-text-primary)] last:mb-0">
+    <pre className="mb-4 max-w-full overflow-x-auto rounded-xl bg-[var(--glass-bg-surface)] p-4 font-mono text-sm leading-6 text-[var(--glass-text-primary)] last:mb-0">
       {children}
     </pre>
   ),
   blockquote: ({ children }) => (
-    <blockquote className="mb-2 pl-3 text-[var(--glass-text-secondary)] last:mb-0">
+    <blockquote className="mb-4 border-l-2 border-[var(--glass-stroke-base)] py-1 pl-4 leading-7 text-[var(--glass-text-secondary)] last:mb-0">
       {children}
     </blockquote>
   ),
   a: WorkspaceMarkdownLink,
   h1: ({ children }) => (
-    <h1 className="mb-2 text-base font-semibold text-[var(--glass-text-primary)]">{children}</h1>
+    <h1 className="mb-4 mt-7 text-xl font-semibold leading-8 text-[var(--glass-text-primary)] first:mt-0">{children}</h1>
   ),
   h2: ({ children }) => (
-    <h2 className="mb-2 text-sm font-semibold text-[var(--glass-text-primary)]">{children}</h2>
+    <h2 className="mb-3 mt-6 text-lg font-semibold leading-7 text-[var(--glass-text-primary)] first:mt-0">{children}</h2>
   ),
   h3: ({ children }) => (
-    <h3 className="mb-1 text-sm font-medium text-[var(--glass-text-primary)]">{children}</h3>
+    <h3 className="mb-3 mt-5 text-[17px] font-semibold leading-7 text-[var(--glass-text-primary)] first:mt-0">{children}</h3>
   ),
-  strong: ({ children }) => (
-    <strong className="font-semibold text-[var(--glass-text-primary)]">{children}</strong>
-  ),
+  strong: MarkdownStrong,
   hr: () => (
-    <hr className="my-3 border-[var(--glass-stroke-base)]" />
+    <hr className="my-6 border-[var(--glass-stroke-base)]" />
   ),
   table: ({ children }) => (
-    <div className="mb-2 max-w-full overflow-x-auto last:mb-0">
-      <table className="w-full text-xs">{children}</table>
+    <div className="mb-4 max-w-full overflow-x-auto last:mb-0">
+      <table className="w-full text-sm leading-6">{children}</table>
     </div>
   ),
   th: ({ children }) => (
-    <th className="border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)] px-2 py-1 text-left font-medium">
+    <th className="border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)] px-3 py-2 text-left font-medium">
       {children}
     </th>
   ),
   td: ({ children }) => (
-    <td className="border border-[var(--glass-stroke-base)] px-2 py-1">{children}</td>
+    <td className="border border-[var(--glass-stroke-base)] px-3 py-2">{children}</td>
   ),
 }
 
@@ -180,7 +201,7 @@ function MarkdownTextPartImpl({
   if (!playback.text) return null
 
   return (
-    <div className="workspace-assistant-markdown min-w-0 max-w-full [overflow-wrap:anywhere]">
+    <div className="workspace-assistant-markdown min-w-0 max-w-full text-[17px] leading-7 [overflow-wrap:anywhere] [text-wrap:pretty]">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={playback.animating

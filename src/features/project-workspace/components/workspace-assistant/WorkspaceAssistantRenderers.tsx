@@ -47,9 +47,9 @@ type WorkspaceAssistantMessagePartComponents = {
 type AssistantAgentTranslator = ReturnType<typeof useTranslations<'assistantAgent'>>
 
 export const WORKSPACE_ASSISTANT_USER_MESSAGE_CLASS =
-  'max-w-full w-fit break-words rounded-2xl bg-neutral-100 px-3 py-2.5 text-base leading-6 text-[var(--glass-text-primary)] [overflow-wrap:anywhere]'
+  'max-w-full w-fit break-words rounded-2xl bg-neutral-100 px-3 py-2.5 text-[17px] leading-7 text-[var(--glass-text-primary)] [overflow-wrap:anywhere]'
 const WORKSPACE_ASSISTANT_MESSAGE_CLASS =
-  'flex min-w-0 max-w-full flex-col gap-3 px-1 py-1 text-base leading-6 text-[var(--glass-text-primary)]'
+  'flex min-w-0 max-w-full flex-col gap-4 px-1 py-2 text-[17px] leading-7 text-[var(--glass-text-primary)]'
 export function resolveProgressStageLabel(
   raw: string | null,
   progressT: ReturnType<typeof useTranslations<'progress'>>,
