@@ -10,6 +10,10 @@ function duration(value: number): string {
   return value.toFixed(3)
 }
 
+function exactAudioDurationFilter(durationSeconds: string): string {
+  return `apad=whole_dur=${durationSeconds},atrim=0:${durationSeconds},asetpts=PTS-STARTPTS`
+}
+
 export async function muxVoiceoverVideo(input: {
   readonly runCommand: FfmpegCommandRunner
   readonly videoPath: string
@@ -23,8 +27,9 @@ export async function muxVoiceoverVideo(input: {
   const audioInputs = [input.videoPath, ...input.narrationPaths.map((item) => item.path), ...(input.bgmPath ? [input.bgmPath] : [])]
   const args = ['-y', ...audioInputs.flatMap((file) => ['-i', file])]
   const filters: string[] = []
-  if (sourceHasAudio) filters.push('[0:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo[source]')
-  else filters.push(`anullsrc=r=48000:cl=stereo,atrim=0:${durationSeconds}[source]`)
+  const exactDurationFilter = exactAudioDurationFilter(durationSeconds)
+  if (sourceHasAudio) filters.push(`[0:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,${exactDurationFilter}[source]`)
+  else filters.push(`anullsrc=r=48000:cl=stereo,${exactDurationFilter}[source]`)
   const narrationLabels: string[] = []
   for (const [index, item] of input.narrationPaths.entries()) {
     const inputIndex = index + 1
@@ -35,18 +40,27 @@ export async function muxVoiceoverVideo(input: {
   }
   const narrationBus = '[narrationbus]'
   filters.push(`${narrationLabels.join('')}amix=inputs=${String(narrationLabels.length)}:duration=longest:dropout_transition=0,alimiter=limit=0.95${narrationBus}`)
+  const narrationConsumerLabels = [
+    '[narrationMix]',
+    ...(sourceHasAudio ? ['[narrationSourceSidechain]'] : []),
+    ...(input.bgmPath ? ['[narrationBgmSidechain]'] : []),
+  ]
+  if (narrationConsumerLabels.length > 1) {
+    filters.push(`${narrationBus}asplit=${String(narrationConsumerLabels.length)}${narrationConsumerLabels.join('')}`)
+  }
+  const narrationMix = narrationConsumerLabels.length === 1 ? narrationBus : '[narrationMix]'
   const mixInputs: string[] = []
   if (sourceHasAudio) {
-    filters.push(`[source]${narrationBus}sidechaincompress=threshold=0.08:ratio=4:attack=20:release=350[sourceDuck]`)
+    filters.push(`[source][narrationSourceSidechain]sidechaincompress=threshold=0.08:ratio=4:attack=20:release=350[sourceDuck]`)
     mixInputs.push('[sourceDuck]')
   } else {
     mixInputs.push('[source]')
   }
-  mixInputs.push(narrationBus)
+  mixInputs.push(narrationMix)
   if (input.bgmPath) {
     const bgmIndex = input.narrationPaths.length + 1
-    filters.push(`[${String(bgmIndex)}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,atrim=0:${durationSeconds},apad=whole_dur=${durationSeconds},volume=0.22[bgm]`)
-    filters.push(`[bgm]${narrationBus}sidechaincompress=threshold=0.06:ratio=5:attack=30:release=450[bgmDuck]`)
+    filters.push(`[${String(bgmIndex)}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,${exactDurationFilter},volume=0.22[bgm]`)
+    filters.push('[bgm][narrationBgmSidechain]sidechaincompress=threshold=0.06:ratio=5:attack=30:release=450[bgmDuck]')
     mixInputs.push('[bgmDuck]')
   }
   filters.push(`${mixInputs.join('')}amix=inputs=${String(mixInputs.length)}:duration=first:dropout_transition=0,alimiter=limit=0.95[aout]`)
