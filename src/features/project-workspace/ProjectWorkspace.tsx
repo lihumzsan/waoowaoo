@@ -11,6 +11,7 @@ import type {
 } from './canvas/contracts/workspace-canvas-interactions'
 import type { WorkspaceAssistantActiveFocusRequest } from './workspace-assistant-focus'
 import type { ProjectWorkspaceProps } from './types'
+import CommercialProductionJourney from './components/CommercialProductionJourney'
 import '@/styles/animations.css'
 
 function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
@@ -49,14 +50,17 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
           setPathFocus({ requestId: crypto.randomUUID(), workspacePath })
         }}
       />
-      <div className="h-full min-w-0 overflow-hidden pr-[var(--workspace-assistant-panel-width,420px)]">
-        <ProjectWorkspaceCanvas
-          selection={selection}
-          onSelectionChange={changeSelection}
-          onAssistantDraftRequest={requestAssistantDraft}
-          activeAssistantFocusRequest={activeFocus}
-          workspacePathFocusRequest={pathFocus}
-        />
+      <div className="flex h-full min-w-0 flex-col overflow-hidden pr-[var(--workspace-assistant-panel-width,420px)]">
+        <CommercialProductionJourney journey={props.project.productionJourney} />
+        <div className="min-h-0 flex-1">
+          <ProjectWorkspaceCanvas
+            selection={selection}
+            onSelectionChange={changeSelection}
+            onAssistantDraftRequest={requestAssistantDraft}
+            activeAssistantFocusRequest={activeFocus}
+            workspacePathFocusRequest={pathFocus}
+          />
+        </div>
       </div>
     </div>
   )

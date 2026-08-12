@@ -1,4 +1,23 @@
 {
+  "commercialJourney": {
+    "title": "Commercial production journey",
+    "description": "Status is derived from canonical project Resources",
+    "stages": {
+      "brief": "Brief",
+      "script": "Commercial script",
+      "direction": "Direction",
+      "assets": "Visual assets",
+      "video": "Video segments",
+      "audio": "Sound",
+      "final": "Final video"
+    },
+    "status": {
+      "not_started": "Not started",
+      "in_progress": "In progress",
+      "completed": "Completed",
+      "needs_attention": "Needs attention"
+    }
+  },
   "canvas": {
     "workspace": {
       "toolbar": {

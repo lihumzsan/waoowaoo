@@ -5,7 +5,7 @@
 <h1 align="center">waoowaoo AI Video Studio</h1>
 
 <p align="center">
-  A self-hosted AI production workspace for scripts, creative direction, visual assets, video segments, and sound design.
+  A self-hosted AI video production workspace for narrative and commercial work, with scripts, creative direction, visual assets, video segments, and sound design.
 </p>
 
 <p align="center">
@@ -26,6 +26,7 @@
 ## What it does
 
 - **Script and story structure** — turn source text into a structured production script.
+- **Commercial production** — turn a source-faithful commercial brief into a timed commercial script, then use the same direction, asset, video, and sound production capabilities.
 - **Creative direction** — align visual style, color, materials, cinematography, and sound direction.
 - **Visual assets** — manage reusable characters, locations, props, and reference media.
 - **Image and video generation** — generate and edit images, then produce video segments.
@@ -94,7 +95,7 @@ Production-style self-hosting requires immutable application and Codex Runtime i
 3. Add your own provider API key.
 4. Select available models for Assistant, analysis, image, video, voice, and music roles.
 5. Use the connection test to validate credentials and endpoints.
-6. Create a project and start producing.
+6. Choose **Narrative video** or **Commercial video** when creating a project, then start producing. The production type is immutable after creation so professional documents and production state cannot cross profiles.
 
 Self-hosted deployments use `DEPLOYMENT_EDITION=self-hosted` and
 `PROVIDER_CREDENTIAL_MODE=user-key`. No platform model keys are bundled. Provider keys are encrypted before database storage with `API_ENCRYPTION_KEY`; back up `.env`, because existing keys cannot be decrypted if that encryption key is lost.

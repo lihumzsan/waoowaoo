@@ -45,6 +45,10 @@ import type { ProjectVideoRatio } from '@/lib/projects/video-ratio'
 import { readClientApiError } from '@/lib/errors/client'
 import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
 import { useToast } from '@/contexts/ToastContext'
+import {
+  DEFAULT_PRODUCTION_PROFILE_ID,
+  type ProductionProfileId,
+} from '@/lib/production-profile'
 
 interface PendingHomeMediaFile extends PendingMediaFileChip {
   readonly file: File
@@ -63,6 +67,7 @@ interface Project {
   description: string | null
   createdAt: string
   updatedAt: string
+  productionProfileId: ProductionProfileId
   stats?: ProjectStats
 }
 
@@ -80,6 +85,9 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true)
   const [inputValue, setInputValue] = useState('')
   const [videoRatio, setVideoRatio] = useState<ProjectVideoRatio>('16:9')
+  const [productionProfileId, setProductionProfileId] = useState<ProductionProfileId>(
+    DEFAULT_PRODUCTION_PROFILE_ID,
+  )
   const [attachments, setAttachments] = useState<ProjectAssistantTextAttachment[]>([])
   const [pendingMediaFiles, setPendingMediaFiles] = useState<PendingHomeMediaFile[]>([])
   const [attachUploading, setAttachUploading] = useState(false)
@@ -134,6 +142,7 @@ export default function HomePage() {
     await submitHomeQuickStartLaunch({
       inputValue,
       videoRatio,
+      productionProfileId,
       attachments,
       mediaFiles: pendingMediaFiles.map((pending) => pending.file),
       isSubmitting: createLoading,
@@ -419,6 +428,36 @@ export default function HomePage() {
             subtitleAnimation="home-hero-focus-rack-text var(--home-hero-focus-rack-duration) ease-in-out infinite"
           />
 
+          <div className="relative z-10 mx-auto mb-4 flex w-full max-w-[792px] gap-2" aria-label={t('productionType.label')}>
+            {(['narrative_video', 'commercial_video'] as const).map((profileId) => {
+              const selected = productionProfileId === profileId
+              const copyKey = profileId === 'narrative_video' ? 'narrative' : 'commercial'
+              return (
+                <button
+                  key={profileId}
+                  type="button"
+                  aria-pressed={selected}
+                  disabled={createLoading}
+                  onClick={() => {
+                    setProductionProfileId(profileId)
+                    if (createError) setCreateError(null)
+                  }}
+                  className={`flex-1 rounded-2xl border px-4 py-3 text-left transition ${selected
+                    ? 'border-[rgba(47,123,255,0.42)] bg-white/90 shadow-[0_8px_24px_-12px_rgba(47,123,255,0.45)]'
+                    : 'border-[rgba(15,17,23,0.08)] bg-white/55 hover:bg-white/75'
+                  }`}
+                >
+                  <span className="block text-sm font-semibold text-[var(--glass-text-primary)]">
+                    {t(`productionType.${copyKey}.title`)}
+                  </span>
+                  <span className="mt-0.5 block text-xs leading-5 text-[var(--glass-text-secondary)]">
+                    {t(`productionType.${copyKey}.description`)}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
           {/* 呼吸光晕 + 输入区域 */}
           <div className="w-full relative group">
             <div
@@ -456,7 +495,9 @@ export default function HomePage() {
               }}
               onSubmit={handleCreate}
               onPaste={handleComposerPaste}
-              placeholder={t('inputPlaceholder')}
+              placeholder={productionProfileId === 'commercial_video'
+                ? t('commercialInputPlaceholder')
+                : t('inputPlaceholder')}
               minRows={HOME_QUICK_START_MIN_ROWS}
               containerClassName="relative mx-auto w-full max-w-[792px] rounded-[28px] border border-[rgba(15,17,23,0.08)] bg-white/85 shadow-[0_2px_4px_rgba(15,17,23,0.03),0_8px_20px_-6px_rgba(15,17,23,0.07),0_32px_64px_-20px_rgba(15,17,23,0.16)] backdrop-blur-[20px] transition-all duration-300 focus-within:border-[rgba(47,123,255,0.38)] focus-within:shadow-[0_2px_4px_rgba(15,17,23,0.04),0_12px_28px_-8px_rgba(47,123,255,0.20),0_40px_80px_-24px_rgba(15,17,23,0.20)]"
               textareaShellClassName=""
