@@ -753,6 +753,15 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
   })
 
   describe('asset-reference multi-reference video capability comes from the catalog', () => {
+    it('declares one explicit valid prompt profile for every production video model', () => {
+      const videoEntries = listBuiltinCapabilityCatalog().filter((entry) => entry.modelType === 'video')
+      expect(videoEntries.length).toBeGreaterThan(0)
+
+      for (const entry of videoEntries) {
+      expect(['generic_v1', 'minimax_h3_v1']).toContain(entry.capabilities?.video?.promptProfile)
+      }
+    })
+
     it('declares the platform OpenRouter Seedance Fast model with its explicit reference limit', () => {
       const modelKey = 'openrouter::bytedance/seedance-2.0-fast'
       expect(supportsAssetReferenceMultiReferenceVideoModel(modelKey)).toBe(true)

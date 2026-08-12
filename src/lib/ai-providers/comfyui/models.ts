@@ -18,6 +18,7 @@ export const COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelType: 'video', provider: 'comfyui', modelId: COMFYUI_H3_MODEL_ID,
     capabilities: {
       video: {
+        promptProfile: 'minimax_h3_v1',
         supportedInputModes: ['first_frame', 'first_last_frame'], supportsTextToVideo: false,
         generationModeOptions: ['normal', 'firstlastframe'],
         durationOptions: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], resolutionOptions: ['480p', '720p'],

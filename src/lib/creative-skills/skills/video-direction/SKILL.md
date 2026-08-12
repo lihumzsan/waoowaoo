@@ -67,6 +67,90 @@ description: Direct screenplay-based video generation with explicit state contin
 - 不传无关素材，不从文件名、近似名称或描述猜身份，不让参考图的偶然构图、姿态、光线或噪点代替本段导演判断。
 - `reference_audio` 是视频模型的内容条件，不是 `generateAudio` 开关，也不是后期背景音乐；当 `referenceAudioRequiresVisual=true` 时，必须同时提供至少一个 `reference_image` 或 `reference_video`。`reference_video` 是运动/内容条件，只在 `maxReferenceVideos > 0` 时使用。
 
+## 最终 Prompt Profile
+
+- 从系统注入的 `productionCapabilities.video.promptProfile` 选择本批次唯一最终表达方言。
+- `generic_v1` 使用下方 generic_v1 最终提示词格式。
+- `minimax_h3_v1` 使用下方 H3 最终 Prompt；不得同时输出通用标签格式。
+- 缺失或未知 profile 时停止构造可执行 items，不得根据 `modelKey`、Provider 名称或输入模式猜测，也不得回落到 `generic_v1`。
+- Profile 只改变同一导演事实的最终表达，不改变剧本、整片时间线、装段、Resource identity 或能力判定。
+
+## minimax_h3_v1 最终 Prompt
+
+H3 只支持当前项目声明的 `first_frame` 与 `first_last_frame`。不增加 T2VA、L2VA 或普通参考模式；不支持的输入必须停止，不得降级。
+
+- 除对白原文和画面内文字外，Prompt 全部使用英文。
+- 每个 Prompt 只有一个 `integrated_multimodal_description`、一个 `overall_soundscape` 和一个 `non_diegetic_music`。
+- `non_diegetic_music: N/A` 始终固定；不得写乐器、旋律、节拍、BPM 或配乐动态，背景配乐由独立音乐链路负责。
+- 不发送 `[风格]`、`[时长]`、`[参考]`、`[入口状态]`、`[出口状态]`、`[整体声音]` 或 `[约束]` 标签；其中适用事实自然写入 H3 三字段。
+- 每个 Shot 首句按“景别与机位关系 → 唯一主运镜及幅度/速度 → 主体落位 → 当前动作”表达。
+- 每个 Shot 都有可见入口、一个向前的新变化和可见落点；后续 Shot 不重演已完成动作。
+- 后续 Shot 使用严格递增的 `At 00:SS.mmm` 时间戳；最后一个 Shot 明确落到 Segment 结束时间。
+- 把抽象情绪转换成低幅度、可观察的呼吸、眉眼、嘴唇、下颌、肩颈、手部、步幅、身体朝向和世内视线变化。
+- 默认使用硬切；禁止叠化、交叉溶解、淡入淡出、透明重叠、瞬移和主体变形。
+- 有人物时，视线落在场景内明确对象上，不与镜头交汇；剧情明确打破第四面墙时除外。
+- 固定写入不生成字幕、标题、水印、拼贴、分屏或额外人物。
+
+### 混合媒介稳定
+
+当画面同时包含 2D、3D、写实或其他不同媒介时，Shot 1 必须声明主体的渲染媒介、轮廓/材质、颜色、比例、地面接触和场景光照保持一致。示例方法句：
+
+```text
+The girl remains consistently rendered as clean 2D cartoon line art within the photorealistic park, with stable outlines, flat colors, scale, ground contact, and scene lighting throughout the video.
+```
+
+实际内容必须来自当前镜头事实，不要机械复制示例。
+
+### `first_frame`：I2VA
+
+```text
+For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.
+
+integrated_multimodal_description: [Shot 1] ...
+overall_soundscape: ...
+non_diegetic_music: N/A
+```
+
+- `references` 恰好有一张 `channel=image, role=first_frame` 图片，没有 `last_frame` 或普通 reference 媒体。
+- `<Picture 1>` 唯一对应该首帧；Shot 1 明确保持 Picture 1 中人物身份、外貌、服装、道具状态、主体位置和场景结构。
+- 动作按“首帧锚定 → 动作开始 → 连续发展 → 结果或反应”推进；同一 Segment 可以有多个向前推进的 Shot。
+- 参考图只锁定身份与设计，不继承资产板的正面居中、僵硬姿态或直视镜头。
+
+### `first_last_frame`：FL2VA
+
+```text
+How the reference pictures align with the target video — <Picture 1> (from [Shot 1]) aligns with the 0.00-second mark of the target video; <Picture 2> (from [Shot 1]) aligns with the N.00-second mark of the target video.
+
+integrated_multimodal_description: [Shot 1] ...
+overall_soundscape: ...
+non_diegetic_music: N/A
+```
+
+`N.00` 使用该 item 的整数 `durationSeconds` 并保留两位小数。`references` 恰好有一张 `first_frame` 和一张 `last_frame`，顺序分别对应 `<Picture 1>` 与 `<Picture 2>`，没有其他 reference 媒体。FL2VA 使用一个连续 Shot，动作按“首帧状态 → 可观察的连续物理动作链 → 差异逐步缩小 → 尾帧着陆”展开；最后一句明确落入 Picture 2 的姿态、道具状态、空间关系、镜头角度、光线和构图。没有合理物理路径时停止，不用变形、叠化或瞬移强行连接。
+
+### 对白与声音
+
+- 同一人物在整个生成批次中保持同一 `(S1)`、`(S2)` 编号；每个独立 Segment 首次出现该说话人时重新描述年龄、性别、音高、音色、语速和必要口音。
+- 对白逐字保留来源，不能翻译、润色、缩写或补写；说话人必须出镜或明确为画外来源，并在时间块结束前自然说完。
+- 对白示例：
+
+```text
+The young man with a low, restrained voice (S1) says: <d>[Chinese] 该走了。</d>
+```
+
+- 旁白示例：
+
+```text
+The man (S1) says in an off-screen voiceover: <d>[Chinese] ...</d>, while every visible character keeps their lips completely closed.
+```
+
+- `overall_soundscape` 使用一至四句英文写环境声、动作声和非语言人声，并跟随动作变化；不重复对白或歌唱，不写 BGM。只有来源明确要求完全静音时才写 `N/A`。
+- 跨 Shot 对白要明确声音持续关系；`<cutoff>` 仅用于来源明确在结尾截断的对白，不得用它修复错误装段。
+
+### H3 停止条件
+
+profile 缺失/未知、输入模式不受支持、帧数量/角色/顺序错误、多出 reference、FL2VA 无连续物理路径、对白无法在合法装段后说完、无法同时满足英文主体/原文对白/`N/A` 配乐或生产能力为空时，停止构造 H3 item。不得改用 `generic_v1`、改变输入模式或静默删除事实。
+
 ## 对白与声音
 
 - 台词格式为 `角色名（≤3 个声音质感词）：{逐字台词}`。说话人必须出镜或被明确设置为画外来源，口型与自然语速匹配，句子必须在所在时间块结束前说完。
@@ -74,7 +158,7 @@ description: Direct screenplay-based video generation with explicit state contin
 - 每个时间块只写当前可听到的对白、动作声与环境声，使用具体质感词；不写 BGM，不把同一声音在每个镜头重新触发。
 - 主动判断声音关系：同期发生、先于来源画面出现、跨镜持续、画外说话者后续揭示，或无需特殊关系。需要时写清开始、持续、减弱或停止的时刻与来源。
 
-## 最终提示词格式
+## generic_v1 最终提示词格式
 
 每个 Segment 使用以下顺序。省略不适用行，但不得省略适用事实：
 

@@ -106,6 +106,7 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID,
     capabilities: {
       video: {
+        promptProfile: 'generic_v1',
         generationModeOptions: ['normal'],
         durationOptions: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
         resolutionOptions: ['720p', '1080p'],
@@ -121,6 +122,7 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID,
     capabilities: {
       video: {
+        promptProfile: 'generic_v1',
         supportedInputModes: ['text_to_video', 'first_frame', 'first_last_frame', 'reference'],
         supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
@@ -145,6 +147,7 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID,
     capabilities: {
       video: {
+        promptProfile: 'generic_v1',
         supportedInputModes: ['text_to_video', 'first_frame', 'first_last_frame', 'reference'],
         supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
@@ -167,7 +170,7 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelType: 'video',
     provider: 'fal',
     modelId: 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video',
-    capabilities: { video: { generationModeOptions: ['normal'], durationOptions: [5, 10], firstlastframe: false, supportGenerateAudio: false } },
+    capabilities: { video: { promptProfile: 'generic_v1', generationModeOptions: ['normal'], durationOptions: [5, 10], firstlastframe: false, supportGenerateAudio: false } },
   },
   {
     modelType: 'video',
@@ -175,6 +178,7 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: FAL_KLING_O3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
     capabilities: {
       video: {
+        promptProfile: 'generic_v1',
         generationModeOptions: ['normal', 'firstlastframe'],
         generateAudioOptions: [true, false],
         durationOptions: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
@@ -190,6 +194,7 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: FAL_KLING_O3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
     capabilities: {
       video: {
+        promptProfile: 'generic_v1',
         generationModeOptions: ['normal', 'firstlastframe'],
         generateAudioOptions: [true, false],
         durationOptions: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
@@ -205,6 +210,7 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: FAL_KLING_V3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
     capabilities: {
       video: {
+        promptProfile: 'generic_v1',
         generationModeOptions: ['normal'],
         durationOptions: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
         firstlastframe: false,
@@ -219,6 +225,7 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
     capabilities: {
       video: {
+        promptProfile: 'generic_v1',
         generationModeOptions: ['normal'],
         durationOptions: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
         firstlastframe: false,

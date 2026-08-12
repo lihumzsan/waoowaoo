@@ -259,7 +259,15 @@ export type VideoInputMode =
   | 'first_last_frame'
   | 'reference'
 
+export const VIDEO_PROMPT_PROFILES = [
+  'generic_v1',
+  'minimax_h3_v1',
+] as const
+
+export type VideoPromptProfile = (typeof VIDEO_PROMPT_PROFILES)[number]
+
 export interface VideoCapabilities {
+  promptProfile: VideoPromptProfile
   supportedInputModes?: VideoInputMode[]
   supportsTextToVideo?: boolean
   generationModeOptions?: string[]
@@ -349,6 +357,7 @@ const IMAGE_ALLOWED_FIELDS = new Set<keyof ImageCapabilities>([
 ])
 
 const VIDEO_ALLOWED_FIELDS = new Set<keyof VideoCapabilities>([
+  'promptProfile',
   'supportedInputModes',
   'supportsTextToVideo',
   'generationModeOptions',
@@ -640,6 +649,14 @@ function validateImageCapabilities(issues: CapabilityValidationIssue[], raw: unk
 
 function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unknown) {
   if (!isRecord(raw)) return
+
+  if (!VIDEO_PROMPT_PROFILES.includes(raw.promptProfile as VideoPromptProfile)) {
+    issues.push(makeAllowedIssue(
+      'capabilities.video.promptProfile',
+      raw.promptProfile,
+      VIDEO_PROMPT_PROFILES,
+    ))
+  }
 
   const supportedInputModes = raw.supportedInputModes
   const validInputModes = new Set<VideoInputMode>([
