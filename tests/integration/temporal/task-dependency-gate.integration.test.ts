@@ -1,7 +1,18 @@
-import type { WorkflowHandle } from '@temporalio/client'
+import {
+  WithStartWorkflowOperation,
+  WorkflowIdConflictPolicy,
+  WorkflowIdReusePolicy,
+  type WorkflowHandle,
+} from '@temporalio/client'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { connectTemporalClient } from '@/lib/temporal/client'
 import { buildTaskWorkflowId, buildUserTaskSchedulerWorkflowId } from '@/lib/temporal/identity'
+import {
+  USER_TASK_SCHEDULER_UPDATE_NAME,
+  type ScheduledTaskRequest,
+  type UserTaskSchedulerView,
+} from '@/lib/temporal/task/contracts'
+import { TEMPORAL_WORKFLOW } from '@/lib/temporal/workflow-registry'
 import { TASK_EVENT_TYPE, TASK_STATUS } from '@/lib/task/types'
 import { prisma } from '../../helpers/prisma'
 import {
@@ -18,6 +29,46 @@ import { activityAttempts } from './helpers/task-durability-harness'
 
 let activeWorker: TaskDependencyGateWorkerHarness | null = null
 let activeFixture: TaskDependencyGateFixture | null = null
+
+type UserTaskSchedulerWorkflow = (input: {
+  readonly workflowId: string
+  readonly userId: string
+  readonly slotLimits: { readonly analysis: number; readonly image: number; readonly video: number }
+}) => Promise<UserTaskSchedulerView>
+
+async function scheduleRawRequest(
+  taskQueue: string,
+  request: ScheduledTaskRequest,
+): Promise<unknown> {
+  const connected = await connectTemporalClient()
+  try {
+    const startOperation = new WithStartWorkflowOperation<UserTaskSchedulerWorkflow>(
+      TEMPORAL_WORKFLOW.USER_TASK_SCHEDULER.type,
+      {
+        workflowId: request.task.schedulerWorkflowId,
+        workflowIdConflictPolicy: WorkflowIdConflictPolicy.USE_EXISTING,
+        workflowIdReusePolicy: WorkflowIdReusePolicy.ALLOW_DUPLICATE,
+        taskQueue,
+        args: [{
+          workflowId: request.task.schedulerWorkflowId,
+          userId: request.task.userId,
+          slotLimits: { analysis: 1, image: 1, video: 1 },
+        }],
+      },
+    )
+    return await connected.client.workflow.executeUpdateWithStart<
+      UserTaskSchedulerWorkflow,
+      unknown,
+      [ScheduledTaskRequest]
+    >(USER_TASK_SCHEDULER_UPDATE_NAME.ENQUEUE, {
+      updateId: `terminal-admission-noncanonical:${request.task.taskId}`,
+      args: [request],
+      startWorkflowOperation: startOperation,
+    })
+  } finally {
+    await connected.close()
+  }
+}
 
 async function terminateScheduler(userId: string): Promise<void> {
   const connected = await connectTemporalClient()
@@ -214,6 +265,25 @@ describe('Temporal dependency gate durability', () => {
     await activeWorker.taskClient.schedule(activeFixture.references.source2)
     await activeWorker.waitForTaskStatus(activeFixture.mixTaskId, 'completed')
     await terminateScheduler(activeFixture.userId)
+
+    const canonicalTask = {
+      workflowId: buildTaskWorkflowId(activeFixture.mixTaskId),
+      schedulerWorkflowId: buildUserTaskSchedulerWorkflowId(activeFixture.userId),
+      taskId: activeFixture.mixTaskId,
+      userId: activeFixture.userId,
+      taskType: activeFixture.references.mix.taskType,
+    }
+    let nonCanonicalEnqueue: unknown = null
+    try {
+      await scheduleRawRequest(activeWorker.taskQueue, {
+        enqueueId: 'non-canonical-terminal-enqueue',
+        task: canonicalTask,
+        dependsOnTaskIds: [...activeFixture.references.mix.dependsOnTaskIds],
+      })
+    } catch (error) {
+      nonCanonicalEnqueue = error
+    }
+    expect(hasNonRetryableTopologyFailure(nonCanonicalEnqueue)).toBe(true)
 
     const mismatchedReference = {
       ...activeFixture.references.mix,

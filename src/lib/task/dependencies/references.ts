@@ -1,5 +1,6 @@
-import type { PrismaClient } from '@prisma/client'
+import { Prisma, type PrismaClient } from '@prisma/client'
 import type { PersistedTaskReference } from '@/lib/temporal/task/contracts'
+import { TaskDependencyTopologyDivergedError } from '@/lib/temporal/task/scheduled-request'
 import { isTaskType, type TaskType } from '@/lib/task/types'
 
 type DependencyClient = Pick<PrismaClient, 'task' | 'taskDependency'>
@@ -23,7 +24,7 @@ export type PersistedDependencyRow = {
 }
 
 function topologyDiverged(...details: readonly string[]): never {
-  throw new Error(['TASK_DEPENDENCY_TOPOLOGY_DIVERGED', ...details].join(':'))
+  throw new TaskDependencyTopologyDivergedError(...details)
 }
 
 function requireTaskType(task: PersistedTaskRow): TaskType {
@@ -46,18 +47,28 @@ function requireDependencyTopology(params: {
   readonly target: PersistedTaskRow
 }): void {
   const { dependency, target } = params
+  const operationExecutionId = target.operationExecutionId
+  if (!operationExecutionId) {
+    topologyDiverged(target.id, 'OPERATION_TASK_IDENTITY_INVALID')
+  }
+  requireOperationTask(target, operationExecutionId)
+  requireOperationTask(dependency.targetTask, operationExecutionId)
+  requireOperationTask(dependency.sourceTask, operationExecutionId)
   if (
     dependency.requirement !== 'required_success' ||
     dependency.targetTaskId !== target.id ||
     dependency.targetTask.id !== target.id ||
+    dependency.sourceTask.id !== dependency.sourceTaskId ||
+    dependency.sourceTask.id === target.id ||
     dependency.operationExecutionId !== target.operationExecutionId ||
     dependency.targetTask.operationExecutionId !== target.operationExecutionId ||
     dependency.sourceTask.operationExecutionId !== target.operationExecutionId ||
+    dependency.targetTask.operationPlanTaskId !== target.operationPlanTaskId ||
     dependency.targetTask.userId !== target.userId ||
     dependency.sourceTask.userId !== target.userId ||
     dependency.targetTask.projectId !== target.projectId ||
     dependency.sourceTask.projectId !== target.projectId ||
-    !isTaskType(dependency.targetTask.type) ||
+    dependency.targetTask.type !== target.type ||
     !isTaskType(dependency.sourceTask.type)
   ) {
     topologyDiverged(target.id, dependency.sourceTaskId)
@@ -68,6 +79,11 @@ export function projectPersistedTaskReference(params: {
   readonly task: PersistedTaskRow
   readonly dependencies: readonly PersistedDependencyRow[]
 }): PersistedTaskReference {
+  if (params.task.operationExecutionId) {
+    requireOperationTask(params.task, params.task.operationExecutionId)
+  } else if (params.task.operationPlanTaskId !== null || params.dependencies.length > 0) {
+    topologyDiverged(params.task.id, 'OPERATION_TASK_IDENTITY_INVALID')
+  }
   const dependsOnTaskIds = params.dependencies
     .map((dependency) => {
       requireDependencyTopology({ dependency, target: params.task })
@@ -94,11 +110,14 @@ const persistedTaskSelect = {
   type: true,
 } as const
 
-const persistedDependencyInclude = {
+export const persistedDependencySelect = {
+  operationExecutionId: true,
+  targetTaskId: true,
+  sourceTaskId: true,
   requirement: true,
   targetTask: { select: persistedTaskSelect },
   sourceTask: { select: persistedTaskSelect },
-} as const
+} as const satisfies Prisma.TaskDependencySelect
 
 export async function buildPersistedTaskReference(
   client: DependencyClient,
@@ -111,7 +130,7 @@ export async function buildPersistedTaskReference(
   if (!task) topologyDiverged(taskId, 'TASK_NOT_FOUND')
   const dependencies = await client.taskDependency.findMany({
     where: { targetTaskId: task.id },
-    include: persistedDependencyInclude,
+    select: persistedDependencySelect,
   })
   return projectPersistedTaskReference({ task, dependencies })
 }
@@ -135,7 +154,7 @@ export async function buildPersistedTaskReferencesForOperationExecution(
         { sourceTaskId: { in: taskIds } },
       ],
     },
-    include: persistedDependencyInclude,
+    select: persistedDependencySelect,
   })
   const dependenciesByTargetId = new Map<string, PersistedDependencyRow[]>()
   for (const dependency of dependencies) {

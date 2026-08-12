@@ -1,10 +1,17 @@
+import { PrismaClient } from '@prisma/client'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { persistPlannedTaskEdgesInTransaction } from '@/lib/task/dependencies/persistence'
 import {
   buildPersistedTaskReference,
   buildPersistedTaskReferencesForOperationExecution,
+  persistedDependencySelect,
   projectPersistedTaskReference,
 } from '@/lib/task/dependencies/references'
+import {
+  isTaskDependencyTopologyDivergedError,
+  validateTaskSchedulerAdmission,
+} from '@/lib/temporal/task/scheduled-request'
+import { buildTaskWorkflowId, buildUserTaskSchedulerWorkflowId } from '@/lib/temporal/identity'
 import { persistSubmittedTaskBatchInTransaction } from '@/lib/task/transactional-create'
 import { TASK_STATUS, TASK_TYPE, type CreateTaskInput } from '@/lib/task/types'
 import { resetBillingState } from '../../helpers/db-reset'
@@ -57,6 +64,31 @@ async function createCommittingExecution(params: {
 }
 
 describe('Persisted Task dependency topology projection', () => {
+  it('uses a Prisma-valid dependency query shape', async () => {
+    const validationClient = new PrismaClient({
+      datasources: {
+        db: { url: 'mysql://root:root@127.0.0.1:1/waoowaoo_test?connect_timeout=1' },
+      },
+    })
+    try {
+      let rejection: unknown = null
+      try {
+        await validationClient.taskDependency.findMany({
+          where: { targetTaskId: 'query-shape-only' },
+          take: 0,
+          select: persistedDependencySelect,
+        })
+      } catch (error) {
+        rejection = error
+      }
+      expect(rejection).toBeInstanceOf(Error)
+      expect((rejection as Error).name).toBe('PrismaClientInitializationError')
+      expect((rejection as Error).name).not.toBe('PrismaClientValidationError')
+    } finally {
+      await validationClient.$disconnect()
+    }
+  })
+
   it('rejects a persisted dependency whose requirement is not required_success', () => {
     const operationExecutionId = 'operation-execution-1'
     const target = {
@@ -88,7 +120,179 @@ describe('Persisted Task dependency topology projection', () => {
       }],
     })).toThrow(/^TASK_DEPENDENCY_TOPOLOGY_DIVERGED/)
   })
+
+  it('rejects source row identity divergence', () => {
+    const operationExecutionId = 'operation-execution-1'
+    const target = {
+      id: 'target-task',
+      userId: 'user-1',
+      projectId: 'project-1',
+      operationExecutionId,
+      operationPlanTaskId: '02:mix',
+      type: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
+    }
+    const source = {
+      id: 'different-source-task',
+      userId: 'user-1',
+      projectId: 'project-1',
+      operationExecutionId,
+      operationPlanTaskId: '01:narration',
+      type: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
+    }
+
+    expect(() => projectPersistedTaskReference({
+      task: target,
+      dependencies: [{
+        operationExecutionId,
+        targetTaskId: target.id,
+        sourceTaskId: 'source-task',
+        requirement: 'required_success',
+        targetTask: target,
+        sourceTask: source,
+      }],
+    })).toThrow(/^TASK_DEPENDENCY_TOPOLOGY_DIVERGED/)
+  })
+
+  it('rejects missing Plan identity on an operation Task', () => {
+    expect(() => projectPersistedTaskReference({
+      task: {
+        id: 'operation-task',
+        userId: 'user-1',
+        projectId: 'project-1',
+        operationExecutionId: 'operation-execution-1',
+        operationPlanTaskId: null,
+        type: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
+      },
+      dependencies: [],
+    })).toThrow(/^TASK_DEPENDENCY_TOPOLOGY_DIVERGED/)
+  })
+
+  it('rejects missing source Plan identity', () => {
+    const operationExecutionId = 'operation-execution-1'
+    const target = {
+      id: 'target-task',
+      userId: 'user-1',
+      projectId: 'project-1',
+      operationExecutionId,
+      operationPlanTaskId: '02:mix',
+      type: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
+    }
+    const source = {
+      id: 'source-task',
+      userId: 'user-1',
+      projectId: 'project-1',
+      operationExecutionId,
+      operationPlanTaskId: null,
+      type: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
+    }
+
+    expect(() => projectPersistedTaskReference({
+      task: target,
+      dependencies: [{
+        operationExecutionId,
+        targetTaskId: target.id,
+        sourceTaskId: source.id,
+        requirement: 'required_success',
+        targetTask: target,
+        sourceTask: source,
+      }],
+    })).toThrow(/^TASK_DEPENDENCY_TOPOLOGY_DIVERGED/)
+  })
+
+  it('allows a direct Task without operation identity or dependencies', () => {
+    expect(projectPersistedTaskReference({
+      task: {
+        id: 'direct-task',
+        userId: 'user-1',
+        projectId: 'project-1',
+        operationExecutionId: null,
+        operationPlanTaskId: null,
+        type: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
+      },
+      dependencies: [],
+    })).toEqual({
+      taskId: 'direct-task',
+      userId: 'user-1',
+      taskType: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
+      dependsOnTaskIds: [],
+    })
+  })
+
+  it('rejects non-canonical complete Scheduler admission request identities', () => {
+    const reference = {
+      taskId: 'target-task',
+      userId: 'user-1',
+      taskType: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
+      dependsOnTaskIds: ['source-task'],
+    } as const
+    const task = {
+      workflowId: buildTaskWorkflowId(reference.taskId),
+      schedulerWorkflowId: buildUserTaskSchedulerWorkflowId(reference.userId),
+      taskId: reference.taskId,
+      userId: reference.userId,
+      taskType: reference.taskType,
+    }
+
+    const canonicalRequest = {
+      enqueueId: 'task-enqueue:v1:R_Ha2b51XHZ6VrMYSAMUdDyIEA_iN-XgNlcbHWMLXek',
+      task,
+      dependsOnTaskIds: [...reference.dependsOnTaskIds],
+    }
+    expect(() => validateTaskSchedulerAdmission(canonicalRequest, reference)).not.toThrow()
+    expect(() => validateTaskSchedulerAdmission({
+      ...canonicalRequest,
+      enqueueId: 'not-the-canonical-enqueue-id',
+    }, reference)).toThrow(/^TASK_DEPENDENCY_TOPOLOGY_DIVERGED/)
+    expect(() => validateTaskSchedulerAdmission({
+      ...canonicalRequest,
+      task: {
+        ...task,
+        schedulerWorkflowId: buildUserTaskSchedulerWorkflowId('different-user'),
+      },
+    }, reference)).toThrow(/^TASK_DEPENDENCY_TOPOLOGY_DIVERGED/)
+    expect(() => validateTaskSchedulerAdmission({
+      ...canonicalRequest,
+      task: { ...task, taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE },
+    }, reference)).toThrow(/^TASK_DEPENDENCY_TOPOLOGY_DIVERGED/)
+    expect(() => validateTaskSchedulerAdmission({
+      ...canonicalRequest,
+      dependsOnTaskIds: [],
+    }, reference)).toThrow(/^TASK_DEPENDENCY_TOPOLOGY_DIVERGED/)
+  })
+
+  it('classifies topology divergence by type rather than message text', () => {
+    expect(isTaskDependencyTopologyDivergedError(
+      new Error('TASK_DEPENDENCY_TOPOLOGY_DIVERGED:lookalike'),
+    )).toBe(false)
+    let topologyError: unknown = null
+    try {
+      validateTaskSchedulerAdmissionDependenciesForClassification()
+    } catch (error) {
+      topologyError = error
+    }
+    expect(isTaskDependencyTopologyDivergedError(topologyError)).toBe(true)
+  })
 })
+
+function validateTaskSchedulerAdmissionDependenciesForClassification(): void {
+  const reference = {
+    taskId: 'target-task',
+    userId: 'user-1',
+    taskType: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
+    dependsOnTaskIds: [],
+  } as const
+  validateTaskSchedulerAdmission({
+    enqueueId: 'non-canonical',
+    task: {
+      workflowId: buildTaskWorkflowId(reference.taskId),
+      schedulerWorkflowId: buildUserTaskSchedulerWorkflowId(reference.userId),
+      taskId: reference.taskId,
+      userId: reference.userId,
+      taskType: reference.taskType,
+    },
+    dependsOnTaskIds: [],
+  }, reference)
+}
 
 describe('Task dependency topology persistence', () => {
   beforeEach(async () => {

@@ -66,7 +66,10 @@ import type {
   UserTaskSchedulerView,
 } from '../task/contracts'
 import { USER_TASK_SCHEDULER_UPDATE_NAME } from '../task/contracts'
-import { validateTaskSchedulerAdmissionDependencies } from '../task/scheduled-request'
+import {
+  isTaskDependencyTopologyDivergedError,
+  validateTaskSchedulerAdmission,
+} from '../task/scheduled-request'
 
 const TASK_TERMINAL_EVENT_KEY_PREFIX = 'task-terminal:'
 const TASK_ATTEMPT_FAILURE_STEP_KEY_PREFIX = '__temporal_attempt_failure__:'
@@ -568,18 +571,9 @@ export async function resolveTaskSchedulerAdmission(
   let persistedReference
   try {
     persistedReference = await buildPersistedTaskReference(prisma, row.id)
-    validateTaskSchedulerAdmissionDependencies(
-      input,
-      persistedReference.taskId,
-      persistedReference.dependsOnTaskIds,
-    )
+    validateTaskSchedulerAdmission(input, persistedReference)
   } catch (error) {
-    if (
-      !(error instanceof Error)
-      || !error.message.startsWith('TASK_DEPENDENCY_TOPOLOGY_DIVERGED')
-    ) {
-      throw error
-    }
+    if (!isTaskDependencyTopologyDivergedError(error)) throw error
     return failNonRetryable('TASK_DEPENDENCY_TOPOLOGY_DIVERGED', row.id)
   }
   if (terminalStatus(row.status)) {
