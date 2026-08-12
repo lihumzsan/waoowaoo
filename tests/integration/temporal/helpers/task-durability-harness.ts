@@ -437,6 +437,8 @@ export async function startTaskLateCancelWorker(input: {
     namespace: config.namespace,
     taskQueue,
     identity: workerIdentity,
+    maxHeartbeatThrottleInterval: '50 milliseconds',
+    defaultHeartbeatThrottleInterval: '50 milliseconds',
     workflowsPath: resolve(process.cwd(), 'src/lib/temporal/workflows/index.ts'),
     activities: {
       ...productionActivities,
