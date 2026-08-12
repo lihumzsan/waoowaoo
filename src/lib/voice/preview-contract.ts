@@ -1,10 +1,10 @@
 import type { VOICE_DESIGN_LANGUAGE_OPTIONS } from '@/lib/ai-registry/voice-design-contract'
 
-export const VOICE_PREVIEW_TARGET_MIN_SECONDS = 5
-export const VOICE_PREVIEW_TARGET_MAX_SECONDS = 8
+export const VOICE_PREVIEW_TARGET_MIN_SECONDS = 3
+export const VOICE_PREVIEW_TARGET_MAX_SECONDS = 4
 
-const MIN_CJK_PREVIEW_CHARACTERS = 24
-const MIN_WORD_BASED_PREVIEW_WORDS = 12
+const MIN_CJK_PREVIEW_CHARACTERS = 14
+const MIN_WORD_BASED_PREVIEW_WORDS = 7
 const CJK_LANGUAGES = new Set<VoiceDesignLanguage>(['Chinese', 'Japanese', 'Korean'])
 const CJK_CHARACTER_PATTERN = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u
 const SIGNIFICANT_CHARACTER_PATTERN = /[\p{L}\p{N}]/u

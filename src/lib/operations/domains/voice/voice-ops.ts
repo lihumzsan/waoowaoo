@@ -465,7 +465,7 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
         },
       },
       confirmation: { kind: 'billable_media', required: true },
-      planContractRevision: 'voice-generation/v9',
+      planContractRevision: 'voice-generation/v10',
       inputSchema: generateVoiceInputSchema,
       outputSchema: generateVoiceOutputSchema,
       plan: async (ctx, input) => input.request.kind === 'retry'

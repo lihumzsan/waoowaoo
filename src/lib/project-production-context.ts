@@ -18,6 +18,7 @@ export type ProjectProductionCapabilities = {
     readonly maxReferenceFiles: number
     readonly referenceAudioRequiresVisual: boolean
     readonly minReferenceAudioDurationMs: number | null
+    readonly maxTotalReferenceAudioDurationMs: number | null
     readonly supportedInputModes: readonly VideoInputMode[]
   } | null
   readonly music: {
@@ -85,6 +86,7 @@ function resolveProductionCapabilities(config: ProjectModelConfig): ProjectProdu
         maxReferenceFiles: video.maxReferenceFiles ?? 0,
         referenceAudioRequiresVisual: video.referenceAudioRequiresVisual === true,
         minReferenceAudioDurationMs: video.minReferenceAudioDurationMs ?? null,
+        maxTotalReferenceAudioDurationMs: video.maxTotalReferenceAudioDurationMs ?? null,
         supportedInputModes: video.supportedInputModes ?? [],
       }
     : null

@@ -579,9 +579,10 @@ async function validateReferenceMediaCapabilities(input: {
   readonly frozenReferences: readonly WorkspaceResourceInputRef[]
 }): Promise<void> {
   if (input.mediaType !== 'video') return
-  const minimumDurationMs = resolveBuiltinCapabilitiesByModelKey('video', input.modelKey)
-    ?.video?.minReferenceAudioDurationMs
-  if (minimumDurationMs === undefined) return
+  const capabilities = resolveBuiltinCapabilitiesByModelKey('video', input.modelKey)?.video
+  const minimumDurationMs = capabilities?.minReferenceAudioDurationMs
+  const maximumTotalDurationMs = capabilities?.maxTotalReferenceAudioDurationMs
+  if (minimumDurationMs === undefined && maximumTotalDurationMs === undefined) return
   const audioPositions = new Set(providerPositions(input.publicReferences, 'audio'))
   const audioReferences = input.frozenReferences.filter((reference) => audioPositions.has(reference.position))
   if (audioReferences.length === 0) return
@@ -591,6 +592,7 @@ async function validateReferenceMediaCapabilities(input: {
     references: audioReferences,
     expectedMediaType: 'audio',
   })
+  let totalDurationMs = 0
   for (const reference of resolved) {
     if (reference.durationMs === null) {
       throw new ApiError('INVALID_PARAMS', {
@@ -598,11 +600,13 @@ async function validateReferenceMediaCapabilities(input: {
         field: 'references',
         resourceId: reference.reference.resourceId,
         contentVersion: reference.reference.contentVersion,
-        minimumDurationMs,
+        ...(minimumDurationMs !== undefined ? { minimumDurationMs } : {}),
+        ...(maximumTotalDurationMs !== undefined ? { maximumTotalDurationMs } : {}),
         agentRetryableAfterCorrection: true,
       })
     }
-    if (reference.durationMs < minimumDurationMs) {
+    totalDurationMs += reference.durationMs
+    if (minimumDurationMs !== undefined && reference.durationMs < minimumDurationMs) {
       throw new ApiError('INVALID_PARAMS', {
         code: 'VIDEO_MODEL_REFERENCE_AUDIO_TOO_SHORT',
         field: 'references',
@@ -613,6 +617,16 @@ async function validateReferenceMediaCapabilities(input: {
         agentRetryableAfterCorrection: true,
       })
     }
+  }
+  if (maximumTotalDurationMs !== undefined && totalDurationMs > maximumTotalDurationMs) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'VIDEO_MODEL_REFERENCE_AUDIO_TOTAL_DURATION_EXCEEDED',
+      field: 'references',
+      actualTotalDurationMs: totalDurationMs,
+      maximumTotalDurationMs,
+      audioReferenceCount: resolved.length,
+      agentRetryableAfterCorrection: true,
+    })
   }
 }
 
