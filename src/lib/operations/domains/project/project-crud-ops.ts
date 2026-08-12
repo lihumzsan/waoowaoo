@@ -21,7 +21,6 @@ import {
   type ProjectAgentOperationRegistryDraft,
 } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
-import { readProductionJourneyView } from '@/lib/production-profile'
 
 const ACTIVE_ASSISTANT_TURN_STATUSES = [
   'queued',
@@ -101,22 +100,11 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
       inputSchema: z.object({}),
       outputSchema: z.unknown(),
       execute: async (ctx) => {
-        const [project, productionJourney] = await Promise.all([
-          requireOwnedProject({
-            projectId: ctx.projectId,
-            userId: ctx.userId,
-          }),
-          readProductionJourneyView({
-            projectId: ctx.projectId,
-            userId: ctx.userId,
-          }),
-        ])
-        return {
-          project: {
-            ...addSignedUrlsToProject(project),
-            productionJourney,
-          },
-        }
+        const project = await requireOwnedProject({
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+        })
+        return { project: addSignedUrlsToProject(project) }
       },
     },
 

@@ -20,10 +20,6 @@ import {
   isProjectVideoRatio,
   writeProjectVideoRatioInTransaction,
 } from '@/lib/projects/video-ratio-write'
-import {
-  PRODUCTION_PROFILE_IDS,
-  requireProductionProfileDefinition,
-} from '@/lib/production-profile'
 
 function readProjectDraftBody(body: unknown): ProjectDraftInput {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -186,7 +182,6 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
       inputSchema: z.object({
         name: z.string().min(1),
         description: z.string().optional().nullable(),
-        productionProfileId: z.enum(PRODUCTION_PROFILE_IDS),
         videoRatio: z.string().trim().min(1).refine(isProjectVideoRatio, {
           message: 'Unsupported project video ratio.',
         }).optional(),
@@ -209,7 +204,6 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
         }
 
         const normalized = normalizeProjectDraft(draft)
-        const productionProfile = requireProductionProfileDefinition(input.productionProfileId)
         const deployment = getDeploymentConfig()
         const platformDefaults = isPlatformProviderCredentialMode(deployment)
           ? getPlatformDefaultModels()
@@ -226,8 +220,6 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
             description: normalized.description?.trim() || null,
             userId: ctx.userId,
             videoRatio: null,
-            productionProfileId: productionProfile.id,
-            productionProfileVersion: productionProfile.version,
             ...(platformDefaults && {
               analysisModel: platformDefaults.analysisModel,
               characterModel: platformDefaults.characterModel,

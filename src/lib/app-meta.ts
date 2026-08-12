@@ -1,6 +1,6 @@
 import packageJson from '../../package.json'
 
-const GITHUB_REPOSITORY_VALUE = 'waooAI/waoowaoo'
+const GITHUB_REPOSITORY_VALUE = 'saturndec/waoowaoo'
 
 const packageVersion = packageJson.version
 if (typeof packageVersion !== 'string' || packageVersion.trim().length === 0) {

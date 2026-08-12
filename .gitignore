@@ -100,8 +100,6 @@ AGENTS.md
 docs/**
 !docs/architecture/
 !docs/architecture/**
-!docs/self-hosted/
-!docs/self-hosted/**
 /artifacts/browser-security/
 /artifacts/golden-journey/
 # GitHub CI workflows (internal)

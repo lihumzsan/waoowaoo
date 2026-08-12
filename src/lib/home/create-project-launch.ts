@@ -10,7 +10,6 @@ import {
   type ProjectAssistantMediaAttachment,
 } from '@/lib/project-agent/media-attachments'
 import type { ProjectVideoRatio } from '@/lib/projects/video-ratio'
-import type { ProductionProfileId } from '@/lib/production-profile'
 
 export const HOME_ASSISTANT_AUTOSTART_QUERY = 'assistantAutoStart' as const
 export const HOME_ASSISTANT_AUTOSTART_VALUE = 'home-input' as const
@@ -34,7 +33,6 @@ export interface CreateHomeProjectLaunchParams {
   projectName: string
   storyText: string
   videoRatio: ProjectVideoRatio
-  productionProfileId: ProductionProfileId
   hasAssistantDraftContent?: boolean
 }
 
@@ -158,7 +156,6 @@ export async function createHomeProjectLaunch({
   projectName,
   storyText,
   videoRatio,
-  productionProfileId,
   hasAssistantDraftContent = false,
 }: CreateHomeProjectLaunchParams): Promise<CreateHomeProjectLaunchResult> {
   if (!storyText.trim() && !hasAssistantDraftContent) {
@@ -171,7 +168,6 @@ export async function createHomeProjectLaunch({
     body: JSON.stringify({
       name: projectName,
       videoRatio,
-      productionProfileId,
     }),
   })
 

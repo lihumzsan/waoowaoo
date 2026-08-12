@@ -9,11 +9,6 @@ import { CREATIVE_SKILL_REGISTRY } from '@/lib/creative-skills/registry'
 import { CREATIVE_RUNTIME_SKILL_REGISTRY } from '@/lib/creative-skills/runtime-skills'
 import { CREATIVE_DOMAIN_KINDS, CREATIVE_OUTPUT_KINDS } from '@/lib/creative-skills/types'
 import { requireWorkspaceResourceSchema } from '@/lib/workspace-resource/schema-registry'
-import {
-  PRODUCTION_PROFILE_IDS,
-  PRODUCTION_PROFILE_REGISTRY,
-} from '@/lib/production-profile'
-import { creativeRuntimeSkillsForProfile } from '@/lib/creative-skills/runtime-skills'
 
 describe('Creative output registry conformance', () => {
   it('binds every creative domain to exactly one Skill, outputKind, strict schema, and Workspace schema', () => {
@@ -34,24 +29,6 @@ describe('Creative output registry conformance', () => {
       const jsonSchema = creativeOutputJsonSchema(outputKind)
       expect(jsonSchema.additionalProperties, domainKind).toBe(false)
       expect(JSON.stringify(jsonSchema), domainKind).toContain(`\"const\":\"${outputKind}\"`)
-    }
-  })
-
-  it('materializes exactly the creative domains allowed by every production profile', () => {
-    expect(Object.keys(PRODUCTION_PROFILE_REGISTRY).sort()).toEqual(
-      [...PRODUCTION_PROFILE_IDS].sort(),
-    )
-    for (const profileId of PRODUCTION_PROFILE_IDS) {
-      const profile = PRODUCTION_PROFILE_REGISTRY[profileId]
-      expect(new Set(profile.allowedDomains).size, profileId).toBe(profile.allowedDomains.length)
-      expect(
-        creativeRuntimeSkillsForProfile(profile).map((skill) => skill.kind),
-        profileId,
-      ).toEqual(profile.allowedDomains)
-      for (const domainKind of profile.allowedDomains) {
-        expect(CREATIVE_RUNTIME_SKILL_REGISTRY[domainKind], `${profileId}:${domainKind}`).toBeDefined()
-        expect(CREATIVE_OUTPUT_REGISTRY[CREATIVE_DOMAIN_OUTPUT_KIND[domainKind]], `${profileId}:${domainKind}`).toBeDefined()
-      }
     }
   })
 })

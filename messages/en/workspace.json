@@ -15,17 +15,6 @@
   "deleteProject": "Delete Project",
   "deleteConfirm": "Are you sure you want to delete project \"{name}\"? This action cannot be undone.",
   "projectName": "Project Name",
-  "productionType": {
-    "label": "Production type",
-    "narrative": {
-      "title": "Narrative video",
-      "description": "Film, series, and story-led video"
-    },
-    "commercial": {
-      "title": "Commercial video",
-      "description": "Brand, product, and campaign video"
-    }
-  },
   "projectNamePlaceholder": "Enter project name",
   "projectDescription": "Project Description (Optional)",
   "projectDescriptionPlaceholder": "Enter project description",

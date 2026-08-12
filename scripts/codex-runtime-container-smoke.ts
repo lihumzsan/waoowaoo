@@ -8,10 +8,7 @@ import {
 } from '@/lib/assistant-runtime/runtime-access'
 import { DockerRuntimeContainerAdapter } from '@/lib/codex-runtime/docker-runtime-container'
 import { PRODUCTION_CODEX_INITIALIZE_CAPABILITIES } from '@/lib/codex-runtime/runtime-config'
-import {
-  creativeRuntimeSkillsForProfile,
-} from '@/lib/creative-skills'
-import { requireProductionProfileDefinition } from '@/lib/production-profile'
+import { CREATIVE_RUNTIME_SKILLS } from '@/lib/creative-skills'
 
 const execFileAsync = promisify(execFile)
 
@@ -42,11 +39,7 @@ async function main(): Promise<void> {
   const scopeKey = `container-smoke-${randomUUID()}`
   const scopeId = createHash('sha256').update(scopeKey, 'utf8').digest('hex')
   const scope = { userId: scopeKey, projectId: scopeKey }
-  const narrativeProfile = requireProductionProfileDefinition('narrative_video')
-  const persistence = new AssistantRuntimePersistence({
-    hostRoot,
-    resolveProductionProfile: async () => narrativeProfile,
-  })
+  const persistence = new AssistantRuntimePersistence({ hostRoot })
   const materialization = await persistence.materialize(scope)
   const adapter = new DockerRuntimeContainerAdapter({
     image,
@@ -82,7 +75,7 @@ async function main(): Promise<void> {
     })
     assert.equal(skills.data.length, 1)
     assert.deepEqual(skills.data[0]?.errors, [])
-    const expectedSkillIds = creativeRuntimeSkillsForProfile(narrativeProfile)
+    const expectedSkillIds = CREATIVE_RUNTIME_SKILLS
       .map((skill) => skill.skillIds[1])
       .sort()
     const installedSkills = (skills.data[0]?.skills ?? [])

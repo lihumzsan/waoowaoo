@@ -27,7 +27,6 @@ import {
   readProjectProductionContext,
   type ProjectProductionContext,
 } from '@/lib/project-production-context'
-import { requireProductionProfileDefinition } from '@/lib/production-profile'
 
 const MCP_PATH = '/api/internal/codex-runtime/mcp'
 // Codex defaults MCP tool calls to 60 seconds. Wao production calls can spend
@@ -40,19 +39,6 @@ const WAO_MCP_TOOL_TIMEOUT_SECONDS = WAO_RUNTIME_TOKEN_MAX_TTL_SECONDS
 export const ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS = buildProjectAgentSystemPrompt(
   creativeSkillRoutingInstructions(),
 )
-
-function buildProfileDeveloperInstructions(
-  projectProductionContext: ProjectProductionContext,
-): string {
-  const profile = requireProductionProfileDefinition(
-    projectProductionContext.productionProfile.id,
-    projectProductionContext.productionProfile.version,
-  )
-  return buildProjectAgentSystemPrompt(
-    creativeSkillRoutingInstructions(profile),
-    profile.developerInstructions,
-  )
-}
 
 // The custom base replaces Codex's built-in coding-agent base prompt. It keeps
 // the load-bearing channel, formatting, update, and autonomy contract verbatim
@@ -261,7 +247,6 @@ export async function resolveAssistantRuntimeModelConfiguration(
     readProjectProductionContext(input.scope),
   ])
   const sandbox = runtimeSandboxMode()
-  const developerInstructions = buildProfileDeveloperInstructions(projectProductionContext)
   const config = runtimeConfig({
     mcpUrl: `${waoBaseUrl}${MCP_PATH}`,
     modelGatewayUrl: gateway.baseUrl,
@@ -279,7 +264,7 @@ export async function resolveAssistantRuntimeModelConfiguration(
     config,
     serviceName: threadContract.serviceName,
     baseInstructions: ASSISTANT_RUNTIME_BASE_INSTRUCTIONS,
-    developerInstructions,
+    developerInstructions: ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
     personality: threadContract.personality,
     ephemeral: threadContract.ephemeral,
   }
@@ -296,7 +281,7 @@ export async function resolveAssistantRuntimeModelConfiguration(
         sandbox,
         config,
         baseInstructions: ASSISTANT_RUNTIME_BASE_INSTRUCTIONS,
-        developerInstructions,
+        developerInstructions: ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
         personality: threadContract.personality,
       },
     },

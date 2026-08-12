@@ -1,23 +1,4 @@
 {
-  "commercialJourney": {
-    "title": "商业片制作流程",
-    "description": "状态由项目中的正式资源自动汇总",
-    "stages": {
-      "brief": "需求简报",
-      "script": "商业脚本",
-      "direction": "创作方向",
-      "assets": "视觉资产",
-      "video": "视频分段",
-      "audio": "声音",
-      "final": "成片"
-    },
-    "status": {
-      "not_started": "未开始",
-      "in_progress": "进行中",
-      "completed": "已完成",
-      "needs_attention": "需处理"
-    }
-  },
   "canvas": {
     "workspace": {
       "toolbar": {

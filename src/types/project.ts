@@ -1,8 +1,3 @@
-import type {
-  ProductionJourneyView,
-  ProductionProfileId,
-} from '@/lib/production-profile'
-
 // ============================================
 // 基础项目类型
 // ============================================
@@ -12,9 +7,6 @@ export interface BaseProject {
   description: string | null
   userId: string
   videoRatio: string | null
-  productionProfileId: ProductionProfileId
-  productionProfileVersion: number
-  productionJourney: ProductionJourneyView | null
   createdAt: Date
   updatedAt: Date
 }

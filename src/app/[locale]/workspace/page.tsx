@@ -24,10 +24,6 @@ import { formatCredits } from '@/lib/billing/credits'
 import {
   requestOperationMutationVoidWithError,
 } from '@/lib/query/mutations/mutation-shared'
-import {
-  DEFAULT_PRODUCTION_PROFILE_ID,
-  type ProductionProfileId,
-} from '@/lib/production-profile'
 
 type Project = WorkspaceProjectListItem
 
@@ -76,8 +72,7 @@ export default function WorkspacePage() {
   const [createError, setCreateError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     name: '',
-    description: '',
-    productionProfileId: DEFAULT_PRODUCTION_PROFILE_ID as ProductionProfileId,
+    description: ''
   })
   const [editingProject, setEditingProject] = useState<Project | null>(null)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -223,11 +218,7 @@ export default function WorkspacePage() {
         }
         setShowCreateModal(false)
         setModelSetupCheckFailed(false)
-        setFormData({
-          name: '',
-          description: '',
-          productionProfileId: DEFAULT_PRODUCTION_PROFILE_ID,
-        })
+        setFormData({ name: '', description: '' })
 
         if (modelSetupCheckFailedAfterCreate) {
           showToast(t('modelSetupCheckFailedAfterCreate'), 'warning')
@@ -627,34 +618,6 @@ export default function WorkspacePage() {
               </div>
             )}
             <form onSubmit={handleCreateProject}>
-              <fieldset className="mb-4">
-                <legend className="glass-field-label mb-2">{t('productionType.label')}</legend>
-                <div className="grid grid-cols-2 gap-2">
-                  {(['narrative_video', 'commercial_video'] as const).map((profileId) => {
-                    const selected = formData.productionProfileId === profileId
-                    const copyKey = profileId === 'narrative_video' ? 'narrative' : 'commercial'
-                    return (
-                      <button
-                        key={profileId}
-                        type="button"
-                        aria-pressed={selected}
-                        onClick={() => setFormData({ ...formData, productionProfileId: profileId })}
-                        className={`rounded-xl border px-3 py-2 text-left transition ${selected
-                          ? 'border-[var(--glass-tone-info-fg)] bg-[var(--glass-tone-surface)]'
-                          : 'border-[var(--glass-stroke-base)] hover:bg-[var(--glass-bg-muted)]'
-                        }`}
-                      >
-                        <span className="block text-sm font-semibold text-[var(--glass-text-primary)]">
-                          {t(`productionType.${copyKey}.title`)}
-                        </span>
-                        <span className="mt-0.5 block text-[11px] leading-4 text-[var(--glass-text-secondary)]">
-                          {t(`productionType.${copyKey}.description`)}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </fieldset>
               <div className="mb-4">
                 <label htmlFor="name" className="glass-field-label block mb-2">
                   {t('projectName')} *
@@ -706,11 +669,7 @@ export default function WorkspacePage() {
                   onClick={() => {
                     setShowCreateModal(false)
                     setCreateError(null)
-                    setFormData({
-                      name: '',
-                      description: '',
-                      productionProfileId: DEFAULT_PRODUCTION_PROFILE_ID,
-                    })
+                    setFormData({ name: '', description: '' })
                   }}
                   className="glass-btn-base glass-btn-secondary px-4 py-2"
                   disabled={createLoading}

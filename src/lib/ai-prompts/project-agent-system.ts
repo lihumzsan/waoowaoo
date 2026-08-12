@@ -31,23 +31,13 @@ export function buildProjectAgentBasePrompt(): string {
 
 export function buildProjectAgentSystemPrompt(
   creativeSkillRouting: readonly string[],
-  productionProfileInstructions: readonly string[] = [],
 ): string {
   const template = fs.readFileSync(PROJECT_AGENT_SYSTEM_PROMPT_PATH, 'utf8')
   if (!template.includes(CREATIVE_SKILL_ROUTING_PLACEHOLDER)) {
     throw new Error('PROJECT_AGENT_SYSTEM_PROMPT_ROUTING_PLACEHOLDER_REQUIRED')
   }
-  const routed = template.replace(
+  return template.replace(
     CREATIVE_SKILL_ROUTING_PLACEHOLDER,
     creativeSkillRouting.map((line) => `- ${line}`).join('\n'),
-  )
-  return [
-    routed.trim(),
-    ...(productionProfileInstructions.length > 0
-      ? [
-          '# Current production profile',
-          ...productionProfileInstructions.map((line) => `- ${line}`),
-        ]
-      : []),
-  ].join('\n\n')
+  ).trim()
 }

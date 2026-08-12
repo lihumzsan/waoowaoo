@@ -8,7 +8,6 @@ export {
   CREATIVE_RUNTIME_SKILLS,
   PRIMARY_AGENT_DISABLED_NATIVE_SKILL_IDS,
   creativeSkillRoutingInstructions,
-  creativeRuntimeSkillsForProfile,
   materializeCreativeRuntimeConfiguration,
 } from './runtime-skills'
 export {
