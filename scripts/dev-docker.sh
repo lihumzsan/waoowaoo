@@ -78,19 +78,16 @@ if image_needs_build "$runtime_image" "$runtime_state_file" "$runtime_fingerprin
 fi
 
 if [ -n "$build_targets" ]; then
-  builder_name="waoowaoo-dev-$$"
-  cleanup_builder() {
-    docker buildx rm --force "$builder_name" >/dev/null 2>&1 || true
-  }
-  trap cleanup_builder EXIT INT TERM
-  docker buildx create \
-    --name "$builder_name" \
-    --driver docker-container \
-    --bootstrap >/dev/null
-  # shellcheck disable=SC2086
-  compose build --builder "$builder_name" $build_targets
-  cleanup_builder
-  trap - EXIT INT TERM
+  # Use Docker's selected long-lived builder so dependency and package layers
+  # remain available across development runs. Only the explicit rebuild command
+  # bypasses those caches.
+  if [ "$WAO_DEV_FORCE_REBUILD" = "1" ]; then
+    # shellcheck disable=SC2086
+    compose build --no-cache $build_targets
+  else
+    # shellcheck disable=SC2086
+    compose build $build_targets
+  fi
 
   case " $build_targets " in
     *" app-dev "*) printf '%s\n' "$app_fingerprint" > "$app_state_file" ;;
