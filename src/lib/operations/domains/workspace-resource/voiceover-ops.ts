@@ -153,11 +153,10 @@ export function createWorkspaceResourceVoiceoverOperations(): ProjectAgentOperat
         ]
         const mixGenerationOptions = { ducking: true, preserveSourceAudio: true } as const
         const mixInputHash = buildWorkspaceResourceVoiceoverMixInputIdentity({
-          modelKey: voiceModel,
           inputs: mixInputs,
           generationOptions: mixGenerationOptions,
         })
-        const mixPayload = { lifecycleProjection: buildWorkspaceResourceLifecycleProjection([{ resourceId: finalResourceId, mediaType: 'video', schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO, name: workspaceResourceDisplayName({ workspacePath: finalPath, resourceId: finalResourceId }) }]), protocol: 'workspace_resource_voiceover_mix_v1', resource: { resourceId: finalResourceId, mediaType: 'video', schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO, prompt: null, modelKey: voiceModel, inputHash: mixInputHash, inputs: mixInputs, generationOptions: mixGenerationOptions, toolCallId: ctx.toolCallId?.trim() || null } }
+        const mixPayload = { lifecycleProjection: buildWorkspaceResourceLifecycleProjection([{ resourceId: finalResourceId, mediaType: 'video', schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO, name: workspaceResourceDisplayName({ workspacePath: finalPath, resourceId: finalResourceId }) }]), protocol: 'workspace_resource_voiceover_mix_v1', resource: { resourceId: finalResourceId, mediaType: 'video', schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO, prompt: null, modelKey: null, inputHash: mixInputHash, inputs: mixInputs, generationOptions: mixGenerationOptions, toolCallId: ctx.toolCallId?.trim() || null } }
         return { kind: 'task_submission', operationId: 'produce_voiceover_video', projectId: ctx.projectId, userId: ctx.userId, tasks: [...narrationTasks, createPlannedTask({ id: mixTaskId, taskType: TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER_MIX, targetType: 'WorkspaceResource', targetId: finalResourceId, payload: mixPayload, locale: resolveOperationLocale(ctx.context), dedupeKey: `produce_voiceover_video:mix:${finalResourceId}:${mixInputHash}` })], taskEdges: narration.map((entry) => ({ sourceTaskPlanId: entry.taskPlanId, targetTaskPlanId: mixTaskId, requirement: 'required_success' as const })), reservedIdentityIds: [finalResourceId, ...narration.map((entry) => entry.resourceId)], metadata: { requestId, finalResourceId, finalPath, narration, input, refs, source, reference, voiceModel, mixTaskId } }
       },
       commit: async (ctx, _input, plan) => {

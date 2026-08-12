@@ -173,6 +173,7 @@ describe('produce_voiceover_video operation contract', () => {
     ])
     const mixTask = plan.tasks.find((task) => task.taskType === TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER_MIX)
     if (!mixTask) throw new Error('voiceover mix Task missing')
+    expect(mixTask.payload.resource).toMatchObject({ modelKey: null })
     const aggregate = parseWorkspaceResourceVoiceoverMixTaskPayload(mixTask.payload).inputAggregate
     expect(aggregate).toMatchObject({
       source: { resourceId: SOURCE_ID, contentVersion: 3, workspacePath: 'video/source.mp4', role: 'source_video', position: 0 },

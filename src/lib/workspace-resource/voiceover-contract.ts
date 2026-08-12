@@ -146,7 +146,7 @@ export const workspaceResourceVoiceoverMixTaskPayloadSchema = z.object({
     mediaType: z.literal('video'),
     schemaId: z.literal('generic.video'),
     prompt: z.null(),
-    modelKey: z.string().trim().min(1),
+    modelKey: z.null(),
     inputHash: z.string().length(64),
     inputs: z.array(voiceoverMixInputSchema).min(3),
     generationOptions: workspaceResourceVoiceoverMixGenerationOptionsSchema,
@@ -182,7 +182,6 @@ export type WorkspaceResourceVoiceoverTaskPayload = z.infer<typeof workspaceReso
 export type WorkspaceResourceVoiceoverMixTaskPayload = z.infer<typeof workspaceResourceVoiceoverMixTaskPayloadSchema>
 
 export function buildWorkspaceResourceVoiceoverMixInputIdentity(input: {
-  readonly modelKey: string
   readonly inputs: WorkspaceResourceVoiceoverMixTaskPayload['resource']['inputs']
   readonly generationOptions: z.infer<typeof workspaceResourceVoiceoverMixGenerationOptionsSchema>
 }): string {
@@ -193,7 +192,6 @@ export function buildWorkspaceResourceVoiceoverMixInputIdentity(input: {
     .sort((left, right) => left.position - right.position)
   const bgm = input.inputs.find((item) => item.role === 'bgm_audio')
   return stableArgsFingerprint({
-    modelKey: input.modelKey,
     inputs: [source, reference, ...narrations, ...(bgm ? [bgm] : [])],
     generationOptions: input.generationOptions,
   })
@@ -285,7 +283,6 @@ export function parseWorkspaceResourceVoiceoverMixTaskPayload(
     .sort((left, right) => left.position - right.position)
   const bgm = payload.resource.inputs.find((input) => input.role === 'bgm_audio')
   const canonicalInputHash = buildWorkspaceResourceVoiceoverMixInputIdentity({
-    modelKey: payload.resource.modelKey,
     inputs: payload.resource.inputs,
     generationOptions: payload.resource.generationOptions,
   })

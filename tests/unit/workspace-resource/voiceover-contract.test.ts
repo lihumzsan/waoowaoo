@@ -100,7 +100,6 @@ function withProjectionResource(
 function payload(inputs: unknown[]) {
   const generationOptions = { ducking: true, preserveSourceAudio: true } as const
   const inputHash = buildWorkspaceResourceVoiceoverMixInputIdentity({
-    modelKey: 'comfyui::moss-tts-local-1.7b',
     inputs: inputs as Parameters<typeof buildWorkspaceResourceVoiceoverMixInputIdentity>[0]['inputs'],
     generationOptions,
   })
@@ -119,7 +118,7 @@ function payload(inputs: unknown[]) {
       mediaType: 'video',
       schemaId: 'generic.video',
       prompt: null,
-      modelKey: 'comfyui::moss-tts-local-1.7b',
+      modelKey: null,
       inputHash,
       inputs,
       generationOptions,
@@ -164,6 +163,23 @@ describe('workspace Resource voiceover mix aggregate contract', () => {
     const candidate = payload([source, reference, narrationZero])
     candidate.resource.generationOptions = { ducking: false, preserveSourceAudio: true } as never
     expect(() => parseWorkspaceResourceVoiceoverMixTaskPayload(candidate)).toThrow()
+  })
+
+  it('does not attribute the deterministic mix identity directly to a narration model', () => {
+    type MixIdentityAcceptsModelKey = 'modelKey' extends keyof Parameters<typeof buildWorkspaceResourceVoiceoverMixInputIdentity>[0] ? true : false
+    const acceptsModelKey: MixIdentityAcceptsModelKey = false
+    const buildIdentity = buildWorkspaceResourceVoiceoverMixInputIdentity as unknown as (input: {
+      modelKey?: string
+      inputs: Parameters<typeof buildWorkspaceResourceVoiceoverMixInputIdentity>[0]['inputs']
+      generationOptions: Parameters<typeof buildWorkspaceResourceVoiceoverMixInputIdentity>[0]['generationOptions']
+    }) => string
+    const inputs = [source, reference, narrationZero] as Parameters<typeof buildWorkspaceResourceVoiceoverMixInputIdentity>[0]['inputs']
+    const generationOptions = { ducking: true, preserveSourceAudio: true } as const
+
+    expect(acceptsModelKey).toBe(false)
+    expect(buildIdentity({ modelKey: 'comfyui::moss-a', inputs, generationOptions })).toBe(
+      buildIdentity({ modelKey: 'comfyui::moss-b', inputs, generationOptions }),
+    )
   })
 
   it('projects narration and mix generation options through one normalized resource facts boundary', () => {
