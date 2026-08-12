@@ -25,6 +25,7 @@ import { refineTaskBatchSubmitOperationOutputSchema, taskBatchSubmitOperationOut
 import { resolveWorkspaceResourceInputMedia } from '@/lib/workspace-resource/input-media'
 import { preflightMediaGenerationOptions, preflightMediaProviderRoutes } from '@/lib/ai-exec/media-preflight'
 import type { WorkspaceResourceVoiceoverMixTaskPayload } from '@/lib/workspace-resource/voiceover-contract'
+import { validateMossTtsReferenceAudioMetadata } from '@/lib/ai-providers/comfyui/moss-tts-reference-policy'
 
 const produceVoiceoverVideoInputSchema = z.object({
   folderPath: z.string().trim().min(1).max(512).nullable().optional(),
@@ -90,6 +91,10 @@ export function createWorkspaceResourceVoiceoverOperations(): ProjectAgentOperat
           references: [bgm],
           expectedMediaType: 'audio',
         }) : []
+        validateMossTtsReferenceAudioMetadata({
+          mimeType: referenceMedia?.mimeType,
+          sizeBytes: referenceMedia?.sizeBytes,
+        })
         const videoDurationMs = videoMedia?.durationMs
         if (!videoDurationMs || videoDurationMs <= 0) throw new Error('VOICEOVER_VIDEO_DURATION_UNKNOWN')
         if (referenceMedia?.durationMs === null || referenceMedia?.durationMs === undefined || referenceMedia.durationMs < 3000 || referenceMedia.durationMs > 10000) throw new Error('VOICEOVER_REFERENCE_AUDIO_DURATION_INVALID')

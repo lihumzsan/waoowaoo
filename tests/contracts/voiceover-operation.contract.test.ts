@@ -38,6 +38,8 @@ function installPlannerStorageBoundary(input: {
   bgmDurationMs: number | null
   referenceDurationMs?: number
   referenceStorageKey?: string
+  referenceMimeType?: string | null
+  referenceSizeBytes?: bigint | null
 }) {
   vi.spyOn(prisma.project, 'findFirst').mockResolvedValue({ id: PROJECT_ID } as never)
   vi.spyOn(prisma.workspaceResource, 'findFirst').mockResolvedValue(null)
@@ -53,21 +55,21 @@ function installPlannerStorageBoundary(input: {
       version: 3,
       contentKind: 'media',
       resource: { userId: USER_ID, projectId: PROJECT_ID, resourceKind: 'file', mediaType: 'video' },
-      media: { id: 'source-media', storageKey: 'media/source.mp4', mimeType: 'video/mp4', width: 1920, height: 1080, durationMs: 12_000 },
+      media: { id: 'source-media', storageKey: 'media/source.mp4', mimeType: 'video/mp4', width: 1920, height: 1080, durationMs: 12_000, sizeBytes: BigInt(1_000_000) },
     },
     {
       resourceId: REFERENCE_ID,
       version: 2,
       contentKind: 'media',
       resource: { userId: USER_ID, projectId: PROJECT_ID, resourceKind: 'file', mediaType: 'audio' },
-      media: { id: 'reference-media', storageKey: input.referenceStorageKey ?? 'media/reference.mp3', mimeType: 'audio/mpeg', width: null, height: null, durationMs: input.referenceDurationMs ?? 5_000 },
+      media: { id: 'reference-media', storageKey: input.referenceStorageKey ?? 'media/reference.mp3', mimeType: input.referenceMimeType === undefined ? 'audio/mpeg' : input.referenceMimeType, width: null, height: null, durationMs: input.referenceDurationMs ?? 5_000, sizeBytes: input.referenceSizeBytes === undefined ? BigInt(1_000_000) : input.referenceSizeBytes },
     },
     {
       resourceId: BGM_ID,
       version: 5,
       contentKind: 'media',
       resource: { userId: USER_ID, projectId: PROJECT_ID, resourceKind: 'file', mediaType: 'audio' },
-      media: { id: 'bgm-media', storageKey: 'media/bgm.mp3', mimeType: 'audio/mpeg', width: null, height: null, durationMs: input.bgmDurationMs },
+      media: { id: 'bgm-media', storageKey: 'media/bgm.mp3', mimeType: 'audio/ogg', width: null, height: null, durationMs: input.bgmDurationMs, sizeBytes: BigInt(80_000_000) },
     },
   ] as never)
 }
@@ -156,6 +158,37 @@ describe('produce_voiceover_video operation contract', () => {
     if (!input.success) throw new Error('valid voiceover input fixture must parse')
 
     await expect(operation.plan(context, input.data)).rejects.toThrow('VOICEOVER_BGM_AUDIO_DURATION_INVALID')
+  })
+
+  it.each([
+    [{ referenceMimeType: 'audio/ogg', referenceSizeBytes: BigInt(1_000_000) }, 'COMFYUI_MOSS_TTS_REFERENCE_AUDIO_MIME_TYPE_UNSUPPORTED'],
+    [{ referenceMimeType: 'audio/mpeg', referenceSizeBytes: BigInt(15 * 1024 * 1024 + 1) }, 'COMFYUI_MOSS_TTS_REFERENCE_AUDIO_TOO_LARGE'],
+    [{ referenceMimeType: null, referenceSizeBytes: BigInt(1_000_000) }, 'COMFYUI_MOSS_TTS_REFERENCE_AUDIO_MIME_TYPE_MISSING'],
+    [{ referenceMimeType: 'audio/mpeg', referenceSizeBytes: null }, 'COMFYUI_MOSS_TTS_REFERENCE_AUDIO_SIZE_BYTES_MISSING'],
+  ])('rejects invalid frozen MOSS reference metadata before returning a plan %#', async (reference, error) => {
+    installPlannerStorageBoundary({ bgmDurationMs: 60_000, ...reference })
+    vi.stubEnv('COMFYUI_BASE_URL', 'http://127.0.0.1:8878')
+    const operation = plannedVoiceoverOperation()
+    const input = operation.inputSchema.safeParse(validInput)
+    if (!input.success) throw new Error('valid voiceover input fixture must parse')
+
+    await expect(operation.plan(context, input.data)).rejects.toThrow(error)
+  })
+
+  it('accepts a supported reference alias without applying the MOSS policy to BGM', async () => {
+    installPlannerStorageBoundary({
+      bgmDurationMs: 60_000,
+      referenceMimeType: 'audio/mp3',
+      referenceSizeBytes: BigInt(15 * 1024 * 1024),
+    })
+    vi.stubEnv('COMFYUI_BASE_URL', 'http://127.0.0.1:8878')
+    const operation = plannedVoiceoverOperation()
+    const input = operation.inputSchema.safeParse(validInput)
+    if (!input.success) throw new Error('valid voiceover input fixture must parse')
+
+    await expect(operation.plan(context, input.data)).resolves.toMatchObject({
+      operationId: 'produce_voiceover_video',
+    })
   })
 
   it('freezes normalized Worker options and one exhaustive mix aggregate in the returned plan', async () => {

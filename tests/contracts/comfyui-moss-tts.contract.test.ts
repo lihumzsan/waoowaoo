@@ -7,6 +7,9 @@ import {
   COMFYUI_MOSS_TTS_LOCAL_MODEL_ID,
   COMFYUI_MOSS_TTS_LOCAL_MODEL_KEY,
 } from '@/lib/ai-providers/comfyui/models'
+import {
+  validateMossTtsReferenceAudioMetadata,
+} from '@/lib/ai-providers/comfyui/moss-tts-reference-policy'
 
 describe('ComfyUI MOSS TTS Local profile', () => {
   it('builds the API graph from frozen text and reference input', () => {
@@ -53,5 +56,28 @@ describe('ComfyUI MOSS TTS Local profile', () => {
 
   it('uses the canonical model key', () => {
     expect(COMFYUI_MOSS_TTS_LOCAL_MODEL_KEY).toBe('comfyui::moss-tts-local-1.7b')
+  })
+
+  it.each([
+    ['audio/mpeg', 'audio/mpeg'],
+    ['audio/mp3', 'audio/mpeg'],
+    ['audio/wav', 'audio/wav'],
+    ['audio/x-wav', 'audio/wav'],
+    ['audio/flac', 'audio/flac'],
+    ['audio/x-flac', 'audio/flac'],
+  ])('accepts MOSS reference MIME %s as canonical %s', (mimeType, expectedMimeType) => {
+    expect(validateMossTtsReferenceAudioMetadata({
+      mimeType,
+      sizeBytes: BigInt(15 * 1024 * 1024),
+    })).toEqual({ mimeType: expectedMimeType, sizeBytes: 15 * 1024 * 1024 })
+  })
+
+  it.each([
+    [{ mimeType: 'audio/ogg', sizeBytes: BigInt(1024) }, 'COMFYUI_MOSS_TTS_REFERENCE_AUDIO_MIME_TYPE_UNSUPPORTED'],
+    [{ mimeType: 'audio/mpeg', sizeBytes: BigInt(15 * 1024 * 1024 + 1) }, 'COMFYUI_MOSS_TTS_REFERENCE_AUDIO_TOO_LARGE'],
+    [{ mimeType: null, sizeBytes: BigInt(1024) }, 'COMFYUI_MOSS_TTS_REFERENCE_AUDIO_MIME_TYPE_MISSING'],
+    [{ mimeType: 'audio/mpeg', sizeBytes: null }, 'COMFYUI_MOSS_TTS_REFERENCE_AUDIO_SIZE_BYTES_MISSING'],
+  ])('rejects invalid frozen MOSS reference metadata %#', (metadata, error) => {
+    expect(() => validateMossTtsReferenceAudioMetadata(metadata)).toThrow(error)
   })
 })

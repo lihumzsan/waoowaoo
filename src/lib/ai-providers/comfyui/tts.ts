@@ -5,6 +5,11 @@ import { readOwnedMediaBytesForGeneration } from '@/lib/media/outbound-owned-med
 import { readComfyUiDeclaredNodeAudioOutput, readComfyUiOutputData, asComfyUiRecord, readComfyUiHttpError, readComfyUiRequiredOptions, readComfyUiString, requestComfyUiJson, COMFYUI_ACCEPTED_JOB_STATUSES, type ComfyUiOutput, ComfyUiHttpError } from './transport'
 import { readComfyUiBaseUrl } from './config'
 import { COMFYUI_MOSS_TTS_LOCAL_MODEL_ID, COMFYUI_MOSS_TTS_LOCAL_MODEL_KEY } from './models'
+import {
+  MOSS_TTS_REFERENCE_AUDIO_MAX_BYTES,
+  MOSS_TTS_REFERENCE_AUDIO_SUPPORTED_MIME_TYPES,
+  normalizeMossTtsReferenceAudioMimeType,
+} from './moss-tts-reference-policy'
 import ttsWorkflow from './workflows/moss-tts-local-1.7b.json'
 
 export const COMFYUI_MOSS_TTS_MAX_AUDIO_BYTES = 25 * 1024 * 1024
@@ -84,10 +89,10 @@ async function preflight(baseUrl: string): Promise<void> {
 
 async function uploadReferenceAudio(input: { baseUrl: string; userId: string; referenceAudio: string; promptId: string }): Promise<string> {
   const media = await readOwnedMediaBytesForGeneration(input.referenceAudio, input.userId, {
-    maxBytes: 15 * 1024 * 1024,
+    maxBytes: MOSS_TTS_REFERENCE_AUDIO_MAX_BYTES,
     label: 'owned MOSS TTS reference audio',
-    supportedMimeTypes: new Set(['audio/mpeg', 'audio/wav', 'audio/flac']),
-    normalizeMimeType: (mime) => mime === 'audio/mp3' ? 'audio/mpeg' : mime,
+    supportedMimeTypes: MOSS_TTS_REFERENCE_AUDIO_SUPPORTED_MIME_TYPES,
+    normalizeMimeType: normalizeMossTtsReferenceAudioMimeType,
   })
   const form = new FormData()
   const filename = `waoowaoo-voiceover-${input.promptId}.wav`
