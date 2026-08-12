@@ -6,9 +6,12 @@ import { H3_RUNTIME_PROFILES, resolveH3Dimensions, resolveH3DurationFrames } fro
 
 describe('ComfyUI H3 profile math', () => {
   it('aligns duration to the H3 17k+5 frame grid', () => {
+    expect(resolveH3DurationFrames(4)).toBe(107)
     expect(resolveH3DurationFrames(5)).toBe(124)
     expect(resolveH3DurationFrames(10)).toBe(243)
     expect(resolveH3DurationFrames(15)).toBe(362)
+    expect(() => resolveH3DurationFrames(3)).toThrow('COMFYUI_H3_OPTION_UNSUPPORTED:duration=3')
+    expect(() => resolveH3DurationFrames(16)).toThrow('COMFYUI_H3_OPTION_UNSUPPORTED:duration=16')
   })
 
   it('resolves ResolutionSelector Mi-pixel areas for 16:9 dimensions', () => {
@@ -20,6 +23,7 @@ describe('ComfyUI H3 profile math', () => {
     const h3 = COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES.find((entry) => entry.modelId === COMFYUI_H3_MODEL_ID)
     expect(h3?.capabilities.video.generationModeOptions).toEqual(['normal', 'firstlastframe'])
     expect(h3?.capabilities.video.promptProfile).toBe('minimax_h3_v1')
+    expect(h3?.capabilities.video.durationOptions).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
   })
 
   it('compiles the H3 normal 10-second selection through the production resolver', () => {

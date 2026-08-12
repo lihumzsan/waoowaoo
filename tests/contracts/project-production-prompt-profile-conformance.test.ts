@@ -20,6 +20,7 @@ describe('project production prompt profile context', () => {
       musicModel: null,
       soundModel: null,
       videoRatio: '9:16',
+      videoVocalPerformanceMode: 'native_dialogue',
       capabilityDefaults: {},
       capabilityOverrides: {},
     }
@@ -27,7 +28,7 @@ describe('project production prompt profile context', () => {
     expect(capabilities.video?.promptProfile).toBe('minimax_h3_v1')
 
     const context: ProjectProductionContext = {
-      schemaVersion: 6,
+      schemaVersion: 7,
       version: 'contract-version',
       project: {
         projectId: 'project-1',
@@ -38,10 +39,17 @@ describe('project production prompt profile context', () => {
         imageResolution: '1024x1024',
       },
       productionCapabilities: capabilities,
+      productionDefaults: {
+        video: { vocalPerformanceMode: 'native_dialogue' },
+      },
     }
 
     expect(buildAssistantRuntimeTurnContext('zh', context)).toContain(
       '"promptProfile": "minimax_h3_v1"',
+    )
+    expect(capabilities.video?.minSegmentDurationSeconds).toBe(4)
+    expect(buildAssistantRuntimeTurnContext('zh', context)).toContain(
+      '"vocalPerformanceMode": "native_dialogue"',
     )
   })
 })

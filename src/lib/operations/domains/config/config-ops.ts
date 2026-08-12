@@ -24,6 +24,7 @@ import {
   PROJECT_VIDEO_RATIO_VALUES,
   writeProjectVideoRatioInTransaction,
 } from '@/lib/projects/video-ratio-write'
+import { vocalPerformanceModeSchema } from '@/lib/workspace-resource/vocal-performance-contract'
 
 const MODEL_FIELDS = [
   'analysisModel',
@@ -35,7 +36,7 @@ const MODEL_FIELDS = [
   'soundModel',
 ] as const
 
-const CLOUD_PROJECT_CONFIG_FIELDS = ['videoRatio'] as const
+const CLOUD_PROJECT_CONFIG_FIELDS = ['videoRatio', 'videoVocalPerformanceMode'] as const
 
 const MODEL_FIELD_TO_TYPE: Record<typeof MODEL_FIELDS[number], UnifiedModelType> = {
   analysisModel: 'llm',
@@ -66,6 +67,7 @@ const updateProjectConfigInputSchema = z.object({
   videoRatio: projectVideoRatioSchema.optional()
     .describe('Explicit project output aspect ratio, for example 16:9 or 9:16.'),
   capabilityOverrides: capabilitySelectionCommandSchema.optional(),
+  videoVocalPerformanceMode: vocalPerformanceModeSchema.optional(),
 }).strict()
 
 const updateProjectConfigToolCommandSchema = z.object({
@@ -77,6 +79,10 @@ const updateProjectConfigToolCommandSchema = z.object({
     z.object({
       kind: z.literal('video_ratio'),
       value: projectVideoRatioSchema,
+    }).strict(),
+    z.object({
+      kind: z.literal('video_vocal_performance_mode'),
+      value: vocalPerformanceModeSchema,
     }).strict(),
   ]),
 }).strict()
@@ -108,6 +114,19 @@ const updateProjectConfigToolInputSchema: ProjectAgentToolInputSchema = {
               enum: [...PROJECT_VIDEO_RATIO_VALUES],
               minLength: 1,
               description: 'Exact project output aspect ratio decided by the user, such as 16:9 or 9:16.',
+            },
+          },
+          required: ['kind', 'value'],
+          additionalProperties: false,
+        },
+        {
+          type: 'object',
+          properties: {
+            kind: { const: 'video_vocal_performance_mode' },
+            value: {
+              type: 'string',
+              enum: ['native_dialogue', 'lip_sync_for_replacement', 'voiceover', 'silent_no_lip'],
+              description: 'Project default for generated video dialogue, voiceover, replacement lip-sync, or silent closed-lip performance.',
             },
           },
           required: ['kind', 'value'],
@@ -397,7 +416,9 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
           const command = updateProjectConfigToolCommandSchema.parse(input)
           return command.change.kind === 'video_model'
             ? { videoModel: command.change.value }
-            : { videoRatio: command.change.value }
+            : command.change.kind === 'video_ratio'
+              ? { videoRatio: command.change.value }
+              : { videoVocalPerformanceMode: command.change.value }
         },
       },
       inputSchema: updateProjectConfigInputSchema,
@@ -435,6 +456,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
         const allowedProjectFields = [
           ...(cloudDeployment ? [] : MODEL_FIELDS),
           'videoRatio',
+          'videoVocalPerformanceMode',
           ...(cloudDeployment ? [] : ['capabilityOverrides'] as const),
         ] as const
 

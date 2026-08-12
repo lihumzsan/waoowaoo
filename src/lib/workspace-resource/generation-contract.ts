@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { taskRuntimePayloadEnvelopeShape } from '@/lib/task/progress-payload'
 import type { WorkspaceResourceJsonValue } from './contracts'
 import { workspaceResourceLifecycleProjectionSchema } from './task-runtime-envelope'
+import { vocalPerformanceModeSchema } from './vocal-performance-contract'
 
 export const CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS = 15
 
@@ -98,13 +99,18 @@ export const workspaceResourceGenerationTaskPayloadSchema = z.object({
   negativePrompt: z.string().max(100_000)
     .refine((value) => value.trim().length > 0, 'negativePrompt must contain non-whitespace content.')
     .optional(),
-}).strict()
+  vocalPerformanceMode: vocalPerformanceModeSchema.optional(),
+}).strict().superRefine((payload, context) => {
+  if (payload.resource.mediaType !== 'video' && payload.vocalPerformanceMode !== undefined) {
+    context.addIssue({ code: 'custom', path: ['vocalPerformanceMode'], message: 'Only video tasks may declare vocalPerformanceMode.' })
+  }
+})
 
 const workspaceResourceGenerationTaskEnvelopeSchema = workspaceResourceGenerationTaskPayloadSchema.extend({
   ...taskRuntimePayloadEnvelopeShape,
 }).strict()
 
-const workspaceResourceGenerationRetrySourceSchema = workspaceResourceGenerationTaskPayloadSchema.extend({
+const workspaceResourceGenerationRetrySourceSchema = workspaceResourceGenerationTaskPayloadSchema.safeExtend({
   resource: frozenResourceSchema.safeExtend({
     inputHash: z.string().trim().min(1).max(64),
   }),
@@ -147,6 +153,7 @@ export function parseWorkspaceResourceGenerationTaskPayload(
     count: parsed.count,
     generationOptions: parsed.generationOptions,
     negativePrompt: parsed.negativePrompt,
+    vocalPerformanceMode: parsed.vocalPerformanceMode,
   })
 }
 
@@ -180,6 +187,7 @@ export function parseWorkspaceResourceGenerationRetrySource(
     count: parsed.count,
     generationOptions: parsed.generationOptions,
     negativePrompt: parsed.negativePrompt,
+    vocalPerformanceMode: parsed.vocalPerformanceMode,
   })
 }
 

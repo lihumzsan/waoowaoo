@@ -75,11 +75,12 @@ export const H3_RUNTIME_PROFILES: Record<H3ProfileId, H3RuntimeProfile> = {
   },
 }
 
-const H3_DURATION_MIN_SECONDS = 5
+const H3_DURATION_MIN_SECONDS = 4
 const H3_DURATION_MAX_SECONDS = 15
 const H3_FRAMES_PER_SECOND = 24
 const H3_FRAME_GRID = 17
 const H3_FRAME_REMAINDER = 5
+const H3_MIN_FRAMES = 107
 
 function unsupportedOption(name: string, value: unknown): never {
   throw new Error(`COMFYUI_H3_OPTION_UNSUPPORTED:${name}=${String(value)}`)
@@ -89,7 +90,7 @@ export function resolveH3DurationFrames(seconds: number): number {
   if (!Number.isFinite(seconds) || seconds < H3_DURATION_MIN_SECONDS || seconds > H3_DURATION_MAX_SECONDS) {
     unsupportedOption('duration', seconds)
   }
-  const minimumFrames = Math.max(H3_DURATION_MIN_SECONDS, Math.round(seconds * H3_FRAMES_PER_SECOND))
+  const minimumFrames = Math.max(H3_MIN_FRAMES, Math.round(seconds * H3_FRAMES_PER_SECOND))
   return minimumFrames + ((H3_FRAME_REMAINDER - (minimumFrames % H3_FRAME_GRID)) % H3_FRAME_GRID)
 }
 

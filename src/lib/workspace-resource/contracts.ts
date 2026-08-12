@@ -207,6 +207,7 @@ export interface WorkspaceResourceView {
   /** Public model label. Provider-qualified routing identity is never exposed. */
   readonly modelName: string | null
   readonly generationOptions: WorkspaceResourceJsonValue | null
+  readonly vocalPerformanceMode: string | null
   readonly operationId: string | null
   readonly memberIndex: number | null
   readonly alternativeGroupExecutionId: string | null
@@ -238,6 +239,7 @@ export interface WorkspaceResourceGenerationProvenance {
   readonly prompt: string | null
   readonly modelKey: string | null
   readonly generationOptions: WorkspaceResourceJsonValue | null
+  readonly vocalPerformanceMode: string | null
 }
 
 export type WorkspaceResourceOperationContract =

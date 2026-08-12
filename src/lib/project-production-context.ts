@@ -4,6 +4,7 @@ import { getProjectModelConfig, type ProjectModelConfig } from '@/lib/config-ser
 import { prisma } from '@/lib/prisma'
 import { CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS } from '@/lib/workspace-resource/generation-contract'
 import type { VideoInputMode, VideoPromptProfile } from '@/lib/ai-registry/types'
+import type { VocalPerformanceMode } from '@/lib/workspace-resource/vocal-performance-contract'
 
 export type ProjectProductionCapabilities = {
   readonly video: {
@@ -46,7 +47,7 @@ export type ProjectProductionCapabilities = {
 }
 
 export type ProjectProductionContext = {
-  readonly schemaVersion: 6
+  readonly schemaVersion: 7
   readonly version: string
   readonly project: {
     readonly projectId: string
@@ -57,6 +58,11 @@ export type ProjectProductionContext = {
     readonly imageResolution: string
   }
   readonly productionCapabilities: ProjectProductionCapabilities
+  readonly productionDefaults: {
+    readonly video: {
+      readonly vocalPerformanceMode: VocalPerformanceMode
+    }
+  }
 }
 
 export class ProjectProductionContextError extends Error {
@@ -181,7 +187,7 @@ export async function readProjectProductionContext(input: {
   ])
   if (!project) throw new ProjectProductionContextError()
   const value: Omit<ProjectProductionContext, 'version'> = {
-    schemaVersion: 6,
+    schemaVersion: 7,
     project: {
       projectId: project.id,
       name: project.name,
@@ -191,6 +197,9 @@ export async function readProjectProductionContext(input: {
       imageResolution: project.imageResolution,
     },
     productionCapabilities: resolveProjectProductionCapabilities(modelConfig),
+    productionDefaults: {
+      video: { vocalPerformanceMode: modelConfig.videoVocalPerformanceMode },
+    },
   }
   return { ...value, version: contextVersion(value) }
 }

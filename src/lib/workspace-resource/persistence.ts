@@ -29,6 +29,7 @@ import {
   requireWorkspaceResourceSchema,
 } from './schema-registry'
 import { advanceWorkspaceResourceRevisionInTransaction } from './projection-revision'
+import type { VocalPerformanceMode } from './vocal-performance-contract'
 
 export type WorkspaceResourceMaterializationContent =
   | { readonly kind: 'text'; readonly text: string }
@@ -77,6 +78,7 @@ type ResourceProvenance = {
   readonly prompt: string | null
   readonly modelKey: string | null
   readonly generationOptions: WorkspaceResourceJsonValue | null
+  readonly vocalPerformanceMode?: VocalPerformanceMode | null
 }
 
 function jsonValue(value: WorkspaceResourceJsonValue | null): Prisma.InputJsonValue | Prisma.NullTypes.JsonNull {
@@ -196,6 +198,7 @@ export type ReserveWorkspaceResourceInput = {
   readonly operationId?: string | null
   readonly inputHash?: string | null
   readonly taskId?: string | null
+  readonly vocalPerformanceMode?: VocalPerformanceMode | null
 }
 
 async function validateWorkspaceResourceFolderPlacement(
@@ -345,6 +348,7 @@ export async function reserveWorkspaceResourceInTransaction(
       prompt: input.prompt ?? null,
       modelKey: input.modelKey?.trim() || null,
       generationOptions: jsonValue(input.generationOptions ?? null),
+      vocalPerformanceMode: input.vocalPerformanceMode ?? null,
       operationId: input.operationId?.trim() || null,
       inputHash: input.inputHash?.trim() || null,
       taskId: input.taskId?.trim() || null,
@@ -371,6 +375,7 @@ export async function retryWorkspaceResourcesInTransaction(
       readonly modelKey: string
       readonly generationOptions: WorkspaceResourceJsonValue
       readonly toolCallId: string | null
+      readonly vocalPerformanceMode?: VocalPerformanceMode | null
     }[]
   },
 ): Promise<void> {
@@ -393,6 +398,7 @@ export async function retryWorkspaceResourcesInTransaction(
         prompt: resource.prompt,
         modelKey: resource.modelKey,
         generationOptions: jsonValue(resource.generationOptions),
+        vocalPerformanceMode: resource.vocalPerformanceMode ?? null,
         toolCallId: resource.toolCallId,
       },
     })
@@ -708,6 +714,7 @@ export async function materializeWorkspaceResourceInTransaction(
       prompt: input.provenance.prompt,
       modelKey: input.provenance.modelKey,
       generationOptions: jsonValue(input.provenance.generationOptions),
+      vocalPerformanceMode: input.provenance.vocalPerformanceMode ?? null,
       operationId: input.provenance.operationId,
       inputHash: input.provenance.inputHash,
       taskId: input.provenance.taskId,

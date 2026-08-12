@@ -5,6 +5,14 @@ import {
   WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA,
   WORKSPACE_RESOURCE_SCHEMA,
 } from './schema-registry'
+export {
+  VOCAL_PERFORMANCE_MODES,
+  vocalPerformanceModeSchema,
+  resolveVideoVocalPerformanceMode,
+  assertVocalPerformancePrompt,
+  type VocalPerformanceMode,
+} from './vocal-performance-contract'
+import { vocalPerformanceModeSchema } from './vocal-performance-contract'
 
 const finalPromptSchema = z.string().min(1).max(100_000)
   .refine((value) => value.trim().length > 0, 'prompt must contain non-whitespace content.')
@@ -132,6 +140,7 @@ export const videoGenerationItemSchema = z.object({
   schemaId: z.enum(WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.video),
   references: z.array(videoGenerationReferenceSchema).max(16).optional(),
   durationSeconds: z.number().int().min(1).max(CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS),
+  vocalPerformanceMode: vocalPerformanceModeSchema.optional(),
 }).strict()
 
 export const videoGenerationRevisionItemSchema = z.object({
@@ -140,6 +149,7 @@ export const videoGenerationRevisionItemSchema = z.object({
   prompt: finalPromptSchema,
   references: z.array(videoGenerationReferenceSchema).max(16).optional(),
   durationSeconds: z.number().int().min(1).max(CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS),
+  vocalPerformanceMode: vocalPerformanceModeSchema.optional(),
 }).strict()
 
 function validateGenerationItems(

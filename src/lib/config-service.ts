@@ -28,6 +28,7 @@ import {
 } from '@/lib/workflow-concurrency'
 import { getDefaultWorkflowConcurrencyConfig } from '@/lib/workflow-concurrency-env'
 import { buildImageRuntimeGenerationOptions } from '@/lib/image-generation/runtime-options'
+import { vocalPerformanceModeSchema, type VocalPerformanceMode } from '@/lib/workspace-resource/vocal-performance-contract'
 
 export type ParsedModelKey = { provider: string, modelId: string }
 
@@ -132,6 +133,7 @@ export interface ProjectModelConfig {
   musicModel: string | null
   soundModel: string | null
   videoRatio: string | null
+  videoVocalPerformanceMode: VocalPerformanceMode
   capabilityDefaults: CapabilitySelections
   capabilityOverrides: CapabilitySelections
 }
@@ -192,6 +194,7 @@ export async function getProjectModelConfig(
       musicModel: platformDefaults.musicModel,
       soundModel: platformDefaults.soundModel,
       videoRatio: projectData?.videoRatio ?? null,
+      videoVocalPerformanceMode: vocalPerformanceModeSchema.parse(projectData?.videoVocalPerformanceMode ?? 'native_dialogue'),
       capabilityDefaults: getPlatformCapabilityDefaults(),
       capabilityOverrides: {},
     }
@@ -211,6 +214,7 @@ export async function getProjectModelConfig(
     musicModel: extractModelKey(projectData?.musicModel) || extractModelKey(userPref?.musicModel) || null,
     soundModel: extractModelKey(projectData?.soundModel) || extractModelKey(userPref?.soundModel) || null,
     videoRatio: projectData?.videoRatio ?? null,
+    videoVocalPerformanceMode: vocalPerformanceModeSchema.parse(projectData?.videoVocalPerformanceMode ?? 'native_dialogue'),
     capabilityDefaults: mergeCapabilitySelections(
       getPlatformCapabilityDefaults(),
       parseCapabilitySelections(userPref?.capabilityDefaults),

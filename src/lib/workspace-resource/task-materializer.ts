@@ -6,7 +6,7 @@ import type {
   WorkspaceResourceJsonValue,
   WorkspaceResourceMediaType,
 } from './contracts'
-import { parseWorkspaceResourceGenerationTaskPayload } from './generation-contract'
+import { parseWorkspaceResourceGenerationTaskPayload, type WorkspaceResourceGenerationTaskPayload } from './generation-contract'
 import {
   materializeWorkspaceResourceInTransaction,
   settleWorkspaceResourceFailureInTransaction,
@@ -35,6 +35,7 @@ type TerminalResourcePayload = {
   readonly generationOptions: WorkspaceResourceJsonValue
   readonly toolCallId: string | null
   readonly sourceTurnId: string | null
+  readonly vocalPerformanceMode: WorkspaceResourceGenerationTaskPayload['vocalPerformanceMode'] | null
 }
 
 function readString(record: Record<string, unknown>, key: string): string | null {
@@ -55,6 +56,7 @@ function parseTerminalResourcePayload(task: TerminalTask): TerminalResourcePaylo
       generationOptions: payload.resource.generationOptions,
       toolCallId: payload.resource.toolCallId,
       sourceTurnId: null,
+      vocalPerformanceMode: null,
     }
   }
   const payload = parseWorkspaceResourceGenerationTaskPayload(task.payload ?? {})
@@ -68,6 +70,7 @@ function parseTerminalResourcePayload(task: TerminalTask): TerminalResourcePaylo
     generationOptions: payload.generationOptions,
     toolCallId: payload.resource.toolCallId,
     sourceTurnId: payload.resource.sourceTurnId,
+    vocalPerformanceMode: payload.vocalPerformanceMode ?? null,
   }
 }
 
@@ -128,6 +131,7 @@ export async function materializeWorkspaceResourceTaskTerminalInTransaction(
       prompt: payload.prompt,
       modelKey: actualModelKey,
       generationOptions: payload.generationOptions,
+      vocalPerformanceMode: payload.vocalPerformanceMode ?? null,
     },
   })
   const safeMediaProjection: Record<string, number> = {}

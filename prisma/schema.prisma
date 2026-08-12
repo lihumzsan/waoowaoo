@@ -216,6 +216,7 @@ model Project {
   musicModel                String?
   soundModel                String?
   videoRatio                String?
+  videoVocalPerformanceMode String                           @default("native_dialogue") @db.VarChar(32)
   characterModel            String?
   locationModel             String?
   editModel                 String?
@@ -714,6 +715,7 @@ model WorkspaceResource {
   prompt                      String?                    @db.LongText
   modelKey                    String?                    @db.VarChar(191)
   generationOptions           Json?
+  vocalPerformanceMode        String?                    @db.VarChar(32)
   operationId                 String?                    @db.VarChar(128)
   inputHash                   String?                    @db.VarChar(64)
   taskId                      String?

@@ -38,6 +38,11 @@ import {
   videoGenerationRevisionBatchSchema,
   type GenerationItem,
 } from '@/lib/workspace-resource/generation-request'
+import {
+  assertVocalPerformancePrompt,
+  resolveVideoVocalPerformanceMode,
+  type VocalPerformanceMode,
+} from '@/lib/workspace-resource/vocal-performance-contract'
 import { buildWorkspaceResourceId } from '@/lib/workspace-resource/identity'
 import {
   assertUniqueWorkspaceResourcePaths,
@@ -772,6 +777,7 @@ function generationInputFingerprint(input: {
   readonly references: readonly WorkspaceResourceInputRef[]
   readonly generationOptions: z.infer<typeof workspaceResourceGenerationOptionsSchema>
   readonly durationSeconds: number | null
+  readonly vocalPerformanceMode?: VocalPerformanceMode | null
 }): string {
   return stableArgsFingerprint(input)
 }
@@ -816,6 +822,7 @@ async function buildPlannedItem(input: {
   readonly memberIndex: number
   readonly alternatives: boolean
   readonly projectVideoRatio: ProjectVideoRatioSnapshot | null
+  readonly projectVocalPerformanceMode?: VocalPerformanceMode
   readonly existingTarget?: {
     readonly resourceId: string
     readonly workspacePath: string
@@ -839,6 +846,23 @@ async function buildPlannedItem(input: {
       : input.projectVideoRatio?.value
         ?? (() => { throw new Error('PROJECT_VIDEO_RATIO_SNAPSHOT_REQUIRED') })()
   const item = input.item
+  const vocalPerformanceMode = mediaType === 'video'
+    ? resolveVideoVocalPerformanceMode({
+      projectDefault: input.projectVocalPerformanceMode,
+      itemOverride: 'vocalPerformanceMode' in item ? item.vocalPerformanceMode : undefined,
+    })
+    : undefined
+  if (mediaType === 'video' && vocalPerformanceMode) {
+    try {
+      assertVocalPerformancePrompt({ mode: vocalPerformanceMode, prompt: item.prompt })
+    } catch {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'VIDEO_SILENT_NO_LIP_PROMPT_CONTAINS_DIALOGUE',
+        field: 'items.prompt',
+        agentRetryableAfterCorrection: true,
+      })
+    }
+  }
   const resourceId = input.existingTarget?.resourceId ?? buildWorkspaceResourceId({
     operationId: input.operationId,
     requestId: `${input.requestId}:${input.item.itemId}`,
@@ -890,6 +914,7 @@ async function buildPlannedItem(input: {
     references,
     generationOptions: compiled.generationOptions,
     durationSeconds: durationSeconds ?? null,
+    ...(vocalPerformanceMode ? { vocalPerformanceMode } : {}),
   })
   const resourcePayload: WorkspaceResourceGenerationTaskPayload['resource'] = {
     resourceId,
@@ -919,6 +944,7 @@ async function buildPlannedItem(input: {
     ...modelPayload(mediaType, modelKey, audioKind),
     count: 1,
     generationOptions: compiled.generationOptions,
+    ...(vocalPerformanceMode ? { vocalPerformanceMode } : {}),
     ...(durationSeconds ? { durationSeconds } : {}),
     ...(item.mediaType === 'audio' && item.audioKind === 'sound' && item.negativePrompt
       ? { negativePrompt: item.negativePrompt }
@@ -1016,6 +1042,9 @@ async function planNewMedia(
   request: NewMediaRequest,
 ): Promise<OperationPlan> {
   const requestId = requestIdentity(ctx, operationId, request)
+  const projectModelConfig = mediaType === 'video'
+    ? await getProjectModelConfig(ctx.projectId, ctx.userId)
+    : null
   const items = request.items as readonly GenerationItem[]
   if (items.some((item) => item.mediaType !== mediaType)) {
     throw new Error(`WORKSPACE_RESOURCE_GENERATION_MEDIA_TYPE_INVALID:${operationId}`)
@@ -1036,6 +1065,7 @@ async function planNewMedia(
       memberIndex,
       alternatives: item.count > 1,
       projectVideoRatio,
+      ...(projectModelConfig ? { projectVocalPerformanceMode: projectModelConfig.videoVocalPerformanceMode } : {}),
     }))
   )))
   assertUniqueWorkspaceResourcePaths(built.map((entry) => entry.resource.workspacePath))
@@ -1072,6 +1102,7 @@ async function planReviseFailedVideo(
     projectId: ctx.projectId,
     userId: ctx.userId,
   })
+  const projectModelConfig = await getProjectModelConfig(ctx.projectId, ctx.userId)
   const requestId = requestIdentity(ctx, 'create_video', request)
   const built = await Promise.all(request.items.map(async (replacement, index) => {
     const resource = byId.get(replacement.resourceId)
@@ -1098,6 +1129,9 @@ async function planReviseFailedVideo(
       prompt: replacement.prompt,
       references: replacement.references,
       durationSeconds: replacement.durationSeconds,
+      vocalPerformanceMode: replacement.vocalPerformanceMode
+        ?? resource.vocalPerformanceMode
+        ?? projectModelConfig.videoVocalPerformanceMode,
       count: 1,
     })
     return await buildPlannedItem({
@@ -1108,6 +1142,7 @@ async function planReviseFailedVideo(
       memberIndex: resource.memberIndex ?? index,
       alternatives: false,
       projectVideoRatio,
+      projectVocalPerformanceMode: projectModelConfig.videoVocalPerformanceMode,
       existingTarget: {
         resourceId: resource.id,
         workspacePath: resource.workspacePath,
@@ -1203,6 +1238,7 @@ async function loadFailedTasks(
           references: source.resource.inputs,
           generationOptions,
           durationSeconds: source.durationSeconds ?? null,
+          vocalPerformanceMode: source.vocalPerformanceMode ?? (mediaType === 'video' ? 'native_dialogue' : null),
         }),
         prompt,
         modelKey,
@@ -1216,6 +1252,9 @@ async function loadFailedTasks(
       ...modelPayload(mediaType, modelKey, source.resource.audioKind),
       count: 1,
       generationOptions,
+      ...(mediaType === 'video'
+        ? { vocalPerformanceMode: source.vocalPerformanceMode ?? 'native_dialogue' as const }
+        : {}),
       ...(source.durationSeconds ? { durationSeconds: source.durationSeconds } : {}),
       ...(source.negativePrompt ? { negativePrompt: source.negativePrompt } : {}),
       ...(source.vocalMode ? { vocalMode: source.vocalMode } : {}),
@@ -1317,6 +1356,7 @@ async function commitProductionPlan(
         prompt: payload.resource.prompt,
         modelKey: payload.resource.modelKey,
         generationOptions: payload.generationOptions,
+        vocalPerformanceMode: payload.vocalPerformanceMode ?? null,
         operationId,
         inputHash: payload.resource.inputHash,
         taskId: null,
@@ -1338,6 +1378,7 @@ async function commitProductionPlan(
           prompt: payload.resource.prompt,
           modelKey: payload.resource.modelKey,
           generationOptions: payload.generationOptions,
+          vocalPerformanceMode: payload.vocalPerformanceMode ?? null,
           toolCallId: ctx.toolCallId?.trim() || null,
         }
       }),
