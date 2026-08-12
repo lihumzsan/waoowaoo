@@ -44,6 +44,17 @@ async function cleanup(): Promise<void> {
   }
 }
 
+async function expectTaskWorkflowAbsent(taskId: string): Promise<void> {
+  const connected = await connectTemporalClient()
+  try {
+    await expect(
+      connected.client.workflow.getHandle(buildTaskWorkflowId(taskId)).describe(),
+    ).rejects.toThrow()
+  } finally {
+    await connected.close()
+  }
+}
+
 describe('Temporal dependency gate durability', () => {
   beforeAll(() => {
     if (process.env.TEMPORAL_TEST_BOOTSTRAP !== '1') {
@@ -72,7 +83,9 @@ describe('Temporal dependency gate durability', () => {
     await expect(
       prisma.task.findUniqueOrThrow({ where: { id: activeFixture.mixTaskId }, select: { status: true, attempt: true } }),
     ).resolves.toEqual({ status: TASK_STATUS.QUEUED, attempt: 0 })
-    await expect(activeWorker.queryScheduler(activeFixture.userId)).resolves.toMatchObject({ status: 'RUNNING' })
+    await expect(activeWorker.queryScheduler(activeFixture.userId)).resolves.toMatchObject({
+      capacityActiveTaskWorkflowIds: expect.not.arrayContaining([buildTaskWorkflowId(activeFixture.mixTaskId)]),
+    })
     activeWorker.releaseHeldSource()
     await activeWorker.waitForTaskStatus(activeFixture.mixTaskId, 'completed')
     await expect(
@@ -90,6 +103,7 @@ describe('Temporal dependency gate durability', () => {
     await activeWorker.taskClient.schedule(activeFixture.references.source1)
     await activeWorker.taskClient.schedule(activeFixture.references.source2)
     await activeWorker.waitForTaskStatus(activeFixture.mixTaskId, 'canceled')
+    await expectTaskWorkflowAbsent(activeFixture.mixTaskId)
     const terminalEvents = await prisma.taskEvent.findMany({
       where: { taskId: activeFixture.mixTaskId, eventType: TASK_EVENT_TYPE.CANCELED },
       select: { id: true, payload: true },
@@ -146,12 +160,15 @@ describe('Temporal dependency gate durability', () => {
     })
     expect(replay).toEqual(first)
     await activeWorker.waitForTaskStatus(activeFixture.mixTaskId, 'canceled')
-    await expect(activeWorker.queryScheduler(activeFixture.userId)).resolves.toMatchObject({ status: 'RUNNING' })
+    await expectTaskWorkflowAbsent(activeFixture.mixTaskId)
+    await expect(activeWorker.queryScheduler(activeFixture.userId)).resolves.toMatchObject({
+      capacityActiveTaskWorkflowIds: expect.not.arrayContaining([buildTaskWorkflowId(activeFixture.mixTaskId)]),
+    })
     await expect(
       prisma.taskEvent.count({ where: { taskId: activeFixture.mixTaskId, eventType: TASK_EVENT_TYPE.CANCELED } }),
     ).resolves.toBe(1)
     await expect(
       prisma.taskExecutionCheckpoint.count({ where: { taskId: activeFixture.mixTaskId, stepKey: '__handler_result__' } }),
-    ).resolves.toBe(1)
+    ).resolves.toBe(0)
   }, 90_000)
 })

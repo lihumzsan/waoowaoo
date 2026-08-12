@@ -7,6 +7,7 @@ import {
   condition,
   continueAsNew,
   defineUpdate,
+  defineQuery,
   proxyActivities,
   setHandler,
   startChild,
@@ -22,6 +23,7 @@ import {
 import { sameScheduledTask } from '../task/scheduled-request'
 import {
   USER_TASK_SCHEDULER_UPDATE_NAME,
+  USER_TASK_SCHEDULER_QUERY_NAME,
   type ScheduledTaskReceipt,
   type ScheduledTaskRequest,
   type ScheduledTaskState,
@@ -54,6 +56,10 @@ const releaseCapacity = defineUpdate<UserTaskSchedulerView, [SchedulerCapacityRe
 
 const cancelQueuedTask = defineUpdate<SchedulerTaskCancelDecision, [SchedulerTaskCancelRequest]>(
   USER_TASK_SCHEDULER_UPDATE_NAME.CANCEL_QUEUED,
+)
+
+const schedulerViewQuery = defineQuery<UserTaskSchedulerView>(
+  USER_TASK_SCHEDULER_QUERY_NAME.VIEW,
 )
 
 interface ScheduledChild {
@@ -412,6 +418,8 @@ export async function userTaskSchedulerWorkflow(
     activeByClass: capacityCounts(capacityActive),
     drainingForContinueAsNew: false,
   })
+
+  setHandler(schedulerViewQuery, buildView)
 
   const admitScheduledTask = async (
     request: ScheduledTaskRequest,

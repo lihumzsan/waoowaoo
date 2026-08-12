@@ -15,6 +15,10 @@ export const USER_TASK_SCHEDULER_UPDATE_NAME = {
   RELEASE_CAPACITY: 'user-task-scheduler.release-capacity',
 } as const
 
+export const USER_TASK_SCHEDULER_QUERY_NAME = {
+  VIEW: 'user-task-scheduler.view',
+} as const
+
 export type TaskWorkflowTerminalStatus = 'completed' | 'failed' | 'canceled'
 
 export interface TaskWorkflowInput {
