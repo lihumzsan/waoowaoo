@@ -44,7 +44,7 @@ export default function CommercialProductionJourney({
   if (!journey || journey.profileId !== 'commercial_video') return null
 
   return (
-    <section className="relative z-20 shrink-0 border-b border-[var(--glass-stroke-base)] bg-white/80 px-4 py-3 backdrop-blur-xl">
+    <section className="relative z-20 mb-3 shrink-0 border-b border-[var(--glass-stroke-base)] bg-white/80 px-4 py-3 backdrop-blur-xl">
       <div className="mb-2 flex items-baseline justify-between gap-4">
         <h2 className="text-xs font-semibold text-[var(--glass-text-primary)]">{t('title')}</h2>
         <p className="text-[10px] text-[var(--glass-text-tertiary)]">{t('description')}</p>
