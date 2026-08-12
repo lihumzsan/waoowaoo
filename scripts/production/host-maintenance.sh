@@ -16,6 +16,12 @@ flock -n 9 || { echo "Host maintenance is already running" >&2; exit 1; }
 
 disk_percent=$(df -P "$deploy_root" | awk 'NR==2 { gsub(/%/, "", $5); print $5 }')
 case "$disk_percent" in ''|*[!0-9]*) echo "Unable to read disk usage" >&2; exit 1 ;; esac
+critical_percent=${WAO_DISK_CRITICAL_PERCENT:-85}
+case "$critical_percent" in ''|*[!0-9]*) echo "WAO_DISK_CRITICAL_PERCENT must be an integer" >&2; exit 1 ;; esac
+if [ "$critical_percent" -le 0 ] || [ "$critical_percent" -ge 100 ]; then
+  echo "WAO_DISK_CRITICAL_PERCENT must be between 1 and 99" >&2
+  exit 1
+fi
 echo "HOST_STORAGE disk_used_percent=$disk_percent"
 docker system df
 
@@ -53,10 +59,25 @@ if [ "$mode" = --apply ]; then
 
   disk_percent=$(df -P "$deploy_root" | awk 'NR==2 { gsub(/%/, "", $5); print $5 }')
   case "$disk_percent" in ''|*[!0-9]*) echo "Unable to reread disk usage" >&2; exit 1 ;; esac
+  if [ "$disk_percent" -ge "$critical_percent" ]; then
+    # Build cache is reproducible and is not part of the release rollback
+    # contract. When ordinary age-based retention cannot bring a critical
+    # host below its threshold, cap cache at a bounded size without touching
+    # images, containers, or named volumes.
+    build_cache_max_gb=${WAO_DOCKER_BUILD_CACHE_MAX_GB:-20}
+    case "$build_cache_max_gb" in ''|*[!0-9]*) echo "WAO_DOCKER_BUILD_CACHE_MAX_GB must be an integer" >&2; exit 1 ;; esac
+    if [ "$build_cache_max_gb" -le 0 ]; then
+      echo "WAO_DOCKER_BUILD_CACHE_MAX_GB must be greater than zero" >&2
+      exit 1
+    fi
+    docker builder prune --all --force --max-used-space "${build_cache_max_gb}GB"
+    disk_percent=$(df -P "$deploy_root" | awk 'NR==2 { gsub(/%/, "", $5); print $5 }')
+    case "$disk_percent" in ''|*[!0-9]*) echo "Unable to reread disk usage after critical cleanup" >&2; exit 1 ;; esac
+  fi
   echo "HOST_STORAGE_AFTER_CLEANUP disk_used_percent=$disk_percent"
 fi
 
-if [ "$disk_percent" -ge "${WAO_DISK_CRITICAL_PERCENT:-85}" ]; then
+if [ "$disk_percent" -ge "$critical_percent" ]; then
   echo "ALERT_HOST_DISK_CRITICAL used_percent=$disk_percent" >&2
   exit 1
 fi
