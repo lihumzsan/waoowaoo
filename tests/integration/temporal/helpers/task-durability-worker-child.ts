@@ -10,6 +10,10 @@ import type {
   RunTaskAttemptInput,
   RunTaskAttemptResult,
 } from '@/lib/temporal/task/contracts'
+import {
+  activateTestWorkerVersion,
+  TEST_WORKER_DEPLOYMENT_OPTIONS,
+} from './versioned-worker'
 
 const READY_MARKER = '[task-durability-worker] READY'
 const BLOCKED_MARKER =
@@ -67,9 +71,11 @@ async function main(): Promise<void> {
       },
       maxHeartbeatThrottleInterval: '50 milliseconds',
       defaultHeartbeatThrottleInterval: '50 milliseconds',
+      workerDeploymentOptions: TEST_WORKER_DEPLOYMENT_OPTIONS,
       shutdownGraceTime: '5 seconds',
     })
     const run = worker.run()
+    await activateTestWorkerVersion(connection, config.namespace)
     console.log(READY_MARKER)
     await run
   } finally {

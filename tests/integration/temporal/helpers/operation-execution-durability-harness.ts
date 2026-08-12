@@ -12,6 +12,10 @@ import type {
   ExecuteOperationActivityInput,
   OperationExecutionWorkflowReceipt,
 } from '@/lib/temporal/operation-execution/contracts'
+import {
+  activateTestWorkerVersion,
+  TEST_WORKER_DEPLOYMENT_OPTIONS,
+} from './versioned-worker'
 
 interface Deferred<T> {
   readonly promise: Promise<T>
@@ -117,9 +121,11 @@ export async function startOperationExecutionDurabilityWorker(input: {
       executeOperation,
       resolveTaskSchedulerAdmission,
     },
+    workerDeploymentOptions: TEST_WORKER_DEPLOYMENT_OPTIONS,
     shutdownGraceTime: '5 seconds',
   })
   const run = worker.run()
+  await activateTestWorkerVersion(connection, config.namespace)
   let closed = false
 
   return {

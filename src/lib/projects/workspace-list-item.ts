@@ -1,3 +1,5 @@
+import type { ProductionProfileId } from '@/lib/production-profile'
+
 export interface WorkspaceProjectStats {
   resources: number
   folders: number
@@ -11,6 +13,8 @@ export interface WorkspaceProjectListItem {
   description: string | null
   createdAt: string
   updatedAt: string
+  productionProfileId: ProductionProfileId
+  productionProfileVersion: number
   totalCost?: number
   stats?: WorkspaceProjectStats
 }

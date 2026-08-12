@@ -231,6 +231,8 @@ model Project {
   id                        String                           @id @default(uuid())
   name                      String
   description               String?                          @db.Text
+  productionProfileId       String                           @default("narrative_video") @db.VarChar(64)
+  productionProfileVersion  Int                              @default(1)
   userId                    String
   workspaceResourceRevision Int                              @default(0)
   analysisModel             String?

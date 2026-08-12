@@ -9,6 +9,7 @@ import type { ProjectAssistantTextAttachment } from '@/lib/project-agent/text-at
 import type { ProjectAssistantMediaAttachment } from '@/lib/project-agent/media-attachments'
 import { uploadProjectAssistantMediaAttachment } from '@/lib/project-agent/media-attachments/client'
 import type { ProjectVideoRatio } from '@/lib/projects/video-ratio'
+import type { ProductionProfileId } from '@/lib/production-profile'
 
 type CreateHomeProjectLaunch = (
   params: CreateHomeProjectLaunchParams,
@@ -29,6 +30,7 @@ type UploadHomeMediaAttachment = (params: {
 export interface SubmitHomeQuickStartLaunchParams {
   readonly inputValue: string
   readonly videoRatio: ProjectVideoRatio
+  readonly productionProfileId: ProductionProfileId
   readonly attachments?: readonly ProjectAssistantTextAttachment[]
   readonly mediaFiles?: readonly File[]
   readonly isSubmitting: boolean
@@ -46,6 +48,7 @@ export interface SubmitHomeQuickStartLaunchParams {
 export async function submitHomeQuickStartLaunch({
   inputValue,
   videoRatio,
+  productionProfileId,
   attachments,
   mediaFiles,
   isSubmitting,
@@ -73,6 +76,7 @@ export async function submitHomeQuickStartLaunch({
       projectName,
       storyText,
       videoRatio,
+      productionProfileId,
       hasAssistantDraftContent: storyText.length > 0
         || draftAttachments.length > 0
         || draftMediaFiles.length > 0,

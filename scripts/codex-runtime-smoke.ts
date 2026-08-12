@@ -32,7 +32,9 @@ import {
 } from '@/lib/assistant-runtime/runtime-access'
 import {
   CREATIVE_RUNTIME_SKILLS,
+  creativeRuntimeSkillsForProfile,
 } from '@/lib/creative-skills'
+import { requireProductionProfileDefinition } from '@/lib/production-profile'
 import {
   ASSISTANT_RUNTIME_APPROVAL_METHODS,
   ASSISTANT_RUNTIME_INPUT_METHODS,
@@ -553,6 +555,9 @@ async function runAppServerSmoke(params: {
 
   const persistence = new AssistantRuntimePersistence({
     hostRoot: path.join(params.rootDir, 'runtime-persistence'),
+    resolveProductionProfile: async () => (
+      requireProductionProfileDefinition('narrative_video')
+    ),
   })
   const persistenceScope = { userId: 'runtime-smoke-user', projectId: 'runtime-smoke-project' }
   const materialization = await persistence.materialize(persistenceScope)
@@ -567,8 +572,11 @@ async function runAppServerSmoke(params: {
   await assert.rejects(access(path.join(codexHome, 'agents')), { code: 'ENOENT' })
   await assert.rejects(access(path.join(codexHome, 'hooks.json')), { code: 'ENOENT' })
   await assert.rejects(access(path.join(codexHome, 'hooks')), { code: 'ENOENT' })
-  const professionalSkillIds = CREATIVE_RUNTIME_SKILLS.map((skill) => skill.skillIds[1])
-  for (const runtimeSkill of CREATIVE_RUNTIME_SKILLS) {
+  const runtimeSkills = creativeRuntimeSkillsForProfile(
+    requireProductionProfileDefinition('narrative_video'),
+  )
+  const professionalSkillIds = runtimeSkills.map((skill) => skill.skillIds[1])
+  for (const runtimeSkill of runtimeSkills) {
     const professionalSkillId = runtimeSkill.skillIds[1]
     const installedSkill = await readFile(
       path.join(cwd, '.agents', 'skills', professionalSkillId, 'SKILL.md'),

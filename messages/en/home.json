@@ -2,6 +2,18 @@
   "title": "What do you want to make",
   "subtitle": "one line is enough — it takes it from there…",
   "inputPlaceholder": "e.g. A courier finds a phone that talks back…",
+  "commercialInputPlaceholder": "e.g. Create a 30-second launch ad for a sugar-free sparkling water aimed at young professionals…",
+  "productionType": {
+    "label": "Production type",
+    "narrative": {
+      "title": "Narrative video",
+      "description": "Film, series, and story-led video"
+    },
+    "commercial": {
+      "title": "Commercial video",
+      "description": "Brand, product, and campaign video"
+    }
+  },
   "aspectRatio": "Aspect ratio",
   "aspectRatioCurrent": "Aspect ratio: {ratio}",
   "defaultProjectName": "New Project {timestamp}",

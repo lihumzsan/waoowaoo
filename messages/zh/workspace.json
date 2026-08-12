@@ -15,6 +15,17 @@
   "deleteProject": "删除项目",
   "deleteConfirm": "确定要删除项目\"{name}\"吗？此操作无法撤销。",
   "projectName": "项目名称",
+  "productionType": {
+    "label": "制作类型",
+    "narrative": {
+      "title": "影视故事",
+      "description": "电影、短剧与剧情视频"
+    },
+    "commercial": {
+      "title": "商业广告",
+      "description": "品牌、产品与营销宣传片"
+    }
+  },
   "projectNamePlaceholder": "输入项目名称",
   "projectDescription": "项目描述（可选）",
   "projectDescriptionPlaceholder": "输入项目描述",

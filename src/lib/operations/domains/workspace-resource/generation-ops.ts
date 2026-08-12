@@ -15,6 +15,7 @@ import {
   readCreativeOutputDefinition,
   readCreativeOutputKind,
   safeParseCreativeOutput,
+  type CreativeOutput,
 } from '@/lib/creative-skills/output-registry'
 import type {
   WorkspaceResourceInputRef,
@@ -70,9 +71,8 @@ import {
   createPlannedTask,
   requirePlannedTaskBillingInfo,
   submitPlannedOperationTasks,
-  type OperationPlan,
-  type PlannedTask,
 } from '@/lib/operations/planning'
+import type { OperationPlan, PlannedTask } from '@/lib/operations/plan-contract'
 import type {
   ProjectAgentOperationContext,
   ProjectAgentOperationRegistryDraft,
@@ -96,6 +96,7 @@ import {
   musicScoreGenerationOptionsSchema,
   type MusicScoreGenerationOptions,
 } from '@/lib/music/score-specification'
+import { readOwnedProjectProductionProfile } from '@/lib/production-profile'
 
 const MAX_BATCH_ITEMS = OPERATION_EXECUTION_MAX_TASKS
 const MEDIA_GENERATION_PLAN_CONTRACT_REVISION = 'workspace-resource-generation-batch/v8'
@@ -1524,7 +1525,7 @@ export function createWorkspaceResourceGenerationOperations(): ProjectAgentOpera
       summary: 'Explicitly save one text or structured document as a canonical project Resource. Runtime scratch and in-turn professional results are never saved implicitly.',
       intent: 'act',
       channels: { tool: true, api: true, mcp: true },
-      toolContractRevision: 'save_project_document/v5',
+      toolContractRevision: 'save_project_document/v6',
       effects: {
         writes: true,
         workspaceResourceImpact: 'workspace_resources',
@@ -1549,6 +1550,7 @@ export function createWorkspaceResourceGenerationOperations(): ProjectAgentOpera
       outputSchema: textOutputSchema,
       executeInTransaction: async (ctx, input, tx) => {
         let schemaId: string = WORKSPACE_RESOURCE_SCHEMA.GENERIC_TEXT
+        let creativeOutput: CreativeOutput | null = null
         if (input.content.kind === 'structured') {
           const outputKind = readCreativeOutputKind(input.content.data)
           if (outputKind) {
@@ -1563,7 +1565,22 @@ export function createWorkspaceResourceGenerationOperations(): ProjectAgentOpera
                 })),
               })
             }
-            schemaId = readCreativeOutputDefinition(outputKind).savedDocumentSchemaId
+            creativeOutput = parsed.data
+            const outputDefinition = readCreativeOutputDefinition(outputKind)
+            const productionProfile = await readOwnedProjectProductionProfile({
+              projectId: ctx.projectId,
+              userId: ctx.userId,
+              client: tx,
+            })
+            if (!productionProfile.allowedDomains.includes(outputDefinition.domainKind)) {
+              throw new ApiError('INVALID_PARAMS', {
+                code: 'PROJECT_DOCUMENT_OUTPUT_NOT_ALLOWED_FOR_PROFILE',
+                field: 'content.data.outputKind',
+                outputKind,
+                productionProfileId: productionProfile.id,
+              })
+            }
+            schemaId = outputDefinition.savedDocumentSchemaId
           } else if (
             input.content.data !== null
             && typeof input.content.data === 'object'
@@ -1609,6 +1626,39 @@ export function createWorkspaceResourceGenerationOperations(): ProjectAgentOpera
             position,
           })),
         })
+        if (creativeOutput?.outputKind === 'commercial_script') {
+          const sourceBrief = creativeOutput.sourceBrief
+          const hasExactBriefReference = references.some((reference) => (
+            reference.resourceId === sourceBrief.resourceId
+            && reference.contentVersion === sourceBrief.contentVersion
+            && reference.role === 'commercial_brief'
+          ))
+          if (!hasExactBriefReference) {
+            throw new ApiError('INVALID_PARAMS', {
+              code: 'COMMERCIAL_SCRIPT_SOURCE_BRIEF_REFERENCE_REQUIRED',
+              field: 'references',
+              sourceBrief,
+            })
+          }
+          const briefResource = await tx.workspaceResource.findFirst({
+            where: {
+              id: sourceBrief.resourceId,
+              projectId: ctx.projectId,
+              userId: ctx.userId,
+              schemaId: WORKSPACE_RESOURCE_SCHEMA.COMMERCIAL_BRIEF,
+              status: 'ready',
+              deletedAt: null,
+              activePath: { not: null },
+            },
+            select: { id: true },
+          })
+          if (!briefResource) {
+            throw new ApiError('INVALID_PARAMS', {
+              code: 'COMMERCIAL_SCRIPT_SOURCE_BRIEF_INVALID',
+              field: 'content.data.sourceBrief',
+            })
+          }
+        }
         const reserved = await reserveWorkspaceResourceInTransaction(tx, {
           resourceId,
           userId: ctx.userId,

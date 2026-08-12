@@ -3,8 +3,8 @@ import {
   mergeOperationPlanViewsForApproval,
   quoteOperationPlan,
   toOperationPlanView,
-  type OperationPlan,
 } from '@/lib/operations/planning'
+import type { OperationPlan } from '@/lib/operations/plan-contract'
 import { TASK_TYPE, type TaskBillingInfo } from '@/lib/task/types'
 
 const originalDeploymentEdition = process.env.DEPLOYMENT_EDITION

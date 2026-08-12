@@ -7,6 +7,8 @@ import {
   type RuntimeSessionScope,
 } from '@/lib/codex-runtime/runtime-session-manager'
 import { materializeCreativeRuntimeConfiguration } from '@/lib/creative-skills'
+import { readOwnedProjectProductionProfile } from '@/lib/production-profile'
+import type { ProductionProfileDefinition } from '@/lib/production-profile/types'
 import { markAssistantRuntimeProjectTurnsInterrupted } from './persistence'
 
 const MATERIALIZATION_DIRECTORY = 'materializations'
@@ -57,9 +59,19 @@ function scopeCodexHome(hostRoot: string, scope: RuntimeSessionScope): string {
 
 export class AssistantRuntimePersistence implements RuntimeSessionPersistence {
   private readonly hostRoot: string
+  private readonly resolveProductionProfile: (
+    scope: RuntimeSessionScope,
+  ) => Promise<ProductionProfileDefinition>
 
-  constructor(input: { readonly hostRoot: string }) {
+  constructor(input: {
+    readonly hostRoot: string
+    readonly resolveProductionProfile?: (
+      scope: RuntimeSessionScope,
+    ) => Promise<ProductionProfileDefinition>
+  }) {
     this.hostRoot = requireHostRoot(input.hostRoot)
+    this.resolveProductionProfile = input.resolveProductionProfile
+      ?? readOwnedProjectProductionProfile
   }
 
   async reconcileBeforeStart(scope: RuntimeSessionScope): Promise<void> {
@@ -85,9 +97,11 @@ export class AssistantRuntimePersistence implements RuntimeSessionPersistence {
     const workspace = path.join(disposableRoot, 'workspace')
     try {
       await ensurePrivateDirectory(workspace)
+      const profile = await this.resolveProductionProfile(scope)
       await materializeCreativeRuntimeConfiguration(
         codexHome,
         path.join(workspace, '.agents', 'skills'),
+        profile,
       )
       return {
         hostWorkspaceDirectory: workspace,

@@ -75,9 +75,10 @@ export default function ProjectDetailPage() {
       </div>
     )
   }
+  const reservesCommercialJourneyHeader = project.productionJourney?.profileId === 'commercial_video'
   return (
     <div className="glass-page flex h-[100dvh] flex-col overflow-hidden">
-      <Navbar reserveLayoutSpace={false} dockAnchor="assistant-panel" />
+      <Navbar reserveLayoutSpace={reservesCommercialJourneyHeader} dockAnchor="assistant-panel" />
       <main className="min-h-0 flex-1 overflow-hidden">
         <ProjectWorkspace
           project={project}

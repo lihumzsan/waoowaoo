@@ -11,6 +11,8 @@ export const WORKSPACE_RESOURCE_SCHEMA = {
   GENERIC_IMAGE: 'generic.image',
   GENERIC_VIDEO: 'generic.video',
   SCREENPLAY: 'project.screenplay',
+  COMMERCIAL_BRIEF: 'project.commercial_brief',
+  COMMERCIAL_SCRIPT: 'project.commercial_script',
   // Historical read-only identity: the long_form domain was removed and
   // continuity now flows through delivered screenplays and batch exit states.
   // Existing Resources remain readable without a destructive data migration.
@@ -80,6 +82,21 @@ const STRUCTURED_SUMMARY_PROJECTORS: Partial<
       stringValue(object, 'screenplayText'),
     )
   },
+  [WORKSPACE_RESOURCE_SCHEMA.COMMERCIAL_BRIEF]: (data) => {
+    const object = objectValue(data)
+    return firstText(
+      stringValue(object, 'keyMessage'),
+      stringValue(objectValue(object?.subject ?? null), 'name'),
+      stringValue(object, 'objective'),
+    )
+  },
+  [WORKSPACE_RESOURCE_SCHEMA.COMMERCIAL_SCRIPT]: (data) => {
+    const object = objectValue(data)
+    return firstText(
+      stringValue(object, 'conceptSummary'),
+      stringValue(object, 'title'),
+    )
+  },
   [WORKSPACE_RESOURCE_SCHEMA.CREATIVE_DIRECTION]: (data) => (
     stringValue(objectValue(data), 'styleSummary')
   ),
@@ -111,6 +128,8 @@ export const WORKSPACE_RESOURCE_SCHEMA_IDS_BY_MEDIA = {
   text: [
     WORKSPACE_RESOURCE_SCHEMA.GENERIC_TEXT,
     WORKSPACE_RESOURCE_SCHEMA.SCREENPLAY,
+    WORKSPACE_RESOURCE_SCHEMA.COMMERCIAL_BRIEF,
+    WORKSPACE_RESOURCE_SCHEMA.COMMERCIAL_SCRIPT,
     WORKSPACE_RESOURCE_SCHEMA.LONG_FORM_PLAN,
     WORKSPACE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
     WORKSPACE_RESOURCE_SCHEMA.ASSET_GENERATION_BATCH,
@@ -175,6 +194,8 @@ const RETIRED_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new Set([
  */
 const CREATIVE_OUTPUT_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new Set([
   WORKSPACE_RESOURCE_SCHEMA.SCREENPLAY,
+  WORKSPACE_RESOURCE_SCHEMA.COMMERCIAL_BRIEF,
+  WORKSPACE_RESOURCE_SCHEMA.COMMERCIAL_SCRIPT,
   WORKSPACE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
   WORKSPACE_RESOURCE_SCHEMA.ASSET_GENERATION_BATCH,
   WORKSPACE_RESOURCE_SCHEMA.VIDEO_GENERATION_BATCH,

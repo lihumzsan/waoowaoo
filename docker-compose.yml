@@ -42,7 +42,7 @@ x-app-environment: &app-environment
   TEMPORAL_TLS_ENABLED: "false"
 
 x-app-service: &app-service
-  image: "${APP_IMAGE:-ghcr.io/saturndec/waoowaoo@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
+  image: "${APP_IMAGE:-ghcr.io/waooai/waoowaoo@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
   restart: unless-stopped
   logging: *default-logging
   environment: *app-environment
@@ -149,7 +149,7 @@ services:
   # This is retained for the current self-hosted release contract; production
   # deployments should run the reviewed migration before replacing the image.
   app-schema:
-    image: "${APP_IMAGE:-ghcr.io/saturndec/waoowaoo@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
+    image: "${APP_IMAGE:-ghcr.io/waooai/waoowaoo@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
     restart: "no"
     logging: *default-logging
     environment: *app-environment
@@ -405,7 +405,7 @@ services:
       CODEX_RUNTIME_DRIVER: docker
       CODEX_RUNTIME_HOST_ROOT: "${CODEX_RUNTIME_HOST_ROOT:-/var/lib/wao/codex-runtime}"
       CODEX_RUNTIME_IDLE_TIMEOUT_MS: "${CODEX_RUNTIME_IDLE_TIMEOUT_MS:-900000}"
-      CODEX_RUNTIME_IMAGE: "${CODEX_RUNTIME_IMAGE:-ghcr.io/saturndec/waoowaoo-codex-runtime@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
+      CODEX_RUNTIME_IMAGE: "${CODEX_RUNTIME_IMAGE:-ghcr.io/waooai/waoowaoo-codex-runtime@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
       CODEX_RUNTIME_NETWORK: "${COMPOSE_PROJECT_NAME:-waoowaoo}_codex-runtime"
       CODEX_RUNTIME_CPU_LIMIT: "${CODEX_RUNTIME_CPU_LIMIT:-2}"
       CODEX_RUNTIME_MEMORY_BYTES: "${CODEX_RUNTIME_MEMORY_BYTES:-2147483648}"
@@ -440,28 +440,28 @@ services:
   temporal-worker-blue:
     <<: *temporal-worker-service
     profiles: ["temporal-worker-rollout"]
-    image: "${TEMPORAL_WORKER_BLUE_IMAGE:-ghcr.io/saturndec/waoowaoo@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
+    image: "${TEMPORAL_WORKER_BLUE_IMAGE:-ghcr.io/waooai/waoowaoo@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
     environment:
       <<: *app-environment
       TEMPORAL_WORKER_DEPLOYMENT_NAME: "${TEMPORAL_WORKER_DEPLOYMENT_NAME:-waoowaoo}"
       TEMPORAL_WORKER_BUILD_ID: "${TEMPORAL_WORKER_BLUE_BUILD_ID:-}"
       TEMPORAL_WORKER_VERSIONING_ENABLED: "true"
       TEMPORAL_WORKER_SLOT: blue
-      TEMPORAL_WORKER_IMAGE: "${TEMPORAL_WORKER_BLUE_IMAGE:-ghcr.io/saturndec/waoowaoo@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
+      TEMPORAL_WORKER_IMAGE: "${TEMPORAL_WORKER_BLUE_IMAGE:-ghcr.io/waooai/waoowaoo@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
     deploy:
       replicas: ${TEMPORAL_WORKER_BLUE_REPLICAS:-1}
 
   temporal-worker-green:
     <<: *temporal-worker-service
     profiles: ["temporal-worker-rollout"]
-    image: "${TEMPORAL_WORKER_GREEN_IMAGE:-ghcr.io/saturndec/waoowaoo@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
+    image: "${TEMPORAL_WORKER_GREEN_IMAGE:-ghcr.io/waooai/waoowaoo@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
     environment:
       <<: *app-environment
       TEMPORAL_WORKER_DEPLOYMENT_NAME: "${TEMPORAL_WORKER_DEPLOYMENT_NAME:-waoowaoo}"
       TEMPORAL_WORKER_BUILD_ID: "${TEMPORAL_WORKER_GREEN_BUILD_ID:-}"
       TEMPORAL_WORKER_VERSIONING_ENABLED: "true"
       TEMPORAL_WORKER_SLOT: green
-      TEMPORAL_WORKER_IMAGE: "${TEMPORAL_WORKER_GREEN_IMAGE:-ghcr.io/saturndec/waoowaoo@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
+      TEMPORAL_WORKER_IMAGE: "${TEMPORAL_WORKER_GREEN_IMAGE:-ghcr.io/waooai/waoowaoo@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
     deploy:
       replicas: ${TEMPORAL_WORKER_GREEN_REPLICAS:-0}
 

@@ -60,7 +60,10 @@ function queryKeysForResource(ref: WorkspaceResourceRef): QueryKey[] {
   }
 
   if (ref.kind === 'workspaceResources') {
-    return [queryKeys.project.workspaceResourcesAll(ref.projectId)]
+    return [
+      queryKeys.project.workspaceResourcesAll(ref.projectId),
+      queryKeys.projectData(ref.projectId),
+    ]
   }
 
   return []

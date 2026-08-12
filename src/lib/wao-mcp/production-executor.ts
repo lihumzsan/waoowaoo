@@ -25,8 +25,8 @@ import { loadOperationPlanSnapshotByApiRequest } from '@/lib/operations/operatio
 import {
   persistOperationPlanView,
   planOperation,
-  type OperationPlanView,
 } from '@/lib/operations/planning'
+import type { OperationPlanView } from '@/lib/operations/plan-contract'
 import {
   isBillablePlannedOperation,
   type JsonObject,

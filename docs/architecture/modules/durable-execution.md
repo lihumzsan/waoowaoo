@@ -44,7 +44,9 @@ Task 与交互式 Agent 的唯一交点是一个稳定 batchId 的完成通知�
 - **DE-17 — 正式 Worker 使用不可变身份和穷尽版本策略。** 生产 build id 与镜像必须不可变；每种
   Workflow 由同一 registry 声明生命周期和版本行为，有限执行 pinned，持续执行 auto-upgrade。
   持续执行的变更必须可重放既有 history。蓝绿切换只可由唯一入口显式 bootstrap/promote，
-  旧版本仍拥有执行或未 drained 时不可 retire；普通应用部署不得管理 Worker 槽位或改变路由。
+  旧版本仍拥有执行或未 drained 时不可 retire；普通应用部署不得管理 Worker 槽位或改变路由。每个
+  执行 registry 版本行为的 Worker 都必须注册 Deployment options；源码 Docker 开发环境只由开发路由
+  初始化入口在两类版本化 poller 就绪后激活本地 Build ID，且不得复用正式 namespace。
 - **DE-19 — migration 只前进。** 已发布 migration 字节不变；不兼容的 schema 或 Workflow payload
   必须在发布前排空对应实例。部分 schema 或未知来源 fail closed。
 - **DE-20 — 持久控制面有复杂度预算。** 新增 timer、lease、claim、reconciler、execution receipt
@@ -60,6 +62,7 @@ Task 与交互式 Agent 的唯一交点是一个稳定 batchId 的完成通知�
 ## 权威入口
 
 - Temporal config/client/worker、Workflow 与 Activity：`src/lib/temporal/**`
+- 源码 Docker 开发路由初始化：`scripts/temporal/dev-route-init.sh`
 - Operation 持久派发：`src/lib/operations/durable-dispatch.ts`、`durable-execution.ts`
 - Task registry / 提交 / 终态：`src/lib/task/**`
 - AssistantRuntime 不属于 Temporal：`src/lib/assistant-runtime/**`
@@ -79,3 +82,7 @@ Task 与交互式 Agent 的唯一交点是一个稳定 batchId 的完成通知�
 - Worker 首版把全部 Workflow 默认 pinned，蓝绿退役保护又只存在于 rollout 脚本；持续 Scheduler
   永远不能自然 drained，普通 Compose 部署绕过脚本停掉旧槽位后，已冻结额度的 Task 无法开始 →
   生命周期版本策略进入穷尽 registry，应用部署隔离 Worker，退役同时校验实际绑定执行（DE-17）。
+- 源码 Docker Worker 曾被启动命令强制为 unversioned，但 Workflow registry 已显式声明版本行为；
+  Temporal 一旦保留了 `local` Current Version，新批准的执行就无人消费，手工切回 unversioned 又会在
+  首轮 Workflow Task 被服务端拒绝 → 旧检查只覆盖正式蓝绿槽位 → 开发 Worker 同样强制版本化，并由
+  唯一启动门禁在 Web 前验证 Worker 运行事实、两类队列注册和 Current Version（DE-17）。

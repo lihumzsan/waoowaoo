@@ -54,7 +54,7 @@ export function loadTestEnv() {
     setIfMissing('TEMPORAL_TLS_ENABLED', 'false')
     setIfMissing('TEMPORAL_WORKER_DEPLOYMENT_NAME', 'waoowaoo-test')
     setIfMissing('TEMPORAL_WORKER_BUILD_ID', 'test')
-    setIfMissing('TEMPORAL_WORKER_VERSIONING_ENABLED', 'false')
+    setIfMissing('TEMPORAL_WORKER_VERSIONING_ENABLED', 'true')
   }
 
   if (mutableEnv.ALLOW_TEST_NETWORK !== '1') {

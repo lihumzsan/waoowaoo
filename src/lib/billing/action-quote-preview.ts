@@ -1,4 +1,4 @@
-import type { BillingQuoteView, OperationPlanView } from '@/lib/operations/planning'
+import type { BillingQuoteView, OperationPlanView } from '@/lib/operations/plan-contract'
 
 export interface BillingActionQuotePreview {
   readonly fullLabel: string

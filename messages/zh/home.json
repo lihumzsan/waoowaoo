@@ -2,6 +2,18 @@
   "title": "今天想拍点什么",
   "subtitle": "一句话就够，剩下的它来办……",
   "inputPlaceholder": "比如：一个外卖员捡到一部会说话的手机……",
+  "commercialInputPlaceholder": "比如：为一款无糖气泡水制作 30 秒新品广告，面向年轻上班族……",
+  "productionType": {
+    "label": "制作类型",
+    "narrative": {
+      "title": "影视故事",
+      "description": "电影、短剧与剧情视频"
+    },
+    "commercial": {
+      "title": "商业广告",
+      "description": "品牌、产品与营销宣传片"
+    }
+  },
   "aspectRatio": "画面比例",
   "aspectRatioCurrent": "画面比例：{ratio}",
   "defaultProjectName": "新项目 {timestamp}",

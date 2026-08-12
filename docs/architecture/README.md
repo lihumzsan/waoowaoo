@@ -29,6 +29,7 @@ npm run architecture:impact -- <准备修改的文件或目录>
 | 生产发布、Worker 切换、主机缓存、镜像与数据库备份治理 | [生产发布与主机治理](modules/production-operations.md) |
 | Agent 指令层级、原生 Skill 与结构化输出契约 | [指令与输出契约](modules/ai-prompt-output-contract.md) |
 | Creative Skill、专业领域路由与主 Agent 输出 | [Creative Skills](modules/creative-skills.md) |
+| Project 内容类型身份、专业能力准入与生产旅程 | [Production Profile](modules/production-profile.md) |
 | 联网搜索入口、证据边界与计费身份 | [Web Search](modules/web-search.md) |
 | 音乐、音色与确定性混音 | [音频生产](modules/audio-production.md) |
 | 注册登录、顶层导航、语言切换、部署能力投影 | [产品外壳、身份与本地化](modules/product-shell.md) |

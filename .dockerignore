@@ -4,17 +4,24 @@
 
 # 构建产物（builder 阶段重新生成）
 .next
+.next-*
 node_modules
+*.tsbuildinfo
 
 # 测试
 coverage
+artifacts
+reports
 tests
 vitest.config.ts
 docker-compose.test.yml
 
 # 运行时数据
 logs
+docker-logs
 data
+.runtime
+tmp
 certificates
 backups
 uploads
@@ -25,8 +32,11 @@ uploads
 .claude
 .gemini
 .agent
+.agents
 .shared
 .artifacts
+.tools
+.tsconfig-golden-*.json
 
 # 数据库文件
 *.db

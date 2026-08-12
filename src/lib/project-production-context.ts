@@ -4,6 +4,8 @@ import { getProjectModelConfig, type ProjectModelConfig } from '@/lib/config-ser
 import { prisma } from '@/lib/prisma'
 import { CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS } from '@/lib/workspace-resource/generation-contract'
 import type { VideoInputMode } from '@/lib/ai-registry/types'
+import { readOwnedProjectProductionProfile } from '@/lib/production-profile'
+import type { ProductionProfileId } from '@/lib/production-profile/types'
 
 export type ProjectProductionCapabilities = {
   readonly video: {
@@ -45,6 +47,11 @@ export type ProjectProductionContext = {
     readonly videoRatio: string | null
     readonly videoResolution: string
     readonly imageResolution: string
+  }
+  readonly productionProfile: {
+    readonly id: ProductionProfileId
+    readonly version: number
+    readonly purpose: string
   }
   readonly productionCapabilities: ProjectProductionCapabilities
 }
@@ -123,7 +130,7 @@ export async function readProjectProductionContext(input: {
   readonly projectId: string
   readonly userId: string
 }): Promise<ProjectProductionContext> {
-  const [project, modelConfig] = await Promise.all([
+  const [project, modelConfig, productionProfile] = await Promise.all([
     prisma.project.findFirst({
       where: { id: input.projectId, userId: input.userId },
       select: {
@@ -135,6 +142,7 @@ export async function readProjectProductionContext(input: {
       },
     }),
     getProjectModelConfig(input.projectId, input.userId),
+    readOwnedProjectProductionProfile(input),
   ])
   if (!project) throw new ProjectProductionContextError()
   const value: Omit<ProjectProductionContext, 'version'> = {
@@ -146,6 +154,11 @@ export async function readProjectProductionContext(input: {
       videoRatio: modelConfig.videoRatio,
       videoResolution: project.videoResolution,
       imageResolution: project.imageResolution,
+    },
+    productionProfile: {
+      id: productionProfile.id,
+      version: productionProfile.version,
+      purpose: productionProfile.purpose,
     },
     productionCapabilities: resolveProductionCapabilities(modelConfig),
   }

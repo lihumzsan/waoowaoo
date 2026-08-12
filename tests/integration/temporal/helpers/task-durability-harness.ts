@@ -28,6 +28,10 @@ import type {
   RunTaskAttemptResult,
   TaskTerminalReceipt,
 } from '@/lib/temporal/task/contracts'
+import {
+  activateTestWorkerVersion,
+  TEST_WORKER_DEPLOYMENT_OPTIONS,
+} from './versioned-worker'
 
 interface Deferred<T> {
   readonly promise: Promise<T>
@@ -259,9 +263,11 @@ export async function startTaskProductionWorker(): Promise<TaskProductionWorkerH
     taskQueue: config.taskQueue,
     workflowsPath: resolve(process.cwd(), 'src/lib/temporal/workflows/index.ts'),
     activities: productionActivities,
+    workerDeploymentOptions: TEST_WORKER_DEPLOYMENT_OPTIONS,
     shutdownGraceTime: '5 seconds',
   })
   const run = worker.run()
+  await activateTestWorkerVersion(connection, config.namespace)
   let closed = false
   return {
     taskQueue: config.taskQueue,
@@ -322,9 +328,11 @@ export async function startTaskQueuedCancelWorker(input: {
       ...productionActivities,
       runTaskAttempt,
     },
+    workerDeploymentOptions: TEST_WORKER_DEPLOYMENT_OPTIONS,
     shutdownGraceTime: '5 seconds',
   })
   const run = worker.run()
+  await activateTestWorkerVersion(connection, config.namespace)
   let closed = false
   const release = (): void => {
     if (released) return
@@ -407,9 +415,11 @@ export async function startTaskLateCancelWorker(input: {
       ...productionActivities,
       runTaskAttempt,
     },
+    workerDeploymentOptions: TEST_WORKER_DEPLOYMENT_OPTIONS,
     shutdownGraceTime: '5 seconds',
   })
   const run = worker.run()
+  await activateTestWorkerVersion(connection, config.namespace)
   let closed = false
   return {
     taskQueue: config.taskQueue,
@@ -495,6 +505,7 @@ export async function startTaskDurabilityWorker(input: {
         commitTaskTerminal,
         notifyTaskFollowUp,
       },
+      workerDeploymentOptions: TEST_WORKER_DEPLOYMENT_OPTIONS,
       shutdownGraceTime: '5 seconds',
     })
   } catch (error) {
@@ -502,6 +513,7 @@ export async function startTaskDurabilityWorker(input: {
     throw error
   }
   const run = worker.run()
+  await activateTestWorkerVersion(connection, config.namespace)
   let closed = false
 
   const releaseNotification = (): void => {
