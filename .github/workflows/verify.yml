@@ -84,7 +84,7 @@ jobs:
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 180
-    environment: production
+    environment: Production
     permissions:
       contents: read
 
