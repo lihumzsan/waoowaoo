@@ -200,6 +200,19 @@
       ]
     },
     {
+      "id": "production-operations",
+      "document": "docs/architecture/modules/production-operations.md",
+      "title": "生产发布与主机治理",
+      "sourcePaths": [
+        ".github/workflows/verify.yml",
+        "scripts/production",
+        "scripts/reconcile-assistant-runtime-rollout.ts",
+        "ops/systemd",
+        "scripts/temporal/worker-rollout.sh",
+        "src/lib/codex-runtime/docker-runtime-container.ts"
+      ]
+    },
+    {
       "id": "ai-prompt-output-contract",
       "document": "docs/architecture/modules/ai-prompt-output-contract.md",
       "title": "Agent 指令、Skill 与输出契约",

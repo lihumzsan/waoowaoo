@@ -19,6 +19,8 @@ const CONTAINER_WORKSPACE_DIRECTORY = '/workspace'
 const CONTAINER_CODEX_HOME_DIRECTORY = '/runtime/codex-home'
 const CONTAINER_RUNTIME_SKILLS_DIRECTORY = '/workspace/.agents/skills'
 const MIN_MEMORY_BYTES = 256 * 1024 * 1024
+const RUNTIME_LOG_MAX_SIZE = '50m'
+const RUNTIME_LOG_MAX_FILES = '5'
 const BWRAP_DOCKER_CAPABILITIES = [
   'SETGID',
   'SETUID',
@@ -112,6 +114,12 @@ export class DockerRuntimeContainerAdapter implements RuntimeContainerAdapter {
       String(this.options.memoryBytes),
       '--pids-limit',
       String(this.options.pidsLimit),
+      '--log-driver',
+      'json-file',
+      '--log-opt',
+      `max-size=${RUNTIME_LOG_MAX_SIZE}`,
+      '--log-opt',
+      `max-file=${RUNTIME_LOG_MAX_FILES}`,
       '--read-only',
       '--cap-drop',
       'ALL',

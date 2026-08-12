@@ -26,6 +26,7 @@ npm run architecture:impact -- <准备修改的文件或目录>
 | Canvas 节点身份、投影、布局与直接动作 | [Canvas 节点与投影](modules/canvas-node.md) |
 | Thread/Turn、审批、中断、steer 与任务完成后的新 Turn | [Assistant Thread 与 Turn](modules/assistant-run-lifecycle.md) |
 | Runtime 隔离、placement、workspace 同步与能力桥 | [Codex Creative Runtime](modules/codex-runtime-rollout.md) |
+| 生产发布、Worker 切换、主机缓存、镜像与数据库备份治理 | [生产发布与主机治理](modules/production-operations.md) |
 | Agent 指令层级、原生 Skill 与结构化输出契约 | [指令与输出契约](modules/ai-prompt-output-contract.md) |
 | Creative Skill、专业领域路由与主 Agent 输出 | [Creative Skills](modules/creative-skills.md) |
 | 联网搜索入口、证据边界与计费身份 | [Web Search](modules/web-search.md) |

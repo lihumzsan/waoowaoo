@@ -4,12 +4,15 @@ on:
   push:
     branches:
       - main
+      - exp/assistant
   pull_request:
   workflow_dispatch:
 
 concurrency:
   group: verify-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer assistant push must queue behind an in-flight production rollout;
+  # cancelling SSH halfway through a Worker promotion would violate drainage.
+  cancel-in-progress: false
 
 jobs:
   verify:
@@ -75,3 +78,76 @@ jobs:
       - name: Browser security
         if: github.event_name != 'pull_request'
         run: npm run test:security
+
+  deploy-assistant-production:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/exp/assistant'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    environment: production
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout verified commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Confirm this is still the assistant branch head
+        id: branch-head
+        run: |
+          set -eu
+          remote_head=$(git ls-remote origin refs/heads/exp/assistant | awk '{print $1}')
+          if [ "$remote_head" = "$GITHUB_SHA" ]; then
+            echo 'deploy=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'deploy=false' >> "$GITHUB_OUTPUT"
+            echo "Skipping superseded commit $GITHUB_SHA; current head is $remote_head"
+          fi
+
+      - name: Package immutable release source
+        if: steps.branch-head.outputs.deploy == 'true'
+        run: |
+          set -eu
+          git archive --format=tar HEAD | gzip -9 > "release-${GITHUB_SHA}.tar.gz"
+          sha256sum "release-${GITHUB_SHA}.tar.gz"
+
+      - name: Configure pinned production SSH identity
+        if: steps.branch-head.outputs.deploy == 'true'
+        env:
+          PRODUCTION_SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}
+          PRODUCTION_SSH_KNOWN_HOSTS: ${{ secrets.PRODUCTION_SSH_KNOWN_HOSTS }}
+        run: |
+          set -eu
+          install -d -m 0700 "$HOME/.ssh"
+          printf '%s\n' "$PRODUCTION_SSH_PRIVATE_KEY" > "$HOME/.ssh/production"
+          chmod 0600 "$HOME/.ssh/production"
+          printf '%s\n' "$PRODUCTION_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 0600 "$HOME/.ssh/known_hosts"
+          ssh-keygen -y -f "$HOME/.ssh/production" >/dev/null
+          test -s "$HOME/.ssh/known_hosts"
+
+      - name: Upload and deploy verified assistant release
+        if: steps.branch-head.outputs.deploy == 'true'
+        env:
+          PRODUCTION_SSH_HOST: ${{ secrets.PRODUCTION_SSH_HOST }}
+          PRODUCTION_SSH_USER: ${{ secrets.PRODUCTION_SSH_USER }}
+          PRODUCTION_DEPLOY_ROOT: ${{ secrets.PRODUCTION_DEPLOY_ROOT }}
+        run: |
+          set -eu
+          case "$PRODUCTION_SSH_HOST" in ''|*[!A-Za-z0-9.:-]*) echo "Invalid production host" >&2; exit 1 ;; esac
+          case "$PRODUCTION_SSH_USER" in ''|*[!A-Za-z0-9_-]*) echo "Invalid production user" >&2; exit 1 ;; esac
+          case "$PRODUCTION_DEPLOY_ROOT" in /*) ;; *) echo "Production deploy root must be absolute" >&2; exit 1 ;; esac
+          case "$PRODUCTION_DEPLOY_ROOT" in *[!A-Za-z0-9_./-]*) echo "Production deploy root contains unsafe characters" >&2; exit 1 ;; esac
+          deploy_root_b64=$(printf '%s' "$PRODUCTION_DEPLOY_ROOT" | base64 -w0)
+          remote_tmp="/tmp/waoowaoo-release-${GITHUB_SHA}.tar.gz"
+          remote_archive="$PRODUCTION_DEPLOY_ROOT/.incoming/release-${GITHUB_SHA}.tar.gz"
+          ssh_args=(-i "$HOME/.ssh/production" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          scp "${ssh_args[@]}" "release-${GITHUB_SHA}.tar.gz" \
+            "$PRODUCTION_SSH_USER@$PRODUCTION_SSH_HOST:$remote_tmp"
+          ssh "${ssh_args[@]}" "$PRODUCTION_SSH_USER@$PRODUCTION_SSH_HOST" \
+            "set -eu; install -d -m 0750 '$PRODUCTION_DEPLOY_ROOT/.incoming'; mv '$remote_tmp' '$remote_archive'"
+          ssh "${ssh_args[@]}" "$PRODUCTION_SSH_USER@$PRODUCTION_SSH_HOST" \
+            "WAO_DEPLOY_ROOT_B64=$deploy_root_b64 sh -s -- '$GITHUB_SHA' '$remote_archive'" \
+            < scripts/production/deploy-release.sh
