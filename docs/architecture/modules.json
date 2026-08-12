@@ -175,6 +175,20 @@
       ]
     },
     {
+      "id": "production-profile",
+      "document": "docs/architecture/modules/production-profile.md",
+      "title": "Production Profile 与内容类型隔离",
+      "sourcePaths": [
+        "src/lib/production-profile",
+        "src/lib/operations/domains/project",
+        "src/lib/home",
+        "src/app/[locale]/home",
+        "src/app/[locale]/workspace",
+        "src/features/project-workspace/components/CommercialProductionJourney.tsx",
+        "prisma/migrations/20260812090000_add_project_production_profile"
+      ]
+    },
+    {
       "id": "provider-gateway",
       "document": "docs/architecture/modules/provider-gateway.md",
       "title": "Provider Gateway",

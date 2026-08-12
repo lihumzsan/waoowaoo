@@ -1,6 +1,8 @@
 export const CREATIVE_SKILL_IDS = [
   'creative-core',
   'story-development',
+  'commercial-brief',
+  'commercial-script',
   'creative-direction',
   'asset-development',
   'video-direction',
@@ -11,6 +13,8 @@ export type CreativeSkillId = (typeof CREATIVE_SKILL_IDS)[number]
 
 export const CREATIVE_DOMAIN_KINDS = [
   'story',
+  'commercial_brief',
+  'commercial_script',
   'direction',
   'assets',
   'video',
@@ -21,6 +25,8 @@ export type CreativeDomainKind = (typeof CREATIVE_DOMAIN_KINDS)[number]
 
 export const CREATIVE_OUTPUT_KINDS = [
   'screenplay',
+  'commercial_brief',
+  'commercial_script',
   'creative_direction',
   'asset_generation_batch',
   'video_generation_batch',

@@ -27,6 +27,20 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
     summary: '忠实且真正好看的剧本创作方法：人物因果、节奏档位、开场与对白纪律；只处理故事文本，不登记生产资产。',
     tags: ['story', 'script', 'screenplay', 'writing', 'hook', 'pacing'],
   }),
+  'commercial-brief': defineSkill({
+    id: 'commercial-brief',
+    version: '1.0.0',
+    title: '商业需求简报',
+    summary: '把用户与精确来源提供的产品、受众、渠道、主张、品牌约束和 CTA 收敛为可验证的商业视频需求简报。',
+    tags: ['commercial', 'advertising', 'marketing', 'brief', 'audience', 'claims', 'cta'],
+  }),
+  'commercial-script': defineSkill({
+    id: 'commercial-script',
+    version: '1.0.0',
+    title: '商业视频脚本',
+    summary: '把商业简报转化为总时长严格、可直接制作的画面、旁白、屏幕文字、声音与 CTA 时间脚本。',
+    tags: ['commercial', 'advertising', 'marketing', 'script', 'timeline', 'copy', 'cta'],
+  }),
   'creative-direction': defineSkill({
     id: 'creative-direction',
     version: '5.0.1',

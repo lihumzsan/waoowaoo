@@ -8,6 +8,7 @@ import {
 } from './output-registry'
 import { getCreativeSkillDefinition } from './registry'
 import type { CreativeDomainKind, CreativeOutputKind, CreativeSkillId } from './types'
+import type { ProductionProfileDefinition } from '@/lib/production-profile/types'
 
 type ProfessionalSkillId = Exclude<CreativeSkillId, 'creative-core'>
 
@@ -37,6 +38,20 @@ export const CREATIVE_RUNTIME_SKILL_REGISTRY: Readonly<
     title: '故事与剧本开发',
     description: '创作或修改故事与剧本，并形成 screenplay 专业结果。',
     skillIds: ['creative-core', 'story-development'],
+    executionFacts: null,
+  }),
+  commercial_brief: defineRuntimeSkill({
+    kind: 'commercial_brief',
+    title: '商业需求简报',
+    description: '整理可验证的商业目标、受众、产品事实、主张、渠道、品牌约束与 CTA，形成 commercial_brief 专业结果。',
+    skillIds: ['creative-core', 'commercial-brief'],
+    executionFacts: null,
+  }),
+  commercial_script: defineRuntimeSkill({
+    kind: 'commercial_script',
+    title: '商业视频脚本',
+    description: '把精确 commercial_brief 转化为总时长严格的商业视频时间脚本，形成 commercial_script 专业结果。',
+    skillIds: ['creative-core', 'commercial-script'],
     executionFacts: null,
   }),
   direction: defineRuntimeSkill({
@@ -73,6 +88,12 @@ export const CREATIVE_RUNTIME_SKILLS: readonly CreativeRuntimeSkillDefinition[] 
   CREATIVE_RUNTIME_SKILL_REGISTRY,
 )
 
+export function creativeRuntimeSkillsForProfile(
+  profile: ProductionProfileDefinition,
+): readonly CreativeRuntimeSkillDefinition[] {
+  return profile.allowedDomains.map((domainKind) => CREATIVE_RUNTIME_SKILL_REGISTRY[domainKind])
+}
+
 /** Pinned Codex system Skills stay disabled. A Codex upgrade that adds one fails smoke. */
 export const PRIMARY_AGENT_DISABLED_NATIVE_SKILL_IDS = [
   'imagegen',
@@ -98,7 +119,10 @@ function withoutFrontmatter(content: string): string {
   return normalized.slice(match[0].length).trim()
 }
 
-async function buildRuntimeSkill(skill: CreativeRuntimeSkillDefinition): Promise<string> {
+async function buildRuntimeSkill(
+  skill: CreativeRuntimeSkillDefinition,
+  profile: ProductionProfileDefinition,
+): Promise<string> {
   const outputDefinition = readCreativeOutputDefinition(skill.outputKind)
   if (
     outputDefinition.domainKind !== skill.kind
@@ -136,6 +160,7 @@ async function buildRuntimeSkill(skill: CreativeRuntimeSkillDefinition): Promise
       body,
       '</wao_skill_source>',
     ].join('\n')),
+    ...(profile.domainInstructions[skill.kind] ?? []),
     'The professional object must match the authoritative schema below exactly: include every required field, include no unknown field, and never invent fields from prose examples. Media item fields are the same contract consumed by the corresponding generation Operation.',
     `<wao_output_schema outputKind=${JSON.stringify(skill.outputKind)}>`,
     jsonSchema,
@@ -146,8 +171,10 @@ async function buildRuntimeSkill(skill: CreativeRuntimeSkillDefinition): Promise
 export async function materializeCreativeRuntimeConfiguration(
   codexHomeDirectory: string,
   runtimeSkillsDirectory: string,
+  profile: ProductionProfileDefinition,
 ): Promise<void> {
   const skillsDirectory = runtimeSkillsDirectory
+  const runtimeSkills = creativeRuntimeSkillsForProfile(profile)
   await mkdir(skillsDirectory, { recursive: true, mode: 0o700 })
   // Earlier runtimes installed Wao Skills in Codex home. That made native
   // Skill reads look like workspace-external shell access under on-request
@@ -159,13 +186,13 @@ export async function materializeCreativeRuntimeConfiguration(
       { recursive: true, force: true },
     )
   }))
-  await Promise.all(CREATIVE_RUNTIME_SKILLS.map(async (skill) => {
+  await Promise.all(runtimeSkills.map(async (skill) => {
     const professionalSkillId = skill.skillIds[1]
     const skillDirectory = path.join(skillsDirectory, professionalSkillId)
     await mkdir(skillDirectory, { recursive: true, mode: 0o700 })
     await writeFile(
       path.join(skillDirectory, 'SKILL.md'),
-      `${await buildRuntimeSkill(skill)}\n`,
+      `${await buildRuntimeSkill(skill, profile)}\n`,
       { mode: 0o600 },
     )
   }))
@@ -198,8 +225,13 @@ export async function materializeCreativeRuntimeConfiguration(
   ])
 }
 
-export function creativeSkillRoutingInstructions(): readonly string[] {
-  return CREATIVE_RUNTIME_SKILLS.map((skill) => (
+export function creativeSkillRoutingInstructions(
+  profile?: ProductionProfileDefinition,
+): readonly string[] {
+  const runtimeSkills = profile
+    ? creativeRuntimeSkillsForProfile(profile)
+    : CREATIVE_RUNTIME_SKILLS
+  return runtimeSkills.map((skill) => (
     `${skill.kind} -> native Skill ${skill.skillIds[1]}, outputKind=${skill.outputKind}: ${skill.description}`
   ))
 }
