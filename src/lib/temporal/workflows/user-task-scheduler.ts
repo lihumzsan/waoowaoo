@@ -19,6 +19,7 @@ import {
   resolveRequiredSuccessDependencyDecision,
   retainSchedulerCompletions,
 } from '../task/dependency-gate'
+import { sameScheduledTask } from '../task/scheduled-request'
 import {
   USER_TASK_SCHEDULER_UPDATE_NAME,
   type ScheduledTaskReceipt,
@@ -145,21 +146,6 @@ function validateScheduledTask(
     }
     previousTaskId = dependencyTaskId
   }
-}
-
-function sameScheduledTask(left: ScheduledTaskRequest, right: ScheduledTaskRequest): boolean {
-  return (
-    left.enqueueId === right.enqueueId &&
-    left.task.workflowId === right.task.workflowId &&
-    left.task.schedulerWorkflowId === right.task.schedulerWorkflowId &&
-    left.task.taskId === right.task.taskId &&
-    left.task.userId === right.task.userId &&
-    left.task.taskType === right.task.taskType &&
-    left.dependsOnTaskIds.length === right.dependsOnTaskIds.length &&
-    left.dependsOnTaskIds.every(
-      (dependencyTaskId, index) => dependencyTaskId === right.dependsOnTaskIds[index],
-    )
-  )
 }
 
 function validateTaskResult(

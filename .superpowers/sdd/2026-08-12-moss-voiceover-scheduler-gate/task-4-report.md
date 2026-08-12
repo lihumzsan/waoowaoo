@@ -42,3 +42,16 @@ Fix verification:
 - `npx.cmd vitest run tests/unit/temporal/task-dependency-gate.test.ts` — exit 0; 1 file passed, 3 tests passed.
 - `git diff --check` — exit 0; existing CRLF conversion warnings only.
 - Whole-repository typecheck remains intentionally blocked by the Task 2–5 protocol cutover and pre-existing dirty callers; no Workflow harness was added in this fix round.
+
+## Fix round 2
+
+Added executable protocol-boundary contract evidence in the focused temporal test:
+
+- Full `ScheduledTaskRequest` dependency arrays are validated against persisted topology; mismatch rejects with `TASK_DEPENDENCY_TOPOLOGY_DIVERGED`.
+- Scheduler replay comparison rejects requests that differ only in dependency IDs.
+- The pure request contract is shared by the Activity and Workflow, so these assertions exercise the production validators/comparator rather than source text or a Scheduler mock.
+
+Verification:
+
+- `npx.cmd vitest run tests/unit/temporal/task-dependency-gate.test.ts` — exit 0; 1 file passed, 5 tests passed.
+- No real Temporal Worker harness was available in the existing unit suite; integration harnesses require the external Temporal/MySQL test runtime and were not started in this round.

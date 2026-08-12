@@ -65,6 +65,7 @@ import type {
   UserTaskSchedulerView,
 } from '../task/contracts'
 import { USER_TASK_SCHEDULER_UPDATE_NAME } from '../task/contracts'
+import { validateTaskSchedulerAdmissionDependencies } from '../task/scheduled-request'
 
 const TASK_TERMINAL_EVENT_KEY_PREFIX = 'task-terminal:'
 const TASK_ATTEMPT_FAILURE_STEP_KEY_PREFIX = '__temporal_attempt_failure__:'
@@ -585,16 +586,9 @@ export async function resolveTaskSchedulerAdmission(
     orderBy: { sourceTaskId: 'asc' },
   })
   const persistedDependencyTaskIds = dependencies.map((dependency) => dependency.sourceTaskId)
-  const requestedDependencyTaskIds = [...input.dependsOnTaskIds].sort()
-  if (
-    requestedDependencyTaskIds.some(
-      (dependencyTaskId) =>
-        dependencyTaskId.trim() !== dependencyTaskId || dependencyTaskId.length === 0,
-    ) ||
-    new Set(requestedDependencyTaskIds).size !== requestedDependencyTaskIds.length ||
-    requestedDependencyTaskIds.includes(row.id) ||
-    JSON.stringify(requestedDependencyTaskIds) !== JSON.stringify(persistedDependencyTaskIds)
-  ) {
+  try {
+    validateTaskSchedulerAdmissionDependencies(input, row.id, persistedDependencyTaskIds)
+  } catch {
     return failNonRetryable('TASK_DEPENDENCY_TOPOLOGY_DIVERGED', row.id)
   }
   if (dependencies.length === 0) {

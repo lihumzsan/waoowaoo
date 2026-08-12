@@ -4,6 +4,22 @@ import {
   retainSchedulerCompletions,
   type SchedulerDependencyCompletion,
 } from '@/lib/temporal/task/dependency-gate'
+import {
+  sameScheduledTask,
+  validateTaskSchedulerAdmissionDependencies,
+} from '@/lib/temporal/task/scheduled-request'
+
+const request = (dependsOnTaskIds: readonly string[]) => ({
+  enqueueId: 'enqueue:target',
+  task: {
+    workflowId: 'task:target',
+    schedulerWorkflowId: 'user-task-scheduler:user-1',
+    taskId: 'target',
+    userId: 'user-1',
+    taskType: 'workspace_resource_video_merge' as const,
+  },
+  dependsOnTaskIds,
+})
 
 const summary = (
   taskId: string,
@@ -75,5 +91,25 @@ describe('required-success Scheduler dependency gate', () => {
 
     expect(retained.filter((item) => item.taskId === 'source-a')).toHaveLength(1)
     expect(retained.find((item) => item.taskId === 'source-a')?.terminalEventId).toBe(2)
+  })
+
+  it('validates the complete admission request against persisted dependency topology', () => {
+    const fullRequest = request(['source-a', 'source-b'])
+    expect(() =>
+      validateTaskSchedulerAdmissionDependencies(fullRequest, 'target', [
+        'source-a',
+        'source-b',
+      ]),
+    ).not.toThrow()
+    expect(() =>
+      validateTaskSchedulerAdmissionDependencies(request(['source-a']), 'target', [
+        'source-a',
+        'source-b',
+      ]),
+    ).toThrow('TASK_DEPENDENCY_TOPOLOGY_DIVERGED')
+  })
+
+  it('rejects scheduler replay when only dependency IDs diverge', () => {
+    expect(sameScheduledTask(request(['source-a']), request(['source-b']))).toBe(false)
   })
 })
