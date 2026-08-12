@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { useSession } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { apiFetch } from '@/lib/api-fetch'
@@ -64,8 +65,14 @@ export function useRecharge(): RechargeState {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<RechargeState['status']>(null)
+  const { status: sessionStatus } = useSession()
 
   useEffect(() => {
+    if (sessionStatus !== 'authenticated') {
+      setConfig(null)
+      setLoading(sessionStatus === 'loading')
+      return
+    }
     let alive = true
     void apiFetch('/api/payments/recharge/config')
       .then(async (r) => {
@@ -90,7 +97,7 @@ export function useRecharge(): RechargeState {
     return () => {
       alive = false
     }
-  }, [resolveClientError, t])
+  }, [resolveClientError, sessionStatus, t])
 
   const checkout = useCallback(
     (amountCny: number) => {
@@ -349,8 +356,13 @@ function parseCurrentPlan(payload: unknown): CurrentPlanSummary | null {
 
 export function useCurrentPlan(): CurrentPlanSummary | null {
   const [plan, setPlan] = useState<CurrentPlanSummary | null>(null)
+  const { status: sessionStatus } = useSession()
 
   useEffect(() => {
+    if (sessionStatus !== 'authenticated') {
+      setPlan(null)
+      return
+    }
     let alive = true
     void apiFetch('/api/user/balance')
       .then(async (r) => (r.ok ? ((await r.json()) as unknown) : null))
@@ -363,7 +375,7 @@ export function useCurrentPlan(): CurrentPlanSummary | null {
     return () => {
       alive = false
     }
-  }, [])
+  }, [sessionStatus])
 
   return plan
 }

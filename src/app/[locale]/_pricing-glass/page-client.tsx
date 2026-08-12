@@ -1,8 +1,9 @@
 'use client'
 
 import { useCallback, useState } from 'react'
+import { useSession } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
-import { Link } from '@/i18n/navigation'
+import { Link, useRouter } from '@/i18n/navigation'
 import { AppIcon } from '@/components/ui/icons'
 import type { GlassPlan, GlassPricingContent } from './content'
 import type { SubscriptionInterval } from '@/lib/billing/subscription-plans'
@@ -228,6 +229,8 @@ export default function PricingGlassPageClient({
 }) {
   const t = useTranslations('pricing.glass')
   const beta = useTranslations('paidBeta')
+  const router = useRouter()
+  const { status: sessionStatus } = useSession()
   const recharge = useRecharge()
   const purchase = usePlanPurchase()
   // Nothing to do the moment credits land: the dialog shows its success state
@@ -284,7 +287,13 @@ export default function PricingGlassPageClient({
               plan={plan}
               interval={interval}
               busy={purchase.busy}
-              onSubscribe={() => setPayingFor(plan)}
+              onSubscribe={() => {
+                if (sessionStatus !== 'authenticated') {
+                  router.push({ pathname: '/auth/signin' })
+                  return
+                }
+                setPayingFor(plan)
+              }}
               owned={currentPlan?.planId === plan.id}
               hasPlanHistory={currentPlan !== null}
               paymentOpen={paidBetaCampaign.paymentOpen}
