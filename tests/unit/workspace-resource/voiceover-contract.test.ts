@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildWorkspaceResourceVoiceoverMixInputIdentity,
   buildWorkspaceResourceVoiceoverInputIdentity,
   parseWorkspaceResourceVoiceoverMixTaskPayload,
   parseWorkspaceResourceVoiceoverTaskPayload,
@@ -29,6 +30,7 @@ const narrationZero = {
   role: 'voiceover_audio' as const,
   position: 0,
   startSeconds: 0,
+  inputHash: 'f259853e19008fc217e3e5f35610b8def59d8d36e1ec4f06550b0fc9ac61fc00',
 }
 
 const narrationOne = {
@@ -38,6 +40,7 @@ const narrationOne = {
   role: 'voiceover_audio' as const,
   position: 1,
   startSeconds: 4.25,
+  inputHash: '31c57596bb3911732828afdac952d9bf3b684c83e9089342f5770b9335488943',
 }
 
 const bgm = {
@@ -49,7 +52,7 @@ const bgm = {
 }
 
 function narrationPayload(overrides: Record<string, unknown> = {}) {
-  return {
+  const candidate = {
     lifecycleProjection: {
       resources: [{ resourceId: 'narration-zero', mediaType: 'audio', schemaId: 'project.voiceover_audio', name: '旁白' }],
     },
@@ -59,7 +62,7 @@ function narrationPayload(overrides: Record<string, unknown> = {}) {
       workspacePath: 'audio/narration-zero.mp3',
       mediaType: 'audio',
       schemaId: 'project.voiceover_audio',
-      inputHash: 'b'.repeat(64),
+      inputHash: '698d76447e58fdbc164c436593cd70098843cf5ea0f7036db23cf4c8f3af3ee8',
       prompt: '第一段旁白',
       modelKey: 'comfyui::moss-tts-local-1.7b',
       inputs: [{ ...reference, position: 0 as const }],
@@ -75,9 +78,16 @@ function narrationPayload(overrides: Record<string, unknown> = {}) {
     text: '第一段旁白',
     language: 'zh',
     outputFormat: 'mp3',
-    generationOptions: { language: 'zh', referenceAudio: 'media/reference.mp3', referenceAudioDurationMs: 5_000, outputFormat: 'mp3' },
+    generationOptions: { language: 'zh' as const, referenceAudio: 'media/reference.mp3', referenceAudioDurationMs: 5_000, outputFormat: 'mp3' as const },
     ...overrides,
   }
+  candidate.resource.inputHash = buildWorkspaceResourceVoiceoverInputIdentity({
+    prompt: candidate.resource.prompt,
+    modelKey: candidate.resource.modelKey,
+    inputs: candidate.resource.inputs,
+    generationOptions: candidate.generationOptions,
+  })
+  return candidate
 }
 
 function withProjectionResource(
@@ -88,6 +98,12 @@ function withProjectionResource(
 }
 
 function payload(inputs: unknown[]) {
+  const generationOptions = { ducking: true, preserveSourceAudio: true } as const
+  const inputHash = buildWorkspaceResourceVoiceoverMixInputIdentity({
+    modelKey: 'comfyui::moss-tts-local-1.7b',
+    inputs: inputs as Parameters<typeof buildWorkspaceResourceVoiceoverMixInputIdentity>[0]['inputs'],
+    generationOptions,
+  })
   return {
     lifecycleProjection: {
       resources: [{
@@ -103,10 +119,10 @@ function payload(inputs: unknown[]) {
       mediaType: 'video',
       schemaId: 'generic.video',
       prompt: null,
-      modelKey: null,
-      inputHash: 'a'.repeat(64),
+      modelKey: 'comfyui::moss-tts-local-1.7b',
+      inputHash,
       inputs,
-      generationOptions: { ducking: true, preserveSourceAudio: true },
+      generationOptions,
       toolCallId: null,
     },
   }
@@ -118,8 +134,7 @@ describe('workspace Resource voiceover mix aggregate contract', () => {
     ['language', { language: 'en', referenceAudio: 'media/reference.mp3', referenceAudioDurationMs: 5_000, outputFormat: 'mp3' }, '31c57596bb3911732828afdac952d9bf3b684c83e9089342f5770b9335488943'],
     ['reference storage key', { language: 'zh', referenceAudio: 'media/reference-v2.mp3', referenceAudioDurationMs: 5_000, outputFormat: 'mp3' }, '6cd47ed80b71671531fb671fdd9e6358a04e698e8f88c7255f016f589b9b14d0'],
     ['reference duration', { language: 'zh', referenceAudio: 'media/reference.mp3', referenceAudioDurationMs: 6_000, outputFormat: 'mp3' }, '23ebe103a340a5494513f2a5786dcdaec6b66d42fcb507fa5677f86fc946962e'],
-    ['output format', { language: 'zh', referenceAudio: 'media/reference.mp3', referenceAudioDurationMs: 5_000, outputFormat: 'wav' }, '8de515c639e8fe9ccf44abcc32161a65a231d6499d554c95ff8f59ab6475b508'],
-  ])('includes normalized %s in the narration identity', (_label, generationOptions, expectedIdentity) => {
+  ] as const)('includes normalized %s in the narration identity', (_label, generationOptions, expectedIdentity) => {
     const identity = buildWorkspaceResourceVoiceoverInputIdentity({
       prompt: 'Narration text',
       modelKey: 'comfyui::moss-tts-local-1.7b',
@@ -127,6 +142,28 @@ describe('workspace Resource voiceover mix aggregate contract', () => {
       generationOptions,
     })
     expect(identity).toBe(expectedIdentity)
+  })
+
+  it('rejects a persisted narration hash that does not match its frozen execution facts', () => {
+    const candidate = narrationPayload()
+    candidate.resource.inputHash = 'b'.repeat(64)
+    expect(() => parseWorkspaceResourceVoiceoverTaskPayload(candidate)).toThrow()
+  })
+
+  it('rejects a persisted mix hash that does not match its frozen execution graph', () => {
+    const candidate = payload([
+      source,
+      reference,
+      narrationZero,
+    ])
+    candidate.resource.inputHash = 'a'.repeat(64)
+    expect(() => parseWorkspaceResourceVoiceoverMixTaskPayload(candidate)).toThrow()
+  })
+
+  it('rejects mix options that do not match the fixed execution policy', () => {
+    const candidate = payload([source, reference, narrationZero])
+    candidate.resource.generationOptions = { ducking: false, preserveSourceAudio: true } as never
+    expect(() => parseWorkspaceResourceVoiceoverMixTaskPayload(candidate)).toThrow()
   })
 
   it('projects narration and mix generation options through one normalized resource facts boundary', () => {

@@ -174,7 +174,7 @@ describe('produce_voiceover_video operation contract', () => {
     const mixTask = plan.tasks.find((task) => task.taskType === TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER_MIX)
     if (!mixTask) throw new Error('voiceover mix Task missing')
     const aggregate = parseWorkspaceResourceVoiceoverMixTaskPayload(mixTask.payload).inputAggregate
-    expect(aggregate).toEqual({
+    expect(aggregate).toMatchObject({
       source: { resourceId: SOURCE_ID, contentVersion: 3, workspacePath: 'video/source.mp4', role: 'source_video', position: 0 },
       reference: { resourceId: REFERENCE_ID, contentVersion: 2, workspacePath: 'audio/reference.mp3', role: 'reference_audio', position: 0 },
       narrations: [
@@ -196,18 +196,26 @@ describe('produce_voiceover_video operation contract', () => {
     if (!input.success) throw new Error('valid voiceover input fixture must parse')
     const baseline = await operation.plan(context, input.data)
     const baselineTask = baseline.tasks.find((task) => task.taskType === TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER)
+    const baselineMixTask = baseline.tasks.find((task) => task.taskType === TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER_MIX)
     if (!baselineTask) throw new Error('baseline narration Task missing')
+    if (!baselineMixTask) throw new Error('baseline mix Task missing')
 
     vi.restoreAllMocks()
     installPlannerStorageBoundary({ bgmDurationMs: 60_000, ...variant })
     const changed = await operation.plan(context, input.data)
     const changedTask = changed.tasks.find((task) => task.taskType === TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER)
+    const changedMixTask = changed.tasks.find((task) => task.taskType === TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER_MIX)
     if (!changedTask) throw new Error('changed narration Task missing')
+    if (!changedMixTask) throw new Error('changed mix Task missing')
 
     expect(changedTask.payload.resource).toMatchObject({ inputHash: expect.any(String) })
     expect((changedTask.payload.resource as { inputHash: string }).inputHash).not.toBe(
       (baselineTask.payload.resource as { inputHash: string }).inputHash,
     )
     expect(changedTask.dedupeKey).not.toBe(baselineTask.dedupeKey)
+    expect((changedMixTask.payload.resource as { inputHash: string }).inputHash).not.toBe(
+      (baselineMixTask.payload.resource as { inputHash: string }).inputHash,
+    )
+    expect(changedMixTask.dedupeKey).not.toBe(baselineMixTask.dedupeKey)
   })
 })

@@ -29,6 +29,19 @@ describe('WorkspaceResource Operation registry conformance', () => {
     }
   })
 
+  it('reserves voiceover audio for the dedicated voiceover production operation', () => {
+    const registry = createProjectAgentOperationRegistryForApi()
+    const genericAudio = registry.create_audio
+    const voiceover = registry.produce_voiceover_video
+    if (!genericAudio || !voiceover) throw new Error('Required audio operations missing')
+    if (genericAudio.resourceContract.kind !== 'resource' || voiceover.resourceContract.kind !== 'resource') {
+      throw new Error('Required audio Resource contracts missing')
+    }
+
+    expect(genericAudio.resourceContract.outputSchemaIds).not.toContain('project.voiceover_audio')
+    expect(voiceover.resourceContract.outputSchemaIds).toContain('project.voiceover_audio')
+  })
+
   it('publishes every media generator directly to MCP and exposes no manifest operation', () => {
     const registry = createProjectAgentOperationRegistryForApi()
     expect(registry.submit_production_manifest).toBeUndefined()

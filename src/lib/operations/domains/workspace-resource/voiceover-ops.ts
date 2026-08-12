@@ -13,6 +13,7 @@ import { stableArgsFingerprint } from '@/lib/project-agent/stable-args-hash'
 import { submitPlannedOperationTasks } from '@/lib/operations/planning'
 import { TASK_TYPE } from '@/lib/task/types'
 import {
+  buildWorkspaceResourceVoiceoverMixInputIdentity,
   buildWorkspaceResourceVoiceoverInputIdentity,
   parseWorkspaceResourceVoiceoverMixTaskPayload,
   parseWorkspaceResourceVoiceoverTaskPayload,
@@ -23,6 +24,7 @@ import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
 import { refineTaskBatchSubmitOperationOutputSchema, taskBatchSubmitOperationOutputSchemaBase } from '@/lib/operations/output-schemas'
 import { resolveWorkspaceResourceInputMedia } from '@/lib/workspace-resource/input-media'
 import { preflightMediaGenerationOptions, preflightMediaProviderRoutes } from '@/lib/ai-exec/media-preflight'
+import type { WorkspaceResourceVoiceoverMixTaskPayload } from '@/lib/workspace-resource/voiceover-contract'
 
 const produceVoiceoverVideoInputSchema = z.object({
   folderPath: z.string().trim().min(1).max(512).nullable().optional(),
@@ -135,8 +137,28 @@ export function createWorkspaceResourceVoiceoverOperations(): ProjectAgentOperat
           lifecycleProjection: buildWorkspaceResourceLifecycleProjection([{ resourceId: entry.resourceId, mediaType: 'audio', schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICEOVER_AUDIO, name: workspaceResourceDisplayName({ workspacePath: entry.path, resourceId: entry.resourceId }) }]), protocol: 'workspace_resource_voiceover_v1', resource: { resourceId: entry.resourceId, workspacePath: entry.path, mediaType: 'audio', schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICEOVER_AUDIO, inputHash: entry.inputHash, prompt: entry.item.text, modelKey: voiceModel, inputs: [{ ...reference, role: 'reference_audio', position: 0 }], toolCallId: ctx.toolCallId?.trim() || null, sourceTurnId: ctx.context.turnId?.trim() || null }, voiceModel, referenceAudio: reference, text: entry.item.text, language: entry.item.language, outputFormat: 'mp3', generationOptions: entry.generationOptions,
         }, locale: resolveOperationLocale(ctx.context), dedupeKey: `produce_voiceover_video:${entry.resourceId}:${entry.inputHash}` }))
         const mixTaskId = `voiceover-mix:${finalResourceId}`
-        const mixPayload = { lifecycleProjection: buildWorkspaceResourceLifecycleProjection([{ resourceId: finalResourceId, mediaType: 'video', schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO, name: workspaceResourceDisplayName({ workspacePath: finalPath, resourceId: finalResourceId }) }]), protocol: 'workspace_resource_voiceover_mix_v1', resource: { resourceId: finalResourceId, mediaType: 'video', schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO, prompt: null, modelKey: null, inputHash: stableArgsFingerprint({ input, refs }), inputs: [source, reference, ...narration.map((entry, index) => ({ resourceId: entry.resourceId, contentVersion: 1, workspacePath: entry.path, role: 'voiceover_audio' as const, position: index, startSeconds: entry.item.startSeconds })), ...(bgm ? [bgm] : [])], generationOptions: { ducking: true, preserveSourceAudio: true }, toolCallId: ctx.toolCallId?.trim() || null } }
-        return { kind: 'task_submission', operationId: 'produce_voiceover_video', projectId: ctx.projectId, userId: ctx.userId, tasks: [...narrationTasks, createPlannedTask({ id: mixTaskId, taskType: TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER_MIX, targetType: 'WorkspaceResource', targetId: finalResourceId, payload: mixPayload, locale: resolveOperationLocale(ctx.context), dedupeKey: `produce_voiceover_video:mix:${finalResourceId}` })], taskEdges: narration.map((entry) => ({ sourceTaskPlanId: entry.taskPlanId, targetTaskPlanId: mixTaskId, requirement: 'required_success' as const })), reservedIdentityIds: [finalResourceId, ...narration.map((entry) => entry.resourceId)], metadata: { requestId, finalResourceId, finalPath, narration, input, refs, source, reference, voiceModel, mixTaskId } }
+        const mixInputs: WorkspaceResourceVoiceoverMixTaskPayload['resource']['inputs'] = [
+          { ...source, role: 'source_video', position: 0 },
+          { ...reference, role: 'reference_audio', position: 0 },
+          ...narration.map((entry, index) => ({
+            resourceId: entry.resourceId,
+            contentVersion: 1,
+            workspacePath: entry.path,
+            role: 'voiceover_audio' as const,
+            position: index,
+            startSeconds: entry.item.startSeconds,
+            inputHash: entry.inputHash,
+          })),
+          ...(bgm ? [{ ...bgm, role: 'bgm_audio' as const, position: 0 as const }] : []),
+        ]
+        const mixGenerationOptions = { ducking: true, preserveSourceAudio: true } as const
+        const mixInputHash = buildWorkspaceResourceVoiceoverMixInputIdentity({
+          modelKey: voiceModel,
+          inputs: mixInputs,
+          generationOptions: mixGenerationOptions,
+        })
+        const mixPayload = { lifecycleProjection: buildWorkspaceResourceLifecycleProjection([{ resourceId: finalResourceId, mediaType: 'video', schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO, name: workspaceResourceDisplayName({ workspacePath: finalPath, resourceId: finalResourceId }) }]), protocol: 'workspace_resource_voiceover_mix_v1', resource: { resourceId: finalResourceId, mediaType: 'video', schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO, prompt: null, modelKey: voiceModel, inputHash: mixInputHash, inputs: mixInputs, generationOptions: mixGenerationOptions, toolCallId: ctx.toolCallId?.trim() || null } }
+        return { kind: 'task_submission', operationId: 'produce_voiceover_video', projectId: ctx.projectId, userId: ctx.userId, tasks: [...narrationTasks, createPlannedTask({ id: mixTaskId, taskType: TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER_MIX, targetType: 'WorkspaceResource', targetId: finalResourceId, payload: mixPayload, locale: resolveOperationLocale(ctx.context), dedupeKey: `produce_voiceover_video:mix:${finalResourceId}:${mixInputHash}` })], taskEdges: narration.map((entry) => ({ sourceTaskPlanId: entry.taskPlanId, targetTaskPlanId: mixTaskId, requirement: 'required_success' as const })), reservedIdentityIds: [finalResourceId, ...narration.map((entry) => entry.resourceId)], metadata: { requestId, finalResourceId, finalPath, narration, input, refs, source, reference, voiceModel, mixTaskId } }
       },
       commit: async (ctx, _input, plan) => {
         const tx = ctx.executionAuthorization?.transaction

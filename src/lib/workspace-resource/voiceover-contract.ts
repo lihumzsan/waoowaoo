@@ -22,12 +22,7 @@ export function buildWorkspaceResourceVoiceoverInputIdentity(input: {
   readonly prompt: string
   readonly modelKey: string
   readonly inputs: ReadonlyArray<z.infer<typeof frozenVoiceoverInputSchema> & { readonly role: 'reference_audio'; readonly position: 0 }>
-  readonly generationOptions: {
-    readonly language: string
-    readonly referenceAudio: string
-    readonly referenceAudioDurationMs: number
-    readonly outputFormat: string
-  }
+  readonly generationOptions: z.infer<typeof workspaceResourceVoiceoverGenerationOptionsSchema>
 }): string {
   return stableArgsFingerprint({
     prompt: input.prompt,
@@ -130,12 +125,18 @@ const voiceoverMixInputSchema = z.discriminatedUnion('role', [
     role: z.literal('voiceover_audio'),
     position: z.number().int().nonnegative(),
     startSeconds: z.number().finite().nonnegative(),
+    inputHash: z.string().length(64),
   }).strict(),
   voiceoverMixInputBaseSchema.extend({
     role: z.literal('bgm_audio'),
     position: z.literal(0),
   }).strict(),
 ])
+
+export const workspaceResourceVoiceoverMixGenerationOptionsSchema = z.object({
+  ducking: z.literal(true),
+  preserveSourceAudio: z.literal(true),
+}).strict()
 
 export const workspaceResourceVoiceoverMixTaskPayloadSchema = z.object({
   lifecycleProjection: workspaceResourceLifecycleProjectionSchema,
@@ -145,10 +146,10 @@ export const workspaceResourceVoiceoverMixTaskPayloadSchema = z.object({
     mediaType: z.literal('video'),
     schemaId: z.literal('generic.video'),
     prompt: z.null(),
-    modelKey: z.null(),
+    modelKey: z.string().trim().min(1),
     inputHash: z.string().length(64),
     inputs: z.array(voiceoverMixInputSchema).min(3),
-    generationOptions: workspaceResourceGenerationOptionsSchema,
+    generationOptions: workspaceResourceVoiceoverMixGenerationOptionsSchema,
     toolCallId: z.string().trim().min(1).nullable(),
   }).strict(),
 }).strict().superRefine((payload, context) => {
@@ -179,6 +180,24 @@ const mixTaskEnvelope = workspaceResourceVoiceoverMixTaskPayloadSchema.extend({ 
 
 export type WorkspaceResourceVoiceoverTaskPayload = z.infer<typeof workspaceResourceVoiceoverTaskPayloadSchema>
 export type WorkspaceResourceVoiceoverMixTaskPayload = z.infer<typeof workspaceResourceVoiceoverMixTaskPayloadSchema>
+
+export function buildWorkspaceResourceVoiceoverMixInputIdentity(input: {
+  readonly modelKey: string
+  readonly inputs: WorkspaceResourceVoiceoverMixTaskPayload['resource']['inputs']
+  readonly generationOptions: z.infer<typeof workspaceResourceVoiceoverMixGenerationOptionsSchema>
+}): string {
+  const source = input.inputs.find((item) => item.role === 'source_video')
+  const reference = input.inputs.find((item) => item.role === 'reference_audio')
+  const narrations = input.inputs
+    .filter((item) => item.role === 'voiceover_audio')
+    .sort((left, right) => left.position - right.position)
+  const bgm = input.inputs.find((item) => item.role === 'bgm_audio')
+  return stableArgsFingerprint({
+    modelKey: input.modelKey,
+    inputs: [source, reference, ...narrations, ...(bgm ? [bgm] : [])],
+    generationOptions: input.generationOptions,
+  })
+}
 export type WorkspaceResourceVoiceoverTaskTarget = { readonly targetType: string; readonly targetId: string }
 export type WorkspaceResourceVoiceoverResourceFacts = {
   readonly resourceId: string
@@ -229,6 +248,15 @@ export function parseWorkspaceResourceVoiceoverTaskPayload(
     generationOptions: parsed.generationOptions,
   })
   validateTaskTarget(payload.resource.resourceId, target)
+  const canonicalInputHash = buildWorkspaceResourceVoiceoverInputIdentity({
+    prompt: payload.resource.prompt,
+    modelKey: payload.resource.modelKey,
+    inputs: payload.resource.inputs,
+    generationOptions: payload.generationOptions,
+  })
+  if (payload.resource.inputHash !== canonicalInputHash) {
+    throw new Error('WORKSPACE_RESOURCE_VOICEOVER_INPUT_HASH_MISMATCH')
+  }
   return {
     ...payload,
     resourceFacts: {
@@ -256,6 +284,14 @@ export function parseWorkspaceResourceVoiceoverMixTaskPayload(
     .filter((input) => input.role === 'voiceover_audio')
     .sort((left, right) => left.position - right.position)
   const bgm = payload.resource.inputs.find((input) => input.role === 'bgm_audio')
+  const canonicalInputHash = buildWorkspaceResourceVoiceoverMixInputIdentity({
+    modelKey: payload.resource.modelKey,
+    inputs: payload.resource.inputs,
+    generationOptions: payload.resource.generationOptions,
+  })
+  if (payload.resource.inputHash !== canonicalInputHash) {
+    throw new Error('WORKSPACE_RESOURCE_VOICEOVER_MIX_INPUT_HASH_MISMATCH')
+  }
   return {
     ...payload,
     resourceFacts: {

@@ -164,6 +164,7 @@ const IMPORT_ORIGIN_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new Set
  */
 const DEDICATED_ORIGIN_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new Set([
   WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
+  WORKSPACE_RESOURCE_SCHEMA.VOICEOVER_AUDIO,
 ])
 
 const RETIRED_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new Set([

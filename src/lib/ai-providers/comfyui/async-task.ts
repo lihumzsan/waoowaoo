@@ -26,7 +26,9 @@ export const comfyuiAsyncTaskProvider: AsyncTaskProviderRegistration = {
     if (result.status === 'pending') return normalizeAsyncPollResult(result)
     if (result.status === 'completed') {
       if (parsed.type === 'SOUND' || parsed.type === 'VOICE') {
-        if (!('audioUrl' in result)) throw new Error('COMFYUI_SOUND_RESULT_MISSING')
+        if (!('audioUrl' in result)) {
+          throw new Error(parsed.type === 'VOICE' ? 'COMFYUI_VOICE_RESULT_MISSING' : 'COMFYUI_SOUND_RESULT_MISSING')
+        }
         return normalizeAsyncPollResult({ status: 'completed', resultUrl: result.audioUrl })
       }
       if (!('videoUrl' in result)) throw new Error('COMFYUI_VIDEO_RESULT_MISSING')
