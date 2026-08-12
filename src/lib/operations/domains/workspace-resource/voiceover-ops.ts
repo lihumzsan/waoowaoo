@@ -16,6 +16,7 @@ import { voiceoverLanguageSchema } from '@/lib/workspace-resource/voiceover-cont
 import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
 import { refineTaskBatchSubmitOperationOutputSchema, taskBatchSubmitOperationOutputSchemaBase } from '@/lib/operations/output-schemas'
 import { resolveWorkspaceResourceInputMedia } from '@/lib/workspace-resource/input-media'
+import { preflightMediaGenerationOptions, preflightMediaProviderRoutes } from '@/lib/ai-exec/media-preflight'
 
 const produceVoiceoverVideoInputSchema = z.object({
   folderPath: z.string().trim().min(1).max(512).nullable().optional(),
@@ -72,25 +73,60 @@ export function createWorkspaceResourceVoiceoverOperations(): ProjectAgentOperat
         const [referenceMedia] = await resolveWorkspaceResourceInputMedia({
           userId: ctx.userId,
           projectId: ctx.projectId,
-          references: [reference, ...(bgm ? [bgm] : [])],
+          references: [reference],
           expectedMediaType: 'audio',
         })
+        const [bgmMedia] = bgm ? await resolveWorkspaceResourceInputMedia({
+          userId: ctx.userId,
+          projectId: ctx.projectId,
+          references: [bgm],
+          expectedMediaType: 'audio',
+        }) : []
         const videoDurationMs = videoMedia?.durationMs
         if (!videoDurationMs || videoDurationMs <= 0) throw new Error('VOICEOVER_VIDEO_DURATION_UNKNOWN')
         if (referenceMedia?.durationMs === null || referenceMedia?.durationMs === undefined || referenceMedia.durationMs < 3000 || referenceMedia.durationMs > 10000) throw new Error('VOICEOVER_REFERENCE_AUDIO_DURATION_INVALID')
+        if (bgm && (bgmMedia?.durationMs === null || bgmMedia?.durationMs === undefined || bgmMedia.durationMs <= 0)) throw new Error('VOICEOVER_BGM_AUDIO_DURATION_INVALID')
         const sorted = [...input.voiceovers].sort((a, b) => a.startSeconds - b.startSeconds)
         if (sorted.some((item) => item.startSeconds >= videoDurationMs / 1000)) throw new Error('VOICEOVER_START_OUTSIDE_VIDEO')
+        const voiceovers = await Promise.all(input.voiceovers.map(async (item) => {
+          const options = {
+            language: item.language,
+            referenceAudio: referenceMedia.storageKey,
+            referenceAudioDurationMs: referenceMedia.durationMs,
+            outputFormat: 'mp3' as const,
+          }
+          const preflight = await preflightMediaGenerationOptions({
+            userId: ctx.userId,
+            modelKey: voiceModel,
+            modality: 'voice',
+            prompt: item.text,
+            options,
+          })
+          const normalizedOptions = z.object({
+            language: voiceoverLanguageSchema,
+            referenceAudio: z.string().trim().min(1),
+            referenceAudioDurationMs: z.number().int().positive(),
+            outputFormat: z.literal('mp3'),
+          }).strict().parse(preflight.options)
+          preflightMediaProviderRoutes({
+            selection: preflight.selection,
+            modality: 'voice',
+            prompt: item.text,
+            options: normalizedOptions,
+          })
+          return { item: { ...item, language: normalizedOptions.language }, generationOptions: normalizedOptions }
+        }))
         const requestId = `produce_voiceover_video:${ctx.userId}:${ctx.projectId}:${ctx.requestId ?? stableArgsFingerprint(input)}`
         const finalResourceId = buildWorkspaceResourceId({ operationId: 'produce_voiceover_video', requestId, memberIndex: input.voiceovers.length })
         const finalPath = await resolveGeneratedWorkspaceResourcePlacement(prisma, { userId: ctx.userId, projectId: ctx.projectId, folderPath: input.folderPath, name: input.name, resourceId: finalResourceId, mediaType: 'video', schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO })
-        const narration = await Promise.all(input.voiceovers.map(async (item, index) => {
+        const narration = await Promise.all(voiceovers.map(async ({ item, generationOptions }, index) => {
           const resourceId = buildWorkspaceResourceId({ operationId: 'produce_voiceover_video', requestId, memberIndex: index })
           const path = await resolveGeneratedWorkspaceResourcePlacement(prisma, { userId: ctx.userId, projectId: ctx.projectId, folderPath: input.folderPath, name: item.name, resourceId, mediaType: 'audio', schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICEOVER_AUDIO, alternativeIndex: index })
           const inputHash = stableArgsFingerprint({ item, reference, voiceModel })
-          return { item, resourceId, path, inputHash, taskPlanId: `voiceover:${resourceId}` }
+          return { item, generationOptions, resourceId, path, inputHash, taskPlanId: `voiceover:${resourceId}` }
         }))
         const narrationTasks: PlannedTask[] = narration.map((entry) => createPlannedTask({ id: entry.taskPlanId, taskType: TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER, targetType: 'WorkspaceResource', targetId: entry.resourceId, payload: {
-          lifecycleProjection: buildWorkspaceResourceLifecycleProjection([{ resourceId: entry.resourceId, mediaType: 'audio', schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICEOVER_AUDIO, name: workspaceResourceDisplayName({ workspacePath: entry.path, resourceId: entry.resourceId }) }]), protocol: 'workspace_resource_voiceover_v1', resource: { resourceId: entry.resourceId, workspacePath: entry.path, mediaType: 'audio', schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICEOVER_AUDIO, inputHash: entry.inputHash, prompt: entry.item.text, modelKey: voiceModel, inputs: [{ ...reference, role: 'reference_audio', position: 0 }], toolCallId: ctx.toolCallId?.trim() || null, sourceTurnId: ctx.context.turnId?.trim() || null }, voiceModel, referenceAudio: reference, text: entry.item.text, language: entry.item.language, outputFormat: 'mp3', generationOptions: { language: entry.item.language, startSeconds: entry.item.startSeconds },
+          lifecycleProjection: buildWorkspaceResourceLifecycleProjection([{ resourceId: entry.resourceId, mediaType: 'audio', schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICEOVER_AUDIO, name: workspaceResourceDisplayName({ workspacePath: entry.path, resourceId: entry.resourceId }) }]), protocol: 'workspace_resource_voiceover_v1', resource: { resourceId: entry.resourceId, workspacePath: entry.path, mediaType: 'audio', schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICEOVER_AUDIO, inputHash: entry.inputHash, prompt: entry.item.text, modelKey: voiceModel, inputs: [{ ...reference, role: 'reference_audio', position: 0 }], toolCallId: ctx.toolCallId?.trim() || null, sourceTurnId: ctx.context.turnId?.trim() || null }, voiceModel, referenceAudio: reference, text: entry.item.text, language: entry.item.language, outputFormat: 'mp3', generationOptions: entry.generationOptions,
         }, locale: resolveOperationLocale(ctx.context), dedupeKey: `produce_voiceover_video:${entry.resourceId}:${entry.inputHash}` }))
         const mixTaskId = `voiceover-mix:${finalResourceId}`
         const mixPayload = { lifecycleProjection: buildWorkspaceResourceLifecycleProjection([{ resourceId: finalResourceId, mediaType: 'video', schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO, name: workspaceResourceDisplayName({ workspacePath: finalPath, resourceId: finalResourceId }) }]), protocol: 'workspace_resource_voiceover_mix_v1', resource: { resourceId: finalResourceId, mediaType: 'video', schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO, prompt: null, modelKey: null, inputHash: stableArgsFingerprint({ input, refs }), inputs: [source, reference, ...narration.map((entry, index) => ({ resourceId: entry.resourceId, contentVersion: 1, workspacePath: entry.path, role: 'voiceover_audio' as const, position: index, startSeconds: entry.item.startSeconds })), ...(bgm ? [bgm] : [])], generationOptions: { ducking: true, preserveSourceAudio: true }, toolCallId: ctx.toolCallId?.trim() || null } }
