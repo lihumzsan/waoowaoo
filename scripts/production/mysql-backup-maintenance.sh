@@ -2,7 +2,10 @@
 set -eu
 
 mode=${1:---check}
-case "$mode" in --check|--apply) ;; *) echo "Usage: mysql-backup-maintenance.sh [--check|--apply]" >&2; exit 2 ;; esac
+case "$mode" in
+  --check|--apply|--backup-only) ;;
+  *) echo "Usage: mysql-backup-maintenance.sh [--check|--apply|--backup-only]" >&2; exit 2 ;;
+esac
 deploy_root=${WAO_DEPLOY_ROOT:-}
 case "$deploy_root" in /*) ;; *) echo "WAO_DEPLOY_ROOT must be absolute" >&2; exit 1 ;; esac
 deploy_root=${deploy_root%/}
@@ -26,6 +29,9 @@ if [ "$mode" = --check ]; then
   backup_file=$(sed -n '1p' "$marker")
   case "$backup_file" in "$backup_root"/*.sql.gz) ;; *) echo "MYSQL_BACKUP_MARKER_INVALID" >&2; exit 1 ;; esac
   [ -f "$backup_file" ] || { echo "MYSQL_BACKUP_FILE_MISSING" >&2; exit 1; }
+  [ -f "$backup_file.sha256" ] || { echo "MYSQL_BACKUP_CHECKSUM_MISSING" >&2; exit 1; }
+  gzip -t "$backup_file"
+  (cd "$backup_root" && sha256sum --check "$(basename "$backup_file.sha256")")
   echo "MYSQL_BACKUP_OK file=$(basename "$backup_file") bytes=$(wc -c < "$backup_file" | tr -d ' ')"
   exit 0
 fi
@@ -45,6 +51,7 @@ export COMPOSE_PROJECT_NAME=${WAO_COMPOSE_PROJECT_NAME:-waoowaoo-prod}
 timestamp=$(date -u +%Y%m%d%H%M%S)
 backup_file="$backup_root/all-databases-$timestamp.sql.gz"
 temporary_file="$backup_file.partial"
+temporary_checksum="$backup_file.sha256.partial"
 fifo="$backup_root/.dump-$timestamp.fifo"
 mkfifo "$fifo"
 gzip_pid=''
@@ -53,7 +60,7 @@ cleanup() {
     kill "$gzip_pid" >/dev/null 2>&1 || true
     wait "$gzip_pid" >/dev/null 2>&1 || true
   fi
-  rm -f "$fifo" "$temporary_file" "$temporary_file.sha256"
+  rm -f "$fifo" "$temporary_file" "$temporary_checksum"
 }
 trap cleanup EXIT HUP INT TERM
 gzip -9 < "$fifo" > "$temporary_file" &
@@ -81,9 +88,9 @@ fi
 rm -f "$fifo"
 test -s "$temporary_file"
 gzip -t "$temporary_file"
-sha256sum "$temporary_file" > "$temporary_file.sha256"
 mv "$temporary_file" "$backup_file"
-mv "$temporary_file.sha256" "$backup_file.sha256"
+(cd "$backup_root" && sha256sum "$(basename "$backup_file")") > "$temporary_checksum"
+mv "$temporary_checksum" "$backup_file.sha256"
 chmod 0600 "$backup_file" "$backup_file.sha256"
 printf '%s\n%s\n' "$backup_file" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$marker"
 chmod 0600 "$marker"
@@ -92,10 +99,12 @@ find "$backup_root" -mindepth 1 -maxdepth 1 -type f \
   \( -name 'all-databases-*.sql.gz' -o -name 'all-databases-*.sql.gz.sha256' \) \
   -mtime "+$retention_days" -delete
 
-WAO_DEPLOY_ROOT="$deploy_root" \
-WAO_MYSQL_BACKUP_MARKER="$marker" \
-WAO_MYSQL_BINLOG_RETENTION_DAYS="$binlog_retention_days" \
-  sh "$(dirname "$0")/mysql-binlog-maintenance.sh" --apply
+if [ "$mode" = --apply ]; then
+  WAO_DEPLOY_ROOT="$deploy_root" \
+  WAO_MYSQL_BACKUP_MARKER="$marker" \
+  WAO_MYSQL_BINLOG_RETENTION_DAYS="$binlog_retention_days" \
+    sh "$(dirname "$0")/mysql-binlog-maintenance.sh" --apply
+fi
 
 trap - EXIT HUP INT TERM
 echo "MYSQL_BACKUP_COMPLETE file=$backup_file"

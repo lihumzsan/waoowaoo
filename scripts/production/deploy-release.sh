@@ -89,6 +89,7 @@ if [ ! -f "$release_dir/Dockerfile" ] \
   || [ ! -f "$release_dir/scripts/production/registry-maintenance.sh" ] \
   || [ ! -f "$release_dir/scripts/production/install-local-registry.sh" ] \
   || [ ! -f "$release_dir/scripts/production/install-host-maintenance.sh" ] \
+  || [ ! -f "$release_dir/scripts/production/mysql-backup-maintenance.sh" ] \
   || [ ! -f "$release_dir/scripts/reconcile-assistant-runtime-rollout.ts" ]; then
   echo "Release archive is incomplete" >&2
   exit 1
@@ -247,7 +248,11 @@ set_env_value "TEMPORAL_WORKER_${candidate_upper}_REPLICAS" 1
 set_env_value "TEMPORAL_WORKER_${current_upper}_REPLICAS" 1
 
 # Schema validation/migration is a deployment gate. It completes before the
-# candidate Worker is allowed to poll the production queue.
+# candidate Worker is allowed to poll the production queue. A verified backup
+# is mandatory before the schema writer runs; binlog retention remains a
+# separate post-release maintenance action.
+WAO_DEPLOY_ROOT="$deploy_root" \
+  sh "$release_dir/scripts/production/mysql-backup-maintenance.sh" --backup-only
 compose run --rm --no-deps app-schema
 
 sh "$rollout_script" promote "$candidate_slot"
