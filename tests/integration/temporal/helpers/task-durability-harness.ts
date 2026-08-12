@@ -24,6 +24,7 @@ import { resolveTemporalWorkflowBundlePath } from '@/lib/temporal/workflow-bundl
 import { connectTemporalClient } from '@/lib/temporal/client'
 import { TemporalTaskClient } from '@/lib/temporal/task-client'
 import { prisma } from '../../../helpers/prisma'
+import { buildUserTaskSchedulerWorkflowId } from '@/lib/temporal/identity'
 import type {
   CommitTaskTerminalInput,
   NotifyTaskFollowUpInput,
@@ -241,6 +242,7 @@ export interface TaskProductionWorkerHarness {
 export interface TaskDependencyGateWorkerHarness {
   readonly taskQueue: string
   readonly taskClient: TemporalTaskClient
+  queryScheduler(userId: string): Promise<{ readonly status: string }>
   releaseHeldSource(): void
   waitForTaskStatus(taskId: string, status: 'queued' | 'processing' | 'completed' | 'failed' | 'canceled'): Promise<void>
   waitForTerminalPostCommitFault(): Promise<TaskTerminalReceipt>
@@ -291,6 +293,12 @@ export async function startTaskDependencyGateWorker(input: {
   return {
     taskQueue: config.taskQueue,
     taskClient: new TemporalTaskClient(connected.client.workflow, config.taskQueue),
+    async queryScheduler(userId) {
+      const description = await connected.client.workflow
+        .getHandle(buildUserTaskSchedulerWorkflowId(userId))
+        .describe()
+      return { status: description.status.name }
+    },
     releaseHeldSource() {
       if (released) return
       released = true

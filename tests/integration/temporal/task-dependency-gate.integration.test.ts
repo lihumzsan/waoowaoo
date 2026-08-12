@@ -72,6 +72,7 @@ describe('Temporal dependency gate durability', () => {
     await expect(
       prisma.task.findUniqueOrThrow({ where: { id: activeFixture.mixTaskId }, select: { status: true, attempt: true } }),
     ).resolves.toEqual({ status: TASK_STATUS.QUEUED, attempt: 0 })
+    await expect(activeWorker.queryScheduler(activeFixture.userId)).resolves.toMatchObject({ status: 'RUNNING' })
     activeWorker.releaseHeldSource()
     await activeWorker.waitForTaskStatus(activeFixture.mixTaskId, 'completed')
     await expect(
@@ -133,7 +134,6 @@ describe('Temporal dependency gate durability', () => {
 
   it('cancels a waiting dependent through Scheduler and replays the same terminal receipt', async () => {
     activeFixture = await createTaskDependencyGateFixture({ suffix: 'cancel', sourceOutcomes: ['completed', 'completed'] })
-    await seedTaskDependencyGateDependentCheckpoint(activeFixture)
     activeWorker = await startTaskDependencyGateWorker({ heldSourceTaskId: activeFixture.source1TaskId, faultAfterTerminalTaskId: null })
     await activeWorker.taskClient.schedule(activeFixture.references.mix)
     const first = await activeWorker.taskClient.cancel({
@@ -146,6 +146,7 @@ describe('Temporal dependency gate durability', () => {
     })
     expect(replay).toEqual(first)
     await activeWorker.waitForTaskStatus(activeFixture.mixTaskId, 'canceled')
+    await expect(activeWorker.queryScheduler(activeFixture.userId)).resolves.toMatchObject({ status: 'RUNNING' })
     await expect(
       prisma.taskEvent.count({ where: { taskId: activeFixture.mixTaskId, eventType: TASK_EVENT_TYPE.CANCELED } }),
     ).resolves.toBe(1)
