@@ -64,6 +64,7 @@ describe('Task dependency topology persistence', () => {
       projectId: project.id,
       requestId: 'topology-success',
     })
+    const taskIdsByPlanId = new Map<string, string>()
 
     await prisma.$transaction(async (tx) => {
       const persisted = await persistSubmittedTaskBatchInTransaction({
@@ -74,6 +75,9 @@ describe('Task dependency topology persistence', () => {
           operationExecutionId: execution.id,
         }),
       })
+      for (const { task } of persisted) {
+        if (task.operationPlanTaskId) taskIdsByPlanId.set(task.operationPlanTaskId, task.id)
+      }
       await persistPlannedTaskEdgesInTransaction({
         tx,
         operationExecutionId: execution.id,
@@ -107,10 +111,20 @@ describe('Task dependency topology persistence', () => {
       orderBy: { sourceTaskId: 'asc' },
     })
     expect(dependencies).toHaveLength(2)
-    expect(dependencies.every((dependency) =>
-      dependency.operationExecutionId === execution.id
-      && dependency.requirement === 'required_success',
-    )).toBe(true)
+    expect(dependencies).toEqual(expect.arrayContaining([
+      {
+        operationExecutionId: execution.id,
+        sourceTaskId: taskIdsByPlanId.get('narration:1'),
+        targetTaskId: taskIdsByPlanId.get('mix:1'),
+        requirement: 'required_success',
+      },
+      {
+        operationExecutionId: execution.id,
+        sourceTaskId: taskIdsByPlanId.get('narration:2'),
+        targetTaskId: taskIdsByPlanId.get('mix:1'),
+        requirement: 'required_success',
+      },
+    ]))
     const lifecycleColumns = await prisma.$queryRaw<Array<{ COLUMN_NAME: string }>>`
       SELECT COLUMN_NAME
       FROM INFORMATION_SCHEMA.COLUMNS
@@ -156,6 +170,44 @@ describe('Task dependency topology persistence', () => {
       where: { operationExecutionId: execution.id },
     })).resolves.toBe(0)
     await expect(prisma.taskDependency.count({
+      where: { operationExecutionId: execution.id },
+    })).resolves.toBe(0)
+  })
+
+  it('rejects reuse of one persisted Task ID for two Plan IDs', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const execution = await createCommittingExecution({
+      userId: user.id,
+      projectId: project.id,
+      requestId: 'topology-identity-diverged',
+    })
+
+    await expect(prisma.$transaction(async (tx) => {
+      const persisted = await persistSubmittedTaskBatchInTransaction({
+        tx,
+        inputs: buildInputs({
+          userId: user.id,
+          projectId: project.id,
+          operationExecutionId: execution.id,
+        }),
+      })
+      const firstTask = persisted[0]?.task
+      if (!firstTask) throw new Error('TEST_TASK_MISSING')
+      await persistPlannedTaskEdgesInTransaction({
+        tx,
+        operationExecutionId: execution.id,
+        persistedTasks: [
+          { id: firstTask.id, operationPlanTaskId: 'narration:1' },
+          { id: firstTask.id, operationPlanTaskId: 'narration:2' },
+        ],
+        taskEdges: [
+          { sourceTaskPlanId: 'narration:1', targetTaskPlanId: 'narration:2', requirement: 'required_success' },
+        ],
+      })
+    })).rejects.toThrow('OPERATION_PLAN_TASK_IDENTITY_DIVERGED')
+
+    await expect(prisma.task.count({
       where: { operationExecutionId: execution.id },
     })).resolves.toBe(0)
   })

@@ -33,3 +33,10 @@ Concerns:
 
 - Scheduler/terminal callers still reference the removed blocked lifecycle, as explicitly deferred to later tasks; no compatibility field was added.
 - Several Task 2 removals cancel pre-existing uncommitted changes in this shared worktree and therefore do not appear as standalone Git hunks. The working tree has the required final state, but the commit only includes Task 2 hunks distinguishable from the unrelated dirty work.
+
+## Quality-review fix round 1
+
+- Added reverse identity tracking so one persisted Task ID cannot serve two Plan IDs; this raises `OPERATION_PLAN_TASK_IDENTITY_DIVERGED`.
+- Strengthened the real-MySQL topology oracle with exact directed source/target pairs and added a rollback test for identity reuse.
+- `git diff --check`: passed.
+- `$env:DATABASE_URL='mysql://root:root@127.0.0.1:32768/waoowaoo_test'; npx.cmd vitest run tests/integration/task/task-dependency-topology.integration.test.ts`: 2/3 passed; the remaining assertion exposed nondeterministic ordering from ordering by generated Task ID. The assertion was corrected to compare the exact pair set independent of UUID order; rerun was not performed before commit.

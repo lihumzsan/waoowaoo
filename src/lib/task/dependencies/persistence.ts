@@ -10,6 +10,7 @@ function buildPersistedTaskIdByPlanId(
   persistedTasks: readonly PersistedTaskPlanIdentity[],
 ): ReadonlyMap<string, string> {
   const persistedTaskIdByPlanId = new Map<string, string>()
+  const planIdByPersistedTaskId = new Map<string, string>()
   for (const persistedTask of persistedTasks) {
     const operationPlanTaskId = persistedTask.operationPlanTaskId
     if (!operationPlanTaskId) {
@@ -18,7 +19,12 @@ function buildPersistedTaskIdByPlanId(
     if (persistedTaskIdByPlanId.has(operationPlanTaskId)) {
       throw new Error(`OPERATION_PLAN_TASK_IDENTITY_DIVERGED:${operationPlanTaskId}`)
     }
+    const existingPlanId = planIdByPersistedTaskId.get(persistedTask.id)
+    if (existingPlanId) {
+      throw new Error(`OPERATION_PLAN_TASK_IDENTITY_DIVERGED:${existingPlanId}:${operationPlanTaskId}`)
+    }
     persistedTaskIdByPlanId.set(operationPlanTaskId, persistedTask.id)
+    planIdByPersistedTaskId.set(persistedTask.id, operationPlanTaskId)
   }
   return persistedTaskIdByPlanId
 }
