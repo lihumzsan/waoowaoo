@@ -27,6 +27,7 @@
     "storage:init:cloud": "node scripts/run-with-env.mjs .env.cloud.local -- tsx src/lib/storage/init.ts",
     "env:cloud:check": "node scripts/check-cloud-env.mjs .env.cloud.local --mode=production",
     "env:cloud:check:dev": "node scripts/check-cloud-env.mjs .env.cloud.local --mode=development",
+    "env:platform-models:check": "tsx --tsconfig tsconfig.runtime-scripts.json scripts/check-platform-default-models.ts",
     "start:next": "next start -H 0.0.0.0",
     "start:temporal-worker": "tsx --env-file=.env src/lib/temporal/worker.ts",
     "temporal:worker:rollout": "sh scripts/temporal/worker-rollout.sh",

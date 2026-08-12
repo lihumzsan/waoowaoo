@@ -137,6 +137,7 @@ if [ ! -f "$env_file" ] || [ ! -f "$compose_file" ] || [ ! -f "$cloud_compose_fi
   echo "Production Compose or environment file is missing" >&2
   exit 1
 fi
+
 release_history="$deploy_root/.release-history"
 if [ ! -e "$release_history" ]; then
   previous_app_image=$(sed -n 's/^APP_IMAGE=//p' "$env_file" | tail -n 1)
@@ -168,6 +169,11 @@ export COMPOSE_PROJECT_NAME=${WAO_COMPOSE_PROJECT_NAME:-waoowaoo-prod}
 compose() {
   docker compose --profile temporal-worker-rollout "$@"
 }
+
+# Resolve every environment-owned platform default through the candidate
+# registry before the candidate can boot or any persistent schema can change.
+APP_IMAGE="$app_image" CODEX_RUNTIME_IMAGE="$runtime_image" \
+  compose run --rm --no-deps app npm run env:platform-models:check
 
 set_env_value() {
   env_key=$1
