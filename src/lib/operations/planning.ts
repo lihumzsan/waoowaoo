@@ -43,6 +43,12 @@ export interface PlannedTaskDependency {
   target: PlannedTaskTarget
 }
 
+export interface PlannedTaskEdge {
+  readonly sourceTaskPlanId: string
+  readonly targetTaskPlanId: string
+  readonly requirement: 'required_success'
+}
+
 export interface OperationPlan {
   kind: OperationPlanKind
   operationId: ProjectAgentOperationId
@@ -50,6 +56,7 @@ export interface OperationPlan {
   userId: string
   tasks: PlannedTask[]
   taskDependencies?: PlannedTaskDependency[]
+  taskEdges?: readonly PlannedTaskEdge[]
   reservedIdentityIds?: string[]
   summary?: string | null
   metadata?: Record<string, unknown>
