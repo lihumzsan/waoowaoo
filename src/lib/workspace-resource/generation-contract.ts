@@ -101,6 +101,9 @@ export const workspaceResourceGenerationTaskPayloadSchema = z.object({
     .optional(),
   vocalPerformanceMode: vocalPerformanceModeSchema.optional(),
 }).strict().superRefine((payload, context) => {
+  if (payload.resource.mediaType === 'video' && payload.vocalPerformanceMode === undefined) {
+    context.addIssue({ code: 'custom', path: ['vocalPerformanceMode'], message: 'video tasks must declare vocalPerformanceMode.' })
+  }
   if (payload.resource.mediaType !== 'video' && payload.vocalPerformanceMode !== undefined) {
     context.addIssue({ code: 'custom', path: ['vocalPerformanceMode'], message: 'Only video tasks may declare vocalPerformanceMode.' })
   }

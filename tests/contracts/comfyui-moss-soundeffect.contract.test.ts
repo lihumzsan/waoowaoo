@@ -6,6 +6,7 @@ import {
   pollComfyUiMossSound,
 } from '@/lib/ai-providers/comfyui/moss'
 import { COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_ID, COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_KEY } from '@/lib/ai-providers/comfyui/models'
+import { normalizeMediaOptionsForSelection } from '@/lib/ai-exec/media-preflight'
 import type { AiProviderSoundExecutionContext } from '@/lib/ai-providers/runtime-types'
 import { workspaceResourceGenerationTaskPayloadSchema } from '@/lib/workspace-resource/generation-contract'
 import { soundGenerationItemSchema } from '@/lib/workspace-resource/generation-request'
@@ -58,6 +59,23 @@ describe('ComfyUI MOSS SoundEffect v2 contract', () => {
       })
     }
   }
+
+  it('keeps the declared one-to-thirty-second range at the provider-option boundary', () => {
+    for (const durationSeconds of [1, 30]) {
+      expect(normalizeMediaOptionsForSelection({
+        selection: soundInput.selection,
+        modality: 'sound',
+        options: { durationSeconds, outputFormat: 'mp3' },
+      })).toMatchObject({ durationSeconds })
+    }
+    for (const durationSeconds of [0, 31]) {
+      expect(() => normalizeMediaOptionsForSelection({
+        selection: soundInput.selection,
+        modality: 'sound',
+        options: { durationSeconds, outputFormat: 'mp3' },
+      })).toThrow()
+    }
+  })
 
   it('preserves negative prompt whitespace at the generation request boundary', () => {
     const negativePrompt = '  music, speech, singing\n'

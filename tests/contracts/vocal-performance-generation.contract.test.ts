@@ -36,6 +36,7 @@ describe('frozen vocal performance task contract', () => {
     })
     expect(parsed.vocalPerformanceMode).toBe('native_dialogue')
     expect(parsed.generationOptions).not.toHaveProperty('vocalPerformanceMode')
+    expect(() => workspaceResourceGenerationTaskPayloadSchema.parse(basePayload('video'))).toThrow()
   })
 
   it('forbids a vocal performance mode on non-video tasks', () => {

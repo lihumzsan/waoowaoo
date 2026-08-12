@@ -20,7 +20,7 @@ export const comfyuiAdapter: AiProviderAdapter = {
         required: ['duration', 'resolution', 'aspectRatio', 'generateAudio'],
         excludedKeys: ['referenceImages', 'referenceAudios', 'referenceVideos', 'size', 'promptExtend', 'serviceTier', 'executionExpiresAfter', 'returnLastFrame', 'draft', 'seed', 'cameraFixed', 'watermark'],
         validators: {
-          duration: integerRangeValidator({ min: 5, max: 15 }),
+          duration: integerRangeValidator({ min: 4, max: 15 }),
           resolution: enumValidator(['480p', '720p']),
           aspectRatio: enumValidator(H3_ASPECT_RATIOS),
           generateAudio: booleanValidator(),
@@ -42,7 +42,7 @@ export const comfyuiAdapter: AiProviderAdapter = {
         required: ['durationSeconds', 'outputFormat'],
         excludedKeys: ['referenceImages', 'referenceAudios', 'referenceVideos'],
         validators: {
-          durationSeconds: integerRangeValidator({ min: 4, max: 15 }),
+          durationSeconds: integerRangeValidator({ min: 1, max: 30 }),
           outputFormat: enumValidator(['mp3']),
         },
         objectValidators: [() => selection.modelId === COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_ID

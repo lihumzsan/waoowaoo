@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
+import { normalizeMediaOptionsForSelection } from '@/lib/ai-exec/media-preflight'
 import { findBuiltinCapabilities, resolveGenerationOptionsForModel } from '@/lib/ai-registry/capabilities-catalog'
 import { COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES, COMFYUI_H3_MODEL_ID } from '@/lib/ai-providers/comfyui/models'
 import { H3_RUNTIME_PROFILES, resolveH3Dimensions, resolveH3DurationFrames } from '@/lib/ai-providers/comfyui/profiles'
@@ -52,6 +53,27 @@ describe('ComfyUI H3 profile math', () => {
       resolution: '720p',
       generateAudio: true,
     })
+  })
+
+  it('accepts four seconds at the real ComfyUI provider-option boundary', () => {
+    const selection = {
+      provider: 'comfyui' as const,
+      modelId: COMFYUI_H3_MODEL_ID,
+      modelKey: `comfyui::${COMFYUI_H3_MODEL_ID}`,
+      variantSubKind: 'official' as const,
+    }
+    expect(normalizeMediaOptionsForSelection({
+      selection,
+      modality: 'video',
+      options: { duration: 4, resolution: '720p', aspectRatio: '9:16', generateAudio: true },
+    })).toMatchObject({ duration: 4 })
+    for (const duration of [3, 16]) {
+      expect(() => normalizeMediaOptionsForSelection({
+        selection,
+        modality: 'video',
+        options: { duration, resolution: '720p', aspectRatio: '9:16', generateAudio: true },
+      })).toThrow()
+    }
   })
 
   it('keeps both production profiles wired to the verified H3 node and output', () => {
