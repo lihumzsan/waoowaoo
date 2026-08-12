@@ -15,7 +15,7 @@ import {
   buildBillingActionQuotePreviewFromQuote,
   type BillingActionQuotePreview,
 } from '@/lib/billing/action-quote-preview'
-import type { OperationPlanView } from '@/lib/operations/planning'
+import type { OperationPlanView } from '@/lib/operations/plan-contract'
 import { MarkdownTextPart } from './MarkdownTextPart'
 import { readProjectAssistantTextAttachmentsFromMetadata } from '@/lib/project-agent/text-attachments'
 import { readProjectAssistantMediaAttachmentsFromMetadata } from '@/lib/project-agent/media-attachments'

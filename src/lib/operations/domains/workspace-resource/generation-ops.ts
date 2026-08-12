@@ -72,9 +72,8 @@ import {
   createPlannedTask,
   requirePlannedTaskBillingInfo,
   submitPlannedOperationTasks,
-  type OperationPlan,
-  type PlannedTask,
 } from '@/lib/operations/planning'
+import type { OperationPlan, PlannedTask } from '@/lib/operations/plan-contract'
 import type {
   ProjectAgentOperationContext,
   ProjectAgentOperationRegistryDraft,

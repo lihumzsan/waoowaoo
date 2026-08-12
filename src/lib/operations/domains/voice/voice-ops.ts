@@ -22,9 +22,8 @@ import {
   createPlannedTask,
   requirePlannedTaskBillingInfo,
   submitPlannedOperationTasks,
-  type OperationPlan,
-  type PlannedTask,
 } from '@/lib/operations/planning'
+import type { OperationPlan, PlannedTask } from '@/lib/operations/plan-contract'
 import { refineTaskBatchSubmitOperationOutputSchema, taskBatchSubmitOperationOutputSchemaBase } from '@/lib/operations/output-schemas'
 import type { ProjectAgentOperationContext, ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { prisma } from '@/lib/prisma'

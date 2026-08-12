@@ -1,10 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { ApiError } from '@/lib/api-errors'
 import { buildDefaultTaskBillingInfo, getBillingMode } from '@/lib/billing'
-import type { BillingMode, TaskBillingInfo, TaskType } from '@/lib/task/types'
-import { getTaskDefinition } from '@/lib/task/definition'
-import { resolveWorkspaceResourceRefs } from '@/lib/workspace-resource/resource-impact'
-import type { Locale } from '@/i18n/routing'
+import type { TaskBillingInfo, TaskType } from '@/lib/task/types'
 import { shouldExposeBillingCredits } from '@/lib/billing/task-billing-view'
 import {
   requiresBillableMediaApproval,
@@ -25,84 +22,14 @@ import {
   loadOperationPlanSnapshotByApiRequest,
   persistOperationPlanSnapshot,
 } from './operation-plan-snapshot'
+import { assertOperationPlanTaskResourceScopes } from './operation-plan-resource-scope'
+import type {
+  BillingQuoteView,
+  OperationPlan,
+  OperationPlanView,
+  PlannedTask,
+} from './plan-contract'
 import { freezeProjectVideoRatioIntoPlan } from './project-video-ratio-policy'
-
-export type OperationPlanKind = 'task_submission'
-
-export interface PlannedTaskTarget {
-  targetType: string
-  targetId: string
-}
-
-export interface PlannedTask {
-  id: string
-  taskType: TaskType
-  target: PlannedTaskTarget
-  payload: Record<string, unknown>
-  billingInfo: TaskBillingInfo
-  dedupeKey?: string | null
-  locale: Locale
-}
-
-export interface PlannedTaskDependency {
-  taskId: string
-  taskType: TaskType
-  target: PlannedTaskTarget
-}
-
-export interface OperationPlan {
-  kind: OperationPlanKind
-  operationId: ProjectAgentOperationId
-  projectId: string
-  userId: string
-  tasks: PlannedTask[]
-  taskDependencies?: PlannedTaskDependency[]
-  reservedIdentityIds?: string[]
-  summary?: string | null
-  metadata?: Record<string, unknown>
-}
-
-export interface BillingQuoteItemView {
-  id: string
-  taskType: TaskType
-  targetType: string
-  targetId: string
-  apiType: 'image' | 'video' | 'music' | 'voice'
-  model: string
-  quantity: number
-  unit: 'image' | 'video' | 'music' | 'voice' | 'second' | 'call' | 'character'
-  maxFrozenCost?: number
-}
-
-export interface BillingQuoteView {
-  showCredits: boolean
-  billingMode: BillingMode
-  billable: boolean
-  taskCount: number
-  mediaTaskCount: number
-  totalMaxFrozenCost?: number
-  currency?: 'credits'
-  items: BillingQuoteItemView[]
-}
-
-export interface OperationPlanView {
-  /** Stable API generation intent carried unchanged through plan/grant/execute. */
-  operationRequestId?: string
-  planSnapshotId?: string
-  inputHash?: string
-  planHash?: string
-  quoteHash?: string
-  operationId: ProjectAgentOperationId
-  kind: OperationPlanKind
-  taskCount: number
-  quote: BillingQuoteView
-  tasks: Array<{
-    id: string
-    taskType: TaskType
-    targetType: string
-    targetId: string
-  }>
-}
 
 /**
  * Builds the one quote shown for one model-step approval batch. Member plan
@@ -218,15 +145,6 @@ export async function quoteOperationPlan(plan: OperationPlan): Promise<BillingQu
         ...(showCredits ? { maxFrozenCost: info.maxFrozenCost } : {}),
       }
     }),
-  }
-}
-
-export function assertOperationPlanTaskResourceScopes(plan: OperationPlan): void {
-  for (const task of plan.tasks) {
-    resolveWorkspaceResourceRefs({
-      impact: getTaskDefinition(task.taskType).terminalResourceImpact,
-      projectId: plan.projectId,
-    })
   }
 }
 

@@ -4,7 +4,7 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/contexts/ToastContext'
-import type { OperationPlanView } from '@/lib/operations/planning'
+import type { OperationPlanView } from '@/lib/operations/plan-contract'
 import {
   executeApprovedCanvasOperation,
   fetchOperationPlanView,

@@ -4,7 +4,7 @@ import type {
   ProjectAgentContext,
   WorkspaceAssistantPartType,
 } from '@/lib/project-agent/types'
-import type { OperationPlan } from './planning'
+import type { OperationPlan } from './plan-contract'
 import type { OperationExecutionAuthorization } from './planned-operation-invocation'
 import type { Prisma } from '@prisma/client'
 import type { WorkspaceResourceImpact } from '@/lib/workspace-resource/resource-impact'
