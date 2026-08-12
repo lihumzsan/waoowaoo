@@ -149,12 +149,14 @@ jobs:
           case "$PRODUCTION_DEPLOY_ROOT" in *[!A-Za-z0-9_./-]*) echo "Production deploy root contains unsafe characters" >&2; exit 1 ;; esac
           deploy_root_b64=$(printf '%s' "$PRODUCTION_DEPLOY_ROOT" | base64 -w0)
           remote_tmp="/tmp/waoowaoo-release-${GITHUB_SHA}.tar.gz"
+          remote_script="/tmp/waoowaoo-deploy-${GITHUB_SHA}.sh"
           remote_archive="$PRODUCTION_DEPLOY_ROOT/.incoming/release-${GITHUB_SHA}.tar.gz"
           ssh_args=(-i "$HOME/.ssh/production" -o BatchMode=yes -o StrictHostKeyChecking=yes)
           scp "${ssh_args[@]}" "release-${GITHUB_SHA}.tar.gz" \
             "$PRODUCTION_SSH_USER@$PRODUCTION_SSH_HOST:$remote_tmp"
+          scp "${ssh_args[@]}" scripts/production/deploy-release.sh \
+            "$PRODUCTION_SSH_USER@$PRODUCTION_SSH_HOST:$remote_script"
           ssh "${ssh_args[@]}" "$PRODUCTION_SSH_USER@$PRODUCTION_SSH_HOST" \
             "set -eu; install -d -m 0750 '$PRODUCTION_DEPLOY_ROOT/.incoming'; mv '$remote_tmp' '$remote_archive'"
           ssh "${ssh_args[@]}" "$PRODUCTION_SSH_USER@$PRODUCTION_SSH_HOST" \
-            "WAO_DEPLOY_ROOT_B64=$deploy_root_b64 sh -s -- '$GITHUB_SHA' '$remote_archive'" \
-            < scripts/production/deploy-release.sh
+            "set -eu; chmod 0500 '$remote_script'; sh -n '$remote_script'; trap 'rm -f \"$remote_script\"' EXIT; WAO_DEPLOY_ROOT_B64=$deploy_root_b64 sh '$remote_script' '$GITHUB_SHA' '$remote_archive'"
