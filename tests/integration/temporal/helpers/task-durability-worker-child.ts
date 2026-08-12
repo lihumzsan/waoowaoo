@@ -14,6 +14,7 @@ import {
   activateTestWorkerVersion,
   buildTestTaskQueue,
   buildTestWorkerDeploymentOptions,
+  buildTestWorkerIdentity,
 } from './versioned-worker'
 
 const READY_MARKER = '[task-durability-worker] READY'
@@ -29,6 +30,7 @@ async function main(): Promise<void> {
   }
   const config = getTemporalRuntimeConfig()
   const taskQueue = buildTestTaskQueue(config.taskQueue, 'task-durability')
+  const workerIdentity = buildTestWorkerIdentity('task-durability')
   const connection = await NativeConnection.connect(
     buildTemporalConnectionOptions(config),
   )
@@ -63,6 +65,7 @@ async function main(): Promise<void> {
       connection,
       namespace: config.namespace,
       taskQueue,
+      identity: workerIdentity,
       workflowsPath: resolve(
         process.cwd(),
         'src/lib/temporal/workflows/index.ts',
@@ -83,6 +86,7 @@ async function main(): Promise<void> {
       connection,
       config.namespace,
       taskQueue,
+      workerIdentity,
       'task-durability',
     )
     console.log(READY_MARKER)

@@ -32,6 +32,7 @@ import {
   activateTestWorkerVersion,
   buildTestTaskQueue,
   buildTestWorkerDeploymentOptions,
+  buildTestWorkerIdentity,
 } from './versioned-worker'
 
 interface Deferred<T> {
@@ -258,11 +259,13 @@ export async function startTaskProductionWorker(): Promise<TaskProductionWorkerH
   requireTemporalTestRuntime()
   const config = getTemporalRuntimeConfig()
   const taskQueue = buildTestTaskQueue(config.taskQueue, 'task-durability')
+  const workerIdentity = buildTestWorkerIdentity('task-durability')
   const connection = await NativeConnection.connect(buildTemporalConnectionOptions(config))
   const worker = await Worker.create({
     connection,
     namespace: config.namespace,
     taskQueue,
+    identity: workerIdentity,
     workflowsPath: resolve(process.cwd(), 'src/lib/temporal/workflows/index.ts'),
     activities: productionActivities,
     workerDeploymentOptions: buildTestWorkerDeploymentOptions(
@@ -275,6 +278,7 @@ export async function startTaskProductionWorker(): Promise<TaskProductionWorkerH
     connection,
     config.namespace,
     taskQueue,
+    workerIdentity,
     'task-durability',
   )
   let closed = false
@@ -299,6 +303,7 @@ export async function startTaskQueuedCancelWorker(input: {
   requireTemporalTestRuntime()
   const config = getTemporalRuntimeConfig()
   const taskQueue = buildTestTaskQueue(config.taskQueue, 'task-durability')
+  const workerIdentity = buildTestWorkerIdentity('task-durability')
   const connection = await NativeConnection.connect(buildTemporalConnectionOptions(config))
   const capacityHeld = deferred<void>()
   const releaseHolder = deferred<void>()
@@ -333,6 +338,7 @@ export async function startTaskQueuedCancelWorker(input: {
     connection,
     namespace: config.namespace,
     taskQueue,
+    identity: workerIdentity,
     workflowsPath: resolve(process.cwd(), 'src/lib/temporal/workflows/index.ts'),
     activities: {
       ...productionActivities,
@@ -348,6 +354,7 @@ export async function startTaskQueuedCancelWorker(input: {
     connection,
     config.namespace,
     taskQueue,
+    workerIdentity,
     'task-durability',
   )
   let closed = false
@@ -382,6 +389,7 @@ export async function startTaskLateCancelWorker(input: {
   requireTemporalTestRuntime()
   const config = getTemporalRuntimeConfig()
   const taskQueue = buildTestTaskQueue(config.taskQueue, 'task-durability')
+  const workerIdentity = buildTestWorkerIdentity('task-durability')
   const connection = await NativeConnection.connect(buildTemporalConnectionOptions(config))
   const checkpointCommitted = deferred<void>()
   const cancellationAcknowledged = deferred<void>()
@@ -428,6 +436,7 @@ export async function startTaskLateCancelWorker(input: {
     connection,
     namespace: config.namespace,
     taskQueue,
+    identity: workerIdentity,
     workflowsPath: resolve(process.cwd(), 'src/lib/temporal/workflows/index.ts'),
     activities: {
       ...productionActivities,
@@ -443,6 +452,7 @@ export async function startTaskLateCancelWorker(input: {
     connection,
     config.namespace,
     taskQueue,
+    workerIdentity,
     'task-durability',
   )
   let closed = false
@@ -482,6 +492,7 @@ export async function startTaskDurabilityWorker(input: {
   requireTemporalTestRuntime()
   const config = getTemporalRuntimeConfig()
   const taskQueue = buildTestTaskQueue(config.taskQueue, 'task-durability')
+  const workerIdentity = buildTestWorkerIdentity('task-durability')
   const connection = await NativeConnection.connect(buildTemporalConnectionOptions(config))
   const followUpServer = await startFollowUpAdmissionServer()
   const terminalFault = deferred<TaskTerminalReceipt>()
@@ -525,6 +536,7 @@ export async function startTaskDurabilityWorker(input: {
       connection,
       namespace: config.namespace,
       taskQueue,
+      identity: workerIdentity,
       workflowsPath: resolve(process.cwd(), 'src/lib/temporal/workflows/index.ts'),
       activities: {
         ...productionActivities,
@@ -545,6 +557,7 @@ export async function startTaskDurabilityWorker(input: {
     connection,
     config.namespace,
     taskQueue,
+    workerIdentity,
     'task-durability',
   )
   let closed = false

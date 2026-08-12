@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import type { NativeConnection, WorkerOptions } from '@temporalio/worker'
 import { UNREGISTERED_WORKFLOW_VERSIONING_FALLBACK } from '@/lib/temporal/workflow-registry'
 
@@ -39,10 +40,15 @@ export function buildTestWorkerDeploymentOptions(
   }
 }
 
+export function buildTestWorkerIdentity(scope: TestWorkerScope): string {
+  return `waoowaoo-${scope}-${randomUUID()}`
+}
+
 export async function activateTestWorkerVersion(
   connection: NativeConnection,
   namespace: string,
   taskQueue: string,
+  workerIdentity: string,
   scope: TestWorkerScope,
 ): Promise<void> {
   const deploymentName = buildTestWorkerDeploymentName(scope)
@@ -106,5 +112,27 @@ export async function activateTestWorkerVersion(
       timer.unref()
     })
     attempt += 1
+  }
+
+  for (const taskQueueType of [1, 2] as const) {
+    attempt = 1
+    while (attempt <= 60) {
+      const described = await connection.workflowService.describeTaskQueue({
+        namespace,
+        taskQueue: { name: taskQueue },
+        taskQueueType,
+      })
+      if (described.pollers.some((poller) => poller.identity === workerIdentity)) {
+        break
+      }
+      if (attempt === 60) {
+        throw new Error('TEMPORAL_TEST_WORKER_POLLER_NOT_READY')
+      }
+      await new Promise<void>((resolveWait) => {
+        const timer = setTimeout(resolveWait, 100)
+        timer.unref()
+      })
+      attempt += 1
+    }
   }
 }

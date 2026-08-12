@@ -15,6 +15,7 @@ import type {
 import {
   activateTestWorkerVersion,
   buildTestWorkerDeploymentOptions,
+  buildTestWorkerIdentity,
 } from './versioned-worker'
 
 interface Deferred<T> {
@@ -88,6 +89,7 @@ export async function startOperationExecutionDurabilityWorker(input: {
   requireTemporalTestRuntime()
   const config = getTemporalRuntimeConfig()
   const taskQueue = config.taskQueue
+  const workerIdentity = buildTestWorkerIdentity('operation-durability')
   const connection = await NativeConnection.connect(
     buildTemporalConnectionOptions(config),
   )
@@ -114,6 +116,7 @@ export async function startOperationExecutionDurabilityWorker(input: {
     connection,
     namespace: config.namespace,
     taskQueue,
+    identity: workerIdentity,
     workflowsPath: resolve(
       process.cwd(),
       'src/lib/temporal/workflows/index.ts',
@@ -132,6 +135,7 @@ export async function startOperationExecutionDurabilityWorker(input: {
     connection,
     config.namespace,
     taskQueue,
+    workerIdentity,
     'operation-durability',
   )
   let closed = false
