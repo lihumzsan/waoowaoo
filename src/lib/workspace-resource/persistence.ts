@@ -40,6 +40,34 @@ export type WorkspaceResourceClient = Pick<
   'project' | 'workspaceResource' | 'workspaceResourceVersion' | 'workspaceResourceLineage' | 'mediaObject'
 > | typeof prisma
 
+export interface WorkspaceResourceInputExpectation {
+  readonly expectedMediaType?: WorkspaceResourceMediaType
+  readonly allowedSchemaIds?: readonly string[]
+}
+
+export function assertWorkspaceResourceInputExpectation(
+  resource: {
+    readonly resourceId: string
+    readonly mediaType: string | null
+    readonly schemaId: string
+    readonly contentKind: string
+  },
+  expectation: WorkspaceResourceInputExpectation,
+): void {
+  if (expectation.expectedMediaType && resource.contentKind !== 'media') {
+    throw new Error(`WORKSPACE_RESOURCE_INPUT_CONTENT_KIND_MISMATCH:${resource.resourceId}`)
+  }
+  if (expectation.expectedMediaType && resource.mediaType !== expectation.expectedMediaType) {
+    throw new Error(`WORKSPACE_RESOURCE_INPUT_MEDIA_TYPE_MISMATCH:${resource.resourceId}`)
+  }
+  if (
+    expectation.allowedSchemaIds
+    && !expectation.allowedSchemaIds.includes(resource.schemaId)
+  ) {
+    throw new Error(`WORKSPACE_RESOURCE_INPUT_SCHEMA_MISMATCH:${resource.resourceId}`)
+  }
+}
+
 type ResourceProvenance = {
   readonly operationId: string | null
   readonly inputHash: string | null
@@ -480,6 +508,8 @@ export async function resolveWorkspaceResourceInputs(
       readonly contentVersion: number
       readonly role: string
       readonly position: number
+      readonly expectedMediaType?: WorkspaceResourceMediaType
+      readonly allowedSchemaIds?: readonly string[]
     }[]
   },
 ): Promise<readonly WorkspaceResourceInputRef[]> {
@@ -493,7 +523,7 @@ export async function resolveWorkspaceResourceInputs(
       resourceKind: 'file',
       deletedAt: null,
     },
-    select: { id: true, workspacePath: true, currentVersion: true, status: true },
+    select: { id: true, workspacePath: true, currentVersion: true, status: true, mediaType: true, schemaId: true },
   })
   const byId = new Map(resources.map((resource) => [resource.id, resource]))
   const seenPositions = new Set<string>()
@@ -516,9 +546,15 @@ export async function resolveWorkspaceResourceInputs(
     }
     const version = await client.workspaceResourceVersion.findUnique({
       where: { resourceId_version: { resourceId: resource.id, version: contentVersion } },
-      select: { id: true },
+      select: { id: true, contentKind: true },
     })
     if (!version) throw new Error(`WORKSPACE_RESOURCE_INPUT_VERSION_NOT_FOUND:${resource.id}:${String(contentVersion)}`)
+    assertWorkspaceResourceInputExpectation({
+      resourceId: resource.id,
+      mediaType: resource.mediaType,
+      schemaId: resource.schemaId,
+      contentKind: version.contentKind,
+    }, reference)
     const role = reference.role.trim()
     const positionKey = `${role}:${String(reference.position)}`
     if (!role || !Number.isSafeInteger(reference.position) || reference.position < 0 || seenPositions.has(positionKey)) {

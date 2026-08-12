@@ -159,6 +159,7 @@ async function submitFixtureTask(input: {
                 name: `Task durability ${input.suffix}`,
               },
             ]),
+            protocol: 'workspace_resource_video_merge_v1',
             resource: {
               resourceId,
               mediaType: 'video',
@@ -167,7 +168,7 @@ async function submitFixtureTask(input: {
               modelKey: null,
               inputHash: 'b'.repeat(64),
               inputs: input.references,
-              generationOptions: { mergeMode: 'ordered_concat' },
+              generationOptions: { mergeMode: 'ordered_concat', audioMode: 'preserve' },
               toolCallId: null,
             },
           },
@@ -185,7 +186,7 @@ async function submitFixtureTask(input: {
               operationId,
               inputHash: 'b'.repeat(64),
               taskId: task.id,
-              generationOptions: { mergeMode: 'ordered_concat' },
+              generationOptions: { mergeMode: 'ordered_concat', audioMode: 'preserve' },
             })
           },
         },

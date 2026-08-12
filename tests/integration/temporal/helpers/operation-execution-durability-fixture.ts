@@ -133,6 +133,7 @@ Promise<OperationExecutionDurabilityFixture> {
   const parsedInput = operation.inputSchema.safeParse({
     folderPath: null,
     name: `Operation durability output ${suffix}`,
+    audioMode: 'preserve',
     videos: seededInputs.resources.map(({ resourceId, contentVersion }) => ({
       resourceId,
       contentVersion,

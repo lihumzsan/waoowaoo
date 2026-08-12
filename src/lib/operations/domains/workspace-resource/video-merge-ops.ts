@@ -19,6 +19,17 @@ import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { prisma } from '@/lib/prisma'
 import { stableArgsFingerprint } from '@/lib/project-agent/stable-args-hash'
 import { TASK_TYPE } from '@/lib/task/types'
+import {
+  videoMergeAudioModeSchema,
+  type VideoMergeAudioMode,
+} from '@/lib/workspace-resource/video-merge-contract'
+
+export function buildVideoMergeInputHash(
+  references: readonly WorkspaceResourceInputRef[],
+  audioMode: VideoMergeAudioMode,
+): string {
+  return stableArgsFingerprint({ references, audioMode })
+}
 
 const mergeVideosInputSchema = z.object({
   folderPath: z.string().trim().min(1).max(512).nullable().optional()
@@ -28,13 +39,29 @@ const mergeVideosInputSchema = z.object({
     resourceId: z.string().trim().min(1).max(32),
     contentVersion: z.number().int().positive(),
   }).strict()).min(1).max(50),
-  music: z.object({
+  audioMode: videoMergeAudioModeSchema.describe(
+    'Required final-audio behavior: preserve keeps source audio; mix keeps source audio and mixes the selected audio; replace removes source audio and uses only the selected audio; mute outputs no audio track.',
+  ),
+  backgroundMusic: z.object({
     resourceId: z.string().trim().min(1).max(32),
     contentVersion: z.number().int().positive(),
-  }).strict().optional(),
-}).strict().refine((input) => input.videos.length >= 2 || Boolean(input.music), {
-  message: 'A single video requires a music input.',
-  path: ['videos'],
+  }).strict().optional().describe('Exact BGM or uploaded-audio Resource version required only by mix. It is treated as background music with fades and ducking.'),
+  replacementAudio: z.object({
+    resourceId: z.string().trim().min(1).max(32),
+    contentVersion: z.number().int().positive(),
+  }).strict().optional().describe('Exact audio Resource version required only by replace. It becomes the complete final soundtrack.'),
+}).strict().superRefine((input, context) => {
+  if (input.audioMode === 'preserve' && input.videos.length < 2) {
+    context.addIssue({ code: 'custom', path: ['videos'], message: 'Preserve mode requires at least two videos.' })
+  }
+  const validAudioInputs = input.audioMode === 'mix'
+    ? Boolean(input.backgroundMusic) && !input.replacementAudio
+    : input.audioMode === 'replace'
+      ? Boolean(input.replacementAudio) && !input.backgroundMusic
+      : !input.backgroundMusic && !input.replacementAudio
+  if (!validAudioInputs) {
+    context.addIssue({ code: 'custom', path: ['audioMode'], message: `${input.audioMode} mode audio input does not match its declared semantics.` })
+  }
 })
 
 const mergeVideosOutputSchema = refineTaskSubmitOperationOutputSchema(
@@ -48,7 +75,7 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
   return {
     merge_videos: defineOperation({
       id: 'merge_videos',
-      summary: 'Concatenate exact frozen video Resource versions and optionally mix one exact audio Resource version into a new server-placed video.',
+      summary: 'Concatenate exact frozen video Resource versions and explicitly preserve, mix, replace, or remove the final audio track.',
       intent: 'act',
       channels: { tool: true, api: true, mcp: true },
       effects: {
@@ -72,7 +99,7 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
       confirmation: { kind: 'none', required: false },
       assistantWriteAuthority: {
         kind: 'temporal_operation_execution',
-        contractRevision: 'merge_videos/v5',
+        contractRevision: 'merge_videos/v6',
         followUpPolicy: 'after_all_terminal',
       },
       inputSchema: mergeVideosInputSchema,
@@ -82,11 +109,28 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
           userId: ctx.userId,
           projectId: ctx.projectId,
           references: [
-            ...input.videos.map((video, position) => ({ ...video, role: 'source_video', position })),
-            ...(input.music ? [{ ...input.music, role: 'bgm_audio', position: input.videos.length }] : []),
+            ...input.videos.map((video, position) => ({
+              ...video,
+              role: 'source_video',
+              position,
+              expectedMediaType: 'video' as const,
+            })),
+            ...(input.backgroundMusic ? [{
+              ...input.backgroundMusic,
+              role: 'background_music',
+              position: input.videos.length,
+              expectedMediaType: 'audio' as const,
+              allowedSchemaIds: [WORKSPACE_RESOURCE_SCHEMA.BGM_AUDIO, WORKSPACE_RESOURCE_SCHEMA.UPLOAD_AUDIO],
+            }] : []),
+            ...(input.replacementAudio ? [{
+              ...input.replacementAudio,
+              role: 'replacement_audio',
+              position: input.videos.length,
+              expectedMediaType: 'audio' as const,
+            }] : []),
           ],
         })
-        const inputHash = stableArgsFingerprint({ references })
+        const inputHash = buildVideoMergeInputHash(references, input.audioMode)
         const requestId = [
           'merge_videos', ctx.userId, ctx.projectId,
           ctx.context.turnId?.trim() || 'no-turn',
@@ -102,9 +146,10 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
           mediaType: 'video',
           schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
         })
-        const generationOptions: Record<string, string | number> = input.music
-          ? { mergeMode: 'ordered_concat', bgmVolume: 1 }
-          : { mergeMode: 'ordered_concat' }
+        const generationOptions: Record<string, string | number> = {
+          mergeMode: 'ordered_concat',
+          audioMode: input.audioMode,
+        }
         const payload = {
           lifecycleProjection: buildWorkspaceResourceLifecycleProjection([{
             resourceId,
@@ -112,6 +157,7 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
             schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
             name: workspaceResourceDisplayName({ workspacePath: outputPath, resourceId }),
           }]),
+          protocol: 'workspace_resource_video_merge_v1' as const,
           resource: {
             resourceId,
             mediaType: 'video' as const,

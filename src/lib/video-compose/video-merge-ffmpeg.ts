@@ -1,4 +1,5 @@
 import { writeFile } from 'node:fs/promises'
+import path from 'node:path'
 import { runFfmpegCommand } from './ffmpeg-command'
 
 export async function probeVideoDimensions(filePath: string): Promise<{
@@ -84,4 +85,53 @@ export async function concatVideoClips(input: {
     stage: 'workspace_resource_video_merge_concat',
     expectedDurationSeconds: input.durationSeconds,
   })
+}
+
+async function probeVideoCodec(filePath: string): Promise<string> {
+  const result = await runFfmpegCommand('ffprobe', [
+    '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name',
+    '-of', 'default=noprint_wrappers=1:nokey=1', filePath,
+  ], { stage: 'workspace_resource_video_merge_probe_codec' })
+  const codec = result.stdout.trim().toLowerCase()
+  if (!codec) throw new Error('WORKSPACE_RESOURCE_VIDEO_MERGE_CODEC_INVALID')
+  return codec
+}
+
+export async function composeVideoMergeVideoTrack(input: {
+  readonly sourcePaths: readonly string[]
+  readonly durations: readonly number[]
+  readonly workspaceDir: string
+  readonly width: number
+  readonly height: number
+}): Promise<string> {
+  const sourcePath = input.sourcePaths[0]
+  if (!sourcePath || input.sourcePaths.length !== input.durations.length) {
+    throw new Error('WORKSPACE_RESOURCE_VIDEO_MERGE_INPUT_INVALID')
+  }
+  if (input.sourcePaths.length === 1 && await probeVideoCodec(sourcePath) === 'h264') {
+    return sourcePath
+  }
+
+  const normalizedPaths: string[] = []
+  for (const [index, currentSourcePath] of input.sourcePaths.entries()) {
+    const durationSeconds = input.durations[index]
+    if (!durationSeconds) throw new Error(`WORKSPACE_RESOURCE_VIDEO_MERGE_DURATION_MISSING:${String(index)}`)
+    const normalizedPath = path.join(input.workspaceDir, `normalized-${String(index)}.mp4`)
+    await normalizeVideoClip({
+      sourcePath: currentSourcePath,
+      outputPath: normalizedPath,
+      durationSeconds,
+      width: input.width,
+      height: input.height,
+    })
+    normalizedPaths.push(normalizedPath)
+  }
+  const stitchedPath = path.join(input.workspaceDir, 'stitched.mp4')
+  await concatVideoClips({
+    clipPaths: normalizedPaths,
+    listPath: path.join(input.workspaceDir, 'concat.txt'),
+    outputPath: stitchedPath,
+    durationSeconds: input.durations.reduce((sum, duration) => sum + duration, 0),
+  })
+  return stitchedPath
 }

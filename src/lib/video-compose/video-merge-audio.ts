@@ -1,4 +1,5 @@
 import type { FfmpegCommandRunner } from './ffmpeg-command'
+import type { VideoMergeAudioMode } from '@/lib/workspace-resource/video-merge-contract'
 
 export type VideoMergeAudioCommandRunner = FfmpegCommandRunner
 
@@ -62,34 +63,56 @@ function parseLoudnormNumber(value: unknown): number | null {
 }
 
 function parseLoudnormMeasurement(stderr: string): AudioLoudnessMeasurement {
-  const match = /\{[\s\S]*"input_i"[\s\S]*?\}/.exec(stderr)
-  if (!match) throw new Error('VIDEO_MERGE_LOUDNESS_ANALYSIS_FAILED')
-  const parsed = JSON.parse(match[0]) as unknown
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('VIDEO_MERGE_LOUDNESS_ANALYSIS_FAILED')
+  let waitingForMeasurement = false
+  let measurementLines: string[] | null = null
+  for (const line of stderr.split(/\r?\n/u)) {
+    const trimmed = line.trim()
+    if (trimmed.startsWith('[Parsed_loudnorm_') && trimmed.endsWith(']')) {
+      waitingForMeasurement = true
+      measurementLines = null
+      continue
+    }
+    if (waitingForMeasurement) {
+      if (!trimmed) continue
+      waitingForMeasurement = false
+      if (trimmed === '{') measurementLines = [line]
+      continue
+    }
+    if (!measurementLines) continue
+    measurementLines.push(line)
+    if (trimmed !== '}') continue
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(measurementLines.join('\n')) as unknown
+    } catch {
+      measurementLines = null
+      continue
+    }
+    measurementLines = null
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue
+    const record = parsed as Record<string, unknown>
+    const inputIntegrated = parseLoudnormNumber(record.input_i)
+    const inputTruePeak = parseLoudnormNumber(record.input_tp)
+    const inputLra = parseLoudnormNumber(record.input_lra)
+    const inputThreshold = parseLoudnormNumber(record.input_thresh)
+    const targetOffset = parseLoudnormNumber(record.target_offset)
+    if (
+      inputIntegrated === null ||
+      inputTruePeak === null ||
+      inputLra === null ||
+      inputThreshold === null ||
+      targetOffset === null
+    ) continue
+    return {
+      inputIntegrated,
+      inputTruePeak,
+      inputLra,
+      inputThreshold,
+      targetOffset,
+    }
   }
-  const record = parsed as Record<string, unknown>
-  const inputIntegrated = parseLoudnormNumber(record.input_i)
-  const inputTruePeak = parseLoudnormNumber(record.input_tp)
-  const inputLra = parseLoudnormNumber(record.input_lra)
-  const inputThreshold = parseLoudnormNumber(record.input_thresh)
-  const targetOffset = parseLoudnormNumber(record.target_offset)
-  if (
-    inputIntegrated === null ||
-    inputTruePeak === null ||
-    inputLra === null ||
-    inputThreshold === null ||
-    targetOffset === null
-  ) {
-    throw new Error('VIDEO_MERGE_LOUDNESS_ANALYSIS_FAILED')
-  }
-  return {
-    inputIntegrated,
-    inputTruePeak,
-    inputLra,
-    inputThreshold,
-    targetOffset,
-  }
+  throw new Error('VIDEO_MERGE_LOUDNESS_ANALYSIS_FAILED')
 }
 
 function formatFilterNumber(value: number): string {
@@ -373,6 +396,94 @@ export async function muxVideoMergeSourceAudio(input: {
   return {
     hasSourceAudio: true,
     mainAudio: mainMeasurement,
+  }
+}
+
+async function muxVideoMergeReplacementAudio(input: {
+  readonly runCommand: VideoMergeAudioCommandRunner
+  readonly stitchedPath: string
+  readonly assemblyAudioPath: string
+  readonly outputPath: string
+  readonly durationSeconds: number
+}): Promise<void> {
+  const measurement = await analyzeAudioLoudness(input.runCommand, input.assemblyAudioPath, MAIN_AUDIO_TARGET)
+  await input.runCommand('ffmpeg', [
+    '-y', '-i', input.stitchedPath, '-i', input.assemblyAudioPath,
+    '-filter_complex',
+    `[1:a]loudnorm=${loudnormApplyFilter(MAIN_AUDIO_TARGET, measurement)},${exactAudioDurationFilter(input.durationSeconds)},alimiter=limit=0.95[aout]`,
+    '-map', '0:v:0', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart',
+    '-t', input.durationSeconds.toFixed(3), input.outputPath,
+  ])
+}
+
+async function muxVideoMergeWithoutAudio(input: {
+  readonly runCommand: VideoMergeAudioCommandRunner
+  readonly stitchedPath: string
+  readonly outputPath: string
+  readonly durationSeconds: number
+}): Promise<void> {
+  await input.runCommand('ffmpeg', [
+    '-y', '-i', input.stitchedPath, '-map', '0:v:0', '-c:v', 'copy', '-an', '-movflags', '+faststart',
+    '-t', input.durationSeconds.toFixed(3), input.outputPath,
+  ])
+}
+
+export async function muxVideoMergeFinalAudio(input: {
+  readonly runCommand: VideoMergeAudioCommandRunner
+  readonly audioMode: VideoMergeAudioMode
+  readonly stitchedPath: string
+  readonly mainAudioPath: string | null
+  readonly hasSourceAudio: boolean
+  readonly assemblyAudioPath: string | null
+  readonly outputPath: string
+  readonly durationSeconds: number
+}): Promise<void> {
+  switch (input.audioMode) {
+    case 'mute':
+      await muxVideoMergeWithoutAudio(input)
+      return
+    case 'replace':
+      if (!input.assemblyAudioPath) throw new Error('VIDEO_MERGE_REPLACEMENT_AUDIO_REQUIRED')
+      await muxVideoMergeReplacementAudio({
+        runCommand: input.runCommand,
+        stitchedPath: input.stitchedPath,
+        assemblyAudioPath: input.assemblyAudioPath,
+        outputPath: input.outputPath,
+        durationSeconds: input.durationSeconds,
+      })
+      return
+    case 'mix':
+      if (!input.mainAudioPath || !input.assemblyAudioPath) throw new Error('VIDEO_MERGE_BACKGROUND_MUSIC_INPUT_REQUIRED')
+      await muxVideoMergeAudio({
+        runCommand: input.runCommand,
+        stitchedPath: input.stitchedPath,
+        mainAudioPath: input.mainAudioPath,
+        hasSourceAudio: input.hasSourceAudio,
+        musicPath: input.assemblyAudioPath,
+        outputPath: input.outputPath,
+        durationSeconds: input.durationSeconds,
+        volume: 1,
+      })
+      return
+    case 'preserve':
+      if (!input.hasSourceAudio) {
+        await muxVideoMergeWithoutAudio(input)
+        return
+      }
+      if (!input.mainAudioPath) throw new Error('VIDEO_MERGE_SOURCE_AUDIO_REQUIRED')
+      await muxVideoMergeSourceAudio({
+        runCommand: input.runCommand,
+        stitchedPath: input.stitchedPath,
+        mainAudioPath: input.mainAudioPath,
+        hasSourceAudio: input.hasSourceAudio,
+        outputPath: input.outputPath,
+        durationSeconds: input.durationSeconds,
+      })
+      return
+    default: {
+      const unsupportedMode: never = input.audioMode
+      throw new Error(`VIDEO_MERGE_AUDIO_MODE_UNSUPPORTED:${String(unsupportedMode)}`)
+    }
   }
 }
 
