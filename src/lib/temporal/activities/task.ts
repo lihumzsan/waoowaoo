@@ -915,6 +915,27 @@ export async function commitTaskTerminal(
       executionCheckpointId: input.executionCheckpointId,
       eventPayload: { stage: 'completed', runtime: 'temporal' },
     })
+    if (result.applied) {
+      const releasedDependencyRows = await prisma.taskDependency.findMany({
+        where: { sourceTaskId: row.id, status: 'released' },
+        select: { targetTaskId: true },
+      })
+      const released = await prisma.task.findMany({
+        where: {
+          id: { in: releasedDependencyRows.map((dependency) => dependency.targetTaskId) },
+          type: 'workspace_resource_voiceover_mix',
+          status: TASK_STATUS.QUEUED,
+        },
+        select: { id: true, userId: true, type: true },
+      })
+      for (const task of released) {
+        await schedulePersistedTask({
+          taskId: task.id,
+          userId: task.userId,
+          taskType: task.type as 'workspace_resource_voiceover_mix',
+        })
+      }
+    }
     return await terminalReceiptFromCommit(input.taskId, 'completed', result)
   }
   if (input.kind === 'failed') {
@@ -932,6 +953,25 @@ export async function commitTaskTerminal(
     return await terminalReceiptFromCommit(input.taskId, 'failed', result)
   }
   requireNonEmpty(input.reason, 'TASK_CANCEL_REASON_INVALID')
+  if (input.dependency) {
+    if (input.dependency.requirement !== 'required_success') {
+      return failNonRetryable('TASK_DEPENDENCY_REQUIREMENT_INVALID')
+    }
+    if (
+      !Array.isArray(input.dependency.sourceTaskIds) ||
+      input.dependency.sourceTaskIds.length === 0 ||
+      new Set(input.dependency.sourceTaskIds).size !== input.dependency.sourceTaskIds.length ||
+      input.dependency.sourceTaskIds.some(
+        (sourceTaskId, index, sourceTaskIds) =>
+          typeof sourceTaskId !== 'string' ||
+          sourceTaskId.trim() !== sourceTaskId ||
+          sourceTaskId.length === 0 ||
+          (index > 0 && sourceTaskIds[index - 1] >= sourceTaskId),
+      )
+    ) {
+      return failNonRetryable('TASK_DEPENDENCY_SOURCE_IDS_INVALID')
+    }
+  }
   const inputFingerprint = await loadTaskExecutionFingerprint(input.taskId)
   const completedCheckpoint = await loadTaskHandlerCheckpoint({
     taskId: input.taskId,
@@ -957,7 +997,16 @@ export async function commitTaskTerminal(
     fence: { kind: 'active' },
     source: input.source,
     reason: input.reason,
-    eventPayload: { stage: 'canceled', runtime: 'temporal' },
+    eventPayload: {
+      stage: 'canceled',
+      runtime: 'temporal',
+      ...(input.dependency
+        ? {
+            errorCode: 'TASK_DEPENDENCY_FAILED',
+            dependencySourceTaskIds: [...input.dependency.sourceTaskIds],
+          }
+        : {}),
+    },
   })
   const receipt = await terminalReceiptFromCommit(input.taskId, 'canceled', result)
   return receipt

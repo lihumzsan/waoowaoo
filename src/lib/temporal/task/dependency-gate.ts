@@ -40,10 +40,17 @@ export function retainSchedulerCompletions(input: {
   readonly completions: readonly SchedulerDependencyCompletion[]
   readonly replayLimit: number
 }): readonly SchedulerDependencyCompletion[] {
-  const recent = input.completions.slice(-input.replayLimit)
+  const latestByTaskId = new Map<string, SchedulerDependencyCompletion>()
+  for (const completion of input.completions) {
+    latestByTaskId.set(completion.taskId, completion)
+  }
+  const uniqueCompletions = input.completions.filter(
+    (completion) => latestByTaskId.get(completion.taskId) === completion,
+  )
+  const recent = uniqueCompletions.slice(-input.replayLimit)
   const retainedTaskIds = new Set(recent.map((item) => item.taskId))
   return [
-    ...input.completions.filter(
+    ...uniqueCompletions.filter(
       (item) =>
         input.queuedDependencyTaskIds.has(item.taskId) && !retainedTaskIds.has(item.taskId),
     ),

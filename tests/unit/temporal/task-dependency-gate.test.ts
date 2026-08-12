@@ -61,4 +61,19 @@ describe('required-success Scheduler dependency gate', () => {
 
     expect(retained.filter((item) => item.taskId === 'source-old')).toHaveLength(1)
   })
+
+  it('deduplicates repeated completion facts by Task ID', () => {
+    const retained = retainSchedulerCompletions({
+      queuedDependencyTaskIds: new Set(['source-a']),
+      completions: [
+        { ...summary('source-a', 'completed'), terminalEventId: 1 },
+        { ...summary('source-a', 'completed'), terminalEventId: 2 },
+        { ...summary('source-b', 'completed'), terminalEventId: 3 },
+      ],
+      replayLimit: 1,
+    })
+
+    expect(retained.filter((item) => item.taskId === 'source-a')).toHaveLength(1)
+    expect(retained.find((item) => item.taskId === 'source-a')?.terminalEventId).toBe(2)
+  })
 })

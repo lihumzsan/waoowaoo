@@ -28,3 +28,17 @@ Implementation complete for the Scheduler required-success dependency gate. The 
 
 - Task 5 must complete the hard cutover for old submit/cancel callers and the terminal-service path before treating the application as runnable or whole-repository type-consistent.
 - Per parent instruction, no whole-repository typecheck, app startup, or broader Temporal suite was run in this task.
+
+## Fix round 1
+
+- Admission terminal results now validate Task ID, canonical workflow ID, status agreement, terminal event, attempts, and follow-up receipt shape before indexing.
+- Dependency admission facts validate source Task ID/workflow ID and terminal status/event consistency.
+- Dependency cancellation metadata is validated in the Activity and forwarded to the terminal event payload as `TASK_DEPENDENCY_FAILED` plus sorted `dependencySourceTaskIds`.
+- Dependency cancellation marks the enqueue `notification_pending` before awaiting the terminal Activity and keeps an in-flight receipt for overlapping user cancellation replay.
+- Completion retention now deduplicates arbitrary repeated Task IDs; focused pure coverage is 3/3.
+
+Fix verification:
+
+- `npx.cmd vitest run tests/unit/temporal/task-dependency-gate.test.ts` — exit 0; 1 file passed, 3 tests passed.
+- `git diff --check` — exit 0; existing CRLF conversion warnings only.
+- Whole-repository typecheck remains intentionally blocked by the Task 2–5 protocol cutover and pre-existing dirty callers; no Workflow harness was added in this fix round.
