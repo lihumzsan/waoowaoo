@@ -172,6 +172,7 @@ async function submitFixtureTask(input: {
               inputHash: 'b'.repeat(64),
               inputs: input.references,
               generationOptions: { mergeMode: 'ordered_concat' },
+              musicCues: [],
               toolCallId: null,
             },
           },
