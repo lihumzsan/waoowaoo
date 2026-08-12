@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildWorkspaceResourceVoiceoverInputIdentity,
   parseWorkspaceResourceVoiceoverMixTaskPayload,
   parseWorkspaceResourceVoiceoverTaskPayload,
 } from '@/lib/workspace-resource/voiceover-contract'
@@ -61,7 +62,7 @@ function narrationPayload(overrides: Record<string, unknown> = {}) {
       inputHash: 'b'.repeat(64),
       prompt: '第一段旁白',
       modelKey: 'comfyui::moss-tts-local-1.7b',
-      inputs: [reference],
+      inputs: [{ ...reference, position: 0 as const }],
       toolCallId: null,
       sourceTurnId: 'turn-one',
     },
@@ -77,6 +78,13 @@ function narrationPayload(overrides: Record<string, unknown> = {}) {
     generationOptions: { language: 'zh', referenceAudio: 'media/reference.mp3', referenceAudioDurationMs: 5_000, outputFormat: 'mp3' },
     ...overrides,
   }
+}
+
+function withProjectionResource(
+  base: ReturnType<typeof narrationPayload>,
+  projection: { resourceId: string; mediaType: 'audio' | 'video'; schemaId: string; name: string },
+) {
+  return { ...base, lifecycleProjection: { resources: [projection] } }
 }
 
 function payload(inputs: unknown[]) {
@@ -105,6 +113,47 @@ function payload(inputs: unknown[]) {
 }
 
 describe('workspace Resource voiceover mix aggregate contract', () => {
+  it.each([
+    ['baseline', { language: 'zh', referenceAudio: 'media/reference.mp3', referenceAudioDurationMs: 5_000, outputFormat: 'mp3' }, 'f259853e19008fc217e3e5f35610b8def59d8d36e1ec4f06550b0fc9ac61fc00'],
+    ['language', { language: 'en', referenceAudio: 'media/reference.mp3', referenceAudioDurationMs: 5_000, outputFormat: 'mp3' }, '31c57596bb3911732828afdac952d9bf3b684c83e9089342f5770b9335488943'],
+    ['reference storage key', { language: 'zh', referenceAudio: 'media/reference-v2.mp3', referenceAudioDurationMs: 5_000, outputFormat: 'mp3' }, '6cd47ed80b71671531fb671fdd9e6358a04e698e8f88c7255f016f589b9b14d0'],
+    ['reference duration', { language: 'zh', referenceAudio: 'media/reference.mp3', referenceAudioDurationMs: 6_000, outputFormat: 'mp3' }, '23ebe103a340a5494513f2a5786dcdaec6b66d42fcb507fa5677f86fc946962e'],
+    ['output format', { language: 'zh', referenceAudio: 'media/reference.mp3', referenceAudioDurationMs: 5_000, outputFormat: 'wav' }, '8de515c639e8fe9ccf44abcc32161a65a231d6499d554c95ff8f59ab6475b508'],
+  ])('includes normalized %s in the narration identity', (_label, generationOptions, expectedIdentity) => {
+    const identity = buildWorkspaceResourceVoiceoverInputIdentity({
+      prompt: 'Narration text',
+      modelKey: 'comfyui::moss-tts-local-1.7b',
+      inputs: [{ ...reference, position: 0 as const }],
+      generationOptions,
+    })
+    expect(identity).toBe(expectedIdentity)
+  })
+
+  it('projects narration and mix generation options through one normalized resource facts boundary', () => {
+    const narration = parseWorkspaceResourceVoiceoverTaskPayload(narrationPayload()) as unknown as {
+      resourceFacts?: { generationOptions: unknown }
+    }
+    const mix = parseWorkspaceResourceVoiceoverMixTaskPayload(payload([source, reference, narrationZero])) as unknown as {
+      resourceFacts?: { generationOptions: unknown }
+    }
+
+    expect(narration.resourceFacts?.generationOptions).toEqual({
+      language: 'zh',
+      referenceAudio: 'media/reference.mp3',
+      referenceAudioDurationMs: 5_000,
+      outputFormat: 'mp3',
+    })
+    expect(mix.resourceFacts?.generationOptions).toEqual({ ducking: true, preserveSourceAudio: true })
+  })
+
+  it.each([
+    ['narration', parseWorkspaceResourceVoiceoverTaskPayload, narrationPayload(), 'other-narration'],
+    ['mix', parseWorkspaceResourceVoiceoverMixTaskPayload, payload([source, reference, narrationZero]), 'other-video'],
+  ])('rejects a cross-wired %s Task target at the parser boundary', (_label, parser, candidate, targetId) => {
+    const parseWithTarget = parser as unknown as (value: unknown, target: { targetType: string; targetId: string }) => unknown
+    expect(() => parseWithTarget(candidate, { targetType: 'WorkspaceResource', targetId })).toThrow()
+  })
+
   it.each([
     ['duplicate source video', [source, { ...source, resourceId: 'other-source' }, reference, narrationZero]],
     ['duplicate reference audio', [source, reference, { ...reference, resourceId: 'other-reference' }, narrationZero]],
@@ -189,5 +238,23 @@ describe('workspace Resource voiceover mix aggregate contract', () => {
       executionDeadlineMs: null,
       heartbeat: () => undefined,
     })).rejects.toThrow('WORKSPACE_RESOURCE_VOICEOVER_MIX_TASK_CONTRACT_INVALID:mix-task')
+  })
+
+  it.each([
+    ['resource identity', { resourceId: 'other-narration', mediaType: 'audio' as const, schemaId: 'project.voiceover_audio', name: '旁白' }],
+    ['media type', { resourceId: 'narration-zero', mediaType: 'video' as const, schemaId: 'project.voiceover_audio', name: '旁白' }],
+    ['schema identity', { resourceId: 'narration-zero', mediaType: 'audio' as const, schemaId: 'generic.video', name: '旁白' }],
+  ])('rejects narration lifecycle projection drift in %s', (_label, projection) => {
+    expect(() => parseWorkspaceResourceVoiceoverTaskPayload(withProjectionResource(narrationPayload(), projection))).toThrow()
+  })
+
+  it.each([
+    ['resource identity', { resourceId: 'other-mix', mediaType: 'video' as const, schemaId: 'generic.video', name: '旁白视频' }],
+    ['media type', { resourceId: 'mixed-video', mediaType: 'audio' as const, schemaId: 'generic.video', name: '旁白视频' }],
+    ['schema identity', { resourceId: 'mixed-video', mediaType: 'video' as const, schemaId: 'project.voiceover_audio', name: '旁白视频' }],
+  ])('rejects mix lifecycle projection drift in %s', (_label, projection) => {
+    const candidate = payload([source, reference, narrationZero])
+    candidate.lifecycleProjection.resources = [projection]
+    expect(() => parseWorkspaceResourceVoiceoverMixTaskPayload(candidate)).toThrow()
   })
 })

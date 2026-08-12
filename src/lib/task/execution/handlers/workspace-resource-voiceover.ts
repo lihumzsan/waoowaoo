@@ -12,8 +12,13 @@ import { resolveWorkspaceResourceInputMedia } from '@/lib/workspace-resource/inp
 
 export async function handleWorkspaceResourceVoiceoverTask(context: TaskExecutionContext) {
   const { data } = context
-  const payload = parseWorkspaceResourceVoiceoverTaskPayload(data.payload)
-  if (data.targetType !== 'WorkspaceResource' || payload.resource.resourceId !== data.targetId) throw new Error(`WORKSPACE_RESOURCE_VOICEOVER_TASK_CONTRACT_INVALID:${data.taskId}`)
+  const payload = (() => {
+    try {
+      return parseWorkspaceResourceVoiceoverTaskPayload(data.payload, data)
+    } catch {
+      throw new Error(`WORKSPACE_RESOURCE_VOICEOVER_TASK_CONTRACT_INVALID:${data.taskId}`)
+    }
+  })()
   const [reference] = await resolveWorkspaceResourceInputMedia({
     userId: data.userId,
     projectId: data.projectId,

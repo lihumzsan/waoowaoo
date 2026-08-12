@@ -34,7 +34,11 @@ const validInput = {
   music: { resourceId: BGM_ID, contentVersion: 5 },
 }
 
-function installPlannerStorageBoundary(input: { bgmDurationMs: number | null }) {
+function installPlannerStorageBoundary(input: {
+  bgmDurationMs: number | null
+  referenceDurationMs?: number
+  referenceStorageKey?: string
+}) {
   vi.spyOn(prisma.project, 'findFirst').mockResolvedValue({ id: PROJECT_ID } as never)
   vi.spyOn(prisma.workspaceResource, 'findFirst').mockResolvedValue(null)
   vi.spyOn(prisma.workspaceResource, 'findMany').mockResolvedValue([
@@ -56,7 +60,7 @@ function installPlannerStorageBoundary(input: { bgmDurationMs: number | null }) 
       version: 2,
       contentKind: 'media',
       resource: { userId: USER_ID, projectId: PROJECT_ID, resourceKind: 'file', mediaType: 'audio' },
-      media: { id: 'reference-media', storageKey: 'media/reference.mp3', mimeType: 'audio/mpeg', width: null, height: null, durationMs: 5_000 },
+      media: { id: 'reference-media', storageKey: input.referenceStorageKey ?? 'media/reference.mp3', mimeType: 'audio/mpeg', width: null, height: null, durationMs: input.referenceDurationMs ?? 5_000 },
     },
     {
       resourceId: BGM_ID,
@@ -179,5 +183,31 @@ describe('produce_voiceover_video operation contract', () => {
       ],
       bgm: { resourceId: BGM_ID, contentVersion: 5, workspacePath: 'audio/bgm.mp3', role: 'bgm_audio', position: 0 },
     })
+  })
+
+  it.each([
+    ['reference storage key', { referenceStorageKey: 'media/reference-v2.mp3', referenceDurationMs: 5_000 }],
+    ['reference duration', { referenceStorageKey: 'media/reference.mp3', referenceDurationMs: 6_000 }],
+  ])('changes narration identity when normalized %s changes', async (_label, variant) => {
+    vi.stubEnv('COMFYUI_BASE_URL', 'http://127.0.0.1:8878')
+    installPlannerStorageBoundary({ bgmDurationMs: 60_000 })
+    const operation = plannedVoiceoverOperation()
+    const input = operation.inputSchema.safeParse(validInput)
+    if (!input.success) throw new Error('valid voiceover input fixture must parse')
+    const baseline = await operation.plan(context, input.data)
+    const baselineTask = baseline.tasks.find((task) => task.taskType === TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER)
+    if (!baselineTask) throw new Error('baseline narration Task missing')
+
+    vi.restoreAllMocks()
+    installPlannerStorageBoundary({ bgmDurationMs: 60_000, ...variant })
+    const changed = await operation.plan(context, input.data)
+    const changedTask = changed.tasks.find((task) => task.taskType === TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER)
+    if (!changedTask) throw new Error('changed narration Task missing')
+
+    expect(changedTask.payload.resource).toMatchObject({ inputHash: expect.any(String) })
+    expect((changedTask.payload.resource as { inputHash: string }).inputHash).not.toBe(
+      (baselineTask.payload.resource as { inputHash: string }).inputHash,
+    )
+    expect(changedTask.dedupeKey).not.toBe(baselineTask.dedupeKey)
   })
 })

@@ -12,7 +12,13 @@ import { prisma } from '@/lib/prisma'
 import { stableArgsFingerprint } from '@/lib/project-agent/stable-args-hash'
 import { submitPlannedOperationTasks } from '@/lib/operations/planning'
 import { TASK_TYPE } from '@/lib/task/types'
-import { voiceoverLanguageSchema } from '@/lib/workspace-resource/voiceover-contract'
+import {
+  buildWorkspaceResourceVoiceoverInputIdentity,
+  parseWorkspaceResourceVoiceoverMixTaskPayload,
+  parseWorkspaceResourceVoiceoverTaskPayload,
+  workspaceResourceVoiceoverGenerationOptionsSchema,
+  voiceoverLanguageSchema,
+} from '@/lib/workspace-resource/voiceover-contract'
 import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
 import { refineTaskBatchSubmitOperationOutputSchema, taskBatchSubmitOperationOutputSchemaBase } from '@/lib/operations/output-schemas'
 import { resolveWorkspaceResourceInputMedia } from '@/lib/workspace-resource/input-media'
@@ -102,12 +108,7 @@ export function createWorkspaceResourceVoiceoverOperations(): ProjectAgentOperat
             prompt: item.text,
             options,
           })
-          const normalizedOptions = z.object({
-            language: voiceoverLanguageSchema,
-            referenceAudio: z.string().trim().min(1),
-            referenceAudioDurationMs: z.number().int().positive(),
-            outputFormat: z.literal('mp3'),
-          }).strict().parse(preflight.options)
+          const normalizedOptions = workspaceResourceVoiceoverGenerationOptionsSchema.parse(preflight.options)
           preflightMediaProviderRoutes({
             selection: preflight.selection,
             modality: 'voice',
@@ -122,7 +123,12 @@ export function createWorkspaceResourceVoiceoverOperations(): ProjectAgentOperat
         const narration = await Promise.all(voiceovers.map(async ({ item, generationOptions }, index) => {
           const resourceId = buildWorkspaceResourceId({ operationId: 'produce_voiceover_video', requestId, memberIndex: index })
           const path = await resolveGeneratedWorkspaceResourcePlacement(prisma, { userId: ctx.userId, projectId: ctx.projectId, folderPath: input.folderPath, name: item.name, resourceId, mediaType: 'audio', schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICEOVER_AUDIO, alternativeIndex: index })
-          const inputHash = stableArgsFingerprint({ item, reference, voiceModel })
+          const inputHash = buildWorkspaceResourceVoiceoverInputIdentity({
+            prompt: item.text,
+            modelKey: voiceModel,
+            inputs: [{ ...reference, role: 'reference_audio', position: 0 }],
+            generationOptions,
+          })
           return { item, generationOptions, resourceId, path, inputHash, taskPlanId: `voiceover:${resourceId}` }
         }))
         const narrationTasks: PlannedTask[] = narration.map((entry) => createPlannedTask({ id: entry.taskPlanId, taskType: TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER, targetType: 'WorkspaceResource', targetId: entry.resourceId, payload: {
@@ -138,11 +144,12 @@ export function createWorkspaceResourceVoiceoverOperations(): ProjectAgentOperat
         const metadata = plan.metadata as { finalResourceId: string; finalPath: string; narration: Array<{ resourceId: string; path: string; item: Input['voiceovers'][number]; taskPlanId: string }>; input: Input; mixTaskId: string }
         if (metadata.input.folderPath) await createWorkspaceResourceFolderInTransaction(tx, { userId: ctx.userId, projectId: ctx.projectId, workspacePath: metadata.input.folderPath, sourceType: 'operation_output_folder', sourceId: null })
         for (const task of plan.tasks) {
-          const payload = task.payload as Record<string, unknown>
-          const resource = payload.resource as Record<string, unknown>
-          const targetId = task.target.targetId
           const isMix = task.taskType === TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER_MIX
-          await reserveWorkspaceResourceInTransaction(tx, { resourceId: targetId, userId: ctx.userId, projectId: ctx.projectId, outputPath: isMix ? metadata.finalPath : String(resource.workspacePath), mediaType: isMix ? 'video' : 'audio', schemaId: isMix ? WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO : WORKSPACE_RESOURCE_SCHEMA.VOICEOVER_AUDIO, operationId: 'produce_voiceover_video', operationExecutionId: ctx.executionAuthorization!.operationExecutionId, taskId: null, inputHash: String(resource.inputHash), prompt: typeof resource.prompt === 'string' ? resource.prompt : null, modelKey: typeof resource.modelKey === 'string' ? resource.modelKey : null, generationOptions: (payload.generationOptions ?? {}) as Record<string, string | number | boolean> })
+          const payload = isMix
+            ? parseWorkspaceResourceVoiceoverMixTaskPayload(task.payload, task.target)
+            : parseWorkspaceResourceVoiceoverTaskPayload(task.payload, task.target)
+          const resource = payload.resourceFacts
+          await reserveWorkspaceResourceInTransaction(tx, { resourceId: resource.resourceId, userId: ctx.userId, projectId: ctx.projectId, outputPath: resource.workspacePath ?? metadata.finalPath, mediaType: resource.mediaType, schemaId: resource.schemaId, operationId: 'produce_voiceover_video', operationExecutionId: ctx.executionAuthorization!.operationExecutionId, taskId: null, inputHash: resource.inputHash, prompt: resource.prompt, modelKey: resource.modelKey, generationOptions: resource.generationOptions })
         }
         const submitted = await submitPlannedOperationTasks({ ctx, operationId: 'produce_voiceover_video' })
         for (const task of plan.tasks) {

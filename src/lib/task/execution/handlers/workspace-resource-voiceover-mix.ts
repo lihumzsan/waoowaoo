@@ -16,10 +16,13 @@ import { assertTaskActive } from '../provider-media'
 
 export async function handleWorkspaceResourceVoiceoverMixTask(context: TaskExecutionContext) {
   const { data } = context
-  const payload = parseWorkspaceResourceVoiceoverMixTaskPayload(data.payload)
-  if (data.targetType !== 'WorkspaceResource' || payload.resource.resourceId !== data.targetId) {
-    throw new Error(`WORKSPACE_RESOURCE_VOICEOVER_MIX_TASK_CONTRACT_INVALID:${data.taskId}`)
-  }
+  const payload = (() => {
+    try {
+      return parseWorkspaceResourceVoiceoverMixTaskPayload(data.payload, data)
+    } catch {
+      throw new Error(`WORKSPACE_RESOURCE_VOICEOVER_MIX_TASK_CONTRACT_INVALID:${data.taskId}`)
+    }
+  })()
   const { source, narrations: narrationRefs, bgm } = payload.inputAggregate
   const [resolvedSource] = await resolveWorkspaceResourceInputMedia({ userId: data.userId, projectId: data.projectId, references: [source], expectedMediaType: 'video' })
   const resolvedNarration = await resolveWorkspaceResourceInputMedia({ userId: data.userId, projectId: data.projectId, references: narrationRefs, expectedMediaType: 'audio' })

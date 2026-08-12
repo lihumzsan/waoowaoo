@@ -59,31 +59,33 @@ function parseTerminalResourcePayload(task: TerminalTask): TerminalResourcePaylo
     }
   }
   if (task.type === TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER) {
-    const payload = parseWorkspaceResourceVoiceoverTaskPayload(task.payload ?? {})
+    const payload = parseWorkspaceResourceVoiceoverTaskPayload(task.payload ?? {}, task)
+    const resource = payload.resourceFacts
     return {
-      resourceId: payload.resource.resourceId,
-      mediaType: payload.resource.mediaType,
-      schemaId: payload.resource.schemaId,
-      prompt: payload.resource.prompt,
-      inputHash: payload.resource.inputHash,
-      inputs: payload.resource.inputs,
-      generationOptions: payload.generationOptions,
-      toolCallId: payload.resource.toolCallId,
-      sourceTurnId: payload.resource.sourceTurnId,
+      resourceId: resource.resourceId,
+      mediaType: resource.mediaType,
+      schemaId: resource.schemaId,
+      prompt: resource.prompt,
+      inputHash: resource.inputHash,
+      inputs: resource.inputs,
+      generationOptions: resource.generationOptions,
+      toolCallId: resource.toolCallId,
+      sourceTurnId: resource.sourceTurnId,
     }
   }
   if (task.type === TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER_MIX) {
-    const payload = parseWorkspaceResourceVoiceoverMixTaskPayload(task.payload ?? {})
+    const payload = parseWorkspaceResourceVoiceoverMixTaskPayload(task.payload ?? {}, task)
+    const resource = payload.resourceFacts
     return {
-      resourceId: payload.resource.resourceId,
-      mediaType: payload.resource.mediaType,
-      schemaId: payload.resource.schemaId,
-      prompt: null,
-      inputHash: payload.resource.inputHash,
-      inputs: payload.resource.inputs,
-      generationOptions: payload.resource.generationOptions,
-      toolCallId: payload.resource.toolCallId,
-      sourceTurnId: null,
+      resourceId: resource.resourceId,
+      mediaType: resource.mediaType,
+      schemaId: resource.schemaId,
+      prompt: resource.prompt,
+      inputHash: resource.inputHash,
+      inputs: resource.inputs,
+      generationOptions: resource.generationOptions,
+      toolCallId: resource.toolCallId,
+      sourceTurnId: resource.sourceTurnId,
     }
   }
   const payload = parseWorkspaceResourceGenerationTaskPayload(task.payload ?? {})

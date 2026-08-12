@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { taskRuntimePayloadEnvelopeShape } from '@/lib/task/progress-payload'
 import { workspaceResourceLifecycleProjectionSchema } from './task-runtime-envelope'
 import { workspaceResourceGenerationOptionsSchema } from './generation-contract'
+import { stableArgsFingerprint } from '@/lib/project-agent/stable-args-hash'
 
 export const voiceoverLanguageSchema = z.enum(['auto', 'zh', 'en', 'ja', 'ko'])
 export const frozenVoiceoverInputSchema = z.object({
@@ -16,6 +17,49 @@ export const workspaceResourceVoiceoverGenerationOptionsSchema = z.object({
   referenceAudioDurationMs: z.number().int().min(3000).max(10000),
   outputFormat: z.literal('mp3'),
 }).strict()
+
+export function buildWorkspaceResourceVoiceoverInputIdentity(input: {
+  readonly prompt: string
+  readonly modelKey: string
+  readonly inputs: ReadonlyArray<z.infer<typeof frozenVoiceoverInputSchema> & { readonly role: 'reference_audio'; readonly position: 0 }>
+  readonly generationOptions: {
+    readonly language: string
+    readonly referenceAudio: string
+    readonly referenceAudioDurationMs: number
+    readonly outputFormat: string
+  }
+}): string {
+  return stableArgsFingerprint({
+    prompt: input.prompt,
+    modelKey: input.modelKey,
+    inputs: input.inputs,
+    generationOptions: {
+      language: input.generationOptions.language,
+      referenceAudio: input.generationOptions.referenceAudio,
+      referenceAudioDurationMs: input.generationOptions.referenceAudioDurationMs,
+      outputFormat: input.generationOptions.outputFormat,
+    },
+  })
+}
+
+function validateLifecycleProjection(
+  payload: {
+    lifecycleProjection: z.infer<typeof workspaceResourceLifecycleProjectionSchema>
+    resource: { resourceId: string; mediaType: 'audio' | 'video'; schemaId: string }
+  },
+  context: z.RefinementCtx,
+): void {
+  const [projection] = payload.lifecycleProjection.resources
+  if (
+    payload.lifecycleProjection.resources.length !== 1
+    || !projection
+    || projection.resourceId !== payload.resource.resourceId
+    || projection.mediaType !== payload.resource.mediaType
+    || projection.schemaId !== payload.resource.schemaId
+  ) {
+    context.addIssue({ code: 'custom', path: ['lifecycleProjection'], message: 'Lifecycle projection must match the frozen Task Resource.' })
+  }
+}
 
 export const workspaceResourceVoiceoverTaskPayloadSchema = z.object({
   lifecycleProjection: workspaceResourceLifecycleProjectionSchema,
@@ -43,6 +87,7 @@ export const workspaceResourceVoiceoverTaskPayloadSchema = z.object({
   outputFormat: z.literal('mp3'),
   generationOptions: workspaceResourceVoiceoverGenerationOptionsSchema,
 }).strict().superRefine((payload, context) => {
+  validateLifecycleProjection(payload, context)
   if (payload.text !== payload.resource.prompt) {
     context.addIssue({ code: 'custom', path: ['text'], message: 'text must match the frozen Resource prompt.' })
   }
@@ -107,6 +152,7 @@ export const workspaceResourceVoiceoverMixTaskPayloadSchema = z.object({
     toolCallId: z.string().trim().min(1).nullable(),
   }).strict(),
 }).strict().superRefine((payload, context) => {
+  validateLifecycleProjection(payload, context)
   const inputs = payload.resource.inputs
   for (const role of ['source_video', 'reference_audio'] as const) {
     if (inputs.filter((input) => input.role === role).length !== 1) {
@@ -133,7 +179,25 @@ const mixTaskEnvelope = workspaceResourceVoiceoverMixTaskPayloadSchema.extend({ 
 
 export type WorkspaceResourceVoiceoverTaskPayload = z.infer<typeof workspaceResourceVoiceoverTaskPayloadSchema>
 export type WorkspaceResourceVoiceoverMixTaskPayload = z.infer<typeof workspaceResourceVoiceoverMixTaskPayloadSchema>
+export type WorkspaceResourceVoiceoverTaskTarget = { readonly targetType: string; readonly targetId: string }
+export type WorkspaceResourceVoiceoverResourceFacts = {
+  readonly resourceId: string
+  readonly workspacePath: string | null
+  readonly mediaType: 'audio' | 'video'
+  readonly schemaId: string
+  readonly prompt: string | null
+  readonly modelKey: string | null
+  readonly inputHash: string
+  readonly inputs: WorkspaceResourceVoiceoverTaskPayload['resource']['inputs'] | WorkspaceResourceVoiceoverMixTaskPayload['resource']['inputs']
+  readonly generationOptions: z.infer<typeof workspaceResourceGenerationOptionsSchema>
+  readonly toolCallId: string | null
+  readonly sourceTurnId: string | null
+}
+export type NormalizedWorkspaceResourceVoiceoverTaskPayload = WorkspaceResourceVoiceoverTaskPayload & {
+  resourceFacts: WorkspaceResourceVoiceoverResourceFacts
+}
 export type NormalizedWorkspaceResourceVoiceoverMixTaskPayload = WorkspaceResourceVoiceoverMixTaskPayload & {
+  resourceFacts: WorkspaceResourceVoiceoverResourceFacts
   inputAggregate: {
     source: Extract<WorkspaceResourceVoiceoverMixTaskPayload['resource']['inputs'][number], { role: 'source_video' }>
     reference: Extract<WorkspaceResourceVoiceoverMixTaskPayload['resource']['inputs'][number], { role: 'reference_audio' }>
@@ -142,9 +206,18 @@ export type NormalizedWorkspaceResourceVoiceoverMixTaskPayload = WorkspaceResour
   }
 }
 
-export function parseWorkspaceResourceVoiceoverTaskPayload(value: unknown): WorkspaceResourceVoiceoverTaskPayload {
+function validateTaskTarget(resourceId: string, target?: WorkspaceResourceVoiceoverTaskTarget): void {
+  if (target && (target.targetType !== 'WorkspaceResource' || target.targetId !== resourceId)) {
+    throw new Error('WORKSPACE_RESOURCE_VOICEOVER_TASK_TARGET_MISMATCH')
+  }
+}
+
+export function parseWorkspaceResourceVoiceoverTaskPayload(
+  value: unknown,
+  target?: WorkspaceResourceVoiceoverTaskTarget,
+): NormalizedWorkspaceResourceVoiceoverTaskPayload {
   const parsed = voiceoverTaskEnvelope.parse(value)
-  return workspaceResourceVoiceoverTaskPayloadSchema.parse({
+  const payload = workspaceResourceVoiceoverTaskPayloadSchema.parse({
     lifecycleProjection: parsed.lifecycleProjection,
     protocol: parsed.protocol,
     resource: parsed.resource,
@@ -155,15 +228,27 @@ export function parseWorkspaceResourceVoiceoverTaskPayload(value: unknown): Work
     outputFormat: parsed.outputFormat,
     generationOptions: parsed.generationOptions,
   })
+  validateTaskTarget(payload.resource.resourceId, target)
+  return {
+    ...payload,
+    resourceFacts: {
+      ...payload.resource,
+      generationOptions: payload.generationOptions,
+    },
+  }
 }
 
-export function parseWorkspaceResourceVoiceoverMixTaskPayload(value: unknown): NormalizedWorkspaceResourceVoiceoverMixTaskPayload {
+export function parseWorkspaceResourceVoiceoverMixTaskPayload(
+  value: unknown,
+  target?: WorkspaceResourceVoiceoverTaskTarget,
+): NormalizedWorkspaceResourceVoiceoverMixTaskPayload {
   const parsed = mixTaskEnvelope.parse(value)
   const payload = workspaceResourceVoiceoverMixTaskPayloadSchema.parse({
     lifecycleProjection: parsed.lifecycleProjection,
     protocol: parsed.protocol,
     resource: parsed.resource,
   })
+  validateTaskTarget(payload.resource.resourceId, target)
   const source = payload.resource.inputs.find((input) => input.role === 'source_video')
   const reference = payload.resource.inputs.find((input) => input.role === 'reference_audio')
   if (!source || !reference) throw new Error('VOICEOVER_MIX_INPUT_NORMALIZATION_FAILED')
@@ -173,6 +258,11 @@ export function parseWorkspaceResourceVoiceoverMixTaskPayload(value: unknown): N
   const bgm = payload.resource.inputs.find((input) => input.role === 'bgm_audio')
   return {
     ...payload,
+    resourceFacts: {
+      ...payload.resource,
+      workspacePath: null,
+      sourceTurnId: null,
+    },
     inputAggregate: {
       source,
       reference,
