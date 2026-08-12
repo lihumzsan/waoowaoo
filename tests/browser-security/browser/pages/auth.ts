@@ -5,7 +5,7 @@ export async function expectSecurityAuthenticatedUser(
   page: Page,
   username: string,
 ): Promise<void> {
-  await expect(page.locator('button[aria-haspopup="menu"]', { hasText: username })).toBeVisible({
+  await expect(page.getByRole('button', { name: username, exact: true })).toBeVisible({
     timeout: 30_000,
   })
 }
