@@ -13,6 +13,7 @@ export interface TemporalWorkerRuntimeConfig extends TemporalRuntimeConfig {
   workerDeploymentName: string
   workerBuildId: string
   workerVersioningEnabled: boolean
+  workerReadyFile: string | null
 }
 
 function readOptionalString(env: RuntimeEnvironment, name: string): string | null {
@@ -50,11 +51,11 @@ function readWorkerBuildId(env: RuntimeEnvironment, defaultValue: string | null)
 }
 
 function readWorkerVersioningEnabled(env: RuntimeEnvironment): boolean {
-  const enabled = readBoolean(env, 'TEMPORAL_WORKER_VERSIONING_ENABLED', false)
-  if (isProductionRuntime(env) && !enabled) {
-    throw new Error('TEMPORAL_WORKER_VERSIONING_REQUIRED_PRODUCTION')
+  const enabled = readBoolean(env, 'TEMPORAL_WORKER_VERSIONING_ENABLED', true)
+  if (!enabled) {
+    throw new Error('TEMPORAL_WORKER_VERSIONING_REQUIRED')
   }
-  return enabled
+  return true
 }
 
 function readTemporalConnectionConfig(env: RuntimeEnvironment): TemporalRuntimeConfig {
@@ -96,6 +97,7 @@ export function getTemporalWorkerRuntimeConfig(
         : 'waoowaoo'),
     workerBuildId: readWorkerBuildId(env, isProductionRuntime(env) ? null : 'local'),
     workerVersioningEnabled: readWorkerVersioningEnabled(env),
+    workerReadyFile: readOptionalString(env, 'TEMPORAL_WORKER_READY_FILE'),
   }
 }
 

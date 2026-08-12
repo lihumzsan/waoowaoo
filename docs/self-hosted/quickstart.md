@@ -50,6 +50,9 @@ npm run dev
 
 访问 [http://localhost:3000](http://localhost:3000)。这个命令会构建并启动 Docker 中的 Web、MySQL、
 Redis、Temporal、开发 Worker 和 Codex Runtime；退出命令会停止前台开发进程，但不会删除持久卷。
+源码开发环境会在 Web 接受请求前等待 Temporal Worker 的版本化 workflow/activity poller 就绪，并把
+本地 Build ID 幂等地设为 Current Version；不需要手工运行 Worker rollout。开发环境与生产式自托管
+不得复用同一个 Temporal namespace。
 
 ## 3. 在网页中配置模型
 

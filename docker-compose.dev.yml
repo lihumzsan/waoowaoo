@@ -11,8 +11,10 @@ x-dev-environment: &dev-environment
   TEMPORAL_TASK_QUEUE: "${TEMPORAL_TASK_QUEUE:-waoowaoo-runtime}"
   TEMPORAL_TLS_ENABLED: "false"
   TEMPORAL_API_KEY: ""
+  TEMPORAL_WORKER_DEPLOYMENT_NAME: "${TEMPORAL_WORKER_DEPLOYMENT_NAME:-waoowaoo}"
   TEMPORAL_WORKER_BUILD_ID: local
-  TEMPORAL_WORKER_VERSIONING_ENABLED: "false"
+  TEMPORAL_WORKER_VERSIONING_ENABLED: "true"
+  TEMPORAL_WORKER_READY_FILE: /tmp/waoowaoo-temporal-worker-ready
   INTERNAL_APP_URL: http://app:3000
   CODEX_RUNTIME_DRIVER: docker
   CODEX_RUNTIME_HOST_ROOT: "${WAO_DEV_CODEX_RUNTIME_ROOT:?Set WAO_DEV_CODEX_RUNTIME_ROOT through scripts/dev-docker.sh}"
@@ -93,12 +95,13 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
-      temporal-create-namespace:
+      temporal-dev-route:
         condition: service_completed_successfully
     command: ["sh", "-c", "npm run storage:init && exec npm run dev:next"]
 
   temporal-worker-dev:
     <<: *dev-service
+    restart: unless-stopped
     depends_on:
       app-schema-dev:
         condition: service_completed_successfully
@@ -106,7 +109,46 @@ services:
         condition: service_healthy
       temporal-create-namespace:
         condition: service_completed_successfully
-    command: ["npm", "run", "dev:temporal-worker"]
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        rm -f "$$TEMPORAL_WORKER_READY_FILE"
+        exec npm run dev:temporal-worker
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          test -s "$${TEMPORAL_WORKER_READY_FILE}" &&
+          ready_pid="$$(cat "$${TEMPORAL_WORKER_READY_FILE}")" &&
+          kill -0 "$${ready_pid}" 2>/dev/null
+      interval: 2s
+      timeout: 2s
+      retries: 60
+      start_period: 5s
+
+  temporal-dev-route:
+    image: temporalio/admin-tools:1.31.2
+    restart: "no"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      temporal-create-namespace:
+        condition: service_completed_successfully
+      temporal-worker-dev:
+        condition: service_healthy
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: "${TEMPORAL_NAMESPACE:-waoowaoo}"
+      TEMPORAL_TASK_QUEUE: "${TEMPORAL_TASK_QUEUE:-waoowaoo-runtime}"
+      TEMPORAL_WORKER_DEPLOYMENT_NAME: "${TEMPORAL_WORKER_DEPLOYMENT_NAME:-waoowaoo}"
+      TEMPORAL_WORKER_BUILD_ID: local
+    volumes:
+      - ./scripts/temporal/dev-route-init.sh:/opt/wao/dev-route-init.sh:ro
+    entrypoint: ["/bin/sh", "/opt/wao/dev-route-init.sh"]
 
 volumes:
   dev_node_modules:

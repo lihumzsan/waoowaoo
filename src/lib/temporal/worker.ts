@@ -1,3 +1,4 @@
+import { rm, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { NativeConnection, Worker } from '@temporalio/worker'
 import { createScopedLogger } from '@/lib/logging/core'
@@ -9,6 +10,9 @@ const logger = createScopedLogger({ module: 'temporal.worker' })
 
 async function runTemporalWorker(): Promise<void> {
   const config = getTemporalWorkerRuntimeConfig()
+  if (config.workerReadyFile) {
+    await rm(config.workerReadyFile, { force: true })
+  }
   const connection = await NativeConnection.connect(buildTemporalConnectionOptions(config))
   try {
     const worker = await Worker.create({
@@ -22,22 +26,14 @@ async function runTemporalWorker(): Promise<void> {
       // too slow for an interactive Agent stop or message correction.
       maxHeartbeatThrottleInterval: '1 second',
       defaultHeartbeatThrottleInterval: '1 second',
-      workerDeploymentOptions: config.workerVersioningEnabled
-        ? {
-            version: {
-              deploymentName: config.workerDeploymentName,
-              buildId: config.workerBuildId,
-            },
-            useWorkerVersioning: true,
-            defaultVersioningBehavior: UNREGISTERED_WORKFLOW_VERSIONING_FALLBACK,
-          }
-        : {
-            version: {
-              deploymentName: config.workerDeploymentName,
-              buildId: config.workerBuildId,
-            },
-            useWorkerVersioning: false,
-          },
+      workerDeploymentOptions: {
+        version: {
+          deploymentName: config.workerDeploymentName,
+          buildId: config.workerBuildId,
+        },
+        useWorkerVersioning: true,
+        defaultVersioningBehavior: UNREGISTERED_WORKFLOW_VERSIONING_FALLBACK,
+      },
     })
     logger.info({
       action: 'temporal.worker.started',
@@ -50,7 +46,23 @@ async function runTemporalWorker(): Promise<void> {
         versioningEnabled: config.workerVersioningEnabled,
       },
     })
-    await worker.run()
+    const runPromise = worker.run()
+    try {
+      if (config.workerReadyFile) {
+        await writeFile(config.workerReadyFile, `${process.pid}\n`, { encoding: 'utf8' })
+      }
+      await runPromise
+    } catch (error: unknown) {
+      if (worker.getState() === 'RUNNING') {
+        worker.shutdown()
+      }
+      await runPromise.catch(() => undefined)
+      throw error
+    } finally {
+      if (config.workerReadyFile) {
+        await rm(config.workerReadyFile, { force: true })
+      }
+    }
   } finally {
     await connection.close()
   }

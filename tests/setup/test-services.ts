@@ -130,7 +130,7 @@ function applyEndpoints(endpoints: TestServiceEndpoints): void {
     process.env.TEMPORAL_WORKER_DEPLOYMENT_NAME =
       `${endpoints.scope.composeProjectName}-worker`
     process.env.TEMPORAL_WORKER_BUILD_ID = 'test'
-    process.env.TEMPORAL_WORKER_VERSIONING_ENABLED = 'false'
+    process.env.TEMPORAL_WORKER_VERSIONING_ENABLED = 'true'
   }
 }
 

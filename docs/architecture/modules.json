@@ -35,6 +35,7 @@
         "src/lib/assistant-runtime/task-follow-up-http.ts",
         "src/app/api/internal/codex-runtime/follow-up",
         "scripts/temporal",
+        "docker-compose.dev.yml",
         "tests/integration/temporal"
       ]
     },

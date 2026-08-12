@@ -51,6 +51,20 @@ Provider 一定没有收到请求；以页面显示的提交阶段和错误代�
 - Worker Current Version 缺失：先执行 `worker-rollout.sh bootstrap blue`。
 - S3 初始化失败：检查 endpoint、bucket、权限和 HTTPS 可达性。
 
+## 本地生成停在授权后、没有创建 Task
+
+运行 `npm run dev` 时，Web 只有在开发 Worker 的版本化 workflow/activity poller 均上线，并把本地
+Build ID 设为 Current Version 后才会启动。若启动失败，检查：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml logs temporal-worker-dev
+docker compose -f docker-compose.yml -f docker-compose.dev.yml logs temporal-dev-route
+```
+
+不要重复点击授权、删除 Temporal 持久卷或重新提交已经获批的媒体任务。修复 Worker 启动错误后重新运行
+`npm run dev`，原 workflow 会以稳定 identity 继续执行。若同一 Temporal namespace 曾用于正式版本化
+Worker，请改用独立 namespace，不要让开发初始化入口修改正式路由。
+
 ## 获得帮助
 
 确认没有敏感信息后，在 [GitHub Issues](https://github.com/waooAI/waoowaoo/issues) 提交最小复现、版本、
