@@ -17,6 +17,7 @@ import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import { withLogContext } from '@/lib/logging/context'
 import { createScopedLogger } from '@/lib/logging/core'
 import { getTemporalClient } from '@/lib/temporal/client'
+import { buildScheduledTaskRequest } from '@/lib/temporal/task-client'
 import { encodeTemporalFailure, temporalInvariantFailure } from '@/lib/temporal/failure'
 import { buildTaskWorkflowId, buildUserTaskSchedulerWorkflowId } from '@/lib/temporal/identity'
 import { prisma } from '@/lib/prisma'
@@ -571,7 +572,7 @@ export async function resolveTaskSchedulerAdmission(
   let persistedReference
   try {
     persistedReference = await buildPersistedTaskReference(prisma, row.id)
-    validateTaskSchedulerAdmission(input, persistedReference)
+    validateTaskSchedulerAdmission(input, buildScheduledTaskRequest(persistedReference))
   } catch (error) {
     if (!isTaskDependencyTopologyDivergedError(error)) throw error
     return failNonRetryable('TASK_DEPENDENCY_TOPOLOGY_DIVERGED', row.id)

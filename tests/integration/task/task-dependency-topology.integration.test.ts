@@ -11,7 +11,8 @@ import {
   isTaskDependencyTopologyDivergedError,
   validateTaskSchedulerAdmission,
 } from '@/lib/temporal/task/scheduled-request'
-import { buildTaskWorkflowId, buildUserTaskSchedulerWorkflowId } from '@/lib/temporal/identity'
+import { buildScheduledTaskRequest } from '@/lib/temporal/task-client'
+import { buildUserTaskSchedulerWorkflowId } from '@/lib/temporal/identity'
 import { persistSubmittedTaskBatchInTransaction } from '@/lib/task/transactional-create'
 import { TASK_STATUS, TASK_TYPE, type CreateTaskInput } from '@/lib/task/types'
 import { resetBillingState } from '../../helpers/db-reset'
@@ -153,17 +154,33 @@ describe('Persisted Task dependency topology projection', () => {
     })).toThrow(/^TASK_DEPENDENCY_TOPOLOGY_DIVERGED/)
   })
 
-  it('rejects missing Plan identity on an operation Task', () => {
+  it('rejects a dependency edge whose target is missing Plan identity', () => {
+    const target = {
+      id: 'target-task',
+      userId: 'user-1',
+      projectId: 'project-1',
+      operationExecutionId: 'operation-execution-1',
+      operationPlanTaskId: null,
+      type: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
+    }
+    const source = {
+      id: 'source-task',
+      userId: 'user-1',
+      projectId: 'project-1',
+      operationExecutionId: 'operation-execution-1',
+      operationPlanTaskId: '01:narration',
+      type: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
+    }
     expect(() => projectPersistedTaskReference({
-      task: {
-        id: 'operation-task',
-        userId: 'user-1',
-        projectId: 'project-1',
+      task: target,
+      dependencies: [{
         operationExecutionId: 'operation-execution-1',
-        operationPlanTaskId: null,
-        type: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
-      },
-      dependencies: [],
+        targetTaskId: target.id,
+        sourceTaskId: source.id,
+        requirement: 'required_success',
+        targetTask: target,
+        sourceTask: source,
+      }],
     })).toThrow(/^TASK_DEPENDENCY_TOPOLOGY_DIVERGED/)
   })
 
@@ -199,13 +216,13 @@ describe('Persisted Task dependency topology projection', () => {
     })).toThrow(/^TASK_DEPENDENCY_TOPOLOGY_DIVERGED/)
   })
 
-  it('allows a direct Task without operation identity or dependencies', () => {
+  it('allows a direct durable Task with execution identity and no Plan identity or dependencies', () => {
     expect(projectPersistedTaskReference({
       task: {
         id: 'direct-task',
         userId: 'user-1',
         projectId: 'project-1',
-        operationExecutionId: null,
+        operationExecutionId: 'direct-execution-1',
         operationPlanTaskId: null,
         type: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
       },
@@ -225,39 +242,30 @@ describe('Persisted Task dependency topology projection', () => {
       taskType: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
       dependsOnTaskIds: ['source-task'],
     } as const
-    const task = {
-      workflowId: buildTaskWorkflowId(reference.taskId),
-      schedulerWorkflowId: buildUserTaskSchedulerWorkflowId(reference.userId),
-      taskId: reference.taskId,
-      userId: reference.userId,
-      taskType: reference.taskType,
-    }
-
-    const canonicalRequest = {
-      enqueueId: 'task-enqueue:v1:R_Ha2b51XHZ6VrMYSAMUdDyIEA_iN-XgNlcbHWMLXek',
-      task,
-      dependsOnTaskIds: [...reference.dependsOnTaskIds],
-    }
-    expect(() => validateTaskSchedulerAdmission(canonicalRequest, reference)).not.toThrow()
+    const canonicalRequest = buildScheduledTaskRequest(reference)
+    expect(() => validateTaskSchedulerAdmission(canonicalRequest, canonicalRequest)).not.toThrow()
     expect(() => validateTaskSchedulerAdmission({
       ...canonicalRequest,
       enqueueId: 'not-the-canonical-enqueue-id',
-    }, reference)).toThrow(/^TASK_DEPENDENCY_TOPOLOGY_DIVERGED/)
+    }, canonicalRequest)).toThrow(/^TASK_DEPENDENCY_TOPOLOGY_DIVERGED/)
     expect(() => validateTaskSchedulerAdmission({
       ...canonicalRequest,
       task: {
-        ...task,
+        ...canonicalRequest.task,
         schedulerWorkflowId: buildUserTaskSchedulerWorkflowId('different-user'),
       },
-    }, reference)).toThrow(/^TASK_DEPENDENCY_TOPOLOGY_DIVERGED/)
+    }, canonicalRequest)).toThrow(/^TASK_DEPENDENCY_TOPOLOGY_DIVERGED/)
     expect(() => validateTaskSchedulerAdmission({
       ...canonicalRequest,
-      task: { ...task, taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE },
-    }, reference)).toThrow(/^TASK_DEPENDENCY_TOPOLOGY_DIVERGED/)
+      task: {
+        ...canonicalRequest.task,
+        taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
+      },
+    }, canonicalRequest)).toThrow(/^TASK_DEPENDENCY_TOPOLOGY_DIVERGED/)
     expect(() => validateTaskSchedulerAdmission({
       ...canonicalRequest,
       dependsOnTaskIds: [],
-    }, reference)).toThrow(/^TASK_DEPENDENCY_TOPOLOGY_DIVERGED/)
+    }, canonicalRequest)).toThrow(/^TASK_DEPENDENCY_TOPOLOGY_DIVERGED/)
   })
 
   it('classifies topology divergence by type rather than message text', () => {
@@ -281,17 +289,12 @@ function validateTaskSchedulerAdmissionDependenciesForClassification(): void {
     taskType: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
     dependsOnTaskIds: [],
   } as const
+  const expected = buildScheduledTaskRequest(reference)
   validateTaskSchedulerAdmission({
     enqueueId: 'non-canonical',
-    task: {
-      workflowId: buildTaskWorkflowId(reference.taskId),
-      schedulerWorkflowId: buildUserTaskSchedulerWorkflowId(reference.userId),
-      taskId: reference.taskId,
-      userId: reference.userId,
-      taskType: reference.taskType,
-    },
+    task: expected.task,
     dependsOnTaskIds: [],
-  }, reference)
+  }, expected)
 }
 
 describe('Task dependency topology persistence', () => {

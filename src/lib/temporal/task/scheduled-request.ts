@@ -1,6 +1,4 @@
-import { createHash } from 'node:crypto'
-import { buildTaskWorkflowId, buildUserTaskSchedulerWorkflowId } from '../identity'
-import type { PersistedTaskReference, ScheduledTaskRequest } from './contracts'
+import type { ScheduledTaskRequest } from './contracts'
 
 export class TaskDependencyTopologyDivergedError extends Error {
   constructor(...details: readonly string[]) {
@@ -17,11 +15,6 @@ export function isTaskDependencyTopologyDivergedError(
 
 function topologyDiverged(): never {
   throw new TaskDependencyTopologyDivergedError()
-}
-
-function buildTaskEnqueueId(taskId: string): string {
-  const digest = createHash('sha256').update(taskId, 'utf8').digest('base64url')
-  return `task-enqueue:v1:${digest}`
 }
 
 export function sameScheduledTask(
@@ -63,19 +56,8 @@ export function validateTaskSchedulerAdmissionDependencies(
 
 export function validateTaskSchedulerAdmission(
   input: ScheduledTaskRequest,
-  persistedReference: PersistedTaskReference,
+  expected: ScheduledTaskRequest,
 ): void {
-  const expected: ScheduledTaskRequest = {
-    enqueueId: buildTaskEnqueueId(persistedReference.taskId),
-    task: {
-      workflowId: buildTaskWorkflowId(persistedReference.taskId),
-      schedulerWorkflowId: buildUserTaskSchedulerWorkflowId(persistedReference.userId),
-      taskId: persistedReference.taskId,
-      userId: persistedReference.userId,
-      taskType: persistedReference.taskType,
-    },
-    dependsOnTaskIds: [...persistedReference.dependsOnTaskIds],
-  }
   validateTaskSchedulerAdmissionDependencies(
     input,
     expected.task.taskId,

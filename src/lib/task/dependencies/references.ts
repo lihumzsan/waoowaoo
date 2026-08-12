@@ -79,9 +79,22 @@ export function projectPersistedTaskReference(params: {
   readonly task: PersistedTaskRow
   readonly dependencies: readonly PersistedDependencyRow[]
 }): PersistedTaskReference {
-  if (params.task.operationExecutionId) {
+  if (params.dependencies.length > 0) {
+    if (!params.task.operationExecutionId) {
+      topologyDiverged(params.task.id, 'OPERATION_TASK_IDENTITY_INVALID')
+    }
     requireOperationTask(params.task, params.task.operationExecutionId)
-  } else if (params.task.operationPlanTaskId !== null || params.dependencies.length > 0) {
+  } else if (params.task.operationPlanTaskId !== null) {
+    if (!params.task.operationExecutionId) {
+      topologyDiverged(params.task.id, 'OPERATION_TASK_IDENTITY_INVALID')
+    }
+    requireOperationTask(params.task, params.task.operationExecutionId)
+  } else if (
+    params.task.operationExecutionId !== null && (
+      params.task.operationExecutionId.length === 0 ||
+      params.task.operationExecutionId.trim() !== params.task.operationExecutionId
+    )
+  ) {
     topologyDiverged(params.task.id, 'OPERATION_TASK_IDENTITY_INVALID')
   }
   const dependsOnTaskIds = params.dependencies

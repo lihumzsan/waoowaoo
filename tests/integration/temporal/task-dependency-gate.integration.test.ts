@@ -7,6 +7,7 @@ import {
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { connectTemporalClient } from '@/lib/temporal/client'
 import { buildTaskWorkflowId, buildUserTaskSchedulerWorkflowId } from '@/lib/temporal/identity'
+import { buildScheduledTaskRequest } from '@/lib/temporal/task-client'
 import {
   USER_TASK_SCHEDULER_UPDATE_NAME,
   type ScheduledTaskRequest,
@@ -266,19 +267,12 @@ describe('Temporal dependency gate durability', () => {
     await activeWorker.waitForTaskStatus(activeFixture.mixTaskId, 'completed')
     await terminateScheduler(activeFixture.userId)
 
-    const canonicalTask = {
-      workflowId: buildTaskWorkflowId(activeFixture.mixTaskId),
-      schedulerWorkflowId: buildUserTaskSchedulerWorkflowId(activeFixture.userId),
-      taskId: activeFixture.mixTaskId,
-      userId: activeFixture.userId,
-      taskType: activeFixture.references.mix.taskType,
-    }
+    const canonicalRequest = buildScheduledTaskRequest(activeFixture.references.mix)
     let nonCanonicalEnqueue: unknown = null
     try {
       await scheduleRawRequest(activeWorker.taskQueue, {
+        ...canonicalRequest,
         enqueueId: 'non-canonical-terminal-enqueue',
-        task: canonicalTask,
-        dependsOnTaskIds: [...activeFixture.references.mix.dependsOnTaskIds],
       })
     } catch (error) {
       nonCanonicalEnqueue = error

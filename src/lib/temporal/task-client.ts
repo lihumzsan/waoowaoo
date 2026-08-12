@@ -82,10 +82,9 @@ function taskWorkflowInput(reference: PersistedTaskReference): TaskWorkflowInput
   }
 }
 
-function scheduleRequest(reference: PersistedTaskReference): {
-  request: ScheduledTaskRequest
-  updateId: string
-} {
+export function buildScheduledTaskRequest(
+  reference: PersistedTaskReference,
+): ScheduledTaskRequest {
   const task = taskWorkflowInput(reference)
   const dependsOnTaskIds = reference.dependsOnTaskIds.map((dependencyTaskId) =>
     requireIdentity(dependencyTaskId, 'TASK_DEPENDENCY_TASK_ID_INVALID'),
@@ -98,8 +97,17 @@ function scheduleRequest(reference: PersistedTaskReference): {
   }
   dependsOnTaskIds.sort()
   const enqueueId = `task-enqueue:v1:${hash(task.taskId)}`
+  return { enqueueId, task, dependsOnTaskIds }
+}
+
+function buildScheduleCommand(reference: PersistedTaskReference): {
+  request: ScheduledTaskRequest
+  updateId: string
+} {
+  const request = buildScheduledTaskRequest(reference)
+  const { enqueueId, task, dependsOnTaskIds } = request
   return {
-    request: { enqueueId, task, dependsOnTaskIds },
+    request,
     updateId: [
       'task-enqueue-update:v1',
       hash(enqueueId),
@@ -125,7 +133,7 @@ function cancelRequest(input: { reference: PersistedTaskReference; reason: strin
   request: TaskCancelRequest
   updateId: string
 } {
-  const scheduledTask = scheduleRequest(input.reference).request
+  const scheduledTask = buildScheduledTaskRequest(input.reference)
   const taskId = scheduledTask.task.taskId
   const reason = requireIdentity(input.reason, 'TASK_CANCEL_REASON_INVALID')
   const requestId = `task-cancel:v1:${hash(taskId)}`
@@ -294,7 +302,7 @@ export class TemporalTaskClient {
   }
 
   async schedule(reference: PersistedTaskReference): Promise<ScheduledTaskReceipt> {
-    const { request, updateId } = scheduleRequest(reference)
+    const { request, updateId } = buildScheduleCommand(reference)
     const schedulerWorkflowId = request.task.schedulerWorkflowId
     const startOperation = new WithStartWorkflowOperation<UserTaskSchedulerWorkflow>(
       TEMPORAL_WORKFLOW.USER_TASK_SCHEDULER.type,
