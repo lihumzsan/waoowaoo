@@ -19,6 +19,7 @@ import {
 } from '@/lib/operations/types'
 import { prisma } from '@/lib/prisma'
 import { getTaskDefinition } from '@/lib/task/definition'
+import { buildPersistedTaskReference } from '@/lib/task/dependencies/references'
 import { publishPersistedTaskEventById } from '@/lib/task/publisher'
 import { isTaskType } from '@/lib/task/types'
 import { buildOperationExecutionWorkflowId, buildTaskWorkflowId } from '@/lib/temporal/identity'
@@ -270,7 +271,6 @@ async function directTaskReceipt(params: {
       tasks.length,
     )
   }
-  const references = []
   for (const task of tasks) {
     if (
       task.userId !== params.command.userId ||
@@ -286,14 +286,10 @@ async function directTaskReceipt(params: {
         task.id,
       )
     }
-    references.push({
-      taskId: task.id,
-      userId: task.userId,
-      taskType: task.type,
-    })
   }
   const scheduled = []
-  for (const reference of references) {
+  for (const task of tasks) {
+    const reference = await buildPersistedTaskReference(prisma, task.id)
     scheduled.push({
       reference,
       schedule: await schedulePersistedTask(reference),

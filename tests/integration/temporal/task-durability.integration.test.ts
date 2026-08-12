@@ -139,6 +139,7 @@ describe('Temporal Task terminal and follow-up durability', () => {
         taskId: fixture.firstTaskId,
         userId: fixture.userId,
         taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
+        dependsOnTaskIds: [],
       })
       const firstTerminalReceipt = await requireWorker().waitForTerminalPostCommitFault()
       const firstCommittedTask = await prisma.task.findUniqueOrThrow({
@@ -172,6 +173,7 @@ describe('Temporal Task terminal and follow-up durability', () => {
         taskId: fixture.secondTaskId,
         userId: fixture.userId,
         taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
+        dependsOnTaskIds: [],
       })
       await waitForTaskTerminal(fixture.secondTaskId)
       const secondWhileNotificationBlocked = await prisma.task.findUniqueOrThrow({
@@ -310,12 +312,14 @@ describe('Temporal Task terminal and follow-up durability', () => {
         taskId: fixture.firstTaskId,
         userId: fixture.userId,
         taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
+        dependsOnTaskIds: [],
       })
       await queuedCancelWorker.waitForCapacityHeld()
       await taskClient.schedule({
         taskId: fixture.secondTaskId,
         userId: fixture.userId,
         taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
+        dependsOnTaskIds: [],
       })
 
       const queuedTask = await prisma.task.findUniqueOrThrow({
@@ -333,6 +337,7 @@ describe('Temporal Task terminal and follow-up durability', () => {
           taskId: fixture.secondTaskId,
           userId: fixture.userId,
           taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
+          dependsOnTaskIds: [],
         },
         reason: 'TEST_CANCEL_WHILE_QUEUED',
       })
@@ -399,6 +404,7 @@ describe('Temporal Task terminal and follow-up durability', () => {
         taskId: fixture.taskId,
         userId: fixture.userId,
         taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
+        dependsOnTaskIds: [],
       })
       await lateCancelWorker.waitForHandlerCheckpointCommit()
       const cancelView = await taskClient.cancel({
@@ -406,6 +412,7 @@ describe('Temporal Task terminal and follow-up durability', () => {
           taskId: fixture.taskId,
           userId: fixture.userId,
           taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
+          dependsOnTaskIds: [],
         },
         reason: 'TEST_CANCEL_AFTER_HANDLER_CHECKPOINT_COMMIT',
       })
@@ -528,6 +535,7 @@ describe('Temporal Task terminal and follow-up durability', () => {
         taskId: fixture.taskId,
         userId: fixture.userId,
         taskType: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
+        dependsOnTaskIds: [],
       })
       await child.waitUntilRunResultBlocked()
       const taskAtKillBoundary = await prisma.task.findUniqueOrThrow({

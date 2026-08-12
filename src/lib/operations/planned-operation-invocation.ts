@@ -15,9 +15,9 @@ import {
   changedOperationPlanArtifacts,
 } from './operation-plan-revalidation'
 import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
+import { buildPersistedTaskReferencesForOperationExecution } from '@/lib/task/dependencies/references'
 import { schedulePersistedTask } from '@/lib/temporal/task-client'
 import type { PersistedTaskReference, ScheduledTaskReceipt } from '@/lib/temporal/task/contracts'
-import { isTaskType } from '@/lib/task/types'
 import { OPERATION_EXECUTION_MAX_TASKS } from '@/lib/temporal/operation-execution/contracts'
 
 const PLANNED_OPERATION_TRANSACTION_TIMEOUT_MS = 60_000
@@ -347,22 +347,23 @@ async function loadPlannedOperationExecutionReceipt(params: {
   if (byPlanTaskId.has(null) || byPlanTaskId.size !== execution.tasks.length) {
     receiptError('OPERATION_EXECUTION_TASK_IDENTITY_DIVERGED', execution.id)
   }
-  const references: PersistedTaskReference[] = snapshot.plan.tasks.map((planTask) => {
+  for (const planTask of snapshot.plan.tasks) {
     const task = byPlanTaskId.get(planTask.id)
     if (!task || task.userId !== params.userId || task.projectId !== params.projectId ||
       task.operationId !== params.operationId || task.operationExecutionId !== execution.id ||
-      task.operationRequestId !== params.operationRequestId || !isTaskType(task.type)) {
-      return receiptError('OPERATION_EXECUTION_TASK_RECEIPT_DIVERGED', execution.id, planTask.id)
+      task.operationRequestId !== params.operationRequestId) {
+      receiptError('OPERATION_EXECUTION_TASK_RECEIPT_DIVERGED', execution.id, planTask.id)
     }
-    return { taskId: task.id, userId: task.userId, taskType: task.type }
-  })
+  }
+  const references = await buildPersistedTaskReferencesForOperationExecution(prisma, execution.id)
   return {
     operationExecutionId: execution.id,
     planSnapshotId: params.planSnapshotId,
     operationRequestId: params.operationRequestId,
     outputHash: hashCanonicalJson(execution.output),
     tasks: await Promise.all(references.map(async (reference) => ({
-      reference, schedule: await schedulePersistedTask(reference),
+      reference,
+      schedule: await schedulePersistedTask(reference),
     }))),
   }
 }

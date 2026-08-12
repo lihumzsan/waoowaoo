@@ -909,27 +909,6 @@ export async function commitTaskTerminal(
       executionCheckpointId: input.executionCheckpointId,
       eventPayload: { stage: 'completed', runtime: 'temporal' },
     })
-    if (result.applied) {
-      const releasedDependencyRows = await prisma.taskDependency.findMany({
-        where: { sourceTaskId: row.id, status: 'released' },
-        select: { targetTaskId: true },
-      })
-      const released = await prisma.task.findMany({
-        where: {
-          id: { in: releasedDependencyRows.map((dependency) => dependency.targetTaskId) },
-          type: 'workspace_resource_voiceover_mix',
-          status: TASK_STATUS.QUEUED,
-        },
-        select: { id: true, userId: true, type: true },
-      })
-      for (const task of released) {
-        await schedulePersistedTask({
-          taskId: task.id,
-          userId: task.userId,
-          taskType: task.type as 'workspace_resource_voiceover_mix',
-        })
-      }
-    }
     return await terminalReceiptFromCommit(input.taskId, 'completed', result)
   }
   if (input.kind === 'failed') {

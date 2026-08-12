@@ -124,11 +124,21 @@ function parseReceipt(
     }
     const reference = referenceValue as Record<string, unknown>
     const schedule = scheduleValue as Record<string, unknown>
+    const dependsOnTaskIds = reference.dependsOnTaskIds
     if (
       typeof reference.taskId !== 'string' ||
       !reference.taskId ||
       reference.userId !== expected.command.userId ||
       !isTaskType(reference.taskType) ||
+      !Array.isArray(dependsOnTaskIds) ||
+      dependsOnTaskIds.some(
+        (dependencyTaskId, index) =>
+          typeof dependencyTaskId !== 'string' ||
+          dependencyTaskId.length === 0 ||
+          dependencyTaskId.trim() !== dependencyTaskId ||
+          dependencyTaskId === reference.taskId ||
+          (index > 0 && dependsOnTaskIds[index - 1] >= dependencyTaskId),
+      ) ||
       typeof schedule.enqueueId !== 'string' ||
       !schedule.enqueueId ||
       typeof schedule.taskWorkflowId !== 'string' ||
@@ -145,6 +155,7 @@ function parseReceipt(
         taskId: reference.taskId,
         userId: expected.command.userId,
         taskType: reference.taskType,
+        dependsOnTaskIds: [...dependsOnTaskIds] as string[],
       },
       schedule: {
         enqueueId: schedule.enqueueId,

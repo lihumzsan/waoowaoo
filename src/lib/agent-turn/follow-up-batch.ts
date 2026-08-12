@@ -239,10 +239,9 @@ async function createFollowUpBatchInTransaction(params: {
       members: {
         create: tasks.map((task) => ({
           taskId: task.id,
-          status:
-            task.status === 'queued' || task.status === 'processing'
-              ? 'pending'
-              : task.status,
+          status: 'pending',
+          terminalEventId: null,
+          settledAt: null,
         })),
       },
     },
