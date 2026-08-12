@@ -16,8 +16,6 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { AppIcon } from '@/components/ui/icons'
-import { MarkdownTextPart } from './MarkdownTextPart'
 type SetWorkspaceAssistantRunningSurface = (key: string, active: boolean) => void
 const WorkspaceAssistantRunningSurfaceSetterContext = createContext<SetWorkspaceAssistantRunningSurface | null>(null)
 const WorkspaceAssistantRunningSurfaceCountContext = createContext(0)
@@ -84,56 +82,49 @@ export function useWorkspaceAssistantHasRunningSurface(): boolean {
   return useContext(WorkspaceAssistantRunningSurfaceCountContext) > 0
 }
 
+// Beautiful UI Loading State: a 3×3 pixel grid whose chevron wavefront drives
+// right, paired with a live elapsed timer. The local clock is the liveness
+// proof — it cannot fail to arrive the way provider progress events can.
+const WAIT_PIXEL_DELAYS = Array.from({ length: 9 }, (_, index) => {
+  const row = Math.floor(index / 3)
+  const column = index % 3
+  return (column + Math.abs(row - 1)) * 90
+})
+
+function useWaitElapsedLabel(): string {
+  const [deciseconds, setDeciseconds] = useState(0)
+  useEffect(() => {
+    const timer = window.setInterval(() => setDeciseconds((current) => current + 1), 100)
+    return () => window.clearInterval(timer)
+  }, [])
+  const total = deciseconds / 10
+  if (total < 60) return `${total.toFixed(1)}s`
+  return `${String(Math.floor(total / 60))}m ${(total % 60).toFixed(1)}s`
+}
+
 export function WorkspaceAssistantWaitDots() {
+  const elapsed = useWaitElapsedLabel()
   return (
     <div
-      className="assistant-thinking-indicator flex min-h-6 items-center text-[var(--glass-text-secondary)]"
+      className="flex min-h-6 items-center gap-2.5 text-[var(--bui-ink)]"
       role="status"
       aria-live="polite"
     >
-      <span className="assistant-thinking-minimal" aria-hidden="true">
-        <span />
-        <span />
-        <span />
+      <span aria-hidden="true" className="grid grid-cols-[repeat(3,4px)] gap-[1.5px]">
+        {WAIT_PIXEL_DELAYS.map((delay, index) => (
+          <span
+            key={index}
+            className="wa-bui-pixel size-[4px] rounded-[1px] bg-[var(--bui-ink)]"
+            style={{
+              opacity: 0.15,
+              animation: `wa-bui-pixel-on 650ms ease-in-out ${String(delay)}ms infinite`,
+            }}
+          />
+        ))}
       </span>
-
-      <style>{`
-        .assistant-thinking-minimal {
-          display: inline-flex;
-          flex-shrink: 0;
-          align-items: center;
-          justify-content: center;
-          gap: 5px;
-          width: 25px;
-        }
-
-        .assistant-thinking-minimal span {
-          width: 5px;
-          height: 5px;
-          border-radius: 999px;
-          background: currentColor;
-          animation: assistant-thinking-minimal-pulse 1.2s ease-in-out infinite;
-        }
-
-        .assistant-thinking-minimal span:nth-child(2) {
-          animation-delay: 160ms;
-        }
-
-        .assistant-thinking-minimal span:nth-child(3) {
-          animation-delay: 320ms;
-        }
-
-        @keyframes assistant-thinking-minimal-pulse {
-          0%, 72%, 100% {
-            opacity: 0.32;
-            transform: scale(0.82);
-          }
-          36% {
-            opacity: 1;
-            transform: scale(1.2);
-          }
-        }
-      `}</style>
+      <span className="font-mono text-[12px] tabular-nums text-[var(--bui-ink-3)]">
+        {elapsed}
+      </span>
     </div>
   )
 }
@@ -143,7 +134,8 @@ export function HiddenWorkspaceAssistantReasoning() {
 }
 
 // 流式期间 run 尚未完成,不会进入 RunTraceGroup,所以「思考中」状态必须由本组件自己表达:
-// 运行时标题扫光并展开正文,结束后自动折叠成一行,正文用缩进和次级文字颜色与助手正文区分。
+// 视觉严格复刻 Beautiful UI ThinkingState 的 Reasoning 变体——星形图标 + 运行时扫光标题,
+// 展开正文以段落行挂在带动画高度的发丝线左轨上,收起/展开用 grid-rows 过渡。
 export function WorkspaceAssistantReasoningPart({
   text,
   status,
@@ -152,50 +144,108 @@ export function WorkspaceAssistantReasoningPart({
   const running = status.type === 'running'
   const runningSurfaceId = useId()
   useWorkspaceAssistantRunningSurface(`reasoning:${runningSurfaceId}`, running && text.trim().length > 0)
-  const [open, setOpen] = useState(running)
-  const [touched, setTouched] = useState(false)
+  const [manualExpanded, setManualExpanded] = useState<boolean | null>(null)
   const previousRunning = useRef(running)
+  const traceRef = useRef<HTMLDivElement>(null)
+  const [lineHeight, setLineHeight] = useState(0)
+  const rows = text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  const expanded = manualExpanded ?? running
 
   useEffect(() => {
     if (previousRunning.current === running) return
     previousRunning.current = running
-    if (!touched) setOpen(running)
-  }, [running, touched])
+    setManualExpanded(null)
+  }, [running])
+
+  useLayoutEffect(() => {
+    if (traceRef.current) setLineHeight(traceRef.current.offsetHeight)
+  }, [expanded, rows.length, text])
 
   if (!text.trim()) return null
 
-  const content = (
-    <div className="pl-3 leading-6 text-[var(--glass-text-secondary)]">
-      <MarkdownTextPart text={text} status={status} />
-    </div>
-  )
-
   return (
-    <section className="text-sm text-[var(--glass-text-tertiary)]">
+    <div className="flex w-full flex-col">
+      {/* header — Beautiful UI ThinkingState */}
       <button
         type="button"
-        aria-expanded={open}
-        onClick={() => {
-          setTouched(true)
-          setOpen((current) => !current)
-        }}
-        className="flex w-full items-center gap-2 py-0.5 text-left"
+        aria-expanded={expanded}
+        onClick={() => setManualExpanded((current) => !(current ?? running))}
+        className="-mx-1.5 flex w-fit items-center gap-2 rounded-[8px] px-1.5 py-1 transition-colors duration-100 hover:bg-[var(--bui-hover-2)]"
       >
+        {/* eslint-disable-next-line no-restricted-syntax -- Beautiful UI's copied star glyph, preserved exactly. */}
+        <svg width="16" height="16" viewBox="0 0 24 24" fill={running ? 'var(--bui-ink-2)' : 'var(--bui-ink-3)'} aria-hidden="true">
+          <path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z" />
+        </svg>
         {running ? (
-          <AppIcon name="loader" className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
-        ) : null}
-        <span className={`text-xs font-medium ${running ? 'assistant-shimmer-text' : ''}`}>
-          {running ? t('reasoning.running') : t('reasoning.completed')}
-        </span>
-        <AppIcon
-          name="chevronDown"
-          className={`h-3 w-3 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+          <span
+            className="bg-clip-text text-[13px] font-medium whitespace-nowrap text-transparent"
+            style={{
+              backgroundImage:
+                'linear-gradient(90deg, var(--bui-ink-3) 35%, var(--bui-ink) 50%, var(--bui-ink-3) 65%)',
+              backgroundSize: '200% 100%',
+              animation: 'wa-bui-shimmer 1.4s linear infinite',
+            }}
+          >
+            {t('reasoning.running')}
+          </span>
+        ) : (
+          <span
+            className="text-[13px] font-medium whitespace-nowrap text-[var(--bui-ink-2)]"
+            style={{ animation: 'wa-bui-fade-in 350ms ease-out both' }}
+          >
+            {t('reasoning.completed')}
+          </span>
+        )}
+        {/* eslint-disable-next-line no-restricted-syntax -- Beautiful UI's copied chevron glyph, preserved exactly. */}
+        <svg
+          width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--bui-ink-3)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+          className="transition-transform duration-300"
+          style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0)' }}
           aria-hidden="true"
-        />
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
       </button>
-      {open ? (
-        <div className="mt-1">{content}</div>
-      ) : null}
-    </section>
+
+      {/* expandable trace */}
+      <div
+        className="grid transition-[grid-template-rows,opacity] duration-400"
+        style={{
+          gridTemplateRows: expanded ? '1fr' : '0fr',
+          opacity: expanded ? 1 : 0,
+          transitionTimingFunction: 'cubic-bezier(0.23, 1, 0.32, 1)',
+        }}
+      >
+        <div className="overflow-hidden">
+          <div className="relative mt-1 ml-[5px] pl-4">
+            <span
+              aria-hidden="true"
+              className="absolute left-[3px] w-px bg-[var(--bui-line)]"
+              style={{
+                top: -8,
+                height: lineHeight ? lineHeight - 2 : 0,
+                transition: 'height 500ms cubic-bezier(0.23,1,0.32,1)',
+              }}
+            />
+            <div ref={traceRef} className="flex flex-col gap-1 py-1">
+              {rows.map((row, index) => (
+                <div
+                  key={`${String(index)}:${row.slice(0, 24)}`}
+                  className="flex min-h-7 w-full items-center gap-2 rounded-[6px] px-1.5 py-0.5 text-left"
+                  style={{ animation: `wa-bui-fade-up 320ms cubic-bezier(0.23,1,0.32,1) ${String(index * 120)}ms both` }}
+                >
+                  <span className="min-w-0 whitespace-normal text-[12.5px] leading-relaxed text-[var(--bui-ink-2)]">
+                    {row}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }

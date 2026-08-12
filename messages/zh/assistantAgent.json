@@ -36,7 +36,10 @@
     "pendingConfirmationChip": "确认：{label}",
     "latest": "最新",
     "pendingApprovalTitle": "待处理审批",
-    "pendingApprovalCount": "{count} 个待处理动作"
+    "pendingApprovalCount": "{count} 个待处理动作",
+    "copyAnswer": "复制回答",
+    "copiedAnswer": "已复制",
+    "sourceCount": "{count} 个来源"
   },
   "canvasContext": {
     "active": "已在画布中选中",
@@ -54,7 +57,7 @@
   },
   "reasoning": {
     "running": "思考中",
-    "completed": "思考完成",
+    "completed": "推理过程",
     "failed": "执行失败",
     "executionRunning": "执行中 · 已调用 {count} 次工具",
     "executionCompleted": "执行完成 · 调用 {count} 次工具",
@@ -98,7 +101,8 @@
     "arguments": "参数",
     "result": "结果",
     "waiting": "等待工具返回结果...",
-    "webSearchRunning": "联网搜索中…"
+    "webSearchRunning": "联网搜索中…",
+    "runSummary": "{count} 次工具调用"
   },
   "runtime": {
     "goal": "当前目标",

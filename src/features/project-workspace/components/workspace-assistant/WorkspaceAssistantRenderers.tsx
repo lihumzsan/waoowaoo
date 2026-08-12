@@ -8,10 +8,6 @@ import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import BillingActionButton from '@/components/billing/BillingActionButton'
 import {
-  MediaAttachmentChips,
-  TextAttachmentChips,
-} from '@/components/project-assistant/AttachmentChips'
-import {
   buildBillingActionQuotePreviewFromQuote,
   type BillingActionQuotePreview,
 } from '@/lib/billing/action-quote-preview'
@@ -27,7 +23,12 @@ import {
 } from './WorkspaceAssistantReasoning'
 import { WORKSPACE_ASSISTANT_HIDDEN_TRACE_TOOL_NAMES } from './workspace-assistant-run-trace'
 import { summarizeBillingActionItems, type BillingActionItemSummary } from './billing-action-items'
-import { WorkspaceAssistantToolCallCard } from './WorkspaceAssistantToolCall'
+import {
+  resolveWebSearchSources,
+  WorkspaceAssistantToolCallCard,
+  type WebSearchSource,
+} from './WorkspaceAssistantToolCall'
+import { WebSourceFavicon } from './WebSourceFavicon'
 import {
   AssistantContextCompactedDataCard,
   AssistantRuntimeGoalDataCard,
@@ -36,6 +37,7 @@ import {
   HiddenRuntimeContextDataCard,
 } from './WorkspaceAssistantNotices'
 import { isWorkspaceAssistantHiddenThreadMessageMetadata } from './workspace-assistant-panel-state'
+import './workspace-assistant-beautiful.css'
 
 type StandardMessagePartComponents = NonNullable<
   ComponentProps<typeof MessagePrimitive.Parts>['components']
@@ -47,7 +49,7 @@ type WorkspaceAssistantMessagePartComponents = {
 type AssistantAgentTranslator = ReturnType<typeof useTranslations<'assistantAgent'>>
 
 export const WORKSPACE_ASSISTANT_USER_MESSAGE_CLASS =
-  'max-w-full w-fit break-words rounded-2xl bg-neutral-100 px-3 py-2.5 text-[17px] leading-7 text-[var(--glass-text-primary)] [overflow-wrap:anywhere]'
+  'max-w-full w-fit break-words rounded-xl bg-[var(--bui-field)] px-3 py-2.5 text-[15px] leading-6 text-[var(--bui-ink)] shadow-[var(--bui-shadow-hairline)] [overflow-wrap:anywhere]'
 const WORKSPACE_ASSISTANT_MESSAGE_CLASS =
   'flex min-w-0 max-w-full flex-col gap-4 px-1 py-2 text-[17px] leading-7 text-[var(--glass-text-primary)]'
 export function resolveProgressStageLabel(
@@ -268,21 +270,52 @@ function HiddenWorkspaceAssistantInternalMessage(props: { children: React.ReactN
   return <>{props.children}</>
 }
 
+/** Beautiful UI chat grammar: attachments in the sent bubble are quiet mono chips. */
+function WorkspaceAssistantBubbleAttachmentChip(props: { readonly name: string }) {
+  return (
+    <span
+      title={props.name}
+      className="mr-1 mt-2 inline-flex h-7 max-w-full items-center truncate rounded-[6px] bg-[var(--bui-surface)] px-2 font-mono text-[11.5px] text-[var(--bui-ink-2)] shadow-[var(--bui-shadow-btn)]"
+    >
+      <span className="truncate">{props.name}</span>
+    </span>
+  )
+}
+
 function WorkspaceAssistantUserTextAttachments() {
   const metadata = useMessage((state) => state.metadata)
   const attachments = readProjectAssistantTextAttachmentsFromMetadata(metadata)
   const mediaAttachments = readProjectAssistantMediaAttachmentsFromMetadata(metadata)
+  if (attachments.length === 0 && mediaAttachments.length === 0) return null
   return (
-    <>
-      <TextAttachmentChips
-        attachments={attachments}
-        className={attachments.length > 0 ? 'mt-2' : undefined}
-      />
-      <MediaAttachmentChips
-        attachments={mediaAttachments}
-        className={mediaAttachments.length > 0 ? 'mt-2' : undefined}
-      />
-    </>
+    <div className="flex max-w-full flex-wrap items-center">
+      {attachments.map((attachment) => (
+        <WorkspaceAssistantBubbleAttachmentChip key={attachment.id} name={attachment.fileName} />
+      ))}
+      {mediaAttachments.map((attachment) => (
+        attachment.mediaType === 'image' && attachment.href ? (
+          <span
+            key={attachment.resourceId}
+            className="mr-1 mt-2 inline-block h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-[var(--bui-inset)] shadow-[var(--bui-shadow-hairline)]"
+            title={attachment.name}
+          >
+            {/* Protected same-origin media route; the session cookie authorizes the read. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={attachment.href}
+              alt={attachment.name}
+              className="h-full w-full object-cover"
+              loading="lazy"
+            />
+          </span>
+        ) : (
+          <WorkspaceAssistantBubbleAttachmentChip
+            key={attachment.resourceId}
+            name={attachment.name}
+          />
+        )
+      ))}
+    </div>
   )
 }
 
@@ -311,6 +344,116 @@ function WorkspaceAssistantUserUndeliveredMarker(props: {
   )
 }
 
+/**
+ * Beautiful UI StreamingText footer: a quiet copy action plus the message's
+ * aggregated search sources (avatar stack + count, expanding to a source
+ * list). Pure projection over the settled message content — no new state
+ * source; it renders only after the message stops running.
+ */
+function WorkspaceAssistantAssistantMessageFooter() {
+  const t = useTranslations('assistantAgent')
+  const [copied, setCopied] = React.useState(false)
+  const [sourcesOpen, setSourcesOpen] = React.useState(false)
+  const running = useMessage((state) => state.status?.type === 'running')
+  const content = useMessage((state) => state.content)
+  const text = content
+    .flatMap((part) => (part.type === 'text' ? [part.text] : []))
+    .join('\n\n')
+    .trim()
+  const sources = React.useMemo(() => {
+    const byUrl = new Map<string, WebSearchSource>()
+    for (const part of content) {
+      if (part.type !== 'tool-call' || part.toolName !== 'web_search') continue
+      for (const source of resolveWebSearchSources(part.result)) {
+        if (!byUrl.has(source.url)) byUrl.set(source.url, source)
+      }
+    }
+    return [...byUrl.values()]
+  }, [content])
+  if (running || !text) return null
+
+  const copyAnswer = (): void => {
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1500)
+    })
+  }
+
+  return (
+    <div className="-mt-2">
+      <div className="flex items-center gap-0.5">
+        <button
+          type="button"
+          aria-label={copied ? t('panel.copiedAnswer') : t('panel.copyAnswer')}
+          title={copied ? t('panel.copiedAnswer') : t('panel.copyAnswer')}
+          onClick={copyAnswer}
+          className={`flex size-6 items-center justify-center rounded-[6px] transition-colors duration-100 hover:bg-[var(--bui-hover-2)] ${copied ? 'text-[var(--bui-green)]' : 'text-[var(--bui-ink-3)] hover:text-[var(--bui-ink)]'}`}
+        >
+          {/* eslint-disable no-restricted-syntax -- Beautiful UI's copied action glyphs, preserved exactly. */}
+          {copied ? (
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg>
+          ) : (
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2.5" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+          )}
+          {/* eslint-enable no-restricted-syntax */}
+        </button>
+        {sources.length > 0 ? (
+          <button
+            type="button"
+            aria-expanded={sourcesOpen}
+            onClick={() => setSourcesOpen((current) => !current)}
+            className="ml-1.5 flex items-center gap-1.5 rounded-[6px] px-1 py-0.5 text-left transition-colors duration-150 hover:bg-[var(--bui-hover)]"
+          >
+            <span className="flex -space-x-1">
+              {sources.slice(0, 3).map((source) => (
+                <span
+                  key={source.url}
+                  className="flex size-3.5 items-center justify-center rounded-full bg-[var(--bui-surface)] shadow-[0_0_0_1.5px_var(--bui-surface)]"
+                >
+                  <WebSourceFavicon domain={source.domain} className="h-2.5 w-2.5 rounded-full" />
+                </span>
+              ))}
+            </span>
+            <span className="text-[12px] text-[var(--bui-ink-2)]">
+              {t('panel.sourceCount', { count: sources.length })}
+            </span>
+          </button>
+        ) : null}
+      </div>
+      {sources.length > 0 ? (
+        <div
+          className="grid transition-[grid-template-rows,opacity] duration-300"
+          style={{
+            gridTemplateRows: sourcesOpen ? '1fr' : '0fr',
+            opacity: sourcesOpen ? 1 : 0,
+            transitionTimingFunction: 'cubic-bezier(0.23, 1, 0.32, 1)',
+          }}
+        >
+          <div className="overflow-hidden">
+            <div className="mt-1.5 flex flex-col rounded-[10px] bg-[var(--bui-inset)] p-1 shadow-[var(--bui-shadow-hairline)]">
+              {sources.map((source) => (
+                <a
+                  key={source.url}
+                  href={source.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 rounded-[6px] px-1.5 py-1 text-[12px] text-[var(--bui-ink-2)] transition-colors duration-150 hover:bg-[var(--bui-hover)] hover:text-[var(--bui-ink)]"
+                >
+                  <WebSourceFavicon domain={source.domain} className="h-4 w-4 rounded-[4px]" />
+                  <span className="wa-bui-underline min-w-0 truncate">{source.title}</span>
+                  <span className="ml-auto shrink-0 font-mono text-[10.5px] text-[var(--bui-ink-3)]">
+                    {source.domain}
+                  </span>
+                </a>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export function WorkspaceAssistantThreadMessage(props: {
   messagePartComponents: WorkspaceAssistantMessagePartComponents
   undeliveredUserMessageId?: string | null
@@ -335,6 +478,7 @@ export function WorkspaceAssistantThreadMessage(props: {
         <div className="space-y-1">
           <MessagePrimitive.Root className={WORKSPACE_ASSISTANT_MESSAGE_CLASS}>
             <MessagePrimitive.Parts components={props.messagePartComponents.assistant} />
+            <WorkspaceAssistantAssistantMessageFooter />
           </MessagePrimitive.Root>
         </div>
       </MessagePrimitive.If>

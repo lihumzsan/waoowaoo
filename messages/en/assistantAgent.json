@@ -36,7 +36,10 @@
     "pendingConfirmationChip": "Confirm: {label}",
     "latest": "Latest",
     "pendingApprovalTitle": "Pending approval",
-    "pendingApprovalCount": "{count} pending actions"
+    "pendingApprovalCount": "{count} pending actions",
+    "copyAnswer": "Copy answer",
+    "copiedAnswer": "Copied",
+    "sourceCount": "{count} sources"
   },
   "canvasContext": {
     "active": "Selected on Canvas",
@@ -54,7 +57,7 @@
   },
   "reasoning": {
     "running": "Thinking",
-    "completed": "Thinking complete",
+    "completed": "Reasoning",
     "failed": "Execution failed",
     "executionRunning": "Working · {count, plural, one {# tool called} other {# tools called}}",
     "executionCompleted": "Work complete · {count, plural, one {# tool call} other {# tool calls}}",
@@ -98,7 +101,8 @@
     "arguments": "Arguments",
     "result": "Result",
     "waiting": "Waiting for tool result...",
-    "webSearchRunning": "Searching the web…"
+    "webSearchRunning": "Searching the web…",
+    "runSummary": "{count} tool calls"
   },
   "runtime": {
     "goal": "Active goal",

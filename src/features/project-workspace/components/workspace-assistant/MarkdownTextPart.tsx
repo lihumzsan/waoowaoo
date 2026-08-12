@@ -68,9 +68,8 @@ function WorkspaceMarkdownLink(props: { readonly href?: string; readonly childre
   const workspaceLink = useWorkspaceAssistantWorkspaceLink()
   const href = props.href?.trim() ?? ''
   if (isExternalWebHref(href)) {
-    // Cited sources read as a run of blue underlines when a paragraph carries
-    // several of them. A compact chip carrying the site's own icon keeps the
-    // sentence readable and makes the source recognisable before it is clicked.
+    // Beautiful UI SourceChip: a quiet inline pill carrying the site's icon and
+    // domain in 10.5px mono, so several citations stay readable in one line.
     const domain = readSourceDomain(href)
     return (
       <a
@@ -78,10 +77,10 @@ function WorkspaceMarkdownLink(props: { readonly href?: string; readonly childre
         target="_blank"
         rel="noopener noreferrer"
         title={href}
-        className="mx-0.5 inline-flex max-w-[16rem] items-baseline gap-1 rounded-md bg-black/[0.045] px-1.5 py-px align-baseline text-[0.9em] leading-[1.5] text-[var(--glass-text-secondary)] no-underline transition-colors hover:bg-black/[0.08] hover:text-[var(--glass-text-primary)]"
+        className="ml-0 mr-1 inline-flex h-[18px] max-w-[16rem] translate-y-[-1px] items-center gap-1 rounded-[5px] bg-[var(--bui-inset)] px-[3px] align-middle font-mono text-[10.5px] leading-none text-[var(--bui-ink-2)] no-underline shadow-[var(--bui-shadow-hairline)] transition-colors duration-150 hover:bg-[var(--bui-hover)] hover:text-[var(--bui-ink)]"
       >
-        <WebSourceFavicon domain={domain} className="h-3 w-3 self-center" />
-        <span className="truncate">{props.children}</span>
+        <WebSourceFavicon domain={domain} className="h-3 w-3 shrink-0 rounded-[3px]" />
+        <span className="truncate">{domain}</span>
       </a>
     )
   }
