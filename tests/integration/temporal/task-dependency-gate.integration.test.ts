@@ -14,6 +14,7 @@ import {
   startTaskDependencyGateWorker,
   type TaskDependencyGateWorkerHarness,
 } from './helpers/task-durability-harness'
+import { activityAttempts } from './helpers/task-durability-harness'
 
 let activeWorker: TaskDependencyGateWorkerHarness | null = null
 let activeFixture: TaskDependencyGateFixture | null = null
@@ -88,6 +89,9 @@ describe('Temporal dependency gate durability', () => {
     })
     activeWorker.releaseHeldSource()
     await activeWorker.waitForTaskStatus(activeFixture.mixTaskId, 'completed')
+    const mixHistory = await activeWorker.fetchTaskHistory(activeFixture.mixTaskId)
+    expect(activityAttempts(mixHistory, 'runTaskAttempt').length).toBeGreaterThanOrEqual(1)
+    expect(activityAttempts(mixHistory, 'commitTaskTerminal').length).toBeGreaterThanOrEqual(1)
     await expect(
       prisma.taskEvent.count({ where: { taskId: activeFixture.mixTaskId, eventType: TASK_EVENT_TYPE.COMPLETED } }),
     ).resolves.toBe(1)
@@ -135,6 +139,10 @@ describe('Temporal dependency gate durability', () => {
     await activeWorker.close()
     activeWorker = await startTaskDependencyGateWorker({ heldSourceTaskId: null, faultAfterTerminalTaskId: null })
     await activeWorker.waitForTaskStatus(activeFixture.mixTaskId, 'completed')
+    const sourceHistory = await activeWorker.fetchTaskHistory(activeFixture.source1TaskId)
+    const mixHistory = await activeWorker.fetchTaskHistory(activeFixture.mixTaskId)
+    expect(activityAttempts(sourceHistory, 'commitTaskTerminal').length).toBeGreaterThanOrEqual(2)
+    expect(activityAttempts(mixHistory, 'runTaskAttempt').length).toBeGreaterThanOrEqual(1)
     await expect(
       prisma.taskEvent.count({ where: { taskId: activeFixture.source1TaskId, eventType: TASK_EVENT_TYPE.COMPLETED } }),
     ).resolves.toBe(1)

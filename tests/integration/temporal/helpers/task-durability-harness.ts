@@ -25,7 +25,7 @@ import { connectTemporalClient } from '@/lib/temporal/client'
 import { TemporalTaskClient } from '@/lib/temporal/task-client'
 import { USER_TASK_SCHEDULER_QUERY_NAME, type UserTaskSchedulerView } from '@/lib/temporal/task/contracts'
 import { prisma } from '../../../helpers/prisma'
-import { buildUserTaskSchedulerWorkflowId } from '@/lib/temporal/identity'
+import { buildTaskWorkflowId, buildUserTaskSchedulerWorkflowId } from '@/lib/temporal/identity'
 import type {
   CommitTaskTerminalInput,
   NotifyTaskFollowUpInput,
@@ -244,6 +244,7 @@ export interface TaskDependencyGateWorkerHarness {
   readonly taskQueue: string
   readonly taskClient: TemporalTaskClient
   queryScheduler(userId: string): Promise<UserTaskSchedulerView>
+  fetchTaskHistory(taskId: string): Promise<History>
   releaseHeldSource(): void
   waitForTaskStatus(taskId: string, status: 'queued' | 'processing' | 'completed' | 'failed' | 'canceled'): Promise<void>
   waitForTerminalPostCommitFault(): Promise<TaskTerminalReceipt>
@@ -298,6 +299,11 @@ export async function startTaskDependencyGateWorker(input: {
       return await connected.client.workflow
         .getHandle(buildUserTaskSchedulerWorkflowId(userId))
         .query<UserTaskSchedulerView>(USER_TASK_SCHEDULER_QUERY_NAME.VIEW)
+    },
+    async fetchTaskHistory(taskId) {
+      return await connected.client.workflow
+        .getHandle(buildTaskWorkflowId(taskId))
+        .fetchHistory()
     },
     releaseHeldSource() {
       if (released) return
