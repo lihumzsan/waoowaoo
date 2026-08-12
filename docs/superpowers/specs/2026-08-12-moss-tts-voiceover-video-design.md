@@ -3,6 +3,7 @@
 ## 状态
 
 - 设计日期：2026-08-12
+- 依赖治理修订：2026-08-12，用户已批准采用 Temporal Scheduler 依赖门控，禁止新增全局 `blocked` Task 状态
 - 用户批准范围：单人正式配音，并以旁白/画外音方式自动混入一个已经成片的视频
 - 不包含：人物口型同步、多说话人对话、视频片段拼接、自动改写台词
 - 本文是实现前设计，不表示 Wao 端链路已经交付
@@ -74,7 +75,8 @@
 - Provider 选择与 capability owner：`ai-registry`。
 - MOSS wire 协议 owner：`ai-providers/comfyui` 的 TTS profile/adapter。
 - Task 终态和 Resource 物化 owner：现有 Task Terminal Service 与 WorkspaceResource materializer。
-- 下游放行 owner：OperationExecution 内部 Task dependency resolver；不是 Agent follow-up batch。
+- 依赖拓扑 owner：冻结的 OperationPlan 与同事务持久化的 TaskDependency 关系。
+- 下游执行准入 owner：现有 Temporal User Task Scheduler；不是 Agent follow-up batch，也不是 Task terminal Activity。
 - 混音 owner：独立 `workspace_resource_voiceover_mix` Task handler，复用 `video-compose` 原语。
 - 本任务不与其他 Agent 共享核心入口文件；实现时同一时刻只有一个 owner 修改 Operation 计划、Task dependency 与 terminal 放行代码。
 
@@ -85,10 +87,10 @@
 | 用户生产意图 | OperationExecution ID / project | Operation invocation | Plan、Task DAG、最终 View |
 | 参考音频 | `resourceId + contentVersion` / project | WorkspaceResource persistence | voiceover planner、handler |
 | 输入视频与 BGM | `resourceId + contentVersion` / project | WorkspaceResource persistence | mix planner、handler |
-| 单条旁白 | 稳定 member index + 预留 resourceId / project | voiceover terminal materializer | Canvas、dependency resolver、mix handler |
+| 单条旁白 | 稳定 member index + 预留 resourceId / project | voiceover terminal materializer | Canvas、Temporal Scheduler、mix handler |
 | 旁白开始时间 | 冻结 Task/Plan payload | Operation planner | timeline validator、mix handler |
-| 旁白结束时间 | `startSeconds +` 已物化音频真实 duration | media metadata writer | dependency release transaction |
-| 混音任务可运行性 | 持久 Task dependency 状态 | Task terminal/dependency owner | Temporal scheduler |
+| 旁白结束时间 | `startSeconds +` 已物化音频真实 duration | media metadata writer | timeline validator、mix handler |
+| 混音任务可运行性 | 冻结依赖拓扑 + Scheduler 已持久记录的 source Task 终态 | OperationPlan 写拓扑；Temporal Scheduler 裁决准入 | Scheduler queue、Task Workflow |
 | 最终视频 | 预留 resourceId / project | mix terminal materializer | Canvas、MCP、Agent |
 | ComfyUI 调用 | invocation key + prompt_id | provider submission fence | poll/cancel/recovery |
 
@@ -99,7 +101,7 @@
 | 正式旁白视频公开执行入口 | 0 | 1 (`produce_voiceover_video`) |
 | 正式旁白 Resource writer | 0 | 1（Task terminal materializer） |
 | 最终混音视频 writer | 现有 merge terminal writer | 同一持久化 owner，新增 mix Task 类型 |
-| 下游混音放行解释者 | 0 | 1（持久 dependency resolver） |
+| 下游混音执行准入解释者 | 0 | 1（Temporal User Task Scheduler） |
 | ComfyUI TTS adapter | 0 | 1（窄 profile） |
 
 新增的是新业务事实的唯一 owner，不引入旧/新双轨。现有 `generate_voice` 不改变语义，现有 `create_audio` 不获得第二套正式配音解释，现有 `merge_videos` 不承担旁白编排。
@@ -112,8 +114,11 @@
 - `create_audio(audioKind=voiceover)` 与 `produce_voiceover_video` 同时成为同义正式配音入口；
 - UI 在旁白完成后直接调用 mix route；
 - follow-up Agent 收到任务通知后再决定是否提交混音；
+- Task terminal Activity 在 MySQL commit 后直接调用 `schedulePersistedTask`；
+- DB 轮询、timer、reconciler 或启动扫描负责补偿遗漏的混音调度；
+- 为依赖等待新增全局 `blocked` Task 状态及其第二套查询、取消和 Resource 保护语义；
 - mix handler 按 workspace path、最近音频或最新版本寻找旁白；
-- ComfyUI adapter 读取固定本机文件名或绝对模型样例路径作为业务输入。
+- ComfyUI adapter 读取固定本机参考音频文件名，或接受调用方提供模型路径作为业务输入；固定 loader 模型路径只存在于受审查的私有 workflow profile。
 
 ## 公开契约
 
@@ -193,28 +198,54 @@ Operation commit 在一个事务中：
 - 创建所需输出目录；
 - 预留 N 个旁白音频 Resource；
 - 预留 1 个最终视频 Resource；
-- 创建 N 个 runnable voiceover Task；
-- 创建 1 个 blocked mix Task；
+- 创建 N 个 voiceover Task；
+- 创建 1 个普通 `queued` mix Task；
 - 为 mix Task 写入对全部 voiceover Task 的 required-success dependencies；
 - 绑定同一 OperationExecution 和 Lineage；
-- 提交后只调度 N 个 voiceover Task。
+- Follow-upBatch 将全部 Task 作为 `pending` 成员绑定；
+- 提交后将全部 Task 交给同一个 Temporal User Task Scheduler，其中 voiceover Task 可立即准入，mix Task 进入依赖等待区。
 
 不能先生成旁白、等终态后再临时创建混音身份；否则崩溃会产生“旁白完成但混音不存在”的交接空窗。
 
 ### 依赖放行
 
-现有 `taskDependencies` 只表达当前 Plan 对既有活跃 Task 的外部依赖，现有 follow-up batch 只负责终态后继续 Agent 回合；两者都不是本功能需要的内部 DAG。
+现有 `taskDependencies` 只表达当前 Plan 对既有活跃 Task 的外部依赖，现有 follow-up batch 只负责终态后继续 Agent 回合；两者都不能承担内部 DAG 的执行准入。实现补全 OperationExecution 内部 Task 依赖契约，但不增加新的 Task 生命周期状态。
 
-实现应补全 OperationExecution 内部 Task dependency 契约：
+冻结的 Plan 使用显式内部边：
 
-- dependency 是持久关系，目标是稳定 mix Task；
-- 每个依赖要求 source Task `completed` 且对应 ResourceVersion 已在同一终态事务物化；
-- 最后一条依赖成功的终态事务将 mix Task 从 blocked 原子转换为 schedulable，并发出唯一 scheduler receipt；
-- 任一依赖 failed/canceled，mix Task 进入明确 canceled/failed-by-dependency 终态，不调度 handler；
-- 重复、乱序、replay 和晚到终态不会产生第二次调度；
-- mix Task 取消或最终终态后，后到的 dependency 不能复活它。
+```ts
+type PlannedTaskEdge = {
+  sourceTaskPlanId: string
+  targetTaskPlanId: string
+  requirement: 'required_success'
+}
+```
 
-这是本设计唯一需要新增的跨 Task 生命周期语义。实现前必须按架构完整级要求更新影响分析；只有确实新增可强制的不变量时才更新正式模块文档。
+Planner 必须满足：
+
+- source/target 都属于同一个 Plan，且 identity 唯一；
+- 禁止自依赖、重复边和有向环；
+- 依赖只能通过稳定 Plan Task identity 表达，不得按 Task type、数组位置或实现名称推断；
+- mix Task 的每条旁白输入都有且仅有一条 required-success 入边；
+- Plan snapshot 冻结后，边集合与 Task payload 一样不可变。
+
+TaskDependency 持久化只保存不可变拓扑：`operationExecutionId + sourceTaskId + targetTaskId + requirement`。不得再保存可由 source Task 终态和 Scheduler history 推导的 `pending/completed/released` 第二状态机，也不增加 `releasedAt/settledAt` 之类的交接标志。
+
+Scheduler 入队命令携带冻结的 `dependsOnTaskIds`。Scheduler 是唯一执行准入裁判：
+
+- 无前置依赖的 voiceover Task 按现有容量策略排队和启动；
+- 有依赖的 mix Task 保持正式 `queued` Task，并进入 Scheduler 依赖等待区；等待不占 Provider/视频执行容量；
+- Scheduler 在同一 Workflow history 中记录 source Task 的正式终态；全部 source 为 `completed` 后，mix 恰好准入一次；
+- 任一 source 为 `failed` 或 `canceled` 时，Scheduler 不启动 mix handler，而是复用现有 queued-cancel terminal 入口，以 `TASK_DEPENDENCY_FAILED` 原因将 mix 收口为 `canceled`；
+- source 终态早于或晚于 mix 入队、重复 Update、Activity ACK 丢失、Workflow replay 与 Worker 重启都只能重放同一裁决；
+- mix 已取消或已终态后，后到的 source 终态不能复活它；
+- 用户可按现有 queued cancellation 路径取消等待中的 mix。
+
+Task terminal service 仍是 Task/Resource/FollowUp 的唯一 MySQL 终态 writer，但不解释依赖、不开启下游 Task，也不在 commit 后调用 `schedulePersistedTask`。Task Workflow 按现有顺序完成 `terminal commit -> capacity release/update Scheduler -> follow-up notification`；Scheduler 从该正式 Update 获得 source 终态并裁决等待成员。该交接由 Temporal history 恢复，不允许 timer、DB 扫描、reconciler 或 UI/Agent 补偿。
+
+Follow-upBatch 对所有新建 Task（包括等待依赖的 mix）统一持久化为 `pending`，只在正式 Task terminal receipt 到达时转为 terminal。它不读取 TaskDependency，也不决定 mix 是否可运行；因此失败级联取消 mix 时，Scheduler 获取正式 terminal receipt，并按现有路径触发唯一 follow-up。
+
+这是本设计唯一新增的跨 Task 执行准入语义。实现前必须按架构完整级要求更新影响分析；只有确实新增可强制的不变量时才更新正式模块文档。
 
 ## ComfyUI TTS profile 与传输
 
@@ -223,11 +254,20 @@ Operation commit 在一个事务中：
 仓库保存窄、可审查的 API-format graph，不保存 UI canvas 元数据：
 
 - `LoadAudio`：`audio` 注入本次上传返回的随机隔离文件名；
-- `MossTTSModelLoader`：使用部署配置或 profile 声明的 Local 1.7B 与 codec 路径；绝不把源 workflow 的 `D:\...` 路径暴露到公共契约；
+- `MossTTSModelLoader`：严格固定使用源工作流的 Local 1.7B 与 codec 路径，不开放部署配置、公共输入、fallback 或自动发现；路径属于私有 ComfyUI profile，不暴露到公共 Operation 契约；
 - `MossTTSGenerate`：注入冻结文本、语言、seed 和 canonical options；`reference_audio` 连接 LoadAudio；
 - `SaveAudioMP3`：固定隔离前缀和 MP3 质量。
 
 Text 节点不是执行必需；API graph 可直接把文本字符串注入 `MossTTSGenerate.text`。profile 必须声明 loader、generator、input 和 output node IDs 及 required node classes，避免 transport 猜输出节点。
+
+固定 loader 输入必须逐字等于源工作流：
+
+```text
+local_model_path = D:\workspace\comfui\dapao2604\ComfyUI\models\moss-tts\OpenMOSS-Team--MOSS-TTS-Local-Transformer
+codec_local_path = D:\workspace\comfui\dapao2604\ComfyUI\models\moss-tts\OpenMOSS-Team--MOSS-Audio-Tokenizer
+```
+
+执行层不得用环境变量、当前模型目录、registry 默认值或其他 ComfyUI 实例路径覆盖这两个值。若目标 ComfyUI 不接受该精确 profile，preflight 原地失败。
 
 ### 参考音频上传
 
@@ -248,7 +288,7 @@ preflight 在 submission fence 外验证：
 - base URL；
 - required node class 与字段；
 - Local 1.7B model variant；
-- 配置的本地 model/codec 路径存在性应由 runtime 诊断或一次 loader smoke 证明，不能仅看客户端路径字符串；
+- 固定 workflow profile 的本地 model/codec 路径存在性应由 runtime 诊断或一次 loader smoke 证明，不能仅看客户端路径字符串；
 - `SaveAudioMP3` 输出协议。
 
 上传属于可能产生外部 scratch 的 prepare 阶段，但 `/prompt` 是唯一生成提交。每个 Task 使用稳定 `prompt_id`。4xx prompt validation 是明确 rejected；网络超时后先按同一 prompt_id 查询 job/history，无法证明是否受理则记录 outcome unknown，禁止新 prompt_id 自动重提。
@@ -280,7 +320,7 @@ Mix Task 只消费：
 - 可选一个 BGM 精确版本；
 - 冻结的增益、ducking、淡入淡出和输出参数。
 
-依赖放行时从每个已物化旁白版本读取真实 `durationMs`，计算 `[start, end)`：
+mix Task 正式启动后，从每个已物化旁白版本读取真实 `durationMs`，计算 `[start, end)`：
 
 - 区间按 start 排序后不得重叠；相邻 `end == next.start` 合法；
 - 每个 `end <= videoDuration`；
@@ -333,7 +373,7 @@ Mix Task 只消费：
 
 ## UI、投影与 i18n
 
-- 公开操作中文名建议为“生成旁白并混入视频”，英文为 “Produce voiceover video”。
+- 公开操作中文名为“生成旁白并混入视频”，英文为 “Produce voiceover video”。
 - 旁白 Resource 展示为正式旁白，不能显示为“角色音色”。
 - 进度阶段至少区分：校验参考音频、上传参考音频、生成旁白、等待其他旁白、校验时间轴、混合音轨、保存成片。
 - 所有用户可见错误和阶段使用 translation key，不硬编码固定语言。
@@ -390,10 +430,11 @@ Mix Task 只消费：
 ### 阶段三：Operation 内部 Task dependency
 
 - 扩展 Plan/OperationExecution/Task 持久协议表达内部 required-success edges。
-- 原子创建 runnable voiceover Tasks 与 blocked mix Task。
-- terminal transaction 唯一放行/阻断下游，覆盖并发、replay、cancel 和 restart。
+- 原子创建全部 `queued` Task 与不可变 TaskDependency 拓扑。
+- 扩展 Temporal Scheduler 的依赖等待与终态裁决；terminal service 不再负责调度下游。
+- 删除全局 `blocked` Task 状态、Task type 推断依赖、terminal Activity commit 后调度和依赖状态第二状态机。
 
-准入：真实数据库 + Temporal 故障注入证明不会漏放行、重复放行或失败后复活。
+准入：真实数据库 + Temporal 故障注入证明不会漏准入、重复准入、失败后复活或让等待任务占用执行容量。
 
 ### 阶段四：旁白时间轴混音
 
@@ -406,7 +447,7 @@ Mix Task 只消费：
 ### 阶段五：端到端与收敛
 
 - 从公开 `produce_voiceover_video` 完成成片视频 -> 多条旁白 -> 自动放行 mix -> 新视频 Resource。
-- 核对没有第二公开配音入口、UI 触发交接、固定本机路径或 fallback。
+- 核对没有第二公开配音入口、UI 触发交接、调用方路径输入、模型 fallback 或自动发现；MOSS loader 路径仍严格等于已批准 workflow profile。
 - 只在确实新增/改变可强制架构不变量时更新模块文档和模块映射。
 
 ## 验证策略
@@ -439,7 +480,7 @@ Mix Task 只消费：
 - 内部 dependency DAG 在 crash/replay/concurrency/cancel 下有真实持久证据；
 - Wao 真实提交 MOSS TTS 并物化旁白 Resource；
 - FFmpeg 真实组合矩阵与完整端到端通过；
-- 无 Agent/UI/timer 交接旁路，无固定本机文件输入，无旧/新双轨；
+- 无 Agent/UI/timer 交接旁路，无固定参考音频文件输入，无模型路径公共输入或 fallback，无旧/新双轨；
 - 不存在关键未验证环境盲区。
 
-本文写作时仍有的盲区：Wao 尚未提交过该 TTS graph；当前成功记录的参考音频为 66 秒，不符合产品 3–10 秒契约；OperationExecution 尚不支持本文所需的内部 blocked Task DAG；最终 ducking 参数尚未以真实成片听感校准。这些都必须在实施阶段如实关闭或继续声明。
+本文写作时仍有的盲区：Wao 尚未提交过该 TTS graph；当前成功记录的参考音频为 66 秒，不符合产品 3–10 秒契约；Temporal Scheduler 尚不支持本文所需的内部 Task dependency gate；最终 ducking 参数尚未以真实成片听感校准。这些都必须在实施阶段如实关闭或继续声明。
