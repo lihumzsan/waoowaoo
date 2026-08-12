@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { persistPlannedTaskEdgesInTransaction } from '@/lib/task/dependencies/persistence'
+import {
+  buildPersistedTaskReference,
+  buildPersistedTaskReferencesForOperationExecution,
+} from '@/lib/task/dependencies/references'
 import { persistSubmittedTaskBatchInTransaction } from '@/lib/task/transactional-create'
 import { TASK_STATUS, TASK_TYPE, type CreateTaskInput } from '@/lib/task/types'
 import { resetBillingState } from '../../helpers/db-reset'
@@ -11,7 +15,7 @@ function buildInputs(params: {
   readonly projectId: string
   readonly operationExecutionId: string
 }): readonly CreateTaskInput[] {
-  return ['narration:1', 'narration:2', 'mix:1'].map((operationPlanTaskId) => ({
+  return ['01:narration:1', '02:narration:2', '03:mix:1'].map((operationPlanTaskId) => ({
     userId: params.userId,
     projectId: params.projectId,
     type: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
@@ -86,8 +90,8 @@ describe('Task dependency topology persistence', () => {
           operationPlanTaskId: task.operationPlanTaskId,
         })),
         taskEdges: [
-          { sourceTaskPlanId: 'narration:1', targetTaskPlanId: 'mix:1', requirement: 'required_success' },
-          { sourceTaskPlanId: 'narration:2', targetTaskPlanId: 'mix:1', requirement: 'required_success' },
+          { sourceTaskPlanId: '01:narration:1', targetTaskPlanId: '03:mix:1', requirement: 'required_success' },
+          { sourceTaskPlanId: '02:narration:2', targetTaskPlanId: '03:mix:1', requirement: 'required_success' },
         ],
       })
     })
@@ -114,17 +118,48 @@ describe('Task dependency topology persistence', () => {
     expect(dependencies).toEqual(expect.arrayContaining([
       {
         operationExecutionId: execution.id,
-        sourceTaskId: taskIdsByPlanId.get('narration:1'),
-        targetTaskId: taskIdsByPlanId.get('mix:1'),
+        sourceTaskId: taskIdsByPlanId.get('01:narration:1'),
+        targetTaskId: taskIdsByPlanId.get('03:mix:1'),
         requirement: 'required_success',
       },
       {
         operationExecutionId: execution.id,
-        sourceTaskId: taskIdsByPlanId.get('narration:2'),
-        targetTaskId: taskIdsByPlanId.get('mix:1'),
+        sourceTaskId: taskIdsByPlanId.get('02:narration:2'),
+        targetTaskId: taskIdsByPlanId.get('03:mix:1'),
         requirement: 'required_success',
       },
     ]))
+    const source1 = taskIdsByPlanId.get('01:narration:1')
+    const source2 = taskIdsByPlanId.get('02:narration:2')
+    const mix = taskIdsByPlanId.get('03:mix:1')
+    if (!source1 || !source2 || !mix) throw new Error('TEST_TASK_MAPPING_MISSING')
+    const [source1Task, source2Task, mixTask] = await Promise.all([
+      prisma.task.findUniqueOrThrow({ where: { id: source1 }, select: { id: true, type: true } }),
+      prisma.task.findUniqueOrThrow({ where: { id: source2 }, select: { id: true, type: true } }),
+      prisma.task.findUniqueOrThrow({ where: { id: mix }, select: { id: true, type: true } }),
+    ])
+    const references = await buildPersistedTaskReferencesForOperationExecution(prisma, execution.id)
+    expect(references).toEqual([
+      { taskId: source1Task.id, userId: user.id, taskType: source1Task.type, dependsOnTaskIds: [] },
+      { taskId: source2Task.id, userId: user.id, taskType: source2Task.type, dependsOnTaskIds: [] },
+      {
+        taskId: mixTask.id,
+        userId: user.id,
+        taskType: mixTask.type,
+        dependsOnTaskIds: [source1Task.id, source2Task.id].sort(),
+      },
+    ])
+    await prisma.taskDependency.update({
+      where: { targetTaskId_sourceTaskId: { targetTaskId: mix, sourceTaskId: source1 } },
+      data: { operationExecutionId: (await createCommittingExecution({
+        userId: user.id,
+        projectId: project.id,
+        requestId: 'topology-diverged',
+      })).id },
+    })
+    await expect(buildPersistedTaskReference(prisma, mix)).rejects.toThrow(
+      'TASK_DEPENDENCY_TOPOLOGY_DIVERGED',
+    )
     const lifecycleColumns = await prisma.$queryRaw<Array<{ COLUMN_NAME: string }>>`
       SELECT COLUMN_NAME
       FROM INFORMATION_SCHEMA.COLUMNS
@@ -161,7 +196,7 @@ describe('Task dependency topology persistence', () => {
           operationPlanTaskId: task.operationPlanTaskId,
         })),
         taskEdges: [
-          { sourceTaskPlanId: 'narration:missing', targetTaskPlanId: 'mix:1', requirement: 'required_success' },
+          { sourceTaskPlanId: '01:narration:missing', targetTaskPlanId: '03:mix:1', requirement: 'required_success' },
         ],
       })
     })).rejects.toThrow('OPERATION_PLAN_TASK_EDGE_MAPPING_MISSING')
@@ -198,11 +233,11 @@ describe('Task dependency topology persistence', () => {
         tx,
         operationExecutionId: execution.id,
         persistedTasks: [
-          { id: firstTask.id, operationPlanTaskId: 'narration:1' },
-          { id: firstTask.id, operationPlanTaskId: 'narration:2' },
+          { id: firstTask.id, operationPlanTaskId: '01:narration:1' },
+          { id: firstTask.id, operationPlanTaskId: '02:narration:2' },
         ],
         taskEdges: [
-          { sourceTaskPlanId: 'narration:1', targetTaskPlanId: 'narration:2', requirement: 'required_success' },
+          { sourceTaskPlanId: '01:narration:1', targetTaskPlanId: '02:narration:2', requirement: 'required_success' },
         ],
       })
     })).rejects.toThrow('OPERATION_PLAN_TASK_IDENTITY_DIVERGED')

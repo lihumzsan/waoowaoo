@@ -87,9 +87,19 @@ function scheduleRequest(reference: PersistedTaskReference): {
   updateId: string
 } {
   const task = taskWorkflowInput(reference)
+  const dependsOnTaskIds = reference.dependsOnTaskIds.map((dependencyTaskId) =>
+    requireIdentity(dependencyTaskId, 'TASK_DEPENDENCY_TASK_ID_INVALID'),
+  )
+  if (
+    dependsOnTaskIds.includes(task.taskId) ||
+    new Set(dependsOnTaskIds).size !== dependsOnTaskIds.length
+  ) {
+    throw new Error('TASK_DEPENDENCY_TOPOLOGY_DIVERGED')
+  }
+  dependsOnTaskIds.sort()
   const enqueueId = `task-enqueue:v1:${hash(task.taskId)}`
   return {
-    request: { enqueueId, task },
+    request: { enqueueId, task, dependsOnTaskIds },
     updateId: [
       'task-enqueue-update:v1',
       hash(enqueueId),
@@ -100,6 +110,7 @@ function scheduleRequest(reference: PersistedTaskReference): {
           task.taskId,
           task.userId,
           task.taskType,
+          dependsOnTaskIds,
         ]),
       ),
     ].join(':'),

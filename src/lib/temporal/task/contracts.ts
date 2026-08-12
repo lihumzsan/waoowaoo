@@ -26,9 +26,10 @@ export interface TaskWorkflowInput {
 }
 
 export interface PersistedTaskReference {
-  taskId: string
-  userId: string
-  taskType: TaskType
+  readonly taskId: string
+  readonly userId: string
+  readonly taskType: TaskType
+  readonly dependsOnTaskIds: readonly string[]
 }
 
 export interface TaskWorkflowPolicySnapshot {
@@ -192,6 +193,7 @@ export interface TaskWorkflowView {
 export interface ScheduledTaskRequest {
   enqueueId: string
   task: TaskWorkflowInput
+  dependsOnTaskIds: readonly string[]
 }
 
 export type ScheduledTaskState =
@@ -276,12 +278,23 @@ export type TaskSchedulerAdmission =
       kind: 'schedule'
       schedulerClass: TaskSchedulerClass | null
       slotLimits: WorkflowConcurrencyConfig
+      dependencies: readonly TaskSchedulerDependencyAdmission[]
     }
   | {
       kind: 'already_terminal'
       schedulerClass: TaskSchedulerClass | null
       slotLimits: WorkflowConcurrencyConfig
       result: TaskWorkflowResult
+    }
+
+export type TaskSchedulerDependencyAdmission =
+  | { readonly taskId: string; readonly taskWorkflowId: string; readonly state: 'pending' }
+  | {
+      readonly taskId: string
+      readonly taskWorkflowId: string
+      readonly state: 'terminal'
+      readonly status: TaskWorkflowTerminalStatus
+      readonly terminalEventId: number
     }
 
 export interface CommitTaskWorkflowFailureInput {
@@ -292,7 +305,7 @@ export interface CommitTaskWorkflowFailureInput {
 }
 
 export interface UserTaskSchedulerActivities {
-  resolveTaskSchedulerAdmission(input: TaskWorkflowInput): Promise<TaskSchedulerAdmission>
+  resolveTaskSchedulerAdmission(input: ScheduledTaskRequest): Promise<TaskSchedulerAdmission>
   commitTaskWorkflowFailure(input: CommitTaskWorkflowFailureInput): Promise<TaskWorkflowResult>
   commitTaskTerminal(input: CommitTaskTerminalInput): Promise<TaskTerminalReceipt>
   notifyTaskFollowUp(input: NotifyTaskFollowUpInput): Promise<void>

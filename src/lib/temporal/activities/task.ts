@@ -37,7 +37,7 @@ import {
   loadReadyFollowUpBatchIdsForTerminal,
 } from '@/lib/agent-turn/follow-up-batch'
 import { requestAssistantRuntimeTaskFollowUp } from '@/lib/assistant-runtime/task-follow-up-http'
-import { TASK_EVENT_TYPE, TASK_STATUS, type TaskExecutionData } from '@/lib/task/types'
+import { isTaskType, TASK_EVENT_TYPE, TASK_STATUS, type TaskExecutionData } from '@/lib/task/types'
 import { executeTaskHandler } from '@/lib/task/execution/registry'
 import { projectTaskProgress } from '@/lib/task/execution/progress'
 import type { TaskExecutionContext, TaskExecutionResult } from '@/lib/task/execution/context'
@@ -56,6 +56,7 @@ import type {
   RunTaskAttemptInput,
   RunTaskAttemptResult,
   SchedulerCapacityRelease,
+  ScheduledTaskRequest,
   TaskAttemptFailure,
   TaskSchedulerAdmission,
   TaskTerminalReceipt,
@@ -551,16 +552,17 @@ export async function initializeTaskWorkflow(
 }
 
 export async function resolveTaskSchedulerAdmission(
-  input: TaskWorkflowInput,
+  input: ScheduledTaskRequest,
 ): Promise<TaskSchedulerAdmission> {
-  requireTaskWorkflowIdentity(input)
-  requireSchedulerActivity(activityInfo().workflowExecution?.workflowId ?? '', input.userId)
+  const taskInput = input.task
+  requireTaskWorkflowIdentity(taskInput)
+  requireSchedulerActivity(activityInfo().workflowExecution?.workflowId ?? '', taskInput.userId)
   const [row, slotLimits] = await Promise.all([
-    loadTaskRow(input.taskId),
-    getUserWorkflowConcurrencyConfig(input.userId),
+    loadTaskRow(taskInput.taskId),
+    getUserWorkflowConcurrencyConfig(taskInput.userId),
   ])
-  requireTaskRowIdentity(row, input)
-  const schedulerClass = getTaskDefinition(input.taskType).schedulerClass
+  requireTaskRowIdentity(row, taskInput)
+  const schedulerClass = getTaskDefinition(taskInput.taskType).schedulerClass
   if (terminalStatus(row.status)) {
     return {
       kind: 'already_terminal',
@@ -577,7 +579,80 @@ export async function resolveTaskSchedulerAdmission(
       row.attempt,
     )
   }
-  return { kind: 'schedule', schedulerClass, slotLimits }
+  const dependencies = await prisma.taskDependency.findMany({
+    where: { targetTaskId: row.id },
+    select: { operationExecutionId: true, sourceTaskId: true },
+    orderBy: { sourceTaskId: 'asc' },
+  })
+  const persistedDependencyTaskIds = dependencies.map((dependency) => dependency.sourceTaskId)
+  const requestedDependencyTaskIds = [...input.dependsOnTaskIds].sort()
+  if (
+    requestedDependencyTaskIds.some(
+      (dependencyTaskId) =>
+        dependencyTaskId.trim() !== dependencyTaskId || dependencyTaskId.length === 0,
+    ) ||
+    new Set(requestedDependencyTaskIds).size !== requestedDependencyTaskIds.length ||
+    requestedDependencyTaskIds.includes(row.id) ||
+    JSON.stringify(requestedDependencyTaskIds) !== JSON.stringify(persistedDependencyTaskIds)
+  ) {
+    return failNonRetryable('TASK_DEPENDENCY_TOPOLOGY_DIVERGED', row.id)
+  }
+  if (dependencies.length === 0) {
+    return { kind: 'schedule', schedulerClass, slotLimits, dependencies: [] }
+  }
+  if (!row.operationExecutionId) {
+    return failNonRetryable('TASK_DEPENDENCY_TOPOLOGY_DIVERGED', row.id)
+  }
+  const sourceRows = await prisma.task.findMany({
+    where: { id: { in: persistedDependencyTaskIds } },
+    select: {
+      id: true,
+      parentTaskId: true,
+      type: true,
+      projectId: true,
+      targetType: true,
+      targetId: true,
+      payload: true,
+      userId: true,
+      operationId: true,
+      operationSource: true,
+      operationExecutionId: true,
+      operationPlanTaskId: true,
+      operationRequestId: true,
+      status: true,
+      progress: true,
+      attempt: true,
+      executionFingerprint: true,
+    },
+  })
+  const sourceById = new Map(sourceRows.map((source) => [source.id, source]))
+  const dependencyAdmissions = await Promise.all(
+    dependencies.map(async (dependency) => {
+      const source = sourceById.get(dependency.sourceTaskId)
+      if (
+        !source ||
+        dependency.operationExecutionId !== row.operationExecutionId ||
+        source.operationExecutionId !== row.operationExecutionId ||
+        source.userId !== row.userId ||
+        source.projectId !== row.projectId ||
+        !isTaskType(source.type)
+      ) {
+        return failNonRetryable('TASK_DEPENDENCY_TOPOLOGY_DIVERGED', row.id, dependency.sourceTaskId)
+      }
+      const taskWorkflowId = buildTaskWorkflowId(source.id)
+      const status = terminalStatus(source.status)
+      if (!status) return { taskId: source.id, taskWorkflowId, state: 'pending' as const }
+      const terminal = await terminalResultFromRow(source)
+      return {
+        taskId: source.id,
+        taskWorkflowId,
+        state: 'terminal' as const,
+        status: terminal.status,
+        terminalEventId: terminal.terminal.terminalEventId,
+      }
+    }),
+  )
+  return { kind: 'schedule', schedulerClass, slotLimits, dependencies: dependencyAdmissions }
 }
 
 /**
