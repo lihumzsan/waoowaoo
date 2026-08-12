@@ -56,6 +56,25 @@ async function expectTaskWorkflowAbsent(taskId: string): Promise<void> {
   }
 }
 
+function hasNonRetryableTopologyFailure(error: unknown): boolean {
+  let current: unknown = error
+  const seen = new Set<unknown>()
+  for (let depth = 0; depth < 12; depth += 1) {
+    if (!current || typeof current !== 'object' || seen.has(current)) return false
+    seen.add(current)
+    const record = current as Record<string, unknown>
+    if (
+      record.nonRetryable === true
+      && typeof record.message === 'string'
+      && record.message.includes('TASK_DEPENDENCY_TOPOLOGY_DIVERGED')
+    ) {
+      return true
+    }
+    current = record.cause
+  }
+  return false
+}
+
 describe('Temporal dependency gate durability', () => {
   beforeAll(() => {
     if (process.env.TEMPORAL_TEST_BOOTSTRAP !== '1') {
@@ -178,5 +197,49 @@ describe('Temporal dependency gate durability', () => {
     await expect(
       prisma.taskExecutionCheckpoint.count({ where: { taskId: activeFixture.mixTaskId, stepKey: '__handler_result__' } }),
     ).resolves.toBe(0)
+  }, 90_000)
+
+  it('validates terminal admission topology before returning the existing receipt', async () => {
+    activeFixture = await createTaskDependencyGateFixture({
+      suffix: 'terminal-admission',
+      sourceOutcomes: ['completed', 'completed'],
+    })
+    await seedTaskDependencyGateDependentCheckpoint(activeFixture)
+    activeWorker = await startTaskDependencyGateWorker({
+      heldSourceTaskId: null,
+      faultAfterTerminalTaskId: null,
+    })
+    await activeWorker.taskClient.schedule(activeFixture.references.mix)
+    await activeWorker.taskClient.schedule(activeFixture.references.source1)
+    await activeWorker.taskClient.schedule(activeFixture.references.source2)
+    await activeWorker.waitForTaskStatus(activeFixture.mixTaskId, 'completed')
+    await terminateScheduler(activeFixture.userId)
+
+    const mismatchedReference = {
+      ...activeFixture.references.mix,
+      dependsOnTaskIds: [activeFixture.source1TaskId],
+    }
+    let mismatch: unknown = null
+    try {
+      await activeWorker.taskClient.schedule(mismatchedReference)
+    } catch (error) {
+      mismatch = error
+    }
+    expect(hasNonRetryableTopologyFailure(mismatch)).toBe(true)
+
+    await expect(
+      activeWorker.taskClient.schedule(activeFixture.references.mix),
+    ).resolves.toMatchObject({
+      taskWorkflowId: buildTaskWorkflowId(activeFixture.mixTaskId),
+      state: 'completed',
+    })
+    await expect(
+      prisma.taskEvent.count({
+        where: {
+          taskId: activeFixture.mixTaskId,
+          eventType: TASK_EVENT_TYPE.COMPLETED,
+        },
+      }),
+    ).resolves.toBe(1)
   }, 90_000)
 })

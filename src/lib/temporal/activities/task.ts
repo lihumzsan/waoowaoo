@@ -21,6 +21,7 @@ import { encodeTemporalFailure, temporalInvariantFailure } from '@/lib/temporal/
 import { buildTaskWorkflowId, buildUserTaskSchedulerWorkflowId } from '@/lib/temporal/identity'
 import { prisma } from '@/lib/prisma'
 import { getTaskDefinition } from '@/lib/task/definition'
+import { buildPersistedTaskReference } from '@/lib/task/dependencies/references'
 import {
   loadTaskExecutionFingerprint,
   loadTaskHandlerCheckpoint,
@@ -37,7 +38,7 @@ import {
   loadReadyFollowUpBatchIdsForTerminal,
 } from '@/lib/agent-turn/follow-up-batch'
 import { requestAssistantRuntimeTaskFollowUp } from '@/lib/assistant-runtime/task-follow-up-http'
-import { isTaskType, TASK_EVENT_TYPE, TASK_STATUS, type TaskExecutionData } from '@/lib/task/types'
+import { TASK_EVENT_TYPE, TASK_STATUS, type TaskExecutionData } from '@/lib/task/types'
 import { executeTaskHandler } from '@/lib/task/execution/registry'
 import { projectTaskProgress } from '@/lib/task/execution/progress'
 import type { TaskExecutionContext, TaskExecutionResult } from '@/lib/task/execution/context'
@@ -564,6 +565,23 @@ export async function resolveTaskSchedulerAdmission(
   ])
   requireTaskRowIdentity(row, taskInput)
   const schedulerClass = getTaskDefinition(taskInput.taskType).schedulerClass
+  let persistedReference
+  try {
+    persistedReference = await buildPersistedTaskReference(prisma, row.id)
+    validateTaskSchedulerAdmissionDependencies(
+      input,
+      persistedReference.taskId,
+      persistedReference.dependsOnTaskIds,
+    )
+  } catch (error) {
+    if (
+      !(error instanceof Error)
+      || !error.message.startsWith('TASK_DEPENDENCY_TOPOLOGY_DIVERGED')
+    ) {
+      throw error
+    }
+    return failNonRetryable('TASK_DEPENDENCY_TOPOLOGY_DIVERGED', row.id)
+  }
   if (terminalStatus(row.status)) {
     return {
       kind: 'already_terminal',
@@ -580,25 +598,11 @@ export async function resolveTaskSchedulerAdmission(
       row.attempt,
     )
   }
-  const dependencies = await prisma.taskDependency.findMany({
-    where: { targetTaskId: row.id },
-    select: { operationExecutionId: true, sourceTaskId: true },
-    orderBy: { sourceTaskId: 'asc' },
-  })
-  const persistedDependencyTaskIds = dependencies.map((dependency) => dependency.sourceTaskId)
-  try {
-    validateTaskSchedulerAdmissionDependencies(input, row.id, persistedDependencyTaskIds)
-  } catch {
-    return failNonRetryable('TASK_DEPENDENCY_TOPOLOGY_DIVERGED', row.id)
-  }
-  if (dependencies.length === 0) {
+  if (persistedReference.dependsOnTaskIds.length === 0) {
     return { kind: 'schedule', schedulerClass, slotLimits, dependencies: [] }
   }
-  if (!row.operationExecutionId) {
-    return failNonRetryable('TASK_DEPENDENCY_TOPOLOGY_DIVERGED', row.id)
-  }
   const sourceRows = await prisma.task.findMany({
-    where: { id: { in: persistedDependencyTaskIds } },
+    where: { id: { in: [...persistedReference.dependsOnTaskIds] } },
     select: {
       id: true,
       parentTaskId: true,
@@ -621,17 +625,10 @@ export async function resolveTaskSchedulerAdmission(
   })
   const sourceById = new Map(sourceRows.map((source) => [source.id, source]))
   const dependencyAdmissions = await Promise.all(
-    dependencies.map(async (dependency) => {
-      const source = sourceById.get(dependency.sourceTaskId)
-      if (
-        !source ||
-        dependency.operationExecutionId !== row.operationExecutionId ||
-        source.operationExecutionId !== row.operationExecutionId ||
-        source.userId !== row.userId ||
-        source.projectId !== row.projectId ||
-        !isTaskType(source.type)
-      ) {
-        return failNonRetryable('TASK_DEPENDENCY_TOPOLOGY_DIVERGED', row.id, dependency.sourceTaskId)
+    persistedReference.dependsOnTaskIds.map(async (sourceTaskId) => {
+      const source = sourceById.get(sourceTaskId)
+      if (!source) {
+        return failNonRetryable('TASK_DEPENDENCY_TOPOLOGY_DIVERGED', row.id, sourceTaskId)
       }
       const taskWorkflowId = buildTaskWorkflowId(source.id)
       const status = terminalStatus(source.status)

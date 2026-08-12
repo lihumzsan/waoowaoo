@@ -3,6 +3,7 @@ import { persistPlannedTaskEdgesInTransaction } from '@/lib/task/dependencies/pe
 import {
   buildPersistedTaskReference,
   buildPersistedTaskReferencesForOperationExecution,
+  projectPersistedTaskReference,
 } from '@/lib/task/dependencies/references'
 import { persistSubmittedTaskBatchInTransaction } from '@/lib/task/transactional-create'
 import { TASK_STATUS, TASK_TYPE, type CreateTaskInput } from '@/lib/task/types'
@@ -54,6 +55,40 @@ async function createCommittingExecution(params: {
     },
   })
 }
+
+describe('Persisted Task dependency topology projection', () => {
+  it('rejects a persisted dependency whose requirement is not required_success', () => {
+    const operationExecutionId = 'operation-execution-1'
+    const target = {
+      id: 'target-task',
+      userId: 'user-1',
+      projectId: 'project-1',
+      operationExecutionId,
+      operationPlanTaskId: '02:mix',
+      type: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
+    }
+    const source = {
+      id: 'source-task',
+      userId: 'user-1',
+      projectId: 'project-1',
+      operationExecutionId,
+      operationPlanTaskId: '01:narration',
+      type: TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
+    }
+
+    expect(() => projectPersistedTaskReference({
+      task: target,
+      dependencies: [{
+        operationExecutionId,
+        targetTaskId: target.id,
+        sourceTaskId: source.id,
+        requirement: 'optional',
+        targetTask: target,
+        sourceTask: source,
+      }],
+    })).toThrow(/^TASK_DEPENDENCY_TOPOLOGY_DIVERGED/)
+  })
+})
 
 describe('Task dependency topology persistence', () => {
   beforeEach(async () => {

@@ -4,7 +4,7 @@ import { isTaskType, type TaskType } from '@/lib/task/types'
 
 type DependencyClient = Pick<PrismaClient, 'task' | 'taskDependency'>
 
-type PersistedTaskRow = {
+export type PersistedTaskRow = {
   readonly id: string
   readonly userId: string
   readonly projectId: string
@@ -13,10 +13,11 @@ type PersistedTaskRow = {
   readonly type: string
 }
 
-type PersistedDependencyRow = {
+export type PersistedDependencyRow = {
   readonly operationExecutionId: string
   readonly targetTaskId: string
   readonly sourceTaskId: string
+  readonly requirement: string
   readonly targetTask: PersistedTaskRow
   readonly sourceTask: PersistedTaskRow
 }
@@ -46,6 +47,7 @@ function requireDependencyTopology(params: {
 }): void {
   const { dependency, target } = params
   if (
+    dependency.requirement !== 'required_success' ||
     dependency.targetTaskId !== target.id ||
     dependency.targetTask.id !== target.id ||
     dependency.operationExecutionId !== target.operationExecutionId ||
@@ -62,7 +64,7 @@ function requireDependencyTopology(params: {
   }
 }
 
-function buildReference(params: {
+export function projectPersistedTaskReference(params: {
   readonly task: PersistedTaskRow
   readonly dependencies: readonly PersistedDependencyRow[]
 }): PersistedTaskReference {
@@ -93,6 +95,7 @@ const persistedTaskSelect = {
 } as const
 
 const persistedDependencyInclude = {
+  requirement: true,
   targetTask: { select: persistedTaskSelect },
   sourceTask: { select: persistedTaskSelect },
 } as const
@@ -110,7 +113,7 @@ export async function buildPersistedTaskReference(
     where: { targetTaskId: task.id },
     include: persistedDependencyInclude,
   })
-  return buildReference({ task, dependencies })
+  return projectPersistedTaskReference({ task, dependencies })
 }
 
 export async function buildPersistedTaskReferencesForOperationExecution(
@@ -144,6 +147,6 @@ export async function buildPersistedTaskReferencesForOperationExecution(
     dependenciesByTargetId.set(dependency.targetTaskId, targetDependencies)
   }
   return tasks.map((task) =>
-    buildReference({ task, dependencies: dependenciesByTargetId.get(task.id) ?? [] }),
+    projectPersistedTaskReference({ task, dependencies: dependenciesByTargetId.get(task.id) ?? [] }),
   )
 }
