@@ -33,6 +33,8 @@
     "workspaceResourceImage": "Image resource generation",
     "workspaceResourceAudio": "Audio resource generation",
     "workspaceResourceVoice": "Voice resource generation",
+    "workspaceResourceVoiceover": "Voiceover generation",
+    "workspaceResourceVoiceoverMix": "Voiceover video mix",
     "workspaceResourceVideo": "Video resource generation",
     "workspaceResourceVideoMerge": "Video resource merge",
     "generic": "Task"

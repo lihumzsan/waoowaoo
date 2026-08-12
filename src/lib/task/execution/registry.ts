@@ -7,6 +7,8 @@ import { handleWorkspaceResourceImageTask } from './handlers/workspace-resource-
 import { handleWorkspaceResourceVideoMergeTask } from './handlers/workspace-resource-video-merge'
 import { handleWorkspaceResourceVideoTask } from './handlers/workspace-resource-video'
 import { handleWorkspaceResourceVoiceTask } from './handlers/workspace-resource-voice'
+import { handleWorkspaceResourceVoiceoverTask } from './handlers/workspace-resource-voiceover'
+import { handleWorkspaceResourceVoiceoverMixTask } from './handlers/workspace-resource-voiceover-mix'
 import { reportTaskProgress } from './progress'
 import type {
   TaskExecutionContext,
@@ -18,6 +20,8 @@ const TASK_EXECUTION_HANDLERS = {
   workspace_resource_image: handleWorkspaceResourceImageTask,
   workspace_resource_audio: handleWorkspaceResourceAudioTask,
   workspace_resource_voice: handleWorkspaceResourceVoiceTask,
+  workspace_resource_voiceover: handleWorkspaceResourceVoiceoverTask,
+  workspace_resource_voiceover_mix: handleWorkspaceResourceVoiceoverMixTask,
   workspace_resource_video: handleWorkspaceResourceVideoTask,
   workspace_resource_video_merge: handleWorkspaceResourceVideoMergeTask,
 } satisfies Record<TaskExecutionHandlerKey, TaskExecutionHandler>

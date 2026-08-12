@@ -151,6 +151,9 @@ export type AiProviderVoiceExecutionContext = {
   text: string
   options?: {
     language?: string
+    referenceAudio?: string
+    referenceAudioDurationMs?: number
+    outputFormat?: 'mp3'
     [key: string]: unknown
   }
 }

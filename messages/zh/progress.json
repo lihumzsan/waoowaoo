@@ -33,6 +33,8 @@
     "workspaceResourceImage": "图片资源生成",
     "workspaceResourceAudio": "音频资源生成",
     "workspaceResourceVoice": "音色资源生成",
+    "workspaceResourceVoiceover": "旁白配音生成",
+    "workspaceResourceVoiceoverMix": "旁白混入视频",
     "workspaceResourceVideo": "视频资源生成",
     "workspaceResourceVideoMerge": "视频资源合并",
     "generic": "任务"

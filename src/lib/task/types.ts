@@ -51,6 +51,8 @@ export const TASK_TYPE = {
   WORKSPACE_RESOURCE_IMAGE: 'workspace_resource_image',
   WORKSPACE_RESOURCE_AUDIO: 'workspace_resource_audio',
   WORKSPACE_RESOURCE_VOICE: 'workspace_resource_voice',
+  WORKSPACE_RESOURCE_VOICEOVER: 'workspace_resource_voiceover',
+  WORKSPACE_RESOURCE_VOICEOVER_MIX: 'workspace_resource_voiceover_mix',
   WORKSPACE_RESOURCE_VIDEO: 'workspace_resource_video',
   WORKSPACE_RESOURCE_VIDEO_MERGE: 'workspace_resource_video_merge',
 } as const

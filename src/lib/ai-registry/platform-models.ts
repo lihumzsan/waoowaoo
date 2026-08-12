@@ -24,6 +24,7 @@ import type { DefaultModelsPayload } from '@/lib/user-api/api-config-types'
 import type { PlatformModelPreset } from '@/lib/platform-models/types'
 import {
   COMFYUI_PLATFORM_DEFAULT_SOUND_MODEL_KEY,
+  COMFYUI_MOSS_TTS_LOCAL_MODEL_KEY,
   COMFYUI_PLATFORM_MODEL_PRESETS,
 } from '@/lib/ai-providers/comfyui/models'
 
@@ -51,3 +52,5 @@ export const PLATFORM_DEFAULT_MODEL_KEYS: Record<PlatformDefaultModelField, stri
   musicModel: FAL_PLATFORM_DEFAULT_MUSIC_MODEL_KEY,
   soundModel: COMFYUI_PLATFORM_DEFAULT_SOUND_MODEL_KEY,
 }
+
+export const PLATFORM_VOICEOVER_MODEL_KEY = COMFYUI_MOSS_TTS_LOCAL_MODEL_KEY

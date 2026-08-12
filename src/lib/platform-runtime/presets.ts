@@ -2,6 +2,7 @@ import type { CapabilitySelections, CapabilityValue } from '@/lib/ai-registry/ty
 import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
 import type { SystemModelPurpose } from '@/lib/model-access/system-model-resolver'
 import { PLATFORM_VOICE_DESIGN_MODEL_KEY } from '@/lib/ai-registry/voice-design-contract'
+import { PLATFORM_VOICEOVER_MODEL_KEY } from '@/lib/ai-registry/platform-models'
 import { findBuiltinCapabilities } from '@/lib/ai-registry/capabilities-catalog'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
@@ -94,6 +95,8 @@ function resolveModelKey(purpose: PlatformRuntimePurpose): string {
       return defaults.soundModel
     case 'voice-design':
       return PLATFORM_VOICE_DESIGN_MODEL_KEY
+    case 'voiceover':
+      return PLATFORM_VOICEOVER_MODEL_KEY
   }
 }
 
@@ -111,6 +114,7 @@ function resolveGenerationOptions(purpose: PlatformRuntimePurpose): Record<strin
       return getPlatformSoundGenerationOptions()
     case 'analysis':
     case 'voice-design':
+    case 'voiceover':
       return {}
   }
 }

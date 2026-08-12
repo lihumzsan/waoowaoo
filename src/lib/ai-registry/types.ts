@@ -311,7 +311,13 @@ export interface SoundCapabilities {
 }
 
 export interface VoiceCapabilities {
+  useCases?: string[]
   languageOptions?: string[]
+  requiresReferenceAudio?: boolean
+  referenceAudioDurationMsRange?: { min: number; max: number }
+  outputFormatOptions?: string[]
+  outputSampleRateHz?: number
+  textMaxChars?: number
   fieldI18n?: CapabilityFieldI18nMap
 }
 
@@ -386,7 +392,13 @@ const SOUND_ALLOWED_FIELDS = new Set<keyof SoundCapabilities>([
 ])
 
 const VOICE_ALLOWED_FIELDS = new Set<keyof VoiceCapabilities>([
+  'useCases',
   'languageOptions',
+  'requiresReferenceAudio',
+  'referenceAudioDurationMsRange',
+  'outputFormatOptions',
+  'outputSampleRateHz',
+  'textMaxChars',
   'fieldI18n',
 ])
 
@@ -941,6 +953,15 @@ function validateSoundCapabilities(issues: CapabilityValidationIssue[], raw: unk
 function validateVoiceCapabilities(issues: CapabilityValidationIssue[], raw: unknown) {
   if (!isRecord(raw)) return
 
+  const useCases = raw.useCases
+  if (useCases !== undefined && !isStringArray(useCases)) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.voice.useCases',
+      message: 'useCases must be a non-empty string array',
+    })
+  }
+
   const languageOptions = raw.languageOptions
   if (languageOptions !== undefined && !isStringArray(languageOptions)) {
     issues.push({
@@ -950,8 +971,29 @@ function validateVoiceCapabilities(issues: CapabilityValidationIssue[], raw: unk
     })
   }
 
+  if (raw.requiresReferenceAudio !== undefined && typeof raw.requiresReferenceAudio !== 'boolean') {
+    issues.push({ code: 'CAPABILITY_FIELD_INVALID', field: 'capabilities.voice.requiresReferenceAudio', message: 'requiresReferenceAudio must be boolean' })
+  }
+  const durationRange = raw.referenceAudioDurationMsRange
+  if (durationRange !== undefined) {
+    const range = isRecord(durationRange) ? durationRange : null
+    if (!range || typeof range.min !== 'number' || !Number.isFinite(range.min) || typeof range.max !== 'number' || !Number.isFinite(range.max) || range.min < 0 || range.max < range.min) {
+      issues.push({ code: 'CAPABILITY_FIELD_INVALID', field: 'capabilities.voice.referenceAudioDurationMsRange', message: 'referenceAudioDurationMsRange must contain an ascending finite min/max' })
+    }
+  }
+  if (raw.outputFormatOptions !== undefined && !isStringArray(raw.outputFormatOptions)) {
+    issues.push({ code: 'CAPABILITY_FIELD_INVALID', field: 'capabilities.voice.outputFormatOptions', message: 'outputFormatOptions must be a non-empty string array' })
+  }
+  if (raw.outputSampleRateHz !== undefined && (typeof raw.outputSampleRateHz !== 'number' || !Number.isSafeInteger(raw.outputSampleRateHz) || raw.outputSampleRateHz <= 0)) {
+    issues.push({ code: 'CAPABILITY_FIELD_INVALID', field: 'capabilities.voice.outputSampleRateHz', message: 'outputSampleRateHz must be a positive integer' })
+  }
+  if (raw.textMaxChars !== undefined && (typeof raw.textMaxChars !== 'number' || !Number.isSafeInteger(raw.textMaxChars) || raw.textMaxChars <= 0)) {
+    issues.push({ code: 'CAPABILITY_FIELD_INVALID', field: 'capabilities.voice.textMaxChars', message: 'textMaxChars must be a positive integer' })
+  }
+
   validateFieldI18nMap(issues, 'voice', raw.fieldI18n, {
     language: isStringArray(languageOptions) ? languageOptions : undefined,
+    useCase: isStringArray(useCases) ? useCases : undefined,
   })
 }
 
