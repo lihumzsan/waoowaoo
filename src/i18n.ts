@@ -49,8 +49,7 @@ export default getRequestConfig(async ({ requestLocale }) => {
         pricing,
         paidBeta,
         announcements,
-        contact,
-        assistantUiLab
+        contact
     ] = await Promise.all([
         import(`../messages/${locale}/common.json`),
         import(`../messages/${locale}/assetLibrary.json`),
@@ -83,8 +82,7 @@ export default getRequestConfig(async ({ requestLocale }) => {
         import(`../messages/${locale}/pricing.json`),
         import(`../messages/${locale}/paidBeta.json`),
         import(`../messages/${locale}/announcements.json`),
-        import(`../messages/${locale}/contact.json`),
-        import(`../messages/${locale}/assistantUiLab.json`)
+        import(`../messages/${locale}/contact.json`)
     ]);
 
     return {
@@ -124,8 +122,7 @@ export default getRequestConfig(async ({ requestLocale }) => {
             pricing: pricing.default,
             paidBeta: paidBeta.default,
             announcements: announcements.default,
-            contact: contact.default,
-            assistantUiLab: assistantUiLab.default
+            contact: contact.default
         }
     };
 });
