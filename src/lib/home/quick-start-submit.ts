@@ -28,7 +28,7 @@ type UploadHomeMediaAttachment = (params: {
 
 export interface SubmitHomeQuickStartLaunchParams {
   readonly inputValue: string
-  readonly videoRatio: ProjectVideoRatio
+  readonly videoRatio?: ProjectVideoRatio
   readonly attachments?: readonly ProjectAssistantTextAttachment[]
   readonly mediaFiles?: readonly File[]
   readonly isSubmitting: boolean

@@ -21,6 +21,7 @@ export function useUserApiConfigQuery(): {
   loading: boolean
   error: Error | null
   reload: () => Promise<void>
+  replaceData: (next: ApiConfig) => void
 } {
   const [data, setData] = useState<ApiConfig | null>(null)
   const [loading, setLoading] = useState(true)
@@ -44,6 +45,11 @@ export function useUserApiConfigQuery(): {
     void reload()
   }, [reload])
 
-  return { data, loading, error, reload }
+  const replaceData = useCallback((next: ApiConfig) => {
+    setData(next)
+    setError(null)
+  }, [])
+
+  return { data, loading, error, reload, replaceData }
 }
 

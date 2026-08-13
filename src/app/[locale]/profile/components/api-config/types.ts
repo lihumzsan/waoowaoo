@@ -6,6 +6,10 @@ import {
     type ModelCapabilities,
     type UnifiedModelType,
 } from '@/lib/ai-registry/types'
+import type {
+    DefaultModelsPayload,
+    EffectiveDefaultModelsView,
+} from '@/lib/user-api/api-config-types'
 import { composeModelKey, parseModelKeyStrict } from '@/lib/ai-registry/selection'
 
 export interface ApiConfigCatalogProvider {
@@ -59,17 +63,9 @@ export interface ApiConfig {
     models: CustomModel[]
     providers: Provider[]
     catalog?: ApiConfigServerCatalog
-    defaultModels?: {
-        assistantModel?: string
-        analysisModel?: string
-        characterModel?: string
-        locationModel?: string
-        editModel?: string
-        videoModel?: string
-        musicModel?: string
-        soundModel?: string
-    }
+    defaultModels?: DefaultModelsPayload
     capabilityDefaults?: CapabilitySelections
+    effectiveDefaults?: EffectiveDefaultModelsView
     workflowConcurrency?: {
         analysis: number
         image: number

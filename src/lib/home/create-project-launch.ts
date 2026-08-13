@@ -32,7 +32,7 @@ export interface CreateHomeProjectLaunchParams {
   apiFetch: ApiFetchLike
   projectName: string
   storyText: string
-  videoRatio: ProjectVideoRatio
+  videoRatio?: ProjectVideoRatio
   hasAssistantDraftContent?: boolean
 }
 
@@ -167,7 +167,7 @@ export async function createHomeProjectLaunch({
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name: projectName,
-      videoRatio,
+      ...(videoRatio ? { videoRatio } : {}),
     }),
   })
 

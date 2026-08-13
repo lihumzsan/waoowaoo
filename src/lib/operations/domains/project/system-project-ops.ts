@@ -24,6 +24,12 @@ import {
   isProjectVideoRatio,
   writeProjectVideoRatioInTransaction,
 } from '@/lib/projects/video-ratio-write'
+import {
+  buildLocalProjectCapabilityOverrides,
+  LOCAL_PROJECT_DEFAULT_MODELS,
+  LOCAL_PROJECT_DEFAULT_VIDEO_RATIO,
+  validateStoredProjectCapabilityDefaults,
+} from '@/lib/projects/creation-defaults'
 
 function readProjectDraftBody(body: unknown): ProjectDraftInput {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -195,17 +201,25 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
         const platformDefaults = isPlatformProviderCredentialMode(deployment)
           ? getPlatformDefaultModels()
           : null
-        const userPreference = platformDefaults
-          ? null
-          : await transaction.userPreference.findUnique({
-              where: { userId: ctx.userId },
-            })
+        const usesLocalProjectPreset = isSelfHostedUserProviderCredentialMode(deployment)
+        const userPreference = await transaction.userPreference.findUnique({
+          where: { userId: ctx.userId },
+        })
+        const validatedCapabilityDefaults = validateStoredProjectCapabilityDefaults({
+          storedUserDefaults: userPreference?.capabilityDefaults,
+          storedCustomModels: userPreference?.customModels,
+        })
         const inheritedVideoModel = (
           userPreference?.videoModel
           && isSelfHostedUserProviderCredentialMode(deployment)
         )
           ? await requireSelectableVideoModel(ctx.userId, userPreference.videoModel)
-          : userPreference?.videoModel ?? null
+          : userPreference?.videoModel ?? (usesLocalProjectPreset
+              ? LOCAL_PROJECT_DEFAULT_MODELS.videoModel
+              : null)
+        const projectVideoRatio = input.videoRatio
+          ?? userPreference?.videoRatio
+          ?? LOCAL_PROJECT_DEFAULT_VIDEO_RATIO
 
         let project = await transaction.project.create({
           data: {
@@ -222,7 +236,23 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
               musicModel: platformDefaults.musicModel,
               soundModel: platformDefaults.soundModel,
             }),
-            ...(!platformDefaults && userPreference && {
+            ...(usesLocalProjectPreset && userPreference && {
+              analysisModel: userPreference.analysisModel ?? LOCAL_PROJECT_DEFAULT_MODELS.analysisModel,
+              characterModel: userPreference.characterModel ?? LOCAL_PROJECT_DEFAULT_MODELS.characterModel,
+              locationModel: userPreference.locationModel ?? LOCAL_PROJECT_DEFAULT_MODELS.locationModel,
+              editModel: userPreference.editModel ?? LOCAL_PROJECT_DEFAULT_MODELS.editModel,
+              videoModel: inheritedVideoModel,
+              musicModel: userPreference.musicModel,
+              soundModel: userPreference.soundModel ?? LOCAL_PROJECT_DEFAULT_MODELS.soundModel,
+              videoResolution: userPreference.videoResolution,
+              imageResolution: userPreference.imageResolution,
+              capabilityOverrides: buildLocalProjectCapabilityOverrides(validatedCapabilityDefaults),
+            }),
+            ...(usesLocalProjectPreset && !userPreference && {
+              ...LOCAL_PROJECT_DEFAULT_MODELS,
+              capabilityOverrides: buildLocalProjectCapabilityOverrides(validatedCapabilityDefaults),
+            }),
+            ...(!platformDefaults && !usesLocalProjectPreset && userPreference && {
               analysisModel: userPreference.analysisModel,
               characterModel: userPreference.characterModel,
               locationModel: userPreference.locationModel,
@@ -236,13 +266,11 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
           },
         })
 
-        if (input.videoRatio !== undefined) {
-          project = await writeProjectVideoRatioInTransaction({
-            transaction,
-            projectId: project.id,
-            videoRatio: input.videoRatio,
-          })
-        }
+        project = await writeProjectVideoRatioInTransaction({
+          transaction,
+          projectId: project.id,
+          videoRatio: projectVideoRatio,
+        })
 
         return { project }
       },

@@ -11,6 +11,7 @@ import {
     resolvePresetProviderName,
 } from './types'
 import type { CapabilitySelections } from '@/lib/ai-registry/types'
+import type { EffectiveDefaultModelsView } from '@/lib/user-api/api-config-types'
 import { normalizeWorkflowConcurrencyValue } from '@/lib/workflow-concurrency'
 import { useApiConfigSaver } from './editor'
 import type { ApiConfigSaveError } from './editor'
@@ -37,8 +38,12 @@ interface UseProvidersReturn {
     providers: Provider[]
     models: CustomModel[]
     defaultModels: DefaultModels
+    displayedDefaultModels: DefaultModels
+    defaultModelSources: Partial<Record<keyof DefaultModels, 'user' | 'system' | 'unset'>>
     workflowConcurrency: WorkflowConcurrency
     capabilityDefaults: CapabilitySelections
+    displayedCapabilityDefaults: CapabilitySelections
+    runtimeManagedModelKeys: ReadonlySet<string>
     loading: boolean
     saveStatus: 'idle' | 'saving' | 'saved' | 'error'
     saveError: ApiConfigSaveError | null
@@ -69,7 +74,12 @@ export function useProviders(): UseProvidersReturn {
     const [defaultModels, setDefaultModels] = useState<DefaultModels>({})
     const [workflowConcurrency, setWorkflowConcurrency] = useState<WorkflowConcurrency>(DEFAULT_WORKFLOW_CONCURRENCY)
     const [capabilityDefaults, setCapabilityDefaults] = useState<CapabilitySelections>({})
-    const { data, loading: queryLoading, error: queryError } = useUserApiConfigQuery()
+    const { data, loading: queryLoading, error: queryError, replaceData } = useUserApiConfigQuery()
+    const [effectiveDefaults, setEffectiveDefaults] = useState<EffectiveDefaultModelsView | null>(null)
+    const displayedDefaultModels = effectiveDefaults?.defaultModels ?? defaultModels
+    const displayedCapabilityDefaults = effectiveDefaults?.capabilityDefaults ?? capabilityDefaults
+    const defaultModelSources = effectiveDefaults?.sources ?? {}
+    const runtimeManagedModelKeys = new Set(effectiveDefaults?.runtimeManagedModelKeys ?? [])
     const catalogProviderIdsRef = useRef<Set<string>>(new Set())
     const catalogModelKeysRef = useRef<Set<string>>(new Set())
 
@@ -85,12 +95,52 @@ export function useProviders(): UseProvidersReturn {
     useEffect(() => { latestWorkflowConcurrencyRef.current = workflowConcurrency }, [workflowConcurrency])
     useEffect(() => { latestCapabilityDefaultsRef.current = capabilityDefaults }, [capabilityDefaults])
 
+    const hydrateConfig = useCallback((nextConfig: NonNullable<typeof data>) => {
+        if (!nextConfig.catalog) {
+            throw new Error('API_CONFIG_CATALOG_MISSING')
+        }
+        const catalogProviders = nextConfig.catalog.providers
+        const catalogModels = nextConfig.catalog.models
+        catalogProviderIdsRef.current = new Set(catalogProviders.map((provider) => provider.id))
+        catalogModelKeysRef.current = new Set(catalogModels.map((model) => encodeModelKey(model.provider, model.modelId)))
+
+        const serverCatalogProviders = catalogProviders.map((provider) => ({
+            ...provider,
+            name: resolvePresetProviderName(provider.id, provider.name, locale),
+        }))
+        const nextProviders = mergeProvidersForDisplay(nextConfig.providers || [], serverCatalogProviders)
+        const nextModels = mergeModelsForDisplay(nextConfig.models || [], catalogModels)
+        const nextDefaultModels = nextConfig.defaultModels || {}
+        const nextWorkflowConcurrency = parseWorkflowConcurrency(nextConfig.workflowConcurrency)
+        const nextCapabilityDefaults = nextConfig.capabilityDefaults && typeof nextConfig.capabilityDefaults === 'object'
+            ? nextConfig.capabilityDefaults as CapabilitySelections
+            : {}
+
+        latestProvidersRef.current = nextProviders
+        latestModelsRef.current = nextModels
+        latestDefaultModelsRef.current = nextDefaultModels
+        latestWorkflowConcurrencyRef.current = nextWorkflowConcurrency
+        latestCapabilityDefaultsRef.current = nextCapabilityDefaults
+        setProviders(nextProviders)
+        setModels(nextModels)
+        setDefaultModels(nextDefaultModels)
+        setWorkflowConcurrency(nextWorkflowConcurrency)
+        setCapabilityDefaults(nextCapabilityDefaults)
+        setEffectiveDefaults(nextConfig.effectiveDefaults ?? null)
+    }, [locale])
+
+    const acceptSavedConfig = useCallback((nextConfig: NonNullable<typeof data>) => {
+        hydrateConfig(nextConfig)
+        replaceData(nextConfig)
+    }, [hydrateConfig, replaceData])
+
     const { saveStatus, saveError, performSave, flushConfig } = useApiConfigSaver({
         latestModelsRef,
         latestProvidersRef,
         latestDefaultModelsRef,
         latestWorkflowConcurrencyRef,
         latestCapabilityDefaultsRef,
+        onSavedConfig: acceptSavedConfig,
     })
 
     useEffect(() => {
@@ -99,28 +149,8 @@ export function useProviders(): UseProvidersReturn {
             return
         }
         if (!data) return
-        if (!data.catalog) {
-            throw new Error('API_CONFIG_CATALOG_MISSING')
-        }
-        const catalogProviders = data.catalog.providers
-        const catalogModels = data.catalog.models
-        catalogProviderIdsRef.current = new Set(catalogProviders.map((provider) => provider.id))
-        catalogModelKeysRef.current = new Set(catalogModels.map((model) => encodeModelKey(model.provider, model.modelId)))
-
-        const serverCatalogProviders = catalogProviders.map((provider) => ({
-            ...provider,
-            name: resolvePresetProviderName(provider.id, provider.name, locale),
-        }))
-
-        const savedProviders: Provider[] = data.providers || []
-        setProviders(mergeProvidersForDisplay(savedProviders, serverCatalogProviders))
-        setModels(mergeModelsForDisplay(data.models || [], catalogModels))
-        if (data.defaultModels) setDefaultModels(data.defaultModels)
-        setWorkflowConcurrency(parseWorkflowConcurrency(data.workflowConcurrency))
-        if (data.capabilityDefaults && typeof data.capabilityDefaults === 'object') {
-            setCapabilityDefaults(data.capabilityDefaults as CapabilitySelections)
-        }
-    }, [data, queryError, locale])
+        hydrateConfig(data)
+    }, [data, queryError, hydrateConfig])
 
     // 默认模型操作：选中即立刻保存（与项目设置一致）
     const updateDefaultModel = useCallback((
@@ -404,8 +434,12 @@ export function useProviders(): UseProvidersReturn {
         providers,
         models,
         defaultModels,
+        displayedDefaultModels,
+        defaultModelSources,
         workflowConcurrency,
         capabilityDefaults,
+        displayedCapabilityDefaults,
+        runtimeManagedModelKeys,
         loading: queryLoading,
         saveStatus,
         saveError,

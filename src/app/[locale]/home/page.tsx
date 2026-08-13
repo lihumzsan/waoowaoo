@@ -42,6 +42,7 @@ import {
   validateProjectAssistantMediaAttachmentFile,
 } from '@/lib/project-agent/media-attachments/client'
 import type { ProjectVideoRatio } from '@/lib/projects/video-ratio'
+import { readConfiguredProjectVideoRatio } from '@/lib/workspace/model-setup'
 import { readClientApiError } from '@/lib/errors/client'
 import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
 import { useToast } from '@/contexts/ToastContext'
@@ -79,7 +80,8 @@ export default function HomePage() {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [inputValue, setInputValue] = useState('')
-  const [videoRatio, setVideoRatio] = useState<ProjectVideoRatio>('16:9')
+  const [videoRatio, setVideoRatio] = useState<ProjectVideoRatio>('9:16')
+  const videoRatioTouchedRef = useRef(false)
   const [attachments, setAttachments] = useState<ProjectAssistantTextAttachment[]>([])
   const [pendingMediaFiles, setPendingMediaFiles] = useState<PendingHomeMediaFile[]>([])
   const [attachUploading, setAttachUploading] = useState(false)
@@ -129,11 +131,34 @@ export default function HomePage() {
     }
   }, [session, fetchRecentProjects])
 
+  useEffect(() => {
+    if (!session) return
+
+    let cancelled = false
+    void (async () => {
+      try {
+        const response = await apiFetch('/api/user-preference')
+        if (!response.ok) return
+        const configuredRatio = readConfiguredProjectVideoRatio(await response.json())
+        if (!cancelled && !videoRatioTouchedRef.current && configuredRatio) {
+          setVideoRatio(configuredRatio)
+        }
+      } catch {
+        // Project creation remains authoritative: it applies the persisted preference
+        // or the local 9:16 preset when this display-only fetch is unavailable.
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [session])
+
   // 创建项目并跳转
   const handleCreate = async () => {
     await submitHomeQuickStartLaunch({
       inputValue,
-      videoRatio,
+      videoRatio: videoRatioTouchedRef.current ? videoRatio : undefined,
       attachments,
       mediaFiles: pendingMediaFiles.map((pending) => pending.file),
       isSubmitting: createLoading,
@@ -502,6 +527,7 @@ export default function HomePage() {
                     value={videoRatio}
                     disabled={createLoading}
                     onChange={(nextRatio) => {
+                      videoRatioTouchedRef.current = true
                       setVideoRatio(nextRatio)
                       if (createError) setCreateError(null)
                     }}

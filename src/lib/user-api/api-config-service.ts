@@ -10,6 +10,7 @@ import type { Prisma } from '@prisma/client'
 import { encryptApiKey } from '@/lib/crypto-utils'
 import { ApiError } from '@/lib/api-errors'
 import { buildApiConfigServerCatalog } from '@/lib/ai-registry/api-config-catalog'
+import type { CapabilitySelections } from '@/lib/ai-registry/types'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import {
   getDeploymentConfig,
@@ -48,10 +49,74 @@ import {
   capabilitySelectionCommandToSelections,
 } from '@/lib/ai-registry/capability-selection-command'
 import { assertUserProviderConfigurationAvailable } from './availability'
+import {
+  buildLocalProjectCapabilitySelections,
+  LOCAL_PROJECT_DEFAULT_MODELS,
+} from '@/lib/projects/creation-defaults'
+import { CODEX_PLATFORM_DEFAULT_ASSISTANT_MODEL_KEY } from '@/lib/ai-providers/codex/models'
+import {
+  COMFYUI_H3_DEFAULT_GENERATION_OPTIONS,
+  COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
+} from '@/lib/ai-providers/comfyui/models'
+import {
+  DEFAULT_MODEL_FIELDS,
+  type DefaultModelField,
+  type DefaultModelSource,
+  type EffectiveDefaultModelsView,
+} from './api-config-types'
 
-export async function getUserApiConfig(userId: string) {
-  assertUserProviderConfigurationAvailable()
-  const pref = await prisma.userPreference.findUnique({
+function buildEffectiveDefaultModelsView(input: {
+  deployment: ReturnType<typeof getDeploymentConfig>
+  explicitDefaultModels: DefaultModelsPayload
+  explicitCapabilityDefaults: CapabilitySelections
+}): EffectiveDefaultModelsView {
+  const systemDefaultModels: DefaultModelsPayload = isSelfHostedUserProviderCredentialMode(input.deployment)
+    ? {
+        assistantModel: CODEX_PLATFORM_DEFAULT_ASSISTANT_MODEL_KEY,
+        ...LOCAL_PROJECT_DEFAULT_MODELS,
+      }
+    : {}
+  const defaultModels: DefaultModelsPayload = { ...systemDefaultModels }
+  for (const field of DEFAULT_MODEL_FIELDS) {
+    const explicitValue = input.explicitDefaultModels[field]
+    if (explicitValue) defaultModels[field] = explicitValue
+  }
+  const sources = Object.fromEntries(DEFAULT_MODEL_FIELDS.map((field) => {
+    let source: DefaultModelSource = 'unset'
+    if (input.explicitDefaultModels[field]) source = 'user'
+    else if (systemDefaultModels[field]) source = 'system'
+    return [field, source]
+  })) as Record<DefaultModelField, DefaultModelSource>
+  const systemCapabilityDefaults: CapabilitySelections = isSelfHostedUserProviderCredentialMode(input.deployment)
+    ? {
+        ...buildLocalProjectCapabilitySelections({}),
+        [COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY]: {
+          ...COMFYUI_H3_DEFAULT_GENERATION_OPTIONS,
+        },
+      }
+    : {}
+  const capabilityDefaults = { ...systemCapabilityDefaults }
+  for (const [modelKey, selection] of Object.entries(input.explicitCapabilityDefaults)) {
+    capabilityDefaults[modelKey] = {
+      ...(capabilityDefaults[modelKey] || {}),
+      ...selection,
+    }
+  }
+  return {
+    defaultModels,
+    capabilityDefaults,
+    sources,
+    runtimeManagedModelKeys: Array.from(new Set(Object.values(systemDefaultModels).filter(Boolean))),
+  }
+}
+
+type ApiConfigReadClient = Pick<Prisma.TransactionClient, 'userPreference'>
+
+async function readUserApiConfig(
+  userId: string,
+  client: ApiConfigReadClient,
+) {
+  const pref = await client.userPreference.findUnique({
     where: { userId },
     select: {
       customModels: true,
@@ -113,9 +178,19 @@ export async function getUserApiConfig(userId: string) {
     }),
     defaultModels: enabledDefaultModels,
     capabilityDefaults,
+    effectiveDefaults: buildEffectiveDefaultModelsView({
+      deployment,
+      explicitDefaultModels: enabledDefaultModels,
+      explicitCapabilityDefaults: capabilityDefaults,
+    }),
     workflowConcurrency,
     deployment: toPublicDeploymentConfig(deployment),
   }
+}
+
+export async function getUserApiConfig(userId: string) {
+  assertUserProviderConfigurationAvailable()
+  return await readUserApiConfig(userId, prisma)
 }
 
 export async function putUserApiConfig(
@@ -295,6 +370,6 @@ export async function putUserApiConfig(
     create: { userId, ...updateData },
   })
 
-  return { success: true }
+  return await readUserApiConfig(userId, client)
 }
 ensureAiCatalogsRegistered()

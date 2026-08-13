@@ -1,4 +1,4 @@
-import type { ModelCapabilities, UnifiedModelType } from '@/lib/ai-registry/types'
+import type { CapabilitySelections, ModelCapabilities, UnifiedModelType } from '@/lib/ai-registry/types'
 export type DefaultModelField =
   | 'assistantModel'
   | 'analysisModel'
@@ -42,6 +42,15 @@ export interface DefaultModelsPayload {
   videoModel?: string
   musicModel?: string
   soundModel?: string
+}
+
+export type DefaultModelSource = 'user' | 'system' | 'unset'
+
+export interface EffectiveDefaultModelsView {
+  defaultModels: DefaultModelsPayload
+  capabilityDefaults: CapabilitySelections
+  sources: Record<DefaultModelField, DefaultModelSource>
+  runtimeManagedModelKeys: string[]
 }
 
 export interface WorkflowConcurrencyPayload {

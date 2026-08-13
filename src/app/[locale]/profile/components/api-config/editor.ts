@@ -3,16 +3,29 @@
 import { apiFetch } from '@/lib/api-fetch'
 import type { CapabilitySelections } from '@/lib/ai-registry/types'
 import type { CustomModel, Provider } from './types'
+import type { ApiConfig } from './types'
 import type { DefaultModels, WorkflowConcurrency } from './selectors'
 import type { MutableRefObject } from 'react'
 import { useCallback, useRef, useState } from 'react'
 import { logError as _ulogError } from '@/lib/logging/core'
 import { capabilitySelectionsToCommand } from '@/lib/ai-registry/capability-selection-command'
+import { LatestSaveQueue } from '@/lib/user-api/latest-save-queue'
 
 export interface ApiConfigSaveError {
   code: string
   providerId?: string
   requestId?: string
+}
+
+class ApiConfigSaveFailure extends Error {
+  constructor(readonly saveError: ApiConfigSaveError) {
+    super(saveError.code)
+  }
+}
+
+interface ApiConfigSaveSubmission {
+  body: string
+  providers: Provider[]
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -57,6 +70,7 @@ export function useApiConfigSaver(input: {
   latestDefaultModelsRef: MutableRefObject<DefaultModels>
   latestWorkflowConcurrencyRef: MutableRefObject<WorkflowConcurrency>
   latestCapabilityDefaultsRef: MutableRefObject<CapabilitySelections>
+  onSavedConfig: (config: ApiConfig) => void
 }): {
   saveStatus: 'idle' | 'saving' | 'saved' | 'error'
   saveError: ApiConfigSaveError | null
@@ -70,6 +84,28 @@ export function useApiConfigSaver(input: {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [saveError, setSaveError] = useState<ApiConfigSaveError | null>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const shouldReportBatchRef = useRef(false)
+  const onSavedConfigRef = useRef(input.onSavedConfig)
+  onSavedConfigRef.current = input.onSavedConfig
+  const saveQueueRef = useRef<LatestSaveQueue<ApiConfigSaveSubmission, ApiConfig> | null>(null)
+  if (!saveQueueRef.current) {
+    saveQueueRef.current = new LatestSaveQueue(async (submission) => {
+      const res = await apiFetch('/api/user/api-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: submission.body,
+      })
+      if (!res.ok) {
+        throw new ApiConfigSaveFailure(await readSaveError(res, submission.providers))
+      }
+      const config = await res.json() as ApiConfig
+      if (!config.catalog || !config.effectiveDefaults) {
+        throw new ApiConfigSaveFailure({ code: 'RESPONSE_INVALID' })
+      }
+      return config
+    })
+  }
+  const saveQueue = saveQueueRef.current
 
   const performSave = useCallback(async (
     overrides?: {
@@ -84,6 +120,7 @@ export function useApiConfigSaver(input: {
       saveTimeoutRef.current = null
     }
     if (!silent) {
+      shouldReportBatchRef.current = true
       setSaveStatus('saving')
       setSaveError(null)
     }
@@ -96,9 +133,8 @@ export function useApiConfigSaver(input: {
       const currentCapabilityDefaults = overrides?.capabilityDefaults ?? input.latestCapabilityDefaultsRef.current
       const enabledModels = currentModels.filter((model) => model.enabled)
 
-      const res = await apiFetch('/api/user/api-config', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+      const result = await saveQueue.submit({
+        providers: currentProviders,
         body: JSON.stringify({
           models: enabledModels.map((model) => ({
             modelId: model.modelId,
@@ -118,15 +154,22 @@ export function useApiConfigSaver(input: {
           capabilityDefaults: capabilitySelectionsToCommand(currentCapabilityDefaults),
         }),
       })
-      if (!res.ok) {
-        if (!silent) {
-          setSaveError(await readSaveError(res, currentProviders))
+      if (!result.ok) {
+        if (result.isLatest && shouldReportBatchRef.current) {
+          shouldReportBatchRef.current = false
+          setSaveError(result.error instanceof ApiConfigSaveFailure
+            ? result.error.saveError
+            : { code: 'NETWORK_ERROR' })
           setSaveStatus('error')
         }
-        return false
+        return !result.isLatest
       }
 
-      if (!silent) {
+      if (result.isLatest) {
+        onSavedConfigRef.current(result.value)
+      }
+      if (result.isLatest && shouldReportBatchRef.current) {
+        shouldReportBatchRef.current = false
         setSaveError(null)
         setSaveStatus('saved')
         saveTimeoutRef.current = setTimeout(() => setSaveStatus('idle'), 3000)
@@ -140,14 +183,18 @@ export function useApiConfigSaver(input: {
       }
       return false
     }
-  }, [input.latestCapabilityDefaultsRef, input.latestDefaultModelsRef, input.latestModelsRef, input.latestProvidersRef, input.latestWorkflowConcurrencyRef])
+  }, [input.latestCapabilityDefaultsRef, input.latestDefaultModelsRef, input.latestModelsRef, input.latestProvidersRef, input.latestWorkflowConcurrencyRef, saveQueue])
 
   const flushConfig = useCallback(async () => {
-    const success = await performSave(undefined, true)
-    if (!success) {
+    const submitted = await performSave(undefined, true)
+    if (!submitted) {
       throw new Error('API_CONFIG_FLUSH_FAILED')
     }
-  }, [performSave])
+    const finalResult = await saveQueue.waitForIdle()
+    if (!finalResult.ok) {
+      throw new Error('API_CONFIG_FLUSH_FAILED')
+    }
+  }, [performSave, saveQueue])
 
   return { saveStatus, saveError, performSave, flushConfig }
 }

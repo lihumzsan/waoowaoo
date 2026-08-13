@@ -1,12 +1,19 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
-import { COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY } from '@/lib/ai-providers/comfyui/models'
+import {
+  COMFYUI_PLATFORM_DEFAULT_SOUND_MODEL_KEY,
+  COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
+} from '@/lib/ai-providers/comfyui/models'
+import {
+  CODEX_PLATFORM_DEFAULT_ASSISTANT_MODEL_KEY,
+  CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
+} from '@/lib/ai-providers/codex/models'
 import { resolveProjectModelCapabilityGenerationOptions } from '@/lib/config-service'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { invokeProjectAgentOperation } from '@/lib/operations/invocation'
 import { planOperation } from '@/lib/operations/planning'
 import { createProjectAgentOperationRegistryForApi } from '@/lib/operations/registry'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
-import { getPlatformModels } from '@/lib/platform-models/catalog'
+import { getPlatformDefaultModels, getPlatformModels } from '@/lib/platform-models/catalog'
 import { resolveModelSelection } from '@/lib/user-api/runtime-config'
 import { buildWorkspaceResourceId } from '@/lib/workspace-resource/identity'
 import {
@@ -361,6 +368,210 @@ describe('project local video model configuration', () => {
     await expect(prisma.project.count({ where: { userId: user.id } })).resolves.toBe(1)
   })
 
+  it('persists the complete local production preset for a new project without user defaults', async () => {
+    const user = await createTestUser()
+    const invocation = await invokeProjectAgentOperation({
+      registry: createProjectAgentOperationRegistryForApi(),
+      channel: 'api',
+      operationId: 'create_project',
+      context: operationContext(user.id, 'system'),
+      input: { name: 'Default production project' },
+    })
+    const result = invocation.data as { project: { id: string } }
+
+    await expect(prisma.project.findUniqueOrThrow({
+      where: { id: result.project.id },
+      select: {
+        analysisModel: true,
+        characterModel: true,
+        locationModel: true,
+        editModel: true,
+        videoModel: true,
+        musicModel: true,
+        soundModel: true,
+        videoRatio: true,
+        videoVocalPerformanceMode: true,
+        capabilityOverrides: true,
+      },
+    })).resolves.toEqual({
+      analysisModel: CODEX_PLATFORM_DEFAULT_ASSISTANT_MODEL_KEY,
+      characterModel: CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
+      locationModel: CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
+      editModel: CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
+      videoModel: COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
+      musicModel: null,
+      soundModel: COMFYUI_PLATFORM_DEFAULT_SOUND_MODEL_KEY,
+      videoRatio: '9:16',
+      videoVocalPerformanceMode: 'native_dialogue',
+      capabilityOverrides: JSON.stringify({
+        [CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY]: {
+          resolution: '2K',
+          quality: 'medium',
+        },
+      }),
+    })
+  })
+
+  it('preserves persisted user ratio and Codex Image defaults when creating from an implicit preset', async () => {
+    const user = await createTestUser()
+    await prisma.userPreference.create({
+      data: {
+        userId: user.id,
+        videoRatio: '16:9',
+        capabilityDefaults: JSON.stringify({
+          [CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY]: {
+            resolution: '4K',
+            quality: 'high',
+          },
+        }),
+      },
+    })
+
+    const invocation = await invokeProjectAgentOperation({
+      registry: createProjectAgentOperationRegistryForApi(),
+      channel: 'api',
+      operationId: 'create_project',
+      context: operationContext(user.id, 'system'),
+      input: { name: 'Preference-aware production project' },
+    })
+    const result = invocation.data as { project: { id: string } }
+
+    await expect(prisma.project.findUniqueOrThrow({
+      where: { id: result.project.id },
+      select: { videoRatio: true, capabilityOverrides: true },
+    })).resolves.toEqual({
+      videoRatio: '16:9',
+      capabilityOverrides: JSON.stringify({
+        [CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY]: {
+          resolution: '4K',
+          quality: 'high',
+        },
+      }),
+    })
+  })
+
+  it.each([
+    ['malformed JSON', '{not-json'],
+    ['an invalid Codex Image value', JSON.stringify({
+      [CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY]: { resolution: '8K', quality: 'medium' },
+    })],
+  ])('rejects %s in stored capability defaults before creating a project', async (_caseName, capabilityDefaults) => {
+    const user = await createTestUser()
+    await prisma.userPreference.create({ data: { userId: user.id, capabilityDefaults } })
+
+    await expect(invokeProjectAgentOperation({
+      registry: createProjectAgentOperationRegistryForApi(),
+      channel: 'api',
+      operationId: 'create_project',
+      context: operationContext(user.id, 'system'),
+      input: { name: 'Rejected capability project' },
+    })).rejects.toMatchObject({
+      details: expect.objectContaining({
+        code: expect.stringMatching(/^CAPABILITY_/),
+        field: expect.any(String),
+      }),
+    })
+    await expect(prisma.project.count({ where: { userId: user.id } })).resolves.toBe(0)
+  })
+
+  it('persists the portrait default without changing Cloud platform model defaults', async () => {
+    process.env.DEPLOYMENT_EDITION = 'cloud'
+    process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
+    const user = await createTestUser()
+    const invocation = await invokeProjectAgentOperation({
+      registry: createProjectAgentOperationRegistryForApi(),
+      channel: 'api',
+      operationId: 'create_project',
+      context: operationContext(user.id, 'system'),
+      input: { name: 'Cloud portrait project' },
+    })
+    const result = invocation.data as { project: { id: string } }
+    const platformDefaults = getPlatformDefaultModels()
+
+    await expect(prisma.project.findUniqueOrThrow({
+      where: { id: result.project.id },
+      select: {
+        videoRatio: true,
+        analysisModel: true,
+        characterModel: true,
+        locationModel: true,
+        editModel: true,
+        videoModel: true,
+        musicModel: true,
+        soundModel: true,
+      },
+    })).resolves.toEqual({
+      videoRatio: '9:16',
+      analysisModel: platformDefaults.analysisModel,
+      characterModel: platformDefaults.characterModel,
+      locationModel: platformDefaults.locationModel,
+      editModel: platformDefaults.editModel,
+      videoModel: platformDefaults.videoModel,
+      musicModel: platformDefaults.musicModel,
+      soundModel: platformDefaults.soundModel,
+    })
+  })
+
+  it('preserves Cloud user-key model setup semantics without local presets', async () => {
+    process.env.DEPLOYMENT_EDITION = 'cloud'
+    process.env.PROVIDER_CREDENTIAL_MODE = 'user-key'
+    const user = await createTestUser()
+    const invocation = await invokeProjectAgentOperation({
+      registry: createProjectAgentOperationRegistryForApi(),
+      channel: 'api',
+      operationId: 'create_project',
+      context: operationContext(user.id, 'system'),
+      input: { name: 'Cloud user-key project' },
+    })
+    const result = invocation.data as { project: { id: string } }
+
+    await expect(prisma.project.findUniqueOrThrow({
+      where: { id: result.project.id },
+      select: {
+        analysisModel: true,
+        characterModel: true,
+        locationModel: true,
+        editModel: true,
+        videoModel: true,
+        musicModel: true,
+        soundModel: true,
+        videoRatio: true,
+        capabilityOverrides: true,
+      },
+    })).resolves.toEqual({
+      analysisModel: null,
+      characterModel: null,
+      locationModel: null,
+      editModel: null,
+      videoModel: null,
+      musicModel: null,
+      soundModel: null,
+      videoRatio: '9:16',
+      capabilityOverrides: null,
+    })
+  })
+
+  it('rejects corrupt stored capability defaults before Cloud user-key project creation', async () => {
+    process.env.DEPLOYMENT_EDITION = 'cloud'
+    process.env.PROVIDER_CREDENTIAL_MODE = 'user-key'
+    const user = await createTestUser()
+    await prisma.userPreference.create({ data: { userId: user.id, capabilityDefaults: '{not-json' } })
+
+    await expect(invokeProjectAgentOperation({
+      registry: createProjectAgentOperationRegistryForApi(),
+      channel: 'api',
+      operationId: 'create_project',
+      context: operationContext(user.id, 'system'),
+      input: { name: 'Rejected Cloud capability project' },
+    })).rejects.toMatchObject({
+      details: expect.objectContaining({
+        code: 'CAPABILITY_SELECTION_INVALID',
+        field: 'capabilityDefaults',
+      }),
+    })
+    await expect(prisma.project.count({ where: { userId: user.id } })).resolves.toBe(0)
+  })
+
   it('rejects an unavailable self-hosted video preference before persistence', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)
@@ -416,6 +627,67 @@ describe('project local video model configuration', () => {
       where: { userId: user.id },
       select: { videoModel: true },
     })).resolves.toBeNull()
+  })
+
+  it('returns the persisted effective defaults from the full API-config writer', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+
+    const result = await invokeProjectAgentOperation({
+      registry: createProjectAgentOperationRegistryForApi(),
+      channel: 'api',
+      operationId: 'put_user_api_config',
+      context: operationContext(user.id, project.id),
+      input: {
+        defaultModels: {
+          characterModel: CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
+        },
+        capabilityDefaults: [{
+          modelKey: CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
+          field: 'quality',
+          value: 'high',
+        }],
+      },
+    })
+
+    expect(result.data).toMatchObject({
+      defaultModels: {
+        characterModel: CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
+      },
+      capabilityDefaults: {
+        [CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY]: {
+          quality: 'high',
+        },
+      },
+      effectiveDefaults: {
+        defaultModels: {
+          characterModel: CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
+        },
+        capabilityDefaults: {
+          [CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY]: {
+            resolution: '2K',
+            quality: 'high',
+          },
+        },
+        sources: {
+          characterModel: 'user',
+        },
+      },
+    })
+    await expect(prisma.userPreference.findUniqueOrThrow({
+      where: { userId: user.id },
+      select: {
+        characterModel: true,
+        capabilityDefaults: true,
+      },
+    })).resolves.toEqual({
+      characterModel: CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
+      capabilityDefaults: JSON.stringify({
+        [CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY]: {
+          quality: 'high',
+        },
+      }),
+    })
   })
 
   it('preserves Cloud user-key custom-video selection behavior', async () => {

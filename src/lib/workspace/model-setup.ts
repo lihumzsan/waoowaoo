@@ -1,10 +1,17 @@
+import {
+  PROJECT_VIDEO_RATIOS,
+  type ProjectVideoRatio,
+} from '@/lib/projects/video-ratio'
+
 interface PreferenceRecord {
   analysisModel?: string | null
+  videoRatio?: string | null
 }
 
 interface DeploymentRecord {
   providerCredentialMode?: string | null
   usesPlatformProviderKeys?: boolean | null
+  isCloud?: boolean | null
 }
 
 interface RuntimeDefaultsRecord {
@@ -47,6 +54,18 @@ export function readConfiguredAnalysisModel(payload: unknown): string | null {
   return isNonEmptyString(runtimeDefaults.analysisModel) ? runtimeDefaults.analysisModel.trim() : null
 }
 
+export function readConfiguredProjectVideoRatio(payload: unknown): ProjectVideoRatio | null {
+  if (!isObjectLike(payload)) return null
+
+  const preferenceValue = payload.preference
+  if (!isObjectLike(preferenceValue)) return null
+
+  const videoRatio = preferenceValue.videoRatio
+  return PROJECT_VIDEO_RATIOS.some((ratio) => ratio === videoRatio)
+    ? videoRatio as ProjectVideoRatio
+    : null
+}
+
 export function usesPlatformProviderKeys(payload: unknown): boolean {
   if (!isObjectLike(payload)) return false
 
@@ -60,6 +79,9 @@ export function usesPlatformProviderKeys(payload: unknown): boolean {
 
 export function shouldGuideToModelSetup(payload: unknown): boolean {
   if (usesPlatformProviderKeys(payload)) return false
+  if (!isObjectLike(payload)) return false
+  const deploymentValue = payload.deployment
+  if (!isObjectLike(deploymentValue) || deploymentValue.isCloud !== true) return false
   return !hasConfiguredAnalysisModel(payload)
 }
 
