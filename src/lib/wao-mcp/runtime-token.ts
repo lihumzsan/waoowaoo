@@ -1,18 +1,14 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
 import { z } from 'zod'
 
-const WAO_RUNTIME_TOKEN_PREFIX = 'waort1'
-const WAO_RUNTIME_TOKEN_PURPOSE = 'wao-codex-runtime-capability:v1'
+const WAO_RUNTIME_TOKEN_PREFIX = 'waort2'
+const WAO_RUNTIME_TOKEN_PURPOSE = 'wao-codex-runtime-placement:v2'
 const WAO_RUNTIME_TOKEN_MAX_CHARS = 4_000
-
-export const WAO_RUNTIME_TOKEN_DEFAULT_TTL_SECONDS = 30 * 60
-export const WAO_RUNTIME_TOKEN_MAX_TTL_SECONDS = 60 * 60
 
 export const waoRuntimeTokenPayloadSchema = z.object({
   userId: z.string().min(1).max(128),
   projectId: z.string().min(1).max(128),
   assistantId: z.string().min(1).max(128),
-  expiry: z.number().int().positive(),
   nonce: z.string().min(16).max(128),
 }).strict()
 
@@ -22,7 +18,7 @@ export type WaoRuntimeTokenPayload = z.infer<
 
 export type WaoRuntimeTokenScope = Omit<
   WaoRuntimeTokenPayload,
-  'expiry' | 'nonce'
+  'nonce'
 >
 
 export type WaoRuntimeTokenErrorCode =
@@ -30,8 +26,6 @@ export type WaoRuntimeTokenErrorCode =
   | 'MALFORMED'
   | 'SIGNATURE_INVALID'
   | 'PAYLOAD_INVALID'
-  | 'EXPIRED'
-  | 'TTL_INVALID'
 
 export class WaoRuntimeTokenError extends Error {
   readonly code: WaoRuntimeTokenErrorCode
@@ -63,39 +57,19 @@ function signEncodedPayload(encodedPayload: string): string {
     .digest('base64url')
 }
 
-function normalizeNowSeconds(now: Date): number {
-  const milliseconds = now.getTime()
-  if (!Number.isFinite(milliseconds)) {
-    throw new WaoRuntimeTokenError('TTL_INVALID')
-  }
-  return Math.floor(milliseconds / 1_000)
-}
-
 /**
- * Issues a short-lived capability token for one Wao project runtime. Its nonce
- * is also the Redis placement owner token, so releasing or rotating the
- * Runtime invalidates model, search, and MCP access before token expiry. Thread
- * and directory identities stay out of the token: the unique running product
- * Turn remains the per-call execution fence resolved from MySQL.
+ * Issues a signed identity for one Wao project runtime placement. Its nonce is
+ * also the Redis placement owner token, so releasing or rotating the Runtime
+ * invalidates MCP access immediately. Thread and directory identities stay out
+ * of the token: the unique running product Turn remains the per-call execution
+ * fence resolved from MySQL.
  * The runtime container receives this token, never database/provider/auth keys.
  */
 export function issueWaoRuntimeToken(params: {
   readonly scope: WaoRuntimeTokenScope
-  readonly ttlSeconds?: number
-  readonly now?: Date
 }): { readonly token: string; readonly payload: WaoRuntimeTokenPayload } {
-  const ttlSeconds =
-    params.ttlSeconds ?? WAO_RUNTIME_TOKEN_DEFAULT_TTL_SECONDS
-  if (
-    !Number.isInteger(ttlSeconds)
-    || ttlSeconds <= 0
-    || ttlSeconds > WAO_RUNTIME_TOKEN_MAX_TTL_SECONDS
-  ) {
-    throw new WaoRuntimeTokenError('TTL_INVALID')
-  }
   const payload = waoRuntimeTokenPayloadSchema.parse({
     ...params.scope,
-    expiry: normalizeNowSeconds(params.now ?? new Date()) + ttlSeconds,
     nonce: randomUUID(),
   })
   const encodedPayload = Buffer.from(
@@ -110,7 +84,6 @@ export function issueWaoRuntimeToken(params: {
 
 export function verifyWaoRuntimeToken(
   token: string,
-  params?: { readonly now?: Date },
 ): WaoRuntimeTokenPayload {
   const normalized = token.trim()
   if (!normalized || normalized.length > WAO_RUNTIME_TOKEN_MAX_CHARS) {
@@ -143,15 +116,11 @@ export function verifyWaoRuntimeToken(
   if (!parsed.success) {
     throw new WaoRuntimeTokenError('PAYLOAD_INVALID')
   }
-  if (parsed.data.expiry <= normalizeNowSeconds(params?.now ?? new Date())) {
-    throw new WaoRuntimeTokenError('EXPIRED')
-  }
   return parsed.data
 }
 
 export function verifyWaoRuntimeBearerAuthorization(
   authorization: string | null,
-  params?: { readonly now?: Date },
 ): WaoRuntimeTokenPayload {
   if (!authorization) {
     throw new WaoRuntimeTokenError('MALFORMED')
@@ -160,5 +129,5 @@ export function verifyWaoRuntimeBearerAuthorization(
   if (!match?.[1]) {
     throw new WaoRuntimeTokenError('MALFORMED')
   }
-  return verifyWaoRuntimeToken(match[1], params)
+  return verifyWaoRuntimeToken(match[1])
 }

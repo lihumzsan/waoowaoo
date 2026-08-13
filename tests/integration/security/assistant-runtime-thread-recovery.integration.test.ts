@@ -34,6 +34,7 @@ import type {
 import {
   RuntimeSessionManager,
   type RuntimeSessionPersistence,
+  type RuntimeSessionScope,
 } from '@/lib/codex-runtime/runtime-session-manager'
 import type { ProjectProductionContext } from '@/lib/project-production-context'
 import { createTestProject, createTestUser } from '../../helpers/billing-fixtures'
@@ -231,11 +232,18 @@ describe('Assistant Runtime native Thread recovery', () => {
       },
     })
     const container = new DeterministicRuntimeContainer()
+    const closedPlacements: Array<{
+      readonly scope: RuntimeSessionScope
+      readonly ownerToken: string
+    }> = []
     const manager = new RuntimeSessionManager({
       container,
       persistence: testPersistence,
       ownership: new RedisAssistantRuntimeOwnership(),
       idleTimeoutMs: 60_000,
+      closePlacementTransportSessions: async (placement) => {
+        closedPlacements.push(placement)
+      },
       waitForTurnSettlement: async () => undefined,
       onError: () => undefined,
     })
@@ -243,7 +251,6 @@ describe('Assistant Runtime native Thread recovery', () => {
       environment: { WAO_MCP_TEST_TOKEN: 'test-token' },
       bearerToken: 'test-token',
       ownerToken: `owner_${randomUUID()}`,
-      expiresAtMs: Date.now() + 60_000,
     }
     const service = new AssistantRuntimeService({
       manager,
@@ -290,6 +297,11 @@ describe('Assistant Runtime native Thread recovery', () => {
     } finally {
       await manager.shutdownAll()
     }
+    expect(closedPlacements).toHaveLength(2)
+    expect(closedPlacements).toEqual(closedPlacements.map(() => ({
+      scope: { projectId: project.id, userId: user.id },
+      ownerToken: access.ownerToken,
+    })))
   })
 
   it('keeps the old binding when the fresh native Thread cannot start', async () => {
@@ -314,6 +326,7 @@ describe('Assistant Runtime native Thread recovery', () => {
       persistence: testPersistence,
       ownership: new RedisAssistantRuntimeOwnership(),
       idleTimeoutMs: 60_000,
+      closePlacementTransportSessions: async () => undefined,
       waitForTurnSettlement: async () => undefined,
       onError: () => undefined,
     })
@@ -321,7 +334,6 @@ describe('Assistant Runtime native Thread recovery', () => {
       environment: { WAO_MCP_TEST_TOKEN: 'test-token' },
       bearerToken: 'test-token',
       ownerToken: `owner_${randomUUID()}`,
-      expiresAtMs: Date.now() + 60_000,
     }
     const service = new AssistantRuntimeService({
       manager,
@@ -371,6 +383,7 @@ describe('Assistant Runtime native Thread recovery', () => {
       persistence: testPersistence,
       ownership: new RedisAssistantRuntimeOwnership(),
       idleTimeoutMs: 60_000,
+      closePlacementTransportSessions: async () => undefined,
       waitForTurnSettlement: async () => undefined,
       onError: () => undefined,
     })
@@ -378,7 +391,6 @@ describe('Assistant Runtime native Thread recovery', () => {
       environment: { WAO_MCP_TEST_TOKEN: 'test-token' },
       bearerToken: 'test-token',
       ownerToken: `owner_${randomUUID()}`,
-      expiresAtMs: Date.now() + 60_000,
     }
     const service = new AssistantRuntimeService({
       manager,

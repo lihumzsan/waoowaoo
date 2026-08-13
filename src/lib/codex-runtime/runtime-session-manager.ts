@@ -108,6 +108,11 @@ export type RuntimeSessionManagerOptions = {
   readonly ownership: RuntimeSessionOwnership
   readonly idleTimeoutMs: number
   readonly idleSweepIntervalMs?: number
+  /** Close process-local protocol sessions before releasing the placement lease. */
+  readonly closePlacementTransportSessions: (placement: {
+    readonly scope: RuntimeSessionScope
+    readonly ownerToken: string
+  }) => Promise<void>
   /** Wait until the product projector has committed every live Turn terminal. */
   readonly waitForTurnSettlement: (scope: RuntimeSessionScope) => Promise<void>
   readonly onError: (params: {
@@ -384,6 +389,7 @@ export class RuntimeSessionManager {
         await this.options.persistence.destroyMaterialization(entry.materialization)
         entry.unsubscribeRuntime?.()
         entry.unsubscribeRuntime = null
+        await this.closePlacementTransportSessions(entry)
         await entry.ownership.release()
         await this.deleteSlot(entry)
         this.publish(entry.scopeId, { type: 'state', state: 'stopped' })
@@ -524,6 +530,10 @@ export class RuntimeSessionManager {
       await ownership.assertCurrent()
       await this.options.persistence.clearScope(scope)
     } finally {
+      await this.options.closePlacementTransportSessions({
+        scope,
+        ownerToken: ownership.ownerToken,
+      })
       await ownership.release()
     }
   }
@@ -596,6 +606,17 @@ export class RuntimeSessionManager {
       if (container) await container.stop('force').catch(() => undefined)
       if (materialization) {
         await this.options.persistence.destroyMaterialization(materialization).catch(() => undefined)
+      }
+      try {
+        await this.options.closePlacementTransportSessions({
+          scope,
+          ownerToken: ownership.ownerToken,
+        })
+      } catch (closeError) {
+        throw new AggregateError(
+          [error, closeError],
+          'CODEX_RUNTIME_SESSION_START_CLEANUP_FAILED',
+        )
       }
       await ownership.release().catch(() => undefined)
       throw error
@@ -737,6 +758,7 @@ export class RuntimeSessionManager {
       await this.options.persistence.destroyMaterialization(entry.materialization)
       entry.unsubscribeRuntime?.()
       entry.unsubscribeRuntime = null
+      await this.closePlacementTransportSessions(entry)
       await entry.ownership.release()
       await this.deleteSlot(entry)
       if (!this.shuttingDown && !hadActiveTurn) {
@@ -769,6 +791,7 @@ export class RuntimeSessionManager {
       await this.options.persistence.destroyMaterialization(entry.materialization)
       entry.unsubscribeRuntime?.()
       entry.unsubscribeRuntime = null
+      await this.closePlacementTransportSessions(entry)
       await entry.ownership.release()
       await this.deleteSlot(entry)
       this.publish(entry.scopeId, {
@@ -797,6 +820,7 @@ export class RuntimeSessionManager {
       await this.options.persistence.clearScope(entry.scope)
       entry.unsubscribeRuntime?.()
       entry.unsubscribeRuntime = null
+      await this.closePlacementTransportSessions(entry)
       await entry.ownership.release()
       await this.deleteSlot(entry)
       this.publish(entry.scopeId, { type: 'state', state: 'stopped' })
@@ -815,6 +839,13 @@ export class RuntimeSessionManager {
     const slot = this.slots.get(buildRuntimeSessionScopeId(normalized))
     if (!slot) return []
     return await this.readThreads(await slot.entry)
+  }
+
+  private async closePlacementTransportSessions(entry: SessionEntry): Promise<void> {
+    await this.options.closePlacementTransportSessions({
+      scope: entry.scope,
+      ownerToken: entry.ownership.ownerToken,
+    })
   }
 
   private async buildRecoverySpecs(entry: SessionEntry): Promise<ThreadRecoverySpec[]> {
@@ -903,6 +934,9 @@ function validateMaterialization(value: RuntimeSessionMaterialization): RuntimeS
 }
 
 function validateManagerOptions(options: RuntimeSessionManagerOptions): void {
+  if (typeof options.closePlacementTransportSessions !== 'function') {
+    throw new Error('CODEX_RUNTIME_SESSION_TRANSPORT_CLOSER_REQUIRED')
+  }
   if (typeof options.waitForTurnSettlement !== 'function') {
     throw new Error('CODEX_RUNTIME_SESSION_SETTLEMENT_WAITER_REQUIRED')
   }

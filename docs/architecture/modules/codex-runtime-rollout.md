@@ -43,10 +43,10 @@ Wao 只为每个 placement 物化可销毁 workspace 与其中的 registry Skill
   业务能力命名空间必须标记为 direct-only，不进入嵌套执行器。
 - **CRR-07A — 用户取消是正常终态。** 拒绝计费或破坏性审批时返回结构化 declined 且不标记协议错误；
   UI 显示"已停止"，模型不得解释为服务失败或建议重试。
-- **CRR-07B — Runtime bearer 不是模型 API key。** bearer nonce 只用于当前 placement 的 Wao MCP ownership
+- **CRR-07B — Runtime bearer 不是模型 API key。** bearer 是当前 placement 的签名 identity，没有独立的墙钟有效期；其 nonce 只用于 Wao MCP ownership
   与 capability 授权；Codex 模型采样和原生搜索使用桌面登录，不经过 Wao bearer。MCP 先证明该 nonce 仍持有租约，
   再证明 Project 恰好一个活跃、未取消、未 clear 且归属本次执行的 Turn。native thread id 只标识模型历史，绝不替代当前 Turn
-  与 ownership 的执行授权。placement 停止或轮换后旧 token 即使未过期也不能重放。
+  与 ownership 的执行授权。placement 停止或轮换必须先关闭其协议 session，再释放租约；旧 token 因失去 ownership 不能重放。
 - **CRR-08 — 空闲可停，持久性不依赖停机事件。** 无活跃 Turn 时达到 idle timeout 可直接停止进程并
   删除 scratch；当前用户的标准 Codex Home 跨项目共享并由 Codex 原生维护，不等待 completion、checkpoint 或
   shutdown 回调才获得持久性。释放 ownership 前仍必须确认产品 Turn 已结算。
@@ -95,7 +95,7 @@ Wao 只为每个 placement 物化可销毁 workspace 与其中的 registry Skill
   granular policy 只允许 MCP elicitation，shell、规则、Skill 与权限升级继续 fail-closed，并以真实计费
   交互验收（CRR-03/07）。
 - 旧模型通道首版只验证"项目里恰好有一个活跃 Turn"，未证明请求来自当前 Runtime；旧容器 bearer 可在
-  有效期内等待新 Turn 后重放 → 凭据没有绑定 placement 租约 → bearer nonce 与 ownership token
+  placement 存活期间等待新 Turn 后重放 → 凭据没有绑定 placement 租约 → bearer nonce 与 ownership token
   完全相同（CRR-07B）。
 - MCP 首版把只有 checkpoint 后才写入的 durable thread id 当成当前调用身份，全新线程的首个 Turn
   因此在计划/计费前统一失败；此前的真实验收复用了已有线程，只证明恢复路径 → 用恢复身份做执行

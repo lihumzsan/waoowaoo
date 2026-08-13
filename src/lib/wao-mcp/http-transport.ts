@@ -21,15 +21,15 @@ const WAO_MCP_REQUEST_MAX_BYTES = 2 * 1_024 * 1_024
 
 type WaoMcpHttpSession = {
   id: string
+  readonly placementKey: string
   readonly scopeKey: string
-  readonly expiresAtMs: number
   readonly server: ReturnType<typeof createWaoMcpServer>
   readonly transport: WebStandardStreamableHTTPServerTransport
 }
 
 const sessionsById = new Map<string, WaoMcpHttpSession>()
 const sessionIdByScope = new Map<string, string>()
-const initializingScopes = new Set<string>()
+const initializingPlacements = new Set<string>()
 let pendingInitializations = 0
 
 export type WaoMcpHttpBindingErrorCode =
@@ -87,6 +87,15 @@ function buildRuntimeScopeKey(scope: WaoRuntimeTokenPayload): string {
   ])
 }
 
+function buildRuntimePlacementKey(scope: WaoRuntimeTokenPayload): string {
+  return JSON.stringify([
+    'wao-mcp-runtime-placement-v1',
+    scope.userId,
+    scope.projectId,
+    scope.assistantId,
+  ])
+}
+
 function mcpHttpError(
   status: number,
   code: number,
@@ -135,26 +144,34 @@ function removeSession(entry: WaoMcpHttpSession): void {
 }
 
 async function closeSession(entry: WaoMcpHttpSession): Promise<void> {
-  removeSession(entry)
-  await entry.server.close()
-}
-
-async function purgeExpiredSessions(nowMs: number): Promise<void> {
-  const expired = [...sessionsById.values()].filter(
-    (entry) => entry.expiresAtMs <= nowMs,
-  )
-  await Promise.allSettled(expired.map(async (entry) => await closeSession(entry)))
-}
-
-async function replaceScopeSession(scopeKey: string): Promise<void> {
-  const existingId = sessionIdByScope.get(scopeKey)
-  if (!existingId) return
-  const existing = sessionsById.get(existingId)
-  if (!existing) {
-    sessionIdByScope.delete(scopeKey)
-    return
+  try {
+    await entry.server.close()
+  } catch (error) {
+    if (entry.id) {
+      sessionsById.set(entry.id, entry)
+      sessionIdByScope.set(entry.scopeKey, entry.id)
+    }
+    throw error
   }
-  await closeSession(existing)
+  removeSession(entry)
+}
+
+async function replacePlacementSessions(placementKey: string): Promise<void> {
+  const existing = [...sessionsById.values()].filter(
+    (entry) => entry.placementKey === placementKey,
+  )
+  for (const entry of existing) await closeSession(entry)
+}
+
+/** Close the protocol sessions owned by one exact Runtime placement generation. */
+export async function closeWaoMcpHttpSessionsForRuntimeScope(
+  scope: WaoRuntimeTokenPayload,
+): Promise<void> {
+  const scopeKey = buildRuntimeScopeKey(scope)
+  const existing = [...sessionsById.values()].filter(
+    (entry) => entry.scopeKey === scopeKey,
+  )
+  for (const entry of existing) await closeSession(entry)
 }
 
 async function parsePostBody(
@@ -173,7 +190,8 @@ async function startHttpSessionExclusive(params: {
   readonly parsedBody: unknown
 }): Promise<Response> {
   const scopeKey = buildRuntimeScopeKey(params.scope)
-  await replaceScopeSession(scopeKey)
+  const placementKey = buildRuntimePlacementKey(params.scope)
+  await replacePlacementSessions(placementKey)
   if (
     sessionsById.size + pendingInitializations
     >= WAO_MCP_MAX_ACTIVE_HTTP_SESSIONS
@@ -218,8 +236,8 @@ async function startHttpSessionExclusive(params: {
   })
   entry = {
     id: '',
+    placementKey,
     scopeKey,
-    expiresAtMs: params.scope.expiry * 1_000,
     server,
     transport,
   }
@@ -259,19 +277,19 @@ async function startHttpSession(params: {
   readonly scope: WaoRuntimeTokenPayload
   readonly parsedBody: unknown
 }): Promise<Response> {
-  const scopeKey = buildRuntimeScopeKey(params.scope)
-  if (initializingScopes.has(scopeKey)) {
+  const placementKey = buildRuntimePlacementKey(params.scope)
+  if (initializingPlacements.has(placementKey)) {
     return mcpHttpError(
       409,
       -32000,
       'Wao MCP session initialization is already in progress.',
     )
   }
-  initializingScopes.add(scopeKey)
+  initializingPlacements.add(placementKey)
   try {
     return await startHttpSessionExclusive(params)
   } finally {
-    initializingScopes.delete(scopeKey)
+    initializingPlacements.delete(placementKey)
   }
 }
 
@@ -404,7 +422,6 @@ export async function handleWaoMcpHttpRequest(params: {
   readonly scope: WaoRuntimeTokenPayload
 }): Promise<Response> {
   params.request.signal.throwIfAborted()
-  await purgeExpiredSessions(Date.now())
   if (
     params.request.method !== 'POST'
     && params.request.method !== 'GET'

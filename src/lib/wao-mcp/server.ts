@@ -15,7 +15,6 @@ import type {
   WaoMcpOperationExecutor,
   WaoMcpOperationExecutorResult,
 } from './contracts'
-import { WAO_RUNTIME_TOKEN_MAX_TTL_SECONDS } from './runtime-token'
 import { createWaoMcpToolRegistry } from './tool-registry'
 import {
   buildWaoMcpUserDecisionElicitation,
@@ -25,11 +24,9 @@ import {
 
 // MCP server-to-client requests have their own 60 second SDK default, separate
 // from Codex's per-tool timeout. A Wao approval or product decision belongs to
-// the user, so keep it alive within (but safely below) the capability token
-// lifetime.
-const WAO_MCP_ELICITATION_TIMEOUT_MS = (
-  WAO_RUNTIME_TOKEN_MAX_TTL_SECONDS - 5 * 60
-) * 1_000
+// the user, so keep the interaction independently bounded without coupling it
+// to placement authorization.
+const WAO_MCP_ELICITATION_TIMEOUT_MS = 55 * 60 * 1_000
 
 export interface CreateWaoMcpServerParams {
   readonly executor: WaoMcpOperationExecutor

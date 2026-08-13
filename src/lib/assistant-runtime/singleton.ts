@@ -18,10 +18,10 @@ import {
   AssistantRuntimeService,
   type AssistantRuntimeAccessProvider,
 } from './service'
+import { ASSISTANT_RUNTIME_ASSISTANT_ID } from './contracts'
+import { closeWaoMcpHttpSessionsForRuntimeScope } from '@/lib/wao-mcp/http-transport'
 
 const logger = createScopedLogger({ module: 'assistant-runtime.singleton' })
-const ACCESS_MIN_REMAINING_MS = 60_000
-
 function scopeKey(scope: RuntimeSessionScope): string {
   return `${scope.userId.length}:${scope.userId}${scope.projectId.length}:${scope.projectId}`
 }
@@ -38,7 +38,7 @@ class ProjectRuntimeAccessProvider implements AssistantRuntimeAccessProvider {
   async get(scope: RuntimeSessionScope): Promise<AssistantRuntimeAccess> {
     const key = scopeKey(scope)
     const existing = this.values.get(key)
-    if (existing && existing.expiresAtMs - Date.now() > ACCESS_MIN_REMAINING_MS) return existing
+    if (existing) return existing
     const rotating = this.rotations.get(key)
     if (rotating) return await rotating
     const next = this.rotate(scope, key, existing !== undefined)
@@ -90,6 +90,13 @@ export function getAssistantRuntimeService(): AssistantRuntimeService {
     persistence: new AssistantRuntimePersistence({ hostRoot: config.hostRoot }),
     ownership: new RedisAssistantRuntimeOwnership(),
     idleTimeoutMs: config.idleTimeoutMs,
+    closePlacementTransportSessions: async ({ scope, ownerToken }) => {
+      await closeWaoMcpHttpSessionsForRuntimeScope({
+        ...scope,
+        assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
+        nonce: ownerToken,
+      })
+    },
     waitForTurnSettlement: async (scope) => {
       await service?.waitForTurnSettlements(scope)
     },

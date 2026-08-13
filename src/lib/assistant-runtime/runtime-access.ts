@@ -5,7 +5,6 @@ import type {
 } from '@/lib/codex-runtime/runtime-session-manager'
 import {
   issueWaoRuntimeToken,
-  WAO_RUNTIME_TOKEN_MAX_TTL_SECONDS,
 } from '@/lib/wao-mcp/runtime-token'
 import {
   CODEX_DEFAULT_MODEL_ID,
@@ -29,11 +28,11 @@ import {
 const MCP_PATH = '/api/internal/codex-runtime/mcp'
 const WAO_MCP_RUNTIME_BEARER_ENV_KEY = 'WAO_MCP_RUNTIME_BEARER_TOKEN' as const
 // Codex defaults MCP tool calls to 60 seconds. Wao production calls can spend
-// most of that time planning before they suspend on a user-owned billing
-// decision, so the default races the approval UI. Keep the call alive for the
-// same bounded lifetime as its project capability token; Wao still owns plan
-// validity, idempotency, cancellation, and execution state.
-const WAO_MCP_TOOL_TIMEOUT_SECONDS = WAO_RUNTIME_TOKEN_MAX_TTL_SECONDS
+// most of that time planning before they suspend on a user-owned decision, so
+// the default races the approval UI. Bound the interaction independently from
+// placement authorization; Wao still owns plan validity, idempotency,
+// cancellation, and execution state.
+const WAO_MCP_TOOL_TIMEOUT_SECONDS = 60 * 60
 
 export const ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS = buildProjectAgentSystemPrompt(
   creativeSkillRoutingInstructions(),
@@ -45,7 +44,7 @@ export const ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS = buildProjectAgentSystemP
 // constraints, review mindset, frontend design).
 export const ASSISTANT_RUNTIME_BASE_INSTRUCTIONS = buildProjectAgentBasePrompt()
 
-export const ASSISTANT_RUNTIME_CODEX_VERSION = '0.147.0-alpha.6.5' as const
+export const ASSISTANT_RUNTIME_CODEX_VERSION = '0.147.0-alpha.6.6' as const
 
 export const ASSISTANT_RUNTIME_STATIC_CONTRACT = {
   thread: {
@@ -105,7 +104,6 @@ export type AssistantRuntimeAccess = {
   readonly environment: Readonly<Record<string, string>>
   readonly bearerToken: string
   readonly ownerToken: string
-  readonly expiresAtMs: number
 }
 
 export type AssistantRuntimeModelConfiguration = {
@@ -181,7 +179,6 @@ export function issueAssistantRuntimeAccess(scope: RuntimeSessionScope): Assista
       projectId: scope.projectId,
       assistantId: 'workspace-command',
     },
-    ttlSeconds: WAO_RUNTIME_TOKEN_MAX_TTL_SECONDS,
   })
   return {
     environment: Object.freeze({
@@ -189,7 +186,6 @@ export function issueAssistantRuntimeAccess(scope: RuntimeSessionScope): Assista
     }),
     bearerToken: issued.token,
     ownerToken: issued.payload.nonce,
-    expiresAtMs: issued.payload.expiry * 1_000,
   }
 }
 
