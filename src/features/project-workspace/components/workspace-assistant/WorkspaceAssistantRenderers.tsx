@@ -42,9 +42,9 @@ type WorkspaceAssistantMessagePartComponents = {
 }
 
 export const WORKSPACE_ASSISTANT_USER_MESSAGE_CLASS =
-  'max-w-full w-fit break-words rounded-xl bg-[var(--bui-field)] px-3 py-2.5 text-[15px] leading-6 text-[var(--bui-ink)] shadow-[var(--bui-shadow-hairline)] [overflow-wrap:anywhere]'
+  'max-w-full w-fit break-words rounded-xl bg-[var(--bui-field)] px-3 py-2.5 text-[16px] leading-[1.6] text-[var(--bui-ink)] shadow-[var(--bui-shadow-hairline)] [overflow-wrap:anywhere]'
 const WORKSPACE_ASSISTANT_MESSAGE_CLASS =
-  'flex min-w-0 max-w-full flex-col gap-4 px-1 py-2 text-[17px] leading-7 text-[var(--glass-text-primary)]'
+  'flex min-w-0 max-w-full flex-col gap-3 px-1 py-2 text-[16px] leading-[1.6] text-[var(--glass-text-primary)]'
 export function resolveProgressStageLabel(
   raw: string | null,
   progressT: ReturnType<typeof useTranslations<'progress'>>,
@@ -329,7 +329,7 @@ function WorkspaceAssistantAssistantMessageFooter() {
                 </span>
               ))}
             </span>
-            <span className="text-[12px] text-[var(--bui-ink-2)]">
+            <span className="text-[13px] text-[var(--bui-ink-2)]">
               {t('panel.sourceCount', { count: sources.length })}
             </span>
           </button>
@@ -352,11 +352,11 @@ function WorkspaceAssistantAssistantMessageFooter() {
                   href={source.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center gap-2 rounded-[6px] px-1.5 py-1 text-[12px] text-[var(--bui-ink-2)] transition-colors duration-150 hover:bg-[var(--bui-hover)] hover:text-[var(--bui-ink)]"
+                  className="flex items-center gap-2 rounded-[6px] px-1.5 py-1 text-[13px] text-[var(--bui-ink-2)] transition-colors duration-150 hover:bg-[var(--bui-hover)] hover:text-[var(--bui-ink)]"
                 >
                   <WebSourceFavicon domain={source.domain} className="h-4 w-4 rounded-[4px]" />
                   <span className="wa-bui-underline min-w-0 truncate">{source.title}</span>
-                  <span className="ml-auto shrink-0 font-mono text-[10.5px] text-[var(--bui-ink-3)]">
+                  <span className="ml-auto shrink-0 font-mono text-[11.5px] text-[var(--bui-ink-3)]">
                     {source.domain}
                   </span>
                 </a>

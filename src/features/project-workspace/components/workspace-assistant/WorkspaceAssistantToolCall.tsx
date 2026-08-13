@@ -13,6 +13,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { WebSourceFavicon } from './WebSourceFavicon'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 import { resolveUnifiedErrorCode, type UnifiedErrorCode } from '@/lib/errors/codes'
@@ -183,6 +184,7 @@ const BUI_TOOL_ICONS = {
   write: <g fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z" /></g>,
   run: <g fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 17l6-5-6-5M12 19h8" /></g>,
   read: <g fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /></g>,
+  globe: <g fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="9" /><path d="M3.5 12h17M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></g>,
 } as const
 
 type BuiToolIconName = keyof typeof BUI_TOOL_ICONS
@@ -196,6 +198,7 @@ function resolveBuiToolIcon(params: {
     case 'file_change':
       return 'write'
     case 'web_search':
+      return 'globe'
     case 'view_image':
       return 'read'
     default:
@@ -229,23 +232,6 @@ function BuiRowChevron({ open, className }: { readonly open: boolean; readonly c
     >
       <path d="M6 9l6 6 6-6" />
     </svg>
-  )
-}
-
-/** Beautiful UI Search-trace dot: a tiny globe on a rotating tone. */
-const BUI_SEARCH_DOT_TONES = ['var(--bui-accent)', 'var(--bui-orange)', 'var(--bui-green)'] as const
-
-function BuiSearchDot({ index }: { readonly index: number }) {
-  return (
-    <span
-      className="flex size-3.5 shrink-0 items-center justify-center rounded-full text-white"
-      style={{ backgroundColor: BUI_SEARCH_DOT_TONES[index % BUI_SEARCH_DOT_TONES.length] }}
-    >
-      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-        <circle cx="12" cy="12" r="9" />
-        <path d="M3.5 12h17M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
-      </svg>
-    </span>
   )
 }
 
@@ -635,9 +621,12 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
   // implied by the quiet row; every non-success state stays explicit.
   const stateSuffix = displayState === 'success' ? null : summaryText
   const detailLines = resolveToolDetailLines(props.result)
-  const detailOpen = rowOpen || failed
-  const hasDetail = detailLines.length > 0 || failed || mixedGroup
   const isSearch = operationId === 'web_search'
+  const hasSearchTrace = isSearch && Boolean(webSearchQuery || webSearchSources.length > 0)
+  // The search trace stays live while the call runs, then settles collapsed
+  // like every other trace; the row click reopens it.
+  const detailOpen = rowOpen || failed || (isSearch && toolStatus === 'running')
+  const hasDetail = detailLines.length > 0 || failed || mixedGroup || hasSearchTrace
   // Beautiful UI collapsed run header: adjacent tool rows fold behind one
   // "{count} tool calls" summary owned by the run's first visible member.
   // Auto-expanded while any member is still running; a click overrides.
@@ -659,7 +648,7 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
           type="button"
           aria-expanded={runExpanded}
           onClick={() => context.toggleRun(runEntry.runId, !runExpanded)}
-          className="-mx-1.5 mb-1.5 flex w-fit items-center gap-1.5 rounded-[8px] px-1.5 py-1 text-[12.5px] text-[var(--bui-ink-2)] transition-colors duration-100 hover:bg-[var(--bui-hover-2)]"
+          className="-mx-1.5 mb-1.5 flex w-fit items-center gap-1.5 rounded-[8px] px-1.5 py-1 text-[13.5px] text-[var(--bui-ink-2)] transition-colors duration-100 hover:bg-[var(--bui-hover-2)]"
         >
           <BuiRowChevron open={runExpanded} className="shrink-0 transition-transform duration-200" />
           <span className="tabular-nums">
@@ -669,45 +658,49 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
       ) : null}
       {runEntry && !runExpanded ? null : (
       <>
-      <button
-        type="button"
-        aria-expanded={detailOpen}
-        onClick={() => setRowOpen((current) => !current)}
-        disabled={!hasDetail}
-        className={`group/row -mx-[3px] flex h-7 w-[calc(100%+6px)] min-w-0 items-center gap-2 rounded-[8px] px-[3px] text-left transition-colors duration-100 ${hasDetail ? 'hover:bg-[var(--bui-hover-2)]' : 'cursor-default'}`}
-      >
-        <span className={`relative flex size-4 shrink-0 items-center justify-center ${troubled ? 'text-[var(--bui-red)]' : 'text-[var(--bui-ink-3)]'}`}>
-          <BuiToolIcon
-            icon={buiIcon}
-            className={`transition-opacity duration-100 ${hasDetail ? 'group-hover/row:opacity-0' : ''} ${detailOpen && hasDetail ? 'opacity-0' : ''}`}
-          />
+      <div className="flex min-h-7 min-w-0 items-center gap-2">
+        <button
+          type="button"
+          aria-expanded={detailOpen}
+          onClick={() => setRowOpen((current) => !current)}
+          disabled={!hasDetail}
+          className={`-mx-1.5 flex w-fit shrink-0 items-center gap-2 rounded-[8px] px-1.5 py-1 text-left transition-colors duration-100 ${hasDetail ? 'hover:bg-[var(--bui-hover-2)]' : 'cursor-default'}`}
+        >
+          <span className={`flex size-4 shrink-0 items-center justify-center ${troubled ? 'text-[var(--bui-red)]' : 'text-[var(--bui-ink-3)]'}`}>
+            <BuiToolIcon icon={buiIcon} className="shrink-0" />
+          </span>
+          <span className={`text-[13.5px] font-medium ${troubled ? 'text-[var(--bui-red)]' : 'text-[var(--bui-ink)]'}`}>
+            {displayTitle}
+            {stateSuffix ? (
+              <span className={troubled ? '' : 'text-[var(--bui-ink-3)]'}> · {stateSuffix}</span>
+            ) : null}
+          </span>
           {hasDetail ? (
-            <BuiRowChevron
-              open={detailOpen}
-              className={`absolute transition-[opacity,transform] duration-150 group-hover/row:opacity-100 ${detailOpen ? 'opacity-100' : 'opacity-0'}`}
-            />
+            /* eslint-disable-next-line no-restricted-syntax -- Beautiful UI's copied chevron glyph, preserved exactly. */
+            <svg
+              width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--bui-ink-3)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+              className="shrink-0 transition-transform duration-300"
+              style={{ transform: detailOpen ? 'rotate(180deg)' : 'rotate(0)' }}
+              aria-hidden="true"
+            >
+              <path d="M6 9l6 6 6-6" />
+            </svg>
           ) : null}
-        </span>
-        <span className={`shrink-0 text-[12.5px] font-medium ${troubled ? 'text-[var(--bui-red)]' : 'text-[var(--bui-ink)]'}`}>
-          {displayTitle}
-          {stateSuffix ? (
-            <span className={troubled ? '' : 'text-[var(--bui-ink-3)]'}> · {stateSuffix}</span>
-          ) : null}
-        </span>
+        </button>
         {chipText ? (
           <span
             title={chipText}
-            className="inline-flex h-[22px] min-w-0 flex-1 items-center truncate rounded-[6px] bg-[var(--bui-hover-2)] px-1.5 font-mono text-[11.5px] text-[#43464c] shadow-[var(--bui-shadow-hairline)]"
+            className="inline-flex h-6 min-w-0 flex-1 items-center truncate rounded-[6px] bg-[var(--bui-hover-2)] px-1.5 font-mono text-[12.5px] text-[#43464c] shadow-[var(--bui-shadow-hairline)]"
           >
             <span className="truncate">{chipText}</span>
           </span>
         ) : null}
         {runningSeconds > 0 ? (
-          <span className="shrink-0 font-mono text-[11.5px] tabular-nums text-[var(--bui-ink-3)]">
+          <span className="shrink-0 font-mono text-[12.5px] tabular-nums text-[var(--bui-ink-3)]">
             {formatRunningSeconds(runningSeconds)}
           </span>
         ) : null}
-      </button>
+      </div>
 
       {/* expanded detail — Beautiful UI trace rail */}
       {hasDetail ? (
@@ -724,19 +717,19 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
               {detailLines.map((line, index) => (
                 <span
                   key={`${String(index)}:${line}`}
-                  className="truncate font-mono text-[11.5px] leading-[1.6] text-[var(--bui-ink-2)]"
+                  className="truncate font-mono text-[12.5px] leading-[1.6] text-[var(--bui-ink-2)]"
                   title={line}
                 >
                   {line}
                 </span>
               ))}
               {mixedGroup ? (
-                <span className="text-[11.5px] leading-[1.6] text-[var(--bui-ink-3)]">
+                <span className="text-[12.5px] leading-[1.6] text-[var(--bui-ink-3)]">
                   {t('toolCall.groupProgressSummary', groupView)}
                 </span>
               ) : null}
               {failed ? (
-                <span className="text-[11.5px] leading-[1.6] text-[var(--bui-red)]">
+                <span className="text-[12.5px] leading-[1.6] text-[var(--bui-red)]">
                   {failureDetail}
                 </span>
               ) : null}
@@ -746,36 +739,47 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
       ) : null}
 
       {/* web search — Beautiful UI Search trace: query row + source rows */}
-      {isSearch && (webSearchQuery || webSearchSources.length > 0) ? (
-        <div className="relative mt-1 ml-[5px] pl-4">
-          <span aria-hidden="true" className="absolute inset-y-1 left-[3px] w-px bg-[var(--bui-line)]" />
-          <div className="flex flex-col gap-1 py-1">
-            {webSearchQuery ? (
-              <div className="flex h-6 items-center gap-2 px-1.5">
-                <BuiSearchGlyph />
-                <span className="min-w-0 truncate text-[12.5px] text-[var(--bui-ink-2)]" title={webSearchQuery}>
-                  {webSearchQuery}
-                </span>
+      {hasSearchTrace ? (
+        <div
+          className="grid transition-[grid-template-rows,opacity] duration-300"
+          style={{
+            gridTemplateRows: detailOpen ? '1fr' : '0fr',
+            opacity: detailOpen ? 1 : 0,
+            transitionTimingFunction: 'cubic-bezier(0.23, 1, 0.32, 1)',
+          }}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <div className="relative mt-1 ml-[5px] pl-4">
+              <span aria-hidden="true" className="absolute inset-y-1 left-[3px] w-px bg-[var(--bui-line)]" />
+              <div className="flex flex-col gap-1 py-1">
+                {webSearchQuery ? (
+                  <div className="flex h-6 items-center gap-2 px-1.5">
+                    <BuiSearchGlyph />
+                    <span className="min-w-0 truncate text-[13.5px] text-[var(--bui-ink-2)]" title={webSearchQuery}>
+                      {webSearchQuery}
+                    </span>
+                  </div>
+                ) : null}
+                {webSearchSources.map((source, index) => (
+                  <a
+                    key={source.url}
+                    href={source.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex min-h-7 w-full items-center gap-2 rounded-[6px] px-1.5 py-0.5 text-left transition-colors duration-150 hover:bg-[var(--bui-hover)]"
+                    style={{ animation: `wa-bui-fade-up 320ms cubic-bezier(0.23,1,0.32,1) ${String(index * 120)}ms both` }}
+                  >
+                    <WebSourceFavicon domain={source.domain} className="h-3.5 w-3.5 shrink-0 rounded-full" />
+                    <span className="wa-bui-underline min-w-0 truncate text-[13.5px] font-medium text-[var(--bui-ink)]">
+                      {source.title}
+                    </span>
+                    <span className="shrink-0 text-[12.5px] text-[var(--bui-ink-3)]">
+                      {source.domain}
+                    </span>
+                  </a>
+                ))}
               </div>
-            ) : null}
-            {webSearchSources.map((source, index) => (
-              <a
-                key={source.url}
-                href={source.url}
-                target="_blank"
-                rel="noreferrer"
-                className="flex min-h-7 w-full items-center gap-2 rounded-[6px] px-1.5 py-0.5 text-left transition-colors duration-150 hover:bg-[var(--bui-hover)]"
-                style={{ animation: `wa-bui-fade-up 320ms cubic-bezier(0.23,1,0.32,1) ${String(index * 120)}ms both` }}
-              >
-                <BuiSearchDot index={index} />
-                <span className="wa-bui-underline min-w-0 truncate text-[12.5px] font-medium text-[var(--bui-ink)]">
-                  {source.title}
-                </span>
-                <span className="shrink-0 text-[11.5px] text-[var(--bui-ink-3)]">
-                  {source.domain}
-                </span>
-              </a>
-            ))}
+            </div>
           </div>
         </div>
       ) : null}

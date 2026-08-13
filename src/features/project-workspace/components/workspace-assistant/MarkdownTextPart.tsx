@@ -77,7 +77,7 @@ function WorkspaceMarkdownLink(props: { readonly href?: string; readonly childre
         target="_blank"
         rel="noopener noreferrer"
         title={href}
-        className="ml-0 mr-1 inline-flex h-[18px] max-w-[16rem] translate-y-[-1px] items-center gap-1 rounded-[5px] bg-[var(--bui-inset)] px-[3px] align-middle font-mono text-[10.5px] leading-none text-[var(--bui-ink-2)] no-underline shadow-[var(--bui-shadow-hairline)] transition-colors duration-150 hover:bg-[var(--bui-hover)] hover:text-[var(--bui-ink)]"
+        className="ml-0 mr-1 inline-flex h-[18px] max-w-[16rem] translate-y-[-1px] items-center gap-1 rounded-[5px] bg-[var(--bui-inset)] px-[3px] align-middle font-mono text-[11.5px] leading-none text-[var(--bui-ink-2)] no-underline shadow-[var(--bui-shadow-hairline)] transition-colors duration-150 hover:bg-[var(--bui-hover)] hover:text-[var(--bui-ink)]"
       >
         <WebSourceFavicon domain={domain} className="h-3 w-3 shrink-0 rounded-[3px]" />
         <span className="truncate">{domain}</span>
@@ -121,19 +121,19 @@ function MarkdownParagraph(props: { readonly children?: React.ReactNode }) {
     )
   }
 
-  return <p className="mb-4 leading-7 last:mb-0">{props.children}</p>
+  return <p className="mb-3 leading-[1.6] last:mb-0">{props.children}</p>
 }
 
 const markdownComponents: Components = {
   p: MarkdownParagraph,
   ul: ({ children }) => (
-    <ul className="mb-4 list-disc pl-6 leading-7 last:mb-0">{children}</ul>
+    <ul className="mb-3 list-disc pl-6 leading-[1.6] last:mb-0">{children}</ul>
   ),
   ol: ({ children }) => (
-    <ol className="mb-4 list-decimal pl-6 leading-7 last:mb-0">{children}</ol>
+    <ol className="mb-3 list-decimal pl-6 leading-[1.6] last:mb-0">{children}</ol>
   ),
   li: ({ children }) => (
-    <li className="mb-2 last:mb-0">{children}</li>
+    <li className="mb-1 last:mb-0">{children}</li>
   ),
   code: ({ children, className }) => {
     const isInline = !className
@@ -200,7 +200,7 @@ function MarkdownTextPartImpl({
   if (!playback.text) return null
 
   return (
-    <div className="workspace-assistant-markdown min-w-0 max-w-full text-[17px] leading-7 [overflow-wrap:anywhere] [text-wrap:pretty]">
+    <div className="workspace-assistant-markdown min-w-0 max-w-full text-[16px] leading-[1.6] [overflow-wrap:anywhere] [text-wrap:pretty]">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={playback.animating
