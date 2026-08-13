@@ -138,20 +138,26 @@ exit /b %errorlevel%
 
 :status_action
 call :is_running
-if not errorlevel 1 (
-  set /p DEV_PID=<"%PID_FILE%"
-  echo APP: RUNNING
-  echo URL: %APP_URL%
-  echo PID: !DEV_PID!
-) else (
-  call :project_port_owner
-  if not errorlevel 1 (
-    echo APP: RUNNING ^(unmanaged Waoowaoo process^)
-    echo URL: %APP_URL%
-  ) else (
-    echo APP: STOPPED
-  )
-)
+if not errorlevel 1 goto :status_managed
+
+call :project_port_owner
+if not errorlevel 1 goto :status_unmanaged
+
+echo APP: STOPPED
+goto :status_infrastructure
+
+:status_managed
+set /p DEV_PID=<"%PID_FILE%"
+echo APP: RUNNING
+echo URL: %APP_URL%
+echo PID: !DEV_PID!
+goto :status_infrastructure
+
+:status_unmanaged
+echo APP: RUNNING ^(unmanaged Waoowaoo process^)
+echo URL: %APP_URL%
+
+:status_infrastructure
 echo.
 echo Docker infrastructure:
 pushd "%ROOT%"
