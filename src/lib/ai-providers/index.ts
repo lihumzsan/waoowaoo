@@ -58,7 +58,7 @@ export function resolveAsyncTaskProviderByExternalId(externalId: string): AsyncT
   if (!registration) {
     throw new Error(
       `无法识别的 externalId 格式: "${externalId}". ` +
-      `支持的格式: FAL:TYPE:endpoint:requestId, ARK:TYPE:requestId, GEMINI:BATCH:batchName, GOOGLE:VIDEO:operationName, OPENROUTER:VIDEO:requestId, TOONFLOW:VIDEO:taskICode, MUREKA:MUSIC:endpoint:taskId, COMFYUI:VIDEO|SOUND:promptId`,
+      `支持的格式: FAL:TYPE:endpoint:requestId, ARK:TYPE:requestId, GEMINI:BATCH:batchName, GOOGLE:VIDEO:operationName, OPENROUTER:VIDEO:requestId, TOONFLOW:VIDEO:taskICode, MUREKA:MUSIC:endpoint:taskId, COMFYUI:VIDEO|MUSIC|SOUND:promptId`,
     )
   }
   return registration

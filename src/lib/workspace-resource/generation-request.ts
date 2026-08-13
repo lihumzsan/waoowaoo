@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { MUSIC_KEY_SCALE_VALUES, MUSIC_TIME_SIGNATURE_VALUES } from './music-parameter-contract'
 import { OPERATION_EXECUTION_MAX_TASKS } from '@/lib/temporal/operation-execution/contracts'
 import { CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS } from './generation-contract'
 import {
@@ -109,6 +110,8 @@ export const musicGenerationItemSchema = z.object({
   genre: z.string().trim().min(1).max(200).optional(),
   mood: z.string().trim().min(1).max(200).optional(),
   bpm: z.number().int().min(20).max(300).optional(),
+  keyScale: z.enum(MUSIC_KEY_SCALE_VALUES).optional(),
+  timeSignature: z.enum(MUSIC_TIME_SIGNATURE_VALUES).optional(),
   startSeconds: z.number().finite().nonnegative().optional(),
   purpose: z.string().trim().min(1).max(4_000).optional(),
   musicalDirection: z.string().trim().min(1).max(8_000).optional(),

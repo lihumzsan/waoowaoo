@@ -113,7 +113,7 @@ Instrumental cinematic score built on one restrained two-note motif and a steady
 ## 返回音频生成批次
 
 - 每个 cue 对应一个 `mediaType: "audio"` item；`prompt` 必须是该 cue 完整最终生成指令，提交阶段与服务端不会再补写。
-- 显式填写 `durationSeconds`、`vocalMode`，以及确实需要的 `genre`、`mood`、`bpm`。这些结构化字段不会被服务端重新拼接进 `prompt`；任何音乐模型必须执行的创作决定仍须写入短 `prompt`。当前 BGM 默认 `schemaId` 为 `project.bgm_audio`。
+- 显式填写 `durationSeconds`、`vocalMode`。逐项读取 `productionCapabilities.music`：`bpmRange` 非空时必须在该范围内填写 `bpm`；`keyScaleOptions` 非空时必须从中填写 `keyScale`；`timeSignatureOptions` 非空时必须从中填写 `timeSignature`。对应能力为空时省略该字段，不得猜测。`genre`、`mood` 只在确实需要时填写。这些结构化字段不会被服务端重新拼接进 `prompt`；任何音乐模型必须执行的创作决定仍须写入短 `prompt`。当前 BGM 默认 `schemaId` 为 `project.bgm_audio`。
 - 唯一专业结果是运行时注入 schema 约束的 `outputKind: "audio_generation_batch"` 严格 JSON。该机器 Schema 是字段、必填项和层级的唯一权威；本 Skill 不另写一份可能漂移的 JSON 模板或配乐说明文件。
 
 ## 边界

@@ -18,7 +18,7 @@ const CAPABILITY_NAMESPACE_ALLOWED_FIELDS = {
     'supportGenerateAudio',
     'fieldI18n',
   ]),
-  music: new Set(['durationSecondsOptions', 'vocalModeOptions', 'outputFormatOptions', 'bpmOptions', 'fieldI18n']),
+  music: new Set(['durationSecondsOptions', 'vocalModeOptions', 'outputFormatOptions', 'bpmOptions', 'bpmRange', 'keyScaleOptions', 'timeSignatureOptions', 'fieldI18n']),
   voice: new Set(['languageOptions', 'fieldI18n']),
 }
 const CAPABILITY_NAMESPACE_I18N_FIELDS = {
@@ -36,6 +36,8 @@ const CAPABILITY_NAMESPACE_I18N_FIELDS = {
     vocalMode: 'vocalModeOptions',
     outputFormat: 'outputFormatOptions',
     bpm: 'bpmOptions',
+    keyScale: 'keyScaleOptions',
+    timeSignature: 'timeSignatureOptions',
   },
   voice: { language: 'languageOptions' },
 }
@@ -254,6 +256,21 @@ function validateCapabilitiesForModelType(issues, file, index, modelType, capabi
       }
       if (music.bpmOptions !== undefined && !isNumberArray(music.bpmOptions)) {
         pushIssue(issues, file, index, 'capabilities.music.bpmOptions', 'must be number array')
+      }
+      if (music.bpmRange !== undefined && (!isRecord(music.bpmRange)
+        || typeof music.bpmRange.min !== 'number'
+        || typeof music.bpmRange.max !== 'number'
+        || !Number.isFinite(music.bpmRange.min)
+        || !Number.isFinite(music.bpmRange.max)
+        || music.bpmRange.min <= 0
+        || music.bpmRange.max < music.bpmRange.min)) {
+        pushIssue(issues, file, index, 'capabilities.music.bpmRange', 'must contain finite positive min/max values with max >= min')
+      }
+      if (music.keyScaleOptions !== undefined && !isStringArray(music.keyScaleOptions)) {
+        pushIssue(issues, file, index, 'capabilities.music.keyScaleOptions', 'must be string array')
+      }
+      if (music.timeSignatureOptions !== undefined && !isStringArray(music.timeSignatureOptions)) {
+        pushIssue(issues, file, index, 'capabilities.music.timeSignatureOptions', 'must be string array')
       }
       validateFieldI18nMap(issues, file, index, 'music', music)
     }

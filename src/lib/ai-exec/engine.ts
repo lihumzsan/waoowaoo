@@ -42,6 +42,7 @@ import {
 } from '@/lib/task/provider-invocation'
 import { resolveProviderRouteSet } from '@/lib/ai-registry/provider-route-set'
 import type { AiResolvedSelection } from '@/lib/ai-registry/types'
+import type { MusicKeyScale, MusicTimeSignature } from '@/lib/workspace-resource/music-parameter-contract'
 import {
   logMediaModelSelectionResolved,
   summarizeGenerateResult,
@@ -85,10 +86,13 @@ export type AiVideoExecutionOptions = {
 export type AiMusicExecutionOptions = {
   negativePrompt?: string
   durationSeconds?: number
+  providerDurationSeconds?: number
   vocalMode?: 'instrumental' | 'vocal'
   genre?: string
   mood?: string
   bpm?: number
+  keyScale?: MusicKeyScale
+  timeSignature?: MusicTimeSignature
   outputFormat?: 'mp3' | 'wav'
   /** Video conditioning input; only valid when the selected music model declares `maxReferenceVideos`. */
   referenceVideoUrl?: string

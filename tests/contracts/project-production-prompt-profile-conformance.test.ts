@@ -28,7 +28,7 @@ describe('project production prompt profile context', () => {
     expect(capabilities.video?.promptProfile).toBe('minimax_h3_v1')
 
     const context: ProjectProductionContext = {
-      schemaVersion: 7,
+      schemaVersion: 8,
       version: 'contract-version',
       project: {
         projectId: 'project-1',

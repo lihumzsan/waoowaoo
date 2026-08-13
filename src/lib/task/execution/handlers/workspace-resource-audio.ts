@@ -9,9 +9,11 @@ import { resolveWorkspaceResourceInputMedia } from '@/lib/workspace-resource/inp
 import { uploadObject } from '@/lib/storage'
 import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import { extensionFromAudioMimeType, loadGeneratedAudio } from '../artifacts/audio'
+import { materializeGeneratedMusic } from '../artifacts/music'
 import { reportTaskProgress } from '../progress'
 import type { TaskExecutionContext } from '../context'
 import { assertTaskActive, requireTaskProviderRouteSelection } from '../provider-media'
+import { isMusicKeyScale, isMusicTimeSignature } from '@/lib/workspace-resource/music-parameter-contract'
 
 type MusicVideoReference = {
   readonly url: string
@@ -116,6 +118,9 @@ export async function handleWorkspaceResourceAudioTask(context: TaskExecutionCon
         prompt,
         {
           durationSeconds,
+          ...(typeof options.providerDurationSeconds === 'number'
+            ? { providerDurationSeconds: options.providerDurationSeconds }
+            : {}),
           ...(typeof options.negativePrompt === 'string'
             ? { negativePrompt: options.negativePrompt }
             : {}),
@@ -125,6 +130,8 @@ export async function handleWorkspaceResourceAudioTask(context: TaskExecutionCon
           ...(typeof options.genre === 'string' ? { genre: options.genre } : {}),
           ...(typeof options.mood === 'string' ? { mood: options.mood } : {}),
           ...(typeof options.bpm === 'number' ? { bpm: options.bpm } : {}),
+          ...(isMusicKeyScale(options.keyScale) ? { keyScale: options.keyScale } : {}),
+          ...(isMusicTimeSignature(options.timeSignature) ? { timeSignature: options.timeSignature } : {}),
           ...(options.outputFormat === 'mp3' || options.outputFormat === 'wav'
             ? { outputFormat: options.outputFormat }
             : {}),
@@ -160,19 +167,26 @@ export async function handleWorkspaceResourceAudioTask(context: TaskExecutionCon
     label: audioKind === 'sound' ? 'generated sound effect' : 'generated music',
     errorPrefix: audioKind === 'sound' ? 'SOUND_GENERATE' : 'MUSIC_GENERATE',
   })
+  const materializedAudio = audioKind === 'music' && typeof options.providerDurationSeconds === 'number'
+    ? await materializeGeneratedMusic({
+        ...audio,
+        requestedDurationSeconds: durationSeconds,
+        providerDurationSeconds: options.providerDurationSeconds,
+      })
+    : { ...audio, durationMs: durationSeconds * 1000, plan: null }
   const storageKey = await uploadObject(
-    audio.buffer,
+    materializedAudio.buffer,
     buildTaskArtifactStorageKey({
       taskId: data.taskId,
       artifact: audioKind === 'sound' ? 'sound:primary' : 'music:primary',
-      extension: extensionFromAudioMimeType(audio.mimeType),
+      extension: extensionFromAudioMimeType(materializedAudio.mimeType),
     }),
-    audio.mimeType,
+    materializedAudio.mimeType,
   )
   const media = await ensureMediaObjectFromStorageKey(storageKey, {
-    mimeType: audio.mimeType,
-    sizeBytes: audio.buffer.byteLength,
-    durationMs: durationSeconds * 1000,
+    mimeType: materializedAudio.mimeType,
+    sizeBytes: materializedAudio.buffer.byteLength,
+    durationMs: materializedAudio.durationMs,
   })
 
   return {
@@ -184,6 +198,9 @@ export async function handleWorkspaceResourceAudioTask(context: TaskExecutionCon
       ? { soundModel: providerRoute.modelKey }
       : { musicModel: providerRoute.modelKey }),
     provider: providerRoute.provider,
-    metadata: generated.metadata || {},
+    metadata: {
+      ...(generated.metadata || {}),
+      ...(materializedAudio.plan ? { musicArtifact: materializedAudio.plan } : {}),
+    },
   }
 }

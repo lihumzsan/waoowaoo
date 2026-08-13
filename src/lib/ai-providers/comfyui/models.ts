@@ -1,5 +1,6 @@
 import type { CapabilityValue } from '@/lib/ai-registry/types'
 import type { PlatformModelPreset } from '@/lib/platform-models/types'
+import { MUSIC_KEY_SCALE_VALUES, MUSIC_TIME_SIGNATURE_VALUES } from '@/lib/workspace-resource/music-parameter-contract'
 
 export const COMFYUI_H3_MODEL_ID = 'minimax-h3-fast'
 export const COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY = `comfyui::${COMFYUI_H3_MODEL_ID}`
@@ -10,6 +11,14 @@ export const COMFYUI_H3_DEFAULT_GENERATION_OPTIONS = {
 export const COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_ID = 'moss-soundeffect-v2'
 export const COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_KEY = `comfyui::${COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_ID}`
 export const COMFYUI_PLATFORM_DEFAULT_SOUND_MODEL_KEY = COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_KEY
+export const COMFYUI_ACE_STEP_1_5_MODEL_ID = 'ace-step-1.5'
+export const COMFYUI_ACE_STEP_1_5_MODEL_KEY = `comfyui::${COMFYUI_ACE_STEP_1_5_MODEL_ID}`
+export const COMFYUI_PLATFORM_DEFAULT_MUSIC_MODEL_KEY = COMFYUI_ACE_STEP_1_5_MODEL_KEY
+export const COMFYUI_ACE_STEP_DEFAULT_GENERATION_OPTIONS = {
+  outputFormat: 'mp3',
+} as const satisfies Record<string, CapabilityValue>
+export const COMFYUI_ACE_STEP_KEY_SCALE_OPTIONS = MUSIC_KEY_SCALE_VALUES
+export const COMFYUI_ACE_STEP_TIME_SIGNATURE_OPTIONS = MUSIC_TIME_SIGNATURE_VALUES
 
 const ZERO_PRICE = { mode: 'flat' as const, unit: 'per_call' as const, flatAmount: 0 }
 
@@ -36,19 +45,35 @@ export const COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
       },
     },
   },
+  {
+    modelType: 'music', provider: 'comfyui', modelId: COMFYUI_ACE_STEP_1_5_MODEL_ID,
+    capabilities: {
+      music: {
+        durationSecondsRange: { min: 4, max: 600 },
+        vocalModeOptions: ['instrumental'],
+        outputFormatOptions: ['mp3'],
+        bpmRange: { min: 20, max: 300 },
+        keyScaleOptions: COMFYUI_ACE_STEP_KEY_SCALE_OPTIONS,
+        timeSignatureOptions: COMFYUI_ACE_STEP_TIME_SIGNATURE_OPTIONS,
+      },
+    },
+  },
 ] as const
 
 export const COMFYUI_BUILTIN_PRICING_CATALOG_ENTRIES = [
   { apiType: 'video', provider: 'comfyui', modelId: COMFYUI_H3_MODEL_ID, cost: ZERO_PRICE, retail: ZERO_PRICE },
   { apiType: 'sound', provider: 'comfyui', modelId: COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_ID, cost: ZERO_PRICE, retail: ZERO_PRICE },
+  { apiType: 'music', provider: 'comfyui', modelId: COMFYUI_ACE_STEP_1_5_MODEL_ID, cost: ZERO_PRICE, retail: ZERO_PRICE },
 ] as const
 
 export const COMFYUI_API_CONFIG_CATALOG_MODELS = [
   { modelId: COMFYUI_H3_MODEL_ID, name: 'MiniMax H3 Fast', type: 'video', provider: 'comfyui' },
   { modelId: COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_ID, name: 'MOSS SoundEffect v2', type: 'sound', provider: 'comfyui' },
+  { modelId: COMFYUI_ACE_STEP_1_5_MODEL_ID, name: 'ACE-Step 1.5', type: 'music', provider: 'comfyui' },
 ] as const
 
 export const COMFYUI_PLATFORM_MODEL_PRESETS: readonly PlatformModelPreset[] = [
   { provider: 'comfyui', modelId: COMFYUI_H3_MODEL_ID, name: 'MiniMax H3 Fast', type: 'video' },
   { provider: 'comfyui', modelId: COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_ID, name: 'MOSS SoundEffect v2', type: 'sound' },
+  { provider: 'comfyui', modelId: COMFYUI_ACE_STEP_1_5_MODEL_ID, name: 'ACE-Step 1.5', type: 'music' },
 ]
