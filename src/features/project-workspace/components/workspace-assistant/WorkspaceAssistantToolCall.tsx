@@ -721,9 +721,9 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
         >
           <div className="min-h-0 overflow-hidden">
             <div className="mt-0.5 mb-1 ml-2 flex flex-col gap-0.5 border-l border-[var(--bui-line)] py-0.5 pl-3.5">
-              {detailLines.map((line) => (
+              {detailLines.map((line, index) => (
                 <span
-                  key={line}
+                  key={`${String(index)}:${line}`}
                   className="truncate font-mono text-[11.5px] leading-[1.6] text-[var(--bui-ink-2)]"
                   title={line}
                 >
