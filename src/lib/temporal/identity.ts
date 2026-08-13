@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { sha256Base64Url } from './sha256'
 
 function requireIdentityPart(value: string, code: string): string {
   const normalized = value.trim()
@@ -7,7 +7,7 @@ function requireIdentityPart(value: string, code: string): string {
 }
 
 function hashIdentity(value: string): string {
-  return createHash('sha256').update(value, 'utf8').digest('base64url')
+  return sha256Base64Url(value)
 }
 
 export function buildTaskWorkflowId(taskId: string): string {
