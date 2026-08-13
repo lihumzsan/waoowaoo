@@ -181,7 +181,7 @@ export function WorkspaceAssistantReasoningPart({
         </svg>
         {running ? (
           <span
-            className="bg-clip-text text-[13px] font-medium whitespace-nowrap text-transparent"
+            className="bg-clip-text text-[14px] font-medium whitespace-nowrap text-transparent"
             style={{
               backgroundImage:
                 'linear-gradient(90deg, var(--bui-ink-3) 35%, var(--bui-ink) 50%, var(--bui-ink-3) 65%)',
@@ -193,7 +193,7 @@ export function WorkspaceAssistantReasoningPart({
           </span>
         ) : (
           <span
-            className="text-[13px] font-medium whitespace-nowrap text-[var(--bui-ink-2)]"
+            className="text-[14px] font-medium whitespace-nowrap text-[var(--bui-ink-2)]"
             style={{ animation: 'wa-bui-fade-in 350ms ease-out both' }}
           >
             {t('reasoning.completed')}
@@ -237,7 +237,7 @@ export function WorkspaceAssistantReasoningPart({
                   className="flex min-h-7 w-full items-center gap-2 rounded-[6px] px-1.5 py-0.5 text-left"
                   style={{ animation: `wa-bui-fade-up 320ms cubic-bezier(0.23,1,0.32,1) ${String(index * 120)}ms both` }}
                 >
-                  <span className="min-w-0 whitespace-normal text-[12.5px] leading-relaxed text-[var(--bui-ink-2)]">
+                  <span className="min-w-0 whitespace-normal text-[13.5px] leading-relaxed text-[var(--bui-ink-2)]">
                     {row}
                   </span>
                 </div>
