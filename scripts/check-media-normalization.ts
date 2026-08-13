@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 
 const TARGETS = ['src/app/api', 'src/lib']
 
@@ -12,16 +12,11 @@ const FETCH_MEDIA_ALLOWLIST = new Set<string>([
   'src/app/api/projects/[projectId]/video-proxy/route.ts',
 ])
 
-function run(cmd: string): string {
-  try {
-    return execSync(cmd, { encoding: 'utf8' })
-  } catch (error: unknown) {
-    if (error && typeof error === 'object' && 'stdout' in error) {
-      const stdout = (error as { stdout?: unknown }).stdout
-      return typeof stdout === 'string' ? stdout : ''
-    }
-    return ''
-  }
+function run(pattern: string): string {
+  const result = spawnSync('rg', ['-n', pattern, ...TARGETS], { encoding: 'utf8' })
+  if (result.status === 0) return result.stdout
+  if (result.status === 1) return ''
+  throw new Error(`MEDIA_NORMALIZATION_SCAN_FAILED:${result.stderr.trim() || `status=${result.status}`}`)
 }
 
 function parseLines(output: string): string[] {
@@ -32,7 +27,7 @@ function parseLines(output: string): string[] {
 }
 
 function getFile(line: string): string {
-  return line.split(':', 1)[0] || ''
+  return (line.split(':', 1)[0] || '').replaceAll('\\', '/')
 }
 
 function getCode(line: string): string {
@@ -58,10 +53,8 @@ function isMediaLikeFetchArg(arg: string): boolean {
 }
 
 function main() {
-  const targetExpr = TARGETS.join(' ')
-
   // 规则 1：业务代码中不允许直接调用 extractStorageKey（统一走 resolveStorageKeyFromMediaValue）
-  const extractOutput = run(`rg -n "extractStorageKey\\\\(" ${targetExpr}`)
+  const extractOutput = run('extractStorageKey\\(')
   const extractLines = parseLines(extractOutput)
   const extractViolations = extractLines.filter((line) => {
     const file = getFile(line)
@@ -70,7 +63,7 @@ function main() {
   })
 
   // 规则 2：媒体相关 fetch 必须包裹 toFetchableUrl
-  const fetchOutput = run(`rg -n "fetch\\\\(" ${targetExpr}`)
+  const fetchOutput = run('fetch\\(')
   const fetchLines = parseLines(fetchOutput)
   const fetchViolations = fetchLines.filter((line) => {
     const file = getFile(line)

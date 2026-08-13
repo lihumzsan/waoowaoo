@@ -19,6 +19,7 @@
 /.next-security/
 /.tsconfig-security-*.json
 /.next-verify/
+/.next-verify-final/
 /out/
 
 # production

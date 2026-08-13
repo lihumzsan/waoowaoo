@@ -159,8 +159,7 @@ const IMPORT_ORIGIN_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new Set
 /**
  * Schemas minted only by their own dedicated operation. The generic create_*
  * generation operations must never offer or mint these identities: a
- * music-model output labeled as a voice reference would bypass the single
- * `generate_voice` entry (AP-08).
+ * voice references and voiceover output have distinct provenance contracts.
  */
 const DEDICATED_ORIGIN_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new Set([
   WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,

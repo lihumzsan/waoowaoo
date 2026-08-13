@@ -2,49 +2,7 @@ import type { CapabilityFieldI18n, CapabilityValue, ModelCapabilities, VideoCapa
 import { isCapabilityValue, isPlainObject } from './catalog-utils'
 
 // -----------------------------
-// Video pricing tier helpers (legacy pricing utilities)
-// -----------------------------
-
-export interface VideoPricingTier {
-  when: Record<string, CapabilityValue>
-}
-
-function matchesFixedSelections(tier: VideoPricingTier, fixedSelections: Record<string, CapabilityValue>): boolean {
-  for (const [field, expectedValue] of Object.entries(fixedSelections)) {
-    const tierValue = tier.when[field]
-    if (tierValue !== undefined && tierValue !== expectedValue) return false
-  }
-  return true
-}
-
-export function projectVideoPricingTiersByFixedSelections(input: {
-  tiers: VideoPricingTier[]
-  fixedSelections: Record<string, CapabilityValue>
-}): VideoPricingTier[] {
-  const { tiers, fixedSelections } = input
-  if (tiers.length === 0) return []
-  if (Object.keys(fixedSelections).length === 0) {
-    return tiers.map((tier) => ({ when: { ...tier.when } }))
-  }
-
-  const hiddenFields = new Set(Object.keys(fixedSelections))
-  const projected: VideoPricingTier[] = []
-
-  for (const tier of tiers) {
-    if (!matchesFixedSelections(tier, fixedSelections)) continue
-    const nextWhen: Record<string, CapabilityValue> = {}
-    for (const [field, value] of Object.entries(tier.when)) {
-      if (hiddenFields.has(field)) continue
-      nextWhen[field] = value
-    }
-    projected.push({ when: nextWhen })
-  }
-
-  return projected
-}
-
-// -----------------------------
-// Video model helpers (legacy video capability utilities)
+// Video model helpers
 // -----------------------------
 
 export interface VideoModelCapabilityCarrier {
@@ -107,10 +65,6 @@ function parseVideoFieldI18n(raw: unknown): CapabilityFieldI18n | null {
   }
 }
 
-function pushUnique(target: CapabilityValue[], value: CapabilityValue) {
-  if (!target.includes(value)) target.push(value)
-}
-
 function collectVideoFieldI18nMap(
   videoCapabilities: VideoCapabilities | undefined,
 ): Record<string, CapabilityFieldI18n | null> {
@@ -125,39 +79,6 @@ function collectVideoFieldI18nMap(
 
 function isCapabilityValueArray(value: unknown): value is CapabilityValue[] {
   return Array.isArray(value) && value.every((item) => isCapabilityValue(item))
-}
-
-function buildVideoDefinitionsFromPricingTiers(
-  tiers: VideoPricingTier[],
-  fieldI18nMap: Record<string, CapabilityFieldI18n | null>,
-): EffectiveVideoCapabilityDefinition[] {
-  const fieldOrder: string[] = []
-  const fieldValues = new Map<string, CapabilityValue[]>()
-
-  for (const tier of tiers) {
-    for (const [field, rawValue] of Object.entries(tier.when)) {
-      if (!isCapabilityValue(rawValue)) continue
-      if (!fieldValues.has(field)) {
-        fieldValues.set(field, [])
-        fieldOrder.push(field)
-      }
-      const values = fieldValues.get(field)
-      if (!values) continue
-      pushUnique(values, rawValue)
-    }
-  }
-
-  const definitions: EffectiveVideoCapabilityDefinition[] = []
-  for (const field of fieldOrder) {
-    const options = fieldValues.get(field) || []
-    if (options.length === 0) continue
-    definitions.push({
-      field,
-      options,
-      fieldI18n: fieldI18nMap[field] || null,
-    })
-  }
-  return definitions
 }
 
 function buildVideoDefinitionsFromCapabilities(
@@ -181,29 +102,10 @@ function buildVideoDefinitionsFromCapabilities(
   return definitions
 }
 
-function hasTierMatch(tiers: VideoPricingTier[], selection: Record<string, CapabilityValue>): boolean {
-  if (tiers.length === 0) return true
-  return tiers.some((tier) =>
-    Object.entries(selection).every(([field, value]) => {
-      const tierValue = tier.when[field]
-      if (tierValue === undefined) return true
-      return tierValue === value
-    }))
-}
-
 function getCompatibleOptionsForField(input: {
-  field: string
   options: CapabilityValue[]
-  tiers: VideoPricingTier[]
-  selection: Record<string, CapabilityValue>
 }): CapabilityValue[] {
-  const { field, options, tiers, selection } = input
-  if (tiers.length === 0) return options.slice()
-  return options.filter((candidate) =>
-    hasTierMatch(tiers, {
-      ...selection,
-      [field]: candidate,
-    }))
+  return input.options.slice()
 }
 
 function filterSelectionByDefinitions(
@@ -223,30 +125,16 @@ function filterSelectionByDefinitions(
 
 export function resolveEffectiveVideoCapabilityDefinitions(input: {
   videoCapabilities?: VideoCapabilities
-  pricingTiers?: VideoPricingTier[]
 }): EffectiveVideoCapabilityDefinition[] {
-  const tiers = input.pricingTiers || []
   const fieldI18nMap = collectVideoFieldI18nMap(input.videoCapabilities)
-  const capabilityDefinitions = buildVideoDefinitionsFromCapabilities(input.videoCapabilities, fieldI18nMap)
-
-  if (capabilityDefinitions.length > 0) {
-    return capabilityDefinitions
-  }
-
-  if (tiers.length > 0) {
-    return buildVideoDefinitionsFromPricingTiers(tiers, fieldI18nMap)
-  }
-
-  return []
+  return buildVideoDefinitionsFromCapabilities(input.videoCapabilities, fieldI18nMap)
 }
 
 export function normalizeVideoGenerationSelections(input: {
   definitions: EffectiveVideoCapabilityDefinition[]
-  pricingTiers?: VideoPricingTier[]
   selection?: Record<string, CapabilityValue>
   pinnedFields?: string[]
 }): Record<string, CapabilityValue> {
-  const tiers = input.pricingTiers || []
   const normalized = filterSelectionByDefinitions(input.definitions, input.selection)
   const pinnedFieldSet = new Set(input.pinnedFields || [])
   const orderedDefinitions = input.definitions.slice().sort((left, right) => {
@@ -267,10 +155,7 @@ export function normalizeVideoGenerationSelections(input: {
 
     for (const definition of orderedDefinitions) {
       const compatibleOptions = getCompatibleOptionsForField({
-        field: definition.field,
         options: definition.options,
-        tiers,
-        selection: normalized,
       })
 
       const current = normalized[definition.field]
@@ -294,22 +179,16 @@ export function normalizeVideoGenerationSelections(input: {
 
 export function resolveEffectiveVideoCapabilityFields(input: {
   definitions: EffectiveVideoCapabilityDefinition[]
-  pricingTiers?: VideoPricingTier[]
   selection?: Record<string, CapabilityValue>
 }): EffectiveVideoCapabilityField[] {
-  const tiers = input.pricingTiers || []
   const normalized = normalizeVideoGenerationSelections({
     definitions: input.definitions,
-    pricingTiers: tiers,
     selection: input.selection,
   })
 
   return input.definitions.map((definition) => {
     const options = getCompatibleOptionsForField({
-      field: definition.field,
       options: definition.options,
-      tiers,
-      selection: normalized,
     })
     const value = normalized[definition.field]
     return {

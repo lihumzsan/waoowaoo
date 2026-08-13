@@ -20,7 +20,7 @@ export async function buildCurrentOperationPlanArtifactHashes<Input>(params: {
   normalizedInput: Input
 }): Promise<OperationPlanArtifactHashes> {
   if (!params.operation.plan) {
-    throw new Error(`BILLABLE_OPERATION_PLAN_MISSING:${params.operation.id}`)
+    throw new Error(`OPERATION_PLAN_MISSING:${params.operation.id}`)
   }
   const rawCurrentPlan = await params.operation.plan({
     ...params.ctx,

@@ -62,7 +62,6 @@ function mergeConfirmation(
     kind,
     required,
     summary: base.summary ?? null,
-    budget: base.budget ?? null,
   }
 }
 

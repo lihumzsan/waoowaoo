@@ -24,8 +24,6 @@
     "sessionStateError": "Assistant status could not be refreshed. Retry or reload before continuing.",
     "backgroundFollowUpRunning": "Reviewing completed task results…",
     "settings": "Assistant settings",
-    "billingConfirmationTitle": "Confirm generation charges",
-    "billingConfirmationDescription": "When enabled, billable operations show a quote card first.",
     "settingsError": "Settings failed to load. Click to retry.",
     "collapse": "Collapse AI assistant sidebar",
     "expand": "Expand AI assistant sidebar",
@@ -36,7 +34,10 @@
     "pendingConfirmationChip": "Confirm: {label}",
     "latest": "Latest",
     "pendingApprovalTitle": "Pending approval",
-    "pendingApprovalCount": "{count} pending actions"
+    "pendingApprovalCount": "{count} pending actions",
+    "copyAnswer": "Copy answer",
+    "copiedAnswer": "Copied",
+    "sourceCount": "{count} sources"
   },
   "canvasContext": {
     "active": "Selected on Canvas",
@@ -54,7 +55,7 @@
   },
   "reasoning": {
     "running": "Thinking",
-    "completed": "Thinking complete",
+    "completed": "Reasoning",
     "failed": "Execution failed",
     "executionRunning": "Working · {count, plural, one {# tool called} other {# tools called}}",
     "executionCompleted": "Work complete · {count, plural, one {# tool call} other {# tool calls}}",
@@ -98,7 +99,8 @@
     "arguments": "Arguments",
     "result": "Result",
     "waiting": "Waiting for tool result...",
-    "webSearchRunning": "Searching the web…"
+    "webSearchRunning": "Searching the web…",
+    "runSummary": "{count} tool calls"
   },
   "runtime": {
     "goal": "Active goal",
@@ -171,7 +173,6 @@
     "searchPlaceholder": "Search tools / descriptions / tags...",
     "empty": "No configurable tools",
     "risk": {
-      "billable": "Billable",
       "high": "High",
       "medium": "Medium",
       "low": "Low"
@@ -204,25 +205,15 @@
     "toolErrorCorrection": "Correct the operation input or configuration, then retry.",
     "toolErrorListSeparator": ", ",
     "confirmationRequired": "Confirmation required",
-    "billingQuotePreview": "Billing preview for the generation task",
-    "billingActionSummary": "Generate {items}",
-    "billingActionImageItems": "{count, plural, one {1 image} other {# images}}",
-    "billingActionVideoItems": "{count, plural, one {1 video} other {# videos}}",
-    "billingActionMusicItems": "{count, plural, one {1 music track} other {# music tracks}}",
-    "billingActionVoiceCharacterItems": "{count, plural, one {1 voice character} other {# voice characters}}",
-    "billingActionMusicSecondItems": "{count, plural, one {1 second of music} other {# seconds of music}}",
-    "billingActionVideoSecondItems": "{count, plural, one {1 second of video} other {# seconds of video}}",
-    "billingActionListSeparator": ", ",
-    "billingActionQuoteWithCredits": "{action} · estimated {cost} credits",
-    "billingActionQuoteWithoutCredits": "{action} will be submitted",
-    "billingQuoteWithCredits": "{count, plural, one {1 media generation task} other {# media generation tasks}} · estimated {cost} credits",
-    "billingQuoteWithoutCredits": "{count, plural, one {1 media generation task will be submitted} other {# media generation tasks will be submitted}}",
     "confirmContinue": "Continue",
     "cancelAction": "Cancel",
     "cancelDecision": "Cancel",
     "sendDecision": "Submit custom answer",
-    "interactionSubmitting": "Processing...",
+    "interactionSubmitting": "Your response is saved and is waiting for delivery.",
+    "interactionRetryDelivery": "Retry delivery",
     "interactionSubmitErrorFallback": "This response could not be submitted. Refresh the conversation and try again.",
+    "contextCompacting": "Organizing the long conversation context…",
+    "contextCompactionFailed": "Conversation context compaction failed",
     "contextCompacted": "Compressed {count} earlier context records",
     "contextCompactedUnknown": "Earlier context was compressed"
   }

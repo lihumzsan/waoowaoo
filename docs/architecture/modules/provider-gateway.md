@@ -8,8 +8,8 @@ Provider 差异只停留在 `ai-providers` 的实现、`ai-exec` 的统一执行
 选择边界。业务 route、Task Activity、Operation 与 Agent 只声明产品需求，不猜测 provider/model、
 不切换 provider、不重建第二条调用链、失败时不静默降级。
 
-不做自动降级是产品决策，不只是工程洁癖：用户选定的模型就是实际扣费和实际出图的模型。历史上
-一次账户额度耗尽触发的自动换路，会让 Provider 成为失败时的隐藏状态解释者。
+不做自动降级是产品决策，不只是工程洁癖：用户选定的模型就是实际执行和实际出图的模型。历史上
+一次 Provider 拒绝触发的自动换路，会让 Provider 成为失败时的隐藏状态解释者。
 
 外部异步任务的创建、external id、轮询、终态、错误分类和重试必须是完整协议；Provider 返回失败、
 未知状态或不支持的能力时如实 surface，不伪造完成、不跳过、不换模型继续。
@@ -49,7 +49,7 @@ Wao 不为它建立 Responses proxy、OpenRouter provider 或第二套模型重�
 - **PG-06B — 用户取消先服从本地终态。** 已有 external id 时，cancel 仍先由 terminal owner 决定
   本地事实；只有本地确认 canceled、终态事务已提交、容量已释放、必需通知已完成后，独立可重试
   Activity 才从 ledger 读真实 external id 调用 cancel。补偿失败只记日志，不复活 Task、不改写
-  计费、不阻止本地 cancellation receipt。
+  本地终态、不阻止本地 cancellation receipt。
 - **PG-07 — stream 与最终结果同源。** 同一次调用的 delta 与 final 必须归一为同一个项目结果。
   final 是已发内容的严格前缀扩展时补发确定 suffix；分叉时原地失败，禁止拼接、重发整份内容、
   改走非流式接口或发起第二次模型调用。
@@ -83,20 +83,20 @@ Wao 不为它建立 Responses proxy、OpenRouter provider 或第二套模型重�
   删除未知字段。敏感内容拒绝是 permanent 业务事实，不能坍缩成内部错误或被跨工具绕过。
 - **PG-21 — 视频输入模式必须显式。** 所选模型在 registry 声明可用的文本、首帧、首尾帧与参考素材
   模式；Workspace 输入用 `first_frame`、`last_frame`、`reference_image`、`reference_audio`、
-  `reference_video` 明确角色，Planner 在报价和副作用前验证唯一模式与各通道上限。普通参考图无论
+  `reference_video` 明确角色，Planner 在副作用前验证唯一模式与各通道上限。普通参考图无论
   数量都不得被共享层或 adapter 推断成首帧；Provider adapter 只映射已冻结的显式角色。
 
 ## 权威入口
 
 - Provider adapter 与媒体/LLM 实现：`src/lib/ai-providers/**`
 - 执行引擎、结果归一、异步轮询与等待：`src/lib/ai-exec/**`
-- 模型目录、价格、能力与运行时选择：`src/lib/ai-registry/**`、`src/lib/platform-models/**`
+- 模型目录、能力与运行时选择：`src/lib/ai-registry/**`、`src/lib/platform-models/**`
 - 提交 fence 与结果重放：`src/lib/task/provider-invocation.ts`
 - 出站媒体投影与下载：`src/lib/media/outbound-*.ts`
 
 ## 踩过的坑
 
-- 账户额度耗尽时用生产 route 自动前进到另一 provider → 自动降级让 Provider 成为隐藏状态解释者，
+- Provider 拒绝请求时用生产 route 自动前进到另一 provider → 自动降级让 Provider 成为隐藏状态解释者，
   且违背"用户选定模型就是实际模型" → 删除全部生产 route 声明，typed 拒绝只结束本次调用。
 - 视频 retry 每次重新签发私有媒体 URL，而 request hash 包含完整签名串，"可重试"的任务永远无法
   重新提交 → 把传输凭据当业务输入 → identity projector 剥除 query/hash（PG-06C）。
@@ -119,6 +119,9 @@ Wao 不为它建立 Responses proxy、OpenRouter provider 或第二套模型重�
   `PROVIDER_SUBMISSION_REJECTED`，既谎报发生阶段又遮住版权限制等真实永久失败 → adapter 直接消费
   结构化 `failReason`，映射稳定 typed code；未知的已接受失败保持 `GENERATION_FAILED`，绝不伪装成
   提交拒绝或自动重提（PG-04/06/19）。
+- Toonflow 曾把整个轮询信封直接当作终态失败 cause；顶层“成功”只表示查询请求成功，却覆盖了 Task
+  的原生失败消息 → 查询信封与业务终态混成一个事实 → adapter 以 `failReason` 构造终态原生证据，
+  查询信封只作为嵌套 cause 保留（PG-04/19）。
 - Provider POST 的 5xx/429 曾被 fence 按 HTTP 状态猜成“明确未受理”，但这些状态不能证明供应商
   没创建任务，存在重复生成和扣费风险 → adapter 明确产出 disposition，普通异常一律
   `outcome_unknown`，fence 不再推断（PG-06）。

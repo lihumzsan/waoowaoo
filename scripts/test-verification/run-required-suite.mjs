@@ -2,6 +2,8 @@
 
 import fs from 'node:fs'
 import { spawnSync } from 'node:child_process'
+import { createRequire } from 'node:module'
+import { dirname, resolve } from 'node:path'
 
 function readOption(name) {
   const index = process.argv.indexOf(name)
@@ -16,8 +18,10 @@ if (!suite || roots.length === 0 || roots.some((root) => !root)) {
 
 fs.mkdirSync('reports/test-results', { recursive: true })
 const report = `reports/test-results/${suite}.json`
-const vitest = spawnSync('npx', [
-  'vitest', 'run', ...roots,
+const vitestPackage = createRequire(import.meta.url).resolve('vitest/package.json')
+const vitestCli = resolve(dirname(vitestPackage), 'vitest.mjs')
+const vitest = spawnSync(process.execPath, [
+  vitestCli, 'run', ...roots,
   '--reporter=default', '--reporter=json', `--outputFile=${report}`,
 ], { stdio: 'inherit', env: process.env })
 

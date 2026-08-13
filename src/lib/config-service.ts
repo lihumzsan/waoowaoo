@@ -139,7 +139,6 @@ export interface ProjectModelConfig {
 }
 
 export interface UserModelConfig {
-  assistantModel: string | null
   analysisModel: string | null
   characterModel: string | null
   locationModel: string | null
@@ -232,7 +231,6 @@ export async function getUserModelConfig(userId: string): Promise<UserModelConfi
     const platformDefaults = getPlatformDefaultModels()
 
     return {
-      assistantModel: platformDefaults.assistantModel,
       analysisModel: platformDefaults.analysisModel,
       characterModel: platformDefaults.characterModel,
       locationModel: platformDefaults.locationModel,
@@ -249,7 +247,6 @@ export async function getUserModelConfig(userId: string): Promise<UserModelConfi
   })
 
   return {
-    assistantModel: extractModelKey(userPref?.assistantModel) || null,
     analysisModel: extractModelKey(userPref?.analysisModel) || null,
     characterModel: extractModelKey(userPref?.characterModel) || null,
     locationModel: extractModelKey(userPref?.locationModel) || null,
@@ -324,7 +321,6 @@ export function checkRequiredModels(
 
   const fieldNames: Record<string, string> = {
     analysisModel: 'AI分析模型',
-    assistantModel: 'Assistant 对话模型',
     characterModel: '角色图像模型',
     locationModel: '场景图像模型',
     editModel: '修图/编辑模型',
@@ -354,12 +350,12 @@ export function getMissingConfigError(missingFields: string[]): string {
 }
 
 /**
- * 为图片类任务统一构建 billingPayload（项目级，async）
+ * 为图片类任务统一构建运行参数（项目级，async）。
  *
  * 生图和修图统一使用严格模式：调用方必须传入业务画幅，用户必须已在项目设置中配置好图片能力参数。
- * 图片运行参数只注入到 billingPayload.generationOptions；计费和 worker 共用这一份参数。
+ * 图片能力选择只注入唯一的 generationOptions，供提交与 worker 共用。
  */
-export async function buildImageBillingPayload(input: {
+export async function buildImageGenerationPayload(input: {
   projectId: string
   userId: string
   imageModel: string | null
@@ -398,11 +394,11 @@ export async function buildImageBillingPayload(input: {
 }
 
 /**
- * 为图片类任务统一构建 billingPayload（用户级，sync）
+ * 为图片类任务统一构建运行参数（用户级，sync）。
  *
  * 适用于 asset-hub 等无 projectId 场景，使用已取出的 userModelConfig。
  */
-export function buildImageBillingPayloadFromUserConfig(input: {
+export function buildImageGenerationPayloadFromUserConfig(input: {
   userModelConfig: UserModelConfig
   imageModel: string | null
   basePayload: Record<string, unknown>

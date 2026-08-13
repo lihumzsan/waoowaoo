@@ -217,7 +217,7 @@ function resolveModelAction(
     spec.category === ERROR_CATEGORY.CONTENT
     || spec.category === ERROR_CATEGORY.VALIDATION
   ) return 'revise_input'
-  // A terminal Task failure never authorizes a new paid Operation. Retryable
+  // A terminal Task failure never authorizes a new Operation. Retryable
   // is exposed as a fact, while the model is instructed to inform the user.
   if (taskReplay === 'safe') return 'inform_user'
   return 'stop'

@@ -57,7 +57,6 @@
 | Provider Critical | `npm run test:critical:provider` | 真实 adapter/wire 协议、零隐式重提 |
 | Task Critical | `npm run test:critical:task` | 真实 DB/Redis 的提交原子性、幂等、并发与账本边界 |
 | Temporal Critical | `npm run test:critical:temporal` | 真实执行平面的 Worker 丢失、heartbeat、ACK 丢失与重放 |
-| Billing Critical | `npm run test:critical:billing`、`:billing-concurrency` | 余额、冻结、结算、逆向资金事件与并发账本 |
 | Security Critical | `npm run test:critical:security` | 真实 owner/scope、媒体读取与跨项目写入拒绝 |
 | Browser Security | `npm run test:security` | 最小 authenticated/unauthenticated 权限边界 |
 

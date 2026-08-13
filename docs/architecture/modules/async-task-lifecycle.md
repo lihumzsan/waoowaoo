@@ -5,7 +5,7 @@
 ## 为什么是这样
 
 Task 是长运行执行的唯一业务事实。执行许可（attempt、retry、timeout、cancel、容量）归 Temporal；
-业务事实（Task / Billing / Resource / FollowUp）归 MySQL owner。两者不互相解释。
+业务事实（Task / Resource / FollowUp）归 MySQL owner。两者不互相解释。
 
 不用 BullMQ、Outbox、DB claim/lease/heartbeat、reconciler 或 Redis 并发闸。历史上这些东西同时
 解释"谁在运行"，每修一个进程窗口就多一个 stale 窗口。共享边界见
@@ -13,7 +13,7 @@ Task 是长运行执行的唯一业务事实。执行许可（attempt、retry、
 
 ## 不变量
 
-- **TL-01 — Task 创建只有一个事务入口。** 校验、计费冻结、Task 行、pending Resource 与
+- **TL-01 — Task 创建只有一个事务入口。** 校验、Task 行、pending Resource 与
   FollowUp 成员在同一事务提交，提交后才调度执行。route、Worker、调用方不得自己拼 Task 行，
   也不得在 commit 后带外启动执行。
 - **TL-05 — attempt 只有一个 owner。** business attempt 由 Workflow 创建并投影到 Task。DB
@@ -21,15 +21,15 @@ Task 是长运行执行的唯一业务事实。执行许可（attempt、retry、
 - **TL-06 — 基础设施 retry 不消耗 business attempt。** 同一 attempt identity 复用。只有封闭
   operation registry 与已提交的副作用事实允许重放时才推进下一次 business attempt；错误码、
   文案和异常类型没有授权重放的能力；仍可重试时不得写
-  Task/Resource/Billing 最终失败。
+  Task/Resource 最终失败。
 - **TL-08 — Provider 调用有独立幂等 fence。** ledger 冻结 logical identity、输入指纹、route、
   external id 与结果。只有明确未受理、或 Provider 支持同一幂等身份时才允许重提；受理结果不明
   写 `outcome_unknown` 并停止自动提交。收费 handler 必须从 ledger 读取实际 accepted route 写
   终态与 provenance——请求里的 primary model 不是成功来源事实。
-- **TL-09 — terminal writer 唯一。** Task 终态、Billing 结算、Resource/Lineage 物化与 FollowUp
+- **TL-09 — terminal writer 唯一。** Task 终态、Resource/Lineage 物化与 FollowUp
   成员更新在同一事务提交；exact replay 返回同一 receipt。长 Activity 不直接写终态。
 - **TL-10 — 已提交结果优先于晚到取消。** handler result checkpoint 一旦提交，即使 cancel 随后
-  到达也必须按该结果收口，不得改写为 cancel/failed/refund。Task 终态不可重开；Provider 补偿只能
+  到达也必须按该结果收口，不得改写为 cancel/failed。Task 终态不可重开；Provider 补偿只能
   由已提交的 canceled receipt 触发。
 - **TL-12 — 批次成员在创建事务冻结。** 一次调用创建多个 Task 必须全建或全滚，并在同一事务冻结
   完整成员集。不存在 collecting/seal 阶段；早到、重复、乱序终态都由成员 identity 幂等收口。
@@ -56,7 +56,7 @@ Task 是长运行执行的唯一业务事实。执行许可（attempt、retry、
 
 ## 踩过的坑
 
-- 收费媒体只有 image 从 ledger 读实际 accepted route，video/music/voice 写请求里的 primary
+- 媒体执行曾只有 image 从 ledger 读实际 accepted route，video/music/voice 写请求里的 primary
   model → 新增实例漏接既有契约 → 四类统一走同一交接入口，缺 route 原地失败（TL-08）。
 - 取消补偿曾在 poll/handler catch 里直接调 Provider cancel，可能取消已经赢得本地终态的工作 →
   补偿顺序早于终态裁决 → 只有 terminal 拿到正式 canceled receipt 后才补偿（TL-10）。

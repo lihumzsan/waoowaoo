@@ -90,36 +90,6 @@ export function getVisibleModelTypesForProvider(
   })
 }
 
-function formatPriceAmount(amount: number): string {
-  const fixed = amount.toFixed(4)
-  const normalized = fixed.replace(/\.?0+$/, '')
-  return normalized || '0'
-}
-
-function getModelPriceTexts(model: CustomModel, t: ProviderCardTranslator): string[] {
-  if (
-    model.type === 'llm'
-    && typeof model.priceInput === 'number'
-    && Number.isFinite(model.priceInput)
-    && typeof model.priceOutput === 'number'
-    && Number.isFinite(model.priceOutput)
-  ) {
-    return [
-      t('priceInput', { amount: `¥${formatPriceAmount(model.priceInput)}` }),
-      t('priceOutput', { amount: `¥${formatPriceAmount(model.priceOutput)}` }),
-    ]
-  }
-
-  const label = typeof model.priceLabel === 'string' ? model.priceLabel.trim() : ''
-  if (label) {
-    return label === '--' ? [] : [`¥${label}`]
-  }
-  if (typeof model.price === 'number' && Number.isFinite(model.price) && model.price > 0) {
-    return [`¥${formatPriceAmount(model.price)}`]
-  }
-  return []
-}
-
 export function ProviderAdvancedFields({
   provider,
   onToggleModel,
@@ -249,7 +219,7 @@ export function ProviderAdvancedFields({
                 )}
               </button>
               <span className="text-xs font-medium text-[var(--glass-text-secondary)]">
-                {t('batchModeHalfPrice')}
+                {t('batchMode')}
               </span>
             </div>
           )}
@@ -352,9 +322,6 @@ function ModelRow({
   onUpdateModel,
   hasApiKey,
 }: ModelRowProps) {
-  const priceTexts = getModelPriceTexts(model, t)
-  const priceText = priceTexts.join(' / ')
-  const hasPriceText = priceText.length > 0
   const isComingSoonModel = isPresetComingSoonModel(model.provider, model.modelId)
   const toggleDisabled = isComingSoonModel || !hasApiKey
   const rowDisabledClass = model.enabled ? '' : 'opacity-50'
@@ -382,9 +349,6 @@ function ModelRow({
               className="glass-input-base w-full px-3 py-1.5 text-[12px] font-mono"
               placeholder={t('modelActualId')}
             />
-            {hasPriceText && (
-              <div className="text-xs text-[var(--glass-text-tertiary)]">{priceText}</div>
-            )}
           </div>
           <div className="flex items-center gap-1.5">
             <button
@@ -417,9 +381,6 @@ function ModelRow({
                 <span className="shrink-0 rounded-md bg-[var(--glass-text-primary)] px-1.5 py-0.5 text-[10px] leading-none text-white">
                   {t('default')}
                 </span>
-              )}
-              {hasPriceText && (
-                <span className="shrink-0 text-[11px] text-[var(--glass-text-tertiary)]">{priceText}</span>
               )}
             </div>
             <span className="break-all text-[11px] text-[var(--glass-text-tertiary)]">{model.modelId}</span>

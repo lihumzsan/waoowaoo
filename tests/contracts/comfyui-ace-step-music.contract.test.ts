@@ -129,18 +129,29 @@ describe('ComfyUI ACE-Step 1.5 music contract', () => {
       timeSignature: '4',
       outputFormat: 'mp3',
     }
-    expect(normalizeMediaOptionsForSelection({ selection, modality: 'music', options: complete })).toEqual({
+    expect(normalizeMediaOptionsForSelection({
+      selection,
+      modality: 'music',
+      musicGenerationMode: 'prompt',
+      options: complete,
+    })).toEqual({
       ...complete,
       providerDurationSeconds: 10,
     })
     for (const missing of ['bpm', 'keyScale', 'timeSignature'] as const) {
       const incomplete = { ...complete }
       delete incomplete[missing]
-      expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'music', options: incomplete })).toThrow()
+      expect(() => normalizeMediaOptionsForSelection({
+        selection,
+        modality: 'music',
+        musicGenerationMode: 'prompt',
+        options: incomplete,
+      })).toThrow()
     }
     expect(() => normalizeMediaOptionsForSelection({
       selection,
       modality: 'music',
+      musicGenerationMode: 'prompt',
       options: { ...complete, vocalMode: 'vocal' },
     })).toThrow()
   })
@@ -196,7 +207,7 @@ describe('ComfyUI ACE-Step 1.5 music contract', () => {
           schemaId: WORKSPACE_RESOURCE_SCHEMA.BGM_AUDIO, name: 'Tension cue',
         }],
       },
-      protocol: 'workspace_resource_generation_v1',
+      protocol: 'workspace_resource_generation_v2',
       resource: {
         resourceId: 'music-cue-1', workspacePath: 'Tension-cue-music-cue-1', mediaType: 'audio', audioKind: 'music',
         schemaId: WORKSPACE_RESOURCE_SCHEMA.BGM_AUDIO, inputHash: 'b'.repeat(64),

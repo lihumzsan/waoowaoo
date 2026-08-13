@@ -147,6 +147,7 @@ export function requireAceStepSelection(input: AiProviderMusicExecutionContext):
 
 export async function executeComfyUiAceStepMusicGeneration(input: AiProviderMusicExecutionContext): Promise<GenerateResult> {
   requireAceStepSelection(input)
+  if (input.generation.kind !== 'prompt') throw new Error('COMFYUI_ACE_STEP_GENERATION_MODE_INVALID')
   const options = input.options ?? {}
   if (options.vocalMode !== 'instrumental') throw new Error('COMFYUI_ACE_STEP_VOCAL_MODE_INVALID')
   if (options.outputFormat !== 'mp3') throw new Error('COMFYUI_ACE_STEP_OUTPUT_FORMAT_INVALID')
@@ -161,7 +162,7 @@ export async function executeComfyUiAceStepMusicGeneration(input: AiProviderMusi
   try {
     baseUrl = readComfyUiBaseUrl()
     built = buildAceStepMusicPromptGraph({
-      prompt: input.prompt,
+      prompt: input.generation.prompt,
       requestedDurationSeconds: options.durationSeconds,
       bpm: options.bpm,
       keyScale: options.keyScale,

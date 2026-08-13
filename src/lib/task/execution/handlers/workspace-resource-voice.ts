@@ -52,9 +52,6 @@ export async function handleWorkspaceResourceVoiceTask(context: TaskExecutionCon
       },
     },
   )
-  if (!generated.success) {
-    throw new Error(generated.error || 'VOICE_GENERATE_PROVIDER_FAILED')
-  }
   const providerRoute = await requireTaskProviderRouteSelection(context, invocationKey)
 
   await reportTaskProgress(context, 85, { stage: 'persist_voice' })

@@ -46,6 +46,12 @@ type PendingTextPart = {
   completedPrefixLength: number
 }
 
+type PendingMessageSnapshot = {
+  readonly message: UIMessage
+  readonly watermark: number
+  readonly publishViewChanged: boolean
+}
+
 function isRecord(value: RuntimeJsonValue | undefined): value is RuntimeJsonObject {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
@@ -236,6 +242,8 @@ export class AssistantRuntimeEventProjector {
   private readonly partOrder: string[] = []
   private readonly pendingText = new Map<string, PendingTextPart>()
   private readonly progressByItem = new Map<string, string>()
+  private readonly pendingMessageSnapshots = new Map<string, PendingMessageSnapshot>()
+  private readonly scheduledMessageSnapshotDrains = new Set<string>()
   private latestStreamSeq = 0
   private segmentIndex = 0
   private terminalProjection: AssistantRuntimeTerminalProjection | null = null
@@ -243,6 +251,7 @@ export class AssistantRuntimeEventProjector {
   private persistenceFailureReason: string | null = null
   private skillsRefreshFailed = false
   private latestRuntimeFailure: AssistantRuntimeFailure | null = null
+  private activeCompactionItemId: string | null = null
   private persistenceTail: Promise<void> = Promise.resolve()
   private skillsRefreshTail: Promise<void> = Promise.resolve()
   private terminalResolve: ((value: AssistantRuntimeTerminalProjection) => void) | null = null
@@ -288,6 +297,7 @@ export class AssistantRuntimeEventProjector {
     this.options.sink.setMessageId(this.buildAssistantMessageId())
     if (!boundaryMessage) return null
     this.queueCriticalPersistence(async () => {
+      this.options.sink.sealChunksThrough(watermark)
       await this.options.onMessageSnapshot(boundaryMessage)
       await this.options.sink.publishChunksThrough(watermark)
       await this.options.sink.publishViewChanged('runtime_steer_boundary').catch(() => undefined)
@@ -388,12 +398,7 @@ export class AssistantRuntimeEventProjector {
         // persistent assistant message view.
         return
       case 'thread/compacted':
-        this.upsertAndPublishDataPart('runtime-compaction', {
-          type: 'data-assistant-context-compacted',
-          id: 'runtime-compaction',
-          data: { replacedItemCount: 0 },
-        })
-        this.queueMessageSnapshot()
+        this.projectCompaction('completed')
         return
       case 'thread/tokenUsage/updated':
         this.consumeTokenUsage(params)
@@ -421,6 +426,9 @@ export class AssistantRuntimeEventProjector {
   private consumeRuntimeError(params: RuntimeJsonObject): void {
     const failure = normalizeAssistantRuntimeFailure(params.error)
     if (failure) this.latestRuntimeFailure = failure
+    if (this.activeCompactionItemId && params.willRetry !== true) {
+      this.projectCompaction('failed')
+    }
     // `willRetry=true` is an app-server-owned retry within the same Turn.
     // It is progress, not a second lifecycle or a Product Turn terminal fact.
     if (params.willRetry === true) {
@@ -534,6 +542,11 @@ export class AssistantRuntimeEventProjector {
       return
     }
     const itemId = readString(item, 'id')
+    if (itemType === 'contextCompaction' && itemId) {
+      this.activeCompactionItemId = itemId
+      this.projectCompaction('running')
+      return
+    }
     const toolName = toolNameForItem(item)
     if (!itemId || !toolName) return
     const input = toolInputForItem(item)
@@ -584,12 +597,7 @@ export class AssistantRuntimeEventProjector {
       return
     }
     if (itemType === 'contextCompaction') {
-      this.upsertAndPublishDataPart('runtime-compaction', {
-        type: 'data-assistant-context-compacted',
-        id: 'runtime-compaction',
-        data: { replacedItemCount: 0 },
-      })
-      this.queueMessageSnapshot()
+      this.projectCompaction('completed')
       return
     }
     const part = finalToolPart(item)
@@ -644,11 +652,23 @@ export class AssistantRuntimeEventProjector {
       return
     }
     if (status === 'interrupted') {
+      if (this.activeCompactionItemId) this.projectCompaction('failed')
       this.finish({ status: 'interrupted', stopReason: 'runtime_interrupted' })
       return
     }
     const failure = normalizeAssistantRuntimeFailure(turn?.error) ?? this.latestRuntimeFailure
+    if (this.activeCompactionItemId) this.projectCompaction('failed')
     this.finish({ status: 'failed', stopReason: 'runtime_failed', failure })
+  }
+
+  private projectCompaction(status: 'running' | 'completed' | 'failed'): void {
+    this.upsertAndPublishDataPart('runtime-compaction', {
+      type: 'data-assistant-context-compacted',
+      id: 'runtime-compaction',
+      data: { status, replacedItemCount: 0 },
+    })
+    if (status !== 'running') this.activeCompactionItemId = null
+    this.queueMessageSnapshot()
   }
 
   private consumeTokenUsage(params: RuntimeJsonObject): void {
@@ -819,12 +839,29 @@ export class AssistantRuntimeEventProjector {
   private queueMessageSnapshot(publishViewChanged = true): void {
     const message = this.buildAssistantMessage()
     if (!message) return
-    const watermark = this.latestStreamSeq
+    const current = this.pendingMessageSnapshots.get(message.id)
+    this.pendingMessageSnapshots.set(message.id, {
+      message,
+      watermark: this.latestStreamSeq,
+      publishViewChanged: publishViewChanged || current?.publishViewChanged === true,
+    })
+    if (this.scheduledMessageSnapshotDrains.has(message.id)) return
+    this.scheduledMessageSnapshotDrains.add(message.id)
     this.queueCriticalPersistence(async () => {
-      await this.options.onMessageSnapshot(message)
-      await this.options.sink.publishChunksThrough(watermark)
-      if (publishViewChanged) {
-        await this.options.sink.publishViewChanged('runtime_item_completed').catch(() => undefined)
+      try {
+        while (true) {
+          const snapshot = this.pendingMessageSnapshots.get(message.id)
+          if (!snapshot) break
+          this.pendingMessageSnapshots.delete(message.id)
+          this.options.sink.sealChunksThrough(snapshot.watermark)
+          await this.options.onMessageSnapshot(snapshot.message)
+          await this.options.sink.publishChunksThrough(snapshot.watermark)
+          if (snapshot.publishViewChanged) {
+            await this.options.sink.publishViewChanged('runtime_item_completed').catch(() => undefined)
+          }
+        }
+      } finally {
+        this.scheduledMessageSnapshotDrains.delete(message.id)
       }
     }, 'message_snapshot_persistence_failed')
   }

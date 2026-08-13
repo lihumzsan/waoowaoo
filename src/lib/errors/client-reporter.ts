@@ -88,12 +88,13 @@ function extractErrorParts(candidate: unknown): { message: string; stack?: strin
   if (typeof candidate === 'string') {
     return { message: candidate }
   }
-  try {
-    const serialized: unknown = JSON.stringify(candidate)
-    return { message: typeof serialized === 'string' ? serialized : String(candidate) }
-  } catch {
-    return { message: String(candidate) }
-  }
+  // Arbitrary rejection objects frequently come from browser extensions and
+  // may contain complete account/session objects. Their contents are neither
+  // a stable error contract nor safe diagnostics, so record only the kind.
+  const valueKind = candidate === null
+    ? 'null'
+    : Array.isArray(candidate) ? 'array' : typeof candidate
+  return { message: `Unhandled rejection with non-Error ${valueKind} value` }
 }
 
 let installed = false

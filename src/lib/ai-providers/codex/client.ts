@@ -31,26 +31,6 @@ async function cleanupCodexTempDirAfterFailure(tempDir: string): Promise<void> {
   }
 }
 
-export type CodexChatMessage = {
-  role: 'user' | 'assistant' | 'system'
-  content: string
-}
-
-export interface CodexCompletionParams {
-  codexPath?: string
-  model?: string
-  messages: CodexChatMessage[]
-  imagePaths?: string[]
-  cwd?: string
-  timeoutMs?: number
-}
-
-export interface CodexCompletionResult {
-  text: string
-  stdout: string
-  stderr: string
-}
-
 export interface CodexImageGenerationParams {
   codexPath?: string
   model?: string
@@ -67,10 +47,6 @@ export interface CodexImageGenerationResult {
   text: string
   stdout: string
   stderr: string
-}
-
-export interface CodexSelfCheckResult extends CodexCompletionResult {
-  durationMs: number
 }
 
 export class CodexExecError extends Error {
@@ -217,52 +193,6 @@ export function resolveCodexExecutablePath(rawPath?: string): string {
     return path.join(os.homedir(), withEnv.slice(2))
   }
   return withEnv
-}
-
-export function buildCodexPrompt(messages: CodexChatMessage[]): string {
-  return messages
-    .map((message) => {
-      const role = message.role.toUpperCase()
-      return `${role}:\n${message.content}`
-    })
-    .join('\n\n')
-}
-
-export function buildCodexExecArgs(params: {
-  model?: string
-  outputPath: string
-  imagePaths?: string[]
-}): string[] {
-  const args = [
-    'exec',
-    '--ephemeral',
-    '--json',
-    ...CODEX_RUNTIME_CONFIG_ARGS,
-    '--color',
-    'never',
-    '--sandbox',
-    'read-only',
-    '--skip-git-repo-check',
-    '--disable',
-    'plugins',
-    '--disable',
-    'memories',
-    '--disable',
-    'apps',
-    '--disable',
-    'shell_snapshot',
-    '-m',
-    params.model || CODEX_DEFAULT_MODEL_ID,
-    '--output-last-message',
-    params.outputPath,
-  ]
-
-  for (const imagePath of params.imagePaths || []) {
-    args.push('-i', imagePath)
-  }
-
-  args.push('-')
-  return args
 }
 
 export function buildCodexImageExecArgs(params: {
@@ -446,73 +376,6 @@ function spawnCodex(
       resolveOnce({ exitCode, signal, stdout, stderr })
     })
   })
-}
-
-export async function runCodexTextCompletion(
-  params: CodexCompletionParams,
-): Promise<CodexCompletionResult> {
-  const executablePath = resolveCodexExecutablePath(params.codexPath)
-  await assertCodexExecutableExists(executablePath)
-
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'waoowaoo-codex-'))
-  const outputPath = path.join(tempDir, 'last-message.txt')
-  const prompt = buildCodexPrompt(params.messages)
-  const args = buildCodexExecArgs({
-    model: params.model,
-    outputPath,
-    imagePaths: params.imagePaths,
-  })
-  const timeoutMs = params.timeoutMs ?? readTimeoutMs(process.env.CODEX_LLM_TIMEOUT_MS)
-
-  try {
-    const result = await spawnCodex(executablePath, args, {
-      cwd: params.cwd,
-      timeoutMs,
-      stdin: prompt,
-    }).catch((error) => {
-      if (error instanceof CodexExecError) throw error
-      throw new CodexExecError(
-        'CODEX_EXEC_FAILED',
-        error instanceof Error ? error.message : String(error),
-      )
-    })
-
-    if (result.exitCode !== 0) {
-      throw new CodexExecError(
-        'CODEX_EXEC_FAILED',
-        `Codex exec exited with code ${result.exitCode ?? 'null'}`,
-        {
-          exitCode: result.exitCode,
-          signal: result.signal,
-          stdout: truncateForError(result.stdout),
-          stderr: truncateForError(result.stderr),
-        },
-      )
-    }
-
-    const output = await fs.readFile(outputPath, 'utf8').catch(() => '')
-    const text = output.trimEnd()
-    if (!text.trim()) {
-      throw new CodexExecError(
-        'CODEX_EMPTY_OUTPUT',
-        'Codex exec completed without writing a final message',
-        {
-          exitCode: result.exitCode,
-          signal: result.signal,
-          stdout: truncateForError(result.stdout),
-          stderr: truncateForError(result.stderr),
-        },
-      )
-    }
-
-    return {
-      text,
-      stdout: result.stdout,
-      stderr: result.stderr,
-    }
-  } finally {
-    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined)
-  }
 }
 
 function inferImageMimeType(buffer: Buffer, filePath: string): string {
@@ -860,41 +723,6 @@ export async function prepareCodexImageGenerationExecution(
   } catch (error) {
     await cleanupCodexTempDirAfterFailure(tempDir)
     throw error
-  }
-}
-
-export async function runCodexSelfCheck(params: {
-  codexPath?: string
-  model?: string
-  cwd?: string
-  timeoutMs?: number
-} = {}): Promise<CodexSelfCheckResult> {
-  const startedAt = Date.now()
-  const result = await runCodexTextCompletion({
-    codexPath: params.codexPath,
-    model: params.model || CODEX_DEFAULT_MODEL_ID,
-    cwd: params.cwd,
-    timeoutMs: params.timeoutMs,
-    messages: [{
-      role: 'user',
-      content: 'Reply with exactly CODEX_OK and no other text.',
-    }],
-  })
-
-  if (!result.text.trim().includes('CODEX_OK')) {
-    throw new CodexExecError(
-      'CODEX_EXEC_FAILED',
-      `Codex self-check returned unexpected text: ${truncateForError(result.text.trim())}`,
-      {
-        stdout: truncateForError(result.stdout),
-        stderr: truncateForError(result.stderr),
-      },
-    )
-  }
-
-  return {
-    ...result,
-    durationMs: Date.now() - startedAt,
   }
 }
 

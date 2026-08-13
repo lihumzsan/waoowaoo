@@ -19,7 +19,8 @@
         "unavailable": "This action is unavailable"
       },
       "errors": {
-        "unknown": "This Resource could not be generated. You can retry it."
+        "unknown": "This Resource could not be generated. You can retry it.",
+        "providerDiagnostic": "Provider error: {message}"
       },
       "preview": {
         "position": "{current} / {total}",
@@ -36,15 +37,13 @@
         "destructiveTitle": "Confirm action",
         "title": "Confirm generation",
         "destructiveDescription": "Review this action before continuing.",
-        "description": "Review the number of generation tasks and the maximum quoted cost.",
+        "description": "Review the generation tasks before submitting.",
         "cancel": "Cancel",
         "executing": "Submitting…",
         "deleting": "Deleting…",
         "confirm": "Confirm and create",
         "confirmDelete": "Confirm deletion",
         "taskCount": "{count} generation tasks",
-        "priceHidden": "Price hidden",
-        "priceCredits": "Up to {cost} credits",
         "destructiveBody": "Remove “{target}” from the current project tree. This is a soft delete and remains recoverable through the system restore capability."
       },
       "upload": {

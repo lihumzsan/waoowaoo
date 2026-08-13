@@ -368,7 +368,6 @@ export function useProviders(): UseProvidersReturn {
                     modelId: mergedModelId,
                     modelKey: nextModelKey,
                     name: updates.name ?? m.name,
-                    price: updates.price ?? m.price,
                 }
             })
             latestModelsRef.current = next
@@ -391,8 +390,6 @@ export function useProviders(): UseProvidersReturn {
                 {
                     ...model,
                     modelKey: model.modelKey || encodeModelKey(model.provider, model.modelId),
-                    price: 0,
-                    priceLabel: '--',
                     enabled: true,
                 },
             ]

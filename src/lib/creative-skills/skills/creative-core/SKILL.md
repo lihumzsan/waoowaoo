@@ -76,4 +76,4 @@ description: Apply shared creative fact boundaries, scope control, duration disc
 
 ## 边界
 
-本 Skill 只负责创作推理质量。项目状态、资源身份、工具调用、计费、审批、异步任务、持久化、输出 Schema 和 provider 参数均由调用方与执行层负责。
+本 Skill 只负责创作推理质量。项目状态、资源身份、工具调用、权限校验、异步任务、持久化、输出 Schema 和 provider 参数均由调用方与执行层负责。

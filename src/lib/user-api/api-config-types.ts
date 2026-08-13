@@ -1,6 +1,5 @@
 import type { CapabilitySelections, ModelCapabilities, UnifiedModelType } from '@/lib/ai-registry/types'
 export type DefaultModelField =
-  | 'assistantModel'
   | 'analysisModel'
   | 'characterModel'
   | 'locationModel'
@@ -23,18 +22,10 @@ export interface StoredModel {
   name: string
   type: UnifiedModelType
   provider: string
-  // Provider metadata retained for user-owned API configuration only.
-  price: number
-  priceMin?: number
-  priceMax?: number
-  priceLabel?: string
-  priceInput?: number
-  priceOutput?: number
   capabilities?: ModelCapabilities
 }
 
 export interface DefaultModelsPayload {
-  assistantModel?: string
   analysisModel?: string
   characterModel?: string
   locationModel?: string
@@ -68,7 +59,6 @@ export interface ApiConfigPutBody {
 }
 
 export const DEFAULT_MODEL_FIELDS: DefaultModelField[] = [
-  'assistantModel',
   'analysisModel',
   'characterModel',
   'locationModel',

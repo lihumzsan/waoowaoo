@@ -53,7 +53,6 @@ import {
   buildLocalProjectCapabilitySelections,
   LOCAL_PROJECT_DEFAULT_MODELS,
 } from '@/lib/projects/creation-defaults'
-import { CODEX_PLATFORM_DEFAULT_ASSISTANT_MODEL_KEY } from '@/lib/ai-providers/codex/models'
 import {
   COMFYUI_H3_DEFAULT_GENERATION_OPTIONS,
   COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
@@ -71,10 +70,7 @@ function buildEffectiveDefaultModelsView(input: {
   explicitCapabilityDefaults: CapabilitySelections
 }): EffectiveDefaultModelsView {
   const systemDefaultModels: DefaultModelsPayload = isSelfHostedUserProviderCredentialMode(input.deployment)
-    ? {
-        assistantModel: CODEX_PLATFORM_DEFAULT_ASSISTANT_MODEL_KEY,
-        ...LOCAL_PROJECT_DEFAULT_MODELS,
-      }
+    ? { ...LOCAL_PROJECT_DEFAULT_MODELS }
     : {}
   const defaultModels: DefaultModelsPayload = { ...systemDefaultModels }
   for (const field of DEFAULT_MODEL_FIELDS) {
@@ -121,7 +117,6 @@ async function readUserApiConfig(
     select: {
       customModels: true,
       customProviders: true,
-      assistantModel: true,
       analysisModel: true,
       characterModel: true,
       locationModel: true,
@@ -149,7 +144,6 @@ async function readUserApiConfig(
   const models = parsedModels
 
   const rawDefaults: DefaultModelsPayload = {
-    assistantModel: pref?.assistantModel || '',
     analysisModel: pref?.analysisModel || '',
     characterModel: pref?.characterModel || '',
     locationModel: pref?.locationModel || '',
@@ -233,7 +227,6 @@ export async function putUserApiConfig(
     select: {
       customProviders: true,
       customModels: true,
-      assistantModel: true,
       analysisModel: true,
       characterModel: true,
       locationModel: true,
@@ -286,9 +279,6 @@ export async function putUserApiConfig(
   if (normalizedDefaults !== undefined) {
     const modelSource = normalizedModels ?? existingModels
     validateDefaultModelsAgainstModels(normalizedDefaults, modelSource)
-    if (normalizedDefaults.assistantModel !== undefined) {
-      updateData.assistantModel = normalizedDefaults.assistantModel || null
-    }
     if (normalizedDefaults.analysisModel !== undefined) {
       updateData.analysisModel = normalizedDefaults.analysisModel || null
     }
@@ -320,7 +310,6 @@ export async function putUserApiConfig(
   if (normalizedModels !== undefined) {
     const modelSource = normalizedModels
     const existingDefaults: DefaultModelsPayload = {
-      assistantModel: existingPref?.assistantModel || '',
       analysisModel: existingPref?.analysisModel || '',
       characterModel: existingPref?.characterModel || '',
       locationModel: existingPref?.locationModel || '',

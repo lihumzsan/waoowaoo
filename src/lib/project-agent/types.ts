@@ -13,7 +13,8 @@ export interface ProjectAgentContext {
   approvedInvocationByToolCallId?: Record<string, PlannedOperationInvocation>
 }
 
-export interface ProjectAgentContextCompactedPartData {
+export interface ProjectAgentContextCompactionPartData {
+  status: 'running' | 'completed' | 'failed'
   replacedItemCount: number
 }
 

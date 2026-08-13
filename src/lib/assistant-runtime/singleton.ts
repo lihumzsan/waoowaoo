@@ -87,7 +87,10 @@ export function getAssistantRuntimeService(): AssistantRuntimeService {
         version: process.env.npm_package_version?.trim() || 'development',
       },
     }),
-    persistence: new AssistantRuntimePersistence({ hostRoot: config.hostRoot }),
+    persistence: new AssistantRuntimePersistence({
+      hostRoot: config.hostRoot,
+      scopedCodexHome: config.driver === 'docker',
+    }),
     ownership: new RedisAssistantRuntimeOwnership(),
     idleTimeoutMs: config.idleTimeoutMs,
     closePlacementTransportSessions: async ({ scope, ownerToken }) => {

@@ -36,8 +36,30 @@ export function buildAgentTurnAssistantMessageId(params: {
 export interface AgentTurnStreamPublisher {
   reserve: (chunk: UIMessageChunk) => number | null
   setMessageId: (messageId: string) => void
+  sealThrough: (watermark: number) => void
   publishThrough: (watermark: number) => Promise<void>
   flush: () => Promise<void>
+}
+
+function mergeAdjacentDeltaChunks(
+  previous: UIMessageChunk,
+  next: UIMessageChunk,
+): UIMessageChunk | null {
+  if (
+    previous.type === 'text-delta'
+    && next.type === 'text-delta'
+    && previous.id === next.id
+  ) {
+    return { ...previous, delta: `${previous.delta}${next.delta}` }
+  }
+  if (
+    previous.type === 'reasoning-delta'
+    && next.type === 'reasoning-delta'
+    && previous.id === next.id
+  ) {
+    return { ...previous, delta: `${previous.delta}${next.delta}` }
+  }
+  return null
 }
 
 export function createAgentTurnStreamPublisher(params: {
@@ -49,15 +71,16 @@ export function createAgentTurnStreamPublisher(params: {
   messageId: string
 }): AgentTurnStreamPublisher {
   let nextSeq = 0
+  let sealedThrough = 0
   let currentMessageId = params.messageId
-  const bufferedMessages = new Map<number, string>()
+  const bufferedEvents = new Map<number, AgentTurnStreamSSEEvent>()
   let disabled = false
   let tail = Promise.resolve()
 
   const disable = (reason: string, error?: unknown): void => {
     if (disabled) return
     disabled = true
-    bufferedMessages.clear()
+    bufferedEvents.clear()
     logger.warn({
       action: 'agent_turn.stream.disabled',
       message: 'agent turn ephemeral stream disabled',
@@ -78,7 +101,27 @@ export function createAgentTurnStreamPublisher(params: {
   return {
     reserve(chunk) {
       if (disabled) return null
-      if (bufferedMessages.size >= AGENT_TURN_STREAM_MAX_PENDING_EVENTS) {
+      const previous = bufferedEvents.get(nextSeq)
+      if (
+        nextSeq > sealedThrough
+        && previous?.messageId === currentMessageId
+      ) {
+        const mergedChunk = mergeAdjacentDeltaChunks(previous.chunk, chunk)
+        if (mergedChunk) {
+          const mergedEvent: AgentTurnStreamSSEEvent = {
+            ...previous,
+            chunk: mergedChunk,
+          }
+          if (
+            Buffer.byteLength(JSON.stringify(mergedEvent), 'utf8')
+            <= AGENT_TURN_STREAM_MAX_EVENT_BYTES
+          ) {
+            bufferedEvents.set(nextSeq, mergedEvent)
+            return nextSeq
+          }
+        }
+      }
+      if (bufferedEvents.size >= AGENT_TURN_STREAM_MAX_PENDING_EVENTS) {
         disable('pending_event_limit')
         return null
       }
@@ -108,7 +151,7 @@ export function createAgentTurnStreamPublisher(params: {
         return null
       }
       nextSeq = seq
-      bufferedMessages.set(seq, message)
+      bufferedEvents.set(seq, event)
       return seq
     },
     setMessageId(messageId) {
@@ -117,15 +160,26 @@ export function createAgentTurnStreamPublisher(params: {
       }
       currentMessageId = messageId
     },
+    sealThrough(watermark) {
+      if (disabled) return
+      if (!Number.isSafeInteger(watermark) || watermark < 0 || watermark > nextSeq) {
+        throw new Error('AGENT_TURN_STREAM_WATERMARK_INVALID')
+      }
+      sealedThrough = Math.max(sealedThrough, watermark)
+    },
     async publishThrough(watermark) {
       if (disabled) return
       if (!Number.isSafeInteger(watermark) || watermark < 0 || watermark > nextSeq) {
         throw new Error('AGENT_TURN_STREAM_WATERMARK_INVALID')
       }
-      const messages = [...bufferedMessages.entries()]
+      if (watermark > sealedThrough) {
+        throw new Error('AGENT_TURN_STREAM_WATERMARK_UNSEALED')
+      }
+      const messages = [...bufferedEvents.entries()]
         .filter(([seq]) => seq <= watermark)
         .sort(([left], [right]) => left - right)
-      for (const [seq] of messages) bufferedMessages.delete(seq)
+        .map(([seq, event]) => [seq, JSON.stringify(event)] as const)
+      for (const [seq] of messages) bufferedEvents.delete(seq)
       tail = tail
         .then(async () => {
           if (disabled) return
@@ -140,7 +194,7 @@ export function createAgentTurnStreamPublisher(params: {
     },
     async flush() {
       await tail
-      if (!disabled && bufferedMessages.size > 0) {
+      if (!disabled && bufferedEvents.size > 0) {
         throw new Error('AGENT_TURN_STREAM_UNCOMMITTED_EVENTS')
       }
     },

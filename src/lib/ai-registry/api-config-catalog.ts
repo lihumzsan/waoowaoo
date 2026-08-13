@@ -46,13 +46,7 @@ function requireBuiltinApiConfigCatalog(): BuiltinApiConfigCatalogRegistration {
 }
 
 export const API_CONFIG_CATALOG_PROVIDERS: readonly ApiConfigCatalogProvider[] = [
-  { id: 'ark', name: 'Volcengine Ark', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3' },
   { id: 'codex', name: 'Codex' },
-  { id: 'openrouter', name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1' },
-  { id: 'fal', name: 'FAL' },
-  { id: 'google', name: 'Google AI Studio' },
-  { id: 'mureka', name: 'Mureka', baseUrl: 'https://api.mureka.ai' },
-  { id: 'toonflow', name: 'Toonflow', baseUrl: 'https://api.toonflow.net/v1' },
   { id: 'comfyui', name: 'ComfyUI' },
 ]
 
@@ -174,9 +168,7 @@ export function matchesApiConfigModelKey(key: string | undefined | null, provide
   return parsed.provider === provider && parsed.modelId === modelId
 }
 
-const ZH_PROVIDER_NAME_MAP: Readonly<Record<string, string>> = {
-  ark: '火山引擎 Ark',
-}
+const ZH_PROVIDER_NAME_MAP: Readonly<Record<string, string>> = {}
 
 function isZhLocale(locale?: string): boolean {
   return typeof locale === 'string' && locale.toLowerCase().startsWith('zh')

@@ -489,12 +489,23 @@ async function runAppServerSmoke(params: {
     () => assertOnlyKeys({ unexpected: true }, [], 'SMOKE_UNEXPECTED_FIELD'),
     CodexAppServerProtocolError,
   )
-  assert.throws(
-    () => readCodexRuntimeConfig({ ...process.env, CODEX_RUNTIME_DRIVER: 'docker' }),
-    /ASSISTANT_RUNTIME_CODEX_LOCAL_DRIVER_REQUIRED/u,
-  )
+  const dockerConfig = readCodexRuntimeConfig({
+    ...process.env,
+    NODE_ENV: 'development',
+    CODEX_RUNTIME_DRIVER: 'docker',
+    CODEX_RUNTIME_HOST_ROOT: path.join(params.rootDir, 'docker-persistence'),
+    CODEX_RUNTIME_IDLE_TIMEOUT_MS: '10000',
+    CODEX_RUNTIME_IMAGE: 'waoowaoo-codex-runtime:smoke',
+    CODEX_RUNTIME_NETWORK: 'waoowaoo-codex-runtime-smoke',
+    CODEX_RUNTIME_CPU_LIMIT: '1',
+    CODEX_RUNTIME_MEMORY_BYTES: '268435456',
+    CODEX_RUNTIME_PIDS_LIMIT: '32',
+    OPENAI_API_KEY: 'smoke-placeholder',
+  })
+  assert.equal(dockerConfig.driver, 'docker')
   const persistence = new AssistantRuntimePersistence({
     hostRoot: path.join(params.rootDir, 'runtime-persistence'),
+    scopedCodexHome: false,
   })
   const sharedHome = path.join(params.rootDir, 'shared-codex-home')
   await mkdir(sharedHome, { recursive: true, mode: 0o700 })
@@ -676,6 +687,7 @@ async function runAppServerSmoke(params: {
 async function runNativeConcurrencySmoke(rootDir: string): Promise<void> {
   const persistence = new AssistantRuntimePersistence({
     hostRoot: path.join(rootDir, 'concurrency-persistence'),
+    scopedCodexHome: false,
   })
   const sharedHome = path.join(rootDir, 'concurrency-shared-home')
   await mkdir(sharedHome, { recursive: true, mode: 0o700 })

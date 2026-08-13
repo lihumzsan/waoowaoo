@@ -20,7 +20,9 @@ function frozenVideoOptions(
 ): Record<string, string | number | boolean> {
   return Object.fromEntries(
     Object.entries(value).filter((entry): entry is [string, string | number | boolean] => (
-      entry[1] !== null
+      typeof entry[1] === 'string'
+      || typeof entry[1] === 'number'
+      || typeof entry[1] === 'boolean'
     )),
   )
 }
@@ -119,6 +121,8 @@ export async function handleWorkspaceResourceVideoTask(
   ) {
     throw new Error(`WORKSPACE_RESOURCE_VIDEO_TASK_CONTRACT_INVALID:${data.taskId}`)
   }
+  const prompt = payload.resource.prompt
+  if (prompt === null) throw new Error(`WORKSPACE_RESOURCE_VIDEO_PROMPT_REQUIRED:${data.taskId}`)
   await reportTaskProgress(context, 20, { stage: 'workspace_resource_prepare' })
   const referenceImages = await loadVideoImageReferences(context, payload)
   const referenceAudios = await loadVideoAudioReferences(data.userId, data.projectId, payload)
@@ -137,7 +141,7 @@ export async function handleWorkspaceResourceVideoTask(
     referenceVideos,
     options: {
       ...frozenVideoOptions(options),
-      prompt: payload.resource.prompt,
+      prompt,
       duration: durationSeconds,
     },
   })

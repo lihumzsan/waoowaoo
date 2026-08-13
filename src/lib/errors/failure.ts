@@ -62,6 +62,11 @@ export type FailureRecord = {
   readonly frames: readonly FailureFrame[]
 }
 
+export function hasProviderFailureEvidence(failure: FailureRecord): boolean {
+  return failure.context.system === 'provider'
+    || failure.frames.some((frame) => frame.system === 'provider')
+}
+
 const SENSITIVE_KEY = /(?:authorization|cookie|secret|token|password|api[-_]?key|credential|signature)/i
 const BUSINESS_CONTENT_KEY = /^\$?(?:audio|base64|body|data|image|input|output|prompt|request|response|url|video)s?$/i
 

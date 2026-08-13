@@ -9,7 +9,6 @@ import type { PublicDeploymentFeatures } from '@/lib/deployment/public-client'
 const FOOTER_LINKS = [
   { href: '/terms', labelKey: 'terms' },
   { href: '/privacy', labelKey: 'privacy' },
-  { href: '/refund-policy', labelKey: 'refundPolicy' },
   { href: '/contact', labelKey: 'contact' },
 ] as const
 

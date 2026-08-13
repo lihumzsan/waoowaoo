@@ -25,6 +25,7 @@ interface KeyTestStep {
   status: KeyTestStepStatus
   messageKey: `connectionTest.${string}`
   model?: string
+  diagnostic?: string
 }
 type KeyTestStatus = 'idle' | 'testing' | 'passed' | 'failed'
 interface UseProviderCardStateParams {
@@ -51,13 +52,11 @@ interface ProviderConnectionPayload {
 
 function pickConfiguredLlmModel(params: {
   models: CustomModel[]
-  defaultAssistantModel?: string
   defaultAnalysisModel?: string
 }): string | undefined {
   const enabledLlmModels = params.models.filter((model) => model.type === 'llm' && model.enabled)
   if (enabledLlmModels.length === 0) return undefined
-  const preferredModel = enabledLlmModels.find((model) => model.modelKey === params.defaultAssistantModel)
-    ?? enabledLlmModels.find((model) => model.modelKey === params.defaultAnalysisModel)
+  const preferredModel = enabledLlmModels.find((model) => model.modelKey === params.defaultAnalysisModel)
   return (preferredModel ?? enabledLlmModels[0])?.modelId
 }
 
@@ -191,7 +190,6 @@ export function useProviderCardState({
 
   const isDefaultModel = (model: CustomModel) => {
     if (model.type === 'llm') {
-      if (matchesModelKey(defaultModels.assistantModel, model.provider, model.modelId)) return true
       if (matchesModelKey(defaultModels.analysisModel, model.provider, model.modelId)) return true
     }
 
@@ -245,7 +243,6 @@ export function useProviderCardState({
     try {
       const fallbackLlmModel = pickConfiguredLlmModel({
         models,
-        defaultAssistantModel: defaultModels.assistantModel,
         defaultAnalysisModel: defaultModels.analysisModel,
       })
       const payload = buildProviderConnectionPayload({
@@ -276,7 +273,7 @@ export function useProviderCardState({
       setKeyTestSteps([{ name: 'models', status: 'fail', messageKey: 'connectionTest.networkError' }])
       setKeyTestStatus('failed')
     }
-  }, [defaultModels.analysisModel, defaultModels.assistantModel, doSaveKey, models, provider.baseUrl, provider.id, providerKey, tempKey])
+  }, [defaultModels.analysisModel, doSaveKey, models, provider.baseUrl, provider.id, providerKey, tempKey])
 
   const handleForceSaveKey = useCallback(() => {
     doSaveKey()
@@ -289,7 +286,6 @@ export function useProviderCardState({
     try {
       const fallbackLlmModel = pickConfiguredLlmModel({
         models,
-        defaultAssistantModel: defaultModels.assistantModel,
         defaultAnalysisModel: defaultModels.analysisModel,
       })
       const payload = buildProviderConnectionPayload({
@@ -310,7 +306,7 @@ export function useProviderCardState({
       setKeyTestSteps([{ name: 'models', status: 'fail', messageKey: 'connectionTest.networkError' }])
       setKeyTestStatus('failed')
     }
-  }, [defaultModels.analysisModel, defaultModels.assistantModel, models, provider.baseUrl, provider.id, providerKey])
+  }, [defaultModels.analysisModel, models, provider.baseUrl, provider.id, providerKey])
 
   const handleDismissTest = useCallback(() => {
     setKeyTestStatus('idle')
@@ -412,7 +408,6 @@ export function useProviderCardState({
         name: finalName,
         type,
         provider: provider.id,
-        price: 0,
       })
 
       setNewModel(EMPTY_MODEL_FORM)

@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { createRequire } from 'node:module'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { Connection } from '@temporalio/client'
 import mysql from 'mysql2/promise'
@@ -130,7 +131,7 @@ function applyEndpoints(endpoints: TestServiceEndpoints): void {
     process.env.TEMPORAL_WORKER_DEPLOYMENT_NAME =
       `${endpoints.scope.composeProjectName}-worker`
     process.env.TEMPORAL_WORKER_BUILD_ID = 'test'
-    process.env.TEMPORAL_WORKER_VERSIONING_ENABLED = 'false'
+    process.env.TEMPORAL_WORKER_VERSIONING_ENABLED = 'true'
   }
 }
 
@@ -282,7 +283,8 @@ export async function waitForTestServices(
 
 export function pushTestSchema(scope?: TestServiceScope): TestServiceEndpoints {
   const endpoints = readEndpoints(scope)
-  execFileSync('npx', ['prisma', 'db', 'push', '--skip-generate', '--schema', 'prisma/schema.prisma'], {
+  const prismaCli = createRequire(import.meta.url).resolve('prisma/build/index.js')
+  execFileSync(process.execPath, [prismaCli, 'db', 'push', '--skip-generate', '--schema', 'prisma/schema.prisma'], {
     cwd: process.cwd(),
     env: process.env,
     stdio: 'inherit',

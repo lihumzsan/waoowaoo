@@ -2,7 +2,6 @@
 
 import { useQuery } from '@tanstack/react-query'
 import type { ModelCapabilities } from '@/lib/ai-registry/types'
-import { VideoPricingTier } from '@/lib/ai-registry/video-capabilities'
 import { queryKeys } from '../keys'
 import { apiFetch } from '@/lib/api-fetch'
 
@@ -12,7 +11,6 @@ export interface UserModelOption {
     provider?: string
     providerName?: string
     capabilities?: ModelCapabilities
-    videoPricingTiers?: VideoPricingTier[]
 }
 
 export interface UserModelsPayload {

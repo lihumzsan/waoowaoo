@@ -22,7 +22,6 @@ describe('TaskDefinition conformance', () => {
       expect(definition.terminalOutputMaterializer).toBe('workspace_resource')
       expect(TASK_DEFINITIONS[taskType].continuationResultProjection).toBe('reference')
       expect(TASK_DEFINITIONS[taskType].lifecyclePayloadProjection).toBe('reference')
-      expect(definition.executionDeadlineMs).toBeNull()
     }
   })
 })

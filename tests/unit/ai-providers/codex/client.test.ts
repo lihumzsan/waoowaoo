@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildCodexImageExecArgs,
-  buildCodexPrompt,
 } from '@/lib/ai-providers/codex/client'
 
 describe('Codex image client', () => {
@@ -24,12 +23,5 @@ describe('Codex image client', () => {
       'C:/tmp/reference.png',
     ]))
     expect(args.at(-1)).toBe('-')
-  })
-
-  it('serializes role-labelled text prompts for the Codex CLI', () => {
-    expect(buildCodexPrompt([
-      { role: 'system', content: 'Be concise.' },
-      { role: 'user', content: 'Draw a red kite.' },
-    ])).toBe('SYSTEM:\nBe concise.\n\nUSER:\nDraw a red kite.')
   })
 })

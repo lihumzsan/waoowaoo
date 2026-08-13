@@ -260,6 +260,7 @@ export interface RuntimeAdapter {
   startTurn(params: RuntimeTurnStartParams): Promise<RuntimeTurn>
   steerTurn(params: RuntimeTurnSteerParams): Promise<string>
   interruptTurn(params: RuntimeTurnInterruptParams): Promise<void>
+  hasPendingServerRequest(requestId: RuntimeRequestId): boolean
   respondToServerRequest(response: RuntimeServerRequestResponse): Promise<void>
   subscribe(listener: RuntimeEventListener): () => void
   shutdown(): Promise<void>

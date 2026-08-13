@@ -4,7 +4,7 @@ import { ApiError } from '@/lib/api-errors'
 import { ASPECT_RATIO_CONFIGS } from '@/lib/constants'
 import { prisma } from '@/lib/prisma'
 import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
-import type { OperationPlan } from './planning'
+import type { OperationPlan } from './plan-contract'
 import { parseWorkspaceResourceGenerationTaskPayload } from '@/lib/workspace-resource/generation-contract'
 import { TASK_TYPE } from '@/lib/task/types'
 

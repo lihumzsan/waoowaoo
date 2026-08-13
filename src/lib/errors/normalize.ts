@@ -36,7 +36,7 @@ type ErrorLike = {
   readonly cause?: unknown
 }
 
-function findCarriedFailure(value: unknown): FailureRecord | null {
+export function findCarriedFailureRecord(value: unknown): FailureRecord | null {
   let current: unknown = value
   const seen = new Set<unknown>()
   for (let depth = 0; depth < 12; depth += 1) {
@@ -65,7 +65,7 @@ function toMessage(value: unknown): string {
 
 /** Bounded internal description for unknown thrown values. */
 export function describeUnknownError(value: unknown): string {
-  const carried = findCarriedFailure(value)
+  const carried = findCarriedFailureRecord(value)
   if (carried) return carried.native.message
   const message = toMessage(value)
   return (message || String(value)).slice(0, 4_000)
@@ -141,7 +141,7 @@ export function normalizeAnyError(
   input: unknown,
   options: NormalizeOptions = {},
 ): FailureRecord {
-  const carried = findCarriedFailure(input)
+  const carried = findCarriedFailureRecord(input)
   if (carried) {
     return augmentFailureRecord(carried, {
       details: options.details,

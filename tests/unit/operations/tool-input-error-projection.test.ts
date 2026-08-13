@@ -12,7 +12,7 @@ const requestSchema = z.object({
     z.object({
       kind: z.literal('new'),
       mode: z.enum(['reference']),
-      maxBudgetCredits: z.number().positive().optional(),
+      optionalCount: z.number().positive().optional(),
     }).strict(),
     z.object({
       kind: z.literal('retry'),
@@ -35,7 +35,7 @@ describe('Project Agent Tool input error projection', () => {
           request: {
             kind: 'new',
             mode: 'frame',
-            maxBudgetCredits: null,
+            optionalCount: null,
           },
         },
         inputSchema: requestSchema,
@@ -69,7 +69,7 @@ describe('Project Agent Tool input error projection', () => {
         request: {
           kind: 'new',
           mode: 'reference',
-          maxBudgetCredits: null,
+            optionalCount: null,
         },
       },
       inputSchema: requestSchema,

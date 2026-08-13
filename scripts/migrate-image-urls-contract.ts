@@ -32,7 +32,6 @@ const BATCH_SIZE = 200
 const APPLY = process.argv.includes('--apply')
 
 const MODELS: Array<{ name: string; model: string }> = [
-  { name: 'CharacterAppearance', model: 'characterAppearance' },
   { name: 'GlobalCharacterAppearance', model: 'globalCharacterAppearance' },
 ]
 

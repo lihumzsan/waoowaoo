@@ -44,7 +44,6 @@ export async function handleWorkspaceResourceVoiceoverTask(context: TaskExecutio
       await assertTaskActive(context, 'voiceover_polling_external_wait')
     },
   })
-  if (!generated.success) throw new Error(generated.error || 'VOICEOVER_GENERATE_PROVIDER_FAILED')
   const providerRoute = await requireTaskProviderRouteSelection(context, 'media:voiceover:primary')
   const audio = await loadGeneratedAudio({ audioBase64: generated.audioBase64, audioUrl: generated.audioUrl, mimeType: generated.audioMimeType, label: 'generated voiceover', errorPrefix: 'VOICEOVER_GENERATE' })
   const extension = extensionFromAudioMimeType(audio.mimeType)

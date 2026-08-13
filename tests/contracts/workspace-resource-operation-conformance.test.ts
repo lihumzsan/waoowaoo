@@ -45,7 +45,7 @@ describe('WorkspaceResource Operation registry conformance', () => {
   it('publishes every media generator directly to MCP and exposes no manifest operation', () => {
     const registry = createProjectAgentOperationRegistryForApi()
     expect(registry.submit_production_manifest).toBeUndefined()
-    for (const operationId of ['create_image', 'create_audio', 'create_video', 'generate_voice']) {
+    for (const operationId of ['create_image', 'create_audio', 'create_video']) {
       const operation = registry[operationId]
       if (!operation) throw new Error(`Required media operation missing: ${operationId}`)
       expect(operation.channels, operationId).toEqual({ tool: true, api: true, mcp: true })
@@ -316,7 +316,7 @@ describe('WorkspaceResource Operation registry conformance', () => {
     }] } }).success).toBe(true)
     expect(() => parseWorkspaceResourceGenerationTaskPayload({
       lifecycleProjection: { resources: [{ resourceId: 'res_output', mediaType: 'image', schemaId: 'generic.image', name: 'Derived' }] },
-      protocol: 'workspace_resource_generation_v1',
+      protocol: 'workspace_resource_generation_v2',
       resource: {
         resourceId: 'res_output', workspacePath: 'Derived-res_output', mediaType: 'image', schemaId: 'generic.image',
         inputHash: 'a'.repeat(64), prompt: 'Use every reference.', modelKey: 'openrouter::openai/gpt-image-2',

@@ -18,17 +18,20 @@ JSON 专业结果，并把同一 items 直接提交给 `create_audio`。系统�
 - **AP-02 — 每次生成显式提交。** `create_audio` items 必须给出名称、模态公共参数和精确输入引用；
   Placement 由服务端根据项目相对目标文件夹路径与用户可见名称派生；
   候选数量上限由 registry 声明。成功只生成对应 Resource，不自动触发混音或视频。
-- **AP-03 — Provider 能力只约束单次执行。** 时长、格式和输入上限由 capability registry 唯一声明；
-  不得据此自动拆分作品或创建系统层级实体。
+- **AP-03 — Provider 能力只约束单次执行。** 生成模式、Composition Plan、时长、格式和输入上限由
+  capability registry 唯一声明；Skill 可把真实 Provider 限制重复为创作纪律，但执行校验仍只读
+  registry。能力缺失原地失败，不自动换模型、改写计划、拆分作品或创建系统层级实体。
 - **AP-04 — 音色是资源。** 参考音色只有在本次输入显式引用并冻结其资源 id 与版本时才传给 Provider；
   "当前音色"或最近记录不是事实。
-- **AP-05 — 混音确定且有界。** 输入、顺序、起止、增益与自动化全部冻结；输出时长由拼接时间线决定。
-  执行统一采样率、时间戳、pad/trim 与超时，不能分析内容后改写创作决定。
-- **AP-06 — 终态不连锁。** 音频 Task 只结算自身 Resource 与账单；后续采用、重做、混音或视频均需
+- **AP-05 — 混音确定且有界。** 每个音乐 cue 必须携带一个精确成片版本的 lineage；输入、顺序、
+  毫秒放置、计划派生时长、增益与自动化由既有 merge Operation 唯一冻结。执行只统一采样率、时间戳、
+  pad/trim、cue 总线与对白 ducking，不能分析内容后改写创作决定。
+- **AP-06 — 终态不连锁。** 音频 Task 只结算自身 Resource；后续采用、重做、混音或视频均需
   独立用户意图和授权。
-- **AP-07 — 音乐输入是显式 generation item 字段。** 主 Agent 的音乐结果写完整最终 Prompt、时长、
-  演唱模式与精确引用；格式、模型和 provider option 由服务端 registry/config 决定并在 Plan 前校验。
-  Planner 不拼接 Prompt，只校验并逐字冻结；handler 与 provider adapter 只消费冻结结果，不得追加参数文案。
+- **AP-07 — 音乐输入是唯一结构化计划。** 主 Agent 的音乐结果直接写 Composition Plan、绝对时间线
+  放置、混音意图与精确成片引用；不得再由 Provider 自动 plan、video-to-music、Prompt 编译器或 handler
+  产生第二份配乐解释。Planner 在 Task 前校验并冻结同一结构；retry、adapter、Resource provenance
+  与 merge planner 只消费这份冻结事实。
 
 ## Sound-effect invariant
 
@@ -54,5 +57,8 @@ JSON 专业结果，并把同一 items 直接提交给 `create_audio`。系统�
   adapter 纳入单 writer 边界 → 删除服务端编译器，adapter 原样发送冻结 Prompt，并向 Skill 注入远低于
   Provider 硬上限的保守目标预算（AP-07）。
 - 音色首版只保存了音频对象却把真实时长写成 null，视频预检又只校验引用角色与数量，1.728 秒试听因而在
-  报价授权后才被 Provider 拒绝并诱导额外付费重做 → 上一版防线没有把冻结媒体事实纳入能力约束 → 音色
+  Task 提交后才被 Provider 拒绝并诱导额外重做 → 上一版防线没有把冻结媒体事实纳入能力约束 → 音色
   Worker 测量并持久化时长，视频 Planner 按模型 registry 对精确 ResourceVersion 在 Plan 前校验（AP-03/04）。
+- cue 起止曾只存在于创作输出，生成 Operation 没有冻结放置，最终 merge 又只会从零开始铺一条 BGM；
+  上一版仅校验 Agent JSON，没有覆盖 Task、retry、Resource provenance 和真实 mixer 调用链 → cue timing
+  与精确成片 lineage 成为同一冻结事实，merge planner 是唯一 placement writer（AP-05/07）。

@@ -15,6 +15,7 @@ function parseComfyUiExternalId(externalId: string): ParsedAsyncExternalId {
 
 export const comfyuiAsyncTaskProvider: AsyncTaskProviderRegistration = {
   providerCode: 'COMFYUI',
+  providerKey: 'comfyui',
   canParseExternalId: (externalId) => externalId.startsWith('COMFYUI:'),
   parseExternalId: parseComfyUiExternalId,
   formatExternalId: (input) => `COMFYUI:${input.type}:${input.requestId}`,

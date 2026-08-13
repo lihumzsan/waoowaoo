@@ -1,5 +1,6 @@
 import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
 import { createProviderAsyncTaskFailure } from '@/lib/ai-providers/shared/async-task-status'
+import { readProviderJsonResponse } from '@/lib/ai-providers/failure'
 import type { AiProviderVoiceExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 import { readOwnedMediaBytesForGeneration } from '@/lib/media/outbound-owned-media'
 import { readComfyUiDeclaredNodeAudioOutput, readComfyUiOutputData, asComfyUiRecord, readComfyUiHttpError, readComfyUiRequiredOptions, readComfyUiString, requestComfyUiJson, COMFYUI_ACCEPTED_JOB_STATUSES, type ComfyUiOutput, ComfyUiHttpError } from './transport'
@@ -104,9 +105,11 @@ async function uploadReferenceAudio(input: { baseUrl: string; userId: string; re
   const response = await fetch(`${input.baseUrl.replace(/\/+$/u, '')}/upload/image`, {
     method: 'POST', body: form, signal: AbortSignal.timeout(120_000), cache: 'no-store',
   })
-  const body = await response.text()
-  let parsed: unknown = null
-  try { parsed = body ? JSON.parse(body) as unknown : null } catch { parsed = body }
+  const parsed = await readProviderJsonResponse({
+    response,
+    provider: 'comfyui',
+    phase: 'submit',
+  })
   if (!response.ok) throw new ComfyUiHttpError(response.status, parsed)
   const record = asComfyUiRecord(parsed)
   const name = readComfyUiString(record?.name)

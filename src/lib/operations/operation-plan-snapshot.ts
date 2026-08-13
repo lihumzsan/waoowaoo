@@ -1,14 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import {
-  assertOperationPlanTaskResourceScopes,
-  type OperationPlan,
-  type OperationPlanView,
-  type PlannedTask,
-  type PlannedTaskDependency,
-  type PlannedTaskEdge,
-} from './planning'
+import type {
+  OperationPlan,
+  OperationPlanView,
+  PlannedTask,
+  PlannedTaskDependency,
+  PlannedTaskEdge,
+} from './plan-contract'
+import { assertOperationPlanTaskResourceScopes } from './operation-plan-resource-scope'
 import { assertValidOperationPlanTaskEdges } from './task-edge-policy'
 import { canonicalJson, hashCanonicalJson } from '@/lib/operation-plan-contract/canonical-json'
 import { isTaskType } from '@/lib/task/types'

@@ -2,10 +2,6 @@
   "llmModels": "Text Model List",
   "imageModels": "Image Model List",
   "videoModels": "Video Model List",
-  "price": "Price",
-  "pricePerMillion": "Per million tokens",
-  "pricePerImage": "Per image",
-  "pricePerVideo": "Per video",
   "name": "Name",
   "modelId": "Model ID",
   "modelName": "Model Name",
@@ -23,5 +19,5 @@
   "noModels": "No models yet, click the button above to add",
   "noApiKey": "Configure API Key",
   "batchMode": "Batch",
-  "batchModeTooltip": "Offline inference, 50% cheaper, completes within 24 hours"
+  "batchModeTooltip": "Offline inference; completion time is determined by the provider"
 }

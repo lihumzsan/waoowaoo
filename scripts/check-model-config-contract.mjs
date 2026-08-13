@@ -11,7 +11,6 @@ const PROJECT_MODEL_FIELDS = [
   'soundModel',
 ]
 const USER_MODEL_FIELDS = [
-  'assistantModel',
   ...PROJECT_MODEL_FIELDS,
 ]
 const MAX_SAMPLES = 200
@@ -372,7 +371,6 @@ async function main() {
     select: {
       id: true,
       customModels: true,
-      assistantModel: true,
       analysisModel: true,
       characterModel: true,
       locationModel: true,

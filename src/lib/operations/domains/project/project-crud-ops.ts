@@ -197,6 +197,7 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
         longRunning: false,
       },
       confirmation: {
+        kind: 'destructive',
         required: true,
         summary:
           '将删除整个项目及其关联数据（不可恢复）。系统会在获得明确批准后执行同一份已审核请求。',

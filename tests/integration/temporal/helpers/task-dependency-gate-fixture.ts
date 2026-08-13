@@ -9,8 +9,11 @@ import { persistSubmittedTaskBatchInTransaction } from '@/lib/task/transactional
 import { TASK_TYPE } from '@/lib/task/types'
 import { buildTaskWorkflowId } from '@/lib/temporal/identity'
 import { buildWorkspaceResourceLifecycleProjection } from '@/lib/workspace-resource/task-runtime-envelope'
+import { buildWorkspaceResourceId } from '@/lib/workspace-resource/identity'
+import type { WorkspaceResourceInputRef } from '@/lib/workspace-resource/contracts'
 import { WORKSPACE_RESOURCE_SCHEMA } from '@/lib/workspace-resource/schema-registry'
 import {
+  createWorkspaceResourceFolderInTransaction,
   materializeWorkspaceResourceInTransaction,
   reserveWorkspaceResourceInTransaction,
 } from '@/lib/workspace-resource/persistence'
@@ -60,7 +63,11 @@ async function seedMedia(suffix: string): Promise<readonly string[]> {
   return media.map((item) => item.id)
 }
 
-function buildPayload(resourceId: string, name: string): Record<string, unknown> {
+function buildPayload(
+  resourceId: string,
+  name: string,
+  inputs: readonly WorkspaceResourceInputRef[],
+): Record<string, unknown> {
   return {
     lifecycleProjection: buildWorkspaceResourceLifecycleProjection([
       {
@@ -70,14 +77,17 @@ function buildPayload(resourceId: string, name: string): Record<string, unknown>
         name,
       },
     ]),
+    protocol: 'workspace_resource_video_merge_v1',
     resource: {
       resourceId,
       mediaType: 'video',
       schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
       prompt: null,
+      modelKey: null,
       inputHash: 'd'.repeat(64),
-      inputs: [],
-      generationOptions: { mergeMode: 'dependency_gate_test' },
+      inputs,
+      generationOptions: { mergeMode: 'ordered_concat', audioMode: 'preserve' },
+      musicCues: [],
       toolCallId: null,
     },
   }
@@ -145,7 +155,7 @@ export async function createTaskDependencyGateFixture(input: {
   await prisma.user.create({
     data: {
       id: userId,
-      name: 'Dependency gate test',
+      name: `Dependency gate test ${suffix}`,
       email: `task-dependency-gate-${suffix}@example.com`,
       preferences: { create: { imageConcurrency: 1, videoConcurrency: 1 } },
       projects: { create: { id: projectId, name: 'Dependency gate project' } },
@@ -177,10 +187,28 @@ export async function createTaskDependencyGateFixture(input: {
     },
   })
   const mediaObjectIds = await seedMedia(suffix)
-  const source1TaskId = `task-dependency-gate-source-1-${suffix}`
-  const source2TaskId = `task-dependency-gate-source-2-${suffix}`
-  const mixTaskId = `task-dependency-gate-mix-${suffix}`
-  const resourceIds = [source1TaskId, source2TaskId, mixTaskId]
+  const resourceIds = [0, 1, 2].map((memberIndex) => buildWorkspaceResourceId({
+    operationId,
+    requestId: operationExecutionId,
+    memberIndex,
+  }))
+  const taskIds = [
+    `task-dependency-gate-source-1-${randomUUID()}`,
+    `task-dependency-gate-source-2-${randomUUID()}`,
+    `task-dependency-gate-mix-${randomUUID()}`,
+  ] as const
+  const inputResourceIds = [0, 1].map((memberIndex) => buildWorkspaceResourceId({
+    operationId: 'dependency_gate_source',
+    requestId: operationExecutionId,
+    memberIndex,
+  }))
+  const inputReferences: readonly WorkspaceResourceInputRef[] = inputResourceIds.map((resourceId, index) => ({
+    resourceId,
+    contentVersion: 1,
+    workspacePath: `dependency-gate/source-${String(index)}`,
+    role: 'source_video',
+    position: index,
+  }))
   const followUpBatchBinding = createAgentFollowUpBatchBinding({
     executionKey: operationExecutionId,
     turnId: originTurnId,
@@ -196,7 +224,7 @@ export async function createTaskDependencyGateFixture(input: {
         type: TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
         targetType: 'WorkspaceResource',
         targetId: resourceId,
-        payload: buildPayload(resourceId, `Dependency gate ${String(index)}`),
+        payload: buildPayload(resourceId, `Dependency gate ${String(index)}`, inputReferences),
         operationId,
         operationSource: 'system',
         operationExecutionId,
@@ -204,7 +232,7 @@ export async function createTaskDependencyGateFixture(input: {
         requestId: operationExecutionId,
         dedupeKey: `task-dependency-gate:${resourceId}`,
       })),
-      id: resourceId,
+      id: taskIds[index],
       operationPlanTaskId: `task:${String(index)}`,
     })),
   )
@@ -224,6 +252,46 @@ export async function createTaskDependencyGateFixture(input: {
         },
       })
       if (execution.id !== operationExecutionId) throw new Error('TASK_DEPENDENCY_GATE_EXECUTION_ID_DIVERGED')
+      await createWorkspaceResourceFolderInTransaction(tx, {
+        userId,
+        projectId,
+        workspacePath: 'dependency-gate',
+        sourceType: 'integration_test_fixture',
+        sourceId: operationExecutionId,
+      })
+      for (const [index, reference] of inputReferences.entries()) {
+        const mediaId = mediaObjectIds[index]
+        if (!mediaId) throw new Error('TASK_DEPENDENCY_GATE_INPUT_MEDIA_MISSING')
+        await reserveWorkspaceResourceInTransaction(tx, {
+          resourceId: reference.resourceId,
+          userId,
+          projectId,
+          outputPath: reference.workspacePath,
+          mediaType: 'video',
+          schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
+          sourceType: 'integration_test_fixture',
+          sourceId: `${operationExecutionId}:source:${String(index)}`,
+        })
+        await materializeWorkspaceResourceInTransaction(tx, {
+          resourceId: reference.resourceId,
+          userId,
+          projectId,
+          mediaType: 'video',
+          schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
+          content: { kind: 'media', mediaId },
+          inputs: [],
+          provenance: {
+            operationId: null,
+            inputHash: null,
+            taskId: null,
+            operationExecutionId: null,
+            toolCallId: null,
+            prompt: null,
+            modelKey: null,
+            generationOptions: null,
+          },
+        })
+      }
       const rows = await persistSubmittedTaskBatchInTransaction({
         tx,
         inputs: prepared,
@@ -240,7 +308,7 @@ export async function createTaskDependencyGateFixture(input: {
               operationExecutionId,
               taskId: task.task.id,
               inputHash: 'd'.repeat(64),
-              generationOptions: { mergeMode: 'dependency_gate_test' },
+              generationOptions: { mergeMode: 'ordered_concat', audioMode: 'preserve' },
             })
           }
           await followUpBatchBinding.bindInTransaction(transaction, {
@@ -300,7 +368,7 @@ export async function createTaskDependencyGateFixture(input: {
     references: sourceReferences,
     sourceOutcomes: input.sourceOutcomes,
     mediaObjectIds,
-    resourceIds,
+    resourceIds: [...resourceIds, ...inputResourceIds],
   }
 }
 
@@ -309,6 +377,14 @@ export async function removeTaskDependencyGateFixture(
 ): Promise<void> {
   await prisma.followUpBatch.deleteMany({ where: { id: fixture.followUpBatchId } })
   await prisma.taskExecutionCheckpoint.deleteMany({ where: { taskId: { in: [fixture.source1TaskId, fixture.source2TaskId, fixture.mixTaskId] } } })
+  await prisma.workspaceResourceLineage.deleteMany({
+    where: {
+      OR: [
+        { outputResourceId: { in: [...fixture.resourceIds] } },
+        { inputResourceId: { in: [...fixture.resourceIds] } },
+      ],
+    },
+  })
   await prisma.workspaceResource.deleteMany({ where: { id: { in: [...fixture.resourceIds] } } })
   await prisma.task.deleteMany({ where: { id: { in: [fixture.source1TaskId, fixture.source2TaskId, fixture.mixTaskId] } } })
   await prisma.operationExecution.deleteMany({ where: { id: fixture.operationExecutionId } })

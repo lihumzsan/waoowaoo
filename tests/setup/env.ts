@@ -45,6 +45,15 @@ export function loadTestEnv() {
   setIfMissing('DATABASE_URL', 'mysql://root:root@127.0.0.1:3307/waoowaoo_test')
   setIfMissing('REDIS_HOST', '127.0.0.1')
   setIfMissing('REDIS_PORT', '6380')
+  setIfMissing('API_ENCRYPTION_KEY', 'test-only-api-encryption-key')
+  setIfMissing('NEXTAUTH_SECRET', 'test-only-nextauth-secret-value')
+  setIfMissing('PLATFORM_DEFAULT_ANALYSIS_MODEL', 'openrouter::openai/gpt-5.6-sol')
+  setIfMissing('PLATFORM_DEFAULT_CHARACTER_MODEL', 'codex::gpt-image-2')
+  setIfMissing('PLATFORM_DEFAULT_LOCATION_MODEL', 'codex::gpt-image-2')
+  setIfMissing('PLATFORM_DEFAULT_EDIT_MODEL', 'codex::gpt-image-2')
+  setIfMissing('PLATFORM_DEFAULT_VIDEO_MODEL', 'comfyui::minimax-h3-fast')
+  setIfMissing('PLATFORM_DEFAULT_MUSIC_MODEL', 'comfyui::ace-step-1.5')
+  setIfMissing('PLATFORM_DEFAULT_SOUND_MODEL', 'comfyui::moss-soundeffect-v2')
 
   if (mutableEnv.TEMPORAL_TEST_BOOTSTRAP === '1') {
     setIfMissing('TEMPORAL_ADDRESS', '127.0.0.1:7233')
@@ -53,7 +62,7 @@ export function loadTestEnv() {
     setIfMissing('TEMPORAL_TLS_ENABLED', 'false')
     setIfMissing('TEMPORAL_WORKER_DEPLOYMENT_NAME', 'waoowaoo-test')
     setIfMissing('TEMPORAL_WORKER_BUILD_ID', 'test')
-    setIfMissing('TEMPORAL_WORKER_VERSIONING_ENABLED', 'false')
+    setIfMissing('TEMPORAL_WORKER_VERSIONING_ENABLED', 'true')
   }
 
   if (mutableEnv.ALLOW_TEST_NETWORK !== '1') {

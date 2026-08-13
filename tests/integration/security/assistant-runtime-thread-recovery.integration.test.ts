@@ -14,6 +14,7 @@ import type {
   RuntimeEvent,
   RuntimeEventListener,
   RuntimeInitializeResult,
+  RuntimeRequestId,
   RuntimeServerRequestResponse,
   RuntimeSkillsListParams,
   RuntimeSkillsListResponse,
@@ -48,6 +49,7 @@ const runtimeWorkspaceDirectory = 'C:\\runtime-workspace'
 class DeterministicRuntimeAdapter implements RuntimeAdapter {
   closed = false
   private readonly listeners = new Set<RuntimeEventListener>()
+  private readonly pendingServerRequests = new Set<RuntimeRequestId>()
   private lastTurnThreadId: string | null = null
 
   constructor(private readonly startThreadFails: boolean) {}
@@ -90,7 +92,15 @@ class DeterministicRuntimeAdapter implements RuntimeAdapter {
 
   async interruptTurn(_params: RuntimeTurnInterruptParams): Promise<void> {}
 
-  async respondToServerRequest(_response: RuntimeServerRequestResponse): Promise<void> {}
+  hasPendingServerRequest(requestId: RuntimeRequestId): boolean {
+    return !this.closed && this.pendingServerRequests.has(requestId)
+  }
+
+  async respondToServerRequest(response: RuntimeServerRequestResponse): Promise<void> {
+    if (!this.pendingServerRequests.delete(response.id)) {
+      throw new Error('TEST_RUNTIME_SERVER_REQUEST_UNKNOWN')
+    }
+  }
 
   subscribe(listener: RuntimeEventListener): () => void {
     this.listeners.add(listener)
@@ -99,6 +109,7 @@ class DeterministicRuntimeAdapter implements RuntimeAdapter {
 
   async shutdown(): Promise<void> {
     this.closed = true
+    this.pendingServerRequests.clear()
   }
 
   completeTurn(): void {
@@ -139,6 +150,7 @@ class DeterministicRuntimeAdapter implements RuntimeAdapter {
         },
       },
     }
+    this.pendingServerRequests.add(event.request.id)
     for (const listener of this.listeners) listener(event)
   }
 }

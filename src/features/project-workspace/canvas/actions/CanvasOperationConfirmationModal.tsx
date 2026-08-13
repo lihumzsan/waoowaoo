@@ -3,7 +3,7 @@
 import { useTranslations } from 'next-intl'
 import GlassModalShell from '@/components/ui/primitives/GlassModalShell'
 import { AppIcon } from '@/components/ui/icons'
-import type { OperationPlanView } from '@/lib/operations/planning'
+import type { OperationPlanView } from '@/lib/operations/plan-contract'
 
 export function CanvasOperationConfirmationModal({
   plan,

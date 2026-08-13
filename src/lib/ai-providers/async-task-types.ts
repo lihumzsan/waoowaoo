@@ -1,14 +1,6 @@
-import type { AiLlmProviderConfig } from '@/lib/ai-registry/types'
 import { parseFailureRecord, type FailureRecord } from '@/lib/errors/failure'
 
 export type AsyncExternalIdProvider =
-  | 'FAL'
-  | 'ARK'
-  | 'GEMINI'
-  | 'GOOGLE'
-  | 'OPENROUTER'
-  | 'TOONFLOW'
-  | 'MUREKA'
   | 'COMFYUI'
 
 export type AsyncExternalIdType = 'VIDEO' | 'IMAGE' | 'MUSIC' | 'SOUND' | 'VOICE' | 'BATCH'
@@ -94,7 +86,12 @@ export interface AsyncUserModelForPolling {
 
 export interface AsyncTaskPollContext {
   userId: string
-  getProviderConfig: (userId: string, providerId: string) => Promise<AiLlmProviderConfig>
+  getProviderConfig: (userId: string, providerId: string) => Promise<{
+    id: string
+    name: string
+    apiKey: string
+    baseUrl?: string
+  }>
   getUserModels: (userId: string) => Promise<AsyncUserModelForPolling[]>
 }
 
@@ -105,6 +102,7 @@ export interface AsyncTaskPollInput {
 
 export interface AsyncTaskProviderRegistration {
   providerCode: AsyncExternalIdProvider
+  providerKey: string
   canParseExternalId: (externalId: string) => boolean
   parseExternalId: (externalId: string) => ParsedAsyncExternalId
   formatExternalId: (input: FormatAsyncExternalIdInput) => string

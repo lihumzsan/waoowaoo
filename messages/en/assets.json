@@ -129,7 +129,7 @@
     "selectCharacter": "Please select a character",
     "enterChangeReason": "Please enter change reason",
     "enterSubDesc": "Please enter appearance description",
-    "insufficientBalance": "Insufficient Balance\n\n{error}",
+    "providerUnavailable": "Provider unavailable\n\n{error}",
     "designFailed": "AI Design Failed: {error}",
     "addFailed": "Add Failed: {error}",
     "aiDesignPlaceholderNew": "e.g. A 20-year-old female mage, blonde hair, blue eyes...",
@@ -150,7 +150,7 @@
     "subDescTip": "Only describe changes (clothes, state), face/body inherits from primary",
     "adding": "Adding...",
     "processing": "Processing...",
-    "insufficientBalanceDefault": "Insufficient balance, please top up to continue",
+    "providerUnavailableDefault": "The configured provider is unavailable",
     "addFailedGeneric": "Add Failed",
     "appearancesCount": "Appearances",
     "addCharacter": "Add Character",
@@ -223,7 +223,7 @@
   "errors": {
     "saveFailed": "Save Failed, please retry",
     "failed": "failed, please retry",
-    "insufficientBalance": "Insufficient balance",
+    "providerUnavailable": "The configured provider is unavailable",
     "aiDesignFailed": "AI design failed",
     "createFailed": "Creation failed"
   },

@@ -20,10 +20,20 @@ export type ProjectProductionCapabilities = {
     readonly maxReferenceFiles: number
     readonly referenceAudioRequiresVisual: boolean
     readonly minReferenceAudioDurationMs: number | null
+    readonly maxTotalReferenceAudioDurationMs: number | null
     readonly supportedInputModes: readonly VideoInputMode[]
   } | null
   readonly music: {
     readonly modelKey: string
+    readonly generationMode: 'prompt' | 'composition_plan'
+    readonly maxChunks: number | null
+    readonly minChunkDurationMs: number | null
+    readonly maxChunkDurationMs: number | null
+    readonly minPlanDurationMs: number | null
+    readonly maxPlanDurationMs: number | null
+    readonly maxPositiveStyles: number | null
+    readonly maxNegativeStyles: number | null
+    readonly contextAdherenceOptions: readonly ('low' | 'medium' | 'high')[]
     readonly promptMaxCharacters: number
     readonly promptTargetCharacters: number
     readonly durationSecondsOptions: readonly number[]
@@ -109,6 +119,7 @@ export function resolveProjectProductionCapabilities(config: ProjectModelConfig)
         maxReferenceFiles: video.maxReferenceFiles ?? 0,
         referenceAudioRequiresVisual: video.referenceAudioRequiresVisual === true,
         minReferenceAudioDurationMs: video.minReferenceAudioDurationMs ?? null,
+        maxTotalReferenceAudioDurationMs: video.maxTotalReferenceAudioDurationMs ?? null,
         supportedInputModes: video.supportedInputModes ?? [],
       }
     : null
@@ -116,6 +127,7 @@ export function resolveProjectProductionCapabilities(config: ProjectModelConfig)
   const music = config.musicModel
     ? resolveBuiltinCapabilitiesByModelKey('music', config.musicModel)?.music
     : undefined
+  const compositionPlan = music?.compositionPlan
   const durationSecondsRange = music?.durationSecondsRange
     ? {
         min: Math.ceil(music.durationSecondsRange.min),
@@ -130,9 +142,22 @@ export function resolveProjectProductionCapabilities(config: ProjectModelConfig)
   const promptMaxCharacters = Math.min(music?.promptMaxChars ?? 100_000, 100_000)
   const musicCapabilities = config.musicModel
     && music
-    && (durationSecondsRange !== null || durationSecondsOptions.length > 0)
+    && ((music.generationModes?.includes('composition_plan') && compositionPlan)
+      || durationSecondsRange !== null
+      || durationSecondsOptions.length > 0)
       ? {
         modelKey: config.musicModel,
+        generationMode: music.generationModes?.includes('composition_plan') && compositionPlan
+          ? 'composition_plan' as const
+          : 'prompt' as const,
+        maxChunks: compositionPlan?.maxChunks ?? null,
+        minChunkDurationMs: compositionPlan?.minChunkDurationMs ?? null,
+        maxChunkDurationMs: compositionPlan?.maxChunkDurationMs ?? null,
+        minPlanDurationMs: compositionPlan?.minPlanDurationMs ?? null,
+        maxPlanDurationMs: compositionPlan?.maxPlanDurationMs ?? null,
+        maxPositiveStyles: compositionPlan?.maxPositiveStyles ?? null,
+        maxNegativeStyles: compositionPlan?.maxNegativeStyles ?? null,
+        contextAdherenceOptions: compositionPlan?.contextAdherenceOptions ?? [],
         promptMaxCharacters,
         promptTargetCharacters: Math.max(
           1,

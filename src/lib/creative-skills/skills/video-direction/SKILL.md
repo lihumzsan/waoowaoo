@@ -78,7 +78,7 @@ description: Direct screenplay-based video generation with explicit state contin
 - Prompt 中的媒体引用语法和编号方式只由所选 Profile 决定，不得把一个 Profile 的引用标记混入另一个 Profile。
 - 每个 item 的 `references` 只列当前 Segment 实际使用的 ready Resource，精确复制 `resourceId`、`contentVersion`、`role` 与 `channel`，并按所选 Profile 在 Prompt 中引用媒体的顺序排列。内部位置由服务端生成；路径不是 Resource 身份，不得提交。
 - 不传无关素材，不从文件名、近似名称或描述猜身份，不让参考图的偶然构图、姿态、光线或噪点代替本段导演判断。
-- `reference_audio` 是视频模型的内容条件，不是 `generateAudio` 开关，也不是后期背景音乐；当 `referenceAudioRequiresVisual=true` 时，必须同时提供至少一个 `reference_image` 或 `reference_video`。`reference_video` 是运动/内容条件，只在 `maxReferenceVideos > 0` 时使用。
+- `reference_audio` 是视频模型的内容条件，不是 `generateAudio` 开关，也不是后期背景音乐；当 `referenceAudioRequiresVisual=true` 时，必须同时提供至少一个 `reference_image` 或 `reference_video`。同时遵守注入的单条最小时长和全部参考音频总时长上限；多角色时优先使用约 3–4 秒的简短音色试听，不得把每个角色的完整台词都当参考音频。`reference_video` 是运动/内容条件，只在 `maxReferenceVideos > 0` 时使用。
 
 ## 最终 Prompt Profile
 
@@ -251,4 +251,4 @@ profile 缺失/未知、输入模式不受支持、帧数量/角色/顺序错误
 
 ## 边界
 
-本 Skill 只负责视频导演方法与最终提示词。能力事实只读取系统直接注入的 `productionCapabilities.video`；项目画幅由服务端项目配置唯一决定，不作为生成 item 或 Prompt 参数重复提交。固定 `video_generation_batch` 字段由运行时注入的机器 Schema 定义，Resource 身份校验、Provider 执行、计费、Task 与合成由系统负责。
+本 Skill 只负责视频导演方法与最终提示词。能力事实只读取系统直接注入的 `productionCapabilities.video`；项目画幅由服务端项目配置唯一决定，不作为生成 item 或 Prompt 参数重复提交。固定 `video_generation_batch` 字段由运行时注入的机器 Schema 定义，Resource 身份校验、Provider 执行、Task 与合成由系统负责。

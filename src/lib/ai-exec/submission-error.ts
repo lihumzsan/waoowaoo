@@ -2,6 +2,11 @@ import { AppError } from '@/lib/errors/app-error'
 import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import type { FailureContext, FailureDetails } from '@/lib/errors/failure'
 import type { UnifiedErrorCode } from '@/lib/errors/codes'
+import {
+  attachFailureToThrown,
+  findCarriedFailureRecord,
+  normalizeAnyError,
+} from '@/lib/errors/normalize'
 
 export type ProviderSubmissionDisposition =
   | 'pre_accept_rejected'
@@ -25,18 +30,30 @@ export class ProviderSubmissionError extends AppError {
       readonly externalId?: string | null
       readonly details?: FailureDetails
       readonly context?: FailureContext
-      readonly cause?: unknown
+      /** The first native Provider fact or an error carrying its FailureRecord. */
+      readonly cause: unknown
     },
   ) {
+    if (options.cause === undefined) {
+      throw new Error('PROVIDER_SUBMISSION_ERROR_SOURCE_REQUIRED')
+    }
+    const context = options.context ?? {
+      system: 'provider' as const,
+      provider: options.provider,
+      phase: 'submit',
+    }
+    const source = findCarriedFailureRecord(options.cause)
+      ? options.cause
+      : attachFailureToThrown(options.cause, normalizeAnyError(options.cause, {
+          fallbackCode: code,
+          context,
+          operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
+        }))
     super(code, message, {
       provider: options.provider,
       details: options.details,
-      context: options.context ?? {
-        system: 'provider',
-        provider: options.provider,
-        phase: 'submit',
-      },
-      cause: options.cause,
+      context,
+      cause: source,
       operation: EXTERNAL_OPERATION.PROVIDER_SUBMIT,
     })
     this.name = 'ProviderSubmissionError'

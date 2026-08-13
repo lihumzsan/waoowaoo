@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { DockerRuntimeContainerAdapter } from './docker-runtime-container'
 import { LocalProcessRuntimeContainerAdapter } from './local-process-runtime-container'
 import type { RuntimeClientInfo, RuntimeInitializeCapabilities } from './runtime-adapter'
 import type { RuntimeContainerAdapter } from './runtime-container'
@@ -22,6 +23,7 @@ export type DockerCodexRuntimeConfig = RuntimeConfigBase & {
   readonly cpuLimit: number
   readonly memoryBytes: number
   readonly pidsLimit: number
+  readonly openAiApiKey: string
 }
 
 export type CodexRuntimeConfig = LocalCodexRuntimeConfig | DockerCodexRuntimeConfig
@@ -42,7 +44,6 @@ export function readCodexRuntimeConfig(
   environment: NodeJS.ProcessEnv = process.env,
 ): CodexRuntimeConfig {
   const driver = requireDriver(environment.CODEX_RUNTIME_DRIVER)
-  if (driver === 'docker') throw new Error('ASSISTANT_RUNTIME_CODEX_LOCAL_DRIVER_REQUIRED')
   const base: RuntimeConfigBase = {
     driver,
     hostRoot: requireHostRoot(environment.CODEX_RUNTIME_HOST_ROOT),
@@ -69,6 +70,7 @@ export function readCodexRuntimeConfig(
       256 * 1024 * 1024,
     ),
     pidsLimit: requireInteger(environment.CODEX_RUNTIME_PIDS_LIMIT, 'CODEX_RUNTIME_PIDS_LIMIT_INVALID', 32),
+    openAiApiKey: requireSecret(environment.OPENAI_API_KEY, 'CODEX_RUNTIME_OPENAI_API_KEY_REQUIRED'),
   }
 }
 
@@ -76,10 +78,24 @@ export function createRuntimeContainerAdapter(
   config: CodexRuntimeConfig,
   params: CodexRuntimeContainerFactoryParams,
 ): RuntimeContainerAdapter {
-  if (config.driver !== 'local') throw new Error('ASSISTANT_RUNTIME_CODEX_LOCAL_DRIVER_REQUIRED')
-  return new LocalProcessRuntimeContainerAdapter({
+  if (config.driver === 'local') {
+    return new LocalProcessRuntimeContainerAdapter({
+      clientInfo: params.clientInfo,
+      initializeCapabilities: PRODUCTION_CODEX_INITIALIZE_CAPABILITIES,
+      shutdownTimeoutMs: params.shutdownTimeoutMs,
+    })
+  }
+  return new DockerRuntimeContainerAdapter({
+    image: config.image,
+    networkName: config.networkName,
     clientInfo: params.clientInfo,
     initializeCapabilities: PRODUCTION_CODEX_INITIALIZE_CAPABILITIES,
+    cpuLimit: config.cpuLimit,
+    memoryBytes: config.memoryBytes,
+    pidsLimit: config.pidsLimit,
+    immutableImageRequired: process.env.NODE_ENV === 'production',
+    openAiApiKey: config.openAiApiKey,
+    processEnvironment: params.processEnvironment,
     shutdownTimeoutMs: params.shutdownTimeoutMs,
   })
 }
@@ -131,5 +147,10 @@ function requireNetworkName(value: string | undefined): string {
   if (!value || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/u.test(value)) {
     throw new Error('CODEX_RUNTIME_NETWORK_INVALID')
   }
+  return value
+}
+
+function requireSecret(value: string | undefined, code: string): string {
+  if (!value || value !== value.trim() || value.includes('\0')) throw new Error(code)
   return value
 }

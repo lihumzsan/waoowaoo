@@ -1,49 +1,31 @@
 import { describe, expect, it } from 'vitest'
-import {
-  normalizeMediaOptionsForSelection,
-} from '@/lib/ai-exec/media-preflight'
+import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
+import { normalizeMediaOptionsForSelection } from '@/lib/ai-exec/media-preflight'
 import { AiOptionValidationError } from '@/lib/ai-exec/normalize'
 
-const MUREKA_SELECTION = {
-  provider: 'mureka',
-  modelId: 'mureka-9',
-  modelKey: 'mureka::mureka-9',
+const ACE_STEP_SELECTION = {
+  provider: 'comfyui',
+  modelId: 'ace-step-1.5',
+  modelKey: 'comfyui::ace-step-1.5',
   variantSubKind: 'official',
 } as const
 
 describe('media generation preflight', () => {
-  it('checks the exact frozen music prompt before provider execution', () => {
-    const options = {
-      durationSeconds: 60,
-      vocalMode: 'instrumental',
-      genre: 'industrial ambient',
-      mood: 'restrained',
-      bpm: 72,
-      outputFormat: 'mp3',
-    }
+  it('requires the selected music model to declare its requested generation mode', () => {
+    ensureAiCatalogsRegistered()
     expect(normalizeMediaOptionsForSelection({
-      selection: MUREKA_SELECTION,
+      selection: ACE_STEP_SELECTION,
       modality: 'music',
-      prompt: 'x'.repeat(1024),
-      options,
-    })).toMatchObject(options)
+      musicGenerationMode: 'prompt',
+      options: { durationSeconds: 30, vocalMode: 'instrumental', bpm: 72, keyScale: 'D minor', timeSignature: '4', outputFormat: 'mp3' },
+    })).toEqual({ durationSeconds: 30, vocalMode: 'instrumental', bpm: 72, keyScale: 'D minor', timeSignature: '4', outputFormat: 'mp3', providerDurationSeconds: 30 })
 
-    try {
-      normalizeMediaOptionsForSelection({
-        selection: MUREKA_SELECTION,
-        modality: 'music',
-        prompt: 'x'.repeat(1025),
-        options,
-      })
-      throw new Error('Expected the frozen provider prompt to exceed its limit')
-    } catch (error) {
-      expect(error).toBeInstanceOf(AiOptionValidationError)
-      expect(error).toMatchObject({
-        failure: 'invalid_option',
-        field: 'prompt',
-        reason: 'max_chars_1024',
-      })
-    }
+    expect(() => normalizeMediaOptionsForSelection({
+      selection: ACE_STEP_SELECTION,
+      modality: 'music',
+      musicGenerationMode: 'composition_plan',
+      prompt: 'legacy prompt',
+      options: { durationSeconds: 30, vocalMode: 'instrumental', bpm: 72, keyScale: 'D minor', timeSignature: '4', outputFormat: 'mp3' },
+    })).toThrow(AiOptionValidationError)
   })
-
 })

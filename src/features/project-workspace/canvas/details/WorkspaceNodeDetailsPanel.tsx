@@ -328,11 +328,12 @@ export function WorkspaceNodeDetailsPanel({
   const [activeInputKey, setActiveInputKey] = useState<string | null>(null)
   const activeInput = inputs.find((input) => inputKey(input) === activeInputKey) ?? null
   const activeVideoUrl = activeInput?.mediaType === 'video' ? activeInput.previewUrl : null
-  const failedErrorMessage = card.resource.error?.code
+  const failedErrorHeadline = card.resource.error?.code
     ? resolveClientError(new Error(card.resource.error.code), errorLabels('unknown'))
     : card.resource.status === 'failed'
       ? errorLabels('unknown')
       : null
+  const failedErrorDiagnostic = card.resource.error?.diagnostic?.trim() || null
 
   const copyPrompt = async () => {
     if (!prompt) return
@@ -509,9 +510,14 @@ export function WorkspaceNodeDetailsPanel({
         </p>
       ) : null}
 
-      {failedErrorMessage ? (
+      {failedErrorHeadline ? (
         <div className="rounded-xl bg-[var(--glass-tone-danger-bg)] px-3 py-2 text-xs leading-5 text-[var(--glass-tone-danger-fg)] shadow-[var(--glass-tone-shadow)]">
-          {failedErrorMessage}
+          <div>{failedErrorHeadline}</div>
+          {failedErrorDiagnostic ? (
+            <div className="mt-0.5 break-words text-[11px] opacity-70">
+              {errorLabels('providerDiagnostic', { message: failedErrorDiagnostic })}
+            </div>
+          ) : null}
         </div>
       ) : null}
 

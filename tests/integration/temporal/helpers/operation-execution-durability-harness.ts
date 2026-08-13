@@ -1,3 +1,4 @@
+import { resolve } from 'node:path'
 import { NativeConnection, Worker } from '@temporalio/worker'
 import {
   executeOperation as executeProductionOperation,
@@ -11,7 +12,11 @@ import type {
   ExecuteOperationActivityInput,
   OperationExecutionWorkflowReceipt,
 } from '@/lib/temporal/operation-execution/contracts'
-import { resolveTemporalWorkflowBundlePath } from '@/lib/temporal/workflow-bundle-path'
+import {
+  activateTestWorkerVersion,
+  buildTestWorkerDeploymentOptions,
+  buildTestWorkerIdentity,
+} from './versioned-worker'
 
 interface Deferred<T> {
   readonly promise: Promise<T>
@@ -83,6 +88,8 @@ export async function startOperationExecutionDurabilityWorker(input: {
 }): Promise<OperationExecutionDurabilityWorker> {
   requireTemporalTestRuntime()
   const config = getTemporalRuntimeConfig()
+  const taskQueue = config.taskQueue
+  const workerIdentity = buildTestWorkerIdentity('operation-durability')
   const connection = await NativeConnection.connect(
     buildTemporalConnectionOptions(config),
   )
@@ -108,19 +115,33 @@ export async function startOperationExecutionDurabilityWorker(input: {
   const worker = await Worker.create({
     connection,
     namespace: config.namespace,
-    taskQueue: config.taskQueue,
-    workflowsPath: resolveTemporalWorkflowBundlePath(false),
+    taskQueue,
+    identity: workerIdentity,
+    workflowsPath: resolve(
+      process.cwd(),
+      'src/lib/temporal/workflows/index.ts',
+    ),
     activities: {
       executeOperation,
       resolveTaskSchedulerAdmission,
     },
+    workerDeploymentOptions: buildTestWorkerDeploymentOptions(
+      'operation-durability',
+    ),
     shutdownGraceTime: '5 seconds',
   })
   const run = worker.run()
+  await activateTestWorkerVersion(
+    connection,
+    config.namespace,
+    taskQueue,
+    workerIdentity,
+    'operation-durability',
+  )
   let closed = false
 
   return {
-    taskQueue: config.taskQueue,
+    taskQueue,
     async waitForPostCommitAcknowledgementLoss() {
       return await within(
         acknowledgementLoss.promise,

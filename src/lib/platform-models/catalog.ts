@@ -9,8 +9,6 @@ import type { DefaultModelsPayload, StoredModel } from '@/lib/user-api/api-confi
 import type { PlatformModelPreset } from './types'
 
 const PLATFORM_DEFAULT_MODEL_TYPES: Record<PlatformDefaultModelField, UnifiedModelType> = {
-  assistantModel: 'llm',
-  analysisModel: 'llm',
   characterModel: 'image',
   locationModel: 'image',
   editModel: 'image',
@@ -20,8 +18,6 @@ const PLATFORM_DEFAULT_MODEL_TYPES: Record<PlatformDefaultModelField, UnifiedMod
 }
 
 const PLATFORM_DEFAULT_MODEL_ENV: Record<PlatformDefaultModelField, string> = {
-  assistantModel: 'PLATFORM_DEFAULT_ASSISTANT_MODEL',
-  analysisModel: 'PLATFORM_DEFAULT_ANALYSIS_MODEL',
   characterModel: 'PLATFORM_DEFAULT_CHARACTER_MODEL',
   locationModel: 'PLATFORM_DEFAULT_LOCATION_MODEL',
   editModel: 'PLATFORM_DEFAULT_EDIT_MODEL',
@@ -37,7 +33,6 @@ function toPlatformModel(input: PlatformModelPreset): StoredModel {
     name: input.name,
     type: input.type,
     provider: input.provider,
-    price: 0,
   }
 }
 
@@ -73,7 +68,7 @@ export function getPlatformDefaultModels(): Required<DefaultModelsPayload> {
   const byKey = new Map(models.map((model) => [model.modelKey, model]))
   const defaults = {} as Required<DefaultModelsPayload>
 
-  for (const field of Object.keys(PLATFORM_DEFAULT_MODEL_KEYS) as PlatformDefaultModelField[]) {
+  for (const field of Object.keys(PLATFORM_DEFAULT_MODEL_TYPES) as PlatformDefaultModelField[]) {
     const modelKey = readEnvModelKey(field) || PLATFORM_DEFAULT_MODEL_KEYS[field]
     const model = byKey.get(modelKey)
     if (!model) {

@@ -49,7 +49,13 @@ export function normalizeOperationExecutionToolError(params: {
   error: unknown
   operationId: string
 }): ProjectAgentToolError {
-  const toolError = buildOperationExecutionToolError(params)
+  const normalized = normalizeAnyError(params.error, {
+    fallbackCode: 'INTERNAL_ERROR',
+  })
+  const toolError = buildOperationExecutionToolError({
+    ...params,
+    normalized,
+  })
   // Single normalization entry for tool execution exceptions: log here once so
   // failures returned to the model as tool-error payloads stay server-visible.
   logger.error({
@@ -57,7 +63,10 @@ export function normalizeOperationExecutionToolError(params: {
     message: 'assistant tool execution failed; error normalized into tool payload',
     operationId: params.operationId,
     errorCode: params.error instanceof ApiError ? params.error.code : toolError.code,
-    details: toolError.details,
+    details: {
+      ...toolError.details,
+      diagnosticFailure: normalized,
+    },
     error: params.error instanceof Error
       ? { name: params.error.name, message: params.error.message, stack: params.error.stack }
       : { message: toolError.message },
@@ -68,8 +77,9 @@ export function normalizeOperationExecutionToolError(params: {
 function buildOperationExecutionToolError(params: {
   error: unknown
   operationId: string
+  normalized?: ReturnType<typeof normalizeAnyError>
 }): ProjectAgentToolError {
-  const normalized = normalizeAnyError(params.error, {
+  const normalized = params.normalized ?? normalizeAnyError(params.error, {
     fallbackCode: 'INTERNAL_ERROR',
   })
   const safeDetails = projectModelErrorDetails(normalized.interpretation.details)

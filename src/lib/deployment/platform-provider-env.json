@@ -1,10 +1,4 @@
 {
   "codex": { "envPrefix": "CODEX", "requiresApiKey": false },
-  "google": { "envPrefix": "PLATFORM_GOOGLE" },
-  "fal": { "envPrefix": "PLATFORM_FAL" },
-  "ark": { "envPrefix": "PLATFORM_ARK" },
-  "openrouter": { "envPrefix": "PLATFORM_OPENROUTER", "requiresBaseUrl": true },
-  "mureka": { "envPrefix": "PLATFORM_MUREKA" },
-  "toonflow": { "envPrefix": "PLATFORM_TOONFLOW" },
   "comfyui": { "envPrefix": "COMFYUI", "requiresBaseUrl": true, "requiresApiKey": false }
 }

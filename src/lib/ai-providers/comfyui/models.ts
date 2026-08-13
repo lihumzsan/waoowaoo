@@ -22,8 +22,6 @@ export const COMFYUI_ACE_STEP_TIME_SIGNATURE_OPTIONS = MUSIC_TIME_SIGNATURE_VALU
 export const COMFYUI_MOSS_TTS_LOCAL_MODEL_ID = 'moss-tts-local-1.7b'
 export const COMFYUI_MOSS_TTS_LOCAL_MODEL_KEY = `comfyui::${COMFYUI_MOSS_TTS_LOCAL_MODEL_ID}`
 
-const ZERO_PRICE = { mode: 'flat' as const, unit: 'per_call' as const, flatAmount: 0 }
-
 export const COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
   {
     modelType: 'video', provider: 'comfyui', modelId: COMFYUI_H3_MODEL_ID,
@@ -46,6 +44,7 @@ export const COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelType: 'music', provider: 'comfyui', modelId: COMFYUI_ACE_STEP_1_5_MODEL_ID,
     capabilities: {
       music: {
+        generationModes: ['prompt'],
         durationSecondsRange: { min: 4, max: 600 }, vocalModeOptions: ['instrumental'], outputFormatOptions: ['mp3'],
         bpmRange: { min: 20, max: 300 }, keyScaleOptions: COMFYUI_ACE_STEP_KEY_SCALE_OPTIONS,
         timeSignatureOptions: COMFYUI_ACE_STEP_TIME_SIGNATURE_OPTIONS,
@@ -62,13 +61,6 @@ export const COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
       },
     },
   },
-] as const
-
-export const COMFYUI_BUILTIN_PRICING_CATALOG_ENTRIES = [
-  { apiType: 'video', provider: 'comfyui', modelId: COMFYUI_H3_MODEL_ID, cost: ZERO_PRICE, retail: ZERO_PRICE },
-  { apiType: 'sound', provider: 'comfyui', modelId: COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_ID, cost: ZERO_PRICE, retail: ZERO_PRICE },
-  { apiType: 'music', provider: 'comfyui', modelId: COMFYUI_ACE_STEP_1_5_MODEL_ID, cost: ZERO_PRICE, retail: ZERO_PRICE },
-  { apiType: 'voice', provider: 'comfyui', modelId: COMFYUI_MOSS_TTS_LOCAL_MODEL_ID, cost: ZERO_PRICE, retail: ZERO_PRICE },
 ] as const
 
 export const COMFYUI_API_CONFIG_CATALOG_MODELS = [

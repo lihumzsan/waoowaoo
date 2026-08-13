@@ -20,13 +20,12 @@ export function assertAssistantToolWriteAuthority(
 
   const confirmation = operation.confirmation as { kind?: unknown } | undefined
   if (
-    confirmation?.kind === 'billable_media'
-    || (confirmation?.kind === 'none'
-      && typeof operation.plan === 'function'
-      && typeof operation.commit === 'function')
+    confirmation?.kind === 'none'
+    && typeof operation.plan === 'function'
+    && typeof operation.commit === 'function'
   ) {
     if (authority !== undefined) {
-      throw new Error(`PROJECT_AGENT_OPERATION_WRITE_AUTHORITY_CONFLICT:${operationId}:billable_plan_commit`)
+      throw new Error(`PROJECT_AGENT_OPERATION_WRITE_AUTHORITY_CONFLICT:${operationId}:planned_commit`)
     }
     return
   }

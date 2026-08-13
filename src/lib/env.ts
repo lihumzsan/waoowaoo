@@ -27,7 +27,7 @@ export function getBaseUrl(): string {
 
 /**
  * 获取完整的 API URL
- * @param path API 路径，如 '/api/user/balance'
+ * @param path API 路径，如 '/api/projects'
  */
 export function getApiUrl(path: string): string {
     const baseUrl = getInternalBaseUrl()

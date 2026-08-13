@@ -1,3 +1,9 @@
+type MediaReferenceOptions = {
+  readonly referenceImages?: unknown
+  readonly referenceAudios?: unknown
+  readonly referenceVideos?: unknown
+  readonly lastFrameImageUrl?: unknown
+}
 type MediaRequestIdentityInput = {
   readonly modality?: unknown
   readonly imageUrl?: unknown
@@ -54,16 +60,49 @@ export function createMediaProviderRequestIdentity<T extends MediaRequestIdentit
     if ('referenceVideos' in options) {
       options.referenceVideos = stableMediaUrlArray(options.referenceVideos, 'referenceVideos')
     }
-    if ('referenceVideos' in options) {
-      options.referenceVideos = stableMediaUrlArray(options.referenceVideos, 'referenceVideos')
-    }
     if ('lastFrameImageUrl' in options && options.lastFrameImageUrl !== undefined) {
       options.lastFrameImageUrl = stableMediaUrl(options.lastFrameImageUrl, 'lastFrameImageUrl')
-    }
-    if ('referenceVideoUrl' in options && options.referenceVideoUrl !== undefined) {
-      options.referenceVideoUrl = stableMediaUrl(options.referenceVideoUrl, 'referenceVideoUrl')
     }
     result.options = options
   }
   return result as T
+}
+export function assertImageMediaReferencesUseHttps(options: unknown): void {
+  if (!options || typeof options !== 'object' || Array.isArray(options)) return
+  const mediaOptions = options as MediaReferenceOptions
+  assertHttpsMediaArray(mediaOptions.referenceImages, 'referenceImages')
+}
+
+export function assertVideoMediaReferencesUseHttps(input: {
+  readonly imageUrl: string
+  readonly options?: unknown
+}): void {
+  if (input.imageUrl) assertHttpsMediaUrl(input.imageUrl, 'imageUrl')
+  if (!input.options || typeof input.options !== 'object' || Array.isArray(input.options)) return
+  const mediaOptions = input.options as MediaReferenceOptions
+  assertHttpsMediaArray(mediaOptions.referenceImages, 'referenceImages')
+  assertHttpsMediaArray(mediaOptions.referenceAudios, 'referenceAudios')
+  assertHttpsMediaArray(mediaOptions.referenceVideos, 'referenceVideos')
+  if (mediaOptions.lastFrameImageUrl !== undefined) {
+    assertHttpsMediaUrl(mediaOptions.lastFrameImageUrl, 'lastFrameImageUrl')
+  }
+}
+
+function assertHttpsMediaUrl(value: unknown, field: string): void {
+  if (typeof value !== 'string' || !value.trim()) throw new Error(`PROVIDER_MEDIA_REFERENCE_INVALID:${field}`)
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    throw new Error(`PROVIDER_MEDIA_REFERENCE_INVALID:${field}`)
+  }
+  if (url.protocol !== 'https:' || url.username || url.password) {
+    throw new Error(`PROVIDER_MEDIA_REFERENCE_HTTPS_REQUIRED:${field}`)
+  }
+}
+
+function assertHttpsMediaArray(value: unknown, field: string): void {
+  if (value === undefined) return
+  if (!Array.isArray(value)) throw new Error(`PROVIDER_MEDIA_REFERENCE_INVALID:${field}`)
+  value.forEach((item, index) => assertHttpsMediaUrl(item, `${field}[${String(index)}]`))
 }

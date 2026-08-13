@@ -15,24 +15,22 @@ Task 与交互式 Agent 的唯一交点是一个稳定 batchId 的完成通知�
 ## 不变量
 
 - **DE-02 — Workflow 只拥有执行许可。** Workflow 可以调度 Activity、等待 heartbeat、推进
-  business attempt、释放容量；Task/Resource/Billing/Provider/Operation 的持久状态只由所属
+  business attempt、释放容量；Task/Resource/Provider/Operation 的持久状态只由所属
   MySQL service 写。
 - **DE-03 — Workflow 必须确定性。** 数据库、Redis、HTTP、对象存储、Provider、随机数与系统时间
   只在 Activity 读取。History 只保存有界 identity、policy 版本与必要结果，不保存 Prompt、模型
   history、媒体或 token delta。
 - **DE-04 — Activity 至少一次，副作用自行幂等。** Temporal retry 不提供业务 exactly-once。
-  数据库写、Provider submit、计费与 Resource 物化使用所属 owner 的 canonical identity；相同
+  数据库写、Provider submit 与 Resource 物化使用所属 owner 的 canonical identity；相同
   identity 不同 payload 必须拒绝。
 - **DE-05 — 产生 Task 的 Operation 只有一条 transport。** 所有 Agent/API/UI 调用先进入同一个
   execution workflow，由 persistence Activity 在一个事务中提交 Operation 输出、Task、Resource
   与批次，再进入调度。禁止 DB commit 后 fire-and-forget，禁止旁路队列或同步 Provider fallback。
 - **DE-06 — execution 是 immutable envelope。** Workflow 一次输入后完成，不建立 Update/Query
   命令状态机。start ACK 丢失按相同 execution identity 读取结果，不重做 domain 写入。
-- **DE-07 — 计费授权先于 Task。** billable Operation 必须携带冻结 Plan snapshot 与精确 Grant；
-  Activity 在同一事务校验后才创建 Task。MCP elicitation 只是用户交互，不能替代 Grant owner。
 - **DE-09 — Provider 结果不明时不自动重提。** 已有 external id 或能证明未受理才可安全恢复；
   超时、断线、ACK 丢失且受理结果不明写 `outcome_unknown` 并停止盲目提交。
-- **DE-10 — 终态交接顺序可恢复。** 先原子提交 Task/Billing/Resource/批次成员，再释放容量，
+- **DE-10 — 终态交接顺序可恢复。** 先原子提交 Task/Resource/批次成员，再释放容量，
   最后执行 follow-up 通知。通知 pending 不得继续占用 Provider 容量。
 - **DE-13 — clear 关闭旧批次。** clear 事务取消旧 Thread 未完成批次；晚到 Task 只能结算成员，
   不能唤醒新 Thread。follow-up 必须从批次读取 user/project/thread/context，不信任 caller 提供
@@ -44,7 +42,8 @@ Task 与交互式 Agent 的唯一交点是一个稳定 batchId 的完成通知�
 - **DE-17 — 正式 Worker 使用不可变身份和穷尽版本策略。** 生产 build id 与镜像必须不可变；每种
   Workflow 由同一 registry 声明生命周期和版本行为，有限执行 pinned，持续执行 auto-upgrade。
   持续执行的变更必须可重放既有 history。蓝绿切换只可由唯一入口显式 bootstrap/promote，
-  旧版本仍拥有执行或未 drained 时不可 retire；普通应用部署不得管理 Worker 槽位或改变路由。
+  旧版本仍拥有执行或未 drained 时不可 retire；普通应用部署不得管理 Worker 槽位或改变路由。本地
+  开发 Worker 默认不启用版本化，且不得复用正式 namespace 或生产路由配置。
 - **DE-19 — migration 只前进。** 已发布 migration 字节不变；不兼容的 schema 或 Workflow payload
   必须在发布前排空对应实例。部分 schema 或未知来源 fail closed。
 - **DE-20 — 持久控制面有复杂度预算。** 新增 timer、lease、claim、reconciler、execution receipt
@@ -69,8 +68,8 @@ Task 与交互式 Agent 的唯一交点是一个稳定 batchId 的完成通知�
 
 ## 踩过的坑
 
-- 对外接受的批量上限与执行 receipt / 批次协议上限不一致，中间区段可报价获批却在提交后确定性
-  失败 → 两处各自声明上限 → 单一常量被 generation batch、Grant 提交与批次共同消费。
+- 对外接受的批量上限与执行 receipt / 批次协议上限不一致，中间区段可通过预检却在提交后确定性
+  失败 → 两处各自声明上限 → 单一常量被 generation batch、持久提交与批次共同消费。
 - approved-plan 路径的未知确定性错误直接抛回 Temporal，而 direct 路径才走统一 retry policy；
   一个旧 Plan 因此每 30 秒无限重放事务 → 两条路径两套错误裁决 → 共用唯一 retry policy，
   领域契约与 schema 错误一律 non-retryable。
@@ -80,5 +79,5 @@ Task 与交互式 Agent 的唯一交点是一个稳定 batchId 的完成通知�
   通用 normalizer 不遍历 cause chain，真实 Workspace 路径错误仍变成 Internal error → Operation、
   Task 与 Scheduler 边界共用版本化 failure codec，client 只在该入口解码（DE-22）。
 - Worker 首版把全部 Workflow 默认 pinned，蓝绿退役保护又只存在于 rollout 脚本；持续 Scheduler
-  永远不能自然 drained，普通 Compose 部署绕过脚本停掉旧槽位后，已冻结额度的 Task 无法开始 →
+  永远不能自然 drained，普通 Compose 部署绕过脚本停掉旧槽位后，已提交的 Task 无法开始 →
   生命周期版本策略进入穷尽 registry，应用部署隔离 Worker，退役同时校验实际绑定执行（DE-17）。

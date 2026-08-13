@@ -1,6 +1,7 @@
 import { chmod, lstat, mkdir, mkdtemp, rm } from 'node:fs/promises'
 import path from 'node:path'
 import {
+  buildRuntimeSessionScopeId,
   type RuntimeSessionMaterialization,
   type RuntimeSessionPersistence,
   type RuntimeSessionScope,
@@ -10,6 +11,7 @@ import { markAssistantRuntimeProjectTurnsInterrupted } from './persistence'
 
 const MATERIALIZATION_DIRECTORY = 'materializations'
 const MATERIALIZATION_PREFIX = 'wao-codex-runtime-'
+const CODEX_HOME_DIRECTORY = 'codex-homes'
 
 function requireHostRoot(value: string): string {
   const normalized = path.resolve(value.trim())
@@ -47,9 +49,11 @@ function requireDisposableRoot(
 
 export class AssistantRuntimePersistence implements RuntimeSessionPersistence {
   private readonly hostRoot: string
+  private readonly scopedCodexHome: boolean
 
-  constructor(input: { readonly hostRoot: string }) {
+  constructor(input: { readonly hostRoot: string; readonly scopedCodexHome: boolean }) {
     this.hostRoot = requireHostRoot(input.hostRoot)
+    this.scopedCodexHome = input.scopedCodexHome
   }
 
   async reconcileBeforeStart(scope: RuntimeSessionScope): Promise<void> {
@@ -63,16 +67,23 @@ export class AssistantRuntimePersistence implements RuntimeSessionPersistence {
 
   async materialize(scope: RuntimeSessionScope): Promise<RuntimeSessionMaterialization> {
     const materializationsRoot = path.join(this.hostRoot, MATERIALIZATION_DIRECTORY)
+    const codexHomesRoot = path.join(this.hostRoot, CODEX_HOME_DIRECTORY)
     await ensurePrivateDirectory(this.hostRoot)
     await ensurePrivateDirectory(materializationsRoot)
+    if (this.scopedCodexHome) await ensurePrivateDirectory(codexHomesRoot)
 
     const disposableRoot = await mkdtemp(path.join(materializationsRoot, MATERIALIZATION_PREFIX))
     const workspace = path.join(disposableRoot, 'workspace')
     try {
       await ensurePrivateDirectory(workspace)
       await materializeCreativeRuntimeConfiguration(path.join(workspace, '.agents', 'skills'))
+      const codexHome = this.scopedCodexHome
+        ? path.join(codexHomesRoot, buildRuntimeSessionScopeId(scope))
+        : undefined
+      if (codexHome) await ensurePrivateDirectory(codexHome)
       return {
         hostWorkspaceDirectory: workspace,
+        ...(codexHome ? { hostCodexHomeDirectory: codexHome } : {}),
       }
     } catch (error) {
       await rm(disposableRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
@@ -88,6 +99,19 @@ export class AssistantRuntimePersistence implements RuntimeSessionPersistence {
   async clearScope(scope: RuntimeSessionScope): Promise<void> {
     // Session Manager keeps one explicit clear lifecycle call. Native Codex
     // owns the shared user Home, so Wao must never inspect or mutate it.
-    void scope
+    if (!this.scopedCodexHome) return
+    const codexHomesRoot = path.join(this.hostRoot, CODEX_HOME_DIRECTORY)
+    await ensurePrivateDirectory(this.hostRoot)
+    await ensurePrivateDirectory(codexHomesRoot)
+    const codexHome = path.join(codexHomesRoot, buildRuntimeSessionScopeId(scope))
+    const stat = await lstat(codexHome).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+      throw error
+    })
+    if (!stat) return
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      throw new Error('ASSISTANT_RUNTIME_CODEX_HOME_INVALID')
+    }
+    await rm(codexHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
   }
 }

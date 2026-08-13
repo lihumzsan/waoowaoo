@@ -15,10 +15,12 @@ const eslintConfig = [
     ignores: [
       "node_modules/**",
       ".agent/**",
+      ".runtime/**",
       ".next/**",
       ".next-golden/**",
       ".next-security/**",
       ".next-verify/**",
+      ".runtime/**",
       ".stryker-tmp/**",
       "artifacts/browser-security/**",
       "artifacts/golden-journey/**",

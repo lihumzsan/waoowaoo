@@ -1,18 +1,14 @@
-import type { LanguageModel, ModelMessage } from 'ai'
 import type {
-  AiLlmExecutionResult,
-  AiLlmMessage,
-  AiLlmProtocol,
-  AiPublicReasoningMode,
   AiResolvedSelection,
   AiVariantDescriptor,
-  AiLlmProviderConfig,
 } from '@/lib/ai-registry/types'
-import type { ReasoningEffort } from '@/lib/ai-registry/reasoning-effort'
 import type { MusicKeyScale, MusicTimeSignature } from '@/lib/workspace-resource/music-parameter-contract'
+import type { ExternalOperationId } from '@/lib/external-operation/registry'
+import type { FailureRecord } from '@/lib/errors/failure'
+import type { MusicCompositionPlan } from '@/lib/music/composition-plan'
 
 export type GenerateResult = {
-  success: boolean
+  readonly success: true
   imageUrl?: string
   imageUrls?: string[]
   imageBase64?: string
@@ -21,38 +17,33 @@ export type GenerateResult = {
   audioBase64?: string
   audioMimeType?: string
   metadata?: Record<string, unknown>
-  error?: string
   requestId?: string
   async?: boolean
   endpoint?: string
   externalId?: string
 }
 
-export type AiProviderLanguageModelContext = {
-  providerKey: string
-  selection: {
-    provider: string
-    modelId: string
-    modelKey: string
-  }
-  providerConfig: AiLlmProviderConfig
-  protocol: AiLlmProtocol
-  publicReasoningMode: AiPublicReasoningMode
-  executionMode: 'sync' | 'stream' | 'vision'
-  reasoning: boolean
-  reasoningEffort: ReasoningEffort
-  messages?: AiLlmMessage[]
-  openRouterSessionId?: string
+export type AiProviderFailurePhase =
+  | 'submit'
+  | 'poll'
+  | 'cancel'
+  | 'result'
+  | 'stream'
+  | 'connection'
+  | 'search'
+
+export type AiProviderFailureNormalizationInput = {
+  readonly error: unknown
+  readonly phase: AiProviderFailurePhase
+  readonly operation?: ExternalOperationId
+  readonly attempts?: number
 }
 
-export type AiProviderLanguageModelRequestContext = Omit<
-  AiProviderLanguageModelContext,
-  'protocol' | 'publicReasoningMode'
->
-export type AiProviderLanguageModelValidationContext = Pick<
-  AiProviderLanguageModelContext,
-  'executionMode'
->
+export type AiProviderFailureAdapter = {
+  readonly providerKey: string
+  readonly normalize: (input: AiProviderFailureNormalizationInput) => FailureRecord
+}
+
 
 export type AiProviderImageExecutionContext = {
   userId: string
@@ -107,7 +98,9 @@ export type AiProviderMusicExecutionContext = {
     modelId: string
     modelKey: string
   }
-  prompt: string
+  generation:
+    | { readonly kind: 'prompt'; readonly prompt: string }
+    | { readonly kind: 'composition_plan'; readonly compositionPlan: MusicCompositionPlan }
   options?: {
     negativePrompt?: string
     durationSeconds?: number
@@ -119,11 +112,6 @@ export type AiProviderMusicExecutionContext = {
     keyScale?: MusicKeyScale
     timeSignature?: MusicTimeSignature
     outputFormat?: 'mp3' | 'wav'
-    referenceVideoUrl?: string
-    referenceVideoDurationMs?: number
-    /** Score only this window of the reference video (music_direction cue). */
-    scoreWindowStartMs?: number
-    scoreWindowEndMs?: number
     [key: string]: unknown
   }
 }
@@ -201,25 +189,7 @@ export type AiProviderMediaModalityAdapter<M extends 'image' | 'video' | 'music'
     ? AiProviderDirectMediaModalityAdapter<M> | AiProviderPreparedMediaModalityAdapter<M>
     : AiProviderDirectMediaModalityAdapter<M>
 
-export type AiProviderLanguageModelAdapter = {
-  create: (input: AiProviderLanguageModelContext) => LanguageModel
-  prepareTextMessages?: (messages: AiLlmMessage[]) => ModelMessage[]
-  validateResult?: (
-    result: AiLlmExecutionResult,
-    context: AiProviderLanguageModelValidationContext,
-  ) => void
-}
-
-export type AiProviderLlmSessionContext = {
-  kind: 'llm' | 'vision'
-  userId: string
-  projectId?: string
-  action?: string
-  modelKey: string
-  explicitSessionId?: string
-}
-
-export type AiProviderConnectionTestStepName = 'models' | 'textGen' | 'imageGen' | 'credits'
+export type AiProviderConnectionTestStepName = 'models' | 'textGen' | 'imageGen' | 'musicGen'
 
 export type AiProviderConnectionTestMessageKey =
   | 'connectionTest.authInvalid'
@@ -229,7 +199,7 @@ export type AiProviderConnectionTestMessageKey =
   | 'connectionTest.providerError'
   | 'connectionTest.rateLimited'
   | 'connectionTest.skippedModelsFailure'
-  | 'connectionTest.skippedSpend'
+  | 'connectionTest.skippedExternalCall'
   | 'connectionTest.textGenerationOk'
   | 'connectionTest.timeout'
 
@@ -238,6 +208,7 @@ export type AiProviderConnectionTestStep = {
   status: 'pass' | 'fail' | 'skip'
   messageKey: AiProviderConnectionTestMessageKey
   model?: string
+  diagnostic?: string
 }
 
 export type AiProviderConnectionTestReport = {
@@ -263,12 +234,11 @@ export type AiProviderConnectionTester = {
 
 export interface AiProviderAdapter {
   readonly providerKey: string
+  readonly failure: AiProviderFailureAdapter
   image?: AiProviderMediaModalityAdapter<'image'>
   video?: AiProviderMediaModalityAdapter<'video'>
   music?: AiProviderMediaModalityAdapter<'music'>
   sound?: AiProviderMediaModalityAdapter<'sound'>
   voice?: AiProviderMediaModalityAdapter<'voice'>
-  languageModel?: AiProviderLanguageModelAdapter
-  resolveLlmSessionId?: (input: AiProviderLlmSessionContext) => string | undefined
   connectionTest?: AiProviderConnectionTester
 }

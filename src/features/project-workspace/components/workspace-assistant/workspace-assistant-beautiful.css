@@ -1,0 +1,61 @@
+/*
+ * Beautiful UI design tokens adopted for the workspace assistant conversation.
+ * Namespaced --bui-* so they never compete with the glass token system; the
+ * glass shell (panel chrome, approval, plan, notices, composer) is untouched.
+ */
+:root {
+  --bui-canvas: #f1f2f3;
+  --bui-surface: #fff;
+  --bui-inset: #f7f8f9;
+  --bui-hover: #f4f5f6;
+  --bui-hover-2: #e7e9eb;
+  --bui-field: #f2f2f3;
+  --bui-ink: #1f2124;
+  --bui-ink-2: #62656b;
+  --bui-ink-3: #9a9da3;
+  --bui-line: #ecedef;
+  --bui-line-strong: #e0e2e5;
+  --bui-accent: #0285ff;
+  --bui-green: #189a4d;
+  --bui-green-tint: #e8f5ed;
+  --bui-orange: #ef720c;
+  --bui-red: #e3474c;
+  --bui-red-tint: #fcecec;
+  --bui-shadow-hairline: 0 0 0 1px var(--bui-line);
+  --bui-shadow-btn: 0 0 0 1px var(--bui-line-strong), 0 1px 2px #1018280d;
+  --bui-shadow-card: 0 0 0 1px var(--bui-line), 0 1px 2px #1018280a, 0 2px 6px #10182808;
+}
+
+@keyframes wa-bui-pixel-on {
+  0%, 100% { opacity: 0.15; transform: scale(0.75); }
+  45% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes wa-bui-shimmer {
+  to { background-position: -200% 0; }
+}
+
+@keyframes wa-bui-fade-up {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes wa-bui-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.wa-bui-underline {
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 2px;
+  transition: text-decoration-color 150ms;
+}
+.wa-bui-underline:hover,
+a:hover > .wa-bui-underline {
+  text-decoration-color: currentColor;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wa-bui-pixel { animation: none !important; }
+}

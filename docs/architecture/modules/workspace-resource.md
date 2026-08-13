@@ -44,9 +44,9 @@ Episode、Chapter、Scene、Shot、Canon 都是用户目录与文件内容，不
   消费冻结版本，不能在 Task 开始后重新按路径读取。
 - **WR-09 — 一个异步终态 writer。** 生成 Operation 的 commit 事务预留 pending Resource 与 Task；
   Task 终态在同一事务物化版本、Lineage、Resource 状态、Task 终态与通知。replay 返回同一事实，
-  不能生成第二 Resource 或重复计费。
+  不能生成第二 Resource 或重复物化。
 - **WR-10 — 批量生产直接提交结构化 items。** `create_image`、`create_audio`、`create_video` 接收各自
-  共享 schema 的批量 items；一次预检形成一个总报价和一个 Grant，再扇出 Task。不存在中间 Manifest
+  共享 schema 的批量 items；一次预检形成一个不可变计划，再扇出 Task。不存在中间 Manifest
   文件或第二次“读取并提交”；成员有稳定 identity，部分失败只重跑失败成员。
 - **WR-11 — 移动、删除、恢复只有一套语义。** 文件移动只改自身路径；文件夹移动原子改写完整子树。
   移动在 Project 锁内按当前路径解析并写入；Agent 的删除路径必须在审批前解析并冻结为
@@ -62,9 +62,10 @@ Episode、Chapter、Scene、Shot、Canon 都是用户目录与文件内容，不
 - **WR-15 — MCP 直接消费持久事实。** MCP Operation 直接从 Catalog、Version、Task 与配置读取权威
   状态；调用前后没有 Runtime 文件 flush/refresh，也没有“资源指针同步中”生命周期。工具提交成功
   后，pending/ready/failed 只由 Resource 与 Task View 表达。
-- **WR-16 — 创作内容不在服务端编译。** 专业 JSON 必须包含完整最终 Prompt、创作身份与创作参数；
-  Project 画幅与资产格式等系统参数由各自服务端 owner 解析，禁止 Agent 重复提交。
-  Planner 在任何 Plan、报价、Resource 或 Task 副作用前严格校验、选择正式模型、解析精确引用并
+- **WR-16 — 创作内容不在服务端编译。** 专业 JSON 必须包含完整最终 Provider-ready 创作输入、创作
+  身份与创作参数：图片/视频使用 Prompt，结构化音乐使用 Composition Plan 与 cue timing；Project
+  画幅与资产格式等系统参数由各自服务端 owner 解析，禁止 Agent 重复提交。
+  Planner 在任何 Plan、Resource 或 Task 副作用前严格校验、选择正式模型、解析精确引用并
   逐字冻结；禁止依据 schemaId 追加 Prompt、猜资产类型，或让调用方覆盖 Project 画幅。
 - **WR-17 — 项目生产上下文由系统实时注入。** 只读上下文由当前 Project 配置与生产 registry 的唯一
   resolver 派生，并由服务端每 Turn 直接附加给主 Agent。它不是 workspace 文件、Skill 副本或 Agent
@@ -95,7 +96,7 @@ Episode、Chapter、Scene、Shot、Canon 都是用户目录与文件内容，不
 - 16 位 compact 幂等 hash 被写进要求完整 SHA-256 的输入字段，四类媒体 Task 在 Provider 调用前
   确定性失败；失败终态又先解析同一畸形 payload，Task、Resource 与冻结额度永久停在处理中 →
   两种 hash 混用 + 终态解析耦合成功路径 → fingerprint 与请求 identity 分离，失败终态只用
-  canonical target 结算。
+  canonical target 收口。
 - 媒体 Task 在 Agent Turn 结束后异步物化版本，而 baseline 把所有 `currentVersion` 变化都视为
   Agent 写冲突，未变的媒体指针也报漂移 → 前台与后台 writer 共用同一 CAS 维度 → 文本按版本 CAS，
   媒体指针只以 identity/路径/存在性/类型参与。
@@ -108,7 +109,7 @@ Episode、Chapter、Scene、Shot、Canon 都是用户目录与文件内容，不
 - 文件型 Manifest、Agent outputPath、必须 mkdir、`.resource` 媒体指针与 MCP 前后同步串成多级协议；
   任一层字段、路径或同步状态漂移都会在真实生产中表现为参数失败或“资源仍在同步”，此前修复只补
   单个校验点所以换形式复发 → 删除整条文件/指针协议，公开输入只保留批量 items、目标文件夹路径、
-  名称与版本引用，服务端一次完成精确路径解析、placement、预检、报价和提交（WR-06/07/08/10/15）。
+  名称与版本引用，服务端一次完成精确路径解析、placement、预检和提交（WR-06/07/08/10/15）。
 - 上一版虽删除了 Agent 的“必须 mkdir”协议，Plan 仍把目标目录已存在当作 Placement 前提，模型只要
   直接提交新语义目录就会在保存、生成或合并前失败 → 只删除 Prompt 步骤，没有删除服务端同一前提
   → Plan 只校验路径与现有树冲突，授权后的输出事务统一调用既有 folder writer 原子补齐目录链（WR-07/09）。

@@ -170,6 +170,11 @@ export function ProviderBaseFields({ provider, t, state }: ProviderBaseFieldsPro
                   <p className={`pl-6 text-[11px] ${step.status === 'fail' ? 'text-red-400' : 'text-[var(--glass-text-secondary)]'}`}>
                     {t(step.messageKey)}
                   </p>
+                  {step.status === 'fail' && step.diagnostic && (
+                    <p className="break-words pl-6 text-[11px] text-red-300">
+                      {t('connectionTest.providerDiagnostic', { message: step.diagnostic })}
+                    </p>
+                  )}
                 </div>
               )
             })}

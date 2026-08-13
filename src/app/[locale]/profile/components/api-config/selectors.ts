@@ -15,7 +15,6 @@ export interface WorkflowConcurrency {
 }
 
 export interface DefaultModels {
-  assistantModel?: string
   analysisModel?: string
   characterModel?: string
   locationModel?: string
@@ -31,7 +30,6 @@ export interface CapabilityFieldDefaults {
 }
 
 export const DEFAULT_MODEL_FIELDS = [
-  'assistantModel',
   'analysisModel',
   'characterModel',
   'locationModel',
@@ -45,14 +43,12 @@ export function createInitialProviders(presetProviders: Provider[]): Provider[] 
   return presetProviders.map((provider) => ({ ...provider, apiKey: '', hasApiKey: false }))
 }
 
-export function createInitialModels(presetModels: ReadonlyArray<Omit<CustomModel, 'modelKey' | 'price' | 'priceLabel' | 'enabled'> & Partial<Pick<CustomModel, 'modelKey' | 'price' | 'priceLabel' | 'enabled'>>>): CustomModel[] {
+export function createInitialModels(presetModels: ReadonlyArray<Omit<CustomModel, 'modelKey' | 'enabled'> & Partial<Pick<CustomModel, 'modelKey' | 'enabled'>>>): CustomModel[] {
   return presetModels.map((model) => {
     const modelKey = encodeModelKey(model.provider, model.modelId)
     return {
       ...model,
       modelKey,
-      price: 0,
-      priceLabel: '--',
       enabled: !isPresetComingSoonModelKey(modelKey),
     }
   })
@@ -136,7 +132,7 @@ export function normalizeSavedModels(savedModelsRaw: CustomModel[]): CustomModel
 
 export function mergeModelsForDisplay(
   savedModelsRaw: CustomModel[],
-  catalogModels: ReadonlyArray<Omit<CustomModel, 'modelKey' | 'price' | 'enabled'> & Partial<Pick<CustomModel, 'modelKey' | 'price' | 'enabled'>>>,
+  catalogModels: ReadonlyArray<Omit<CustomModel, 'modelKey' | 'enabled'> & Partial<Pick<CustomModel, 'modelKey' | 'enabled'>>>,
 ): CustomModel[] {
   const savedModels = normalizeSavedModels(savedModelsRaw)
   const hasSavedModels = savedModels.length > 0
@@ -151,7 +147,6 @@ export function mergeModelsForDisplay(
       enabled: isPresetComingSoonModelKey(presetModelKey)
         ? false
         : (hasSavedModels ? !!saved : false),
-      price: 0,
       capabilities: saved?.capabilities ?? preset.capabilities,
     }
     return mergedPreset

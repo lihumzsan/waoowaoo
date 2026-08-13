@@ -15,7 +15,6 @@ type DynamicModel = {
 const BATCH_SIZE = 500
 
 const MODELS: Array<{ name: string; model: string }> = [
-  { name: 'CharacterAppearance', model: 'characterAppearance' },
   { name: 'GlobalCharacterAppearance', model: 'globalCharacterAppearance' },
 ]
 

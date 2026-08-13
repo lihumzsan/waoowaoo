@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { TASK_STATUS, TASK_TYPE, type CreateTaskInput } from '@/lib/task/types'
 import { tryUpdateTaskProgress } from '@/lib/task/service'
 import { persistSubmittedTaskBatchInTransaction } from '@/lib/task/transactional-create'
 import { prisma } from '../../helpers/prisma'
 import { createTestProject, createTestUser } from '../../helpers/billing-fixtures'
+import { resetBillingState } from '../../helpers/db-reset'
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -51,6 +52,10 @@ async function persistBatch(
 }
 
 describe('transactional Task batch dedupe', () => {
+  beforeEach(async () => {
+    await resetBillingState()
+  })
+
   it('creates the Task and its Created event in one transaction', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)

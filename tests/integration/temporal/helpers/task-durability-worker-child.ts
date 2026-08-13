@@ -1,3 +1,4 @@
+import { resolve } from 'node:path'
 import { heartbeat } from '@temporalio/activity'
 import { NativeConnection, Worker } from '@temporalio/worker'
 import * as productionActivities from '@/lib/temporal/activities'
@@ -9,7 +10,12 @@ import type {
   RunTaskAttemptInput,
   RunTaskAttemptResult,
 } from '@/lib/temporal/task/contracts'
-import { resolveTemporalWorkflowBundlePath } from '@/lib/temporal/workflow-bundle-path'
+import {
+  activateTestWorkerVersion,
+  buildTestTaskQueue,
+  buildTestWorkerDeploymentOptions,
+  buildTestWorkerIdentity,
+} from './versioned-worker'
 
 const READY_MARKER = '[task-durability-worker] READY'
 const BLOCKED_MARKER =
@@ -23,6 +29,8 @@ async function main(): Promise<void> {
     throw new Error('TASK_DURABILITY_CHILD_RUNTIME_REQUIRED')
   }
   const config = getTemporalRuntimeConfig()
+  const taskQueue = buildTestTaskQueue(config.taskQueue, 'task-durability')
+  const workerIdentity = buildTestWorkerIdentity('task-durability')
   const connection = await NativeConnection.connect(
     buildTemporalConnectionOptions(config),
   )
@@ -56,17 +64,31 @@ async function main(): Promise<void> {
     const worker = await Worker.create({
       connection,
       namespace: config.namespace,
-      taskQueue: config.taskQueue,
-      workflowsPath: resolveTemporalWorkflowBundlePath(false),
+      taskQueue,
+      identity: workerIdentity,
+      workflowsPath: resolve(
+        process.cwd(),
+        'src/lib/temporal/workflows/index.ts',
+      ),
       activities: {
         ...productionActivities,
         runTaskAttempt,
       },
       maxHeartbeatThrottleInterval: '50 milliseconds',
       defaultHeartbeatThrottleInterval: '50 milliseconds',
+      workerDeploymentOptions: buildTestWorkerDeploymentOptions(
+        'task-durability',
+      ),
       shutdownGraceTime: '5 seconds',
     })
     const run = worker.run()
+    await activateTestWorkerVersion(
+      connection,
+      config.namespace,
+      taskQueue,
+      workerIdentity,
+      'task-durability',
+    )
     console.log(READY_MARKER)
     await run
   } finally {

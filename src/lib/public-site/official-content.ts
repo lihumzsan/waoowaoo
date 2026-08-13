@@ -21,7 +21,7 @@ export interface OfficialContactPageContent {
   publicInfo: { title: string; fields: readonly OfficialContactField[] }
   portalOnly: OfficialPortalOnlyContent
 }
-export type OfficialLegalPageKey = 'terms' | 'privacy' | 'refund-policy'
+export type OfficialLegalPageKey = 'terms' | 'privacy'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)

@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client'
 import { safeValidateUIMessages, type UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
 import { buildAgentTurnAssistantMessageId } from '@/lib/agent-turn/stream-publisher'
-import { parseFailureRecord } from '@/lib/errors/failure'
+import { hasProviderFailureEvidence, parseFailureRecord } from '@/lib/errors/failure'
 import type { RuntimeJsonValue } from '@/lib/codex-runtime/runtime-adapter'
 import {
   parseProjectAgentPlanSnapshot,
@@ -51,6 +51,7 @@ function toTurnView(row: {
   readonly updatedAt: Date
 }): AssistantRuntimeSessionTurnView {
   const status = parseTurnStatus(row.status)
+  const failure = parseFailureRecord(row.failure)
   return {
     turnId: row.id,
     requestId: row.requestId,
@@ -65,7 +66,10 @@ function toTurnView(row: {
       ? buildAgentTurnAssistantMessageId({ turnId: row.id, attempt: row.attempt })
       : null),
     stopReason: row.stopReason,
-    errorCode: parseFailureRecord(row.failure)?.interpretation.code ?? null,
+    errorCode: failure?.interpretation.code ?? null,
+    errorDiagnostic: failure && hasProviderFailureEvidence(failure)
+      ? failure.native.message
+      : null,
     cancelReason: row.cancelReason,
     startedAt: row.startedAt?.toISOString() ?? null,
     finishedAt: row.finishedAt?.toISOString() ?? null,
@@ -91,7 +95,10 @@ function parseInteraction(row: {
   readonly responseJson: Prisma.JsonValue | null
   readonly createdAt: Date
 }): AssistantRuntimePendingInteractionView {
-  if (!row.runtimeRequestId || (row.status !== 'pending' && row.status !== 'decided')) {
+  if (
+    !row.runtimeRequestId
+    || (row.status !== 'pending' && row.status !== 'delivery_pending' && row.status !== 'decided')
+  ) {
     throw new Error(`ASSISTANT_RUNTIME_VIEW_INTERACTION_INVALID:${row.id}`)
   }
   if (!row.payloadJson || typeof row.payloadJson !== 'object' || Array.isArray(row.payloadJson)) {
@@ -116,7 +123,7 @@ function parseInteraction(row: {
     method: payload.method,
     params: payload.params as RuntimeJsonValue,
     response: row.responseJson as RuntimeJsonValue | null,
-    status: row.status,
+    status: row.status === 'pending' ? 'pending' : 'decided',
     createdAt: row.createdAt.toISOString(),
   }
 }
@@ -169,7 +176,10 @@ export async function getAssistantRuntimeSessionView(
         take: RECENT_TURN_LIMIT,
       }),
       tx.agentTurnInteraction.findMany({
-        where: { turn: { threadId: thread.id }, status: { in: ['pending', 'decided'] } },
+        where: {
+          turn: { threadId: thread.id },
+          status: { in: ['pending', 'delivery_pending', 'decided'] },
+        },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       }),
       tx.followUpBatch.findMany({

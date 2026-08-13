@@ -19,7 +19,7 @@ export async function requireSelectableVideoModel(
       throw new ApiError('INVALID_PARAMS', {
         code: 'PROJECT_VIDEO_MODEL_NOT_AVAILABLE',
         field: 'videoModel',
-      })
+      }, { cause: error })
     }
     throw error
   }

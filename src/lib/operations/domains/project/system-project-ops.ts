@@ -237,7 +237,7 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
               soundModel: platformDefaults.soundModel,
             }),
             ...(usesLocalProjectPreset && userPreference && {
-              analysisModel: userPreference.analysisModel ?? LOCAL_PROJECT_DEFAULT_MODELS.analysisModel,
+              analysisModel: userPreference.analysisModel,
               characterModel: userPreference.characterModel ?? LOCAL_PROJECT_DEFAULT_MODELS.characterModel,
               locationModel: userPreference.locationModel ?? LOCAL_PROJECT_DEFAULT_MODELS.locationModel,
               editModel: userPreference.editModel ?? LOCAL_PROJECT_DEFAULT_MODELS.editModel,

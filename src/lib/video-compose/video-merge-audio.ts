@@ -17,12 +17,6 @@ export type AudioLoudnessMeasurement = {
   readonly targetOffset: number
 }
 
-export type VideoMergeAudioMixResult = {
-  readonly hasSourceAudio: boolean
-  readonly mainAudio?: AudioLoudnessMeasurement
-  readonly bgm?: AudioLoudnessMeasurement
-}
-
 export const MAIN_AUDIO_TARGET: AudioLoudnessTarget = {
   integratedLufs: -16,
   truePeakDb: -1.5,
@@ -245,89 +239,134 @@ export async function concatVideoMergeAudioClips(input: {
   ])
 }
 
-export async function muxVideoMergeAudio(input: {
+export type VideoMergeMusicCueInput = {
+  readonly musicPath: string
+  readonly startMs: number
+  readonly durationMs: number
+  readonly fadeInMs: number
+  readonly fadeOutMs: number
+  readonly gainDb: number
+}
+
+function musicCueFilter(input: {
+  readonly inputIndex: number
+  readonly cueIndex: number
+  readonly cue: VideoMergeMusicCueInput
+  readonly measurement: AudioLoudnessMeasurement
+}): string {
+  const durationSeconds = input.cue.durationMs / 1000
+  const filters = [
+    `atrim=0:${formatFilterNumber(durationSeconds)}`,
+    'asetpts=PTS-STARTPTS',
+    'aresample=48000',
+    'aformat=sample_fmts=fltp:channel_layouts=stereo',
+    `loudnorm=${loudnormApplyFilter(BGM_AUDIO_TARGET, input.measurement)}`,
+  ]
+  if (input.cue.fadeInMs > 0) {
+    filters.push(`afade=t=in:st=0:d=${formatFilterNumber(input.cue.fadeInMs / 1000)}`)
+  }
+  if (input.cue.fadeOutMs > 0) {
+    filters.push(
+      `afade=t=out:st=${formatFilterNumber((input.cue.durationMs - input.cue.fadeOutMs) / 1000)}`
+      + `:d=${formatFilterNumber(input.cue.fadeOutMs / 1000)}`,
+    )
+  }
+  filters.push(
+    `volume=${formatFilterNumber(input.cue.gainDb)}dB`,
+    exactAudioDurationFilter(durationSeconds),
+    `adelay=delays=${String(input.cue.startMs)}:all=1`,
+  )
+  return `[${String(input.inputIndex)}:a]${filters.join(',')}[music_cue_${String(input.cueIndex)}]`
+}
+
+/**
+ * Place independently generated score cues on one exact timeline. Cue gaps are
+ * digital silence, overlaps mix deterministically, and source-audio ducking is
+ * applied once to the completed BGM bus.
+ */
+export async function muxVideoMergeMusicCues(input: {
   readonly runCommand: VideoMergeAudioCommandRunner
   readonly stitchedPath: string
   readonly mainAudioPath: string
   readonly hasSourceAudio: boolean
-  readonly musicPath: string
+  readonly musicCues: readonly VideoMergeMusicCueInput[]
   readonly outputPath: string
   readonly durationSeconds: number
-  readonly volume: number
-}): Promise<VideoMergeAudioMixResult> {
-  const fadeDuration = Math.min(2, Math.max(0.4, input.durationSeconds / 8))
-  const fadeOutStart = Math.max(0, input.durationSeconds - fadeDuration)
+}): Promise<{
+  readonly hasSourceAudio: boolean
+  readonly mainAudio?: AudioLoudnessMeasurement
+  readonly bgm: readonly AudioLoudnessMeasurement[]
+}> {
+  if (input.musicCues.length === 0) throw new Error('VIDEO_MERGE_MUSIC_CUES_REQUIRED')
   const exactDurationFilter = exactAudioDurationFilter(input.durationSeconds)
-  const bgmMeasurement = await analyzeAudioLoudness(input.runCommand, input.musicPath, BGM_AUDIO_TARGET)
+  const bgmMeasurements = await Promise.all(input.musicCues.map(async (cue) => (
+    await analyzeAudioLoudness(input.runCommand, cue.musicPath, BGM_AUDIO_TARGET)
+  )))
+  const mediaInputs = input.musicCues.flatMap((cue) => ['-i', cue.musicPath])
+  const cueFilters = input.musicCues.map((cue, cueIndex) => musicCueFilter({
+    inputIndex: cueIndex + 2,
+    cueIndex,
+    cue,
+    measurement: bgmMeasurements[cueIndex]
+      ?? (() => { throw new Error(`VIDEO_MERGE_MUSIC_CUE_MEASUREMENT_MISSING:${String(cueIndex)}`) })(),
+  }))
+  const cueLabels = input.musicCues.map((_, cueIndex) => `[music_cue_${String(cueIndex)}]`).join('')
+  const silenceFilter = `anullsrc=r=48000:cl=stereo:d=${formatFilterNumber(input.durationSeconds)}[music_silence]`
+  const bgmBusFilter = `[music_silence]${cueLabels}amix=inputs=${String(input.musicCues.length + 1)}:duration=first:dropout_transition=0:normalize=0,${exactDurationFilter}[bgm_bus]`
 
   if (!input.hasSourceAudio) {
     await input.runCommand('ffmpeg', [
       '-y',
-      '-i',
-      input.stitchedPath,
-      '-i',
-      input.musicPath,
+      '-i', input.stitchedPath,
+      '-i', input.mainAudioPath,
+      ...mediaInputs,
       '-filter_complex',
-      `[1:a]atrim=0:${input.durationSeconds.toFixed(3)},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=${fadeDuration.toFixed(3)},afade=t=out:st=${fadeOutStart.toFixed(3)}:d=${fadeDuration.toFixed(3)},loudnorm=${loudnormApplyFilter(BGM_AUDIO_TARGET, bgmMeasurement)},volume=${input.volume.toFixed(3)},${exactDurationFilter},alimiter=limit=0.95[aout]`,
-      '-map',
-      '0:v:0',
-      '-map',
-      '[aout]',
-      '-c:v',
-      'copy',
-      '-c:a',
-      'aac',
-      '-b:a',
-      '192k',
-      '-movflags',
-      '+faststart',
-      '-t',
-      input.durationSeconds.toFixed(3),
+      [...cueFilters, silenceFilter, bgmBusFilter, '[bgm_bus]alimiter=limit=0.95[aout]'].join(';'),
+      '-map', '0:v:0',
+      '-map', '[aout]',
+      '-c:v', 'copy',
+      '-c:a', 'aac',
+      '-b:a', '192k',
+      '-movflags', '+faststart',
+      '-t', input.durationSeconds.toFixed(3),
       input.outputPath,
     ])
-    return {
-      hasSourceAudio: false,
-      bgm: bgmMeasurement,
-    }
+    return { hasSourceAudio: false, bgm: bgmMeasurements }
   }
 
-  const mainMeasurement = await analyzeAudioLoudness(input.runCommand, input.mainAudioPath, MAIN_AUDIO_TARGET)
+  const mainMeasurement = await analyzeAudioLoudness(
+    input.runCommand,
+    input.mainAudioPath,
+    MAIN_AUDIO_TARGET,
+  )
   await input.runCommand('ffmpeg', [
-      '-y',
-      '-i',
-      input.stitchedPath,
-      '-i',
-      input.mainAudioPath,
-      '-i',
-      input.musicPath,
+    '-y',
+    '-i', input.stitchedPath,
+    '-i', input.mainAudioPath,
+    ...mediaInputs,
     '-filter_complex',
     [
+      ...cueFilters,
+      silenceFilter,
+      bgmBusFilter,
       `[1:a]loudnorm=${loudnormApplyFilter(MAIN_AUDIO_TARGET, mainMeasurement)},${exactDurationFilter}[main_norm]`,
-      `[2:a]atrim=0:${input.durationSeconds.toFixed(3)},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=${fadeDuration.toFixed(3)},afade=t=out:st=${fadeOutStart.toFixed(3)}:d=${fadeDuration.toFixed(3)},loudnorm=${loudnormApplyFilter(BGM_AUDIO_TARGET, bgmMeasurement)},volume=${input.volume.toFixed(3)},${exactDurationFilter}[bgm_norm]`,
       '[main_norm]asplit=2[main_mix][main_sidechain]',
-      `[bgm_norm][main_sidechain]sidechaincompress=threshold=${BGM_DUCKING_THRESHOLD}:ratio=${BGM_DUCKING_RATIO}:attack=${BGM_DUCKING_ATTACK_MS}:release=${BGM_DUCKING_RELEASE_MS}[ducked_bgm]`,
-      '[main_mix][ducked_bgm]amix=inputs=2:duration=first:dropout_transition=0,alimiter=limit=0.95[aout]',
+      `[bgm_bus][main_sidechain]sidechaincompress=threshold=${BGM_DUCKING_THRESHOLD}:ratio=${BGM_DUCKING_RATIO}:attack=${BGM_DUCKING_ATTACK_MS}:release=${BGM_DUCKING_RELEASE_MS}[ducked_bgm]`,
+      '[main_mix][ducked_bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[aout]',
     ].join(';'),
-    '-map',
-    '0:v:0',
-    '-map',
-    '[aout]',
-    '-c:v',
-    'copy',
-    '-c:a',
-    'aac',
-    '-b:a',
-    '192k',
-    '-movflags',
-    '+faststart',
-    '-t',
-    input.durationSeconds.toFixed(3),
+    '-map', '0:v:0',
+    '-map', '[aout]',
+    '-c:v', 'copy',
+    '-c:a', 'aac',
+    '-b:a', '192k',
+    '-movflags', '+faststart',
+    '-t', input.durationSeconds.toFixed(3),
     input.outputPath,
   ])
   return {
     hasSourceAudio: true,
     mainAudio: mainMeasurement,
-    bgm: bgmMeasurement,
+    bgm: bgmMeasurements,
   }
 }
 
@@ -428,6 +467,53 @@ async function muxVideoMergeWithoutAudio(input: {
   ])
 }
 
+async function muxVideoMergeBackgroundMusic(input: {
+  readonly runCommand: VideoMergeAudioCommandRunner
+  readonly stitchedPath: string
+  readonly mainAudioPath: string
+  readonly hasSourceAudio: boolean
+  readonly musicPath: string
+  readonly outputPath: string
+  readonly durationSeconds: number
+}): Promise<void> {
+  const fadeDuration = Math.min(2, Math.max(0.4, input.durationSeconds / 8))
+  const fadeOutStart = Math.max(0, input.durationSeconds - fadeDuration)
+  const exactDurationFilter = exactAudioDurationFilter(input.durationSeconds)
+  const bgmMeasurement = await analyzeAudioLoudness(input.runCommand, input.musicPath, BGM_AUDIO_TARGET)
+  const bgmFilter = [
+    `atrim=0:${input.durationSeconds.toFixed(3)}`,
+    'asetpts=PTS-STARTPTS',
+    `afade=t=in:st=0:d=${fadeDuration.toFixed(3)}`,
+    `afade=t=out:st=${fadeOutStart.toFixed(3)}:d=${fadeDuration.toFixed(3)}`,
+    `loudnorm=${loudnormApplyFilter(BGM_AUDIO_TARGET, bgmMeasurement)}`,
+    exactDurationFilter,
+  ].join(',')
+
+  if (!input.hasSourceAudio) {
+    await input.runCommand('ffmpeg', [
+      '-y', '-i', input.stitchedPath, '-i', input.musicPath,
+      '-filter_complex', `[1:a]${bgmFilter},alimiter=limit=0.95[aout]`,
+      '-map', '0:v:0', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
+      '-movflags', '+faststart', '-t', input.durationSeconds.toFixed(3), input.outputPath,
+    ])
+    return
+  }
+
+  const mainMeasurement = await analyzeAudioLoudness(input.runCommand, input.mainAudioPath, MAIN_AUDIO_TARGET)
+  await input.runCommand('ffmpeg', [
+    '-y', '-i', input.stitchedPath, '-i', input.mainAudioPath, '-i', input.musicPath,
+    '-filter_complex', [
+      `[1:a]loudnorm=${loudnormApplyFilter(MAIN_AUDIO_TARGET, mainMeasurement)},${exactDurationFilter}[main_norm]`,
+      `[2:a]${bgmFilter}[bgm_norm]`,
+      '[main_norm]asplit=2[main_mix][main_sidechain]',
+      `[bgm_norm][main_sidechain]sidechaincompress=threshold=${BGM_DUCKING_THRESHOLD}:ratio=${BGM_DUCKING_RATIO}:attack=${BGM_DUCKING_ATTACK_MS}:release=${BGM_DUCKING_RELEASE_MS}[ducked_bgm]`,
+      '[main_mix][ducked_bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[aout]',
+    ].join(';'),
+    '-map', '0:v:0', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
+    '-movflags', '+faststart', '-t', input.durationSeconds.toFixed(3), input.outputPath,
+  ])
+}
+
 export async function muxVideoMergeFinalAudio(input: {
   readonly runCommand: VideoMergeAudioCommandRunner
   readonly audioMode: VideoMergeAudioMode
@@ -454,7 +540,7 @@ export async function muxVideoMergeFinalAudio(input: {
       return
     case 'mix':
       if (!input.mainAudioPath || !input.assemblyAudioPath) throw new Error('VIDEO_MERGE_BACKGROUND_MUSIC_INPUT_REQUIRED')
-      await muxVideoMergeAudio({
+      await muxVideoMergeBackgroundMusic({
         runCommand: input.runCommand,
         stitchedPath: input.stitchedPath,
         mainAudioPath: input.mainAudioPath,
@@ -462,7 +548,6 @@ export async function muxVideoMergeFinalAudio(input: {
         musicPath: input.assemblyAudioPath,
         outputPath: input.outputPath,
         durationSeconds: input.durationSeconds,
-        volume: 1,
       })
       return
     case 'preserve':

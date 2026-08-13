@@ -7,7 +7,7 @@ export interface ImageRuntimeGenerationOptions {
   readonly size?: string
 }
 
-type ImageBillingMetadata = Record<string, unknown>
+type ImageGenerationMetadata = Record<string, unknown>
 
 const IMAGE_SIZE_PATTERN = /^\d+x\d+$/
 
@@ -68,7 +68,7 @@ export function buildImageRuntimeGenerationOptions(input: {
   return options
 }
 
-export function resolveImageSizeFromGenerationOptions(metadata?: ImageBillingMetadata): string | null {
+export function resolveImageSizeFromGenerationOptions(metadata?: ImageGenerationMetadata): string | null {
   const explicitSize = readString(metadata?.imageSize) || readString(metadata?.size)
   if (explicitSize && IMAGE_SIZE_PATTERN.test(explicitSize)) return explicitSize
 

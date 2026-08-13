@@ -107,4 +107,4 @@ description: Scope reusable production assets and define stable visible designs 
 
 ## 边界
 
-本 Skill 负责资产筛选、稳定可见设计、最终资产图片 Prompt 和对应批次参数。项目级呈现政策来自已提供的 Creative Direction；主 Agent 把同一结果的原样 items 提交给 `create_image`，媒体执行、模型选择、能力校验、计费、审批、Task 与终态由系统服务负责。
+本 Skill 负责资产筛选、稳定可见设计、最终资产图片 Prompt 和对应批次参数。项目级呈现政策来自已提供的 Creative Direction；主 Agent 把同一结果的原样 items 提交给 `create_image`，媒体执行、模型选择、能力校验、权限校验、Task 与终态由系统服务负责。

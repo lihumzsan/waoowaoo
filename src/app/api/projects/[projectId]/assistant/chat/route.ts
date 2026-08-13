@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { safeValidateUIMessages, type UIMessage } from 'ai'
 import { apiHandler } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuth } from '@/lib/api-auth'
+import { createScopedLogger, type ScopedLogger } from '@/lib/logging/core'
 import {
   getAssistantRuntimeService,
   getAssistantRuntimeSessionView,
@@ -15,11 +16,51 @@ import {
   type ProjectAgentCommandHttpBody,
 } from '../command-http'
 
-async function validateUserMessage(message: unknown): Promise<UIMessage> {
+function validationDiagnostics(message: unknown, error: unknown): Record<string, unknown> {
+  const messageRecord = isRecord(message) ? message : null
+  const parts = messageRecord && Array.isArray(messageRecord.parts) ? messageRecord.parts : []
+  const errorRecord = isRecord(error) ? error : null
+  const issues = errorRecord && Array.isArray(errorRecord.issues) ? errorRecord.issues : []
+  return {
+    payloadKind: message === null ? 'null' : Array.isArray(message) ? 'array' : typeof message,
+    payloadKeys: messageRecord ? Object.keys(messageRecord).sort().slice(0, 20) : [],
+    role: messageRecord && typeof messageRecord.role === 'string' ? messageRecord.role : null,
+    partCount: parts.length,
+    partTypes: parts.slice(0, 20).map((part) => (
+      isRecord(part) && typeof part.type === 'string' ? part.type : 'invalid'
+    )),
+    issueCount: issues.length,
+    issues: issues.slice(0, 20).map((issue) => {
+      if (!isRecord(issue)) return { code: 'unknown', path: [] }
+      return {
+        code: typeof issue.code === 'string' ? issue.code : 'unknown',
+        path: Array.isArray(issue.path)
+          ? issue.path.filter((entry): entry is string | number => (
+              typeof entry === 'string' || typeof entry === 'number'
+            )).slice(0, 12)
+          : [],
+      }
+    }),
+  }
+}
+
+async function validateUserMessage(message: unknown, logger: ScopedLogger): Promise<UIMessage> {
   const validation = await safeValidateUIMessages({ messages: [message] })
-  if (!validation.success) throw new Error('PROJECT_AGENT_INVALID_MESSAGES')
+  if (!validation.success) {
+    logger.warn({
+      action: 'assistant.message.invalid',
+      message: 'assistant message failed structural validation',
+      details: validationDiagnostics(message, validation.error),
+    })
+    throw new Error('PROJECT_AGENT_INVALID_MESSAGES')
+  }
   const [validatedMessage] = ensureUniqueUIMessages(validation.data)
   if (!validatedMessage || validatedMessage.role !== 'user') {
+    logger.warn({
+      action: 'assistant.message.invalid',
+      message: 'assistant message did not resolve to one user message',
+      details: validationDiagnostics(message, null),
+    })
     throw new Error('PROJECT_AGENT_INVALID_MESSAGES')
   }
   return validatedMessage
@@ -156,11 +197,16 @@ export const POST = apiHandler(async (
   const { projectId } = await context.params
   const authResult = await requireProjectAuth(projectId)
   if (isErrorResponse(authResult)) return authResult
+  const logger = createScopedLogger({
+    module: 'assistant',
+    projectId,
+    userId: authResult.session.user.id,
+  })
 
   try {
     const body = await readProjectAgentCommandHttpBody(request)
     const turnContext = readUserTurnContext(body)
-    const message = await validateUserMessage(body.message)
+    const message = await validateUserMessage(body.message, logger)
     const sourceId = readRequiredProjectAgentCommandString(
       message.id,
       'AGENT_TURN_SOURCE_ID_INVALID',

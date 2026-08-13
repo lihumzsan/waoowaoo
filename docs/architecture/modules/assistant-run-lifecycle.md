@@ -5,7 +5,7 @@
 ## 为什么是这样
 
 Codex app-server 拥有单个 Agent 进程内的 Thread/Turn 与原生交互；Wao 拥有产品身份、准入、持久
-View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 placement、互斥、恢复和空闲停止，
+View、刷新恢复、破坏性确认和跨进程唤醒。Session Manager 只做 placement、互斥、恢复和空闲停止，
 不解释模型思考或工具选择。
 
 产品 View 独立持久是刻意的：刷新不读 Codex 本地文件格式，UI 不解析流内容；它服务展示与业务归因，
@@ -30,9 +30,9 @@ View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 pl
   clear/cancel 后晚到的响应不得重新产生 waiting 状态或文件副作用。普通业务选择只有 Wao MCP
   decision tool 一个入口，并经 app-server 的 MCP elicitation 请求承载；原生 request-user-input 不得
   成为第二条产品 Choice 协议。
-- **ARL-05 — 两类审批同一 UI、不同权威。** shell/patch/sandbox 权限响应 Runtime request；付费媒体
-  响应 Wao 的 Snapshot/预算授权。UI 可统一展示，但不能互相授权。两层 timeout 都必须显式覆盖有界
-  用户决策窗口，内层短于能力凭据寿命——不能让任一默认值与审批竞争。
+- **ARL-05 — 破坏性确认独立于 Runtime 权限。** shell/patch/sandbox 权限响应 Runtime request；
+  破坏性操作响应 Wao 的认证浏览器决定。UI 可统一展示，但不能互相授权。两层 timeout 都必须显式
+  覆盖有界用户决策窗口，不能让任一默认值与确认竞争。
 - **ARL-06 — Runtime 终态不是 Task 终态。** Turn 可以在媒体 Task 仍运行时结束；Task 继续完成，
   按持久批次 identity 至多一次注入新 Turn。
 - **ARL-06A — FollowUp 是当前运行投影，不是第二份 Task 历史。** 当前 Task 只由 Resource 的
@@ -62,8 +62,9 @@ View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 pl
   旧 owner 之后不能续租或释放新连接。恢复不得依赖等待 TTL。
 - **ARL-17 — 错误与继续动作都由持久事实裁决。** projector 只按钉死协议读取错误事件，将最终失败
   一次性写为稳定 code；UI 不解析流内容、日志或 Provider 文案猜原因。仍可重试的 attempt 不是产品
-  Turn 终态。已进入 Runtime 且非用户取消的失败只能以新 source identity 创建新 Turn；只有从未
-  进入 Runtime 的消息才允许忠实重发。
+  Turn 终态。Provider adapter 与原生 Runtime 必须保留一手 FailureRecord，最终 projector 只消费
+  与 Turn 终态对应的失败事实，不得从包装文案反造原因。已进入 Runtime 且非用户
+  取消的失败只能以新 source identity 创建新 Turn；只有从未进入 Runtime 的消息才允许忠实重发。
 - **ARL-18 — 工具输出与长期 Task 展示分权。** projector 只把结构化结果作为业务输出；transport
   外壳与工具完成不能把异步提交解释成媒体成功。聊天保留本 Turn 的调用与错误，但不永久渲染项目
   Task 批次状态；资源与 Task 状态只由正式 View 展示。已删除的中间提交工具即使仍存在于历史消息，
@@ -92,21 +93,39 @@ View、刷新恢复、计费审批和跨进程唤醒。Session Manager 只做 pl
 - 取消首版只写取消标记，queued Turn 仍会被绑定，等待审批的晚到 accept 仍可签发 Grant 或写资源 →
   取消不是副作用 fence → 所有 effect 事务共享同一 Turn fence（ARL-13）。
 - clear 首版只用于准入，未进入模型/MCP/effect guard，已 claim 的清空仍可能继续产生模型调用、
-  付费任务或目录写入 → fence 覆盖面不完整 → clear 覆盖全部能力边界并按同一锁序检查（ARL-14）。
+  Task 或目录写入 → fence 覆盖面不完整 → clear 覆盖全部能力边界并按同一锁序检查（ARL-14）。
 - 工具 `item/started` 曾只存在于易失 SSE，只有完成才进入产品 View；进程退出或用户停止发生在工具
   执行中时，该工具刷新后完全消失 → 未完成事实没有持久表示 → started 立即持久化，非正常终止时
   一次性结算为 output-error，并区分"已停止"与"执行失败"。
 - 刷新续流首版只补缺失的 text-start 而没有持久 watermark，bootstrap 还主动丢弃订阅期间的增量，
   刷新可长期显示截断尾段 → 用重建猜测代替持久前缀 → durable prefix 与 seq 同存，严格续号
   （ARL-11）。
+- durable prefix 首版又把每个模型增量都排成一次完整消息历史事务；长对话中旧前缀排队耗尽易失流
+  缓冲并阻塞 Turn 终态，刷新后长期显示输出中 → 已持久前缀与最新未发布前缀没有区分 → 同一消息只
+  保留最新未落库快照，并合并尚未被快照封口的相邻文字增量；分段边界仍按队列顺序持久化，终态只
+  等待当前写入和最终快照（ARL-07/11）。
 - 旧链路已建立稳定错误码与本地化边界，但 Runtime 切换后的终态持久化又固定写一个通用失败码并丢弃
   详情；第一次补救只枚举 Codex error enum，没有用真实 Provider 402 验证协议边界，`UnexpectedStatus`
   仍被官方 Runtime 降成 `other` → 同一可见性不变量换 writer 后又漏掉真实入口 → 模型网关把 Provider
   非成功响应投影到官方 Codex 已支持的结构化错误类别，projector 再作为终态错误的唯一解释者映射到共享
   error registry，禁止维护 Runtime fork 或从错误文案反推状态。
+- 网关错误投影随后仍只用自造的嵌套 `error.type/code` 信封验收；OpenRouter Responses 把稳定原因放在
+  顶层 `error_type`，导致真实 400 再次丢失原生诊断并被兜底伪装成 `slow_down` → 协议 smoke 没覆盖实际
+  Provider skin，且兜底改变了错误语义 → 网关必须读取各受支持 skin 的稳定 typed 字段、携带有界脱敏
+  原生 message，并把未知请求拒绝投影为非可用性错误。该修复仍只覆盖投影，Gateway transport/stream
+  的一手失败没有 attempt owner，projector 只能从二手 Runtime 错误重造原因 → 每次请求先 claim
+  一手 FailureRecord，终态沿同一事实交给 Runtime（ARL-17/FG-01/04）。
+- Runtime 中断可留下只有摘要、没有加密载荷的 reasoning item；首版网关把所有历史 item 原样重放，
+  下一个完整 reasoning 的加密载荷因此被 Provider 判定为绑定了错误 identity，旧诊断防线又只看到网关
+  的泛化外层错误 → Provider 请求边界只重放具有可验证加密载荷的 reasoning，并从有界原生错误信封读取
+  上游诊断；产品消息和持久 Rollout 均不另建修复 writer（ARL-07/ARL-17）。
 - Runtime 恢复曾把数据库消息重新注入新 Thread；失败 Turn 的最新用户消息尚未投影时，恢复上下文会
   回到更早约束 → 产品 View 被误作模型 history writer → Product Thread 在首个 Turn 前绑定，后续只
   resume 持久 Codex Thread，View 永不参与模型历史恢复（ARL-07）。
+- 原生交互首版先持久化用户决定再写 Runtime 管道，却没有在原生 request 随超时、重启或部署消失时
+  关闭持久交互；第一次修复只在提交请求内验证 live request，进程恰好在持久化与交付间退出后没有
+  入口再次触发该裁决 → 持久 response 保持唯一事实并允许幂等重投；request 已消失时仍由既有恢复
+  writer 终结 Turn 与交互，不重做用户决定（ARL-04/07）。
 - Codex 切换曾把 `turn/plan/updated` 写回旧版 Thread 级计划本，停止后的 Plan 因而残留并可能被下一
   Turn 误认；旧实现只替换了事件来源，没有重新核对事实 scope → Plan 改由精确 Turn identity 写入，
   终态不再进入当前 View（ARL-03）。

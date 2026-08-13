@@ -49,8 +49,8 @@ export const ASSISTANT_RUNTIME_CODEX_VERSION = '0.147.0-alpha.6.6' as const
 export const ASSISTANT_RUNTIME_STATIC_CONTRACT = {
   thread: {
     // Shell, rule, Skill, and permission escalation have no product-owned UI,
-    // so denied commands must fail in place. Wao billable/destructive actions
-    // are MCP elicitations with authenticated browser proof and remain the one
+    // so denied commands must fail in place. Destructive Wao actions are MCP
+    // elicitations with authenticated browser proof and remain the one
     // interactive approval class.
     approvalPolicy: {
       granular: {
@@ -123,8 +123,7 @@ function requireAbsoluteHttpUrl(value: string | undefined, code: string): string
 
 function runtimeSandboxMode(): 'workspace-write' {
   const driver = process.env.CODEX_RUNTIME_DRIVER
-  if (driver === 'local') return 'workspace-write'
-  if (driver === 'docker') throw new Error('ASSISTANT_RUNTIME_CODEX_LOCAL_DRIVER_REQUIRED')
+  if (driver === 'local' || driver === 'docker') return 'workspace-write'
   throw new Error('ASSISTANT_RUNTIME_DRIVER_REQUIRED')
 }
 
@@ -138,7 +137,7 @@ function runtimeConfig(input: {
     web_search: tools.webSearch,
     features: {
       // Wao installs only its six registry-bound domain Skills. Built-in image
-      // generation stays disabled; paid media crosses Wao's direct Operations.
+      // generation stays disabled; media generation crosses Wao's direct Operations.
       skill_search: tools.features.skillSearch,
       image_generation: tools.features.imageGeneration,
       standalone_web_search: tools.features.standaloneWebSearch,
@@ -162,8 +161,8 @@ function runtimeConfig(input: {
         url: input.mcpUrl,
         bearer_token_env_var: input.bearerTokenEnvironmentKey,
         required: tools.waoMcp.required,
-        // Wao owns approval for its immutable production plan and quoted
-        // budget. Codex approval remains enabled for shell/file permissions,
+        // Wao owns confirmation for destructive production actions. Codex
+        // approval remains enabled for shell/file permissions,
         // but must not add a second prompt in front of Wao MCP tools.
         default_tools_approval_mode: tools.waoMcp.defaultToolsApprovalMode,
         tool_timeout_sec: WAO_MCP_TOOL_TIMEOUT_SECONDS,

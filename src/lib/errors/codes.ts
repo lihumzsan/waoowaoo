@@ -1,6 +1,5 @@
 export const ERROR_CATEGORY = {
   AUTH: 'AUTH',
-  BILLING: 'BILLING',
   CONTENT: 'CONTENT',
   PROVIDER: 'PROVIDER',
   SYSTEM: 'SYSTEM',
@@ -97,7 +96,7 @@ export const ERROR_CATALOG = {
     retryable: false,
     category: ERROR_CATEGORY.VALIDATION,
     userMessageKey: 'errors.OPERATION_PLAN_CHANGED',
-    defaultMessage: 'The task plan or price changed. Generate a new quote before continuing.',
+    defaultMessage: 'The task plan changed. Review the current plan before continuing.',
   },
   TASK_NOT_READY: {
     httpStatus: 202,

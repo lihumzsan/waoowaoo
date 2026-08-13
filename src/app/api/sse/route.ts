@@ -202,7 +202,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
       leaseTimer = setInterval(() => {
         void connectionLease.renew().then((renewed) => {
           if (!renewed) {
-            void fail(new Error('SSE_CONNECTION_LEASE_LOST'))
+            // A newer connection with the same stable tab identity owns the
+            // lease now. Closing this superseded stream is the normal ARL-16
+            // handoff; only renewal infrastructure failures use fail().
+            void close()
           }
         }).catch((error: unknown) => {
           void fail(error)

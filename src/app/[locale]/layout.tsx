@@ -47,6 +47,8 @@ export default async function LocaleLayout({
         notFound();
     }
 
+    setRequestLocale(locale);
+
     // 获取翻译消息
     setRequestLocale(locale);
 

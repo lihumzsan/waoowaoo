@@ -1,9 +1,12 @@
 import {
+  execFileSync,
   spawn,
   type ChildProcess,
 } from 'node:child_process'
 import { once } from 'node:events'
-import { resolve } from 'node:path'
+import { createRequire } from 'node:module'
+import { dirname, resolve } from 'node:path'
+import { buildTestTaskQueue } from './versioned-worker'
 
 const READY_MARKER = '[task-durability-worker] READY'
 const BLOCKED_MARKER =
@@ -31,6 +34,14 @@ function signalProcessGroup(
 ): void {
   const pid = child.pid
   if (!pid) throw new Error('TASK_DURABILITY_CHILD_PID_MISSING')
+  if (process.platform === 'win32') {
+    try {
+      execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' })
+    } catch (error) {
+      if (child.exitCode === null && child.signalCode === null) throw error
+    }
+    return
+  }
   try {
     process.kill(-pid, signal)
   } catch (error) {
@@ -58,12 +69,20 @@ async function within<T>(
 }
 
 export function startTaskDurabilityChildWorker(): TaskDurabilityChildWorker {
-  const taskQueue = process.env.TEMPORAL_TASK_QUEUE?.trim()
-  if (!taskQueue) throw new Error('TASK_DURABILITY_CHILD_TASK_QUEUE_REQUIRED')
+  const configuredTaskQueue = process.env.TEMPORAL_TASK_QUEUE?.trim()
+  if (!configuredTaskQueue) {
+    throw new Error('TASK_DURABILITY_CHILD_TASK_QUEUE_REQUIRED')
+  }
+  const taskQueue = buildTestTaskQueue(
+    configuredTaskQueue,
+    'task-durability',
+  )
+  const tsxPackage = createRequire(import.meta.url).resolve('tsx/package.json')
+  const tsxCli = resolve(dirname(tsxPackage), 'dist/cli.mjs')
   const child = spawn(
     process.execPath,
     [
-      'node_modules/tsx/dist/cli.mjs',
+      tsxCli,
       resolve(
         process.cwd(),
         'tests/integration/temporal/helpers/task-durability-worker-child.ts',

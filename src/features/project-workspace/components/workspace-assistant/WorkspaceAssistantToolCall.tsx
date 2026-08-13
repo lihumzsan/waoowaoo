@@ -1,10 +1,11 @@
 'use client'
 
 import type { ToolCallMessagePartProps } from '@assistant-ui/react'
-import { isToolUIPart, type UIMessage } from 'ai'
+import { getToolName, isToolUIPart, type UIMessage } from 'ai'
 import { useLocale, useTranslations } from 'next-intl'
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -12,8 +13,6 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { AppIcon } from '@/components/ui/icons'
-import { WebSourceFavicon } from './WebSourceFavicon'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 import { resolveUnifiedErrorCode, type UnifiedErrorCode } from '@/lib/errors/codes'
@@ -28,6 +27,7 @@ import {
   resolveWorkspaceAssistantRepeatedToolCallGroups,
   resolveWorkspaceAssistantToolCallDisplayState,
   resolveWorkspaceAssistantToolCallGroupView,
+  WORKSPACE_ASSISTANT_HIDDEN_TRACE_TOOL_NAMES,
   type WorkspaceAssistantRepeatedToolCallGroup,
   type WorkspaceAssistantToolCallDisplayState,
   type WorkspaceAssistantToolCallGroupView,
@@ -37,13 +37,31 @@ type RepeatedToolCallEntry = {
   readonly group: WorkspaceAssistantRepeatedToolCallGroup
   readonly view: WorkspaceAssistantToolCallGroupView
 }
+/**
+ * A "run" is a stretch of adjacent tool parts inside one message (step-start
+ * parts are transparent). Runs with 2+ visible rows collapse behind one
+ * Beautiful UI summary header owned by the first visible member.
+ */
+type ToolRunEntry = {
+  readonly runId: string
+  readonly leaderToolCallId: string
+  readonly displayCount: number
+  readonly active: boolean
+  readonly followsDisplayedTool: boolean
+}
 type WorkspaceAssistantToolCallContextValue = {
   readonly repeatedByToolCallId: ReadonlyMap<string, RepeatedToolCallEntry>
   readonly interruptedToolCallIds: ReadonlySet<string>
+  readonly toolRunsByToolCallId: ReadonlyMap<string, ToolRunEntry>
+  readonly expandedRunOverrides: ReadonlyMap<string, boolean>
+  readonly toggleRun: (runId: string, expanded: boolean) => void
 }
 const EMPTY_TOOL_CALL_CONTEXT: WorkspaceAssistantToolCallContextValue = {
   repeatedByToolCallId: new Map(),
   interruptedToolCallIds: new Set(),
+  toolRunsByToolCallId: new Map(),
+  expandedRunOverrides: new Map(),
+  toggleRun: () => {},
 }
 const WorkspaceAssistantToolCallContext = createContext<WorkspaceAssistantToolCallContextValue>(EMPTY_TOOL_CALL_CONTEXT)
 
@@ -159,6 +177,131 @@ function resolveToolFailureReason(result: unknown): { field: string | null; reas
   return { field: readText(details?.field), reasonCode }
 }
 
+/* eslint-disable no-restricted-syntax -- Beautiful UI's copied tool glyphs, preserved exactly. */
+const BUI_TOOL_ICONS = {
+  think: <path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z" />,
+  write: <g fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z" /></g>,
+  run: <g fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 17l6-5-6-5M12 19h8" /></g>,
+  read: <g fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /></g>,
+} as const
+
+type BuiToolIconName = keyof typeof BUI_TOOL_ICONS
+
+function resolveBuiToolIcon(params: {
+  readonly toolName: string
+  readonly runtimeSkillRead: boolean
+}): BuiToolIconName {
+  if (params.runtimeSkillRead) return 'read'
+  switch (params.toolName) {
+    case 'file_change':
+      return 'write'
+    case 'web_search':
+    case 'view_image':
+      return 'read'
+    default:
+      return 'run'
+  }
+}
+
+function BuiToolIcon({ icon, className }: { readonly icon: BuiToolIconName; readonly className: string }) {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      className={className}
+      fill={icon === 'think' ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      aria-hidden="true"
+    >
+      {BUI_TOOL_ICONS[icon]}
+    </svg>
+  )
+}
+
+function BuiRowChevron({ open, className }: { readonly open: boolean; readonly className: string }) {
+  return (
+    <svg
+      width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+      className={className}
+      style={{ transform: open ? 'rotate(0deg)' : 'rotate(-90deg)' }}
+      aria-hidden="true"
+    >
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  )
+}
+
+/** Beautiful UI Search-trace dot: a tiny globe on a rotating tone. */
+const BUI_SEARCH_DOT_TONES = ['var(--bui-accent)', 'var(--bui-orange)', 'var(--bui-green)'] as const
+
+function BuiSearchDot({ index }: { readonly index: number }) {
+  return (
+    <span
+      className="flex size-3.5 shrink-0 items-center justify-center rounded-full text-white"
+      style={{ backgroundColor: BUI_SEARCH_DOT_TONES[index % BUI_SEARCH_DOT_TONES.length] }}
+    >
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M3.5 12h17M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+      </svg>
+    </span>
+  )
+}
+
+function BuiSearchGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--bui-ink-3)" strokeWidth="2" strokeLinecap="round" className="shrink-0" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" />
+      <path d="M21 21l-4.3-4.3" />
+    </svg>
+  )
+}
+/* eslint-enable no-restricted-syntax */
+
+/** Detail lines behind a row, in Beautiful UI's expandable-trace grammar. */
+function resolveToolDetailLines(result: unknown): string[] {
+  if (!isRecord(result)) return []
+  const output = result.output
+  if (typeof output === 'string' && output.trim()) {
+    return output
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .slice(0, 4)
+  }
+  if (Array.isArray(result.changes)) {
+    return result.changes.flatMap((change) =>
+      isRecord(change) && typeof change.path === 'string' ? [change.path] : [],
+    ).slice(0, 4)
+  }
+  const summary = result.summary ?? result.message
+  if (typeof summary === 'string' && summary.trim()) return [summary]
+  return []
+}
+
+/** The mono chip beside a tool row: the command or file paths. */
+function resolveToolChipText(toolName: string, args: unknown): string | null {
+  if (!isRecord(args)) return null
+  // The search query renders inside the Search trace rows, not as a chip.
+  if (toolName === 'web_search') return null
+  const command = args.command
+  if (typeof command === 'string' && command.trim()) return command
+  if (Array.isArray(command) && command.every((item) => typeof item === 'string')) {
+    const joined = command.join(' ').trim()
+    if (joined) return joined
+  }
+  if (Array.isArray(args.changes)) {
+    const paths = args.changes.flatMap((change) =>
+      isRecord(change) && typeof change.path === 'string' ? [change.path.split('/').pop() ?? change.path] : [],
+    )
+    if (paths.length > 0) return paths.join(', ')
+  }
+  const path = args.path
+  if (typeof path === 'string' && path.trim()) return path
+  return null
+}
+
 function resolveNativeToolTitle(toolName: string, t: AssistantAgentTranslator): string | null {
   switch (toolName) {
     case 'shell': return t('runtime.native.shell')
@@ -180,7 +323,7 @@ function resolveRuntimeSkillRead(
   return resolveCreativeRuntimeSkillReadCommand(args.command)
 }
 
-type WebSearchSource = {
+export type WebSearchSource = {
   readonly url: string
   readonly title: string
   readonly domain: string
@@ -188,7 +331,7 @@ type WebSearchSource = {
 }
 
 /** Reads native standalone-search results from the completed Codex item. */
-function resolveWebSearchSources(result: unknown): WebSearchSource[] {
+export function resolveWebSearchSources(result: unknown): WebSearchSource[] {
   const output = isRecord(result) ? result : null
   if (!Array.isArray(output?.results)) return []
   const previewBySourceUrl = new Map<string, string>()
@@ -236,6 +379,12 @@ function resolveWebSearchQuery(args: unknown): string | null {
   return queries.length > 0 ? queries.join(' · ') : null
 }
 
+const HIDDEN_TRACE_TOOL_NAMES: readonly string[] = WORKSPACE_ASSISTANT_HIDDEN_TRACE_TOOL_NAMES
+
+function isRunActiveToolState(state: string): boolean {
+  return state === 'input-streaming' || state === 'input-available' || state === 'approval-requested'
+}
+
 export function WorkspaceAssistantRepeatedToolCallGroupProvider({
   children,
   messages = [],
@@ -243,6 +392,16 @@ export function WorkspaceAssistantRepeatedToolCallGroupProvider({
   readonly children: ReactNode
   readonly messages: readonly UIMessage[]
 }) {
+  const [expandedRunOverrides, setExpandedRunOverrides] = useState<ReadonlyMap<string, boolean>>(
+    () => new Map(),
+  )
+  const toggleRun = useCallback((runId: string, expanded: boolean) => {
+    setExpandedRunOverrides((current) => {
+      const next = new Map(current)
+      next.set(runId, expanded)
+      return next
+    })
+  }, [])
   const value = useMemo((): WorkspaceAssistantToolCallContextValue => {
     const repeatedByToolCallId = new Map<string, RepeatedToolCallEntry>()
     for (const group of resolveWorkspaceAssistantRepeatedToolCallGroups(messages)) {
@@ -260,8 +419,49 @@ export function WorkspaceAssistantRepeatedToolCallGroupProvider({
         }
       }
     }
-    return { repeatedByToolCallId, interruptedToolCallIds }
-  }, [messages])
+    const toolRunsByToolCallId = new Map<string, ToolRunEntry>()
+    for (const message of messages) {
+      let run: { readonly toolCallId: string; readonly state: string }[] = []
+      const flushRun = (): void => {
+        if (run.length >= 2) {
+          const leaderToolCallId = run[0].toolCallId
+          const active = run.some((member) => isRunActiveToolState(member.state))
+          run.forEach((member, index) => {
+            toolRunsByToolCallId.set(member.toolCallId, {
+              runId: leaderToolCallId,
+              leaderToolCallId,
+              displayCount: run.length,
+              active,
+              followsDisplayedTool: index > 0,
+            })
+          })
+        }
+        run = []
+      }
+      for (const part of message.parts) {
+        if (part.type === 'step-start') continue
+        if (isToolUIPart(part)) {
+          const toolName = getToolName(part)
+          // Hidden trace tools and suppressed repeated members render nothing,
+          // so they are transparent to adjacency instead of breaking the run.
+          if (HIDDEN_TRACE_TOOL_NAMES.includes(toolName)) continue
+          const repeated = repeatedByToolCallId.get(part.toolCallId)
+          if (repeated && repeated.view.leaderToolCallId !== part.toolCallId) continue
+          run.push({ toolCallId: part.toolCallId, state: part.state })
+          continue
+        }
+        flushRun()
+      }
+      flushRun()
+    }
+    return {
+      repeatedByToolCallId,
+      interruptedToolCallIds,
+      toolRunsByToolCallId,
+      expandedRunOverrides,
+      toggleRun,
+    }
+  }, [expandedRunOverrides, messages, toggleRun])
   return (
     <WorkspaceAssistantToolCallContext.Provider value={value}>
       {children}
@@ -360,6 +560,7 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
     : resolveNativeToolTitle(props.toolName, t)
       ?? localizeProjectAgentOperationTitle(operationId, locale)
   const toolStatus = props.status.type
+  const [rowOpen, setRowOpen] = useState(false)
   const runningSeconds = useRunningSeconds(toolStatus === 'running')
   useWorkspaceAssistantRunningSurface(
     `tool:${props.toolCallId}`,
@@ -403,7 +604,10 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
   if (failureCorrection) {
     failureDetail = translateToolFailureCorrection(failureCorrection, t)
   }
-  const iconName = failed || interrupted ? 'alert' : 'settingsHex'
+  const buiIcon = resolveBuiToolIcon({
+    toolName: props.toolName,
+    runtimeSkillRead: runtimeSkillId !== null,
+  })
   const displayTitle = !groupView || runtimeSkillId || props.toolName === 'web_search'
     ? operationTitle
     : t('toolCall.groupTitle', { title: operationTitle, count: groupView.total })
@@ -424,64 +628,159 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
   const webSearchQuery = operationId === 'web_search'
     ? resolveWebSearchQuery(props.args)
     : null
+  const chipText = resolveToolChipText(props.toolName, props.args)
+  const troubled = failed || interrupted
+  // Beautiful UI ToolChips row grammar: glyph + medium title + inline chip;
+  // the row expands to detail lines behind a hairline left rail. Success is
+  // implied by the quiet row; every non-success state stays explicit.
+  const stateSuffix = displayState === 'success' ? null : summaryText
+  const detailLines = resolveToolDetailLines(props.result)
+  const detailOpen = rowOpen || failed
+  const hasDetail = detailLines.length > 0 || failed || mixedGroup
+  const isSearch = operationId === 'web_search'
+  // Beautiful UI collapsed run header: adjacent tool rows fold behind one
+  // "{count} tool calls" summary owned by the run's first visible member.
+  // Auto-expanded while any member is still running; a click overrides.
+  const runEntry = context.toolRunsByToolCallId.get(props.toolCallId) ?? null
+  const isRunLeader = runEntry?.leaderToolCallId === props.toolCallId
+  const runExpanded = runEntry
+    ? context.expandedRunOverrides.get(runEntry.runId) ?? runEntry.active
+    : true
+
+  if (runEntry && !runExpanded && !isRunLeader) return null
 
   return (
-    <div className={`text-sm leading-5 ${failed || interrupted ? 'text-[var(--glass-tone-warning-fg)]' : 'text-[var(--glass-text-tertiary)]'}`}>
-      <div className="flex items-center gap-2">
-        <AppIcon name={iconName} className="h-3.5 w-3.5 shrink-0" />
-        <span className="min-w-0 truncate">{summaryText} · {displayTitle}</span>
-        {runningSeconds > 0 ? (
-          <span className="shrink-0 tabular-nums opacity-60">{formatRunningSeconds(runningSeconds)}</span>
-        ) : null}
-      </div>
-      {webSearchQuery ? (
-        <div className="ml-5 mt-1 flex min-w-0 items-center gap-1.5 text-xs leading-4">
-          <AppIcon name="search" className="h-3 w-3 shrink-0 opacity-70" aria-hidden="true" />
-          <span
-            className="min-w-0 line-clamp-2 break-words text-[var(--glass-text-secondary)]"
-            title={webSearchQuery}
-          >
-            {webSearchQuery}
+    <div
+      className="w-full text-sm leading-5"
+      style={runEntry && runExpanded && runEntry.followsDisplayedTool ? { marginTop: -12 } : undefined}
+    >
+      {runEntry && isRunLeader ? (
+        <button
+          type="button"
+          aria-expanded={runExpanded}
+          onClick={() => context.toggleRun(runEntry.runId, !runExpanded)}
+          className="-mx-1.5 mb-1.5 flex w-fit items-center gap-1.5 rounded-[8px] px-1.5 py-1 text-[12.5px] text-[var(--bui-ink-2)] transition-colors duration-100 hover:bg-[var(--bui-hover-2)]"
+        >
+          <BuiRowChevron open={runExpanded} className="shrink-0 transition-transform duration-200" />
+          <span className="tabular-nums">
+            {t('toolCall.runSummary', { count: runEntry.displayCount })}
           </span>
-        </div>
+        </button>
       ) : null}
-      {webSearchSources.length > 0 ? (
-        <div className="ml-5 mt-2 grid grid-cols-2 gap-2">
-          {webSearchSources.map((source) => (
-            <a
-              key={source.url}
-              href={source.url}
-              target="_blank"
-              rel="noreferrer"
-              className="group flex min-w-0 items-center gap-2 rounded-xl bg-slate-50/80 p-2 ring-1 ring-slate-200/70 transition hover:bg-white hover:ring-slate-300"
-            >
-              {source.previewImageUrl ? (
-                // Search previews are public source thumbnails, never workspace assets.
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={source.previewImageUrl} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover bg-slate-100" />
-              ) : (
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white ring-1 ring-slate-200">
-                  <WebSourceFavicon domain={source.domain} className="h-5 w-5" />
+      {runEntry && !runExpanded ? null : (
+      <>
+      <button
+        type="button"
+        aria-expanded={detailOpen}
+        onClick={() => setRowOpen((current) => !current)}
+        disabled={!hasDetail}
+        className={`group/row -mx-[3px] flex h-7 w-[calc(100%+6px)] min-w-0 items-center gap-2 rounded-[8px] px-[3px] text-left transition-colors duration-100 ${hasDetail ? 'hover:bg-[var(--bui-hover-2)]' : 'cursor-default'}`}
+      >
+        <span className={`relative flex size-4 shrink-0 items-center justify-center ${troubled ? 'text-[var(--bui-red)]' : 'text-[var(--bui-ink-3)]'}`}>
+          <BuiToolIcon
+            icon={buiIcon}
+            className={`transition-opacity duration-100 ${hasDetail ? 'group-hover/row:opacity-0' : ''} ${detailOpen && hasDetail ? 'opacity-0' : ''}`}
+          />
+          {hasDetail ? (
+            <BuiRowChevron
+              open={detailOpen}
+              className={`absolute transition-[opacity,transform] duration-150 group-hover/row:opacity-100 ${detailOpen ? 'opacity-100' : 'opacity-0'}`}
+            />
+          ) : null}
+        </span>
+        <span className={`shrink-0 text-[12.5px] font-medium ${troubled ? 'text-[var(--bui-red)]' : 'text-[var(--bui-ink)]'}`}>
+          {displayTitle}
+          {stateSuffix ? (
+            <span className={troubled ? '' : 'text-[var(--bui-ink-3)]'}> · {stateSuffix}</span>
+          ) : null}
+        </span>
+        {chipText ? (
+          <span
+            title={chipText}
+            className="inline-flex h-[22px] min-w-0 flex-1 items-center truncate rounded-[6px] bg-[var(--bui-hover-2)] px-1.5 font-mono text-[11.5px] text-[#43464c] shadow-[var(--bui-shadow-hairline)]"
+          >
+            <span className="truncate">{chipText}</span>
+          </span>
+        ) : null}
+        {runningSeconds > 0 ? (
+          <span className="shrink-0 font-mono text-[11.5px] tabular-nums text-[var(--bui-ink-3)]">
+            {formatRunningSeconds(runningSeconds)}
+          </span>
+        ) : null}
+      </button>
+
+      {/* expanded detail — Beautiful UI trace rail */}
+      {hasDetail ? (
+        <div
+          className="grid transition-[grid-template-rows,opacity] duration-300"
+          style={{
+            gridTemplateRows: detailOpen ? '1fr' : '0fr',
+            opacity: detailOpen ? 1 : 0,
+            transitionTimingFunction: 'cubic-bezier(0.23, 1, 0.32, 1)',
+          }}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <div className="mt-0.5 mb-1 ml-2 flex flex-col gap-0.5 border-l border-[var(--bui-line)] py-0.5 pl-3.5">
+              {detailLines.map((line) => (
+                <span
+                  key={line}
+                  className="truncate font-mono text-[11.5px] leading-[1.6] text-[var(--bui-ink-2)]"
+                  title={line}
+                >
+                  {line}
                 </span>
-              )}
-              <span className="min-w-0">
-                <span className="line-clamp-2 text-xs font-medium leading-4 text-[var(--glass-text-secondary)] group-hover:text-[var(--glass-text-primary)]">{source.title}</span>
-                <span className="mt-0.5 block truncate text-[10px] text-[var(--glass-text-tertiary)]">{source.domain}</span>
-              </span>
-            </a>
-          ))}
+              ))}
+              {mixedGroup ? (
+                <span className="text-[11.5px] leading-[1.6] text-[var(--bui-ink-3)]">
+                  {t('toolCall.groupProgressSummary', groupView)}
+                </span>
+              ) : null}
+              {failed ? (
+                <span className="text-[11.5px] leading-[1.6] text-[var(--bui-red)]">
+                  {failureDetail}
+                </span>
+              ) : null}
+            </div>
+          </div>
         </div>
       ) : null}
-      {mixedGroup ? (
-        <div className="ml-5 mt-1 text-xs leading-4">
-          {t('toolCall.groupProgressSummary', groupView)}
+
+      {/* web search — Beautiful UI Search trace: query row + source rows */}
+      {isSearch && (webSearchQuery || webSearchSources.length > 0) ? (
+        <div className="relative mt-1 ml-[5px] pl-4">
+          <span aria-hidden="true" className="absolute inset-y-1 left-[3px] w-px bg-[var(--bui-line)]" />
+          <div className="flex flex-col gap-1 py-1">
+            {webSearchQuery ? (
+              <div className="flex h-6 items-center gap-2 px-1.5">
+                <BuiSearchGlyph />
+                <span className="min-w-0 truncate text-[12.5px] text-[var(--bui-ink-2)]" title={webSearchQuery}>
+                  {webSearchQuery}
+                </span>
+              </div>
+            ) : null}
+            {webSearchSources.map((source, index) => (
+              <a
+                key={source.url}
+                href={source.url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex min-h-7 w-full items-center gap-2 rounded-[6px] px-1.5 py-0.5 text-left transition-colors duration-150 hover:bg-[var(--bui-hover)]"
+                style={{ animation: `wa-bui-fade-up 320ms cubic-bezier(0.23,1,0.32,1) ${String(index * 120)}ms both` }}
+              >
+                <BuiSearchDot index={index} />
+                <span className="wa-bui-underline min-w-0 truncate text-[12.5px] font-medium text-[var(--bui-ink)]">
+                  {source.title}
+                </span>
+                <span className="shrink-0 text-[11.5px] text-[var(--bui-ink-3)]">
+                  {source.domain}
+                </span>
+              </a>
+            ))}
+          </div>
         </div>
       ) : null}
-      {failed ? (
-        <div className="ml-5 mt-1 rounded-lg bg-[var(--glass-tone-surface)] shadow-[var(--glass-tone-shadow)] px-2 py-1 text-xs leading-4">
-          {failureDetail}
-        </div>
-      ) : null}
+      </>
+      )}
     </div>
   )
 }

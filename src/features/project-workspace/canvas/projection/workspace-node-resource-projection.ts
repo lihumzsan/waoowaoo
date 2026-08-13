@@ -170,7 +170,7 @@ function deleteOperation(resource: WorkspaceResourceView): WorkspaceCanvasDelete
 function resourceCard(resourceView: WorkspaceResourceView): WorkspaceResourceCardView {
   const resource = requireFileResource(resourceView)
   const download = resource.actions.find((action) => action.kind === 'download' && action.enabled && action.href)
-  const billableOperations = resource.actions.flatMap((action) => {
+  const generationOperations = resource.actions.flatMap((action) => {
     if (
       (action.kind !== 'retry' && action.kind !== 'variant')
       || !action.enabled
@@ -213,7 +213,7 @@ function resourceCard(resourceView: WorkspaceResourceView): WorkspaceResourceCar
       members: allAlternativeMembers,
     } : null,
     canvasOperations: [
-      ...billableOperations,
+      ...generationOperations,
       ...(projectedDeleteOperation ? [projectedDeleteOperation] : []),
     ],
   }

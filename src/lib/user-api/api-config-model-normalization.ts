@@ -59,13 +59,6 @@ function normalizeStoredModel(raw: unknown, index: number): StoredModel {
     })
   }
 
-  if (raw.customPricing !== undefined) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'MODEL_CUSTOM_PRICING_UNSUPPORTED',
-      field: `models[${index}].customPricing`,
-    })
-  }
-
   const modelName = readTrimmedString(raw.name) || modelId
 
   return {
@@ -74,7 +67,6 @@ function normalizeStoredModel(raw: unknown, index: number): StoredModel {
     name: modelName,
     type: modelType,
     provider,
-    price: 0,
   }
 }
 

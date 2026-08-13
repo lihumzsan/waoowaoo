@@ -1,4 +1,4 @@
-import type { PlannedTask, PlannedTaskEdge } from './planning'
+import type { PlannedTask, PlannedTaskEdge } from './plan-contract'
 
 export function assertValidOperationPlanTaskEdges(
   tasks: readonly Pick<PlannedTask, 'id'>[],

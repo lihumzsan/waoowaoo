@@ -5,6 +5,7 @@ import {
   type ServerResponse,
 } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { resolve } from 'node:path'
 import type { History } from '@temporalio/common/lib/proto-utils'
 import { CancelledFailure, Context, heartbeat } from '@temporalio/activity'
 import { NativeConnection, Worker } from '@temporalio/worker'
@@ -20,7 +21,6 @@ import {
 } from '@/lib/assistant-runtime/task-follow-up-http'
 import * as productionActivities from '@/lib/temporal/activities'
 import { buildTemporalConnectionOptions, getTemporalRuntimeConfig } from '@/lib/temporal/config'
-import { resolveTemporalWorkflowBundlePath } from '@/lib/temporal/workflow-bundle-path'
 import { connectTemporalClient } from '@/lib/temporal/client'
 import { TemporalTaskClient } from '@/lib/temporal/task-client'
 import { USER_TASK_SCHEDULER_QUERY_NAME, type UserTaskSchedulerView } from '@/lib/temporal/task/contracts'
@@ -33,6 +33,12 @@ import type {
   RunTaskAttemptResult,
   TaskTerminalReceipt,
 } from '@/lib/temporal/task/contracts'
+import {
+  activateTestWorkerVersion,
+  buildTestTaskQueue,
+  buildTestWorkerDeploymentOptions,
+  buildTestWorkerIdentity,
+} from './versioned-worker'
 
 interface Deferred<T> {
   readonly promise: Promise<T>
@@ -257,6 +263,8 @@ export async function startTaskDependencyGateWorker(input: {
 }): Promise<TaskDependencyGateWorkerHarness> {
   requireTemporalTestRuntime()
   const config = getTemporalRuntimeConfig()
+  const taskQueue = buildTestTaskQueue(config.taskQueue, 'task-dependency-gate')
+  const workerIdentity = buildTestWorkerIdentity('task-dependency-gate')
   const connection = await NativeConnection.connect(buildTemporalConnectionOptions(config))
   const connected = await connectTemporalClient()
   const held = deferred<void>()
@@ -281,9 +289,11 @@ export async function startTaskDependencyGateWorker(input: {
     worker = await Worker.create({
       connection,
       namespace: config.namespace,
-      taskQueue: config.taskQueue,
-      workflowsPath: resolveTemporalWorkflowBundlePath(false),
+      taskQueue,
+      identity: workerIdentity,
+      workflowsPath: resolve(process.cwd(), 'src/lib/temporal/workflows/index.ts'),
       activities: { ...productionActivities, runTaskAttempt, commitTaskTerminal },
+      workerDeploymentOptions: buildTestWorkerDeploymentOptions('task-dependency-gate'),
       shutdownGraceTime: '5 seconds',
     })
   } catch (error) {
@@ -291,10 +301,17 @@ export async function startTaskDependencyGateWorker(input: {
     throw error
   }
   const run = worker.run()
+  await activateTestWorkerVersion(
+    connection,
+    config.namespace,
+    taskQueue,
+    workerIdentity,
+    'task-dependency-gate',
+  )
   let closed = false
   return {
-    taskQueue: config.taskQueue,
-    taskClient: new TemporalTaskClient(connected.client.workflow, config.taskQueue),
+    taskQueue,
+    taskClient: new TemporalTaskClient(connected.client.workflow, taskQueue),
     async queryScheduler(userId) {
       return await connected.client.workflow
         .getHandle(buildUserTaskSchedulerWorkflowId(userId))
@@ -359,19 +376,32 @@ export interface TaskQueuedCancelWorkerHarness {
 export async function startTaskProductionWorker(): Promise<TaskProductionWorkerHarness> {
   requireTemporalTestRuntime()
   const config = getTemporalRuntimeConfig()
+  const taskQueue = buildTestTaskQueue(config.taskQueue, 'task-durability')
+  const workerIdentity = buildTestWorkerIdentity('task-durability')
   const connection = await NativeConnection.connect(buildTemporalConnectionOptions(config))
   const worker = await Worker.create({
     connection,
     namespace: config.namespace,
-    taskQueue: config.taskQueue,
-    workflowsPath: resolveTemporalWorkflowBundlePath(false),
+    taskQueue,
+    identity: workerIdentity,
+    workflowsPath: resolve(process.cwd(), 'src/lib/temporal/workflows/index.ts'),
     activities: productionActivities,
+    workerDeploymentOptions: buildTestWorkerDeploymentOptions(
+      'task-durability',
+    ),
     shutdownGraceTime: '5 seconds',
   })
   const run = worker.run()
+  await activateTestWorkerVersion(
+    connection,
+    config.namespace,
+    taskQueue,
+    workerIdentity,
+    'task-durability',
+  )
   let closed = false
   return {
-    taskQueue: config.taskQueue,
+    taskQueue,
     async close() {
       if (closed) return
       closed = true
@@ -390,6 +420,8 @@ export async function startTaskQueuedCancelWorker(input: {
 }): Promise<TaskQueuedCancelWorkerHarness> {
   requireTemporalTestRuntime()
   const config = getTemporalRuntimeConfig()
+  const taskQueue = buildTestTaskQueue(config.taskQueue, 'task-durability')
+  const workerIdentity = buildTestWorkerIdentity('task-durability')
   const connection = await NativeConnection.connect(buildTemporalConnectionOptions(config))
   const capacityHeld = deferred<void>()
   const releaseHolder = deferred<void>()
@@ -423,15 +455,26 @@ export async function startTaskQueuedCancelWorker(input: {
   const worker = await Worker.create({
     connection,
     namespace: config.namespace,
-    taskQueue: config.taskQueue,
-    workflowsPath: resolveTemporalWorkflowBundlePath(false),
+    taskQueue,
+    identity: workerIdentity,
+    workflowsPath: resolve(process.cwd(), 'src/lib/temporal/workflows/index.ts'),
     activities: {
       ...productionActivities,
       runTaskAttempt,
     },
+    workerDeploymentOptions: buildTestWorkerDeploymentOptions(
+      'task-durability',
+    ),
     shutdownGraceTime: '5 seconds',
   })
   const run = worker.run()
+  await activateTestWorkerVersion(
+    connection,
+    config.namespace,
+    taskQueue,
+    workerIdentity,
+    'task-durability',
+  )
   let closed = false
   const release = (): void => {
     if (released) return
@@ -439,7 +482,7 @@ export async function startTaskQueuedCancelWorker(input: {
     releaseHolder.resolve()
   }
   return {
-    taskQueue: config.taskQueue,
+    taskQueue,
     async waitForCapacityHeld() {
       await within(capacityHeld.promise, 30_000, 'TASK_QUEUED_CANCEL_CAPACITY_HOLDER_TIMEOUT')
     },
@@ -463,6 +506,8 @@ export async function startTaskLateCancelWorker(input: {
 }): Promise<TaskLateCancelWorkerHarness> {
   requireTemporalTestRuntime()
   const config = getTemporalRuntimeConfig()
+  const taskQueue = buildTestTaskQueue(config.taskQueue, 'task-durability')
+  const workerIdentity = buildTestWorkerIdentity('task-durability')
   const connection = await NativeConnection.connect(buildTemporalConnectionOptions(config))
   const checkpointCommitted = deferred<void>()
   const cancellationAcknowledged = deferred<void>()
@@ -508,18 +553,31 @@ export async function startTaskLateCancelWorker(input: {
   const worker = await Worker.create({
     connection,
     namespace: config.namespace,
-    taskQueue: config.taskQueue,
-    workflowsPath: resolveTemporalWorkflowBundlePath(false),
+    taskQueue,
+    identity: workerIdentity,
+    maxHeartbeatThrottleInterval: '50 milliseconds',
+    defaultHeartbeatThrottleInterval: '50 milliseconds',
+    workflowsPath: resolve(process.cwd(), 'src/lib/temporal/workflows/index.ts'),
     activities: {
       ...productionActivities,
       runTaskAttempt,
     },
+    workerDeploymentOptions: buildTestWorkerDeploymentOptions(
+      'task-durability',
+    ),
     shutdownGraceTime: '5 seconds',
   })
   const run = worker.run()
+  await activateTestWorkerVersion(
+    connection,
+    config.namespace,
+    taskQueue,
+    workerIdentity,
+    'task-durability',
+  )
   let closed = false
   return {
-    taskQueue: config.taskQueue,
+    taskQueue,
     async waitForHandlerCheckpointCommit() {
       await within(
         checkpointCommitted.promise,
@@ -553,6 +611,8 @@ export async function startTaskDurabilityWorker(input: {
 }): Promise<TaskDurabilityWorkerHarness> {
   requireTemporalTestRuntime()
   const config = getTemporalRuntimeConfig()
+  const taskQueue = buildTestTaskQueue(config.taskQueue, 'task-durability')
+  const workerIdentity = buildTestWorkerIdentity('task-durability')
   const connection = await NativeConnection.connect(buildTemporalConnectionOptions(config))
   const followUpServer = await startFollowUpAdmissionServer()
   const terminalFault = deferred<TaskTerminalReceipt>()
@@ -595,13 +655,17 @@ export async function startTaskDurabilityWorker(input: {
     worker = await Worker.create({
       connection,
       namespace: config.namespace,
-      taskQueue: config.taskQueue,
-      workflowsPath: resolveTemporalWorkflowBundlePath(false),
+      taskQueue,
+      identity: workerIdentity,
+      workflowsPath: resolve(process.cwd(), 'src/lib/temporal/workflows/index.ts'),
       activities: {
         ...productionActivities,
         commitTaskTerminal,
         notifyTaskFollowUp,
       },
+      workerDeploymentOptions: buildTestWorkerDeploymentOptions(
+        'task-durability',
+      ),
       shutdownGraceTime: '5 seconds',
     })
   } catch (error) {
@@ -609,6 +673,13 @@ export async function startTaskDurabilityWorker(input: {
     throw error
   }
   const run = worker.run()
+  await activateTestWorkerVersion(
+    connection,
+    config.namespace,
+    taskQueue,
+    workerIdentity,
+    'task-durability',
+  )
   let closed = false
 
   const releaseNotification = (): void => {
@@ -618,7 +689,7 @@ export async function startTaskDurabilityWorker(input: {
   }
 
   return {
-    taskQueue: config.taskQueue,
+    taskQueue,
     async waitForTerminalPostCommitFault() {
       return await within(terminalFault.promise, 30_000, 'TASK_TERMINAL_POST_COMMIT_FAULT_TIMEOUT')
     },
@@ -665,13 +736,22 @@ function scheduledActivityTypes(history: History): ReadonlyMap<string, string> {
 
 export function activityAttempts(history: History, activityType: string): number[] {
   const scheduledTypes = scheduledActivityTypes(history)
-  const attempts: number[] = []
+  const attemptsByScheduledEvent = new Map<string, number>()
   for (const event of history.events ?? []) {
     const attributes = event.activityTaskStartedEventAttributes
     if (!attributes) continue
-    if (scheduledTypes.get(eventIdKey(attributes.scheduledEventId)) === activityType) {
-      attempts.push(attributes.attempt ?? 0)
-    }
+    const scheduledEventId = eventIdKey(attributes.scheduledEventId)
+    if (scheduledTypes.get(scheduledEventId) !== activityType) continue
+    const attempt = attributes.attempt ?? 0
+    attemptsByScheduledEvent.set(
+      scheduledEventId,
+      Math.max(attemptsByScheduledEvent.get(scheduledEventId) ?? 0, attempt),
+    )
+  }
+  const attempts: number[] = []
+  for (const [scheduledEventId, scheduledType] of scheduledTypes) {
+    if (scheduledType !== activityType) continue
+    attempts.push(attemptsByScheduledEvent.get(scheduledEventId) ?? 0)
   }
   return attempts
 }

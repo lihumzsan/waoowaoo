@@ -251,6 +251,7 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
       },
       channels: { tool: false, api: true },
       confirmation: {
+        kind: 'destructive',
         required: true,
         summary: '将取消该任务。系统会在获得明确批准后执行同一份已审核请求。',
       },

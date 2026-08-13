@@ -1,7 +1,7 @@
 'use client'
 
 import { apiFetch } from '@/lib/api-fetch'
-import type { OperationPlanView } from '@/lib/operations/planning'
+import type { OperationPlanView } from '@/lib/operations/plan-contract'
 import { readClientApiError } from '@/lib/errors/client'
 import { requestJsonWithError } from '@/lib/query/mutations/mutation-shared'
 

@@ -4,7 +4,6 @@ import {
   COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
 } from '@/lib/ai-providers/comfyui/models'
 import {
-  CODEX_PLATFORM_DEFAULT_ASSISTANT_MODEL_KEY,
   CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
 } from '@/lib/ai-providers/codex/models'
 import { resolveProjectModelCapabilityGenerationOptions } from '@/lib/config-service'
@@ -394,7 +393,7 @@ describe('project local video model configuration', () => {
         capabilityOverrides: true,
       },
     })).resolves.toEqual({
-      analysisModel: CODEX_PLATFORM_DEFAULT_ASSISTANT_MODEL_KEY,
+      analysisModel: null,
       characterModel: CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
       locationModel: CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
       editModel: CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,

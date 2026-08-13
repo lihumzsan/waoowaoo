@@ -22,7 +22,6 @@ function assertNoLegacyArtStyle(body: Record<string, unknown>) {
 }
 
 const ALLOWED_FIELDS: ReadonlyArray<string> = [
-  'assistantModel',
   'analysisModel',
   'characterModel',
   'locationModel',
@@ -34,7 +33,6 @@ const ALLOWED_FIELDS: ReadonlyArray<string> = [
 ]
 
 const PLATFORM_MODEL_FIELDS = new Set([
-  'assistantModel',
   'analysisModel',
   'characterModel',
   'locationModel',
@@ -48,7 +46,6 @@ const modelKeyPreferenceSchema = z.string().trim().min(1).nullable()
   .describe('Exact provider::modelId key from list_user_models, or null to clear the preference.')
 
 const updateUserPreferenceInputSchema = z.object({
-  assistantModel: modelKeyPreferenceSchema.optional(),
   analysisModel: modelKeyPreferenceSchema.optional(),
   characterModel: modelKeyPreferenceSchema.optional(),
   locationModel: modelKeyPreferenceSchema.optional(),
@@ -130,10 +127,7 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
         externalSideEffects: false,
         longRunning: false,
       },
-      confirmation: {
-        required: true,
-        summary: '将覆盖更新用户偏好设置（例如模型等）。系统会在获得明确批准后执行同一份已审核请求。',
-      },
+      confirmation: { kind: 'none', required: false },
       inputSchema: updateUserPreferenceInputSchema,
       outputSchema: z.unknown(),
       executeInTransaction: async (ctx, input, transaction) => {

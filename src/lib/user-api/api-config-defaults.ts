@@ -11,7 +11,6 @@ import { DEFAULT_MODEL_FIELDS } from './api-config-types'
 import { isRecord, readTrimmedString } from './api-config-shared'
 
 const DEFAULT_FIELD_TO_MODEL_TYPE: Readonly<Record<DefaultModelField, StoredModel['type']>> = {
-  assistantModel: 'llm',
   analysisModel: 'llm',
   characterModel: 'image',
   locationModel: 'image',

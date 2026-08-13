@@ -17,7 +17,6 @@ import { createWorkspaceResourceUploadedMediaOperations } from './domains/worksp
 import { createWorkspaceResourceVideoMergeOperations } from './domains/workspace-resource/video-merge-ops'
 import { createWorkspaceResourceVoiceoverOperations } from './domains/workspace-resource/voiceover-ops'
 import { createWorkspaceResourceReferenceImageOperations } from './domains/workspace-resource/reference-image-ops'
-import { createVoiceOperations } from './domains/voice/voice-ops'
 import { createAssetDeleteOperations } from './domains/asset/delete'
 import { withOperationPack } from './pack'
 import type { ProjectAgentOperationRegistry } from './types'
@@ -26,7 +25,6 @@ const CONFIRM_NONE = {
   kind: 'none',
   required: false,
   summary: null,
-  budget: null,
 } as const
 
 const API_ONLY = { tool: false, api: true, mcp: false } as const
@@ -107,11 +105,6 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
     ...withOperationPack(createProjectCrudOperations(), {
       groupPath: ['project', 'crud'],
       channels: API_ONLY,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createVoiceOperations(), {
-      groupPath: ['media', 'voice'],
-      channels: CAPABILITY_API,
       confirmation: CONFIRM_NONE,
     }),
     ...withOperationPack(createConfigOperations(), {

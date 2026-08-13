@@ -13,7 +13,6 @@ export interface RuntimeStoredModel {
   name: string
   type: UnifiedModelType
   provider: string
-  price: number
 }
 
 export interface RuntimeModelSelection {

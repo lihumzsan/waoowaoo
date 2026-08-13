@@ -91,6 +91,12 @@ function applicationEnvironment(testServices: TestServiceEndpoints): NodeJS.Proc
     PLATFORM_OPENROUTER_BASE_URL: 'http://127.0.0.1:9/v1',
     PLATFORM_FAL_API_KEY: 'browser-security-unused-key',
     FAL_QUEUE_BASE_URL: 'http://127.0.0.1:9',
+    PLATFORM_DEFAULT_ANALYSIS_MODEL: 'openrouter::openai/gpt-5.6-luna',
+    PLATFORM_DEFAULT_CHARACTER_MODEL: 'openrouter::openai/gpt-image-2',
+    PLATFORM_DEFAULT_LOCATION_MODEL: 'openrouter::openai/gpt-image-2',
+    PLATFORM_DEFAULT_EDIT_MODEL: 'openrouter::openai/gpt-image-2',
+    PLATFORM_DEFAULT_VIDEO_MODEL: 'toonflow::seedance-2.0',
+    PLATFORM_DEFAULT_MUSIC_MODEL: 'elevenlabs::music_v2',
     NO_PROXY: '127.0.0.1,localhost',
     no_proxy: '127.0.0.1,localhost',
   }

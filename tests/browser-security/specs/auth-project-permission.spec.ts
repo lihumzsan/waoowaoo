@@ -68,13 +68,13 @@ test('[SEC-AUTH-SESSION-RECOVERY] unified auth creates then restores the same pe
   await page.goto('/zh/auth/signin')
   await page.locator('#username').fill(recoveryUser.username)
   await page.locator('#password').fill('definitely-wrong-password')
-  await page.getByRole('button', { name: '登录 / 注册', exact: true }).click()
+  await page.getByRole('button', { name: '登录', exact: true }).click()
   await expect(page.getByRole('alert')).toBeVisible()
   await expect(page).toHaveURL(/\/zh\/auth\/signin(?:[/?#]|$)/)
   expect(await (await page.request.get('/api/auth/session')).json()).toEqual({})
 
   await page.locator('#password').fill(recoveryUser.password)
-  await page.getByRole('button', { name: '登录 / 注册', exact: true }).click()
+  await page.getByRole('button', { name: '登录', exact: true }).click()
   await expect(page).toHaveURL(/\/zh\/home(?:[/?#]|$)/, { timeout: 30_000 })
   await expectSecurityAuthenticatedUser(page, recoveryUser.username)
   const restoredSessionResponse = await page.request.get('/api/auth/session')
@@ -119,12 +119,8 @@ test('[SEC-PROJECT-CROSS-USER-ISOLATION] second user cannot list read mutate ope
   ])
   expect(protectedResponses.map((response) => response.status())).toEqual([403, 403, 403])
 
-  const directAccess = page.waitForResponse((response) => (
-    response.status() === 403
-    && response.url().includes(`/api/projects/${projectId}/data`)
-  ))
   await page.goto(`/zh/workspace/${projectId}`, { waitUntil: 'domcontentloaded' })
-  await directAccess
+  await expect(page.getByText('没有权限访问', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: '返回工作区', exact: true })).toBeVisible()
   expect(await readSecurityProjectById(projectId)).toEqual(beforeDeniedRequests)
 

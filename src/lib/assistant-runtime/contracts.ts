@@ -158,6 +158,8 @@ export interface AssistantRuntimeEventSink {
   reserveChunk(chunk: UIMessageChunk): number | null
   /** Route subsequent chunks to a new durable assistant segment after steer. */
   setMessageId(messageId: string): void
+  /** Freeze the exact chunks covered by a durable snapshot before its write begins. */
+  sealChunksThrough(watermark: number): void
   /** Publish only after the matching durable message watermark has committed. */
   publishChunksThrough(watermark: number): Promise<void>
   publishViewChanged(reason: string): Promise<void>

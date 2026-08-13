@@ -80,7 +80,7 @@ function projectExecutorResult(
  * binds each request to trusted Wao scope and stable Turn/call identity. The
  * executor owns canonical Operation validation, approvals and execution. This
  * layer only advertises registry-derived tools and forwards calls; it never
- * reads or writes DB, Task, billing, or provider state.
+ * reads or writes DB, Task, or provider state.
  */
 export function createWaoMcpServer(
   params: CreateWaoMcpServerParams,

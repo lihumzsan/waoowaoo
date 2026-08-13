@@ -110,7 +110,7 @@ describe('ComfyUI MOSS SoundEffect v2 contract', () => {
           schemaId: WORKSPACE_RESOURCE_SCHEMA.SOUND_EFFECT_AUDIO, name: 'Rain',
         }],
       },
-      protocol: 'workspace_resource_generation_v1',
+      protocol: 'workspace_resource_generation_v2',
       resource: {
         resourceId: 'sound-rain', workspacePath: 'Rain-sound-rain', mediaType: 'audio', audioKind: 'sound',
         schemaId: WORKSPACE_RESOURCE_SCHEMA.SOUND_EFFECT_AUDIO, inputHash: 'a'.repeat(64),

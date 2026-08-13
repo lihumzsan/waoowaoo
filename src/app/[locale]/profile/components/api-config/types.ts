@@ -48,12 +48,6 @@ export interface CustomModel {
     name: string          // 显示名称
     type: UnifiedModelType
     provider: string
-    price: number
-    priceMin?: number
-    priceMax?: number
-    priceLabel?: string
-    priceInput?: number
-    priceOutput?: number
     enabled: boolean
     capabilities?: ModelCapabilities
 }
@@ -116,10 +110,8 @@ export function isPresetComingSoonModelKey(modelKey: string): boolean {
 }
 
 const ZH_PROVIDER_NAME_MAP: Record<string, string> = {
-    ark: '火山引擎 Ark',
-    google: 'Google',
-    fal: 'FAL',
-    openrouter: 'OpenRouter',
+    codex: 'Codex',
+    comfyui: 'ComfyUI',
 }
 
 function isZhLocale(locale?: string): boolean {
@@ -152,48 +144,7 @@ export interface ProviderTutorial {
 
 // 厂商开通教程配置
 // 注意: text 字段使用 i18n key, 翻译在 apiConfig.tutorials 下
-export const PROVIDER_TUTORIALS: ProviderTutorial[] = [
-    {
-        providerId: 'ark',
-        steps: [
-            {
-                text: 'ark_step1',
-                url: 'https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D'
-            },
-            {
-                text: 'ark_step2',
-                url: 'https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?LLM=%7B%7D&advancedActiveKey=model'
-            }
-        ]
-    },
-    {
-        providerId: 'openrouter',
-        steps: [
-            {
-                text: 'openrouter_step1',
-                url: 'https://openrouter.ai/settings/keys'
-            }
-        ]
-    },
-    {
-        providerId: 'fal',
-        steps: [
-            {
-                text: 'fal_step1',
-                url: 'https://fal.ai/dashboard/keys'
-            }
-        ]
-    },
-    {
-        providerId: 'google',
-        steps: [
-            {
-                text: 'google_step1',
-                url: 'https://aistudio.google.com/api-keys'
-            }
-        ]
-    },
-]
+export const PROVIDER_TUTORIALS: ProviderTutorial[] = []
 
 /**
  * 根据厂商ID获取教程配置

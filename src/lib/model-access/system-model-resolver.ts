@@ -1,6 +1,5 @@
 import { ApiError } from '@/lib/api-errors'
 import { getProjectModelConfig, getUserModelConfig } from '@/lib/config-service'
-import { PLATFORM_VOICE_DESIGN_MODEL_KEY } from '@/lib/ai-registry/voice-design-contract'
 import { PLATFORM_VOICEOVER_MODEL_KEY } from '@/lib/ai-registry/platform-models'
 
 export type SystemModelPurpose =
@@ -11,7 +10,6 @@ export type SystemModelPurpose =
   | 'video'
   | 'music'
   | 'sound'
-  | 'voice-design'
   | 'voiceover'
 
 function requireModel(modelKey: string | null | undefined, purpose: SystemModelPurpose): string {
@@ -27,7 +25,6 @@ export async function resolveSystemModelKey(input: {
   projectId?: string | null
   purpose: SystemModelPurpose
 }): Promise<string> {
-  if (input.purpose === 'voice-design') return PLATFORM_VOICE_DESIGN_MODEL_KEY
   if (input.purpose === 'voiceover') return PLATFORM_VOICEOVER_MODEL_KEY
 
   const config = input.projectId
@@ -36,7 +33,7 @@ export async function resolveSystemModelKey(input: {
 
   switch (input.purpose) {
     case 'analysis':
-      return requireModel(config.analysisModel, input.purpose)
+      throw new ApiError('INVALID_PARAMS', { code: 'SYSTEM_MODEL_REQUIRED', field: input.purpose })
     case 'character-image':
       return requireModel(config.characterModel, input.purpose)
     case 'location-image':

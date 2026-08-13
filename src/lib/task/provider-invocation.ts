@@ -31,7 +31,6 @@ export type TaskProviderInvocationRouteSelection = {
 
 type MediaProviderInvocationResult = {
   readonly success: boolean
-  readonly error?: string
 }
 
 type TaskDurableInvocationResultPolicy<TResult> = {
@@ -250,7 +249,7 @@ function parseMediaProviderResult<TResult extends MediaProviderInvocationResult>
     throw new Error('PROVIDER_INVOCATION_RESULT_INVALID')
   }
   const result = value as Record<string, unknown>
-  if (typeof result.success !== 'boolean') throw new Error('PROVIDER_INVOCATION_RESULT_INVALID')
+  if (result.success !== true) throw new Error('PROVIDER_INVOCATION_RESULT_INVALID')
   return result as TResult
 }
 
@@ -1124,6 +1123,7 @@ export async function executeTaskDurableInvocation<TResult>(params: {
         new ProviderSubmissionError('PROVIDER_SUBMISSION_REJECTED', rejectionMessage, {
           disposition: 'rejected',
           provider: descriptor.provider,
+          cause: result,
         }),
         {
           fallbackCode: 'PROVIDER_SUBMISSION_REJECTED',
@@ -1237,10 +1237,6 @@ export async function executeTaskProviderInvocation<
       ...execution,
       resultPolicy: {
         parse: parseMediaProviderResult<TResult>,
-        outcomeUnknownMessage: (result) =>
-          result.success
-            ? null
-            : result.error || 'Provider returned success:false without a typed acceptance outcome',
       },
     })
   }
@@ -1454,34 +1450,6 @@ export async function executeTaskProviderInvocation<
       })
       if (!transitioned) throw outcomeUnknown(descriptor, error)
       throw terminal
-    }
-
-    if (!result.success) {
-      const message = result.error || 'Provider returned success:false without a typed acceptance outcome'
-      const unknown = outcomeUnknown(
-        { ...descriptor, provider: routeDescriptor.provider, modelKey: routeDescriptor.modelKey },
-        new Error(message),
-      )
-      const nextOutput: MediaProviderRouteInvocationOutput = {
-        ...output,
-        routeAttempts: replaceLastRouteAttempt(output, {
-          routeIndex,
-          taskAttempt,
-          provider: routeDescriptor.provider,
-          modelKey: routeDescriptor.modelKey,
-          state: 'outcome_unknown',
-          failure: unknown.failure,
-        }),
-        failure: unknown.failure,
-      }
-      const transitioned = await transitionRouteCheckpoint({
-        checkpointId: checkpoint.id,
-        expectedState: 'submitting',
-        state: 'outcome_unknown',
-        output: nextOutput,
-      })
-      if (!transitioned) throw outcomeUnknown(descriptor, unknown)
-      throw unknown
     }
 
     const routedResult = withProviderRouteMetadata({

@@ -20,6 +20,6 @@ describe('free operation plan contract', () => {
     const deleteResource = registry.delete_resource
     if (!deleteResource) throw new Error('delete_resource missing')
     expect(deleteResource.confirmation.required).toBe(true)
-    expect(deleteResource.confirmation.kind).not.toBe('billable_media')
+    expect(deleteResource.confirmation.kind).toBe('destructive')
   })
 })

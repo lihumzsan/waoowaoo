@@ -19,7 +19,8 @@
         "unavailable": "当前无法执行此操作"
       },
       "errors": {
-        "unknown": "这个资源生成失败，你可以重新尝试。"
+        "unknown": "这个资源生成失败，你可以重新尝试。",
+        "providerDiagnostic": "服务商原始错误：{message}"
       },
       "preview": {
         "position": "{current} / {total}",
@@ -36,15 +37,13 @@
         "destructiveTitle": "确认操作",
         "title": "确认生成",
         "destructiveDescription": "继续前请确认本次操作。",
-        "description": "确认生成任务数量与最高报价后再提交。",
+        "description": "确认生成任务后再提交。",
         "cancel": "取消",
         "executing": "提交中…",
         "deleting": "删除中…",
         "confirm": "确认并生成",
         "confirmDelete": "确认删除",
         "taskCount": "{count} 个生成任务",
-        "priceHidden": "价格不可见",
-        "priceCredits": "最高 {cost} 积分",
         "destructiveBody": "将从当前项目目录中删除“{target}”。资源采用软删除，可通过系统恢复能力找回。"
       },
       "upload": {

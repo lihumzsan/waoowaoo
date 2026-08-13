@@ -21,7 +21,7 @@ const basePayload = (mediaType: 'video' | 'image') => ({
   lifecycleProjection: {
     resources: [{ resourceId: 'resource-1', mediaType, schemaId: mediaType === 'video' ? 'generic.video' : 'generic.image', name: 'Clip' }],
   },
-  protocol: 'workspace_resource_generation_v1' as const,
+  protocol: 'workspace_resource_generation_v2' as const,
   resource: resource(mediaType),
   ...(mediaType === 'video' ? { videoModel: 'comfyui::minimax-h3-fast', durationSeconds: 4 } : { imageModel: 'codex::gpt-image-2' }),
   count: 1 as const,

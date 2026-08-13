@@ -91,6 +91,6 @@
         "createFailed": "创建失败",
         "aiDesignFailed": "AI 设计失败",
         "addSubAppearanceFailed": "添加子形象失败",
-        "insufficientBalance": "账户余额不足"
+        "providerUnavailable": "当前配置的供应商不可用"
     }
 }

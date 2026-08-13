@@ -23,6 +23,9 @@ import {
   videoMergeAudioModeSchema,
   type VideoMergeAudioMode,
 } from '@/lib/workspace-resource/video-merge-contract'
+import { resolveWorkspaceResourceInputMedia } from '@/lib/workspace-resource/input-media'
+import { musicCompositionPlanDurationMs } from '@/lib/music/composition-plan'
+import { musicScoreGenerationOptionsSchema } from '@/lib/music/score-specification'
 
 export function buildVideoMergeInputHash(
   references: readonly WorkspaceResourceInputRef[],
@@ -50,7 +53,21 @@ const mergeVideosInputSchema = z.object({
     resourceId: z.string().trim().min(1).max(32),
     contentVersion: z.number().int().positive(),
   }).strict().optional().describe('Exact audio Resource version required only by replace. It becomes the complete final soundtrack.'),
+  musicCues: z.array(z.object({
+    resourceId: z.string().trim().min(1).max(32),
+    contentVersion: z.number().int().positive(),
+  }).strict()).min(1).max(50).optional(),
 }).strict().superRefine((input, context) => {
+  if (input.musicCues) {
+    if (input.videos.length !== 1 || input.audioMode !== 'preserve' || input.backgroundMusic || input.replacementAudio) {
+      context.addIssue({ code: 'custom', path: ['musicCues'], message: 'Music cues require one source video and preserve mode without another audio input.' })
+    }
+    const identities = input.musicCues.map((cue) => `${cue.resourceId}:${String(cue.contentVersion)}`)
+    if (new Set(identities).size !== identities.length) {
+      context.addIssue({ code: 'custom', path: ['musicCues'], message: 'Music cue references must be unique.' })
+    }
+    return
+  }
   if (input.audioMode === 'preserve' && input.videos.length < 2) {
     context.addIssue({ code: 'custom', path: ['videos'], message: 'Preserve mode requires at least two videos.' })
   }
@@ -71,11 +88,113 @@ const mergeVideosOutputSchema = refineTaskSubmitOperationOutputSchema(
   }).passthrough(),
 )
 
+type FrozenMusicCuePlacement = {
+  readonly inputPosition: number
+  readonly startMs: number
+  readonly durationMs: number
+  readonly fadeInMs: number
+  readonly fadeOutMs: number
+  readonly gainDb: number
+}
+
+async function resolveFrozenMusicCuePlacements(input: {
+  readonly userId: string
+  readonly projectId: string
+  readonly references: readonly WorkspaceResourceInputRef[]
+}): Promise<readonly FrozenMusicCuePlacement[]> {
+  const sourceVideo = input.references.find((reference) => reference.role === 'source_video')
+  const musicReferences = input.references.filter((reference) => reference.role === 'bgm_audio')
+  if (musicReferences.length === 0) return []
+  if (!sourceVideo || input.references.filter((reference) => reference.role === 'source_video').length !== 1) {
+    throw new Error('WORKSPACE_RESOURCE_VIDEO_MERGE_SCORE_SOURCE_INVALID')
+  }
+
+  const [timeline] = await resolveWorkspaceResourceInputMedia({
+    userId: input.userId,
+    projectId: input.projectId,
+    references: [sourceVideo],
+    expectedMediaType: 'video',
+  })
+  if (!timeline || timeline.durationMs === null) {
+    throw new Error('WORKSPACE_RESOURCE_VIDEO_MERGE_SCORE_TIMELINE_DURATION_MISSING')
+  }
+  const timelineDurationMs = timeline.durationMs
+
+  const resources = await prisma.workspaceResource.findMany({
+    where: {
+      id: { in: musicReferences.map((reference) => reference.resourceId) },
+      userId: input.userId,
+      projectId: input.projectId,
+      resourceKind: 'file',
+      mediaType: 'audio',
+      status: 'ready',
+      deletedAt: null,
+    },
+    select: { id: true, currentVersion: true, generationOptions: true },
+  })
+  const resourceById = new Map(resources.map((resource) => [resource.id, resource]))
+  const lineage = await prisma.workspaceResourceLineage.findMany({
+    where: {
+      OR: musicReferences.map((reference) => ({
+        outputResourceId: reference.resourceId,
+        outputVersion: reference.contentVersion,
+      })),
+    },
+    select: {
+      outputResourceId: true,
+      outputVersion: true,
+      inputResourceId: true,
+      inputVersion: true,
+      role: true,
+      position: true,
+    },
+  })
+
+  return musicReferences.map((reference) => {
+    const resource = resourceById.get(reference.resourceId)
+    if (!resource || resource.currentVersion !== reference.contentVersion) {
+      throw new Error(
+        `WORKSPACE_RESOURCE_VIDEO_MERGE_SCORE_PROVENANCE_VERSION_MISMATCH:${reference.resourceId}:${String(reference.contentVersion)}`,
+      )
+    }
+    const specification = musicScoreGenerationOptionsSchema.parse(resource.generationOptions)
+    const timelineLineage = lineage.find((candidate) => (
+      candidate.outputResourceId === reference.resourceId
+      && candidate.outputVersion === reference.contentVersion
+      && candidate.role === 'score_timeline'
+      && candidate.position === specification.timelineInputPosition
+    ))
+    if (
+      !timelineLineage
+      || timelineLineage.inputResourceId !== sourceVideo.resourceId
+      || timelineLineage.inputVersion !== sourceVideo.contentVersion
+    ) {
+      throw new Error(
+        `WORKSPACE_RESOURCE_VIDEO_MERGE_SCORE_TIMELINE_MISMATCH:${reference.resourceId}:${String(reference.contentVersion)}`,
+      )
+    }
+    const durationMs = musicCompositionPlanDurationMs(specification.compositionPlan)
+    if (specification.startMs + durationMs > timelineDurationMs) {
+      throw new Error(
+        `WORKSPACE_RESOURCE_VIDEO_MERGE_SCORE_CUE_EXCEEDS_TIMELINE:${reference.resourceId}:${String(reference.contentVersion)}`,
+      )
+    }
+    return {
+      inputPosition: reference.position,
+      startMs: specification.startMs,
+      durationMs,
+      fadeInMs: specification.fadeInMs,
+      fadeOutMs: specification.fadeOutMs,
+      gainDb: specification.gainDb,
+    }
+  })
+}
+
 export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOperationRegistryDraft {
   return {
     merge_videos: defineOperation({
       id: 'merge_videos',
-      summary: 'Concatenate exact frozen video Resource versions and explicitly preserve, mix, replace, or remove the final audio track.',
+      summary: 'Concatenate exact frozen video Resource versions, explicitly control final audio, or place exact generated music cues onto one merged source video.',
       intent: 'act',
       channels: { tool: true, api: true, mcp: true },
       effects: {
@@ -128,9 +247,19 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
               position: input.videos.length,
               expectedMediaType: 'audio' as const,
             }] : []),
+            ...(input.musicCues ?? []).map((music, index) => ({
+              ...music,
+              role: 'bgm_audio',
+              position: input.videos.length + index,
+            })),
           ],
         })
-        const inputHash = buildVideoMergeInputHash(references, input.audioMode)
+        const musicCues = await resolveFrozenMusicCuePlacements({
+          userId: ctx.userId,
+          projectId: ctx.projectId,
+          references,
+        })
+        const inputHash = stableArgsFingerprint({ references, musicCues })
         const requestId = [
           'merge_videos', ctx.userId, ctx.projectId,
           ctx.context.turnId?.trim() || 'no-turn',
@@ -146,10 +275,9 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
           mediaType: 'video',
           schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
         })
-        const generationOptions: Record<string, string | number> = {
-          mergeMode: 'ordered_concat',
-          audioMode: input.audioMode,
-        }
+        const generationOptions: Record<string, string | number> = musicCues.length > 0
+          ? { mergeMode: 'score_cues' }
+          : { mergeMode: 'ordered_concat', audioMode: input.audioMode }
         const payload = {
           lifecycleProjection: buildWorkspaceResourceLifecycleProjection([{
             resourceId,
@@ -167,6 +295,7 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
             inputHash,
             inputs: references,
             generationOptions,
+            musicCues,
             toolCallId: ctx.toolCallId?.trim() || null,
           },
         }

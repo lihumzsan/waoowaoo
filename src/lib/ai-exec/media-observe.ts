@@ -3,6 +3,7 @@ import { normalizeAnyError } from '@/lib/errors/normalize'
 import type { ErrorFields } from '@/lib/logging/types'
 import type { GenerateResult } from '@/lib/ai-providers/runtime-types'
 import type { AiMediaExecutionInput, AiMediaExecutionModality } from '@/lib/ai-exec/engine'
+import { musicCompositionPlanDurationMs } from '@/lib/music/composition-plan'
 
 /**
  * Media provider execution observability (logging only).
@@ -59,11 +60,26 @@ export function summarizeMediaRequestInput(input: AiMediaExecutionInput): Record
       resolution: input.options?.resolution ?? null,
     }
   case 'music':
+    if (input.generation.kind === 'prompt') {
+      return {
+        generationMode: 'prompt',
+        promptChars: input.generation.prompt.length,
+        negativePromptChars: input.options?.negativePrompt?.length ?? 0,
+        durationSeconds: input.options?.durationSeconds ?? null,
+      }
+    }
     return {
-      promptChars: input.prompt.length,
-      negativePromptChars: input.options?.negativePrompt?.length ?? 0,
-      durationSeconds: input.options?.durationSeconds ?? null,
-      hasReferenceVideo: Boolean(input.options?.referenceVideoUrl),
+      generationMode: 'composition_plan',
+      chunkCount: input.generation.compositionPlan.chunks.length,
+      durationMs: musicCompositionPlanDurationMs(input.generation.compositionPlan),
+      positiveStyleCount: input.generation.compositionPlan.chunks.reduce(
+        (total, chunk) => total + chunk.positiveStyles.length,
+        0,
+      ),
+      negativeStyleCount: input.generation.compositionPlan.chunks.reduce(
+        (total, chunk) => total + chunk.negativeStyles.length,
+        0,
+      ),
     }
   case 'sound':
     return {
@@ -88,7 +104,7 @@ export function summarizeGenerateResult(result: GenerateResult): Record<string, 
     async: result.async ?? false,
     imageCount: result.imageUrls?.length ?? (result.imageUrl ? 1 : 0),
     hasVideo: Boolean(result.videoUrl),
-    hasAudio: Boolean(result.audioUrl),
+    hasAudio: Boolean(result.audioUrl || result.audioBase64),
     base64Chars: (result.imageBase64?.length ?? 0) + (result.audioBase64?.length ?? 0),
     externalId: result.externalId ?? null,
     requestId: result.requestId ?? null,

@@ -25,7 +25,6 @@ const apiConfigInputSchema = z.object({
     provider: z.string().trim().min(1).describe('Exact configured provider ID.'),
   }).strict()).optional(),
   defaultModels: z.object({
-    assistantModel: modelKeySchema.optional(),
     analysisModel: modelKeySchema.optional(),
     characterModel: modelKeySchema.optional(),
     locationModel: modelKeySchema.optional(),
@@ -46,7 +45,7 @@ export function createUserApiConfigOperations(): ProjectAgentOperationRegistryDr
   return {
     get_user_api_config: defineOperation({
       id: 'get_user_api_config',
-      summary: 'Read user API config (masked provider credential state, pricing/capabilities enrichment).',
+      summary: 'Read user API config with masked provider credential state and capability metadata.',
       intent: 'query',
       effects: {
         writes: false,
@@ -73,10 +72,7 @@ export function createUserApiConfigOperations(): ProjectAgentOperationRegistryDr
         externalSideEffects: false,
         longRunning: false,
       },
-      confirmation: {
-        required: true,
-        summary: '将覆盖更新用户 API 配置（可能影响后续调用与计费）。系统会在获得明确批准后执行同一份已审核请求。',
-      },
+      confirmation: { kind: 'none', required: false },
       inputSchema: apiConfigInputSchema,
       outputSchema: z.unknown(),
       executeInTransaction: async (ctx, input, transaction) =>

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { MUSIC_KEY_SCALE_VALUES, MUSIC_TIME_SIGNATURE_VALUES } from './music-parameter-contract'
 import { OPERATION_EXECUTION_MAX_TASKS } from '@/lib/temporal/operation-execution/contracts'
+import { musicScoreCueRequestSchema } from '@/lib/music/score-specification'
 import { CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS } from './generation-contract'
 import {
   WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA,
@@ -56,7 +57,6 @@ const commonItemShape = {
   itemId: z.string().trim().min(1).max(191),
   name: resourceNameSchema,
   folderPath: folderPathSchema,
-  prompt: finalPromptSchema,
   count: z.number().int().min(1).max(6).default(1),
 } as const
 
@@ -67,6 +67,7 @@ const textList = (maxItems: number, maxLength: number) => z.array(
 export const imageGenerationItemSchema = z.object({
   ...commonItemShape,
   mediaType: z.literal('image'),
+  prompt: finalPromptSchema,
   schemaId: z.enum(WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.image),
   assetKind: z.enum(['character', 'location', 'prop']).nullable().default(null),
   references: z.array(generationReferenceSchema.extend({
@@ -96,7 +97,7 @@ export const imageGenerationItemSchema = z.object({
   }
 })
 
-export const musicGenerationItemSchema = z.object({
+export const promptMusicGenerationItemSchema = z.object({
   ...commonItemShape,
   mediaType: z.literal('audio'),
   audioKind: z.literal('music'),
@@ -118,6 +119,23 @@ export const musicGenerationItemSchema = z.object({
   dialogueSafety: z.string().trim().min(1).max(2_000).nullable().optional(),
 }).strict()
 
+export const compositionPlanMusicGenerationItemSchema = musicScoreCueRequestSchema.safeExtend({
+  ...commonItemShape,
+  mediaType: z.literal('audio'),
+  audioKind: z.literal('music'),
+  prompt: z.string().optional(),
+  schemaId: z.enum(WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.audio),
+  references: z.array(generationReferenceSchema.extend({
+    channel: z.literal('context'),
+    role: z.literal('score_timeline'),
+  }).strict()).length(1),
+}).strict()
+
+export const musicGenerationItemSchema = z.union([
+  promptMusicGenerationItemSchema,
+  compositionPlanMusicGenerationItemSchema,
+])
+
 export const soundGenerationItemSchema = z.object({
   ...commonItemShape,
   mediaType: z.literal('audio'),
@@ -130,7 +148,7 @@ export const soundGenerationItemSchema = z.object({
     .optional(),
 }).strict()
 
-export const audioGenerationItemSchema = z.discriminatedUnion('audioKind', [
+export const audioGenerationItemSchema = z.union([
   musicGenerationItemSchema,
   soundGenerationItemSchema,
 ])
@@ -140,6 +158,7 @@ export type AudioGenerationKind = 'music' | 'sound'
 export const videoGenerationItemSchema = z.object({
   ...commonItemShape,
   mediaType: z.literal('video'),
+  prompt: finalPromptSchema,
   schemaId: z.enum(WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.video),
   references: z.array(videoGenerationReferenceSchema).max(16).optional(),
   durationSeconds: z.number().int().min(1).max(CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS),
@@ -174,7 +193,6 @@ function validateGenerationItems(
 
 const batchCommonShape = {
   kind: z.literal('new'),
-  maxBudgetCredits: z.number().finite().positive().optional(),
 } as const
 
 export const imageGenerationBatchSchema = z.object({
@@ -195,7 +213,6 @@ export const videoGenerationBatchSchema = z.object({
 export const videoGenerationRevisionBatchSchema = z.object({
   kind: z.literal('revise_failed'),
   items: z.array(videoGenerationRevisionItemSchema).min(1).max(OPERATION_EXECUTION_MAX_TASKS),
-  maxBudgetCredits: z.number().finite().positive().optional(),
 }).strict().superRefine((batch, context) => {
   if (new Set(batch.items.map((item) => item.resourceId)).size !== batch.items.length) {
     context.addIssue({ code: 'custom', path: ['items'], message: 'resourceId values must be unique.' })
@@ -249,7 +266,7 @@ export const audioGenerationBatchOutputSchema = z.object({
   batchId: z.string().trim().min(1).max(191),
   decision: z.enum(['produce', 'no_audio']),
   overview: z.string().trim().min(1).max(12_000),
-  items: z.array(audioGenerationItemSchema).max(8),
+  items: z.array(audioGenerationItemSchema).max(OPERATION_EXECUTION_MAX_TASKS),
   globalContinuity: z.string().trim().max(8_000),
   assumptions: textList(64, 2_000),
   warnings: textList(64, 2_000),
@@ -261,7 +278,9 @@ export const audioGenerationBatchOutputSchema = z.object({
     context.addIssue({ code: 'custom', path: ['items'], message: 'decision=no_audio requires items to be empty.' })
   }
   let previousEnd = 0
-  batch.items.filter((item) => item.audioKind === 'music').forEach((item, index) => {
+  batch.items.filter((item): item is z.infer<typeof promptMusicGenerationItemSchema> => (
+    item.audioKind === 'music' && 'startSeconds' in item
+  )).forEach((item, index) => {
     const start = item.startSeconds ?? previousEnd
     if (start < previousEnd) {
       context.addIssue({ code: 'custom', path: ['items', index, 'startSeconds'], message: 'Music cues must not overlap.' })

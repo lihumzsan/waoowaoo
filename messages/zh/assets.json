@@ -129,7 +129,7 @@
     "selectCharacter": "请选择一个角色",
     "enterChangeReason": "请填写形象变化原因",
     "enterSubDesc": "请填写形象描述",
-    "insufficientBalance": "余额不足\n\n{error}",
+    "providerUnavailable": "供应商不可用\n\n{error}",
     "designFailed": "AI设计失败: {error}",
     "addFailed": "添加失败: {error}",
     "aiDesignPlaceholderNew": "例如：一个20岁的女性魔法师，金色长发，蓝色眼睛，穿着紫色法袍...",
@@ -150,7 +150,7 @@
     "subDescTip": "子形象只需描述变化部分（服装、状态等），面部和体型会自动继承主形象",
     "adding": "添加中...",
     "processing": "处理中...",
-    "insufficientBalanceDefault": "账户余额不足，请充值后继续使用",
+    "providerUnavailableDefault": "当前配置的供应商不可用",
     "addFailedGeneric": "添加失败",
     "appearancesCount": "个形象",
     "addCharacter": "新增角色",
@@ -223,7 +223,7 @@
   "errors": {
     "saveFailed": "保存失败，请重试",
     "failed": "失败，请重试",
-    "insufficientBalance": "账户余额不足",
+    "providerUnavailable": "当前配置的供应商不可用",
     "aiDesignFailed": "AI 设计失败",
     "createFailed": "创建失败"
   },

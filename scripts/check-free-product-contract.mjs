@@ -41,6 +41,22 @@ const FORBIDDEN_SCHEMA_FIELDS = [
   'quoteHash',
   'quoteCeiling',
 ]
+const FORBIDDEN_ACTIVE_SOURCE_PATTERNS = [
+  { label: 'pricing catalog', pattern: /\bBUILTIN_PRICING_CATALOG_ENTRIES\b/u },
+  { label: 'retail price state', pattern: /\bretail\s*:/u },
+  { label: 'price conversion', pattern: /\busdToCredits\b/u },
+  { label: 'assistant quote copy', pattern: /quoted ceiling|报价上限/iu },
+  { label: 'legacy product pricing type', pattern: /\bVideoPricingTier\b/u },
+  { label: 'legacy product budget field', pattern: /\bmaxBudgetCredits\b/u },
+]
+const FORBIDDEN_MESSAGE_PATTERNS = [
+  { label: 'commercial message copy', pattern: /\b(?:stripe|pricing|retail|recharge|refund|billable|credits?)\b/iu },
+  { label: 'commercial Chinese message copy', pattern: /(?:计费|价格|零售价|充值|退款|平台额度|余额不足)/u },
+]
+const ALLOWED_PROVIDER_MESSAGE_KEYS = new Set([
+  'PROVIDER_BILLING_REQUIRED',
+  'PLATFORM_PROVIDER_BILLING_REQUIRED',
+])
 
 function readJson(rootDir, relativePath) {
   const absolutePath = path.join(rootDir, relativePath)
@@ -127,6 +143,50 @@ function checkFreeProductContract({ rootDir }) {
     const source = readFileSync(path.join(rootDir, relativePath), 'utf8')
     if (/@\/lib\/billing|@\/lib\/payments|from\s+['"](?:stripe|@stripe\/stripe-js)['"]/u.test(source)) {
       violations.push(`billing import: ${relativePath}`)
+    }
+    for (const forbidden of FORBIDDEN_ACTIVE_SOURCE_PATTERNS) {
+      if (forbidden.pattern.test(source)) {
+        violations.push(`${forbidden.label}: ${relativePath}`)
+      }
+    }
+  }
+
+  for (const locale of ['en', 'zh']) {
+    const directory = path.join(rootDir, 'messages', locale)
+    if (!existsSync(directory)) continue
+    for (const fileName of readdirSync(directory)) {
+      if (!fileName.endsWith('.json')) continue
+      const relativePath = path.join('messages', locale, fileName)
+      const parsed = readJson(rootDir, relativePath)
+      if (!parsed || parsed.__parseError) {
+        violations.push(`invalid message catalog: ${relativePath}`)
+        continue
+      }
+      const stack = [[parsed, '']]
+      while (stack.length > 0) {
+        const [value, keyPath] = stack.pop()
+        if (typeof value === 'string') {
+          const leafKey = keyPath.split('.').at(-1) || ''
+          if (ALLOWED_PROVIDER_MESSAGE_KEYS.has(leafKey)) continue
+          for (const forbidden of FORBIDDEN_MESSAGE_PATTERNS) {
+            if (forbidden.pattern.test(value) || forbidden.pattern.test(keyPath)) {
+              violations.push(`${forbidden.label}: ${relativePath}:${keyPath}`)
+            }
+          }
+          continue
+        }
+        if (!value || typeof value !== 'object' || Array.isArray(value)) continue
+        for (const [key, child] of Object.entries(value)) {
+          stack.push([child, keyPath ? `${keyPath}.${key}` : key])
+        }
+      }
+    }
+  }
+
+  for (const relativePath of ['docker-compose.yml', 'docker-compose.dev.yml']) {
+    const absolutePath = path.join(rootDir, relativePath)
+    if (existsSync(absolutePath) && /\bBILLING_MODE\b/u.test(readFileSync(absolutePath, 'utf8'))) {
+      violations.push(`billing environment switch: ${relativePath}`)
     }
   }
 

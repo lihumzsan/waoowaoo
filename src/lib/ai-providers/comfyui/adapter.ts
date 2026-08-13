@@ -12,11 +12,13 @@ import { executeComfyUiH3VideoGeneration } from './h3'
 import { COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_ID } from './models'
 import { executeComfyUiMossSoundGeneration } from './moss'
 import { executeComfyUiMossTtsGeneration } from './tts'
+import { createAiProviderFailureAdapter } from '@/lib/ai-providers/failure'
 
 const H3_ASPECT_RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16', '9:21'] as const
 
 export const comfyuiAdapter: AiProviderAdapter = {
   providerKey: 'comfyui',
+  failure: createAiProviderFailureAdapter('comfyui'),
   music: {
     describe: (selection) => describeMediaVariantBase({
       modality: 'music',

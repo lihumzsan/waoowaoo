@@ -8,7 +8,6 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { decryptApiKey } from '@/lib/crypto-utils'
 import { isApiConfigCatalogProviderId } from '@/lib/ai-registry/api-config-catalog'
 import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
 import {
@@ -16,7 +15,6 @@ import {
   isPlatformProviderCredentialMode,
   isSelfHostedUserProviderCredentialMode,
 } from '@/lib/deployment/config'
-import PLATFORM_PROVIDER_ENV from '@/lib/deployment/platform-provider-env.json'
 import { getPlatformModels, getSelectableLocalVideoModels } from '@/lib/platform-models/catalog'
 import type { UnifiedModelType } from '@/lib/ai-registry/types'
 import { isUnifiedModelType } from '@/lib/user-api/api-config-shared'
@@ -24,7 +22,6 @@ import { AppError } from '@/lib/errors/app-error'
 import { readComfyUiBaseUrl } from '@/lib/ai-providers/comfyui/config'
 import {
   findRuntimeModelByKey,
-  normalizeProviderRuntimeBaseUrl,
   resolveRuntimeModelSelection,
   resolveSingleRuntimeModelSelection,
   type RuntimeModelMediaType,
@@ -37,24 +34,10 @@ export interface CustomModel {
   name: string
   type: UnifiedModelType
   provider: string
-  // Non-authoritative display field; billing uses unified server pricing catalog.
-  price: number
 }
 
 export type ModelMediaType = RuntimeModelMediaType
 export type ModelSelection = RuntimeModelSelection
-
-interface CustomProvider {
-  id: string
-  name: string
-  baseUrl?: string
-  apiKey?: string
-}
-
-type PlatformProviderEnv = {
-  apiKey?: string
-  baseUrl?: string
-}
 
 function isPlainObject(value: unknown): value is object {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -64,91 +47,12 @@ function readTrimmedString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function readEnvString(name: string): string {
-  return readTrimmedString(process.env[name])
-}
-
-function getProviderFamily(providerId: string): string {
-  const trimmed = providerId.trim()
-  const colonIndex = trimmed.indexOf(':')
-  return colonIndex === -1 ? trimmed : trimmed.slice(0, colonIndex)
-}
-
-function resolvePlatformProviderEnv(providerId: string): PlatformProviderEnv {
-  const providerFamily = getProviderFamily(providerId)
-  const entry = (PLATFORM_PROVIDER_ENV as Record<string, {
-    envPrefix: string
-    requiresBaseUrl?: boolean
-    requiresApiKey?: boolean
-  }>)[providerFamily]
-  if (!entry) {
-    throw new Error(`PLATFORM_PROVIDER_UNSUPPORTED: ${providerId}`)
-  }
-
-  const apiKey = readEnvString(`${entry.envPrefix}_API_KEY`)
-  if (entry.requiresApiKey !== false && !apiKey) {
-    throw new Error(`PLATFORM_PROVIDER_API_KEY_MISSING: ${providerId}`)
-  }
-
-  const baseUrl = readEnvString(`${entry.envPrefix}_BASE_URL`)
-  if (entry.requiresBaseUrl && !baseUrl) {
-    throw new Error(`PLATFORM_PROVIDER_BASE_URL_MISSING: ${providerId}`)
-  }
-  return {
-    apiKey: apiKey || '',
-    ...(baseUrl ? { baseUrl } : {}),
-  }
-}
-
 function assertModelKey(value: string, field: string): { provider: string; modelId: string; modelKey: string } {
   const parsed = parseModelKeyStrict(value)
   if (!parsed) {
     throw new Error(`MODEL_KEY_INVALID: ${field} must be provider::modelId`)
   }
   return parsed
-}
-
-function parseCustomProviders(rawProviders: string | null | undefined): CustomProvider[] {
-  if (!rawProviders) return []
-
-  let parsedUnknown: unknown
-  try {
-    parsedUnknown = JSON.parse(rawProviders)
-  } catch {
-    throw new Error('PROVIDER_PAYLOAD_INVALID: customProviders is not valid JSON')
-  }
-
-  if (!Array.isArray(parsedUnknown)) {
-    throw new Error('PROVIDER_PAYLOAD_INVALID: customProviders must be an array')
-  }
-
-  const providers: CustomProvider[] = []
-  for (let index = 0; index < parsedUnknown.length; index += 1) {
-    const raw = parsedUnknown[index]
-    if (!isPlainObject(raw)) {
-      throw new Error(`PROVIDER_PAYLOAD_INVALID: customProviders[${index}] must be object`)
-    }
-
-    const id = readTrimmedString(Reflect.get(raw, 'id'))
-    const name = readTrimmedString(Reflect.get(raw, 'name'))
-    if (!id || !name) {
-      throw new Error(`PROVIDER_PAYLOAD_INVALID: customProviders[${index}] id/name required`)
-    }
-    if (!isApiConfigCatalogProviderId(id)) {
-      throw new Error(`PROVIDER_UNSUPPORTED: ${id}`)
-    }
-
-    const baseUrl = readTrimmedString(Reflect.get(raw, 'baseUrl')) || undefined
-    const apiKey = readTrimmedString(Reflect.get(raw, 'apiKey')) || undefined
-    providers.push({
-      id,
-      name,
-      ...(baseUrl ? { baseUrl } : {}),
-      ...(apiKey ? { apiKey } : {}),
-    })
-  }
-
-  return providers
 }
 
 function normalizeStoredModel(raw: unknown, index: number): CustomModel {
@@ -176,7 +80,6 @@ function normalizeStoredModel(raw: unknown, index: number): CustomModel {
     provider,
     type: typeRaw,
     name: readTrimmedString(Reflect.get(raw, 'name')) || modelId,
-    price: 0,
   }
 }
 
@@ -202,27 +105,16 @@ function parseCustomModels(rawModels: string | null | undefined): CustomModel[] 
   return models
 }
 
-function pickProviderStrict(providers: CustomProvider[], providerId: string): CustomProvider {
-  const matched = providers.find((provider) => provider.id === providerId)
-  if (matched) return matched
-
-  throw new AppError('PROVIDER_AUTH_INVALID', `Provider is not configured: ${providerId}`, {
-    provider: providerId,
-  })
-}
-
-async function readUserConfig(userId: string): Promise<{ models: CustomModel[]; providers: CustomProvider[] }> {
+async function readUserConfig(userId: string): Promise<{ models: CustomModel[] }> {
   const pref = await prisma.userPreference.findUnique({
     where: { userId },
     select: {
       customModels: true,
-      customProviders: true,
     },
   })
 
   return {
     models: parseCustomModels(pref?.customModels),
-    providers: parseCustomProviders(pref?.customProviders),
   }
 }
 
@@ -319,7 +211,7 @@ export interface ProviderConfig {
 }
 
 export async function getProviderConfig(userId: string, providerId: string): Promise<ProviderConfig> {
-  if (getProviderFamily(providerId) === 'codex') {
+  if (providerId === 'codex') {
     return {
       id: providerId,
       name: 'Codex',
@@ -327,7 +219,7 @@ export async function getProviderConfig(userId: string, providerId: string): Pro
     }
   }
 
-  if (getProviderFamily(providerId) === 'comfyui') {
+  if (providerId === 'comfyui') {
     const baseUrl = readComfyUiBaseUrl()
     return {
       id: providerId,
@@ -337,32 +229,9 @@ export async function getProviderConfig(userId: string, providerId: string): Pro
     }
   }
 
-  const deployment = getDeploymentConfig()
-  if (isPlatformProviderCredentialMode(deployment)) {
-    const platform = resolvePlatformProviderEnv(providerId)
-    return {
-      id: providerId,
-      name: providerId,
-      apiKey: platform.apiKey || '',
-      baseUrl: normalizeProviderRuntimeBaseUrl(providerId, platform.baseUrl),
-    }
-  }
-
-  const { providers } = await readUserConfig(userId)
-  const provider = pickProviderStrict(providers, providerId)
-
-  if (!provider.apiKey) {
-    throw new AppError('PROVIDER_AUTH_INVALID', 'Provider API key is missing', {
-      provider: provider.id,
-    })
-  }
-
-  return {
-    id: provider.id,
-    name: provider.name,
-    apiKey: decryptApiKey(provider.apiKey),
-    baseUrl: normalizeProviderRuntimeBaseUrl(provider.id, provider.baseUrl),
-  }
+  throw new AppError('PROVIDER_AUTH_INVALID', `Provider is not available locally: ${providerId}`, {
+    provider: providerId,
+  })
 }
 
 export async function getUserModels(userId: string): Promise<CustomModel[]> {
@@ -380,28 +249,7 @@ export async function getModelsByType(userId: string, type: ModelMediaType): Pro
   return models.filter((model) => model.type === type)
 }
 
-export async function resolveModelId(userId: string, model: string): Promise<string> {
-  const selection = await resolveModelSelection(userId, model, 'llm')
-  return selection.modelId
-}
-
-export async function getModelPrice(userId: string, model: string): Promise<number> {
-  const models = await getRuntimeModels(userId)
-  const matched = findModelByKey(models, model)
-  if (!matched) {
-    throw new Error(`MODEL_NOT_FOUND: ${model}`)
-  }
-  return matched.price
-}
-
 export async function hasApiConfig(userId: string): Promise<boolean> {
-  if (isPlatformProviderCredentialMode()) return true
-
-  const pref = await prisma.userPreference.findUnique({
-    where: { userId },
-    select: { customProviders: true },
-  })
-
-  const providers = parseCustomProviders(pref?.customProviders)
-  return providers.some((provider) => !!provider.apiKey)
+  await readUserConfig(userId)
+  return true
 }

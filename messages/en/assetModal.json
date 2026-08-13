@@ -91,6 +91,6 @@
         "createFailed": "Creation failed",
         "aiDesignFailed": "AI design failed",
         "addSubAppearanceFailed": "Failed to add sub-appearance",
-        "insufficientBalance": "Insufficient balance"
+        "providerUnavailable": "The configured provider is unavailable"
     }
 }

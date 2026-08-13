@@ -182,6 +182,7 @@ describe('Codex runtime terminal error projection', () => {
       sink: {
         reserveChunk: () => null,
         setMessageId: () => undefined,
+        sealChunksThrough: () => undefined,
         publishChunksThrough: async () => undefined,
         publishViewChanged: async () => undefined,
       },

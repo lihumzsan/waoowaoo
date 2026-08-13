@@ -67,8 +67,7 @@
   `src/lib/user-api/availability.ts` 统一裁决
 - 认证与账号初始化：`src/lib/auth/**`（`account-onboarding.ts` 是唯一账号 writer）
 - API 会话、管理员权限与错误边界：`src/lib/api-auth.ts`、`src/lib/auth/admin.ts`、`src/lib/errors/**`
-- 公测预约：`src/lib/public-beta/**`、`/api/public-beta/waitlist`；售罄事实来自
-  `src/lib/paid-beta/campaign.ts`
+- 公测预约：`/api/public-beta/waitlist`
 - 部署启动边界：`docker-compose.yml`、`docker-entrypoint.sh`、`scripts/check-cloud-env.mjs`、
   `src/lib/storage/**`
 

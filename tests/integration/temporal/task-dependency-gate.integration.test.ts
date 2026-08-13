@@ -184,7 +184,7 @@ describe('Temporal dependency gate durability', () => {
       select: { id: true, payload: true },
     })
     expect(terminalEvents).toHaveLength(1)
-    expect(terminalEvents[0]?.payload).toMatchObject({ errorCode: 'TASK_DEPENDENCY_FAILED' })
+    expect(terminalEvents[0]?.payload).toMatchObject({ terminalSource: 'system' })
     await expect(
       prisma.followUpBatch.findUniqueOrThrow({ where: { id: activeFixture.followUpBatchId }, select: { status: true } }),
     ).resolves.toEqual({ status: 'ready' })
@@ -212,7 +212,7 @@ describe('Temporal dependency gate durability', () => {
     await activeWorker.waitForTaskStatus(activeFixture.mixTaskId, 'completed')
     const sourceHistory = await activeWorker.fetchTaskHistory(activeFixture.source1TaskId)
     const mixHistory = await activeWorker.fetchTaskHistory(activeFixture.mixTaskId)
-    expect(activityAttempts(sourceHistory, 'commitTaskTerminal').length).toBeGreaterThanOrEqual(2)
+    expect(Math.max(0, ...activityAttempts(sourceHistory, 'commitTaskTerminal'))).toBeGreaterThanOrEqual(2)
     expect(activityAttempts(mixHistory, 'runTaskAttempt').length).toBeGreaterThanOrEqual(1)
     await expect(
       prisma.taskEvent.count({ where: { taskId: activeFixture.source1TaskId, eventType: TASK_EVENT_TYPE.COMPLETED } }),

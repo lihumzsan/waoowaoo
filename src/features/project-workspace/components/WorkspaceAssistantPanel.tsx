@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { useTranslations } from 'next-intl'
 import { AssistantRuntimeProvider, ThreadPrimitive } from '@assistant-ui/react'
 import { AppIcon } from '@/components/ui/icons'
-import { UserErrorActionLink } from '@/components/errors/UserErrorActionLink'
 import { useAttachmentFilePicker } from '@/components/project-assistant/useAttachmentFilePicker'
 import {
   isAssistantRuntimeApprovalRequest,
@@ -282,15 +281,21 @@ function WorkspaceAssistantRuntimeRequestCard(props: {
 
   if (props.interaction.status === 'decided') {
     return (
-      <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-sm">
+      <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-sm text-[var(--glass-text-secondary)]">
+        <p>{t('cards.interactionSubmitting')}</p>
         <button
           type="button"
-          disabled={submitting}
-          className="w-full rounded-xl bg-neutral-900 px-3 py-2 font-medium text-white disabled:opacity-50"
+          className="mt-2 rounded-lg bg-[var(--glass-tone-soft)] px-3 py-1.5 font-medium text-[var(--glass-text-primary)]"
           onClick={() => submit({})}
+          disabled={submitting}
         >
-          {submitting ? t('cards.interactionSubmitting') : t('cards.confirmContinue')}
+          {t('cards.interactionRetryDelivery')}
         </button>
+        {error ? (
+          <p role="alert" className="mt-2 text-[var(--glass-tone-warning-fg)]">
+            {t('panel.sessionStateError')}
+          </p>
+        ) : null}
       </div>
     )
   }
@@ -835,13 +840,19 @@ export default function WorkspaceAssistantPanel({
     (id: string) => tErrors('referenceId', { id }),
     [tErrors],
   )
+  const formatFailureDiagnostic = useCallback(
+    (message: string) => tErrors('providerDiagnostic', { message }),
+    [tErrors],
+  )
   const runFailureView = resolveWorkspaceAssistantFailureView({
     facts: {
       code: currentTurn?.errorCode?.trim() || null,
       requestId: currentTurn?.requestId?.trim() || null,
+      diagnostic: currentTurn?.errorDiagnostic?.trim() || null,
     },
     localizeCode: localizeErrorCode,
     formatReference: formatFailureReference,
+    formatDiagnostic: formatFailureDiagnostic,
     unknownFallback: unknownFailureFallback,
   })
   const composerFailureView =
@@ -851,6 +862,7 @@ export default function WorkspaceAssistantPanel({
           facts: parseWorkspaceAssistantFailureText(assistantRuntime.error.message),
           localizeCode: localizeErrorCode,
           formatReference: formatFailureReference,
+          formatDiagnostic: formatFailureDiagnostic,
           unknownFallback: unknownFailureFallback,
         })
   // Undelivered marker + resend draft are derived from persisted facts only:
@@ -955,14 +967,14 @@ export default function WorkspaceAssistantPanel({
                 >
                 <ThreadPrimitive.Viewport
                   autoScroll
-                  className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 pb-4 pt-12"
+                  className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-6 pb-4 pt-12"
                   style={WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE}
                 >
                   <WorkspaceAssistantRunningSurfaceProvider
                     activeTurn={assistantRuntime.replyInFlight}
                   >
-                    <div className="min-w-0">
-                      <div className="space-y-3">
+                    <div className="mx-auto min-w-0 w-full max-w-[40rem]">
+                      <div className="space-y-6">
                           <ThreadPrimitive.Messages>
                             {() => (
                               <WorkspaceAssistantThreadMessage

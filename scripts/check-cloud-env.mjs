@@ -43,20 +43,10 @@ const COMMON_REQUIRED_KEYS = [
   'CODEX_RUNTIME_IDLE_TIMEOUT_MS',
   'CODEX_RUNTIME_WAO_BASE_URL',
   'OFFICIAL_CONTENT_DIR',
-  'PAYMENT_MIN_CREDITS',
-  'PAYMENT_MAX_CREDITS',
-  'PAYMENT_PUBLIC_BASE_URL',
-  'STRIPE_SECRET_KEY',
-  'STRIPE_WEBHOOK_SECRET',
-  // Browser-side Stripe.js key. Without it the in-page WeChat QR cannot be
-  // confirmed and the payment method silently disappears from the page, so a
-  // cloud deployment must fail the check rather than ship missing it.
-  'STRIPE_PUBLISHABLE_KEY',
 ]
 
 const PRODUCTION_REQUIRED_KEYS = [
   'ADMIN_USER_IDS',
-  'ADMIN_CREDIT_TOKEN',
   'TRUSTED_PROXY_HOPS',
   'TEMPORAL_ADDRESS',
   'TEMPORAL_NAMESPACE',
@@ -75,13 +65,14 @@ const PRODUCTION_REQUIRED_KEYS = [
 const VALIDATION_MODES = new Set(['development', 'production'])
 
 const DEFAULT_MODEL_KEYS = [
-  'PLATFORM_DEFAULT_ASSISTANT_MODEL',
   'PLATFORM_DEFAULT_ANALYSIS_MODEL',
   'PLATFORM_DEFAULT_CHARACTER_MODEL',
   'PLATFORM_DEFAULT_LOCATION_MODEL',
   'PLATFORM_DEFAULT_EDIT_MODEL',
   'PLATFORM_DEFAULT_VIDEO_MODEL',
   'PLATFORM_DEFAULT_MUSIC_MODEL',
+  'PLATFORM_DEFAULT_SOUND_MODEL',
+  'PLATFORM_DEFAULT_UTILITY_MODEL',
 ]
 
 // Single source of truth shared with src/lib/user-api/runtime-config.ts
@@ -282,10 +273,6 @@ if (
 ) {
   missing.push('WECHAT_OFFICIAL_ENCODING_AES_KEY=43-character-platform-key')
 }
-if (!isMissing(env.ADMIN_CREDIT_TOKEN) && isWeakSecret(env.ADMIN_CREDIT_TOKEN)) {
-  missing.push('ADMIN_CREDIT_TOKEN=strong-secret-at-least-24-characters')
-}
-
 const isAllowedUrl = validationMode === 'production' ? isHttpsUrl : isDevelopmentUrl
 const requiredUrlDescription = validationMode === 'production'
   ? 'https://...'
@@ -293,10 +280,6 @@ const requiredUrlDescription = validationMode === 'production'
 if (!isMissing(env.NEXTAUTH_URL) && !isAllowedUrl(env.NEXTAUTH_URL)) {
   missing.push(`NEXTAUTH_URL=${requiredUrlDescription}`)
 }
-if (!isMissing(env.PAYMENT_PUBLIC_BASE_URL) && !isAllowedUrl(env.PAYMENT_PUBLIC_BASE_URL)) {
-  missing.push(`PAYMENT_PUBLIC_BASE_URL=${requiredUrlDescription}`)
-}
-
 const trustedProxyHops = Number(env.TRUSTED_PROXY_HOPS)
 if (validationMode === 'production') {
   if (!isMissing(env.TRUSTED_PROXY_HOPS) && (!Number.isSafeInteger(trustedProxyHops) || trustedProxyHops <= 0)) {
@@ -347,7 +330,9 @@ for (const modelEnvKey of DEFAULT_MODEL_KEYS) {
     missing.push(`PLATFORM_PROVIDER_SUPPORTED:${provider}`)
     continue
   }
-  requiredPlatformKeys.add(`${providerEnv.envPrefix}_API_KEY`)
+  if (providerEnv.requiresApiKey !== false) {
+    requiredPlatformKeys.add(`${providerEnv.envPrefix}_API_KEY`)
+  }
   if (providerEnv.requiresBaseUrl) {
     requiredPlatformBaseUrls.add(`${providerEnv.envPrefix}_BASE_URL`)
   }

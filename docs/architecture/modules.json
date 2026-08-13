@@ -6,7 +6,6 @@
       "title": "Codex Creative Runtime",
       "sourcePaths": [
         "src/lib/codex-runtime",
-        "src/lib/codex-model-gateway",
         "src/lib/assistant-runtime",
         "src/lib/project-production-context.ts",
         "src/lib/wao-mcp",
@@ -35,6 +34,7 @@
         "src/lib/assistant-runtime/task-follow-up-http.ts",
         "src/app/api/internal/codex-runtime/follow-up",
         "scripts/temporal",
+        "docker-compose.dev.yml",
         "tests/integration/temporal"
       ]
     },
@@ -115,7 +115,8 @@
         "src/lib/ai-providers/fal/music.ts",
         "src/lib/ai-providers/fal/voice.ts",
         "src/lib/ai-providers/google/music.ts",
-        "src/lib/ai-providers/mureka",
+        "src/lib/ai-providers/elevenlabs",
+        "src/lib/music",
         "src/lib/task/execution/artifacts/audio.ts",
         "src/lib/task/execution/handlers/workspace-resource-audio.ts",
         "src/lib/task/execution/handlers/workspace-resource-voice.ts",
@@ -191,6 +192,19 @@
       ]
     },
     {
+      "id": "production-operations",
+      "document": "docs/architecture/modules/production-operations.md",
+      "title": "生产发布与主机治理",
+      "sourcePaths": [
+        ".github/workflows/verify.yml",
+        "scripts/production",
+        "scripts/reconcile-assistant-runtime-rollout.ts",
+        "ops/systemd",
+        "scripts/temporal/worker-rollout.sh",
+        "src/lib/codex-runtime/docker-runtime-container.ts"
+      ]
+    },
+    {
       "id": "ai-prompt-output-contract",
       "document": "docs/architecture/modules/ai-prompt-output-contract.md",
       "title": "Agent 指令、Skill 与输出契约",
@@ -213,7 +227,6 @@
       "title": "托管联网研究",
       "sourcePaths": [
         "src/lib/web-search",
-        "src/lib/codex-model-gateway/standalone-search.ts",
         "src/lib/ai-providers/openai",
         "src/lib/ai-exec/hosted-web-search.ts",
         "src/lib/wao-mcp",
@@ -231,6 +244,8 @@
         "src/lib/external-operation",
         "src/lib/storage",
         "src/lib/api-errors.ts",
+        "src/lib/ai-providers/failure.ts",
+        "src/lib/assistant-runtime/persistence.ts",
         "src/lib/adapters/operation-error-normalizer.ts",
         "src/lib/media-process.ts",
         "scripts/diagnose-project.ts",

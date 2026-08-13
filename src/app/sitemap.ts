@@ -12,7 +12,6 @@ const OFFICIAL_PUBLIC_PATHS = [
   '',
   '/terms',
   '/privacy',
-  '/refund-policy',
   '/contact',
 ] as const
 

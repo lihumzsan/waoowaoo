@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { muxVideoMergeAudio } from '@/lib/video-compose/video-merge-audio'
+import { muxVideoMergeFinalAudio } from '@/lib/video-compose/video-merge-audio'
 
 const loudnormStderrWithComfyUiPromptMetadata = [
   'Input #0, mp3, from sound-effect.mp3:',
@@ -24,7 +24,7 @@ const loudnormStderrWithComfyUiPromptMetadata = [
 
 describe('video merge loudness analysis', () => {
   it('ignores JSON-shaped input metadata before the loudnorm measurement', async () => {
-    const result = await muxVideoMergeAudio({
+    await expect(muxVideoMergeFinalAudio({
       runCommand: async (_command, args) => ({
         stdout: '',
         stderr: args.some((arg) => arg.includes('print_format=json'))
@@ -34,22 +34,11 @@ describe('video merge loudness analysis', () => {
       stitchedPath: 'stitched.mp4',
       mainAudioPath: 'main-audio.wav',
       hasSourceAudio: false,
-      musicPath: 'sound-effect.mp3',
+      audioMode: 'mix',
+      assemblyAudioPath: 'sound-effect.mp3',
       outputPath: 'merged.mp4',
       durationSeconds: 15.5,
-      volume: 1,
-    })
-
-    expect(result).toEqual({
-      hasSourceAudio: false,
-      bgm: {
-        inputIntegrated: -49.51,
-        inputTruePeak: -22.51,
-        inputLra: 0.3,
-        inputThreshold: -59.51,
-        targetOffset: 12.01,
-      },
-    })
+    })).resolves.toBeUndefined()
   })
 
   it('rejects measurement-shaped metadata when loudnorm emitted no result', async () => {
@@ -59,15 +48,15 @@ describe('video merge loudness analysis', () => {
       '    prompt          : {"input_i":"-1","input_tp":"-2","input_lra":"3","input_thresh":"-4","target_offset":"5"}',
     ].join('\n')
 
-    await expect(muxVideoMergeAudio({
+    await expect(muxVideoMergeFinalAudio({
       runCommand: async () => ({ stdout: '', stderr: measurementShapedMetadata }),
       stitchedPath: 'stitched.mp4',
       mainAudioPath: 'main-audio.wav',
       hasSourceAudio: false,
-      musicPath: 'sound-effect.mp3',
+      audioMode: 'mix',
+      assemblyAudioPath: 'sound-effect.mp3',
       outputPath: 'merged.mp4',
       durationSeconds: 15.5,
-      volume: 1,
     })).rejects.toThrow('VIDEO_MERGE_LOUDNESS_ANALYSIS_FAILED')
   })
 })

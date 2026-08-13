@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server'
-import { ApiError, normalizeError } from '@/lib/api-errors'
+import { ApiError } from '@/lib/api-errors'
 import { AssistantRuntimeProjectBusyError } from '@/lib/assistant-runtime'
 
 export type ProjectAgentCommandHttpBody = Record<string, unknown>
@@ -190,6 +190,7 @@ export function mapProjectAgentCommandError(error: unknown): ApiError {
       || agentTurnCode.endsWith('_NOT_FOUND')
       || agentTurnCode.endsWith('_NOT_READY')
       || agentTurnCode.endsWith('_NOT_PENDING')
+      || agentTurnCode.endsWith('_EXPIRED')
       || agentTurnCode.endsWith('_REJECTED')
       || agentTurnCode.endsWith('_REPLAY_DIVERGED')
       || agentTurnCode.endsWith('_RESPONSE_DIVERGED')

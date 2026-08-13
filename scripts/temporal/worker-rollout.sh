@@ -17,8 +17,8 @@ starts only that candidate, waits until Temporal sees its pollers, and makes its
 immutable build the Current Version. It then migrates legacy pinned continuous
 Schedulers to AutoUpgrade. It never stops the previous slot.
 
-retire refuses the Current Version, any version still owning a running
-Workflow, and any version whose Temporal drainage status is not "drained".
+retire refuses the Current Version and any version whose Temporal drainage
+status is not "drained".
 EOF
   exit 2
 }
@@ -461,15 +461,6 @@ worker_identity "$service" || {
 current_build=$(current_build_id)
 if [ "$current_build" = "$build_id" ]; then
   echo "Refusing to retire Current Version '$build_id'" >&2
-  exit 1
-fi
-
-require_visibility_identity "$deployment" "Worker Deployment name"
-bound_workflow_query="ExecutionStatus=\"Running\" AND TemporalWorkerDeploymentVersion=\"$deployment:$build_id\""
-bound_workflows=$(workflow_list_json "$bound_workflow_query")
-if printf '%s\n' "$bound_workflows" | contains_workflow; then
-  printf '%s\n' "$bound_workflows"
-  echo "Worker '$build_id' still owns running Workflows; keep '$service' running" >&2
   exit 1
 fi
 

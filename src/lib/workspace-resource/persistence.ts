@@ -371,7 +371,7 @@ export async function retryWorkspaceResourcesInTransaction(
       readonly operationId: string
       readonly operationExecutionId: string | null
       readonly inputHash: string
-      readonly prompt: string
+      readonly prompt: string | null
       readonly modelKey: string
       readonly generationOptions: WorkspaceResourceJsonValue
       readonly toolCallId: string | null

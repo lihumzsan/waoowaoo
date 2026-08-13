@@ -2,3 +2,4 @@
 set -e
 
 npm run security:secrets:repo
+npm run verify:push:local

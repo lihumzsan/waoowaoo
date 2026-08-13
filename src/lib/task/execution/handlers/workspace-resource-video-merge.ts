@@ -10,6 +10,7 @@ import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import {
   concatVideoMergeAudioClips,
   muxVideoMergeFinalAudio,
+  muxVideoMergeMusicCues,
   renderVideoMergeClipAudio,
 } from '@/lib/video-compose/video-merge-audio'
 import {
@@ -46,7 +47,9 @@ export async function handleWorkspaceResourceVideoMergeTask(
     input: resource.reference,
     storageKey: resource.storageKey,
   }))
-  const assemblyAudioInput = payload.resource.inputs.find((input) => input.role !== 'source_video') ?? null
+  const assemblyAudioInput = payload.resource.inputs.find((input) => (
+    input.role === 'background_music' || input.role === 'replacement_audio'
+  )) ?? null
   const [resolvedAssemblyAudio] = assemblyAudioInput ? await resolveWorkspaceResourceInputMedia({
     userId: data.userId,
     projectId: data.projectId,
@@ -54,8 +57,25 @@ export async function handleWorkspaceResourceVideoMergeTask(
     expectedMediaType: 'audio',
   }) : []
   const assemblyAudioStorageKey = resolvedAssemblyAudio?.storageKey ?? null
-  const audioMode = payload.resource.generationOptions.audioMode
-  const usesSourceAudio = audioMode === 'preserve' || audioMode === 'mix'
+  const audioMode = 'audioMode' in payload.resource.generationOptions
+    && ['preserve', 'mix', 'replace', 'mute'].includes(String(payload.resource.generationOptions.audioMode))
+    ? payload.resource.generationOptions.audioMode as 'preserve' | 'mix' | 'replace' | 'mute'
+    : 'preserve'
+  const usesSourceAudio = payload.resource.musicCues.length > 0 || audioMode === 'preserve' || audioMode === 'mix'
+  const inputByPosition = new Map(payload.resource.inputs.map((input) => [input.position, input]))
+  const bgmInputs = payload.resource.musicCues.map((cue) => {
+    const reference = inputByPosition.get(cue.inputPosition)
+    if (!reference || reference.role !== 'bgm_audio') {
+      throw new Error(`WORKSPACE_RESOURCE_VIDEO_MERGE_BGM_POSITION_INVALID:${String(cue.inputPosition)}`)
+    }
+    return reference
+  })
+  const resolvedBgm = bgmInputs.length > 0 ? await resolveWorkspaceResourceInputMedia({
+    userId: data.userId,
+    projectId: data.projectId,
+    references: bgmInputs,
+    expectedMediaType: 'audio',
+  }) : []
 
   const workspaceDir = await mkdtemp(path.join(tmpdir(), `waoowaoo-resource-merge-${randomUUID()}-`))
   try {
@@ -115,24 +135,47 @@ export async function handleWorkspaceResourceVideoMergeTask(
         durationSeconds: stitchedDurationSeconds,
       })
     }
-    const assemblyAudioPath = assemblyAudioStorageKey ? path.join(workspaceDir, 'assembly-audio-source') : null
-    if (assemblyAudioPath && assemblyAudioStorageKey) {
-      await writeFile(assemblyAudioPath, await getObjectBuffer(assemblyAudioStorageKey))
-    }
     const outputPath = path.join(workspaceDir, 'merged.mp4')
-    await muxVideoMergeFinalAudio({
-      runCommand: createFfmpegCommandRunner({
-        stage: 'workspace_resource_video_merge_mux',
-        expectedDurationSeconds: stitchedDurationSeconds,
-      }),
-      audioMode,
-      stitchedPath,
-      mainAudioPath,
-      hasSourceAudio,
-      assemblyAudioPath,
-      outputPath,
-      durationSeconds: stitchedDurationSeconds,
-    })
+    if (resolvedBgm.length > 0) {
+      if (!mainAudioPath) throw new Error('WORKSPACE_RESOURCE_VIDEO_MERGE_MAIN_AUDIO_REQUIRED')
+      const musicCues = await Promise.all(resolvedBgm.map(async (bgm, index) => {
+        const placement = payload.resource.musicCues[index]
+        if (!placement) throw new Error(`WORKSPACE_RESOURCE_VIDEO_MERGE_BGM_PLACEMENT_MISSING:${String(index)}`)
+        const musicPath = path.join(workspaceDir, `bgm-source-${String(index)}`)
+        await writeFile(musicPath, await getObjectBuffer(bgm.storageKey))
+        return { ...placement, musicPath }
+      }))
+      await muxVideoMergeMusicCues({
+        runCommand: createFfmpegCommandRunner({
+          stage: 'workspace_resource_video_merge_concat_audio',
+          expectedDurationSeconds: stitchedDurationSeconds,
+        }),
+        stitchedPath,
+        mainAudioPath,
+        hasSourceAudio,
+        musicCues,
+        outputPath,
+        durationSeconds: stitchedDurationSeconds,
+      })
+    } else {
+      const assemblyAudioPath = assemblyAudioStorageKey ? path.join(workspaceDir, 'assembly-audio-source') : null
+      if (assemblyAudioPath && assemblyAudioStorageKey) {
+        await writeFile(assemblyAudioPath, await getObjectBuffer(assemblyAudioStorageKey))
+      }
+      await muxVideoMergeFinalAudio({
+        runCommand: createFfmpegCommandRunner({
+          stage: 'workspace_resource_video_merge_mux',
+          expectedDurationSeconds: stitchedDurationSeconds,
+        }),
+        audioMode,
+        stitchedPath,
+        mainAudioPath,
+        hasSourceAudio,
+        assemblyAudioPath,
+        outputPath,
+        durationSeconds: stitchedDurationSeconds,
+      })
+    }
 
     await reportTaskProgress(context, 92, { stage: 'workspace_resource_video_merge_persist' })
     await assertTaskActive(context, 'persist_workspace_resource_video_merge')

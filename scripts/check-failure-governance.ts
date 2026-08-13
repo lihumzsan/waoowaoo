@@ -12,6 +12,11 @@ import { FAILURE_RECORD_VERSION } from '@/lib/errors/failure'
 import { normalizeAnyError } from '@/lib/errors/normalize'
 import { projectErrorForModel } from '@/lib/errors/projection'
 import { TEMPORAL_FAILURE_PROTOCOL } from '@/lib/temporal/failure'
+import {
+  listRegisteredAiProviderAdapters,
+  listRegisteredAsyncTaskProviders,
+} from '@/lib/ai-providers'
+import { ProviderHttpError } from '@/lib/ai-providers/failure'
 
 const root = process.cwd()
 const sourceRoot = path.join(root, 'src')
@@ -57,7 +62,7 @@ function carriesCaughtValue(expression: ts.NewExpression, identifier: string): b
     return found
   }
   for (const argument of expression.arguments ?? []) {
-    if (ts.isIdentifier(argument) && argument.text === identifier) return true
+    if (containsIdentifier(argument, identifier)) return true
     if (
       ts.isArrayLiteralExpression(argument)
       && argument.elements.some((element) => ts.isIdentifier(element) && element.text === identifier)
@@ -98,6 +103,48 @@ function findLossyCatchWrappers(file: string, source: string): readonly number[]
       }
       inspectCatchBody(node.block)
     }
+    if (ts.isCatchClause(node) && !node.variableDeclaration) {
+      const parent = node.parent
+      if (
+        ts.isTryStatement(parent)
+        && /\b(?:fetchWithProviderProxy|fetchWithRetry)\s*\(/u.test(parent.tryBlock.getText(sourceFile))
+      ) {
+        lines.push(sourceFile.getLineAndCharacterOfPosition(node.getStart()).line + 1)
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(sourceFile)
+  return lines
+}
+
+function findProviderResponseParserBypasses(file: string, source: string): readonly number[] {
+  if (file.replaceAll(path.sep, '/').endsWith('/ai-providers/failure.ts')) return []
+  const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true)
+  const lines: number[] = []
+  const normalizedFile = file.replaceAll(path.sep, '/')
+  const requestBodyReader = false
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node)
+      && ts.isPropertyAccessExpression(node.expression)
+      && (
+        node.expression.name.text === 'json'
+        || node.expression.name.text === 'text'
+      )
+    ) {
+      const receiver = node.expression.expression
+      const allowedRequestText = node.expression.name.text === 'text'
+        && requestBodyReader
+        && ts.isCallExpression(receiver)
+        && ts.isPropertyAccessExpression(receiver.expression)
+        && receiver.expression.name.text === 'clone'
+        && ts.isIdentifier(receiver.expression.expression)
+        && receiver.expression.expression.text === 'input'
+      if (!allowedRequestText) {
+        lines.push(sourceFile.getLineAndCharacterOfPosition(node.getStart()).line + 1)
+      }
+    }
     ts.forEachChild(node, visit)
   }
   visit(sourceFile)
@@ -118,6 +165,52 @@ function requireContract(
 }
 
 const violations: string[] = []
+const providerAdapters = listRegisteredAiProviderAdapters()
+const providerKeys = new Set(providerAdapters.map((adapter) => adapter.providerKey))
+if (providerKeys.size !== providerAdapters.length) {
+  violations.push('provider registry identities must be unique')
+}
+for (const adapter of providerAdapters) {
+  if (adapter.failure.providerKey !== adapter.providerKey) {
+    violations.push(`${adapter.providerKey} does not own its required failure capability`)
+  }
+}
+for (const registration of listRegisteredAsyncTaskProviders()) {
+  if (!providerKeys.has(registration.providerKey)) {
+    violations.push(`${registration.providerCode} async provider has no registered failure capability`)
+  }
+}
+const futureProviderHttpError = new ProviderHttpError({
+  provider: 'openrouter',
+  phase: 'submit',
+  statusCode: 418,
+  requestId: 'future-provider-request',
+  code: 'FUTURE_PROVIDER_CODE',
+  errorEnvelope: {
+    error: {
+      code: 'FUTURE_PROVIDER_CODE',
+      message: 'future provider diagnostic',
+      authorization: 'secret-must-not-leak',
+    },
+  },
+  diagnosticText: 'future provider diagnostic',
+})
+const futureProviderFailure = providerAdapters
+  .find((adapter) => adapter.providerKey === 'comfyui')
+  ?.failure.normalize({ error: futureProviderHttpError, phase: 'submit' })
+if (
+  !futureProviderFailure
+  || futureProviderFailure.native.message !== 'future provider diagnostic'
+  || futureProviderFailure.native.code !== 'FUTURE_PROVIDER_CODE'
+  || futureProviderFailure.native.statusCode !== 418
+  || futureProviderFailure.native.requestId !== 'future-provider-request'
+  || futureProviderFailure.interpretation.code !== 'PROVIDER_SUBMISSION_REJECTED'
+) {
+  violations.push('an unseen Provider HTTP failure must preserve native evidence through the registry capability')
+}
+if (JSON.stringify(futureProviderFailure ?? {}).includes('secret-must-not-leak')) {
+  violations.push('Provider failure capture leaked credential-bearing native evidence')
+}
 const ids = Object.values(EXTERNAL_OPERATION)
 const registryIds = Object.keys(EXTERNAL_OPERATION_REGISTRY)
 if (new Set(ids).size !== ids.length) violations.push('external operation identities must be unique')
@@ -244,10 +337,18 @@ const providerReplayAuthorityOwners = new Map<string, ReadonlySet<string>>([
 ])
 
 for (const file of listSourceFiles(sourceRoot)) {
-  const relative = path.relative(root, file)
+  const relative = path.relative(root, file).replaceAll(path.sep, '/')
   const source = fs.readFileSync(file, 'utf8')
   for (const line of findLossyCatchWrappers(file, source)) {
     violations.push(`${relative}:${String(line)} replaces a caught failure without carrying its evidence`)
+  }
+  if (relative.startsWith('src/lib/ai-providers/')) {
+    for (const line of findProviderResponseParserBypasses(file, source)) {
+      violations.push(`${relative}:${String(line)} bypasses the bounded Provider response parser`)
+    }
+    if (relative !== 'src/lib/ai-providers/failure.ts' && /\bfetchWithRetry\s*\(/u.test(source)) {
+      violations.push(`${relative} bypasses the canonical retrying Provider fetch`)
+    }
   }
   for (const [label, pattern] of forbidden) {
     pattern.lastIndex = 0

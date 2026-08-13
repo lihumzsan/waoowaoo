@@ -2,10 +2,6 @@
   "llmModels": "文本模型列表",
   "imageModels": "图片模型列表",
   "videoModels": "视频模型列表",
-  "price": "价格",
-  "pricePerMillion": "每百万token",
-  "pricePerImage": "每张",
-  "pricePerVideo": "每条",
   "name": "名称",
   "modelId": "模型 ID",
   "modelName": "模型名称",
@@ -23,5 +19,5 @@
   "noModels": "暂无模型，点击上方按钮添加",
   "noApiKey": "请配置API Key",
   "batchMode": "批量",
-  "batchModeTooltip": "离线推理，价格便宜50%，24小时内完成"
+  "batchModeTooltip": "离线推理，完成时间由供应商决定"
 }

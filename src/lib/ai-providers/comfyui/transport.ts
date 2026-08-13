@@ -1,4 +1,5 @@
 import { readResponseBufferWithLimit } from '@/lib/http/body-limits'
+import { readProviderJsonResponse } from '@/lib/ai-providers/failure'
 
 export const COMFYUI_ACCEPTED_JOB_STATUSES = new Set([
   'pending',
@@ -77,9 +78,11 @@ export async function requestComfyUiJson(
     signal: init?.signal ?? AbortSignal.timeout(60_000),
     cache: 'no-store',
   })
-  const text = await response.text()
-  let payload: unknown = null
-  try { payload = text ? JSON.parse(text) as unknown : null } catch { payload = text }
+  const payload = await readProviderJsonResponse({
+    response,
+    provider: 'comfyui',
+    phase: init?.method === 'POST' ? 'submit' : 'poll',
+  })
   if (!response.ok) throw new ComfyUiHttpError(response.status, payload)
   return payload
 }

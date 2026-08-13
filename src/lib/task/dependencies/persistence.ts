@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client'
-import type { PlannedTaskEdge } from '@/lib/operations/planning'
+import type { PlannedTaskEdge } from '@/lib/operations/plan-contract'
 
 type PersistedTaskPlanIdentity = {
   readonly id: string

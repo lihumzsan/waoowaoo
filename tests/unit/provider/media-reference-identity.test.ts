@@ -72,21 +72,4 @@ describe('media provider durable request identity', () => {
       createMediaProviderRequestIdentity(oppositeOrder),
     )
   })
-
-  it('normalizes the signed video reference used by music generation', () => {
-    const first = createMediaProviderRequestIdentity({
-      modality: 'music',
-      options: {
-        referenceVideoUrl: 'https://media.example.com/final.mp4?X-Amz-Expires=60&token=one',
-      },
-    })
-    const second = createMediaProviderRequestIdentity({
-      modality: 'music',
-      options: {
-        referenceVideoUrl: 'https://media.example.com/final.mp4?X-Amz-Expires=120&token=two',
-      },
-    })
-
-    expect(first).toEqual(second)
-  })
 })

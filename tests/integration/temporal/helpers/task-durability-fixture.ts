@@ -169,6 +169,7 @@ async function submitFixtureTask(input: {
               inputHash: 'b'.repeat(64),
               inputs: input.references,
               generationOptions: { mergeMode: 'ordered_concat', audioMode: 'preserve' },
+              musicCues: [],
               toolCallId: null,
             },
           },
@@ -291,7 +292,7 @@ export async function createTaskDurabilityFixture(): Promise<TaskDurabilityFixtu
   await prisma.user.create({
     data: {
       id: userId,
-      name: 'Task durability test',
+      name: `Task durability test ${suffix}`,
       email: `task-durability-${suffix}@example.com`,
       preferences: {
         create: {
@@ -392,7 +393,7 @@ export async function createTaskWorkerKillFixture(): Promise<TaskWorkerKillFixtu
   await prisma.user.create({
     data: {
       id: userId,
-      name: 'Task worker kill test',
+      name: `Task worker kill test ${suffix}`,
       email: `task-worker-kill-${suffix}@example.com`,
       preferences: {
         create: {
@@ -433,7 +434,7 @@ export async function createTaskLateCancelFixture(): Promise<TaskLateCancelFixtu
   await prisma.user.create({
     data: {
       id: userId,
-      name: 'Task late cancel test',
+      name: `Task late cancel test ${suffix}`,
       email: `task-late-cancel-${suffix}@example.com`,
       preferences: {
         create: {

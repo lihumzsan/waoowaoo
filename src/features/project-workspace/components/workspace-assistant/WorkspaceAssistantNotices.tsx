@@ -1,7 +1,7 @@
 import { useTranslations } from 'next-intl'
 import type { DataMessagePartProps } from '@assistant-ui/react'
 import { AppIcon } from '@/components/ui/icons'
-import type { ProjectAgentContextCompactedPartData } from '@/lib/project-agent/types'
+import type { ProjectAgentContextCompactionPartData } from '@/lib/project-agent/types'
 
 type RuntimeGoalPartData = { readonly goal: unknown }
 type RuntimeProgressPartData = { readonly kind: unknown }
@@ -37,13 +37,26 @@ function readGoalStatus(
 
 export function AssistantContextCompactedDataCard({
   data,
-}: DataMessagePartProps<ProjectAgentContextCompactedPartData>) {
+}: DataMessagePartProps<ProjectAgentContextCompactionPartData>) {
   const t = useTranslations('assistantAgent')
+  const running = data.status === 'running'
+  const failed = data.status === 'failed'
   return (
-    <div className="flex items-center gap-1.5 border-l-2 border-[var(--glass-text-tertiary)]/30 pl-2 text-xs leading-5 text-[var(--glass-text-tertiary)]">
-      <AppIcon name="alert" className="h-3 w-3 shrink-0 opacity-60" />
+    <div className={`flex items-center gap-1.5 text-xs leading-5 ${
+      failed
+        ? 'text-[var(--glass-tone-danger-fg)]'
+        : 'text-[var(--glass-text-tertiary)]'
+    }`}>
+      <AppIcon
+        name={running ? 'loader' : failed ? 'alert' : 'sparkles'}
+        className={`h-3 w-3 shrink-0 opacity-60 ${running ? 'animate-spin' : ''}`}
+      />
       <span className="min-w-0 truncate">
-        {data.replacedItemCount > 0
+        {running
+          ? t('cards.contextCompacting')
+          : failed
+            ? t('cards.contextCompactionFailed')
+            : data.replacedItemCount > 0
           ? t('cards.contextCompacted', { count: data.replacedItemCount })
           : t('cards.contextCompactedUnknown')}
       </span>

@@ -24,8 +24,8 @@ import { loadOperationPlanSnapshotByApiRequest } from '@/lib/operations/operatio
 import {
   persistOperationPlanView,
   planOperation,
-  type OperationPlanView,
 } from '@/lib/operations/planning'
+import type { OperationPlanView } from '@/lib/operations/plan-contract'
 import {
   isPlannedOperation,
   type JsonObject,
@@ -259,24 +259,14 @@ function approvalElicitation(params: {
   readonly operationId: string
   readonly locale: string | null | undefined
   readonly plan: OperationPlanView | null
-  readonly kind: 'planned' | 'destructive'
   readonly destructiveInputSummary?: string
 }): WaoMcpElicitationRequest {
   const locale = normalizeProjectAgentLocale(params.locale)
   const operationTitle = localizeProjectAgentOperationTitle(params.operationId, locale)
   const planSummary = params.plan
-    ? (() => {
-        const quote = { mediaTaskCount: params.plan.taskCount }
-        const cost = null
-        if (locale === 'en') {
-          return cost
-            ? `${String(params.plan.taskCount)} tasks (${String(quote.mediaTaskCount)} media), maximum ${cost} credits`
-            : `${String(params.plan.taskCount)} tasks (${String(quote.mediaTaskCount)} media)`
-        }
-        return cost
-          ? `${String(params.plan.taskCount)} 个任务（${String(quote.mediaTaskCount)} 个媒体任务），最高 ${cost} 积分`
-          : `${String(params.plan.taskCount)} 个任务（${String(quote.mediaTaskCount)} 个媒体任务）`
-      })()
+    ? locale === 'en'
+      ? `${String(params.plan.taskCount)} tasks`
+      : `${String(params.plan.taskCount)} 个任务`
     : null
   const message = locale === 'en'
     ? [
@@ -285,9 +275,7 @@ function approvalElicitation(params: {
         params.destructiveInputSummary
           ? `Exact target: ${params.destructiveInputSummary}`
           : null,
-        params.kind === 'planned'
-          ? 'Approving authorizes the displayed immutable production plan and its quoted ceiling.'
-          : 'Approving authorizes this destructive operation.',
+        'Approving authorizes this destructive operation.',
       ].filter((value): value is string => Boolean(value)).join('\n')
     : [
         `${operationTitle}需要你的确认。`,
@@ -295,9 +283,7 @@ function approvalElicitation(params: {
         params.destructiveInputSummary
           ? `精确目标：${params.destructiveInputSummary}`
           : null,
-        params.kind === 'planned'
-          ? '确认后将授权执行上述不可变生产计划及其报价上限。'
-          : '确认后将授权执行此删除操作。',
+        '确认后将授权执行此破坏性操作。',
       ].filter((value): value is string => Boolean(value)).join('\n')
   return {
     mode: 'form',
@@ -393,9 +379,15 @@ async function authorizePlannedOperation(params: {
       operationId: params.operation.id,
       locale: params.context.locale,
       plan: view,
-      kind: 'planned',
     }))
     if (!elicitationApproved(decision)) return null
+    params.signal.throwIfAborted()
+    await requireWaoMcpBrowserApproval({
+      userId: params.trusted.userId,
+      projectId: params.trusted.projectId,
+      turnId: params.trusted.turnId,
+      approvalRequestId,
+    })
     params.signal.throwIfAborted()
     await params.assertAuthorized()
     params.signal.throwIfAborted()
@@ -486,7 +478,6 @@ async function executeOperation(params: {
         operationId: params.operation.id,
         locale: params.context.locale,
         plan: null,
-        kind: 'destructive',
         destructiveInputSummary,
       }))
       if (!elicitationApproved(decision)) {

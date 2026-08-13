@@ -4,7 +4,7 @@ import type {
   ProjectAgentContext,
   WorkspaceAssistantPartType,
 } from '@/lib/project-agent/types'
-import type { OperationPlan } from './planning'
+import type { OperationPlan } from './plan-contract'
 import type { OperationExecutionAuthorization } from './planned-operation-invocation'
 import type { Prisma } from '@prisma/client'
 import type { WorkspaceResourceImpact } from '@/lib/workspace-resource/resource-impact'
@@ -199,10 +199,6 @@ export interface OperationConfirmation {
   kind: OperationApprovalKind
   required: boolean
   summary?: string | null
-  budget?: {
-    key?: string
-    estimatedCostUnits?: number
-  } | null
 }
 
 export type RuntimeSchemaSafeParseResult<T> =
@@ -322,9 +318,7 @@ interface ProjectAgentOperationDefinitionFields<
 }
 
 type NonTransactionalDirectOperationBehavior<Input, Output> = {
-  confirmation?: Omit<OperationConfirmation, 'kind'> & {
-    kind?: Exclude<OperationApprovalKind, 'billable_media'>
-  }
+  confirmation?: OperationConfirmation
   plan?: never
   commit?: never
   execute: BivariantOperationExecute<Input, Output>
@@ -340,9 +334,7 @@ type NonTransactionalDirectOperationBehavior<Input, Output> = {
 }
 
 type TransactionalDirectOperationBehaviorBase<Input, Output> = {
-  confirmation?: Omit<OperationConfirmation, 'kind'> & {
-    kind?: Exclude<OperationApprovalKind, 'billable_media'>
-  }
+  confirmation?: OperationConfirmation
   plan?: never
   commit?: never
   execute?: never

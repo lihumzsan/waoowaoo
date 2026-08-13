@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { buildWorkspaceResourceId } from '@/lib/workspace-resource/identity'
-import { resolveWorkspaceResourceInputs, resolveGeneratedWorkspaceResourcePlacement, reserveWorkspaceResourceInTransaction, createWorkspaceResourceFolderInTransaction } from '@/lib/workspace-resource/persistence'
+import { bindWorkspaceResourceTasksInTransaction, resolveWorkspaceResourceInputs, resolveGeneratedWorkspaceResourcePlacement, reserveWorkspaceResourceInTransaction, createWorkspaceResourceFolderInTransaction } from '@/lib/workspace-resource/persistence'
 import { WORKSPACE_RESOURCE_SCHEMA } from '@/lib/workspace-resource/schema-registry'
 import { buildWorkspaceResourceLifecycleProjection } from '@/lib/workspace-resource/task-runtime-envelope'
 import { workspaceResourceDisplayName } from '@/lib/workspace-resource/path'
@@ -178,10 +178,15 @@ export function createWorkspaceResourceVoiceoverOperations(): ProjectAgentOperat
           await reserveWorkspaceResourceInTransaction(tx, { resourceId: resource.resourceId, userId: ctx.userId, projectId: ctx.projectId, outputPath: resource.workspacePath ?? metadata.finalPath, mediaType: resource.mediaType, schemaId: resource.schemaId, operationId: 'produce_voiceover_video', operationExecutionId: ctx.executionAuthorization!.operationExecutionId, taskId: null, inputHash: resource.inputHash, prompt: resource.prompt, modelKey: resource.modelKey, generationOptions: resource.generationOptions })
         }
         const submitted = await submitPlannedOperationTasks({ ctx, operationId: 'produce_voiceover_video' })
-        for (const task of plan.tasks) {
-          const result = submitted.get(task.id)
-          if (result) await tx.workspaceResource.updateMany({ where: { id: task.target.targetId, operationExecutionId: ctx.executionAuthorization!.operationExecutionId }, data: { taskId: result.taskId } })
-        }
+        await bindWorkspaceResourceTasksInTransaction(tx, {
+          userId: ctx.userId,
+          projectId: ctx.projectId,
+          bindings: plan.tasks.map((task) => {
+            const result = submitted.get(task.id)
+            if (!result) throw new Error(`VOICEOVER_TASK_RESULT_MISSING:${task.id}`)
+            return { resourceId: task.target.targetId, taskId: result.taskId }
+          }),
+        })
         const result = submitted.get(metadata.mixTaskId)
         if (!result) throw new Error('VOICEOVER_MIX_TASK_RESULT_MISSING')
         return produceVoiceoverVideoOutputSchema.parse({ success: true, async: true, total: submitted.size, taskIds: [...submitted.values()].map((value) => value.taskId), resourceId: metadata.finalResourceId, workspacePath: metadata.finalPath, narrationResourceIds: metadata.narration.map((entry) => entry.resourceId), mixTaskId: result.taskId, results: [...submitted.entries()].map(([refId, value]) => ({ refId, taskId: value.taskId })) })

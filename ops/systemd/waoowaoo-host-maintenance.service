@@ -1,0 +1,16 @@
+[Unit]
+Description=WaooWaoo guarded host storage maintenance
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/waoowaoo/maintenance.env
+ExecStart=/usr/local/lib/waoowaoo/host-maintenance.sh --apply
+ExecStart=/usr/local/lib/waoowaoo/registry-maintenance.sh --apply
+ExecStart=/usr/local/lib/waoowaoo/mysql-backup-maintenance.sh --apply
+TimeoutStartSec=6h
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+PrivateTmp=true

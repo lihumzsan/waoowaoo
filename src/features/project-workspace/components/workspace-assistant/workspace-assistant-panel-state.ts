@@ -93,7 +93,7 @@ export function resolveWorkspaceAssistantUndeliveredUserMessage(params: {
 
 /**
  * A message is undelivered only when its Turn never reached the runtime. Once
- * `startedAt` exists the model may already have produced text, files or paid
+ * `startedAt` exists the model may already have produced text or files
  * side effects, so offering "resend" would risk duplicating real work.
  */
 export function shouldShowWorkspaceAssistantDeliveryFailure(params: {
@@ -152,6 +152,7 @@ export function resolveWorkspaceAssistantResendDraft(
 export interface WorkspaceAssistantFailureFacts {
   readonly code: string | null
   readonly requestId: string | null
+  readonly diagnostic: string | null
 }
 
 /**
@@ -162,11 +163,12 @@ export function parseWorkspaceAssistantFailureText(
   text: string | null | undefined,
 ): WorkspaceAssistantFailureFacts {
   const trimmed = text?.trim()
-  if (!trimmed) return { code: null, requestId: null }
+  if (!trimmed) return { code: null, requestId: null, diagnostic: null }
   const parsed = parseClientError(trimmed)
   return {
     code: parsed.code,
     requestId: parsed.requestId,
+    diagnostic: null,
   }
 }
 
@@ -187,6 +189,7 @@ export function resolveWorkspaceAssistantFailureView(params: {
   readonly facts: WorkspaceAssistantFailureFacts
   readonly localizeCode: (code: string) => string | null
   readonly formatReference: (id: string) => string
+  readonly formatDiagnostic: (message: string) => string
   readonly unknownFallback: string
 }): WorkspaceAssistantFailureView {
   const { facts } = params
@@ -196,7 +199,10 @@ export function resolveWorkspaceAssistantFailureView(params: {
   return {
     tone: 'danger',
     headline,
-    technical: facts.requestId ? params.formatReference(facts.requestId) : null,
+    technical: [
+      facts.diagnostic ? params.formatDiagnostic(facts.diagnostic) : null,
+      facts.requestId ? params.formatReference(facts.requestId) : null,
+    ].filter((value): value is string => Boolean(value)).join('\n') || null,
     action: facts.code && isKnownErrorCode(facts.code)
       ? projectErrorForUser(facts.code, facts.requestId).action
       : null,
