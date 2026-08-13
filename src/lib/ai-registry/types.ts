@@ -295,6 +295,12 @@ export interface MusicCapabilities {
   vocalModeOptions?: string[]
   outputFormatOptions?: string[]
   bpmOptions?: number[]
+  bpmRange?: {
+    min: number
+    max: number
+  }
+  keyScaleOptions?: string[]
+  timeSignatureOptions?: string[]
   /**
    * Whether and how many video Resource references this music model accepts as
    * generation conditioning (video-to-soundtrack). Absent means unsupported.
@@ -382,6 +388,9 @@ const MUSIC_ALLOWED_FIELDS = new Set<keyof MusicCapabilities>([
   'vocalModeOptions',
   'outputFormatOptions',
   'bpmOptions',
+  'bpmRange',
+  'keyScaleOptions',
+  'timeSignatureOptions',
   'maxReferenceVideos',
   'promptMaxChars',
   'fieldI18n',
@@ -879,6 +888,42 @@ function validateMusicCapabilities(issues: CapabilityValidationIssue[], raw: unk
     })
   }
 
+  const bpmRange = raw.bpmRange
+  if (bpmRange !== undefined) {
+    const validRange = isRecord(bpmRange)
+      && typeof bpmRange.min === 'number'
+      && Number.isFinite(bpmRange.min)
+      && bpmRange.min > 0
+      && typeof bpmRange.max === 'number'
+      && Number.isFinite(bpmRange.max)
+      && bpmRange.max >= bpmRange.min
+    if (!validRange) {
+      issues.push({
+        code: 'CAPABILITY_FIELD_INVALID',
+        field: 'capabilities.music.bpmRange',
+        message: 'bpmRange must contain finite positive min/max values with max >= min',
+      })
+    }
+  }
+
+  const keyScaleOptions = raw.keyScaleOptions
+  if (keyScaleOptions !== undefined && !isStringArray(keyScaleOptions)) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.music.keyScaleOptions',
+      message: 'keyScaleOptions must be a non-empty string array',
+    })
+  }
+
+  const timeSignatureOptions = raw.timeSignatureOptions
+  if (timeSignatureOptions !== undefined && !isStringArray(timeSignatureOptions)) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.music.timeSignatureOptions',
+      message: 'timeSignatureOptions must be a non-empty string array',
+    })
+  }
+
   if (
     raw.maxReferenceVideos !== undefined
     && (!Number.isInteger(raw.maxReferenceVideos) || (raw.maxReferenceVideos as number) <= 0)
@@ -906,6 +951,8 @@ function validateMusicCapabilities(issues: CapabilityValidationIssue[], raw: unk
     vocalMode: isStringArray(vocalModeOptions) ? vocalModeOptions : undefined,
     outputFormat: isStringArray(outputFormatOptions) ? outputFormatOptions : undefined,
     bpm: isNumberArray(bpmOptions) ? bpmOptions : undefined,
+    keyScale: isStringArray(keyScaleOptions) ? keyScaleOptions : undefined,
+    timeSignature: isStringArray(timeSignatureOptions) ? timeSignatureOptions : undefined,
   })
 }
 

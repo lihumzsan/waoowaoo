@@ -9,6 +9,7 @@ import type {
   AiLlmProviderConfig,
 } from '@/lib/ai-registry/types'
 import type { ReasoningEffort } from '@/lib/ai-registry/reasoning-effort'
+import type { MusicKeyScale, MusicTimeSignature } from '@/lib/workspace-resource/music-parameter-contract'
 
 export type GenerateResult = {
   success: boolean
@@ -110,10 +111,13 @@ export type AiProviderMusicExecutionContext = {
   options?: {
     negativePrompt?: string
     durationSeconds?: number
+    providerDurationSeconds?: number
     vocalMode?: 'instrumental' | 'vocal'
     genre?: string
     mood?: string
     bpm?: number
+    keyScale?: MusicKeyScale
+    timeSignature?: MusicTimeSignature
     outputFormat?: 'mp3' | 'wav'
     referenceVideoUrl?: string
     referenceVideoDurationMs?: number

@@ -1,7 +1,13 @@
 import type { AiProviderAdapter } from '@/lib/ai-providers/runtime-types'
 import { describeMediaVariantBase } from '@/lib/ai-providers/shared/media-adapter'
 import { buildMediaOptionSchema, booleanValidator, enumValidator, integerRangeValidator } from '@/lib/ai-providers/shared/option-schema'
-import { COMFYUI_H3_MODEL_ID } from './models'
+import { ACE_STEP_MIN_PROVIDER_DURATION_SECONDS, executeComfyUiAceStepMusicGeneration } from './ace-step'
+import {
+  COMFYUI_ACE_STEP_1_5_MODEL_ID,
+  COMFYUI_ACE_STEP_KEY_SCALE_OPTIONS,
+  COMFYUI_ACE_STEP_TIME_SIGNATURE_OPTIONS,
+  COMFYUI_H3_MODEL_ID,
+} from './models'
 import { executeComfyUiH3VideoGeneration } from './h3'
 import { COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_ID } from './models'
 import { executeComfyUiMossSoundGeneration } from './moss'
@@ -10,6 +16,37 @@ const H3_ASPECT_RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16', '9:21'] a
 
 export const comfyuiAdapter: AiProviderAdapter = {
   providerKey: 'comfyui',
+  music: {
+    describe: (selection) => describeMediaVariantBase({
+      modality: 'music',
+      selection,
+      executionMode: 'async',
+      optionSchema: buildMediaOptionSchema('music', {
+        allowedKeys: ['keyScale', 'timeSignature', 'providerDurationSeconds'],
+        required: ['durationSeconds', 'vocalMode', 'bpm', 'keyScale', 'timeSignature', 'outputFormat'],
+        excludedKeys: ['negativePrompt', 'genre', 'mood', 'referenceVideos'],
+        validators: {
+          durationSeconds: integerRangeValidator({ min: 4, max: 600 }),
+          vocalMode: enumValidator(['instrumental']),
+          bpm: integerRangeValidator({ min: 20, max: 300 }),
+          keyScale: enumValidator(COMFYUI_ACE_STEP_KEY_SCALE_OPTIONS),
+          timeSignature: enumValidator(COMFYUI_ACE_STEP_TIME_SIGNATURE_OPTIONS),
+          outputFormat: enumValidator(['mp3']),
+        },
+        objectValidators: [() => selection.modelId === COMFYUI_ACE_STEP_1_5_MODEL_ID
+          ? { ok: true }
+          : { ok: false, reason: 'unsupported_model' }],
+        normalize: (options) => ({
+          ...options,
+          providerDurationSeconds: Math.max(
+            options.durationSeconds as number,
+            ACE_STEP_MIN_PROVIDER_DURATION_SECONDS,
+          ),
+        }),
+      }),
+    }),
+    execute: executeComfyUiAceStepMusicGeneration,
+  },
   video: {
     describe: (selection) => describeMediaVariantBase({
       modality: 'video',

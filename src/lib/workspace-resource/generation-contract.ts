@@ -3,6 +3,7 @@ import { taskRuntimePayloadEnvelopeShape } from '@/lib/task/progress-payload'
 import type { WorkspaceResourceJsonValue } from './contracts'
 import { workspaceResourceLifecycleProjectionSchema } from './task-runtime-envelope'
 import { vocalPerformanceModeSchema } from './vocal-performance-contract'
+import { MUSIC_KEY_SCALE_VALUES, MUSIC_TIME_SIGNATURE_VALUES } from './music-parameter-contract'
 
 export const CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS = 15
 
@@ -88,6 +89,8 @@ export const workspaceResourceGenerationTaskPayloadSchema = z.object({
   genre: z.string().trim().min(1).max(200).optional(),
   mood: z.string().trim().min(1).max(200).optional(),
   bpm: z.number().int().min(20).max(300).optional(),
+  keyScale: z.enum(MUSIC_KEY_SCALE_VALUES).optional(),
+  timeSignature: z.enum(MUSIC_TIME_SIGNATURE_VALUES).optional(),
   outputFormat: z.enum(['mp3', 'wav']).optional(),
   scoreCue: z.object({
     key: z.string().trim().min(1).max(191),
@@ -151,6 +154,8 @@ export function parseWorkspaceResourceGenerationTaskPayload(
     genre: parsed.genre,
     mood: parsed.mood,
     bpm: parsed.bpm,
+    keyScale: parsed.keyScale,
+    timeSignature: parsed.timeSignature,
     outputFormat: parsed.outputFormat,
     scoreCue: parsed.scoreCue,
     count: parsed.count,
@@ -185,6 +190,8 @@ export function parseWorkspaceResourceGenerationRetrySource(
     genre: parsed.genre,
     mood: parsed.mood,
     bpm: parsed.bpm,
+    keyScale: parsed.keyScale,
+    timeSignature: parsed.timeSignature,
     outputFormat: parsed.outputFormat,
     scoreCue: parsed.scoreCue,
     count: parsed.count,

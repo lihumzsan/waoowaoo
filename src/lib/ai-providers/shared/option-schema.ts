@@ -155,6 +155,8 @@ function buildAllowedKeys(modality: MediaModality): ReadonlySet<string> {
       'genre',
       'mood',
       'bpm',
+      'keyScale',
+      'timeSignature',
       'outputFormat',
     ])
   }

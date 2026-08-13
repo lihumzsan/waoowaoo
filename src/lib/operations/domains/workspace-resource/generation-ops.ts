@@ -607,6 +607,8 @@ async function compileMediaExecution(input: {
         ...(item.genre ? { genre: item.genre } : {}),
         ...(item.mood ? { mood: item.mood } : {}),
         ...(item.bpm ? { bpm: item.bpm } : {}),
+        ...(item.keyScale ? { keyScale: item.keyScale } : {}),
+        ...(item.timeSignature ? { timeSignature: item.timeSignature } : {}),
       }
     } else {
       const config = await getProjectModelConfig(input.ctx.projectId, input.ctx.userId)
@@ -961,6 +963,12 @@ async function buildPlannedItem(input: {
     ...(typeof compiled.generationOptions.bpm === 'number'
       ? { bpm: compiled.generationOptions.bpm }
       : {}),
+    ...(typeof compiled.generationOptions.keyScale === 'string'
+      ? { keyScale: compiled.generationOptions.keyScale as WorkspaceResourceGenerationTaskPayload['keyScale'] }
+      : {}),
+    ...(typeof compiled.generationOptions.timeSignature === 'string'
+      ? { timeSignature: compiled.generationOptions.timeSignature as WorkspaceResourceGenerationTaskPayload['timeSignature'] }
+      : {}),
     ...(compiled.generationOptions.outputFormat === 'mp3' || compiled.generationOptions.outputFormat === 'wav'
       ? { outputFormat: compiled.generationOptions.outputFormat }
       : {}),
@@ -1261,6 +1269,8 @@ async function loadFailedTasks(
       ...(source.genre ? { genre: source.genre } : {}),
       ...(source.mood ? { mood: source.mood } : {}),
       ...(source.bpm ? { bpm: source.bpm } : {}),
+      ...(source.keyScale ? { keyScale: source.keyScale } : {}),
+      ...(source.timeSignature ? { timeSignature: source.timeSignature } : {}),
       ...(source.outputFormat ? { outputFormat: source.outputFormat } : {}),
       ...(source.scoreCue ? { scoreCue: source.scoreCue } : {}),
     })

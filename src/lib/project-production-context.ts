@@ -32,6 +32,12 @@ export type ProjectProductionCapabilities = {
       readonly max: number
     } | null
     readonly vocalModeOptions: readonly string[]
+    readonly bpmRange: {
+      readonly min: number
+      readonly max: number
+    } | null
+    readonly keyScaleOptions: readonly string[]
+    readonly timeSignatureOptions: readonly string[]
     readonly maxReferenceVideos: number
   } | null
   readonly sound: {
@@ -47,7 +53,7 @@ export type ProjectProductionCapabilities = {
 }
 
 export type ProjectProductionContext = {
-  readonly schemaVersion: 7
+  readonly schemaVersion: 8
   readonly version: string
   readonly project: {
     readonly projectId: string
@@ -135,6 +141,9 @@ export function resolveProjectProductionCapabilities(config: ProjectModelConfig)
         durationSecondsOptions,
         durationSecondsRange,
         vocalModeOptions: music.vocalModeOptions ?? [],
+        bpmRange: music.bpmRange ?? null,
+        keyScaleOptions: music.keyScaleOptions ?? [],
+        timeSignatureOptions: music.timeSignatureOptions ?? [],
         maxReferenceVideos: music.maxReferenceVideos ?? 0,
       }
       : null
@@ -187,7 +196,7 @@ export async function readProjectProductionContext(input: {
   ])
   if (!project) throw new ProjectProductionContextError()
   const value: Omit<ProjectProductionContext, 'version'> = {
-    schemaVersion: 7,
+    schemaVersion: 8,
     project: {
       projectId: project.id,
       name: project.name,
