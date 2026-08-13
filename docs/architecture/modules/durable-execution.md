@@ -56,6 +56,9 @@ Task 与交互式 Agent 的唯一交点是一个稳定 batchId 的完成通知�
 - **DE-22 — Temporal 失败只用一个版本化 codec。** Activity 把含原生证据的完整 FailureRecord 编码进唯一协议；
   client 必须遍历 `WorkflowFailedError → ActivityFailure → ApplicationFailure` cause chain 并恢复同一
   记录。Workflow wrapper、API 与 MCP 不得分别重建、覆盖原生证据或猜测 code；协议缺失或畸形必须显式失败关闭。
+- **DE-23 — Scheduler continuation 必须保留依赖事实。** User Task Scheduler 的 Continue-As-New
+  必须保留仍被排队 Task 依赖引用的终态完成事实，直到这些依赖被裁决；不得用第二个持久状态 owner、数据库扫描
+  或旁路 reconciler 补回已丢失的依赖事实。
 
 ## 权威入口
 

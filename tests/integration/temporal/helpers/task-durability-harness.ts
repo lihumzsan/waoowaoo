@@ -21,6 +21,11 @@ import {
 import * as productionActivities from '@/lib/temporal/activities'
 import { buildTemporalConnectionOptions, getTemporalRuntimeConfig } from '@/lib/temporal/config'
 import { resolveTemporalWorkflowBundlePath } from '@/lib/temporal/workflow-bundle-path'
+import { connectTemporalClient } from '@/lib/temporal/client'
+import { TemporalTaskClient } from '@/lib/temporal/task-client'
+import { USER_TASK_SCHEDULER_QUERY_NAME, type UserTaskSchedulerView } from '@/lib/temporal/task/contracts'
+import { prisma } from '../../../helpers/prisma'
+import { buildTaskWorkflowId, buildUserTaskSchedulerWorkflowId } from '@/lib/temporal/identity'
 import type {
   CommitTaskTerminalInput,
   NotifyTaskFollowUpInput,
@@ -233,6 +238,108 @@ export interface TaskDurabilityWorkerHarness {
 export interface TaskProductionWorkerHarness {
   readonly taskQueue: string
   close(): Promise<void>
+}
+
+export interface TaskDependencyGateWorkerHarness {
+  readonly taskQueue: string
+  readonly taskClient: TemporalTaskClient
+  queryScheduler(userId: string): Promise<UserTaskSchedulerView>
+  fetchTaskHistory(taskId: string): Promise<History>
+  releaseHeldSource(): void
+  waitForTaskStatus(taskId: string, status: 'queued' | 'processing' | 'completed' | 'failed' | 'canceled'): Promise<void>
+  waitForTerminalPostCommitFault(): Promise<TaskTerminalReceipt>
+  close(): Promise<void>
+}
+
+export async function startTaskDependencyGateWorker(input: {
+  readonly heldSourceTaskId: string | null
+  readonly faultAfterTerminalTaskId: string | null
+}): Promise<TaskDependencyGateWorkerHarness> {
+  requireTemporalTestRuntime()
+  const config = getTemporalRuntimeConfig()
+  const connection = await NativeConnection.connect(buildTemporalConnectionOptions(config))
+  const connected = await connectTemporalClient()
+  const held = deferred<void>()
+  const terminalFault = deferred<TaskTerminalReceipt>()
+  let released = input.heldSourceTaskId === null
+  let faultPending = input.faultAfterTerminalTaskId !== null
+  const runTaskAttempt = async (activityInput: RunTaskAttemptInput): Promise<RunTaskAttemptResult> => {
+    return await productionActivities.runTaskAttempt(activityInput)
+  }
+  const commitTaskTerminal = async (activityInput: CommitTaskTerminalInput): Promise<TaskTerminalReceipt> => {
+    const receipt = await productionActivities.commitTaskTerminal(activityInput)
+    if (activityInput.taskId === input.heldSourceTaskId && !released) await held.promise
+    if (activityInput.taskId === input.faultAfterTerminalTaskId && faultPending) {
+      faultPending = false
+      terminalFault.resolve(receipt)
+      throw new Error('TEST_TASK_DEPENDENCY_GATE_TERMINAL_ACK_LOST')
+    }
+    return receipt
+  }
+  let worker: Worker
+  try {
+    worker = await Worker.create({
+      connection,
+      namespace: config.namespace,
+      taskQueue: config.taskQueue,
+      workflowsPath: resolveTemporalWorkflowBundlePath(false),
+      activities: { ...productionActivities, runTaskAttempt, commitTaskTerminal },
+      shutdownGraceTime: '5 seconds',
+    })
+  } catch (error) {
+    await Promise.allSettled([connection.close(), connected.close()])
+    throw error
+  }
+  const run = worker.run()
+  let closed = false
+  return {
+    taskQueue: config.taskQueue,
+    taskClient: new TemporalTaskClient(connected.client.workflow, config.taskQueue),
+    async queryScheduler(userId) {
+      return await connected.client.workflow
+        .getHandle(buildUserTaskSchedulerWorkflowId(userId))
+        .query<UserTaskSchedulerView>(USER_TASK_SCHEDULER_QUERY_NAME.VIEW)
+    },
+    async fetchTaskHistory(taskId) {
+      return await connected.client.workflow
+        .getHandle(buildTaskWorkflowId(taskId))
+        .fetchHistory()
+    },
+    releaseHeldSource() {
+      if (released) return
+      released = true
+      held.resolve()
+    },
+    async waitForTaskStatus(taskId, status) {
+      const deadline = Date.now() + 60_000
+      while (Date.now() < deadline) {
+        const task = await prisma.task.findUnique({ where: { id: taskId }, select: { status: true } })
+        if (task?.status === status) return
+        await new Promise<void>((resolveWait) => {
+          const timer = setTimeout(resolveWait, 50)
+          timer.unref()
+        })
+      }
+      throw new Error(`TASK_DEPENDENCY_GATE_STATUS_TIMEOUT:${taskId}:${status}`)
+    },
+    async waitForTerminalPostCommitFault() {
+      return await within(terminalFault.promise, 30_000, 'TASK_DEPENDENCY_GATE_TERMINAL_ACK_TIMEOUT')
+    },
+    async close() {
+      if (closed) return
+      closed = true
+      if (!released) {
+        released = true
+        held.resolve()
+      }
+      worker.shutdown()
+      try {
+        await run
+      } finally {
+        await Promise.allSettled([connection.close(), connected.close()])
+      }
+    },
+  }
 }
 
 export interface TaskLateCancelWorkerHarness {

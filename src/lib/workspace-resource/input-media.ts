@@ -6,6 +6,7 @@ export interface ResolvedWorkspaceResourceInputMedia {
   readonly mediaId: string
   readonly storageKey: string
   readonly mimeType: string | null
+  readonly sizeBytes: bigint | null
   readonly width: number | null
   readonly height: number | null
   readonly durationMs: number | null
@@ -32,7 +33,7 @@ export async function resolveWorkspaceResourceInputMedia(input: {
     },
     include: {
       resource: { select: { userId: true, projectId: true, resourceKind: true, mediaType: true } },
-      media: { select: { id: true, storageKey: true, mimeType: true, width: true, height: true, durationMs: true } },
+      media: { select: { id: true, storageKey: true, mimeType: true, sizeBytes: true, width: true, height: true, durationMs: true } },
     },
   })
   const byKey = new Map(versions.map((version) => [
@@ -58,6 +59,7 @@ export async function resolveWorkspaceResourceInputMedia(input: {
       mediaId: version.media.id,
       storageKey: version.media.storageKey,
       mimeType: version.media.mimeType,
+      sizeBytes: version.media.sizeBytes,
       width: version.media.width,
       height: version.media.height,
       durationMs: version.media.durationMs,

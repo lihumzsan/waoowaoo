@@ -17,10 +17,12 @@ import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import { withLogContext } from '@/lib/logging/context'
 import { createScopedLogger } from '@/lib/logging/core'
 import { getTemporalClient } from '@/lib/temporal/client'
+import { buildScheduledTaskRequest } from '@/lib/temporal/task/scheduled-request-builder'
 import { encodeTemporalFailure, temporalInvariantFailure } from '@/lib/temporal/failure'
 import { buildTaskWorkflowId, buildUserTaskSchedulerWorkflowId } from '@/lib/temporal/identity'
 import { prisma } from '@/lib/prisma'
 import { getTaskDefinition } from '@/lib/task/definition'
+import { buildPersistedTaskReference } from '@/lib/task/dependencies/references'
 import {
   loadTaskExecutionFingerprint,
   loadTaskHandlerCheckpoint,
@@ -56,6 +58,7 @@ import type {
   RunTaskAttemptInput,
   RunTaskAttemptResult,
   SchedulerCapacityRelease,
+  ScheduledTaskRequest,
   TaskAttemptFailure,
   TaskSchedulerAdmission,
   TaskTerminalReceipt,
@@ -64,6 +67,10 @@ import type {
   UserTaskSchedulerView,
 } from '../task/contracts'
 import { USER_TASK_SCHEDULER_UPDATE_NAME } from '../task/contracts'
+import {
+  isTaskDependencyTopologyDivergedError,
+  validateTaskSchedulerAdmission,
+} from '../task/scheduled-request'
 
 const TASK_TERMINAL_EVENT_KEY_PREFIX = 'task-terminal:'
 const TASK_ATTEMPT_FAILURE_STEP_KEY_PREFIX = '__temporal_attempt_failure__:'
@@ -551,16 +558,25 @@ export async function initializeTaskWorkflow(
 }
 
 export async function resolveTaskSchedulerAdmission(
-  input: TaskWorkflowInput,
+  input: ScheduledTaskRequest,
 ): Promise<TaskSchedulerAdmission> {
-  requireTaskWorkflowIdentity(input)
-  requireSchedulerActivity(activityInfo().workflowExecution?.workflowId ?? '', input.userId)
+  const taskInput = input.task
+  requireTaskWorkflowIdentity(taskInput)
+  requireSchedulerActivity(activityInfo().workflowExecution?.workflowId ?? '', taskInput.userId)
   const [row, slotLimits] = await Promise.all([
-    loadTaskRow(input.taskId),
-    getUserWorkflowConcurrencyConfig(input.userId),
+    loadTaskRow(taskInput.taskId),
+    getUserWorkflowConcurrencyConfig(taskInput.userId),
   ])
-  requireTaskRowIdentity(row, input)
-  const schedulerClass = getTaskDefinition(input.taskType).schedulerClass
+  requireTaskRowIdentity(row, taskInput)
+  const schedulerClass = getTaskDefinition(taskInput.taskType).schedulerClass
+  let persistedReference
+  try {
+    persistedReference = await buildPersistedTaskReference(prisma, row.id)
+    validateTaskSchedulerAdmission(input, buildScheduledTaskRequest(persistedReference))
+  } catch (error) {
+    if (!isTaskDependencyTopologyDivergedError(error)) throw error
+    return failNonRetryable('TASK_DEPENDENCY_TOPOLOGY_DIVERGED', row.id)
+  }
   if (terminalStatus(row.status)) {
     return {
       kind: 'already_terminal',
@@ -577,7 +593,52 @@ export async function resolveTaskSchedulerAdmission(
       row.attempt,
     )
   }
-  return { kind: 'schedule', schedulerClass, slotLimits }
+  if (persistedReference.dependsOnTaskIds.length === 0) {
+    return { kind: 'schedule', schedulerClass, slotLimits, dependencies: [] }
+  }
+  const sourceRows = await prisma.task.findMany({
+    where: { id: { in: [...persistedReference.dependsOnTaskIds] } },
+    select: {
+      id: true,
+      parentTaskId: true,
+      type: true,
+      projectId: true,
+      targetType: true,
+      targetId: true,
+      payload: true,
+      userId: true,
+      operationId: true,
+      operationSource: true,
+      operationExecutionId: true,
+      operationPlanTaskId: true,
+      operationRequestId: true,
+      status: true,
+      progress: true,
+      attempt: true,
+      executionFingerprint: true,
+    },
+  })
+  const sourceById = new Map(sourceRows.map((source) => [source.id, source]))
+  const dependencyAdmissions = await Promise.all(
+    persistedReference.dependsOnTaskIds.map(async (sourceTaskId) => {
+      const source = sourceById.get(sourceTaskId)
+      if (!source) {
+        return failNonRetryable('TASK_DEPENDENCY_TOPOLOGY_DIVERGED', row.id, sourceTaskId)
+      }
+      const taskWorkflowId = buildTaskWorkflowId(source.id)
+      const status = terminalStatus(source.status)
+      if (!status) return { taskId: source.id, taskWorkflowId, state: 'pending' as const }
+      const terminal = await terminalResultFromRow(source)
+      return {
+        taskId: source.id,
+        taskWorkflowId,
+        state: 'terminal' as const,
+        status: terminal.status,
+        terminalEventId: terminal.terminal.terminalEventId,
+      }
+    }),
+  )
+  return { kind: 'schedule', schedulerClass, slotLimits, dependencies: dependencyAdmissions }
 }
 
 /**
@@ -857,6 +918,25 @@ export async function commitTaskTerminal(
     return await terminalReceiptFromCommit(input.taskId, 'failed', result)
   }
   requireNonEmpty(input.reason, 'TASK_CANCEL_REASON_INVALID')
+  if (input.dependency) {
+    if (input.dependency.requirement !== 'required_success') {
+      return failNonRetryable('TASK_DEPENDENCY_REQUIREMENT_INVALID')
+    }
+    if (
+      !Array.isArray(input.dependency.sourceTaskIds) ||
+      input.dependency.sourceTaskIds.length === 0 ||
+      new Set(input.dependency.sourceTaskIds).size !== input.dependency.sourceTaskIds.length ||
+      input.dependency.sourceTaskIds.some(
+        (sourceTaskId, index, sourceTaskIds) =>
+          typeof sourceTaskId !== 'string' ||
+          sourceTaskId.trim() !== sourceTaskId ||
+          sourceTaskId.length === 0 ||
+          (index > 0 && sourceTaskIds[index - 1] >= sourceTaskId),
+      )
+    ) {
+      return failNonRetryable('TASK_DEPENDENCY_SOURCE_IDS_INVALID')
+    }
+  }
   const inputFingerprint = await loadTaskExecutionFingerprint(input.taskId)
   const completedCheckpoint = await loadTaskHandlerCheckpoint({
     taskId: input.taskId,
@@ -882,7 +962,16 @@ export async function commitTaskTerminal(
     fence: { kind: 'active' },
     source: input.source,
     reason: input.reason,
-    eventPayload: { stage: 'canceled', runtime: 'temporal' },
+    eventPayload: {
+      stage: 'canceled',
+      runtime: 'temporal',
+      ...(input.dependency
+        ? {
+            errorCode: 'TASK_DEPENDENCY_FAILED',
+            dependencySourceTaskIds: [...input.dependency.sourceTaskIds],
+          }
+        : {}),
+    },
   })
   const receipt = await terminalReceiptFromCommit(input.taskId, 'canceled', result)
   return receipt

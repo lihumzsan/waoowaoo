@@ -46,6 +46,7 @@ const MUSIC_PROGRESS_TASK_TYPES = new Set<string>([
 
 const VOICE_PROGRESS_TASK_TYPES = new Set<string>([
   TASK_TYPE.WORKSPACE_RESOURCE_VOICE,
+  TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER,
 ])
 
 function normalizePhase(phase: string | null | undefined): EstimatedTaskProgressPhase {

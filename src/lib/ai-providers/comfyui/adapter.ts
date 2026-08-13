@@ -11,6 +11,7 @@ import {
 import { executeComfyUiH3VideoGeneration } from './h3'
 import { COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_ID } from './models'
 import { executeComfyUiMossSoundGeneration } from './moss'
+import { executeComfyUiMossTtsGeneration } from './tts'
 
 const H3_ASPECT_RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16', '9:21'] as const
 
@@ -88,5 +89,29 @@ export const comfyuiAdapter: AiProviderAdapter = {
       }),
     }),
     execute: executeComfyUiMossSoundGeneration,
+  },
+  voice: {
+    describe: (selection) => describeMediaVariantBase({
+      modality: 'voice',
+      selection,
+      executionMode: 'async',
+      optionSchema: buildMediaOptionSchema('voice', {
+        allowedKeys: ['language', 'referenceAudio', 'referenceAudioDurationMs', 'outputFormat'],
+        required: ['language', 'referenceAudio', 'referenceAudioDurationMs', 'outputFormat'],
+        excludedKeys: ['referenceImages', 'referenceVideos'],
+        validators: {
+          language: enumValidator(['auto', 'zh', 'en', 'ja', 'ko']),
+          referenceAudio: (value) => typeof value === 'string' && value.trim().length > 0
+            ? { ok: true }
+            : { ok: false, reason: 'reference_audio_required' },
+          referenceAudioDurationMs: integerRangeValidator({ min: 3000, max: 10000 }),
+          outputFormat: enumValidator(['mp3']),
+        },
+        objectValidators: [() => selection.modelKey === 'comfyui::moss-tts-local-1.7b'
+          ? { ok: true }
+          : { ok: false, reason: 'unsupported_model' }],
+      }),
+    }),
+    execute: executeComfyUiMossTtsGeneration,
   },
 }

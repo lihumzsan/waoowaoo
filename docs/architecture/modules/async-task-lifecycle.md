@@ -43,6 +43,9 @@ Task 是长运行执行的唯一业务事实。执行许可（attempt、retry、
   只能投影 allow-list details，消费者不得从文案反解状态。
 - **TL-24 — Worker 只执行冻结计划。** payload 携带 planner 已验证的模型、canonical 参数与精确
   Resource 版本。handler 不读当前项目配置、不补 capability 默认、不换模型、不静默丢弃已冻结字段。
+- **TL-25 — 内部 Task 依赖只有一个就绪裁判。** 冻结的 Operation plan 拥有
+  `required_success` 边，MySQL 只保存其不可变拓扑，按用户划分的 Scheduler 独自等待、启动或因依赖失败
+  取消排队中的 Task。Task terminal service 只提交调用方指定 Task 的终态 bundle，不调度或修改下游 Task。
 
 ## 权威入口
 

@@ -23,6 +23,7 @@ async function resetTaskExecutionState() {
   await prisma.followUpBatch.deleteMany()
   await prisma.taskExecutionCheckpoint.deleteMany()
   await prisma.taskEvent.deleteMany()
+  await prisma.taskDependency.deleteMany()
   await prisma.task.deleteMany()
 }
 

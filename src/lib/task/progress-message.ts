@@ -4,6 +4,8 @@ const TASK_TYPE_LABELS: Record<string, string> = {
   [TASK_TYPE.WORKSPACE_RESOURCE_IMAGE]: 'progress.taskType.workspaceResourceImage',
   [TASK_TYPE.WORKSPACE_RESOURCE_AUDIO]: 'progress.taskType.workspaceResourceAudio',
   [TASK_TYPE.WORKSPACE_RESOURCE_VOICE]: 'progress.taskType.workspaceResourceVoice',
+  [TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER]: 'progress.taskType.workspaceResourceVoiceover',
+  [TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER_MIX]: 'progress.taskType.workspaceResourceVoiceoverMix',
   [TASK_TYPE.WORKSPACE_RESOURCE_VIDEO]: 'progress.taskType.workspaceResourceVideo',
   [TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE]: 'progress.taskType.workspaceResourceVideoMerge',
 }

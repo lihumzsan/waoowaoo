@@ -6,10 +6,9 @@ import {
   WorkflowUpdateFailedError,
   type WorkflowClient,
 } from '@temporalio/client'
-import { isTaskType } from '@/lib/task/types'
 import { getTemporalClient } from './client'
 import { getTemporalRuntimeConfig } from './config'
-import { buildTaskWorkflowId, buildUserTaskSchedulerWorkflowId } from './identity'
+import { buildScheduledTaskRequest } from './task/scheduled-request-builder'
 import {
   TASK_WORKFLOW_UPDATE_NAME,
   USER_TASK_SCHEDULER_UPDATE_NAME,
@@ -67,29 +66,14 @@ function hash(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('base64url')
 }
 
-function taskWorkflowInput(reference: PersistedTaskReference): TaskWorkflowInput {
-  const taskId = requireIdentity(reference.taskId, 'TASK_ID_INVALID')
-  const userId = requireIdentity(reference.userId, 'TASK_USER_ID_INVALID')
-  if (!isTaskType(reference.taskType)) {
-    throw new Error(`TASK_TYPE_INVALID:${String(reference.taskType)}`)
-  }
-  return {
-    workflowId: buildTaskWorkflowId(taskId),
-    schedulerWorkflowId: buildUserTaskSchedulerWorkflowId(userId),
-    taskId,
-    userId,
-    taskType: reference.taskType,
-  }
-}
-
-function scheduleRequest(reference: PersistedTaskReference): {
+function buildScheduleCommand(reference: PersistedTaskReference): {
   request: ScheduledTaskRequest
   updateId: string
 } {
-  const task = taskWorkflowInput(reference)
-  const enqueueId = `task-enqueue:v1:${hash(task.taskId)}`
+  const request = buildScheduledTaskRequest(reference)
+  const { enqueueId, task, dependsOnTaskIds } = request
   return {
-    request: { enqueueId, task },
+    request,
     updateId: [
       'task-enqueue-update:v1',
       hash(enqueueId),
@@ -100,6 +84,7 @@ function scheduleRequest(reference: PersistedTaskReference): {
           task.taskId,
           task.userId,
           task.taskType,
+          dependsOnTaskIds,
         ]),
       ),
     ].join(':'),
@@ -114,7 +99,7 @@ function cancelRequest(input: { reference: PersistedTaskReference; reason: strin
   request: TaskCancelRequest
   updateId: string
 } {
-  const scheduledTask = scheduleRequest(input.reference).request
+  const scheduledTask = buildScheduledTaskRequest(input.reference)
   const taskId = scheduledTask.task.taskId
   const reason = requireIdentity(input.reason, 'TASK_CANCEL_REASON_INVALID')
   const requestId = `task-cancel:v1:${hash(taskId)}`
@@ -283,7 +268,7 @@ export class TemporalTaskClient {
   }
 
   async schedule(reference: PersistedTaskReference): Promise<ScheduledTaskReceipt> {
-    const { request, updateId } = scheduleRequest(reference)
+    const { request, updateId } = buildScheduleCommand(reference)
     const schedulerWorkflowId = request.task.schedulerWorkflowId
     const startOperation = new WithStartWorkflowOperation<UserTaskSchedulerWorkflow>(
       TEMPORAL_WORKFLOW.USER_TASK_SCHEDULER.type,

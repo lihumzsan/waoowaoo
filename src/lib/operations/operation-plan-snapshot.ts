@@ -7,7 +7,9 @@ import {
   type OperationPlanView,
   type PlannedTask,
   type PlannedTaskDependency,
+  type PlannedTaskEdge,
 } from './planning'
+import { assertValidOperationPlanTaskEdges } from './task-edge-policy'
 import { canonicalJson, hashCanonicalJson } from '@/lib/operation-plan-contract/canonical-json'
 import { isTaskType } from '@/lib/task/types'
 import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
@@ -96,6 +98,19 @@ function parsePlannedTaskDependency(value: unknown): PlannedTaskDependency {
   }
 }
 
+function parsePlannedTaskEdge(value: unknown): PlannedTaskEdge {
+  const record = readRecord(value, 'taskEdges[]')
+  const requirement = readString(record, 'requirement')
+  if (requirement !== 'required_success') {
+    throw new Error(`OPERATION_PLAN_SNAPSHOT_FIELD_INVALID:taskEdges[].requirement:${requirement}`)
+  }
+  return {
+    sourceTaskPlanId: readString(record, 'sourceTaskPlanId'),
+    targetTaskPlanId: readString(record, 'targetTaskPlanId'),
+    requirement,
+  }
+}
+
 function parseOperationPlan(value: unknown): OperationPlan {
   const record = readRecord(value, 'planSnapshot')
   if (record.kind !== 'task_submission') {
@@ -114,17 +129,25 @@ function parseOperationPlan(value: unknown): OperationPlan {
     'taskDependencies',
     parsePlannedTaskDependency,
   )
-  return {
+  const taskEdges = readOptionalArray(
+    record.taskEdges,
+    'taskEdges',
+    parsePlannedTaskEdge,
+  )
+  const plan: OperationPlan = {
     kind: 'task_submission',
     operationId: readString(record, 'operationId'),
     projectId: readString(record, 'projectId'),
     userId: readString(record, 'userId'),
     tasks: record.tasks.map(parsePlannedTask),
     ...(taskDependencies ? { taskDependencies } : {}),
+    ...(taskEdges ? { taskEdges } : {}),
     ...(reservedIdentityIds ? { reservedIdentityIds } : {}),
     ...(summary !== null ? { summary } : {}),
     ...(metadata ? { metadata } : {}),
   }
+  assertValidOperationPlanTaskEdges(plan.tasks, plan.taskEdges ?? [])
+  return plan
 }
 
 async function assertOperationPlanTaskDependencies(plan: OperationPlan): Promise<void> {
@@ -301,6 +324,7 @@ export async function persistOperationPlanSnapshot(params: {
     throw new Error(`OPERATION_PLAN_EXECUTION_CONTRACT_REVISION_MISSING:${params.plan.operationId}`)
   }
   assertOperationPlanTaskResourceScopes(params.plan)
+  assertValidOperationPlanTaskEdges(params.plan.tasks, params.plan.taskEdges ?? [])
   await assertOperationPlanTaskDependencies(params.plan)
   const scopeKind = params.plan.projectId === GLOBAL_ASSET_PROJECT_ID ? 'global_asset_hub' : 'project'
   const scopeId = params.plan.projectId

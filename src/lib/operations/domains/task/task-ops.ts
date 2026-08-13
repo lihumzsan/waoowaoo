@@ -9,6 +9,8 @@ import {
 import { parseFailureRecord } from '@/lib/errors/failure'
 import { listTaskLifecycleEvents } from '@/lib/task/publisher'
 import { getTaskById, queryTasks } from '@/lib/task/service'
+import { buildPersistedTaskReference } from '@/lib/task/dependencies/references'
+import { prisma } from '@/lib/prisma'
 import { queryTaskTargetStates } from '@/lib/task/state-service'
 import { cancelTemporalTask } from '@/lib/temporal/task-client'
 import { withRetry } from '@/lib/retry'
@@ -268,11 +270,7 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
         }
         const workflow = active
           ? await cancelTemporalTask({
-              reference: {
-                taskId: task.id,
-                userId: task.userId,
-                taskType: task.type,
-              },
+              reference: await buildPersistedTaskReference(prisma, task.id),
               reason: 'Task cancelled by user',
             })
           : null

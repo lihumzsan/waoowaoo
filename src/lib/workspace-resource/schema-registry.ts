@@ -32,6 +32,7 @@ export const WORKSPACE_RESOURCE_SCHEMA = {
   BGM_AUDIO: 'project.bgm_audio',
   SOUND_EFFECT_AUDIO: 'project.sound_effect_audio',
   VOICE_REFERENCE: 'project.voice_reference',
+  VOICEOVER_AUDIO: 'project.voiceover_audio',
   RENDERED_VIDEO: 'project.rendered_video',
   WEB_REFERENCE_IMAGE: 'project.web_reference_image',
   UPLOAD_IMAGE: 'project.upload_image',
@@ -131,6 +132,7 @@ export const WORKSPACE_RESOURCE_SCHEMA_IDS_BY_MEDIA = {
     WORKSPACE_RESOURCE_SCHEMA.BGM_AUDIO,
     WORKSPACE_RESOURCE_SCHEMA.SOUND_EFFECT_AUDIO,
     WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
+    WORKSPACE_RESOURCE_SCHEMA.VOICEOVER_AUDIO,
     WORKSPACE_RESOURCE_SCHEMA.UPLOAD_AUDIO,
   ],
   video: [
@@ -162,6 +164,7 @@ const IMPORT_ORIGIN_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new Set
  */
 const DEDICATED_ORIGIN_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new Set([
   WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
+  WORKSPACE_RESOURCE_SCHEMA.VOICEOVER_AUDIO,
 ])
 
 const RETIRED_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new Set([

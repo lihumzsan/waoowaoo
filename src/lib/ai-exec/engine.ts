@@ -110,6 +110,9 @@ export type AiSoundExecutionOptions = {
 
 export type AiVoiceExecutionOptions = {
   language?: string
+  referenceAudio?: string
+  referenceAudioDurationMs?: number
+  outputFormat?: 'mp3'
 }
 
 export type AiLlmExecutionInput = {

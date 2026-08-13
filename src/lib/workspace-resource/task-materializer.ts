@@ -12,6 +12,7 @@ import {
   settleWorkspaceResourceFailureInTransaction,
 } from './persistence'
 import { parseWorkspaceResourceVideoMergeTaskPayload } from './video-merge-contract'
+import { parseWorkspaceResourceVoiceoverTaskPayload, parseWorkspaceResourceVoiceoverMixTaskPayload } from './voiceover-contract'
 
 type TerminalTask = {
   readonly id: string
@@ -56,6 +57,38 @@ function parseTerminalResourcePayload(task: TerminalTask): TerminalResourcePaylo
       generationOptions: payload.resource.generationOptions,
       toolCallId: payload.resource.toolCallId,
       sourceTurnId: null,
+      vocalPerformanceMode: null,
+    }
+  }
+  if (task.type === TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER) {
+    const payload = parseWorkspaceResourceVoiceoverTaskPayload(task.payload ?? {}, task)
+    const resource = payload.resourceFacts
+    return {
+      resourceId: resource.resourceId,
+      mediaType: resource.mediaType,
+      schemaId: resource.schemaId,
+      prompt: resource.prompt,
+      inputHash: resource.inputHash,
+      inputs: resource.inputs,
+      generationOptions: resource.generationOptions,
+      toolCallId: resource.toolCallId,
+      sourceTurnId: resource.sourceTurnId,
+      vocalPerformanceMode: null,
+    }
+  }
+  if (task.type === TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER_MIX) {
+    const payload = parseWorkspaceResourceVoiceoverMixTaskPayload(task.payload ?? {}, task)
+    const resource = payload.resourceFacts
+    return {
+      resourceId: resource.resourceId,
+      mediaType: resource.mediaType,
+      schemaId: resource.schemaId,
+      prompt: resource.prompt,
+      inputHash: resource.inputHash,
+      inputs: resource.inputs,
+      generationOptions: resource.generationOptions,
+      toolCallId: resource.toolCallId,
+      sourceTurnId: resource.sourceTurnId,
       vocalPerformanceMode: null,
     }
   }

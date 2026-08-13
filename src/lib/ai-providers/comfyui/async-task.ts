@@ -1,15 +1,16 @@
 import type { AsyncTaskProviderRegistration, ParsedAsyncExternalId } from '@/lib/ai-providers/async-task-types'
 import { normalizeAsyncPollResult } from '@/lib/ai-providers/async-task-types'
+import { cancelComfyUiAceStepMusic, pollComfyUiAceStepMusic } from './ace-step'
 import { cancelComfyUiH3Video, pollComfyUiH3Video } from './h3'
 import { cancelComfyUiMossSound, pollComfyUiMossSound } from './moss'
-import { cancelComfyUiAceStepMusic, pollComfyUiAceStepMusic } from './ace-step'
+import { cancelComfyUiMossTts, pollComfyUiMossTts } from './tts'
 
 function parseComfyUiExternalId(externalId: string): ParsedAsyncExternalId {
   const parts = externalId.split(':')
-  if (parts.length !== 3 || parts[0] !== 'COMFYUI' || !['VIDEO', 'MUSIC', 'SOUND'].includes(parts[1] ?? '') || !/^[0-9a-f-]{36}$/iu.test(parts[2] ?? '')) {
+  if (parts.length !== 3 || parts[0] !== 'COMFYUI' || !['VIDEO', 'MUSIC', 'SOUND', 'VOICE'].includes(parts[1] ?? '') || !/^[0-9a-f-]{36}$/iu.test(parts[2] ?? '')) {
     throw new Error(`Invalid COMFYUI externalId: ${externalId}`)
   }
-  return { provider: 'COMFYUI', type: parts[1] as 'VIDEO' | 'MUSIC' | 'SOUND', requestId: parts[2]! }
+  return { provider: 'COMFYUI', type: parts[1] as 'VIDEO' | 'MUSIC' | 'SOUND' | 'VOICE', requestId: parts[2]! }
 }
 
 export const comfyuiAsyncTaskProvider: AsyncTaskProviderRegistration = {
@@ -22,10 +23,12 @@ export const comfyuiAsyncTaskProvider: AsyncTaskProviderRegistration = {
       ? await pollComfyUiMossSound(parsed.requestId)
       : parsed.type === 'MUSIC'
         ? await pollComfyUiAceStepMusic(parsed.requestId)
-        : await pollComfyUiH3Video(parsed.requestId)
+        : parsed.type === 'VOICE'
+          ? await pollComfyUiMossTts(parsed.requestId)
+          : await pollComfyUiH3Video(parsed.requestId)
     if (result.status === 'pending') return normalizeAsyncPollResult(result)
     if (result.status === 'completed') {
-      if (parsed.type === 'SOUND' || parsed.type === 'MUSIC') {
+      if (parsed.type === 'SOUND' || parsed.type === 'MUSIC' || parsed.type === 'VOICE') {
         if (!('audioUrl' in result)) throw new Error(`COMFYUI_${parsed.type}_RESULT_MISSING`)
         return normalizeAsyncPollResult({ status: 'completed', resultUrl: result.audioUrl })
       }
@@ -38,5 +41,7 @@ export const comfyuiAsyncTaskProvider: AsyncTaskProviderRegistration = {
     ? await cancelComfyUiMossSound(parsed.requestId)
     : parsed.type === 'MUSIC'
       ? await cancelComfyUiAceStepMusic(parsed.requestId)
-      : await cancelComfyUiH3Video(parsed.requestId),
+      : parsed.type === 'VOICE'
+        ? await cancelComfyUiMossTts(parsed.requestId)
+        : await cancelComfyUiH3Video(parsed.requestId),
 }
