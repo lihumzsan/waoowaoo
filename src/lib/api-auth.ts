@@ -63,7 +63,7 @@ async function resolveExistingSession(session: AuthSession): Promise<AuthSession
     return userById ? withCanonicalSessionUser(session, userById) : null
 }
 
-async function requireExistingSession(): Promise<AuthSession | null> {
+export async function readExistingAuthSession(): Promise<AuthSession | null> {
     const session = await getAuthSession()
     if (!session?.user?.id) return null
     return await resolveExistingSession(session)
@@ -156,7 +156,7 @@ export async function getAuthSession(): Promise<AuthSession | null> {
  * @throws 返回 401 响应
  */
 export async function requireAuth(): Promise<AuthSession> {
-    const session = await requireExistingSession()
+    const session = await readExistingAuthSession()
     if (!session) {
         throw { response: unauthorized() }
     }
@@ -187,7 +187,7 @@ export async function requireAuth(): Promise<AuthSession> {
  */
 export async function requireProjectAuth(projectId: string): Promise<ProjectAuthContext | NextResponse> {
     // 1. 验证 Session
-    const session = await requireExistingSession()
+    const session = await readExistingAuthSession()
     if (!session) {
         return unauthorized()
     }
@@ -253,7 +253,7 @@ export async function requireProjectAuth(projectId: string): Promise<ProjectAuth
  * ```
  */
 export async function requireUserAuth(): Promise<{ session: AuthSession } | NextResponse> {
-    const session = await requireExistingSession()
+    const session = await readExistingAuthSession()
     if (!session) {
         return unauthorized()
     }
@@ -268,7 +268,7 @@ export async function requireUserAuth(): Promise<{ session: AuthSession } | Next
 export async function requireProjectAuthLight(
     projectId: string
 ): Promise<{ session: AuthSession; project: { id: string; userId: string; name: string; [key: string]: unknown } } | NextResponse> {
-    const session = await requireExistingSession()
+    const session = await readExistingAuthSession()
     if (!session) {
         return unauthorized()
     }

@@ -315,6 +315,8 @@ model User {
   preferences          UserPreference?
   paidBetaSeats        PaidBetaSeat[]
   announcementReceipts AnnouncementReceipt[]
+  waoSsoAuthorizationCodes WaoSsoAuthorizationCode[]
+  waoSsoAccessTokens       WaoSsoAccessToken[]
 
   // 资产中心
   globalAssetFolders              GlobalAssetFolder[]
@@ -329,6 +331,40 @@ model User {
   workspaceResources              WorkspaceResource[]
 
   @@map("user")
+}
+
+model WaoSsoAuthorizationCode {
+  id            String    @id @default(uuid())
+  codeHash      String    @unique @db.Char(64)
+  clientId      String    @db.VarChar(64)
+  userId        String
+  redirectUri   String    @db.VarChar(512)
+  scope         String    @db.VarChar(255)
+  codeChallenge String    @db.VarChar(128)
+  expiresAt     DateTime  @db.DateTime(3)
+  consumedAt    DateTime? @db.DateTime(3)
+  createdAt     DateTime  @default(now()) @db.DateTime(3)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@map("wao_sso_authorization_codes")
+}
+
+model WaoSsoAccessToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique @db.Char(64)
+  clientId  String    @db.VarChar(64)
+  userId    String
+  scope     String    @db.VarChar(255)
+  expiresAt DateTime  @db.DateTime(3)
+  revokedAt DateTime? @db.DateTime(3)
+  createdAt DateTime  @default(now()) @db.DateTime(3)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@map("wao_sso_access_tokens")
 }
 
 model UserPreference {

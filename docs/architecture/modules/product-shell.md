@@ -59,13 +59,18 @@
   `(campaignId, phoneE164)` 是唯一 identity，只有服务端预约 service 可以写入。前后端必须由同一
   deployment feature 裁决，且只有付费内测的权威 Campaign View 判定席位售罄后才能开放；API
   只回传脱敏号码，不得把原始手机号写入日志或响应。
+- **PS-17 — 跨产品登录只传递身份声明。** 第一方产品只能通过 Authorization Code + PKCE、精确注册的
+  redirect URI 和一次性 code 获取当前持久 User identity；不得共享 Session Cookie、Session 密钥、用户表
+  或把 access token 当作下游业务身份。登录后的下游产品必须签发自己的 host-only Session 并独立校验资源
+  owner；登录 continuation 只能回到本域 SSO authorize 入口，不能成为通用 callback URL。
 
 ## 权威入口
 
 - locale 路由与导航：`src/i18n/**`、`@/i18n/navigation`
 - 部署能力：`src/lib/deployment/**`、`/api/deployment`；用户 Provider 配置可用性由
   `src/lib/user-api/availability.ts` 统一裁决
-- 认证与账号初始化：`src/lib/auth/**`（`account-onboarding.ts` 是唯一账号 writer）
+- 认证与账号初始化：`src/lib/auth/**`（`account-onboarding.ts` 是唯一账号 writer）；第一方身份声明：
+  `src/lib/auth/sso/**` 与 `/api/auth/sso/**`
 - API 会话、管理员权限与错误边界：`src/lib/api-auth.ts`、`src/lib/auth/admin.ts`、`src/lib/errors/**`
 - 公测预约：`src/lib/public-beta/**`、`/api/public-beta/waitlist`；售罄事实来自
   `src/lib/paid-beta/campaign.ts`

@@ -8,6 +8,8 @@ const COMMON_REQUIRED_KEYS = [
   'BILLING_MODE',
   'NEXTAUTH_URL',
   'NEXTAUTH_SECRET',
+  'WAO_SSO_HORROR_CLIENT_SECRET',
+  'WAO_SSO_HORROR_REDIRECT_URI',
   'CRON_SECRET',
   'API_ENCRYPTION_KEY',
   'GOOGLE_CLIENT_ID',
@@ -157,6 +159,46 @@ function isDevelopmentUrl(value) {
   }
 }
 
+function isExactPublicOrigin(value, mode) {
+  try {
+    const url = new URL(value)
+    const allowedProtocol = mode === 'production'
+      ? url.protocol === 'https:'
+      : url.protocol === 'https:' || (url.protocol === 'http:' && isLoopbackHost(url.hostname))
+    return allowedProtocol
+      && !url.username
+      && !url.password
+      && !url.search
+      && !url.hash
+      && url.pathname === '/'
+  } catch {
+    return false
+  }
+}
+
+function isWaoSsoRedirectUri(value, providerValue, mode) {
+  try {
+    const url = new URL(value)
+    const provider = new URL(providerValue)
+    const secure = url.protocol === 'https:'
+      || (
+        mode === 'development'
+        && provider.protocol === 'http:'
+        && isLoopbackHost(provider.hostname)
+        && url.protocol === 'http:'
+        && isLoopbackHost(url.hostname)
+      )
+    return secure
+      && !url.username
+      && !url.password
+      && !url.search
+      && !url.hash
+      && url.pathname === '/api/auth/callback/wao-sso'
+  } catch {
+    return false
+  }
+}
+
 function isHttpUrl(value) {
   try {
     const url = new URL(value)
@@ -272,6 +314,17 @@ if (validationMode === 'production') {
 for (const key of ['NEXTAUTH_SECRET', 'CRON_SECRET', 'API_ENCRYPTION_KEY']) {
   if (!isMissing(env[key]) && isWeakSecret(env[key])) missing.push(`${key}=strong-secret-at-least-24-characters`)
 }
+if (!isMissing(env.WAO_SSO_HORROR_CLIENT_SECRET)) {
+  const ssoSecret = env.WAO_SSO_HORROR_CLIENT_SECRET
+  const normalizedSsoSecret = ssoSecret.toLowerCase()
+  if (
+    !/^[A-Za-z0-9_-]{43,128}$/u.test(ssoSecret)
+    || new Set(ssoSecret).size < 12
+    || normalizedSsoSecret.includes('changeme')
+    || normalizedSsoSecret.includes('default')
+    || normalizedSsoSecret.includes('example')
+  ) missing.push('WAO_SSO_HORROR_CLIENT_SECRET=random-base64url-secret-43-to-128-characters')
+}
 if (!isMissing(env.WECHAT_OFFICIAL_APP_ID) && !/^wx[A-Za-z0-9]{16}$/u.test(env.WECHAT_OFFICIAL_APP_ID)) {
   missing.push('WECHAT_OFFICIAL_APP_ID=valid-service-account-app-id')
 }
@@ -295,8 +348,14 @@ const isAllowedUrl = validationMode === 'production' ? isHttpsUrl : isDevelopmen
 const requiredUrlDescription = validationMode === 'production'
   ? 'https://...'
   : 'https://... or http://localhost'
-if (!isMissing(env.NEXTAUTH_URL) && !isAllowedUrl(env.NEXTAUTH_URL)) {
+if (!isMissing(env.NEXTAUTH_URL) && !isExactPublicOrigin(env.NEXTAUTH_URL, validationMode)) {
   missing.push(`NEXTAUTH_URL=${requiredUrlDescription}`)
+}
+if (
+  !isMissing(env.WAO_SSO_HORROR_REDIRECT_URI)
+  && !isWaoSsoRedirectUri(env.WAO_SSO_HORROR_REDIRECT_URI, env.NEXTAUTH_URL, validationMode)
+) {
+  missing.push('WAO_SSO_HORROR_REDIRECT_URI=exact-horror-oauth-callback')
 }
 if (!isMissing(env.PAYMENT_PUBLIC_BASE_URL) && !isAllowedUrl(env.PAYMENT_PUBLIC_BASE_URL)) {
   missing.push(`PAYMENT_PUBLIC_BASE_URL=${requiredUrlDescription}`)

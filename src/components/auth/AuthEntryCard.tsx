@@ -31,6 +31,7 @@ interface AuthEntryCardProps {
     | 'showGoogleOAuth'
     | 'showWechatOfficialAuth'
   >
+  postAuthTarget: string | null
 }
 
 type PendingAction = 'send-code' | 'submit' | null
@@ -54,7 +55,7 @@ function readImageCaptchaPayload(payload: unknown): ImageCaptchaPayload | null {
   return { captchaId, imageDataUrl }
 }
 
-export default function AuthEntryCard({ features }: AuthEntryCardProps) {
+export default function AuthEntryCard({ features, postAuthTarget }: AuthEntryCardProps) {
   const [destinationId, setDestinationId] = useState<SmsDestinationId>('CN')
   const [phoneNumber, setPhoneNumber] = useState('')
   const [verificationCode, setVerificationCode] = useState('')
@@ -115,6 +116,10 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
   }, [resendSeconds])
 
   const finishAuthentication = () => {
+    if (postAuthTarget) {
+      window.location.assign(postAuthTarget)
+      return
+    }
     router.push(buildAuthenticatedHomeTarget())
     router.refresh()
   }
@@ -559,6 +564,7 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
                 label={t('continueWithGoogle')}
                 loadingLabel={t('googleButtonLoading')}
                 onError={() => setError(t('googleLoginError'))}
+                postAuthTarget={postAuthTarget}
               />
             </>
           ) : null}

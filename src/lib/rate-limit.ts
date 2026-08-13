@@ -63,6 +63,18 @@ export const AUTH_WECHAT_STREAM_LIMIT: RateLimitConfig = {
     maxRequests: 20,
 }
 
+/** OAuth code exchanges are credentialed but remain bounded per trusted client source. */
+export const AUTH_SSO_TOKEN_LIMIT: RateLimitConfig = {
+    windowSeconds: 60,
+    maxRequests: 600,
+}
+
+/** Userinfo is server-to-server and may be called during every fresh Horror login. */
+export const AUTH_SSO_USERINFO_LIMIT: RateLimitConfig = {
+    windowSeconds: 60,
+    maxRequests: 600,
+}
+
 /** Public-beta reservation: one client source may register five numbers per hour. */
 export const PUBLIC_BETA_WAITLIST_LIMIT: RateLimitConfig = {
     windowSeconds: 60 * 60,
