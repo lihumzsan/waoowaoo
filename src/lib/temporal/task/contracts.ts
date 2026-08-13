@@ -266,9 +266,21 @@ export interface SchedulerActiveTask {
   sequence: number
 }
 
+/**
+ * The Task terminal transaction has committed, but its TaskWorkflow has not
+ * yet been started to own follow-up delivery. This is scheduler state, not a
+ * second terminal-state writer.
+ */
+export interface SchedulerPrestartTerminalHandoff {
+  item: SchedulerQueuedTask
+  terminal: TaskTerminalReceipt
+  cancellation?: TaskCancelRequest
+}
+
 export interface UserTaskSchedulerContinuationState {
   queued: readonly SchedulerQueuedTask[]
   active: readonly SchedulerActiveTask[]
+  prestartTerminalHandoffs?: readonly SchedulerPrestartTerminalHandoff[]
   recentEnqueues: readonly SchedulerEnqueueDedupeEntry[]
   recentCompletions: readonly SchedulerCompletionSummary[]
   nextSequence: number

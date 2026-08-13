@@ -5,7 +5,9 @@ import {
 import { resolveOwnedAudioUrlForGeneration } from '@/lib/media/outbound-audio'
 import { resolveOwnedImageUrlForGeneration } from '@/lib/media/outbound-image'
 import { resolveOwnedVideoUrlForGeneration } from '@/lib/media/outbound-video'
+import { probeMediaBufferDurationMs } from '@/lib/media/probe-duration'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
+import { getObjectBuffer } from '@/lib/storage'
 import { resolveWorkspaceResourceInputMedia } from '@/lib/workspace-resource/input-media'
 import { reportTaskProgress } from '../progress'
 import type { TaskExecutionContext } from '../context'
@@ -153,9 +155,14 @@ export async function handleWorkspaceResourceVideoTask(
     generated.downloadHeaders,
     { taskId: data.taskId, artifact: `workspace-resource:${payload.resource.resourceId}` },
   )
+  const durationMs = await probeMediaBufferDurationMs({
+    buffer: await getObjectBuffer(storageKey),
+    extension: 'mp4',
+    stage: 'workspace_resource_video_probe_duration',
+  })
   const media = await ensureMediaObjectFromStorageKey(storageKey, {
     mimeType: 'video/mp4',
-    durationMs: durationSeconds * 1000,
+    durationMs,
   })
   return {
     mediaId: media.id,
@@ -163,7 +170,7 @@ export async function handleWorkspaceResourceVideoTask(
     storageKey: media.storageKey,
     modelKey: providerRoute.modelKey,
     provider: providerRoute.provider,
-    durationMs: durationSeconds * 1000,
+    durationMs,
     ...(typeof generated.actualVideoTokens === 'number'
       ? { actualVideoTokens: generated.actualVideoTokens }
       : {}),

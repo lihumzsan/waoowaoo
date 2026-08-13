@@ -26,7 +26,7 @@ export default defineConfig({
     setupFiles: ['./tests/setup/env.ts'],
     globalSetup: ['./tests/setup/global-setup.ts'],
     include: ['**/*.test.ts', '**/*.test.tsx'],
-    exclude: [...configDefaults.exclude, '**/.stryker-tmp/**'],
+    exclude: [...configDefaults.exclude, '**/.stryker-tmp/**', '**/.worktrees/**'],
     testTimeout: 30_000,
     hookTimeout: 60_000,
     coverage: {

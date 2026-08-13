@@ -244,7 +244,7 @@ const providerReplayAuthorityOwners = new Map<string, ReadonlySet<string>>([
 ])
 
 for (const file of listSourceFiles(sourceRoot)) {
-  const relative = path.relative(root, file)
+  const relative = path.relative(root, file).split(path.sep).join('/')
   const source = fs.readFileSync(file, 'utf8')
   for (const line of findLossyCatchWrappers(file, source)) {
     violations.push(`${relative}:${String(line)} replaces a caught failure without carrying its evidence`)

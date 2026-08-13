@@ -15,8 +15,9 @@ import {
 } from './profiles'
 import {
   asComfyUiRecord,
-  COMFYUI_ACCEPTED_JOB_STATUSES,
+  cancelComfyUiQueuedPrompt,
   ComfyUiHttpError,
+  inspectComfyUiPrompt,
   readComfyUiHttpError,
   readComfyUiOutput,
   readComfyUiOutputData,
@@ -134,13 +135,15 @@ export async function executeComfyUiH3VideoGeneration(input: AiProviderVideoExec
       throw promptRejection(error)
     }
     try {
-      const probe = asComfyUiRecord(await requestComfyUiJson(baseUrl, `/api/jobs/${encodeURIComponent(promptId)}`))
-      const status = readComfyUiString(probe?.status)
-      if (COMFYUI_ACCEPTED_JOB_STATUSES.has(status)) {
+      const probe = await inspectComfyUiPrompt(baseUrl, promptId)
+      if (probe.status !== 'missing') {
         return { success: true, async: true, requestId: promptId, externalId: `COMFYUI:VIDEO:${promptId}`, endpoint: built.profileId }
       }
     } catch { /* Preserve the original accepted/unknown boundary below. */ }
-    throw new Error(`COMFYUI_SUBMIT_OUTCOME_UNKNOWN:${error instanceof Error ? error.message : String(error)}`)
+    throw new Error(
+      `COMFYUI_SUBMIT_OUTCOME_UNKNOWN:${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    )
   }
 }
 
@@ -151,15 +154,13 @@ export type ComfyUiPollResult =
 
 export async function pollComfyUiH3Video(promptId: string): Promise<ComfyUiPollResult> {
   const baseUrl = readComfyUiBaseUrl()
-  const raw = await requestComfyUiJson(baseUrl, `/api/jobs/${encodeURIComponent(promptId)}`)
-  const record = asComfyUiRecord(raw)
-  const status = readComfyUiString(record?.status)
-  if (status === 'pending') return { status: 'pending', pendingPhase: 'queued' }
-  if (status === 'in_progress') return { status: 'pending', pendingPhase: 'running' }
-  if (status === 'cancelled') return { status: 'failed', failure: createProviderAsyncTaskFailure({ provider: 'comfyui', code: 'GENERATION_FAILED', message: 'ComfyUI H3 job was cancelled', cause: record }) }
-  if (status === 'failed') return { status: 'failed', failure: createProviderAsyncTaskFailure({ provider: 'comfyui', code: 'GENERATION_FAILED', message: readComfyUiHttpError(record?.execution_error), cause: record }) }
-  if (status !== 'completed') throw new Error(`COMFYUI_JOB_STATUS_UNKNOWN:${status || '<missing>'}`)
-  const output = readComfyUiOutput(record?.outputs ?? record?.preview_output ?? record?.output)
+  const inspection = await inspectComfyUiPrompt(baseUrl, promptId)
+  if (inspection.status === 'pending') return inspection
+  if (inspection.status === 'missing') throw new Error('COMFYUI_PROMPT_NOT_FOUND')
+  if (inspection.status === 'failed') {
+    return { status: 'failed', failure: createProviderAsyncTaskFailure({ provider: 'comfyui', code: 'GENERATION_FAILED', message: readComfyUiHttpError(inspection.details), cause: inspection.details }) }
+  }
+  const output = readComfyUiOutput(inspection.outputs)
   if (!output) throw new Error('COMFYUI_VIDEO_OUTPUT_MISSING')
   return {
     status: 'completed',
@@ -175,7 +176,7 @@ export async function pollComfyUiH3Video(promptId: string): Promise<ComfyUiPollR
 
 export async function cancelComfyUiH3Video(promptId: string): Promise<void> {
   try {
-    await requestComfyUiJson(readComfyUiBaseUrl(), `/api/jobs/${encodeURIComponent(promptId)}/cancel`, { method: 'POST' })
+    await cancelComfyUiQueuedPrompt(readComfyUiBaseUrl(), promptId)
   } catch (error) {
     if (error instanceof Error && /COMFYUI_HTTP_(400|404)/u.test(error.message)) return
     throw error

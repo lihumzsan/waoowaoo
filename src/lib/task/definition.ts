@@ -115,10 +115,10 @@ export const TASK_DEFINITIONS = {
     'reference',
   ),
   [TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER]: definition(
-    'workspace_resource_voiceover', 3, 'image', 'workspace_resources', 'none', 'none', 'none', 'workspace_resource', 'reference', 'reference', 'required', 30 * 24 * 60 * 60 * 1000,
+    'workspace_resource_voiceover', 3, 'image', 'workspace_resources', 'none', 'none', 'none', 'workspace_resource', 'reference', 'reference', 'required',
   ),
   [TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER_MIX]: definition(
-    'workspace_resource_voiceover_mix', 1, 'video', 'workspace_resources', 'none', 'none', 'none', 'workspace_resource', 'reference', 'reference', 'none', 30 * 24 * 60 * 60 * 1000,
+    'workspace_resource_voiceover_mix', 1, 'video', 'workspace_resources', 'none', 'none', 'none', 'workspace_resource', 'reference', 'reference', 'none',
   ),
   [TASK_TYPE.WORKSPACE_RESOURCE_VIDEO]: definition(
     'workspace_resource_video',

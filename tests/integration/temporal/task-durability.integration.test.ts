@@ -288,7 +288,7 @@ describe('Temporal Task terminal and follow-up durability', () => {
     }
   }, 60_000)
 
-  it('cancels a queued Task durably without ever starting its TaskWorkflow', async () => {
+  it('cancels a queued Task durably and starts its terminal handoff TaskWorkflow', async () => {
     const fixture = await createTaskDurabilityFixture()
     const connected = await connectTemporalClient()
     const schedulerWorkflowId = buildUserTaskSchedulerWorkflowId(fixture.userId)
@@ -367,8 +367,14 @@ describe('Temporal Task terminal and follow-up durability', () => {
       })
       expect(canceledEvents).toHaveLength(1)
       await expect(
-        connected.client.workflow.getHandle(secondWorkflowId).describe(),
-      ).rejects.toThrow()
+        connected.client.workflow.getHandle<
+          (input: TaskWorkflowInput) => Promise<TaskWorkflowResult>
+        >(secondWorkflowId).result(),
+      ).resolves.toMatchObject({
+        taskId: fixture.secondTaskId,
+        status: 'canceled',
+        attempts: 0,
+      })
     } finally {
       queuedCancelWorker?.releaseCapacityHolder()
       await terminateQuietly(firstHandle, 'TASK_QUEUED_CANCEL_CAPACITY_HOLDER_TEST_COMPLETE')

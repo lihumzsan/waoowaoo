@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
-import { executeComfyUiH3VideoGeneration, pollComfyUiH3Video } from '@/lib/ai-providers/comfyui/h3'
+import {
+  cancelComfyUiH3Video,
+  executeComfyUiH3VideoGeneration,
+  pollComfyUiH3Video,
+} from '@/lib/ai-providers/comfyui/h3'
 import { COMFYUI_H3_MODEL_ID } from '@/lib/ai-providers/comfyui/models'
 import { H3_MODELS, H3_RUNTIME_PROFILES } from '@/lib/ai-providers/comfyui/profiles'
 import type { AiProviderVideoExecutionContext } from '@/lib/ai-providers/runtime-types'
@@ -107,7 +111,7 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
         frames: [{ system: 'provider', provider: 'comfyui', phase: 'submit' }],
       },
     })
-    expect(server!.getRequests('GET', `/api/jobs/${PROMPT_ID}`)).toHaveLength(0)
+    expect(server!.getRequests('GET', `/history/${PROMPT_ID}`)).toHaveLength(0)
   })
 
   it('keeps a prompt 5xx as an unknown acceptance outcome after probing the same prompt id', async () => {
@@ -121,9 +125,15 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
     })
     server!.defineScenario({
       method: 'GET',
-      path: `/api/jobs/${PROMPT_ID}`,
-      mode: 'fatal_error',
-      submitResponse: { status: 404, body: { error: 'not found' } },
+      path: `/history/${PROMPT_ID}`,
+      mode: 'success',
+      submitResponse: { status: 200, body: {} },
+    })
+    server!.defineScenario({
+      method: 'GET',
+      path: '/queue',
+      mode: 'success',
+      submitResponse: { status: 200, body: { queue_running: [], queue_pending: [] } },
     })
 
     let captured: unknown = null
@@ -136,7 +146,7 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
     expect(captured).toBeInstanceOf(Error)
     expect(captured).not.toBeInstanceOf(ProviderSubmissionError)
     expect(captured).toMatchObject({ message: expect.stringContaining('COMFYUI_SUBMIT_OUTCOME_UNKNOWN') })
-    expect(server!.getRequests('GET', `/api/jobs/${PROMPT_ID}`)).toHaveLength(1)
+    expect(server!.getRequests('GET', `/history/${PROMPT_ID}`)).toHaveLength(1)
   })
 
   it('keeps a prompt 408 uncertain and probes the same prompt id', async () => {
@@ -147,13 +157,17 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
       submitResponse: { status: 408, body: { error: 'request timeout' } },
     })
     server!.defineScenario({
-      method: 'GET', path: `/api/jobs/${PROMPT_ID}`, mode: 'fatal_error',
-      submitResponse: { status: 404, body: { error: 'not found' } },
+      method: 'GET', path: `/history/${PROMPT_ID}`, mode: 'success',
+      submitResponse: { status: 200, body: {} },
+    })
+    server!.defineScenario({
+      method: 'GET', path: '/queue', mode: 'success',
+      submitResponse: { status: 200, body: { queue_running: [], queue_pending: [] } },
     })
 
     await expect(executeComfyUiH3VideoGeneration(videoInput))
       .rejects.toThrow('COMFYUI_SUBMIT_OUTCOME_UNKNOWN')
-    expect(server!.getRequests('GET', `/api/jobs/${PROMPT_ID}`)).toHaveLength(1)
+    expect(server!.getRequests('GET', `/history/${PROMPT_ID}`)).toHaveLength(1)
   })
 
   it('does not accept an unknown same-id probe status', async () => {
@@ -164,19 +178,74 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
       submitResponse: { status: 503, body: { error: 'temporarily unavailable' } },
     })
     server!.defineScenario({
-      method: 'GET', path: `/api/jobs/${PROMPT_ID}`, mode: 'success',
-      submitResponse: { status: 200, body: { status: 'not_found' } },
+      method: 'GET', path: `/history/${PROMPT_ID}`, mode: 'success',
+      submitResponse: { status: 200, body: {} },
+    })
+    server!.defineScenario({
+      method: 'GET', path: '/queue', mode: 'success',
+      submitResponse: { status: 200, body: { queue_running: [], queue_pending: [] } },
     })
 
     await expect(executeComfyUiH3VideoGeneration(videoInput))
       .rejects.toThrow('COMFYUI_SUBMIT_OUTCOME_UNKNOWN')
   })
 
+  it('reads a running prompt from the standard ComfyUI history and queue endpoints', async () => {
+    vi.stubEnv('COMFYUI_BASE_URL', server!.baseUrl)
+    server!.defineScenario({
+      method: 'GET', path: `/history/${PROMPT_ID}`, mode: 'success',
+      submitResponse: { status: 200, body: {} },
+    })
+    server!.defineScenario({
+      method: 'GET', path: '/queue', mode: 'success',
+      submitResponse: { status: 200, body: { queue_running: [[3, PROMPT_ID]], queue_pending: [] } },
+    })
+
+    await expect(pollComfyUiH3Video(PROMPT_ID)).resolves.toEqual({
+      status: 'pending',
+      pendingPhase: 'running',
+    })
+  })
+
+  it('does not claim to cancel a running prompt through the queue deletion endpoint', async () => {
+    vi.stubEnv('COMFYUI_BASE_URL', server!.baseUrl)
+    server!.defineScenario({
+      method: 'GET', path: `/history/${PROMPT_ID}`, mode: 'success',
+      submitResponse: { status: 200, body: {} },
+    })
+    server!.defineScenario({
+      method: 'GET', path: '/queue', mode: 'success',
+      submitResponse: { status: 200, body: { queue_running: [[3, PROMPT_ID]], queue_pending: [] } },
+    })
+
+    await expect(cancelComfyUiH3Video(PROMPT_ID)).resolves.toBeUndefined()
+    expect(server!.getRequests('POST', '/queue')).toHaveLength(0)
+  })
+
+  it('removes a queue-pending prompt through ComfyUI queue deletion', async () => {
+    vi.stubEnv('COMFYUI_BASE_URL', server!.baseUrl)
+    server!.defineScenario({
+      method: 'GET', path: `/history/${PROMPT_ID}`, mode: 'success',
+      submitResponse: { status: 200, body: {} },
+    })
+    server!.defineScenario({
+      method: 'GET', path: '/queue', mode: 'success',
+      submitResponse: { status: 200, body: { queue_running: [], queue_pending: [[4, PROMPT_ID]] } },
+    })
+    server!.defineScenario({
+      method: 'POST', path: '/queue', mode: 'success',
+      submitResponse: { status: 200, body: {} },
+    })
+
+    await expect(cancelComfyUiH3Video(PROMPT_ID)).resolves.toBeUndefined()
+    expect(server!.getRequests('POST', '/queue')).toHaveLength(1)
+  })
+
   it('rejects a completed video declared above the 100 MiB provider limit', async () => {
     vi.stubEnv('COMFYUI_BASE_URL', server!.baseUrl)
     server!.defineScenario({
-      method: 'GET', path: `/api/jobs/${PROMPT_ID}`, mode: 'success',
-      submitResponse: { status: 200, body: { status: 'completed', outputs: { '15': { gifs: [{ filename: 'large.mp4', subfolder: '', type: 'output' }] } } } },
+      method: 'GET', path: `/history/${PROMPT_ID}`, mode: 'success',
+      submitResponse: { status: 200, body: { [PROMPT_ID]: { status: { status_str: 'success' }, outputs: { '15': { gifs: [{ filename: 'large.mp4', subfolder: '', type: 'output' }] } } } } },
     })
     server!.defineScenario({
       method: 'GET', path: '/view', mode: 'success',
@@ -190,8 +259,8 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
   it('rejects a completed output that is not a video', async () => {
     vi.stubEnv('COMFYUI_BASE_URL', server!.baseUrl)
     server!.defineScenario({
-      method: 'GET', path: `/api/jobs/${PROMPT_ID}`, mode: 'success',
-      submitResponse: { status: 200, body: { status: 'completed', outputs: { '15': { gifs: [{ filename: 'wrong.txt', subfolder: '', type: 'output' }] } } } },
+      method: 'GET', path: `/history/${PROMPT_ID}`, mode: 'success',
+      submitResponse: { status: 200, body: { [PROMPT_ID]: { status: { status_str: 'success' }, outputs: { '15': { gifs: [{ filename: 'wrong.txt', subfolder: '', type: 'output' }] } } } } },
     })
     server!.defineScenario({
       method: 'GET', path: '/view', mode: 'success',
@@ -205,8 +274,8 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
   it('rejects a non-MP4 video container before MP4 persistence', async () => {
     vi.stubEnv('COMFYUI_BASE_URL', server!.baseUrl)
     server!.defineScenario({
-      method: 'GET', path: `/api/jobs/${PROMPT_ID}`, mode: 'success',
-      submitResponse: { status: 200, body: { status: 'completed', outputs: { '15': { gifs: [{ filename: 'wrong.webm', subfolder: '', type: 'output' }] } } } },
+      method: 'GET', path: `/history/${PROMPT_ID}`, mode: 'success',
+      submitResponse: { status: 200, body: { [PROMPT_ID]: { status: { status_str: 'success' }, outputs: { '15': { gifs: [{ filename: 'wrong.webm', subfolder: '', type: 'output' }] } } } } },
     })
     server!.defineScenario({
       method: 'GET', path: '/view', mode: 'success',

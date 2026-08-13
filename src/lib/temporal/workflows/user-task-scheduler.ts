@@ -9,7 +9,9 @@ import {
   defineUpdate,
   defineQuery,
   proxyActivities,
+  patched,
   setHandler,
+  sleep,
   startChild,
   workflowInfo,
 } from '@temporalio/workflow'
@@ -32,6 +34,7 @@ import {
   type SchedulerTaskCancelRequest,
   type SchedulerCompletionSummary,
   type SchedulerEnqueueDedupeEntry,
+  type SchedulerPrestartTerminalHandoff,
   type SchedulerQueuedTask,
   type TaskSchedulerClass,
   type TaskSchedulerAdmission,
@@ -45,6 +48,7 @@ import {
 import { taskWorkflow } from './task'
 
 const RECENT_DEDUPE_LIMIT = 2_048
+const PRESTART_TERMINAL_HANDOFF_PATCH = 'user-task-scheduler-prestart-terminal-handoff-v1'
 
 const enqueueTask = defineUpdate<ScheduledTaskReceipt, [ScheduledTaskRequest]>(
   USER_TASK_SCHEDULER_UPDATE_NAME.ENQUEUE,
@@ -306,6 +310,8 @@ export async function userTaskSchedulerWorkflow(
   const taskWorkflowToEnqueueId = new Map<string, string>()
   const pendingEnqueues = new Map<string, PendingEnqueueValidation>()
   const inFlightDependencyCancellations = new Map<string, Promise<TaskTerminalReceipt>>()
+  const prestartTerminalHandoffs = new Map<string, SchedulerPrestartTerminalHandoff>()
+  const inFlightPrestartTerminalHandoffs = new Map<string, Promise<void>>()
 
   const recordCompletion = (completion: SchedulerCompletionSummary): void => {
     requireNonEmpty(completion.taskId, 'TASK_SCHEDULER_COMPLETION_TASK_ID_INVALID')
@@ -341,6 +347,70 @@ export async function userTaskSchedulerWorkflow(
     }
     completions.set(completion.taskWorkflowId, { ...completion })
     completionByTaskId.set(completion.taskId, { ...completion })
+  }
+
+  const queuePrestartTerminalHandoff = (handoff: SchedulerPrestartTerminalHandoff): void => {
+    const workflowId = handoff.item.request.task.workflowId
+    const entry = enqueueDedupe.get(handoff.item.request.enqueueId)
+    if (!entry) fail('TASK_SCHEDULER_ENQUEUE_STATE_MISSING')
+    const existing = prestartTerminalHandoffs.get(workflowId)
+    if (
+      existing &&
+      (existing.item.request.enqueueId !== handoff.item.request.enqueueId ||
+        existing.terminal.taskId !== handoff.terminal.taskId ||
+        existing.terminal.status !== handoff.terminal.status ||
+        existing.terminal.terminalEventId !== handoff.terminal.terminalEventId ||
+        existing.cancellation?.requestId !== handoff.cancellation?.requestId ||
+        existing.cancellation?.reason !== handoff.cancellation?.reason)
+    ) {
+      fail('TASK_SCHEDULER_PRESTART_HANDOFF_REPLAY_DIVERGED', workflowId)
+    }
+    entry.state = 'notification_pending'
+    prestartTerminalHandoffs.set(workflowId, {
+      item: { ...handoff.item },
+      terminal: { ...handoff.terminal },
+      ...(handoff.cancellation ? { cancellation: { ...handoff.cancellation } } : {}),
+    })
+  }
+
+  const startPrestartTerminalTaskWorkflows = async (): Promise<void> => {
+    for (const handoff of prestartTerminalHandoffs.values()) {
+      const workflowId = handoff.item.request.task.workflowId
+      const inFlight = inFlightPrestartTerminalHandoffs.get(workflowId)
+      if (inFlight) {
+        await inFlight
+        continue
+      }
+      const start = Promise.resolve().then(async (): Promise<void> => {
+        try {
+          await startChild(taskWorkflow, {
+            workflowId,
+            workflowIdReusePolicy: WorkflowIdReusePolicy.REJECT_DUPLICATE,
+            parentClosePolicy: ParentClosePolicy.ABANDON,
+            args: [handoff.item.request.task],
+          })
+        } catch {
+          // Keep the committed terminal handoff in continuation state. A later
+          // Scheduler turn retries child ownership instead of claiming delivery.
+          return
+        }
+        const entry = enqueueDedupe.get(handoff.item.request.enqueueId)
+        if (!entry) fail('TASK_SCHEDULER_ENQUEUE_STATE_MISSING')
+        entry.state = handoff.terminal.status
+        recordCompletion({
+          taskId: handoff.item.request.task.taskId,
+          taskWorkflowId: workflowId,
+          status: handoff.terminal.status,
+          terminalEventId: handoff.terminal.terminalEventId,
+          ...(handoff.cancellation ? { cancellation: { ...handoff.cancellation } } : {}),
+        })
+        prestartTerminalHandoffs.delete(workflowId)
+      }).finally(() => {
+        inFlightPrestartTerminalHandoffs.delete(workflowId)
+      })
+      inFlightPrestartTerminalHandoffs.set(workflowId, start)
+      await start
+    }
   }
 
   const restoreEntry = (entry: SchedulerEnqueueDedupeEntry): void => {
@@ -405,6 +475,26 @@ export async function userTaskSchedulerWorkflow(
       })
       capacityActive.set(item.request.task.workflowId, { ...item })
     }
+    for (const handoff of input.continuation.prestartTerminalHandoffs ?? []) {
+      validateScheduledTask(input.workflowId, input.userId, handoff.item.request)
+      if (
+        handoff.terminal.taskId !== handoff.item.request.task.taskId ||
+        !isTerminalStatus(handoff.terminal.status) ||
+        !Number.isSafeInteger(handoff.terminal.terminalEventId) ||
+        handoff.terminal.terminalEventId <= 0
+      ) {
+        fail('TASK_SCHEDULER_PRESTART_HANDOFF_INVALID')
+      }
+      const entry = enqueueDedupe.get(handoff.item.request.enqueueId)
+      if (!entry || entry.state !== 'notification_pending') {
+        fail('TASK_SCHEDULER_PRESTART_HANDOFF_ENTRY_MISSING')
+      }
+      queuePrestartTerminalHandoff({
+        item: handoff.item,
+        terminal: handoff.terminal,
+        ...(handoff.cancellation ? { cancellation: handoff.cancellation } : {}),
+      })
+    }
   }
 
   const buildView = (): UserTaskSchedulerView => ({
@@ -414,7 +504,7 @@ export async function userTaskSchedulerWorkflow(
     slotLimitsVersion,
     queuedTaskWorkflowIds: queued.map((item) => item.request.task.workflowId),
     capacityActiveTaskWorkflowIds: [...capacityActive.keys()],
-    terminalNotificationPendingTaskWorkflowIds: [],
+    terminalNotificationPendingTaskWorkflowIds: [...prestartTerminalHandoffs.keys()],
     activeByClass: capacityCounts(capacityActive),
     drainingForContinueAsNew: false,
   })
@@ -579,6 +669,20 @@ export async function userTaskSchedulerWorkflow(
         return { kind: 'terminal', status: receipt.state }
       }
       if (receipt.state === 'notification_pending') {
+        const pendingHandoff = prestartTerminalHandoffs.get(
+          request.scheduledTask.task.workflowId,
+        )
+        if (pendingHandoff) {
+          const cancellation = pendingHandoff.cancellation
+          if (
+            cancellation &&
+            (cancellation.requestId !== request.cancellation.requestId ||
+              cancellation.reason !== request.cancellation.reason)
+          ) {
+            fail('TASK_SCHEDULER_CANCEL_REPLAY_DIVERGED', request.scheduledTask.task.workflowId)
+          }
+          return { kind: 'terminal', status: pendingHandoff.terminal.status }
+        }
         const pendingCancellation = inFlightDependencyCancellations.get(
           request.scheduledTask.task.workflowId,
         )
@@ -634,22 +738,37 @@ export async function userTaskSchedulerWorkflow(
           request.scheduledTask.task.workflowId,
         )
       }
-      for (const batchId of terminal.readyFollowUpBatchIds) {
-        await schedulerActivities.notifyTaskFollowUp({
-          workflowId: request.scheduledTask.task.workflowId,
-          taskId: request.scheduledTask.task.taskId,
-          batchId,
+      const queuedItem: SchedulerQueuedTask = {
+        request: request.scheduledTask,
+        schedulerClass: entry.schedulerClass,
+        sequence: entry.sequence,
+      }
+      if (patched(PRESTART_TERMINAL_HANDOFF_PATCH)) {
+        queuePrestartTerminalHandoff({
+          item: queuedItem,
           terminal,
+          cancellation: request.cancellation,
+        })
+        await startPrestartTerminalTaskWorkflows()
+      } else {
+        entry.state = 'notification_pending'
+        for (const batchId of terminal.readyFollowUpBatchIds) {
+          await schedulerActivities.notifyTaskFollowUp({
+            workflowId: request.scheduledTask.task.workflowId,
+            taskId: request.scheduledTask.task.taskId,
+            batchId,
+            terminal,
+          })
+        }
+        entry.state = 'canceled'
+        recordCompletion({
+          taskId: request.scheduledTask.task.taskId,
+          taskWorkflowId: request.scheduledTask.task.workflowId,
+          status: 'canceled',
+          terminalEventId: terminal.terminalEventId,
+          cancellation: { ...request.cancellation },
         })
       }
-      entry.state = 'canceled'
-      recordCompletion({
-        taskId: request.scheduledTask.task.taskId,
-        taskWorkflowId: request.scheduledTask.task.workflowId,
-        status: 'canceled',
-        terminalEventId: terminal.terminalEventId,
-        cancellation: { ...request.cancellation },
-      })
       return { kind: 'terminal', status: 'canceled' }
     },
     {
@@ -711,6 +830,9 @@ export async function userTaskSchedulerWorkflow(
     )
 
   const startQueuedTasks = async (): Promise<void> => {
+    if (patched(PRESTART_TERMINAL_HANDOFF_PATCH)) {
+      await startPrestartTerminalTaskWorkflows()
+    }
     while (true) {
       const queueIndex = queued.findIndex((item) => {
         const decision = queueDecision(item)
@@ -740,7 +862,12 @@ export async function userTaskSchedulerWorkflow(
           },
         })
         inFlightDependencyCancellations.set(taskWorkflowId, terminalPromise)
-        const terminal = await terminalPromise
+        let terminal: TaskTerminalReceipt
+        try {
+          terminal = await terminalPromise
+        } finally {
+          inFlightDependencyCancellations.delete(taskWorkflowId)
+        }
         if (
           terminal.taskId !== item.request.task.taskId ||
           terminal.status !== 'canceled' ||
@@ -749,22 +876,27 @@ export async function userTaskSchedulerWorkflow(
         ) {
           fail('TASK_SCHEDULER_DEPENDENCY_CANCEL_TERMINAL_DIVERGED', taskWorkflowId)
         }
-        for (const batchId of terminal.readyFollowUpBatchIds) {
-          await schedulerActivities.notifyTaskFollowUp({
-            workflowId: taskWorkflowId,
+        if (patched(PRESTART_TERMINAL_HANDOFF_PATCH)) {
+          queuePrestartTerminalHandoff({ item, terminal })
+          await startPrestartTerminalTaskWorkflows()
+        } else {
+          entry.state = 'notification_pending'
+          for (const batchId of terminal.readyFollowUpBatchIds) {
+            await schedulerActivities.notifyTaskFollowUp({
+              workflowId: taskWorkflowId,
+              taskId: item.request.task.taskId,
+              batchId,
+              terminal,
+            })
+          }
+          entry.state = 'canceled'
+          recordCompletion({
             taskId: item.request.task.taskId,
-            batchId,
-            terminal,
+            taskWorkflowId,
+            status: 'canceled',
+            terminalEventId: terminal.terminalEventId,
           })
         }
-        entry.state = 'canceled'
-        recordCompletion({
-          taskId: item.request.task.taskId,
-          taskWorkflowId,
-          status: 'canceled',
-          terminalEventId: terminal.terminalEventId,
-        })
-        inFlightDependencyCancellations.delete(taskWorkflowId)
         continue
       }
       if (decision.kind !== 'run') {
@@ -793,20 +925,28 @@ export async function userTaskSchedulerWorkflow(
         })
         validateTaskResult(taskWorkflowId, item.request.task.taskId, result)
         capacityActive.delete(taskWorkflowId)
-        entry.state = result.status
-        recordCompletion({
-          taskId: item.request.task.taskId,
-          taskWorkflowId,
-          status: result.status,
-          terminalEventId: result.terminal.terminalEventId,
-        })
-        for (const batchId of result.terminal.readyFollowUpBatchIds) {
-          await schedulerActivities.notifyTaskFollowUp({
-            workflowId: taskWorkflowId,
-            taskId: result.taskId,
-            batchId,
+        if (patched(PRESTART_TERMINAL_HANDOFF_PATCH)) {
+          queuePrestartTerminalHandoff({
+            item,
             terminal: result.terminal,
           })
+          await startPrestartTerminalTaskWorkflows()
+        } else {
+          entry.state = result.status
+          recordCompletion({
+            taskId: item.request.task.taskId,
+            taskWorkflowId,
+            status: result.status,
+            terminalEventId: result.terminal.terminalEventId,
+          })
+          for (const batchId of result.terminal.readyFollowUpBatchIds) {
+            await schedulerActivities.notifyTaskFollowUp({
+              workflowId: taskWorkflowId,
+              taskId: result.taskId,
+              batchId,
+              terminal: result.terminal,
+            })
+          }
         }
       }
     }
@@ -825,12 +965,22 @@ export async function userTaskSchedulerWorkflow(
     const retainedCompletedWorkflowIds = new Set(
       recentCompletions.map((completion) => completion.taskWorkflowId),
     )
+    const retainedPrestartHandoffWorkflowIds = new Set(prestartTerminalHandoffs.keys())
     const recentEnqueues = [...enqueueDedupe.values()]
-      .filter((entry) => retainedCompletedWorkflowIds.has(entry.request.task.workflowId))
+      .filter(
+        (entry) =>
+          retainedCompletedWorkflowIds.has(entry.request.task.workflowId) ||
+          retainedPrestartHandoffWorkflowIds.has(entry.request.task.workflowId),
+      )
       .map((entry) => ({ ...entry }))
     return {
       queued: queued.map((item) => ({ ...item })),
       active: [...capacityActive.values()].map((item) => ({ ...item })),
+      prestartTerminalHandoffs: [...prestartTerminalHandoffs.values()].map((handoff) => ({
+        item: { ...handoff.item },
+        terminal: { ...handoff.terminal },
+        ...(handoff.cancellation ? { cancellation: { ...handoff.cancellation } } : {}),
+      })),
       recentEnqueues,
       recentCompletions,
       nextSequence,
@@ -840,6 +990,11 @@ export async function userTaskSchedulerWorkflow(
 
   while (true) {
     await startQueuedTasks()
+
+    if (prestartTerminalHandoffs.size > 0) {
+      await sleep('1 second')
+      continue
+    }
 
     if (workflowInfo().continueAsNewSuggested && allHandlersFinished()) {
       await continueAsNew<typeof userTaskSchedulerWorkflow>({
@@ -853,6 +1008,7 @@ export async function userTaskSchedulerWorkflow(
     await condition(
       () =>
         (workflowInfo().continueAsNewSuggested && allHandlersFinished()) ||
+        prestartTerminalHandoffs.size > 0 ||
         queued.some((item) => {
           const decision = queueDecision(item)
           return (

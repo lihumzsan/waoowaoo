@@ -190,11 +190,11 @@ describe('ComfyUI MOSS SoundEffect v2 contract', () => {
     vi.stubEnv('COMFYUI_BASE_URL', server!.baseUrl)
     server!.defineScenario({
       method: 'GET',
-      path: `/api/jobs/${PROMPT_ID}`,
+      path: `/history/${PROMPT_ID}`,
       mode: 'success',
       submitResponse: {
         status: 200,
-        body: { status: 'completed', outputs: { '28': { audio: [{ filename: 'sound.mp3', subfolder: '', type: 'output' }] } } },
+        body: { [PROMPT_ID]: { status: { status_str: 'success' }, outputs: { '28': { audio: [{ filename: 'sound.mp3', subfolder: '', type: 'output' }] } } } },
       },
     })
     server!.defineScenario({
@@ -218,9 +218,9 @@ describe('ComfyUI MOSS SoundEffect v2 contract', () => {
     ]) {
       server!.defineScenario({
         method: 'GET',
-        path: `/api/jobs/${PROMPT_ID}`,
+        path: `/history/${PROMPT_ID}`,
         mode: 'success',
-        submitResponse: { status: 200, body: { status: 'completed', outputs } },
+        submitResponse: { status: 200, body: { [PROMPT_ID]: { status: { status_str: 'success' }, outputs } } },
       })
       await expect(pollComfyUiMossSound(PROMPT_ID)).rejects.toThrow('COMFYUI_MOSS_AUDIO_OUTPUT_MISSING')
     }

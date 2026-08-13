@@ -1,13 +1,5 @@
 import { readResponseBufferWithLimit } from '@/lib/http/body-limits'
 
-export const COMFYUI_ACCEPTED_JOB_STATUSES = new Set([
-  'pending',
-  'in_progress',
-  'completed',
-  'failed',
-  'cancelled',
-])
-
 export class ComfyUiHttpError extends Error {
   readonly status: number
   readonly payload: unknown
@@ -82,6 +74,75 @@ export async function requestComfyUiJson(
   try { payload = text ? JSON.parse(text) as unknown : null } catch { payload = text }
   if (!response.ok) throw new ComfyUiHttpError(response.status, payload)
   return payload
+}
+
+export type ComfyUiPromptInspection =
+  | { readonly status: 'missing' }
+  | { readonly status: 'pending'; readonly pendingPhase: 'queued' | 'running' }
+  | { readonly status: 'completed'; readonly outputs: unknown }
+  | { readonly status: 'failed'; readonly details: unknown }
+
+/**
+ * Standard ComfyUI only exposes a prompt-specific deletion operation for
+ * queue-pending prompts. `/interrupt` is global, so a running prompt is left
+ * alone rather than accidentally interrupting another local generation.
+ */
+export type ComfyUiPromptCancellationOutcome =
+  | 'removed_from_queue'
+  | 'running_not_cancelled'
+  | 'already_terminal_or_missing'
+
+function queueContainsPrompt(value: unknown, promptId: string): boolean {
+  if (!Array.isArray(value)) return false
+  return value.some((entry) => Array.isArray(entry) && readComfyUiString(entry[1]) === promptId)
+}
+
+export async function inspectComfyUiPrompt(
+  baseUrl: string,
+  promptId: string,
+): Promise<ComfyUiPromptInspection> {
+  const history = asComfyUiRecord(
+    await requestComfyUiJson(baseUrl, `/history/${encodeURIComponent(promptId)}`),
+  )
+  const historyItem = asComfyUiRecord(history?.[promptId])
+  if (historyItem) {
+    const status = asComfyUiRecord(historyItem.status)
+    const statusText = readComfyUiString(status?.status_str).toLowerCase()
+    if (statusText === 'success') {
+      return { status: 'completed', outputs: historyItem.outputs }
+    }
+    if (statusText === 'error' || statusText === 'failed' || statusText === 'cancelled') {
+      return { status: 'failed', details: historyItem }
+    }
+  }
+
+  const queue = asComfyUiRecord(await requestComfyUiJson(baseUrl, '/queue'))
+  if (queueContainsPrompt(queue?.queue_running, promptId)) {
+    return { status: 'pending', pendingPhase: 'running' }
+  }
+  if (queueContainsPrompt(queue?.queue_pending, promptId)) {
+    return { status: 'pending', pendingPhase: 'queued' }
+  }
+  return { status: 'missing' }
+}
+
+export async function cancelComfyUiQueuedPrompt(
+  baseUrl: string,
+  promptId: string,
+): Promise<ComfyUiPromptCancellationOutcome> {
+  const inspection = await inspectComfyUiPrompt(baseUrl, promptId)
+  if (inspection.status === 'pending' && inspection.pendingPhase === 'running') {
+    return 'running_not_cancelled'
+  }
+  if (inspection.status !== 'pending') {
+    return 'already_terminal_or_missing'
+  }
+  await requestComfyUiJson(baseUrl, '/queue', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ delete: [promptId] }),
+  })
+  return 'removed_from_queue'
 }
 
 export function readComfyUiOutput(value: unknown): ComfyUiOutput | null {

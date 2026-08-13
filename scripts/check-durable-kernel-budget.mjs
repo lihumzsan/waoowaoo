@@ -20,22 +20,14 @@ function sourceFilesUnder(path) {
 }
 
 const kernel = [
-  'src/lib/agent-turn/approval-history.ts',
-  'src/lib/agent-turn/approval.ts',
-  'src/lib/agent-turn/choice.ts',
-  'src/lib/agent-turn/contracts.ts',
   'src/lib/agent-turn/follow-up-batch.ts',
-  'src/lib/agent-turn/identity.ts',
-  'src/lib/agent-turn/lifecycle.ts',
-  'src/lib/agent-turn/runtime-contract.ts',
-  'src/lib/agent-turn/service.ts',
   ...sourceFilesUnder('src/lib/temporal'),
   'src/lib/operations/durable-dispatch.ts',
 ]
 
 const safetyLedgers = [
+  'src/lib/agent-turn/effect-fence.ts',
   'src/lib/agent-turn/tool-effect.ts',
-  'src/lib/agent-turn/usage.ts',
   ...sourceFilesUnder('src/lib/task/terminal'),
   'src/lib/task/provider-invocation.ts',
   'src/lib/task/execution-checkpoint.ts',
@@ -43,15 +35,7 @@ const safetyLedgers = [
 ]
 
 const productAdapters = [
-  'src/lib/agent-turn/interrupted-effect-digest.ts',
-  'src/lib/agent-turn/model-session.ts',
-  'src/lib/agent-turn/runner-input.ts',
-  'src/lib/agent-turn/runner.ts',
   'src/lib/agent-turn/stream-publisher.ts',
-  'src/lib/agent-turn/tools.ts',
-  'src/lib/agent-turn/user-evidence.ts',
-  'src/lib/agent-turn/view-contract.ts',
-  'src/lib/agent-turn/view.ts',
   'src/lib/operations/mutation-receipt.ts',
 ]
 
@@ -137,7 +121,7 @@ if (kernelLines > targetMax) {
 }
 
 for (const file of relevant) {
-  const normalized = relative(repositoryRoot, resolve(repositoryRoot, file))
+  const normalized = relative(repositoryRoot, resolve(repositoryRoot, file)).replaceAll('\\', '/')
   if (normalized !== file) {
     throw new Error(`DURABLE_BUDGET_PATH_DIVERGED:${file}:${normalized}`)
   }

@@ -6,8 +6,9 @@ import { COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_ID, COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL
 import mossWorkflow from './workflows/moss-soundeffect-v2.json'
 import {
   asComfyUiRecord,
-  COMFYUI_ACCEPTED_JOB_STATUSES,
+  cancelComfyUiQueuedPrompt,
   ComfyUiHttpError,
+  inspectComfyUiPrompt,
   readComfyUiHttpError,
   readComfyUiDeclaredNodeAudioOutput,
   readComfyUiOutputData,
@@ -138,12 +139,15 @@ export async function executeComfyUiMossSoundGeneration(input: AiProviderSoundEx
   } catch (error) {
     if (error instanceof ComfyUiHttpError && error.status >= 400 && error.status < 500) throw promptRejection(error)
     try {
-      const probe = asComfyUiRecord(await requestComfyUiJson(baseUrl, `/api/jobs/${encodeURIComponent(promptId)}`))
-      if (COMFYUI_ACCEPTED_JOB_STATUSES.has(readComfyUiString(probe?.status))) {
+      const probe = await inspectComfyUiPrompt(baseUrl, promptId)
+      if (probe.status !== 'missing') {
         return { success: true, async: true, requestId: promptId, externalId: `COMFYUI:SOUND:${promptId}`, endpoint: 'moss-soundeffect-v2' }
       }
     } catch { /* Preserve the original accepted/unknown boundary below. */ }
-    throw new Error(`COMFYUI_SUBMIT_OUTCOME_UNKNOWN:${error instanceof Error ? error.message : String(error)}`)
+    throw new Error(
+      `COMFYUI_SUBMIT_OUTCOME_UNKNOWN:${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    )
   }
 }
 
@@ -154,14 +158,13 @@ export type MossSoundPollResult =
 
 export async function pollComfyUiMossSound(promptId: string): Promise<MossSoundPollResult> {
   const baseUrl = readComfyUiBaseUrl()
-  const record = asComfyUiRecord(await requestComfyUiJson(baseUrl, `/api/jobs/${encodeURIComponent(promptId)}`))
-  const status = readComfyUiString(record?.status)
-  if (status === 'pending') return { status: 'pending', pendingPhase: 'queued' }
-  if (status === 'in_progress') return { status: 'pending', pendingPhase: 'running' }
-  if (status === 'cancelled') return { status: 'failed', failure: createProviderAsyncTaskFailure({ provider: 'comfyui', code: 'GENERATION_FAILED', message: 'ComfyUI MOSS job was cancelled', cause: record }) }
-  if (status === 'failed') return { status: 'failed', failure: createProviderAsyncTaskFailure({ provider: 'comfyui', code: 'GENERATION_FAILED', message: readComfyUiHttpError(record?.execution_error), cause: record }) }
-  if (status !== 'completed') throw new Error(`COMFYUI_JOB_STATUS_UNKNOWN:${status || '<missing>'}`)
-  const output: ComfyUiOutput | null = readComfyUiDeclaredNodeAudioOutput(record?.outputs ?? record?.preview_output ?? record?.output, '28')
+  const inspection = await inspectComfyUiPrompt(baseUrl, promptId)
+  if (inspection.status === 'pending') return inspection
+  if (inspection.status === 'missing') throw new Error('COMFYUI_PROMPT_NOT_FOUND')
+  if (inspection.status === 'failed') {
+    return { status: 'failed', failure: createProviderAsyncTaskFailure({ provider: 'comfyui', code: 'GENERATION_FAILED', message: readComfyUiHttpError(inspection.details), cause: inspection.details }) }
+  }
+  const output: ComfyUiOutput | null = readComfyUiDeclaredNodeAudioOutput(inspection.outputs, '28')
   if (!output) throw new Error('COMFYUI_MOSS_AUDIO_OUTPUT_MISSING')
   return {
     status: 'completed',
@@ -177,7 +180,7 @@ export async function pollComfyUiMossSound(promptId: string): Promise<MossSoundP
 
 export async function cancelComfyUiMossSound(promptId: string): Promise<void> {
   try {
-    await requestComfyUiJson(readComfyUiBaseUrl(), `/api/jobs/${encodeURIComponent(promptId)}/cancel`, { method: 'POST' })
+    await cancelComfyUiQueuedPrompt(readComfyUiBaseUrl(), promptId)
   } catch (error) {
     if (error instanceof Error && /COMFYUI_HTTP_(400|404)/u.test(error.message)) return
     throw error

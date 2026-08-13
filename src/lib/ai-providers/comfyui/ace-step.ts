@@ -7,8 +7,9 @@ import { readComfyUiBaseUrl } from './config'
 import { COMFYUI_ACE_STEP_1_5_MODEL_ID, COMFYUI_ACE_STEP_1_5_MODEL_KEY } from './models'
 import {
   asComfyUiRecord,
-  COMFYUI_ACCEPTED_JOB_STATUSES,
+  cancelComfyUiQueuedPrompt,
   ComfyUiHttpError,
+  inspectComfyUiPrompt,
   readComfyUiDeclaredNodeAudioOutput,
   readComfyUiHttpError,
   readComfyUiOutputData,
@@ -193,8 +194,8 @@ export async function executeComfyUiAceStepMusicGeneration(input: AiProviderMusi
   } catch (error) {
     if (error instanceof ComfyUiHttpError && error.status >= 400 && error.status < 500) throw promptRejection(error)
     try {
-      const probe = asComfyUiRecord(await requestComfyUiJson(baseUrl, `/api/jobs/${encodeURIComponent(promptId)}`))
-      if (COMFYUI_ACCEPTED_JOB_STATUSES.has(readComfyUiString(probe?.status))) {
+      const probe = await inspectComfyUiPrompt(baseUrl, promptId)
+      if (probe.status !== 'missing') {
         return { success: true, async: true, requestId: promptId, externalId: `COMFYUI:MUSIC:${promptId}`, endpoint: 'ace-step-1.5', metadata: built.durationPlan }
       }
     } catch { /* Preserve the original accepted/unknown boundary below. */ }
@@ -209,14 +210,13 @@ export type AceStepMusicPollResult =
 
 export async function pollComfyUiAceStepMusic(promptId: string): Promise<AceStepMusicPollResult> {
   const baseUrl = readComfyUiBaseUrl()
-  const record = asComfyUiRecord(await requestComfyUiJson(baseUrl, `/api/jobs/${encodeURIComponent(promptId)}`))
-  const status = readComfyUiString(record?.status)
-  if (status === 'pending') return { status: 'pending', pendingPhase: 'queued' }
-  if (status === 'in_progress') return { status: 'pending', pendingPhase: 'running' }
-  if (status === 'cancelled') return { status: 'failed', failure: createProviderAsyncTaskFailure({ provider: 'comfyui', code: 'GENERATION_FAILED', message: 'ComfyUI ACE-Step job was cancelled', cause: record }) }
-  if (status === 'failed') return { status: 'failed', failure: createProviderAsyncTaskFailure({ provider: 'comfyui', code: 'GENERATION_FAILED', message: readComfyUiHttpError(record?.execution_error), cause: record }) }
-  if (status !== 'completed') throw new Error(`COMFYUI_JOB_STATUS_UNKNOWN:${status || '<missing>'}`)
-  const output: ComfyUiOutput | null = readComfyUiDeclaredNodeAudioOutput(record?.outputs ?? record?.preview_output ?? record?.output, ACE_STEP_1_5_PROFILE.outputNodeId)
+  const inspection = await inspectComfyUiPrompt(baseUrl, promptId)
+  if (inspection.status === 'pending') return inspection
+  if (inspection.status === 'missing') throw new Error('COMFYUI_PROMPT_NOT_FOUND')
+  if (inspection.status === 'failed') {
+    return { status: 'failed', failure: createProviderAsyncTaskFailure({ provider: 'comfyui', code: 'GENERATION_FAILED', message: readComfyUiHttpError(inspection.details), cause: inspection.details }) }
+  }
+  const output: ComfyUiOutput | null = readComfyUiDeclaredNodeAudioOutput(inspection.outputs, ACE_STEP_1_5_PROFILE.outputNodeId)
   if (!output) throw new Error('COMFYUI_ACE_STEP_AUDIO_OUTPUT_MISSING')
   return {
     status: 'completed',
@@ -232,7 +232,7 @@ export async function pollComfyUiAceStepMusic(promptId: string): Promise<AceStep
 
 export async function cancelComfyUiAceStepMusic(promptId: string): Promise<void> {
   try {
-    await requestComfyUiJson(readComfyUiBaseUrl(), `/api/jobs/${encodeURIComponent(promptId)}/cancel`, { method: 'POST' })
+    await cancelComfyUiQueuedPrompt(readComfyUiBaseUrl(), promptId)
   } catch (error) {
     if (error instanceof Error && /COMFYUI_HTTP_(400|404)/u.test(error.message)) return
     throw error

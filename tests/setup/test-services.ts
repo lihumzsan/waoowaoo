@@ -1,10 +1,33 @@
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { dirname, resolve } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { Connection } from '@temporalio/client'
 import mysql from 'mysql2/promise'
 import Redis from 'ioredis'
 import { loadTestEnv } from './env'
+
+const packageRequire = createRequire(import.meta.url)
+
+function resolvePackageBinary(packageName: string, binaryName: string): string {
+  const packageJsonPath = packageRequire.resolve(`${packageName}/package.json`)
+  const manifest: unknown = JSON.parse(readFileSync(packageJsonPath, 'utf8'))
+  if (!manifest || typeof manifest !== 'object') {
+    throw new Error(`PACKAGE_MANIFEST_INVALID:${packageName}`)
+  }
+  const bin = (manifest as { readonly bin?: unknown }).bin
+  const relativeBinary = typeof bin === 'string'
+    ? bin
+    : bin && typeof bin === 'object'
+      ? (bin as Record<string, unknown>)[binaryName]
+      : undefined
+  if (typeof relativeBinary !== 'string' || relativeBinary.length === 0) {
+    throw new Error(`PACKAGE_BINARY_UNRESOLVED:${packageName}:${binaryName}`)
+  }
+  return resolve(dirname(packageJsonPath), relativeBinary)
+}
 
 type DbConfig = {
   host: string
@@ -282,7 +305,10 @@ export async function waitForTestServices(
 
 export function pushTestSchema(scope?: TestServiceScope): TestServiceEndpoints {
   const endpoints = readEndpoints(scope)
-  execFileSync('npx', ['prisma', 'db', 'push', '--skip-generate', '--schema', 'prisma/schema.prisma'], {
+  execFileSync(process.execPath, [
+    resolvePackageBinary('prisma', 'prisma'),
+    'db', 'push', '--skip-generate', '--schema', 'prisma/schema.prisma',
+  ], {
     cwd: process.cwd(),
     env: process.env,
     stdio: 'inherit',
