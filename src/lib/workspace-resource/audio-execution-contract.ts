@@ -94,6 +94,19 @@ export const frozenAudioExecutionSchema = z.discriminatedUnion('mode', [
 
 export type FrozenAudioExecution = z.infer<typeof frozenAudioExecutionSchema>
 
+export function resolveAudioExecutionMode(item: AudioGenerationItem): AudioExecutionMode {
+  if (item.audioKind === 'sound') return 'sound'
+  return 'compositionPlan' in item ? 'composition_music' : 'prompt_music'
+}
+
+export function musicGenerationModeForAudioExecution(
+  mode: AudioExecutionMode,
+): 'prompt' | 'composition_plan' | null {
+  if (mode === 'prompt_music') return 'prompt'
+  if (mode === 'composition_music') return 'composition_plan'
+  return null
+}
+
 type FrozenAudioExecutionFields = {
   readonly audioExecutionMode: AudioExecutionMode | undefined
   readonly audioKind: 'music' | 'sound' | undefined
@@ -106,31 +119,49 @@ export function freezeAudioExecution(input: {
   readonly item: AudioGenerationItem
   readonly generationOptions: Readonly<Record<string, WorkspaceResourceJsonValue>>
 }): FrozenAudioExecution {
-  if (input.item.audioKind === 'sound') {
-    return frozenAudioExecutionSchema.parse({
-      mode: 'sound',
-      audioKind: 'sound',
-      prompt: input.item.prompt,
-      durationSeconds: input.item.durationSeconds,
-      generationOptions: input.generationOptions,
-    })
+  const mode = resolveAudioExecutionMode(input.item)
+  switch (mode) {
+    case 'sound': {
+      if (input.item.audioKind !== 'sound') {
+        throw new Error('AUDIO_EXECUTION_MODE_ITEM_MISMATCH:sound')
+      }
+      return frozenAudioExecutionSchema.parse({
+        mode,
+        audioKind: 'sound',
+        prompt: input.item.prompt,
+        durationSeconds: input.item.durationSeconds,
+        generationOptions: input.generationOptions,
+      })
+    }
+    case 'composition_music': {
+      if (!('compositionPlan' in input.item)) {
+        throw new Error('AUDIO_EXECUTION_MODE_ITEM_MISMATCH:composition_music')
+      }
+      return frozenAudioExecutionSchema.parse({
+        mode,
+        audioKind: 'music',
+        prompt: null,
+        durationSeconds: null,
+        generationOptions: input.generationOptions,
+      })
+    }
+    case 'prompt_music': {
+      if (input.item.audioKind !== 'music' || 'compositionPlan' in input.item) {
+        throw new Error('AUDIO_EXECUTION_MODE_ITEM_MISMATCH:prompt_music')
+      }
+      return frozenAudioExecutionSchema.parse({
+        mode,
+        audioKind: 'music',
+        prompt: input.item.prompt,
+        durationSeconds: input.item.durationSeconds,
+        generationOptions: input.generationOptions,
+      })
+    }
+    default: {
+      const exhaustive: never = mode
+      throw new Error(`AUDIO_EXECUTION_MODE_UNSUPPORTED:${String(exhaustive)}`)
+    }
   }
-  if ('compositionPlan' in input.item) {
-    return frozenAudioExecutionSchema.parse({
-      mode: 'composition_music',
-      audioKind: 'music',
-      prompt: null,
-      durationSeconds: null,
-      generationOptions: input.generationOptions,
-    })
-  }
-  return frozenAudioExecutionSchema.parse({
-    mode: 'prompt_music',
-    audioKind: 'music',
-    prompt: input.item.prompt,
-    durationSeconds: input.item.durationSeconds,
-    generationOptions: input.generationOptions,
-  })
 }
 
 export function parseFrozenAudioExecution(input: FrozenAudioExecutionFields): FrozenAudioExecution {

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   freezeAudioExecution,
+  musicGenerationModeForAudioExecution,
   parseFrozenAudioExecution,
 } from '@/lib/workspace-resource/audio-execution-contract'
+import { workspaceResourceGenerationTaskPayloadSchema } from '@/lib/workspace-resource/generation-contract'
 import {
   compositionPlanMusicGenerationItemSchema,
   promptMusicGenerationItemSchema,
@@ -71,6 +73,22 @@ describe('frozen workspace audio execution contract', () => {
     })
   })
 
+  it('maps frozen prompt music to the required provider preflight mode', () => {
+    const frozen = parseFrozenAudioExecution({
+      audioExecutionMode: 'prompt_music',
+      audioKind: 'music',
+      prompt: 'A restrained metallic pulse.',
+      durationSeconds: 26,
+      generationOptions: {
+        durationSeconds: 26,
+        vocalMode: 'instrumental',
+        outputFormat: 'mp3',
+      },
+    })
+
+    expect(musicGenerationModeForAudioExecution(frozen.mode)).toBe('prompt')
+  })
+
   it('accepts music_score_v1 only for composition music', () => {
     const compositionPlan = {
       chunks: [{
@@ -131,5 +149,50 @@ describe('frozen workspace audio execution contract', () => {
         outputFormat: 'mp3',
       },
     })).toThrow()
+  })
+
+  it('reports frozen sound duration conflicts at the durable duration field', () => {
+    const result = workspaceResourceGenerationTaskPayloadSchema.safeParse({
+      lifecycleProjection: {
+        resources: [{
+          resourceId: 'sound-rain',
+          mediaType: 'audio',
+          schemaId: 'project.sound_effect_audio',
+          name: 'Rain',
+        }],
+      },
+      protocol: 'workspace_resource_generation_v2',
+      audioExecutionMode: 'sound',
+      resource: {
+        resourceId: 'sound-rain',
+        workspacePath: 'Rain-sound-rain',
+        mediaType: 'audio',
+        audioKind: 'sound',
+        schemaId: 'project.sound_effect_audio',
+        inputHash: 'a'.repeat(64),
+        prompt: 'Rain on a metal roof.',
+        modelKey: 'comfyui::moss-soundeffect-v2',
+        inputs: [],
+        imageInputPositions: [],
+        audioInputPositions: [],
+        videoInputPositions: [],
+        toolCallId: null,
+        sourceTurnId: null,
+      },
+      soundModel: 'comfyui::moss-soundeffect-v2',
+      durationSeconds: 6,
+      count: 1,
+      generationOptions: {
+        durationSeconds: 5,
+        outputFormat: 'mp3',
+      },
+    })
+
+    expect(result.success).toBe(false)
+    if (result.success) return
+    expect(result.error.issues).toContainEqual(expect.objectContaining({
+      path: ['durationSeconds'],
+      message: 'Sound duration must match frozen generationOptions.',
+    }))
   })
 })

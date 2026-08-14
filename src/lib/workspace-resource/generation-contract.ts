@@ -32,6 +32,16 @@ export const workspaceResourceGenerationOptionsSchema = z.record(
   workspaceResourceJsonValueSchema,
 )
 
+function frozenAudioExecutionIssuePath(path: readonly PropertyKey[]): PropertyKey[] {
+  const [field, ...rest] = path
+  if (field === 'mode') return ['audioExecutionMode', ...rest]
+  if (field === 'audioKind') return ['resource', 'audioKind', ...rest]
+  if (field === 'prompt') return ['resource', 'prompt', ...rest]
+  if (field === 'durationSeconds') return ['durationSeconds', ...rest]
+  if (field === 'generationOptions') return ['generationOptions', ...rest]
+  return ['audioExecutionMode', ...path]
+}
+
 const frozenResourceSchema = z.object({
   resourceId: z.string().trim().min(1).max(32),
   workspacePath: z.string().trim().min(1).max(512),
@@ -120,7 +130,7 @@ export const workspaceResourceGenerationTaskPayloadSchema = z.object({
       for (const issue of audioExecution.error.issues) {
         context.addIssue({
           ...issue,
-          path: ['audioExecutionMode', ...issue.path],
+          path: frozenAudioExecutionIssuePath(issue.path),
         })
       }
     } else {

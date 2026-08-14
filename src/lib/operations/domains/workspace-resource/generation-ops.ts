@@ -30,7 +30,9 @@ import {
 } from '@/lib/workspace-resource/generation-contract'
 import {
   freezeAudioExecution,
+  musicGenerationModeForAudioExecution,
   parseFrozenAudioExecution,
+  resolveAudioExecutionMode,
   type FrozenAudioExecution,
 } from '@/lib/workspace-resource/audio-execution-contract'
 import {
@@ -692,7 +694,17 @@ async function compileMediaExecution(input: {
 }): Promise<CompiledMediaExecution> {
   const { item, modelKey } = input
   const aspectRatio = input.aspectRatio
-  const prompt = item.mediaType === 'audio' && 'compositionPlan' in item ? null : item.prompt
+  const audioExecutionMode = item.mediaType === 'audio'
+    ? resolveAudioExecutionMode(item)
+    : null
+  const musicGenerationMode = audioExecutionMode === null
+    ? null
+    : musicGenerationModeForAudioExecution(audioExecutionMode)
+  const prompt = audioExecutionMode === 'composition_music'
+    ? null
+    : 'prompt' in item
+      ? item.prompt
+      : null
 
   try {
     let requested: Record<string, CapabilityValue>
@@ -728,13 +740,13 @@ async function compileMediaExecution(input: {
         duration: item.durationSeconds,
         ...(aspectRatio ? { aspectRatio } : {}),
       }
-    } else if (item.audioKind === 'music' && 'compositionPlan' in item) {
+    } else if (audioExecutionMode === 'composition_music' && 'compositionPlan' in item) {
       validateMusicCompositionCapability({
         modelKey,
         compositionPlan: item.compositionPlan,
       })
       requested = { outputFormat: 'mp3' }
-    } else if (item.audioKind === 'music') {
+    } else if (item.mediaType === 'audio' && item.audioKind === 'music' && !('compositionPlan' in item)) {
       const config = await getProjectModelConfig(input.ctx.projectId, input.ctx.userId)
       requested = {
         ...(config.capabilityDefaults[modelKey] ?? {}),
@@ -747,7 +759,7 @@ async function compileMediaExecution(input: {
         ...(item.keyScale ? { keyScale: item.keyScale } : {}),
         ...(item.timeSignature ? { timeSignature: item.timeSignature } : {}),
       }
-    } else {
+    } else if (item.mediaType === 'audio' && item.audioKind === 'sound') {
       const config = await getProjectModelConfig(input.ctx.projectId, input.ctx.userId)
       requested = {
         ...(config.capabilityDefaults[modelKey] ?? {}),
@@ -756,6 +768,8 @@ async function compileMediaExecution(input: {
         ...(item.negativePrompt ? { negativePrompt: item.negativePrompt } : {}),
         outputFormat: 'mp3',
       }
+    } else {
+      throw new Error('AUDIO_EXECUTION_MODE_ITEM_MISMATCH')
     }
 
     const imageCount = input.references.filter((reference) => reference.channel === 'image').length
@@ -767,7 +781,7 @@ async function compileMediaExecution(input: {
     const usesLastFrame = item.mediaType === 'video'
       && input.references.some((reference) => reference.role === 'last_frame')
     const durationSeconds = item.mediaType === 'video'
-      || (item.mediaType === 'audio' && !('compositionPlan' in item))
+      || (item.mediaType === 'audio' && audioExecutionMode !== 'composition_music' && 'durationSeconds' in item)
       ? item.durationSeconds
       : null
     const preflightOptions = providerTransportPreflightOptions({
@@ -786,8 +800,8 @@ async function compileMediaExecution(input: {
       modality: item.mediaType === 'audio' ? item.audioKind : item.mediaType,
       options: preflightOptions,
       ...(prompt ? { prompt } : {}),
-      ...(item.mediaType === 'audio' && item.audioKind === 'music' && 'compositionPlan' in item
-        ? { musicGenerationMode: 'composition_plan' as const }
+      ...(musicGenerationMode
+        ? { musicGenerationMode }
         : {}),
     })
     const frozenExecutionOptions = providerTransportPreflightOptions({
@@ -805,11 +819,11 @@ async function compileMediaExecution(input: {
       modality: item.mediaType === 'audio' ? item.audioKind : item.mediaType,
       options: frozenExecutionOptions,
       ...(prompt ? { prompt } : {}),
-      ...(item.mediaType === 'audio' && item.audioKind === 'music' && 'compositionPlan' in item
-        ? { musicGenerationMode: 'composition_plan' as const }
+      ...(musicGenerationMode
+        ? { musicGenerationMode }
         : {}),
     })
-    const generationOptions = item.mediaType === 'audio' && item.audioKind === 'music' && 'compositionPlan' in item
+    const generationOptions = audioExecutionMode === 'composition_music' && 'compositionPlan' in item
       ? musicScoreGenerationOptionsSchema.parse({
           kind: 'music_score_v1',
           compositionPlan: item.compositionPlan,
@@ -887,6 +901,9 @@ async function preflightFrozenRetry(input: {
   const musicSpecification = input.audioExecution?.mode === 'composition_music'
     ? input.audioExecution.generationOptions
     : null
+  const musicGenerationMode = input.audioExecution
+    ? musicGenerationModeForAudioExecution(input.audioExecution.mode)
+    : null
   const frozenOptions = input.audioExecution?.generationOptions ?? input.generationOptions
   const frozenPrompt = input.audioExecution?.prompt ?? input.prompt
   const frozenAudioKind = input.audioExecution?.audioKind ?? input.source.resource.audioKind
@@ -928,14 +945,14 @@ async function preflightFrozenRetry(input: {
       modality: input.mediaType === 'audio' ? frozenAudioKind! : input.mediaType,
       options,
       ...(frozenPrompt ? { prompt: frozenPrompt } : {}),
-      ...(musicSpecification ? { musicGenerationMode: 'composition_plan' as const } : {}),
+      ...(musicGenerationMode ? { musicGenerationMode } : {}),
     })
     preflightMediaProviderRoutes({
       selection: preflight.selection,
       modality: input.mediaType === 'audio' ? frozenAudioKind! : input.mediaType,
       options,
       ...(frozenPrompt ? { prompt: frozenPrompt } : {}),
-      ...(musicSpecification ? { musicGenerationMode: 'composition_plan' as const } : {}),
+      ...(musicGenerationMode ? { musicGenerationMode } : {}),
     })
   } catch (error) {
     throwMediaPreflightError(error, { mediaType: input.mediaType })
