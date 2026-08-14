@@ -3,10 +3,12 @@ import { NativeConnection, Worker } from '@temporalio/worker'
 import { createScopedLogger } from '@/lib/logging/core'
 import * as activities from './activities'
 import { buildTemporalConnectionOptions, getTemporalWorkerRuntimeConfig } from './config'
+import type { TaskWorkflowActivities } from './task/contracts'
 import { resolveTemporalWorkflowBundlePath } from './workflow-bundle-path'
 import { UNREGISTERED_WORKFLOW_VERSIONING_FALLBACK } from './workflow-registry'
 
 const logger = createScopedLogger({ module: 'temporal.worker' })
+const registeredActivities: typeof activities & TaskWorkflowActivities = activities
 
 async function runTemporalWorker(): Promise<void> {
   const config = getTemporalWorkerRuntimeConfig()
@@ -22,7 +24,7 @@ async function runTemporalWorker(): Promise<void> {
       workflowsPath: resolveTemporalWorkflowBundlePath(
         config.workerVersioningEnabled,
       ),
-      activities,
+      activities: registeredActivities,
       // Remote Activity cancellation is delivered through heartbeats. The
       // SDK default may throttle a 45s heartbeat timeout for ~36s, which is
       // too slow for an interactive Agent stop or message correction.

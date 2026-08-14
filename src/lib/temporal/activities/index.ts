@@ -6,6 +6,7 @@ export {
   initializeTaskWorkflow,
   notifyTaskFollowUp,
   releaseTaskCapacity,
+  reportTaskRetry,
   resolveTaskSchedulerAdmission,
   runTaskAttempt,
 } from './task'
