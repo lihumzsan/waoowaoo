@@ -6,13 +6,12 @@ import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { uploadObject } from '@/lib/storage'
 import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import { musicCompositionPlanDurationMs } from '@/lib/music/composition-plan'
-import { musicScoreGenerationOptionsSchema } from '@/lib/music/score-specification'
 import { extensionFromAudioMimeType, loadGeneratedAudio } from '../artifacts/audio'
 import { materializeGeneratedMusic } from '../artifacts/music'
 import { reportTaskProgress } from '../progress'
 import type { TaskExecutionContext } from '../context'
 import { assertTaskActive, requireTaskProviderRouteSelection } from '../provider-media'
-import { isMusicKeyScale, isMusicTimeSignature } from '@/lib/workspace-resource/music-parameter-contract'
+import { parseFrozenAudioExecution } from '@/lib/workspace-resource/audio-execution-contract'
 
 export async function handleWorkspaceResourceAudioTask(context: TaskExecutionContext) {
   const { data } = context
@@ -20,34 +19,30 @@ export async function handleWorkspaceResourceAudioTask(context: TaskExecutionCon
     throw new Error(`WORKSPACE_RESOURCE_TASK_TARGET_INVALID:${data.targetType}`)
   }
   const payload = parseWorkspaceResourceGenerationTaskPayload(data.payload ?? {})
-  const audioKind = payload.resource.audioKind
-  if (!audioKind) {
-    throw new Error(`WORKSPACE_RESOURCE_AUDIO_KIND_REQUIRED:${data.taskId}`)
-  }
   if (payload.resource.resourceId !== data.targetId || payload.resource.mediaType !== 'audio') {
     throw new Error(`WORKSPACE_RESOURCE_AUDIO_TASK_CONTRACT_INVALID:${data.taskId}`)
   }
+  const execution = parseFrozenAudioExecution({
+    audioExecutionMode: payload.audioExecutionMode,
+    audioKind: payload.resource.audioKind,
+    prompt: payload.resource.prompt,
+    durationSeconds: payload.durationSeconds,
+    generationOptions: payload.generationOptions,
+  })
+  const audioKind = execution.audioKind
   const selectedModel = audioKind === 'sound' ? payload.soundModel : payload.musicModel
   if (selectedModel !== payload.resource.modelKey) {
     throw new Error(`WORKSPACE_RESOURCE_${audioKind.toUpperCase()}_TASK_CONTRACT_INVALID:${data.taskId}`)
   }
   const model = payload.resource.modelKey
-  const prompt = payload.resource.prompt
-  const compositionSpecification = audioKind === 'music'
-    ? musicScoreGenerationOptionsSchema.safeParse(payload.generationOptions)
-    : null
-  const durationMs = compositionSpecification?.success
-    ? musicCompositionPlanDurationMs(compositionSpecification.data.compositionPlan)
-    : (payload.durationSeconds ?? 0) * 1000
+  const durationMs = execution.mode === 'composition_music'
+    ? musicCompositionPlanDurationMs(execution.generationOptions.compositionPlan)
+    : execution.durationSeconds * 1000
   const durationSeconds = durationMs / 1000
   if (durationMs <= 0) {
     throw new Error(`${audioKind.toUpperCase()}_GENERATE_DURATIONSECONDS_INVALID`)
   }
 
-  const options = payload.generationOptions
-  if (audioKind === 'sound' && options.outputFormat !== 'mp3') {
-    throw new Error('SOUND_GENERATE_OUTPUT_FORMAT_INVALID')
-  }
   await reportTaskProgress(context, 20, {
     stage: audioKind === 'sound' ? 'generate_sound_submit' : 'generate_music_submit',
   })
@@ -64,50 +59,41 @@ export async function handleWorkspaceResourceAudioTask(context: TaskExecutionCon
       await assertTaskActive(context, 'polling_external_wait')
     },
   }
-  const generated = audioKind === 'sound'
-    ? await generateSound(
-        data.userId,
-        model,
-        prompt ?? '',
-        {
-          durationSeconds,
-          negativePrompt: payload.negativePrompt,
-          outputFormat: 'mp3',
-        },
-        { key: invocationKey },
-        wait,
-      )
-    : await generateMusic(
-        data.userId,
-        model,
-        compositionSpecification?.success
-          ? { kind: 'composition_plan', compositionPlan: compositionSpecification.data.compositionPlan }
-          : { kind: 'prompt', prompt: prompt ?? '' },
-        compositionSpecification?.success
-          ? { outputFormat: compositionSpecification.data.outputFormat }
-          : {
-              durationSeconds,
-              ...(typeof options.providerDurationSeconds === 'number'
-                ? { providerDurationSeconds: options.providerDurationSeconds }
-                : {}),
-              ...(typeof options.negativePrompt === 'string'
-                ? { negativePrompt: options.negativePrompt }
-                : {}),
-              ...(options.vocalMode === 'instrumental' || options.vocalMode === 'vocal'
-                ? { vocalMode: options.vocalMode }
-                : {}),
-              ...(typeof options.genre === 'string' ? { genre: options.genre } : {}),
-              ...(typeof options.mood === 'string' ? { mood: options.mood } : {}),
-              ...(typeof options.bpm === 'number' ? { bpm: options.bpm } : {}),
-              ...(isMusicKeyScale(options.keyScale) ? { keyScale: options.keyScale } : {}),
-              ...(isMusicTimeSignature(options.timeSignature) ? { timeSignature: options.timeSignature } : {}),
-              ...(options.outputFormat === 'mp3' || options.outputFormat === 'wav'
-                ? { outputFormat: options.outputFormat }
-                : {}),
-          },
-        { key: invocationKey },
-        wait,
-      )
+  const generated = await (async () => {
+    switch (execution.mode) {
+      case 'sound':
+        return generateSound(
+          data.userId,
+          model,
+          execution.prompt,
+          execution.generationOptions,
+          { key: invocationKey },
+          wait,
+        )
+      case 'prompt_music':
+        return generateMusic(
+          data.userId,
+          model,
+          { kind: 'prompt', prompt: execution.prompt },
+          execution.generationOptions,
+          { key: invocationKey },
+          wait,
+        )
+      case 'composition_music':
+        return generateMusic(
+          data.userId,
+          model,
+          { kind: 'composition_plan', compositionPlan: execution.generationOptions.compositionPlan },
+          { outputFormat: execution.generationOptions.outputFormat },
+          { key: invocationKey },
+          wait,
+        )
+      default: {
+        const exhaustive: never = execution
+        throw new Error(`WORKSPACE_RESOURCE_AUDIO_EXECUTION_MODE_UNSUPPORTED:${String(exhaustive)}`)
+      }
+    }
+  })()
   const providerRoute = await requireTaskProviderRouteSelection(context, invocationKey)
 
   await reportTaskProgress(context, 85, {
@@ -120,13 +106,12 @@ export async function handleWorkspaceResourceAudioTask(context: TaskExecutionCon
     label: audioKind === 'sound' ? 'generated sound effect' : 'generated music',
     errorPrefix: audioKind === 'sound' ? 'SOUND_GENERATE' : 'MUSIC_GENERATE',
   })
-  const materializedAudio = audioKind === 'music'
-    && !compositionSpecification?.success
-    && typeof options.providerDurationSeconds === 'number'
+  const materializedAudio = execution.mode === 'prompt_music'
+    && typeof execution.generationOptions.providerDurationSeconds === 'number'
     ? await materializeGeneratedMusic({
         ...audio,
         requestedDurationSeconds: durationSeconds,
-        providerDurationSeconds: options.providerDurationSeconds,
+        providerDurationSeconds: execution.generationOptions.providerDurationSeconds,
       })
     : { ...audio, durationMs, plan: null }
   const storageKey = await uploadObject(
