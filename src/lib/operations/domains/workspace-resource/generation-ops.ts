@@ -29,6 +29,11 @@ import {
   type WorkspaceResourceGenerationTaskPayload,
 } from '@/lib/workspace-resource/generation-contract'
 import {
+  freezeAudioExecution,
+  parseFrozenAudioExecution,
+  type FrozenAudioExecution,
+} from '@/lib/workspace-resource/audio-execution-contract'
+import {
   audioGenerationBatchSchema,
   type AudioGenerationKind,
   generationReferenceSchema,
@@ -666,6 +671,17 @@ async function validateReferenceMediaCapabilities(input: {
   }
 }
 
+type CompiledMediaExecution =
+  | {
+      readonly kind: 'visual'
+      readonly prompt: string
+      readonly generationOptions: z.infer<typeof workspaceResourceGenerationOptionsSchema>
+    }
+  | {
+      readonly kind: 'audio'
+      readonly execution: FrozenAudioExecution
+    }
+
 async function compileMediaExecution(input: {
   readonly ctx: ProjectAgentOperationContext
   readonly item: GenerationItem
@@ -673,13 +689,10 @@ async function compileMediaExecution(input: {
   readonly schemaId: string
   readonly modelKey: string
   readonly references: readonly z.infer<typeof generationReferenceSchema>[]
-}): Promise<{
-  readonly prompt: string | null
-  readonly generationOptions: z.infer<typeof workspaceResourceGenerationOptionsSchema>
-}> {
+}): Promise<CompiledMediaExecution> {
   const { item, modelKey } = input
   const aspectRatio = input.aspectRatio
-  const prompt = item.mediaType === 'audio' ? null : item.prompt
+  const prompt = item.mediaType === 'audio' && 'compositionPlan' in item ? null : item.prompt
 
   try {
     let requested: Record<string, CapabilityValue>
@@ -753,7 +766,10 @@ async function compileMediaExecution(input: {
     const videoCount = input.references.filter((reference) => reference.channel === 'video').length
     const usesLastFrame = item.mediaType === 'video'
       && input.references.some((reference) => reference.role === 'last_frame')
-    const durationSeconds = item.mediaType === 'video' ? item.durationSeconds : null
+    const durationSeconds = item.mediaType === 'video'
+      || (item.mediaType === 'audio' && !('compositionPlan' in item))
+      ? item.durationSeconds
+      : null
     const preflightOptions = providerTransportPreflightOptions({
       mediaType: item.mediaType,
       options: requested,
@@ -805,7 +821,15 @@ async function compileMediaExecution(input: {
           outputFormat: 'mp3',
         })
       : frozenScalarOptions(preflight.options)
+    if (item.mediaType === 'audio') {
+      return {
+        kind: 'audio',
+        execution: freezeAudioExecution({ item, generationOptions }),
+      }
+    }
+    if (prompt === null) throw new Error('WORKSPACE_RESOURCE_VISUAL_PROMPT_REQUIRED')
     return {
+      kind: 'visual',
       prompt,
       generationOptions,
     }
@@ -830,6 +854,7 @@ async function preflightFrozenRetry(input: {
   readonly prompt: string | null
   readonly source: ReturnType<typeof parseWorkspaceResourceGenerationRetrySource>
   readonly generationOptions: z.infer<typeof workspaceResourceGenerationOptionsSchema>
+  readonly audioExecution: FrozenAudioExecution | null
 }): Promise<void> {
   const imagePositions = new Set(input.source.resource.imageInputPositions)
   const audioPositions = new Set(input.source.resource.audioInputPositions)
@@ -859,9 +884,12 @@ async function preflightFrozenRetry(input: {
     publicReferences: references,
     frozenReferences: input.source.resource.inputs,
   })
-  const musicSpecification = input.mediaType === 'audio'
-    ? musicScoreGenerationOptionsSchema.parse(input.generationOptions)
+  const musicSpecification = input.audioExecution?.mode === 'composition_music'
+    ? input.audioExecution.generationOptions
     : null
+  const frozenOptions = input.audioExecution?.generationOptions ?? input.generationOptions
+  const frozenPrompt = input.audioExecution?.prompt ?? input.prompt
+  const frozenAudioKind = input.audioExecution?.audioKind ?? input.source.resource.audioKind
   if (musicSpecification) {
     validateMusicCompositionCapability({
       modelKey: input.modelKey,
@@ -885,28 +913,28 @@ async function preflightFrozenRetry(input: {
     mediaType: input.mediaType,
     options: musicSpecification
       ? { outputFormat: musicSpecification.outputFormat }
-      : input.generationOptions,
+      : frozenOptions,
     imageCount: input.source.resource.imageInputPositions.length,
     referenceImageCount,
     audioCount: input.source.resource.audioInputPositions.length,
     videoCount: input.source.resource.videoInputPositions.length,
     usesLastFrame,
-    durationSeconds: input.source.durationSeconds ?? null,
+    durationSeconds: input.audioExecution?.durationSeconds ?? input.source.durationSeconds ?? null,
   })
   try {
     const preflight = await preflightMediaGenerationOptions({
       userId: input.ctx.userId,
       modelKey: input.modelKey,
-      modality: input.mediaType === 'audio' ? input.source.resource.audioKind! : input.mediaType,
+      modality: input.mediaType === 'audio' ? frozenAudioKind! : input.mediaType,
       options,
-      ...(input.prompt ? { prompt: input.prompt } : {}),
+      ...(frozenPrompt ? { prompt: frozenPrompt } : {}),
       ...(musicSpecification ? { musicGenerationMode: 'composition_plan' as const } : {}),
     })
     preflightMediaProviderRoutes({
       selection: preflight.selection,
-      modality: input.mediaType === 'audio' ? input.source.resource.audioKind! : input.mediaType,
+      modality: input.mediaType === 'audio' ? frozenAudioKind! : input.mediaType,
       options,
-      ...(input.prompt ? { prompt: input.prompt } : {}),
+      ...(frozenPrompt ? { prompt: frozenPrompt } : {}),
       ...(musicSpecification ? { musicGenerationMode: 'composition_plan' as const } : {}),
     })
   } catch (error) {
@@ -933,6 +961,7 @@ function modelPayload(
 function generationInputFingerprint(input: {
   readonly mediaType: PlannedResource['mediaType']
   readonly audioKind?: AudioGenerationKind
+  readonly audioExecutionMode?: FrozenAudioExecution['mode']
   readonly schemaId: string
   readonly modelKey: string
   readonly prompt: string | null
@@ -1064,22 +1093,29 @@ async function buildPlannedItem(input: {
     modelKey,
     references: publicReferences,
   })
-  if (item.mediaType === 'audio') {
+  const audioExecution = compiled.kind === 'audio' ? compiled.execution : null
+  const prompt = compiled.kind === 'audio' ? compiled.execution.prompt : compiled.prompt
+  const generationOptions = compiled.kind === 'audio'
+    ? compiled.execution.generationOptions
+    : compiled.generationOptions
+  if (audioExecution?.mode === 'composition_music') {
     await validateFrozenMusicScoreTimeline({
       ctx: input.ctx,
       references,
-      specification: musicScoreGenerationOptionsSchema.parse(compiled.generationOptions),
+      specification: audioExecution.generationOptions,
     })
   }
-  const durationSeconds = item.mediaType === 'video' ? item.durationSeconds : undefined
+  const durationSeconds = audioExecution?.durationSeconds
+    ?? (item.mediaType === 'video' ? item.durationSeconds : undefined)
   const inputHash = generationInputFingerprint({
     mediaType,
     ...(audioKind ? { audioKind } : {}),
+    ...(audioExecution ? { audioExecutionMode: audioExecution.mode } : {}),
     schemaId,
     modelKey,
-    prompt: compiled.prompt,
+    prompt,
     references,
-    generationOptions: compiled.generationOptions,
+    generationOptions,
     durationSeconds: durationSeconds ?? null,
     ...(vocalPerformanceMode ? { vocalPerformanceMode } : {}),
   })
@@ -1090,7 +1126,7 @@ async function buildPlannedItem(input: {
     ...(audioKind ? { audioKind } : {}),
     schemaId,
     inputHash,
-    prompt: compiled.prompt,
+    prompt,
     modelKey,
     inputs: [...references],
     imageInputPositions: providerPositions(publicReferences, 'image'),
@@ -1109,34 +1145,11 @@ async function buildPlannedItem(input: {
     protocol: 'workspace_resource_generation_v2',
     resource: resourcePayload,
     ...modelPayload(mediaType, modelKey, audioKind),
+    ...(audioExecution ? { audioExecutionMode: audioExecution.mode } : {}),
     count: 1,
-    generationOptions: compiled.generationOptions,
+    generationOptions,
     ...(vocalPerformanceMode ? { vocalPerformanceMode } : {}),
     ...(durationSeconds ? { durationSeconds } : {}),
-    ...(item.mediaType === 'audio' && item.audioKind === 'sound' && item.negativePrompt
-      ? { negativePrompt: item.negativePrompt }
-      : {}),
-    ...(typeof compiled.generationOptions.vocalMode === 'string'
-      ? { vocalMode: compiled.generationOptions.vocalMode as 'instrumental' | 'vocal' }
-      : {}),
-    ...(typeof compiled.generationOptions.genre === 'string'
-      ? { genre: compiled.generationOptions.genre }
-      : {}),
-    ...(typeof compiled.generationOptions.mood === 'string'
-      ? { mood: compiled.generationOptions.mood }
-      : {}),
-    ...(typeof compiled.generationOptions.bpm === 'number'
-      ? { bpm: compiled.generationOptions.bpm }
-      : {}),
-    ...(typeof compiled.generationOptions.keyScale === 'string'
-      ? { keyScale: compiled.generationOptions.keyScale as WorkspaceResourceGenerationTaskPayload['keyScale'] }
-      : {}),
-    ...(typeof compiled.generationOptions.timeSignature === 'string'
-      ? { timeSignature: compiled.generationOptions.timeSignature as WorkspaceResourceGenerationTaskPayload['timeSignature'] }
-      : {}),
-    ...(compiled.generationOptions.outputFormat === 'mp3' || compiled.generationOptions.outputFormat === 'wav'
-      ? { outputFormat: compiled.generationOptions.outputFormat }
-      : {}),
   }
   const taskType = taskTypeForMedia(mediaType)
   const taskPlanId = input.existingTarget
@@ -1367,16 +1380,28 @@ async function loadFailedTasks(
     }
     const mediaType = resource.mediaType as PlannedResource['mediaType']
     schemaForMedia(mediaType, resource.schemaId)
-    const prompt = resource.prompt
-    const modelKey = resource.modelKey?.trim()
+    const audioExecution = mediaType === 'audio'
+      ? parseFrozenAudioExecution({
+          audioExecutionMode: source.audioExecutionMode,
+          audioKind: source.resource.audioKind,
+          prompt: source.resource.prompt,
+          durationSeconds: source.durationSeconds,
+          generationOptions: source.generationOptions,
+        })
+      : null
+    const prompt = audioExecution?.prompt ?? resource.prompt
+    const modelKey = source.resource.modelKey.trim()
+    if (resource.modelKey?.trim() !== modelKey) {
+      throw new Error(`WORKSPACE_RESOURCE_RETRY_MODEL_MISMATCH:${resourceId}`)
+    }
     if (!modelKey || (mediaType !== 'audio' && !prompt?.trim())) {
       throw new ApiError('WORKSPACE_RESOURCE_RETRY_FROZEN_INPUT_MISSING', { resourceId })
     }
-    const generationOptions = workspaceResourceGenerationOptionsSchema.parse(resource.generationOptions ?? {})
+    const generationOptions = audioExecution?.generationOptions
+      ?? workspaceResourceGenerationOptionsSchema.parse(source.generationOptions)
     if (mediaType === 'video' && !source.durationSeconds) {
       throw new Error(`WORKSPACE_RESOURCE_RETRY_DURATION_MISSING:${resourceId}`)
     }
-    if (mediaType === 'audio') musicScoreGenerationOptionsSchema.parse(generationOptions)
     await preflightFrozenRetry({
       ctx,
       mediaType,
@@ -1384,6 +1409,7 @@ async function loadFailedTasks(
       prompt,
       source,
       generationOptions,
+      audioExecution,
     })
     const payload = parseWorkspaceResourceGenerationTaskPayload({
       lifecycleProjection: buildWorkspaceResourceLifecycleProjection([{
@@ -1406,12 +1432,13 @@ async function loadFailedTasks(
         inputHash: generationInputFingerprint({
           mediaType,
           ...(source.resource.audioKind ? { audioKind: source.resource.audioKind } : {}),
+          ...(audioExecution ? { audioExecutionMode: audioExecution.mode } : {}),
           schemaId: resource.schemaId,
           modelKey,
           prompt,
           references: source.resource.inputs,
           generationOptions,
-          durationSeconds: source.durationSeconds ?? null,
+          durationSeconds: audioExecution?.durationSeconds ?? source.durationSeconds ?? null,
           vocalPerformanceMode: source.vocalPerformanceMode ?? (mediaType === 'video' ? 'native_dialogue' : null),
         }),
         prompt,
@@ -1424,20 +1451,15 @@ async function loadFailedTasks(
         sourceTurnId: ctx.context.turnId?.trim() || null,
       },
       ...modelPayload(mediaType, modelKey, source.resource.audioKind),
+      ...(audioExecution ? { audioExecutionMode: audioExecution.mode } : {}),
       count: 1,
       generationOptions,
       ...(mediaType === 'video'
         ? { vocalPerformanceMode: source.vocalPerformanceMode ?? 'native_dialogue' as const }
         : {}),
-      ...(source.durationSeconds ? { durationSeconds: source.durationSeconds } : {}),
-      ...(source.negativePrompt ? { negativePrompt: source.negativePrompt } : {}),
-      ...(source.vocalMode ? { vocalMode: source.vocalMode } : {}),
-      ...(source.genre ? { genre: source.genre } : {}),
-      ...(source.mood ? { mood: source.mood } : {}),
-      ...(source.bpm ? { bpm: source.bpm } : {}),
-      ...(source.keyScale ? { keyScale: source.keyScale } : {}),
-      ...(source.timeSignature ? { timeSignature: source.timeSignature } : {}),
-      ...(source.outputFormat ? { outputFormat: source.outputFormat } : {}),
+      ...((audioExecution?.durationSeconds ?? source.durationSeconds)
+        ? { durationSeconds: audioExecution?.durationSeconds ?? source.durationSeconds }
+        : {}),
       ...(source.scoreCue ? { scoreCue: source.scoreCue } : {}),
     })
     const taskPlanId = `rerun_failed_production_items:${resourceId}`

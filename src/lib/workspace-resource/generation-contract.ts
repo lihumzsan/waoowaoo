@@ -123,9 +123,13 @@ export const workspaceResourceGenerationTaskPayloadSchema = z.object({
           path: ['audioExecutionMode', ...issue.path],
         })
       }
-    } else if ('timelineInputPosition' in audioExecution.data.generationOptions) {
-      if (!payload.resource.inputs.some((reference) => (
-        reference.position === audioExecution.data.generationOptions.timelineInputPosition
+    } else {
+      const scoreSpecification = audioExecution.data.generationOptions
+      const timelineInputPosition = 'timelineInputPosition' in scoreSpecification
+        ? scoreSpecification.timelineInputPosition
+        : null
+      if (timelineInputPosition !== null && !payload.resource.inputs.some((reference) => (
+        reference.position === timelineInputPosition
         && reference.role === 'score_timeline'
       ))) {
         context.addIssue({
