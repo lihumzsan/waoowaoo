@@ -67,28 +67,28 @@ export function createMediaProviderRequestIdentity<T extends MediaRequestIdentit
   }
   return result as T
 }
-export function assertImageMediaReferencesUseHttps(options: unknown): void {
+export function assertImageMediaReferencesUseAbsoluteHttpUrls(options: unknown): void {
   if (!options || typeof options !== 'object' || Array.isArray(options)) return
   const mediaOptions = options as MediaReferenceOptions
-  assertHttpsMediaArray(mediaOptions.referenceImages, 'referenceImages')
+  assertAbsoluteHttpMediaArray(mediaOptions.referenceImages, 'referenceImages')
 }
 
-export function assertVideoMediaReferencesUseHttps(input: {
+export function assertVideoMediaReferencesUseAbsoluteHttpUrls(input: {
   readonly imageUrl: string
   readonly options?: unknown
 }): void {
-  if (input.imageUrl) assertHttpsMediaUrl(input.imageUrl, 'imageUrl')
+  if (input.imageUrl) assertAbsoluteHttpMediaUrl(input.imageUrl, 'imageUrl')
   if (!input.options || typeof input.options !== 'object' || Array.isArray(input.options)) return
   const mediaOptions = input.options as MediaReferenceOptions
-  assertHttpsMediaArray(mediaOptions.referenceImages, 'referenceImages')
-  assertHttpsMediaArray(mediaOptions.referenceAudios, 'referenceAudios')
-  assertHttpsMediaArray(mediaOptions.referenceVideos, 'referenceVideos')
+  assertAbsoluteHttpMediaArray(mediaOptions.referenceImages, 'referenceImages')
+  assertAbsoluteHttpMediaArray(mediaOptions.referenceAudios, 'referenceAudios')
+  assertAbsoluteHttpMediaArray(mediaOptions.referenceVideos, 'referenceVideos')
   if (mediaOptions.lastFrameImageUrl !== undefined) {
-    assertHttpsMediaUrl(mediaOptions.lastFrameImageUrl, 'lastFrameImageUrl')
+    assertAbsoluteHttpMediaUrl(mediaOptions.lastFrameImageUrl, 'lastFrameImageUrl')
   }
 }
 
-function assertHttpsMediaUrl(value: unknown, field: string): void {
+function assertAbsoluteHttpMediaUrl(value: unknown, field: string): void {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`PROVIDER_MEDIA_REFERENCE_INVALID:${field}`)
   let url: URL
   try {
@@ -96,13 +96,16 @@ function assertHttpsMediaUrl(value: unknown, field: string): void {
   } catch {
     throw new Error(`PROVIDER_MEDIA_REFERENCE_INVALID:${field}`)
   }
-  if (url.protocol !== 'https:' || url.username || url.password) {
-    throw new Error(`PROVIDER_MEDIA_REFERENCE_HTTPS_REQUIRED:${field}`)
+  if (url.username || url.password) {
+    throw new Error(`PROVIDER_MEDIA_REFERENCE_CREDENTIALS_FORBIDDEN:${field}`)
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error(`PROVIDER_MEDIA_REFERENCE_SCHEME_UNSUPPORTED:${field}`)
   }
 }
 
-function assertHttpsMediaArray(value: unknown, field: string): void {
+function assertAbsoluteHttpMediaArray(value: unknown, field: string): void {
   if (value === undefined) return
   if (!Array.isArray(value)) throw new Error(`PROVIDER_MEDIA_REFERENCE_INVALID:${field}`)
-  value.forEach((item, index) => assertHttpsMediaUrl(item, `${field}[${String(index)}]`))
+  value.forEach((item, index) => assertAbsoluteHttpMediaUrl(item, `${field}[${String(index)}]`))
 }

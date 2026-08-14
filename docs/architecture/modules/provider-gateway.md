@@ -66,7 +66,7 @@ Wao 不为它建立 Responses proxy、OpenRouter provider 或第二套模型重�
   schema 拥有；adapter 只把 canonical option 映射为 provider wire 字段，不再维护同义 allowed-key、
   枚举、默认值或跨字段裁决。把重复解释移到 shared wrapper 但保留第二裁判不算收敛。
 - **PG-17 — 媒体引用只有一条投影链。** 私有图片/音频/视频在进入 Gateway 前必须经 owner-aware
-  出站入口，按模态校验后投影为有界时效的绝对 MinIO 签名 URL；Gateway 不再按 HTTP/HTTPS 建立第二
+  出站入口，按模态校验后投影为有界时效的绝对 MinIO 签名 URL；本地部署可使用 HTTP，Gateway 不再按 HTTP/HTTPS 建立第二
   套媒体引用裁决，但仍拒绝相对路径、Data URL 与内嵌凭据。Base64 不是跨 provider 的媒体协议，
   只允许在明确要求 inline bytes 的 adapter 内部有界转换。
 - **PG-18 — 外部下载只有一个 SSRF-safe 出口。** scheme、凭据、私网/保留地址、DNS 全部结果与
@@ -105,6 +105,7 @@ Wao 不为它建立 Responses proxy、OpenRouter provider 或第二套模型重�
 - engine 已把 option normalize 移到 fence 前，Codex adapter 却仍在 `execute` 内下载私有参考图，
   且 catch-all 把本地 SSRF 拒绝改成 `success:false`，再次误记 `outcome_unknown` → 旧防线未覆盖
   adapter 内本地预处理 → adapter 用互斥 `prepare/execute` 契约，owner 校验后经 storage SDK 物化（PG-06/17/18）。
+- Codex adapter 已用 `prepare/execute` 在本地物化私有参考图，engine 却保留全局 HTTPS 门禁，MinIO 恢复本地 HTTP 后合法投影在 prepare 前被拒绝 → 上次防线只覆盖 adapter 边界而没覆盖真实执行入口 → Gateway 只校验绝对 HTTP(S) 与无内嵌凭据（PG-17）。
 - 结构化输出的 fence 剥离曾与"JSON 内容修复、正文截取"写在一起，删除修复路径时把安全的外层
   envelope 归一也一并删了，完整合法 JSON 被 ``` 包裹后连续解析失败 → 一次删除跨越了两个语义 →
   只剥最外层完整 fence，继续拒绝一切内容修补（PG-09）。

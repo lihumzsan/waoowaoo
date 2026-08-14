@@ -18,8 +18,8 @@ import { ProviderTaskFailureError } from "@/lib/ai-exec/provider-errors";
 import { EXTERNAL_OPERATION } from "@/lib/external-operation/registry";
 import {
   createMediaProviderRequestIdentity,
-  assertImageMediaReferencesUseHttps,
-  assertVideoMediaReferencesUseHttps,
+  assertImageMediaReferencesUseAbsoluteHttpUrls,
+  assertVideoMediaReferencesUseAbsoluteHttpUrls,
 } from "@/lib/ai-exec/media-references";
 import {
   executeTaskProviderInvocation,
@@ -179,9 +179,9 @@ export async function executeMediaGeneration(
   wait?: AsyncProviderWaitCallbacks,
 ): Promise<GenerateResult> {
   if (input.modality === "image") {
-    assertImageMediaReferencesUseHttps(input.options);
+    assertImageMediaReferencesUseAbsoluteHttpUrls(input.options);
   } else if (input.modality === "video") {
-    assertVideoMediaReferencesUseHttps({
+    assertVideoMediaReferencesUseAbsoluteHttpUrls({
       imageUrl: input.imageUrl,
       options: input.options,
     });

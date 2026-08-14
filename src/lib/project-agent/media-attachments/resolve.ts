@@ -1,5 +1,10 @@
+import { createHash } from 'node:crypto'
 import type { Prisma } from '@prisma/client'
+import { MAX_IMAGE_BYTES } from '@/lib/http/body-limits'
+import { detectMimeFromBuffer } from '@/lib/media/media-mime'
 import { prisma } from '@/lib/prisma'
+import { getObjectBuffer } from '@/lib/storage'
+import { StorageObjectSizeExceededError } from '@/lib/storage/errors'
 import { resolveUserUploadAcceptedMedia } from '@/lib/workspace-resource/upload-contract'
 import {
   verifyProjectAssistantAttachmentToken,
@@ -19,6 +24,45 @@ export interface ResolvedProjectAssistantAttachmentRegistration {
     readonly mimeType: string | null
     readonly sizeBytes: number | null
   }
+}
+
+export async function resolveProjectAssistantImageAttachmentDataUrl(input: {
+  readonly userId: string
+  readonly projectId: string
+  readonly attachmentToken: string
+}): Promise<string> {
+  const registration = await resolveProjectAssistantAttachmentRegistration(input)
+  if (registration.payload.mediaType !== 'image') {
+    throw new Error(
+      `PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MEDIA_TYPE_INVALID:${registration.payload.publicId}`,
+    )
+  }
+  let bytes: Buffer
+  try {
+    bytes = await getObjectBuffer(registration.media.storageKey, { maxBytes: MAX_IMAGE_BYTES })
+  } catch (error) {
+    if (error instanceof StorageObjectSizeExceededError) {
+      throw new Error(
+        `PROJECT_ASSISTANT_MEDIA_ATTACHMENT_SIZE_EXCEEDED:${registration.payload.publicId}`,
+        { cause: error },
+      )
+    }
+    throw error
+  }
+  const mimeType = detectMimeFromBuffer(bytes)
+  const accepted = resolveUserUploadAcceptedMedia(mimeType)
+  if (!accepted || accepted.mediaType !== 'image') {
+    throw new Error(
+      `PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MEDIA_TYPE_INVALID:${registration.payload.publicId}`,
+    )
+  }
+  const sha256 = createHash('sha256').update(bytes).digest('hex')
+  if (sha256 !== registration.payload.sha256) {
+    throw new Error(
+      `PROJECT_ASSISTANT_MEDIA_ATTACHMENT_CONTENT_MISMATCH:${registration.payload.publicId}`,
+    )
+  }
+  return `data:${accepted.mimeType};base64,${bytes.toString('base64')}`
 }
 
 /**

@@ -1,6 +1,5 @@
 import { safeValidateUIMessages, type UIMessage } from 'ai'
 import { MAX_IMAGE_BYTES } from '@/lib/http/body-limits'
-import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
 import type { RuntimeUserInput } from '@/lib/codex-runtime/runtime-adapter'
 import {
   readProjectAssistantMediaAttachmentsFromMessage,
@@ -8,6 +7,7 @@ import {
 } from '@/lib/project-agent/media-attachments'
 import {
   resolveProjectAssistantAttachmentRegistration,
+  resolveProjectAssistantImageAttachmentDataUrl,
   resolveProjectAssistantMediaAttachments,
 } from '@/lib/project-agent/media-attachments/resolve'
 import { ensureUniqueUIMessages } from '@/lib/project-agent/ui-message-validation'
@@ -125,7 +125,11 @@ export async function prepareAssistantRuntimeUserInput(input: {
     }
     runtimeInputs.push({
       type: 'image',
-      url: await normalizeToBase64ForGeneration(registration.media.storageKey),
+      url: await resolveProjectAssistantImageAttachmentDataUrl({
+        userId: input.userId,
+        projectId: input.projectId,
+        attachmentToken: attachment.attachmentToken,
+      }),
       detail: 'high',
     })
   }
