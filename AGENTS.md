@@ -24,6 +24,15 @@
 - 禁止硬编码固定语言，用户可见内容必须遵守 i18n。
 - 所有方案采用第一性原理：先明确目标、约束和事实，再推导路径；禁止因“惯例如此”直接决策。
 
+## 2.1 本地产品与 Provider 固定边界
+
+- 本项目只在本机单用户环境使用；不以云端部署、多租户或多副本运行作为产品目标，也不得为这些未启用场景新增兼容层、fallback 或第二套实现。
+- 应用与 Temporal Worker 默认由 Windows 宿主机运行；Docker 只承载 MySQL、Redis、MinIO、Temporal 等基础设施，以及按需独立运行的 Codex Runtime。不得因 `cloud` edition 或其他部署分支改变这一本地开发与验收边界。
+- Codex 是文字与图片能力的唯一 Provider：文字、对话、规划、上下文压缩和原生搜索由当前 Windows 用户已登录的 Codex App Server 负责；图片生成与图片编辑只走现有 Codex 图片 Provider 的统一 registry 与执行入口。
+- 视频、音乐、环境音效、TTS 和配音只走本机 ComfyUI 的统一 registry 与执行入口。ComfyUI 工作流内部可使用图片节点，但不得作为用户可选择的图片 Provider。
+- 禁止接入外部 OpenAI API Key、OpenAI-compatible 网关或第二套文字/图片 Provider；禁止恢复 Ark、OpenRouter、FAL、Google、Mureka、Toonflow 等旧 Provider，失败时也不得自动回退到它们。
+- 代码评审和验收只覆盖上述本地真实路径；现有 cloud、旧 Provider 或其他未启用代码的删除与迁移仍须由用户单独授权，不能借本节约束顺带扩大任务范围。
+
 ## 3. 历史驱动的纠正性变更
 
 历史分诊按**后果**分级，不按改动类型分级。
