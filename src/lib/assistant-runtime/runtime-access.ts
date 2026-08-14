@@ -74,7 +74,7 @@ export const ASSISTANT_RUNTIME_STATIC_CONTRACT = {
       skillSearch: false,
       imageGeneration: false,
       standaloneWebSearch: false,
-      remoteCompactionV2: false,
+      remoteCompactionV2: true,
       codeMode: {
         enabled: true,
         directOnlyToolNamespaces: ['wao'],
