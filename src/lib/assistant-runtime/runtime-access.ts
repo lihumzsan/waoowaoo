@@ -70,11 +70,20 @@ export const ASSISTANT_RUNTIME_STATIC_CONTRACT = {
   },
   tools: {
     webSearch: 'live',
+    // The pinned runtime routes providers named exactly OpenAI through remote
+    // compaction. This native-authenticated provider keeps the desktop
+    // Responses service while selecting the runtime's local compaction path.
+    modelProvider: {
+      id: 'wao-openai-local-compaction',
+      name: 'Wao OpenAI',
+      requiresOpenAiAuth: true,
+      supportsWebsockets: true,
+      supportsStandaloneWebSearch: true,
+    },
     features: {
       skillSearch: false,
       imageGeneration: false,
       standaloneWebSearch: false,
-      remoteCompactionV2: true,
       codeMode: {
         enabled: true,
         directOnlyToolNamespaces: ['wao'],
@@ -135,13 +144,21 @@ function runtimeConfig(input: {
   return {
     // Codex owns the search tool and its native authenticated capability.
     web_search: tools.webSearch,
+    model_provider: tools.modelProvider.id,
+    model_providers: {
+      [tools.modelProvider.id]: {
+        name: tools.modelProvider.name,
+        requires_openai_auth: tools.modelProvider.requiresOpenAiAuth,
+        supports_websockets: tools.modelProvider.supportsWebsockets,
+        supports_standalone_web_search: tools.modelProvider.supportsStandaloneWebSearch,
+      },
+    },
     features: {
       // Wao installs only its six registry-bound domain Skills. Built-in image
       // generation stays disabled; media generation crosses Wao's direct Operations.
       skill_search: tools.features.skillSearch,
       image_generation: tools.features.imageGeneration,
       standalone_web_search: tools.features.standaloneWebSearch,
-      remote_compaction_v2: tools.features.remoteCompactionV2,
       // GPT-5.6 Sol/Terra select Codex's code-mode-only tool contract in their
       // official model metadata. The bundled process host must therefore be
       // available or those models fail closed without shell or Web Search.

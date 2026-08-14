@@ -1,12 +1,16 @@
-# Native Runtime Compaction V2 Implementation Plan
+# Native Runtime Local Compaction Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make long workspace-assistant conversations compact through the supported native Codex v2 path, unblock the existing retrying media Task, and prove recovery from the workspace UI.
+**Goal:** Make long workspace-assistant conversations use the local compaction path selected by a native-authenticated provider identity, unblock the existing retrying media Task, and prove recovery from the workspace UI.
 
-**Architecture:** Keep `ASSISTANT_RUNTIME_STATIC_CONTRACT` as the only feature authority. Change only its compaction declaration, exercise it with a direct production-contract test, and use the existing new-Turn continuation flow for recovery.
+**Architecture:** Keep `ASSISTANT_RUNTIME_STATIC_CONTRACT` as the only runtime provider authority. Its one provider declaration maps to the sole `model_provider` and `model_providers` entry in `runtimeConfig`; no base URL or credentials are supplied, so native desktop ChatGPT authentication remains authoritative. Use the existing new-Turn continuation flow for recovery.
 
 **Tech Stack:** TypeScript, Vitest, Next.js, Codex App Server, Prisma, in-app browser.
+
+## Correction after first UI verification
+
+The initial v2-only assumption was falsified after commit `d7f59c4d1`: a new assistant turn still failed with a plain `404` from the legacy ChatGPT compaction endpoint. In pinned Codex `0.147.0-alpha.6.6`, `remote_compaction_v2` chooses only between remote protocol variants; provider identity chooses remote versus local compaction. Replace the removed feature declaration with one provider whose name is not exactly `OpenAI`, while retaining `requires_openai_auth` and no explicit model-provider base URL or credentials. This is a static provider contract, not a fallback, proxy, retry owner, or second runtime configuration source.
 
 ## Global Constraints
 
@@ -17,50 +21,35 @@
 
 ---
 
-### Task 1: Pin the native compaction contract
+### Task 1: Superseded v2-only attempt
+
+The post-commit UI verification falsified this task's premise. It is retained only as history; Task 3 replaces the v2 feature flag with the provider contract that controls local versus remote routing.
+
+### Task 3: Route compaction through the native local provider
 
 **Files:**
 - Modify: `src/lib/assistant-runtime/runtime-access.ts`
-- Create: `tests/unit/assistant-runtime/runtime-access-contract.test.ts`
+- Modify: `tests/unit/assistant-runtime/runtime-access-contract.test.ts`
 
 **Interfaces:**
-- Consumes: `ASSISTANT_RUNTIME_STATIC_CONTRACT.tools.features.remoteCompactionV2`
-- Produces: a native runtime contract where `remoteCompactionV2` is always `true`
+- Consumes: `ASSISTANT_RUNTIME_STATIC_CONTRACT.tools.modelProvider`
+- Produces: one top-level `model_provider` plus exactly one matching `model_providers` definition, without a provider base URL, environment key, or bearer token.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Verify RED**
 
-```ts
-import { describe, expect, it } from 'vitest'
-import { ASSISTANT_RUNTIME_STATIC_CONTRACT } from '@/lib/assistant-runtime/runtime-access'
+Run `npm.cmd exec vitest run tests/unit/assistant-runtime/runtime-access-contract.test.ts` after changing the production-contract test to require the provider declaration. It must fail because the declaration is missing.
 
-describe('assistant native runtime contract', () => {
-  it('uses the supported v2 remote compaction protocol', () => {
-    expect(ASSISTANT_RUNTIME_STATIC_CONTRACT.tools.features.remoteCompactionV2).toBe(true)
-  })
-})
-```
+- [ ] **Step 2: Apply the minimal provider contract**
 
-- [ ] **Step 2: Verify RED**
+Add `wao-openai-local-compaction` with the deliberately non-`OpenAI` name `Wao OpenAI`, `requiresOpenAiAuth`, `supportsWebsockets`, and `supportsStandaloneWebSearch` all true. Remove `remoteCompactionV2` and its runtime override; emit the provider selection and its matching definition only in `runtimeConfig`.
 
-Run: `vitest run tests/unit/assistant-runtime/runtime-access-contract.test.ts`
+- [ ] **Step 3: Verify GREEN and static checks**
 
-Expected: FAIL because the current production contract returns `false`.
+Run the focused test, `npm.cmd run typecheck`, targeted ESLint for the code and test file, and `git diff --check`.
 
-- [ ] **Step 3: Apply the minimal production change**
+- [ ] **Step 4: Commit**
 
-Change the contract declaration to:
-
-```ts
-remoteCompactionV2: true,
-```
-
-- [ ] **Step 4: Verify GREEN and static checks**
-
-Run the focused test, targeted ESLint, `npm.cmd run typecheck`, `npm.cmd run test:logic`, and `npm.cmd run architecture:impact -- --changed`.
-
-- [ ] **Step 5: Commit**
-
-Commit only the contract and its regression test with `fix(runtime): use native compaction v2`.
+Commit the provider repair, regression test, and corrected spec/plan with `fix(runtime): route compaction locally`.
 
 ### Task 2: Complete the existing Worker Activity registry
 
@@ -96,7 +85,7 @@ Run typecheck and targeted ESLint for the two files.
 
 Commit only the registry conformance and export with `fix(temporal): register task retry projection`.
 
-### Task 3: Integrate and verify the user trigger
+### Task 4: Integrate and verify the user trigger
 
 **Files:**
 - No additional source files.

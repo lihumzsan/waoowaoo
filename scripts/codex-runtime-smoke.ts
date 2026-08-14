@@ -449,11 +449,19 @@ function buildNativeRuntimeConfig(): RuntimeJsonObject {
   const tools = ASSISTANT_RUNTIME_STATIC_CONTRACT.tools
   return {
     web_search: tools.webSearch,
+    model_provider: tools.modelProvider.id,
+    model_providers: {
+      [tools.modelProvider.id]: {
+        name: tools.modelProvider.name,
+        requires_openai_auth: tools.modelProvider.requiresOpenAiAuth,
+        supports_websockets: tools.modelProvider.supportsWebsockets,
+        supports_standalone_web_search: tools.modelProvider.supportsStandaloneWebSearch,
+      },
+    },
     features: {
       skill_search: tools.features.skillSearch,
       image_generation: tools.features.imageGeneration,
       standalone_web_search: tools.features.standaloneWebSearch,
-      remote_compaction_v2: tools.features.remoteCompactionV2,
       code_mode: {
         enabled: tools.features.codeMode.enabled,
         direct_only_tool_namespaces: [...tools.features.codeMode.directOnlyToolNamespaces],
@@ -479,11 +487,13 @@ async function runAppServerSmoke(params: {
     false,
     'Native Codex owns standalone web search; Wao must not install a model gateway search bridge.',
   )
-  assert.equal(
-    'modelProvider' in staticToolContract,
-    false,
-    'Native Codex must not expose a custom model provider contract.',
-  )
+  assert.deepEqual(staticToolContract.modelProvider, {
+    id: 'wao-openai-local-compaction',
+    name: 'Wao OpenAI',
+    requiresOpenAiAuth: true,
+    supportsWebsockets: true,
+    supportsStandaloneWebSearch: true,
+  })
   assert.equal(staticToolContract.waoMcp.required, true)
   assert.throws(
     () => assertOnlyKeys({ unexpected: true }, [], 'SMOKE_UNEXPECTED_FIELD'),
