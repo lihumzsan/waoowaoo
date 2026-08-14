@@ -34,6 +34,21 @@ export function buildVideoMergeInputHash(
   return stableArgsFingerprint({ references, audioMode })
 }
 
+const timedSoundCueInputSchema = z.object({
+  resourceId: z.string().trim().min(1).max(32),
+  contentVersion: z.number().int().positive(),
+  startMs: z.number().int().nonnegative(),
+  durationMs: z.number().int().positive(),
+  fadeInMs: z.number().int().nonnegative(),
+  fadeOutMs: z.number().int().nonnegative(),
+  gainDb: z.number().finite().min(-60).max(12),
+}).strict().superRefine((cue, context) => {
+  if (cue.fadeInMs > cue.durationMs) context.addIssue({ code: 'custom', path: ['fadeInMs'], message: 'fadeInMs exceeds cue duration.' })
+  if (cue.fadeOutMs > cue.durationMs) context.addIssue({ code: 'custom', path: ['fadeOutMs'], message: 'fadeOutMs exceeds cue duration.' })
+})
+
+type TimedSoundCueInput = z.infer<typeof timedSoundCueInputSchema>
+
 const mergeVideosInputSchema = z.object({
   folderPath: z.string().trim().min(1).max(512).nullable().optional()
     .describe('Optional project-relative destination folder. Missing folders are created atomically with the merged video Resource.'),
@@ -57,14 +72,20 @@ const mergeVideosInputSchema = z.object({
     resourceId: z.string().trim().min(1).max(32),
     contentVersion: z.number().int().positive(),
   }).strict()).min(1).max(50).optional(),
+  soundCues: z.array(timedSoundCueInputSchema).min(1).max(50).optional(),
 }).strict().superRefine((input, context) => {
-  if (input.musicCues) {
+  const musicCues = input.musicCues ?? []
+  const soundCues = input.soundCues ?? []
+  if (musicCues.length > 0 || soundCues.length > 0) {
     if (input.videos.length !== 1 || input.audioMode !== 'preserve' || input.backgroundMusic || input.replacementAudio) {
-      context.addIssue({ code: 'custom', path: ['musicCues'], message: 'Music cues require one source video and preserve mode without another audio input.' })
+      context.addIssue({ code: 'custom', path: ['audioMode'], message: 'Timed audio cues require one source video and preserve mode without another audio input.' })
     }
-    const identities = input.musicCues.map((cue) => `${cue.resourceId}:${String(cue.contentVersion)}`)
+    const identities = [...musicCues, ...soundCues].map((cue) => `${cue.resourceId}:${String(cue.contentVersion)}`)
     if (new Set(identities).size !== identities.length) {
-      context.addIssue({ code: 'custom', path: ['musicCues'], message: 'Music cue references must be unique.' })
+      context.addIssue({ code: 'custom', path: ['soundCues'], message: 'Timed audio cue references must be unique.' })
+    }
+    if (musicCues.length + soundCues.length > 50) {
+      context.addIssue({ code: 'custom', path: ['soundCues'], message: 'Timed audio cues cannot exceed 50 inputs.' })
     }
     return
   }
@@ -97,18 +118,24 @@ type FrozenMusicCuePlacement = {
   readonly gainDb: number
 }
 
-async function resolveFrozenMusicCuePlacements(input: {
+type FrozenSoundCuePlacement = {
+  readonly inputPosition: number
+  readonly startMs: number
+  readonly durationMs: number
+  readonly fadeInMs: number
+  readonly fadeOutMs: number
+  readonly gainDb: number
+}
+
+async function resolveSingleSourceTimeline(input: {
   readonly userId: string
   readonly projectId: string
   readonly references: readonly WorkspaceResourceInputRef[]
-}): Promise<readonly FrozenMusicCuePlacement[]> {
+}): Promise<{ readonly sourceVideo: WorkspaceResourceInputRef; readonly durationMs: number }> {
   const sourceVideo = input.references.find((reference) => reference.role === 'source_video')
-  const musicReferences = input.references.filter((reference) => reference.role === 'bgm_audio')
-  if (musicReferences.length === 0) return []
   if (!sourceVideo || input.references.filter((reference) => reference.role === 'source_video').length !== 1) {
-    throw new Error('WORKSPACE_RESOURCE_VIDEO_MERGE_SCORE_SOURCE_INVALID')
+    throw new Error('WORKSPACE_RESOURCE_VIDEO_MERGE_TIMELINE_SOURCE_INVALID')
   }
-
   const [timeline] = await resolveWorkspaceResourceInputMedia({
     userId: input.userId,
     projectId: input.projectId,
@@ -116,9 +143,19 @@ async function resolveFrozenMusicCuePlacements(input: {
     expectedMediaType: 'video',
   })
   if (!timeline || timeline.durationMs === null) {
-    throw new Error('WORKSPACE_RESOURCE_VIDEO_MERGE_SCORE_TIMELINE_DURATION_MISSING')
+    throw new Error('WORKSPACE_RESOURCE_VIDEO_MERGE_TIMELINE_DURATION_MISSING')
   }
-  const timelineDurationMs = timeline.durationMs
+  return { sourceVideo, durationMs: timeline.durationMs }
+}
+
+async function resolveFrozenMusicCuePlacements(input: {
+  readonly userId: string
+  readonly projectId: string
+  readonly references: readonly WorkspaceResourceInputRef[]
+}): Promise<readonly FrozenMusicCuePlacement[]> {
+  const musicReferences = input.references.filter((reference) => reference.role === 'bgm_audio')
+  if (musicReferences.length === 0) return []
+  const { sourceVideo, durationMs: timelineDurationMs } = await resolveSingleSourceTimeline(input)
 
   const resources = await prisma.workspaceResource.findMany({
     where: {
@@ -190,11 +227,53 @@ async function resolveFrozenMusicCuePlacements(input: {
   })
 }
 
+async function resolveFrozenSoundCuePlacements(input: {
+  readonly userId: string
+  readonly projectId: string
+  readonly references: readonly WorkspaceResourceInputRef[]
+  readonly soundCues: readonly TimedSoundCueInput[]
+}): Promise<readonly FrozenSoundCuePlacement[]> {
+  const soundReferences = input.references.filter((reference) => reference.role === 'sound_effect_audio')
+  if (soundReferences.length === 0) return []
+  const { durationMs: timelineDurationMs } = await resolveSingleSourceTimeline(input)
+  const soundMedia = await resolveWorkspaceResourceInputMedia({
+    userId: input.userId,
+    projectId: input.projectId,
+    references: soundReferences,
+    expectedMediaType: 'audio',
+  })
+  const cueByIdentity = new Map(input.soundCues.map((cue) => [
+    `${cue.resourceId}:${String(cue.contentVersion)}`,
+    cue,
+  ]))
+  return soundMedia.map((media) => {
+    const cue = cueByIdentity.get(`${media.reference.resourceId}:${String(media.reference.contentVersion)}`)
+    if (!cue) throw new Error(`WORKSPACE_RESOURCE_VIDEO_MERGE_SOUND_CUE_MISSING:${media.reference.resourceId}`)
+    if (media.durationMs === null) {
+      throw new Error(`WORKSPACE_RESOURCE_VIDEO_MERGE_SOUND_DURATION_MISSING:${media.reference.resourceId}`)
+    }
+    if (cue.durationMs > media.durationMs) {
+      throw new Error(`WORKSPACE_RESOURCE_VIDEO_MERGE_SOUND_CUE_EXCEEDS_SOURCE:${media.reference.resourceId}`)
+    }
+    if (cue.startMs + cue.durationMs > timelineDurationMs) {
+      throw new Error(`WORKSPACE_RESOURCE_VIDEO_MERGE_SOUND_CUE_EXCEEDS_TIMELINE:${media.reference.resourceId}`)
+    }
+    return {
+      inputPosition: media.reference.position,
+      startMs: cue.startMs,
+      durationMs: cue.durationMs,
+      fadeInMs: cue.fadeInMs,
+      fadeOutMs: cue.fadeOutMs,
+      gainDb: cue.gainDb,
+    }
+  })
+}
+
 export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOperationRegistryDraft {
   return {
     merge_videos: defineOperation({
       id: 'merge_videos',
-      summary: 'Concatenate exact frozen video Resource versions, explicitly control final audio, or place exact generated music cues onto one merged source video.',
+      summary: 'Concatenate exact frozen video Resource versions, explicitly control final audio, or place exact music and environment-sound cues onto one merged source video.',
       intent: 'act',
       channels: { tool: true, api: true, mcp: true },
       effects: {
@@ -218,7 +297,7 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
       confirmation: { kind: 'none', required: false },
       assistantWriteAuthority: {
         kind: 'temporal_operation_execution',
-        contractRevision: 'merge_videos/v6',
+        contractRevision: 'merge_videos/v7',
         followUpPolicy: 'after_all_terminal',
       },
       inputSchema: mergeVideosInputSchema,
@@ -252,6 +331,14 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
               role: 'bgm_audio',
               position: input.videos.length + index,
             })),
+            ...(input.soundCues ?? []).map((sound, index) => ({
+              resourceId: sound.resourceId,
+              contentVersion: sound.contentVersion,
+              role: 'sound_effect_audio',
+              position: input.videos.length + (input.musicCues?.length ?? 0) + index,
+              expectedMediaType: 'audio' as const,
+              allowedSchemaIds: [WORKSPACE_RESOURCE_SCHEMA.SOUND_EFFECT_AUDIO],
+            })),
           ],
         })
         const musicCues = await resolveFrozenMusicCuePlacements({
@@ -259,7 +346,13 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
           projectId: ctx.projectId,
           references,
         })
-        const inputHash = stableArgsFingerprint({ references, musicCues })
+        const soundCues = await resolveFrozenSoundCuePlacements({
+          userId: ctx.userId,
+          projectId: ctx.projectId,
+          references,
+          soundCues: input.soundCues ?? [],
+        })
+        const inputHash = stableArgsFingerprint({ references, audioMode: input.audioMode, musicCues, soundCues })
         const requestId = [
           'merge_videos', ctx.userId, ctx.projectId,
           ctx.context.turnId?.trim() || 'no-turn',
@@ -275,8 +368,8 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
           mediaType: 'video',
           schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
         })
-        const generationOptions: Record<string, string | number> = musicCues.length > 0
-          ? { mergeMode: 'score_cues' }
+        const generationOptions: Record<string, string | number> = musicCues.length > 0 || soundCues.length > 0
+          ? { mergeMode: 'timed_cues', audioMode: 'preserve' }
           : { mergeMode: 'ordered_concat', audioMode: input.audioMode }
         const payload = {
           lifecycleProjection: buildWorkspaceResourceLifecycleProjection([{
@@ -285,7 +378,7 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
             schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
             name: workspaceResourceDisplayName({ workspacePath: outputPath, resourceId }),
           }]),
-          protocol: 'workspace_resource_video_merge_v1' as const,
+          protocol: 'workspace_resource_video_merge_v2' as const,
           resource: {
             resourceId,
             mediaType: 'video' as const,
@@ -296,6 +389,7 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
             inputs: references,
             generationOptions,
             musicCues,
+            soundCues,
             toolCallId: ctx.toolCallId?.trim() || null,
           },
         }

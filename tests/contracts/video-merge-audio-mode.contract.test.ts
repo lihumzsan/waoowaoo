@@ -19,6 +19,23 @@ describe('merge_videos audio mode contract', () => {
     expect(operation.inputSchema.safeParse(input).success).toBe(true)
   })
 
+  it('accepts exact environment sound cues on one preserved video timeline', () => {
+    expect(operation.inputSchema.safeParse({
+      name: 'timed ambience',
+      videos: [video('video_one')],
+      audioMode: 'preserve',
+      soundCues: [{
+        resourceId: 'sound_one',
+        contentVersion: 1,
+        startMs: 0,
+        durationMs: 26_000,
+        fadeInMs: 300,
+        fadeOutMs: 500,
+        gainDb: -8,
+      }],
+    }).success).toBe(true)
+  })
+
   it.each([
     ['missing mode', { name: 'missing', videos: [video('video_one'), video('video_two')] }],
     ['legacy music field', { name: 'legacy', videos: [video('video_one')], audioMode: 'replace', music: audio }],
@@ -42,7 +59,7 @@ describe('merge_videos audio mode contract', () => {
         schemaId: 'generic.video',
         name: 'Replaced output',
       }] },
-      protocol: 'workspace_resource_video_merge_v1',
+      protocol: 'workspace_resource_video_merge_v2',
       resource: {
         resourceId: 'output_one',
         mediaType: 'video',
@@ -59,7 +76,7 @@ describe('merge_videos audio mode contract', () => {
       },
     })
 
-    expect(parsed.protocol).toBe('workspace_resource_video_merge_v1')
+    expect(parsed.protocol).toBe('workspace_resource_video_merge_v2')
     expect(parsed.resource.generationOptions.audioMode).toBe('replace')
     expect(parsed.resource.inputs[1]?.role).toBe('replacement_audio')
   })
@@ -73,5 +90,48 @@ describe('merge_videos audio mode contract', () => {
     expect(buildVideoMergeInputHash(references, 'mix')).not.toBe(
       buildVideoMergeInputHash(references, 'replace'),
     )
+  })
+
+  it('freezes sound cues separately from background music cue positions', () => {
+    const payload = {
+      lifecycleProjection: { resources: [{
+        resourceId: 'output_one',
+        mediaType: 'video',
+        schemaId: 'generic.video',
+        name: 'Timed output',
+      }] },
+      protocol: 'workspace_resource_video_merge_v2',
+      resource: {
+        resourceId: 'output_one',
+        mediaType: 'video',
+        schemaId: 'generic.video',
+        prompt: null,
+        modelKey: null,
+        inputHash: 'a'.repeat(64),
+        inputs: [
+          { resourceId: 'video_one', contentVersion: 1, workspacePath: 'video-one.mp4', role: 'source_video', position: 0 },
+          { resourceId: 'sound_one', contentVersion: 1, workspacePath: 'rain.mp3', role: 'sound_effect_audio', position: 1 },
+        ],
+        generationOptions: { mergeMode: 'timed_cues', audioMode: 'preserve' },
+        musicCues: [],
+        soundCues: [{ inputPosition: 1, startMs: 0, durationMs: 26_000, fadeInMs: 300, fadeOutMs: 500, gainDb: -8 }],
+        toolCallId: null,
+      },
+    }
+
+    const parsed = parseWorkspaceResourceVideoMergeTaskPayload(payload)
+    expect(parsed.protocol).toBe('workspace_resource_video_merge_v2')
+    expect(parsed.resource.soundCues).toHaveLength(1)
+
+    expect(() => parseWorkspaceResourceVideoMergeTaskPayload({
+      ...payload,
+      resource: {
+        ...payload.resource,
+        inputs: [
+          payload.resource.inputs[0],
+          { ...payload.resource.inputs[1], role: 'bgm_audio' },
+        ],
+      },
+    })).toThrow(/soundCues/)
   })
 })
