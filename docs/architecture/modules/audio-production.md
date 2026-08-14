@@ -62,3 +62,6 @@ JSON 专业结果，并把同一 items 直接提交给 `create_audio`。系统�
 - cue 起止曾只存在于创作输出，生成 Operation 没有冻结放置，最终 merge 又只会从零开始铺一条 BGM；
   上一版仅校验 Agent JSON，没有覆盖 Task、retry、Resource provenance 和真实 mixer 调用链 → cue timing
   与精确成片 lineage 成为同一冻结事实，merge planner 是唯一 placement writer（AP-05/07）。
+- 公开 `audioKind` 与 provider 分支正确仍不足以保证音频模式正确：编曲方案重构曾把“全部 audio 等于
+  `music_score_v1`”遗留在通用规划、冻结重建和重试路径，导致环境音效在提交前被错误 schema 拒绝；音频
+  模式必须由持久化判别式 resolver 一次裁决，planner、retry 与 Worker 只能穷尽消费。
