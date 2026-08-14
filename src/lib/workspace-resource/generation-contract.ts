@@ -1,10 +1,12 @@
 import { z } from 'zod'
 import { taskRuntimePayloadEnvelopeShape } from '@/lib/task/progress-payload'
-import { musicScoreGenerationOptionsSchema } from '@/lib/music/score-specification'
 import type { WorkspaceResourceJsonValue } from './contracts'
 import { workspaceResourceLifecycleProjectionSchema } from './task-runtime-envelope'
 import { vocalPerformanceModeSchema } from './vocal-performance-contract'
-import { MUSIC_KEY_SCALE_VALUES, MUSIC_TIME_SIGNATURE_VALUES } from './music-parameter-contract'
+import {
+  audioExecutionModeSchema,
+  frozenAudioExecutionSchema,
+} from './audio-execution-contract'
 
 export const CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS = 15
 
@@ -95,14 +97,8 @@ export const workspaceResourceGenerationTaskPayloadSchema = z.object({
   voiceModel: z.string().trim().min(1).optional(),
   previewText: z.string().trim().min(1).max(20_000).optional(),
   language: z.string().trim().min(1).max(32).optional(),
+  audioExecutionMode: audioExecutionModeSchema.optional(),
   durationSeconds: z.number().int().min(1).max(600).optional(),
-  vocalMode: z.enum(['instrumental', 'vocal']).optional(),
-  genre: z.string().trim().min(1).max(200).optional(),
-  mood: z.string().trim().min(1).max(200).optional(),
-  bpm: z.number().int().min(20).max(300).optional(),
-  keyScale: z.enum(MUSIC_KEY_SCALE_VALUES).optional(),
-  timeSignature: z.enum(MUSIC_TIME_SIGNATURE_VALUES).optional(),
-  outputFormat: z.enum(['mp3', 'wav']).optional(),
   scoreCue: z.object({
     key: z.string().trim().min(1).max(191),
     startMs: z.number().int().nonnegative(),
@@ -110,23 +106,26 @@ export const workspaceResourceGenerationTaskPayloadSchema = z.object({
   }).strict().refine((cue) => cue.endMs > cue.startMs, { message: 'scoreCue endMs must exceed startMs' }).optional(),
   count: z.literal(1),
   generationOptions: workspaceResourceGenerationOptionsSchema,
-  negativePrompt: z.string().max(100_000)
-    .refine((value) => value.trim().length > 0, 'negativePrompt must contain non-whitespace content.')
-    .optional(),
   vocalPerformanceMode: vocalPerformanceModeSchema.optional(),
 }).strict().superRefine((payload, context) => {
-  if (payload.resource.mediaType === 'audio' && payload.resource.audioKind === 'music') {
-    const musicOptions = musicScoreGenerationOptionsSchema.safeParse(payload.generationOptions)
-    if (musicOptions.success) {
-      if (payload.resource.prompt !== null) {
+  if (payload.resource.mediaType === 'audio') {
+    const audioExecution = frozenAudioExecutionSchema.safeParse({
+      mode: payload.audioExecutionMode,
+      audioKind: payload.resource.audioKind,
+      prompt: payload.resource.prompt,
+      durationSeconds: payload.durationSeconds ?? null,
+      generationOptions: payload.generationOptions,
+    })
+    if (!audioExecution.success) {
+      for (const issue of audioExecution.error.issues) {
         context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['resource', 'prompt'],
-          message: 'Composition Plan music Resources do not use a prompt.',
+          ...issue,
+          path: ['audioExecutionMode', ...issue.path],
         })
       }
+    } else if ('timelineInputPosition' in audioExecution.data.generationOptions) {
       if (!payload.resource.inputs.some((reference) => (
-        reference.position === musicOptions.data.timelineInputPosition
+        reference.position === audioExecution.data.generationOptions.timelineInputPosition
         && reference.role === 'score_timeline'
       ))) {
         context.addIssue({
@@ -135,23 +134,13 @@ export const workspaceResourceGenerationTaskPayloadSchema = z.object({
           message: 'Music score timelineInputPosition must identify the frozen score_timeline input.',
         })
       }
-      if (payload.durationSeconds !== undefined) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['durationSeconds'],
-          message: 'Composition Plan music duration is derived only from the plan.',
-        })
-      }
-    } else if (payload.resource.prompt === null) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['resource', 'prompt'],
-        message: 'Prompt music generation requires a prompt.',
-      })
     }
-  }
-  if (payload.resource.mediaType === 'audio' && payload.resource.audioKind === 'sound' && payload.resource.prompt === null) {
-    context.addIssue({ code: 'custom', path: ['resource', 'prompt'], message: 'Sound generation requires a prompt.' })
+  } else if (payload.audioExecutionMode !== undefined) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['audioExecutionMode'],
+      message: 'audioExecutionMode is only valid for audio resources.',
+    })
   }
   if (payload.resource.mediaType === 'video' && payload.vocalPerformanceMode === undefined) {
     context.addIssue({ code: 'custom', path: ['vocalPerformanceMode'], message: 'video tasks must declare vocalPerformanceMode.' })
@@ -212,18 +201,11 @@ export function parseWorkspaceResourceGenerationTaskPayload(
     voiceModel: parsed.voiceModel,
     previewText: parsed.previewText,
     language: parsed.language,
+    audioExecutionMode: parsed.audioExecutionMode,
     durationSeconds: parsed.durationSeconds,
-    vocalMode: parsed.vocalMode,
-    genre: parsed.genre,
-    mood: parsed.mood,
-    bpm: parsed.bpm,
-    keyScale: parsed.keyScale,
-    timeSignature: parsed.timeSignature,
-    outputFormat: parsed.outputFormat,
     scoreCue: parsed.scoreCue,
     count: parsed.count,
     generationOptions: parsed.generationOptions,
-    negativePrompt: parsed.negativePrompt,
     vocalPerformanceMode: parsed.vocalPerformanceMode,
   })
 }
@@ -248,18 +230,11 @@ export function parseWorkspaceResourceGenerationRetrySource(
     voiceModel: parsed.voiceModel,
     previewText: parsed.previewText,
     language: parsed.language,
+    audioExecutionMode: parsed.audioExecutionMode,
     durationSeconds: parsed.durationSeconds,
-    vocalMode: parsed.vocalMode,
-    genre: parsed.genre,
-    mood: parsed.mood,
-    bpm: parsed.bpm,
-    keyScale: parsed.keyScale,
-    timeSignature: parsed.timeSignature,
-    outputFormat: parsed.outputFormat,
     scoreCue: parsed.scoreCue,
     count: parsed.count,
     generationOptions: parsed.generationOptions,
-    negativePrompt: parsed.negativePrompt,
     vocalPerformanceMode: parsed.vocalPerformanceMode,
   })
 }

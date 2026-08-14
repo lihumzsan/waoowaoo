@@ -111,6 +111,7 @@ describe('ComfyUI MOSS SoundEffect v2 contract', () => {
         }],
       },
       protocol: 'workspace_resource_generation_v2',
+      audioExecutionMode: 'sound',
       resource: {
         resourceId: 'sound-rain', workspacePath: 'Rain-sound-rain', mediaType: 'audio', audioKind: 'sound',
         schemaId: WORKSPACE_RESOURCE_SCHEMA.SOUND_EFFECT_AUDIO, inputHash: 'a'.repeat(64),
@@ -119,10 +120,12 @@ describe('ComfyUI MOSS SoundEffect v2 contract', () => {
         toolCallId: null, sourceTurnId: null,
       },
       soundModel: COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_KEY,
-      durationSeconds: 5, outputFormat: 'mp3', count: 1, generationOptions: {}, negativePrompt,
+      durationSeconds: 5,
+      count: 1,
+      generationOptions: { durationSeconds: 5, outputFormat: 'mp3', negativePrompt },
     })
 
-    expect(payload.negativePrompt).toBe(negativePrompt)
+    expect(payload.generationOptions.negativePrompt).toBe(negativePrompt)
   })
 
   it('compiles the checked-in API graph without UI-only prompt nodes or references', () => {

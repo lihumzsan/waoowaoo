@@ -123,7 +123,6 @@ export const compositionPlanMusicGenerationItemSchema = musicScoreCueRequestSche
   ...commonItemShape,
   mediaType: z.literal('audio'),
   audioKind: z.literal('music'),
-  prompt: z.string().optional(),
   schemaId: z.enum(WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.audio),
   references: z.array(generationReferenceSchema.extend({
     channel: z.literal('context'),
@@ -152,6 +151,8 @@ export const audioGenerationItemSchema = z.union([
   musicGenerationItemSchema,
   soundGenerationItemSchema,
 ])
+
+export type AudioGenerationItem = z.infer<typeof audioGenerationItemSchema>
 
 export type AudioGenerationKind = 'music' | 'sound'
 

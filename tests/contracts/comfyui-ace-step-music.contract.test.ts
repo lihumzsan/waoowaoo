@@ -12,7 +12,7 @@ import {
 } from '@/lib/ai-providers/comfyui/models'
 import { normalizeMediaOptionsForSelection } from '@/lib/ai-exec/media-preflight'
 import { resolveAsyncTaskProviderByExternalId } from '@/lib/ai-providers'
-import { musicGenerationItemSchema } from '@/lib/workspace-resource/generation-request'
+import { promptMusicGenerationItemSchema } from '@/lib/workspace-resource/generation-request'
 import { workspaceResourceGenerationTaskPayloadSchema } from '@/lib/workspace-resource/generation-contract'
 import { WORKSPACE_RESOURCE_SCHEMA } from '@/lib/workspace-resource/schema-registry'
 import { resolveMusicArtifactPlan } from '@/lib/task/execution/artifacts/music'
@@ -184,7 +184,7 @@ describe('ComfyUI ACE-Step 1.5 music contract', () => {
   })
 
   it('freezes key scale and time signature in the durable music payload', () => {
-    const item = musicGenerationItemSchema.parse({
+    const item = promptMusicGenerationItemSchema.parse({
       itemId: 'music-cue-1',
       name: 'Tension cue',
       folderPath: null,
@@ -208,6 +208,7 @@ describe('ComfyUI ACE-Step 1.5 music contract', () => {
         }],
       },
       protocol: 'workspace_resource_generation_v2',
+      audioExecutionMode: 'prompt_music',
       resource: {
         resourceId: 'music-cue-1', workspacePath: 'Tension-cue-music-cue-1', mediaType: 'audio', audioKind: 'music',
         schemaId: WORKSPACE_RESOURCE_SCHEMA.BGM_AUDIO, inputHash: 'b'.repeat(64),
@@ -217,11 +218,6 @@ describe('ComfyUI ACE-Step 1.5 music contract', () => {
       },
       musicModel: COMFYUI_ACE_STEP_1_5_MODEL_KEY,
       durationSeconds: 6,
-      vocalMode: 'instrumental',
-      bpm: 72,
-      keyScale: 'D minor',
-      timeSignature: '4',
-      outputFormat: 'mp3',
       count: 1,
       generationOptions: {
         durationSeconds: 6,
@@ -232,7 +228,7 @@ describe('ComfyUI ACE-Step 1.5 music contract', () => {
         outputFormat: 'mp3',
       },
     })
-    expect(payload).toMatchObject({ keyScale: 'D minor', timeSignature: '4' })
+    expect(payload.audioExecutionMode).toBe('prompt_music')
     expect(payload.generationOptions).toMatchObject({ keyScale: 'D minor', timeSignature: '4' })
   })
 })
