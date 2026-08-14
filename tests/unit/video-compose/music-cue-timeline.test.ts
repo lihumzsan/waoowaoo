@@ -7,7 +7,7 @@ import {
   probeMediaDurationSeconds,
   runFfmpegCommand,
 } from '@/lib/video-compose/ffmpeg-command'
-import { muxVideoMergeMusicCues } from '@/lib/video-compose/video-merge-audio'
+import { muxVideoMergeTimedAudioCues } from '@/lib/video-compose/video-merge-audio'
 
 const SAMPLE_RATE = 48_000
 const temporaryDirectories: string[] = []
@@ -23,14 +23,14 @@ function windowRms(pcm: Buffer, startSeconds: number, endSeconds: number): numbe
   return Math.sqrt(squareSum / (endSample - startSample))
 }
 
-describe('video score cue timeline', () => {
+describe('video timed audio cue timeline', () => {
   afterEach(async () => {
     await Promise.all(temporaryDirectories.splice(0).map(async (directory) => {
       await rm(directory, { recursive: true, force: true })
     }))
   })
 
-  it('places independent cues at their exact windows and leaves gaps silent', async () => {
+  it('places independent environment sound cues at their exact windows and leaves gaps silent', async () => {
     const directory = await mkdtemp(path.join(tmpdir(), 'waoowaoo-score-cues-'))
     temporaryDirectories.push(directory)
     const stitchedPath = path.join(directory, 'video.mp4')
@@ -63,14 +63,15 @@ describe('video score cue timeline', () => {
       ]),
     ])
 
-    await muxVideoMergeMusicCues({
+    await muxVideoMergeTimedAudioCues({
       runCommand,
       stitchedPath,
       mainAudioPath,
       hasSourceAudio: false,
-      musicCues: [
+      musicCues: [],
+      soundCues: [
         {
-          musicPath: firstCuePath,
+          audioPath: firstCuePath,
           startMs: 1_000,
           durationMs: 1_000,
           fadeInMs: 0,
@@ -78,7 +79,7 @@ describe('video score cue timeline', () => {
           gainDb: 0,
         },
         {
-          musicPath: secondCuePath,
+          audioPath: secondCuePath,
           startMs: 4_000,
           durationMs: 1_000,
           fadeInMs: 0,

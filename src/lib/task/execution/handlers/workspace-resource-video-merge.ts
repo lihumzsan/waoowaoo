@@ -10,7 +10,7 @@ import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import {
   concatVideoMergeAudioClips,
   muxVideoMergeFinalAudio,
-  muxVideoMergeMusicCues,
+  muxVideoMergeTimedAudioCues,
   renderVideoMergeClipAudio,
 } from '@/lib/video-compose/video-merge-audio'
 import {
@@ -61,7 +61,8 @@ export async function handleWorkspaceResourceVideoMergeTask(
     && ['preserve', 'mix', 'replace', 'mute'].includes(String(payload.resource.generationOptions.audioMode))
     ? payload.resource.generationOptions.audioMode as 'preserve' | 'mix' | 'replace' | 'mute'
     : 'preserve'
-  const usesSourceAudio = payload.resource.musicCues.length > 0 || audioMode === 'preserve' || audioMode === 'mix'
+  const hasTimedAudioCues = payload.resource.musicCues.length > 0 || payload.resource.soundCues.length > 0
+  const usesSourceAudio = hasTimedAudioCues || audioMode === 'preserve' || audioMode === 'mix'
   const inputByPosition = new Map(payload.resource.inputs.map((input) => [input.position, input]))
   const bgmInputs = payload.resource.musicCues.map((cue) => {
     const reference = inputByPosition.get(cue.inputPosition)
@@ -74,6 +75,19 @@ export async function handleWorkspaceResourceVideoMergeTask(
     userId: data.userId,
     projectId: data.projectId,
     references: bgmInputs,
+    expectedMediaType: 'audio',
+  }) : []
+  const soundInputs = payload.resource.soundCues.map((cue) => {
+    const reference = inputByPosition.get(cue.inputPosition)
+    if (!reference || reference.role !== 'sound_effect_audio') {
+      throw new Error(`WORKSPACE_RESOURCE_VIDEO_MERGE_SOUND_POSITION_INVALID:${String(cue.inputPosition)}`)
+    }
+    return reference
+  })
+  const resolvedSound = soundInputs.length > 0 ? await resolveWorkspaceResourceInputMedia({
+    userId: data.userId,
+    projectId: data.projectId,
+    references: soundInputs,
     expectedMediaType: 'audio',
   }) : []
 
@@ -136,16 +150,23 @@ export async function handleWorkspaceResourceVideoMergeTask(
       })
     }
     const outputPath = path.join(workspaceDir, 'merged.mp4')
-    if (resolvedBgm.length > 0) {
+    if (hasTimedAudioCues) {
       if (!mainAudioPath) throw new Error('WORKSPACE_RESOURCE_VIDEO_MERGE_MAIN_AUDIO_REQUIRED')
       const musicCues = await Promise.all(resolvedBgm.map(async (bgm, index) => {
         const placement = payload.resource.musicCues[index]
         if (!placement) throw new Error(`WORKSPACE_RESOURCE_VIDEO_MERGE_BGM_PLACEMENT_MISSING:${String(index)}`)
         const musicPath = path.join(workspaceDir, `bgm-source-${String(index)}`)
         await writeFile(musicPath, await getObjectBuffer(bgm.storageKey))
-        return { ...placement, musicPath }
+        return { ...placement, audioPath: musicPath }
       }))
-      await muxVideoMergeMusicCues({
+      const soundCues = await Promise.all(resolvedSound.map(async (sound, index) => {
+        const placement = payload.resource.soundCues[index]
+        if (!placement) throw new Error(`WORKSPACE_RESOURCE_VIDEO_MERGE_SOUND_PLACEMENT_MISSING:${String(index)}`)
+        const soundPath = path.join(workspaceDir, `sound-source-${String(index)}`)
+        await writeFile(soundPath, await getObjectBuffer(sound.storageKey))
+        return { ...placement, audioPath: soundPath }
+      }))
+      await muxVideoMergeTimedAudioCues({
         runCommand: createFfmpegCommandRunner({
           stage: 'workspace_resource_video_merge_concat_audio',
           expectedDurationSeconds: stitchedDurationSeconds,
@@ -154,6 +175,7 @@ export async function handleWorkspaceResourceVideoMergeTask(
         mainAudioPath,
         hasSourceAudio,
         musicCues,
+        soundCues,
         outputPath,
         durationSeconds: stitchedDurationSeconds,
       })

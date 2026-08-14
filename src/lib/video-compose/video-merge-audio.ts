@@ -29,6 +29,12 @@ export const BGM_AUDIO_TARGET: AudioLoudnessTarget = {
   loudnessRange: 11,
 }
 
+export const SOUND_EFFECT_AUDIO_TARGET: AudioLoudnessTarget = {
+  integratedLufs: -20,
+  truePeakDb: -3,
+  loudnessRange: 11,
+}
+
 const BGM_DUCKING_THRESHOLD = 0.08
 const BGM_DUCKING_RATIO = 3
 const BGM_DUCKING_ATTACK_MS = 80
@@ -239,8 +245,8 @@ export async function concatVideoMergeAudioClips(input: {
   ])
 }
 
-export type VideoMergeMusicCueInput = {
-  readonly musicPath: string
+export type VideoMergeTimedAudioCueInput = {
+  readonly audioPath: string
   readonly startMs: number
   readonly durationMs: number
   readonly fadeInMs: number
@@ -248,11 +254,13 @@ export type VideoMergeMusicCueInput = {
   readonly gainDb: number
 }
 
-function musicCueFilter(input: {
+function timedAudioCueFilter(input: {
   readonly inputIndex: number
   readonly cueIndex: number
-  readonly cue: VideoMergeMusicCueInput
+  readonly cue: VideoMergeTimedAudioCueInput
   readonly measurement: AudioLoudnessMeasurement
+  readonly target: AudioLoudnessTarget
+  readonly label: string
 }): string {
   const durationSeconds = input.cue.durationMs / 1000
   const filters = [
@@ -260,7 +268,7 @@ function musicCueFilter(input: {
     'asetpts=PTS-STARTPTS',
     'aresample=48000',
     'aformat=sample_fmts=fltp:channel_layouts=stereo',
-    `loudnorm=${loudnormApplyFilter(BGM_AUDIO_TARGET, input.measurement)}`,
+    `loudnorm=${loudnormApplyFilter(input.target, input.measurement)}`,
   ]
   if (input.cue.fadeInMs > 0) {
     filters.push(`afade=t=in:st=0:d=${formatFilterNumber(input.cue.fadeInMs / 1000)}`)
@@ -276,52 +284,84 @@ function musicCueFilter(input: {
     exactAudioDurationFilter(durationSeconds),
     `adelay=delays=${String(input.cue.startMs)}:all=1`,
   )
-  return `[${String(input.inputIndex)}:a]${filters.join(',')}[music_cue_${String(input.cueIndex)}]`
+  return `[${String(input.inputIndex)}:a]${filters.join(',')}[${input.label}_${String(input.cueIndex)}]`
 }
 
 /**
- * Place independently generated score cues on one exact timeline. Cue gaps are
- * digital silence, overlaps mix deterministically, and source-audio ducking is
- * applied once to the completed BGM bus.
+ * Place independently generated music and sound-effect cues on one exact
+ * timeline. Cue gaps are digital silence, overlaps mix deterministically, and
+ * only the BGM bus is ducked against source audio.
  */
-export async function muxVideoMergeMusicCues(input: {
+export async function muxVideoMergeTimedAudioCues(input: {
   readonly runCommand: VideoMergeAudioCommandRunner
   readonly stitchedPath: string
   readonly mainAudioPath: string
   readonly hasSourceAudio: boolean
-  readonly musicCues: readonly VideoMergeMusicCueInput[]
+  readonly musicCues: readonly VideoMergeTimedAudioCueInput[]
+  readonly soundCues: readonly VideoMergeTimedAudioCueInput[]
   readonly outputPath: string
   readonly durationSeconds: number
 }): Promise<{
   readonly hasSourceAudio: boolean
   readonly mainAudio?: AudioLoudnessMeasurement
   readonly bgm: readonly AudioLoudnessMeasurement[]
+  readonly sound: readonly AudioLoudnessMeasurement[]
 }> {
-  if (input.musicCues.length === 0) throw new Error('VIDEO_MERGE_MUSIC_CUES_REQUIRED')
+  if (input.musicCues.length === 0 && input.soundCues.length === 0) {
+    throw new Error('VIDEO_MERGE_TIMED_AUDIO_CUES_REQUIRED')
+  }
   const exactDurationFilter = exactAudioDurationFilter(input.durationSeconds)
   const bgmMeasurements = await Promise.all(input.musicCues.map(async (cue) => (
-    await analyzeAudioLoudness(input.runCommand, cue.musicPath, BGM_AUDIO_TARGET)
+    await analyzeAudioLoudness(input.runCommand, cue.audioPath, BGM_AUDIO_TARGET)
   )))
-  const mediaInputs = input.musicCues.flatMap((cue) => ['-i', cue.musicPath])
-  const cueFilters = input.musicCues.map((cue, cueIndex) => musicCueFilter({
-    inputIndex: cueIndex + 2,
+  const soundMeasurements = await Promise.all(input.soundCues.map(async (cue) => (
+    await analyzeAudioLoudness(input.runCommand, cue.audioPath, SOUND_EFFECT_AUDIO_TARGET)
+  )))
+  const mediaInputs = [
+    ...input.musicCues.flatMap((cue) => ['-i', cue.audioPath]),
+    ...input.soundCues.flatMap((cue) => ['-i', cue.audioPath]),
+  ]
+  const inputOffset = input.hasSourceAudio ? 2 : 1
+  const musicCueFilters = input.musicCues.map((cue, cueIndex) => timedAudioCueFilter({
+    inputIndex: cueIndex + inputOffset,
     cueIndex,
     cue,
     measurement: bgmMeasurements[cueIndex]
       ?? (() => { throw new Error(`VIDEO_MERGE_MUSIC_CUE_MEASUREMENT_MISSING:${String(cueIndex)}`) })(),
+    target: BGM_AUDIO_TARGET,
+    label: 'music_cue',
   }))
-  const cueLabels = input.musicCues.map((_, cueIndex) => `[music_cue_${String(cueIndex)}]`).join('')
+  const soundCueFilters = input.soundCues.map((cue, cueIndex) => timedAudioCueFilter({
+    inputIndex: input.musicCues.length + cueIndex + inputOffset,
+    cueIndex,
+    cue,
+    measurement: soundMeasurements[cueIndex]
+      ?? (() => { throw new Error(`VIDEO_MERGE_SOUND_CUE_MEASUREMENT_MISSING:${String(cueIndex)}`) })(),
+    target: SOUND_EFFECT_AUDIO_TARGET,
+    label: 'sound_cue',
+  }))
+  const musicCueLabels = input.musicCues.map((_, cueIndex) => `[music_cue_${String(cueIndex)}]`).join('')
+  const soundCueLabels = input.soundCues.map((_, cueIndex) => `[sound_cue_${String(cueIndex)}]`).join('')
   const silenceFilter = `anullsrc=r=48000:cl=stereo:d=${formatFilterNumber(input.durationSeconds)}[music_silence]`
-  const bgmBusFilter = `[music_silence]${cueLabels}amix=inputs=${String(input.musicCues.length + 1)}:duration=first:dropout_transition=0:normalize=0,${exactDurationFilter}[bgm_bus]`
+  const soundSilenceFilter = `anullsrc=r=48000:cl=stereo:d=${formatFilterNumber(input.durationSeconds)}[sound_silence]`
+  const bgmBusFilter = `[music_silence]${musicCueLabels}amix=inputs=${String(input.musicCues.length + 1)}:duration=first:dropout_transition=0:normalize=0,${exactDurationFilter}[bgm_bus]`
+  const soundBusFilter = `[sound_silence]${soundCueLabels}amix=inputs=${String(input.soundCues.length + 1)}:duration=first:dropout_transition=0:normalize=0,${exactDurationFilter}[sound_bus]`
 
   if (!input.hasSourceAudio) {
     await input.runCommand('ffmpeg', [
       '-y',
       '-i', input.stitchedPath,
-      '-i', input.mainAudioPath,
       ...mediaInputs,
       '-filter_complex',
-      [...cueFilters, silenceFilter, bgmBusFilter, '[bgm_bus]alimiter=limit=0.95[aout]'].join(';'),
+      [
+        ...musicCueFilters,
+        ...soundCueFilters,
+        silenceFilter,
+        soundSilenceFilter,
+        bgmBusFilter,
+        soundBusFilter,
+        '[bgm_bus][sound_bus]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[aout]',
+      ].join(';'),
       '-map', '0:v:0',
       '-map', '[aout]',
       '-c:v', 'copy',
@@ -331,7 +371,7 @@ export async function muxVideoMergeMusicCues(input: {
       '-t', input.durationSeconds.toFixed(3),
       input.outputPath,
     ])
-    return { hasSourceAudio: false, bgm: bgmMeasurements }
+    return { hasSourceAudio: false, bgm: bgmMeasurements, sound: soundMeasurements }
   }
 
   const mainMeasurement = await analyzeAudioLoudness(
@@ -346,13 +386,16 @@ export async function muxVideoMergeMusicCues(input: {
     ...mediaInputs,
     '-filter_complex',
     [
-      ...cueFilters,
+      ...musicCueFilters,
+      ...soundCueFilters,
       silenceFilter,
+      soundSilenceFilter,
       bgmBusFilter,
+      soundBusFilter,
       `[1:a]loudnorm=${loudnormApplyFilter(MAIN_AUDIO_TARGET, mainMeasurement)},${exactDurationFilter}[main_norm]`,
       '[main_norm]asplit=2[main_mix][main_sidechain]',
       `[bgm_bus][main_sidechain]sidechaincompress=threshold=${BGM_DUCKING_THRESHOLD}:ratio=${BGM_DUCKING_RATIO}:attack=${BGM_DUCKING_ATTACK_MS}:release=${BGM_DUCKING_RELEASE_MS}[ducked_bgm]`,
-      '[main_mix][ducked_bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[aout]',
+      '[main_mix][ducked_bgm][sound_bus]amix=inputs=3:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[aout]',
     ].join(';'),
     '-map', '0:v:0',
     '-map', '[aout]',
@@ -367,6 +410,7 @@ export async function muxVideoMergeMusicCues(input: {
     hasSourceAudio: true,
     mainAudio: mainMeasurement,
     bgm: bgmMeasurements,
+    sound: soundMeasurements,
   }
 }
 
