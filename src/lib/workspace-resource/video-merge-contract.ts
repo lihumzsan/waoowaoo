@@ -100,6 +100,14 @@ export const workspaceResourceVideoMergeTaskPayloadSchema = z.object({
       }
       return
     }
+    if (bgmPositions.size > 0 || soundPositions.size > 0) {
+      context.addIssue({
+        code: 'custom',
+        path: ['inputs'],
+        message: 'Timed audio inputs require matching frozen cues.',
+      })
+      return
+    }
     if (resource.generationOptions.mergeMode !== 'ordered_concat') {
       context.addIssue({ code: 'custom', path: ['generationOptions'], message: 'Non-timed video merge requires ordered_concat mode.' })
       return

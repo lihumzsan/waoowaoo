@@ -134,4 +134,33 @@ describe('merge_videos audio mode contract', () => {
       },
     })).toThrow(/soundCues/)
   })
+
+  it('rejects a timed audio input without a matching frozen cue', () => {
+    expect(() => parseWorkspaceResourceVideoMergeTaskPayload({
+      lifecycleProjection: { resources: [{
+        resourceId: 'output_one',
+        mediaType: 'video',
+        schemaId: 'generic.video',
+        name: 'Output',
+      }] },
+      protocol: 'workspace_resource_video_merge_v2',
+      resource: {
+        resourceId: 'output_one',
+        mediaType: 'video',
+        schemaId: 'generic.video',
+        prompt: null,
+        modelKey: null,
+        inputHash: 'a'.repeat(64),
+        inputs: [
+          { resourceId: 'video_one', contentVersion: 1, workspacePath: 'video-one.mp4', role: 'source_video', position: 0 },
+          { resourceId: 'video_two', contentVersion: 1, workspacePath: 'video-two.mp4', role: 'source_video', position: 1 },
+          { resourceId: 'sound_one', contentVersion: 1, workspacePath: 'rain.mp3', role: 'sound_effect_audio', position: 2 },
+        ],
+        generationOptions: { mergeMode: 'ordered_concat', audioMode: 'preserve' },
+        musicCues: [],
+        soundCues: [],
+        toolCallId: null,
+      },
+    })).toThrow(/Timed audio inputs require matching frozen cues/)
+  })
 })
