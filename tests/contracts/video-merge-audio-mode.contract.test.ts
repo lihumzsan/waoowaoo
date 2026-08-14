@@ -163,4 +163,32 @@ describe('merge_videos audio mode contract', () => {
       },
     })).toThrow(/Timed audio inputs require matching frozen cues/)
   })
+
+  it('rejects duplicate frozen input positions before worker lookup can become ambiguous', () => {
+    expect(() => parseWorkspaceResourceVideoMergeTaskPayload({
+      lifecycleProjection: { resources: [{
+        resourceId: 'output_one',
+        mediaType: 'video',
+        schemaId: 'generic.video',
+        name: 'Output',
+      }] },
+      protocol: 'workspace_resource_video_merge_v2',
+      resource: {
+        resourceId: 'output_one',
+        mediaType: 'video',
+        schemaId: 'generic.video',
+        prompt: null,
+        modelKey: null,
+        inputHash: 'a'.repeat(64),
+        inputs: [
+          { resourceId: 'video_one', contentVersion: 1, workspacePath: 'video-one.mp4', role: 'source_video', position: 0 },
+          { resourceId: 'sound_one', contentVersion: 1, workspacePath: 'rain.mp3', role: 'sound_effect_audio', position: 0 },
+        ],
+        generationOptions: { mergeMode: 'timed_cues', audioMode: 'preserve' },
+        musicCues: [],
+        soundCues: [{ inputPosition: 0, startMs: 0, durationMs: 1_000, fadeInMs: 0, fadeOutMs: 0, gainDb: -8 }],
+        toolCallId: null,
+      },
+    })).toThrow(/VIDEO_MERGE_INPUT_POSITIONS_DUPLICATE/)
+  })
 })

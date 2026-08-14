@@ -47,6 +47,10 @@ const videoMergeInputsSchema = z.array(videoMergeInputRefSchema).min(1).max(51)
     },
     { message: 'VIDEO_MERGE_SOURCE_VIDEO_COUNT_INVALID' },
   )
+  .refine(
+    (inputs) => new Set(inputs.map((input) => input.position)).size === inputs.length,
+    { message: 'VIDEO_MERGE_INPUT_POSITIONS_DUPLICATE' },
+  )
 
 export const workspaceResourceVideoMergeTaskPayloadSchema = z.object({
   lifecycleProjection: workspaceResourceLifecycleProjectionSchema,

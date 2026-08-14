@@ -30,7 +30,7 @@ describe('video timed audio cue timeline', () => {
     }))
   })
 
-  it('places independent environment sound cues at their exact windows and leaves gaps silent', async () => {
+  it('keeps score and environment sound cues at their exact windows and leaves gaps silent', async () => {
     const directory = await mkdtemp(path.join(tmpdir(), 'waoowaoo-score-cues-'))
     temporaryDirectories.push(directory)
     const stitchedPath = path.join(directory, 'video.mp4')
@@ -68,8 +68,7 @@ describe('video timed audio cue timeline', () => {
       stitchedPath,
       mainAudioPath,
       hasSourceAudio: false,
-      musicCues: [],
-      soundCues: [
+      musicCues: [
         {
           audioPath: firstCuePath,
           startMs: 1_000,
@@ -78,6 +77,8 @@ describe('video timed audio cue timeline', () => {
           fadeOutMs: 0,
           gainDb: 0,
         },
+      ],
+      soundCues: [
         {
           audioPath: secondCuePath,
           startMs: 4_000,
