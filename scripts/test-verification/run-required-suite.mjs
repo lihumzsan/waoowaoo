@@ -22,6 +22,7 @@ const vitestPackage = createRequire(import.meta.url).resolve('vitest/package.jso
 const vitestCli = resolve(dirname(vitestPackage), 'vitest.mjs')
 const vitest = spawnSync(process.execPath, [
   vitestCli, 'run', ...roots,
+  '--exclude=.worktrees/**',
   '--reporter=default', '--reporter=json', `--outputFile=${report}`,
 ], { stdio: 'inherit', env: process.env })
 
