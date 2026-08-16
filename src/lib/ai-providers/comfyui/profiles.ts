@@ -1,5 +1,6 @@
 import firstFrameWorkflow from './workflows/h3-fast-first-frame.json'
 import firstLastFrameWorkflow from './workflows/h3-fast-first-last-frame.json'
+import dualStageWorkflow from './workflows/h3-dual-stage-2mp.json'
 
 export const H3_PROFILE_IDS = [
   'h3-fast-first-frame',
@@ -108,17 +109,86 @@ function roundToMultiple(value: number, multiple: number): number {
 export function resolveH3Dimensions(input: {
   readonly resolution: H3Resolution
   readonly aspectRatio: H3AspectRatio
+} | {
+  readonly megapixels: number
+  readonly aspectRatio: H3AspectRatio
 }): { readonly width: number; readonly height: number } {
-  const megapixels = input.resolution === '480p'
-    ? 0.4
-    : input.resolution === '720p'
-      ? 1.0
-      : unsupportedOption('resolution', input.resolution)
+  const megapixels = 'megapixels' in input
+    ? input.megapixels
+    : input.resolution === '480p'
+      ? 0.4
+      : input.resolution === '720p'
+        ? 1.0
+        : unsupportedOption('resolution', input.resolution)
+  if (megapixels !== 0.4 && megapixels !== 1 && megapixels !== 2) unsupportedOption('megapixels', megapixels)
   const [ratioWidth, ratioHeight] = parseAspectRatio(input.aspectRatio)
   const area = megapixels * 1024 * 1024
   const width = Math.sqrt(area * (ratioWidth / ratioHeight))
   const height = area / width
   return { width: roundToMultiple(width, 32), height: roundToMultiple(height, 32) }
+}
+
+export const H3_DUAL_STAGE_PROFILE_ID = 'h3-dual-stage-2mp' as const
+
+export type H3DualStageRuntimeProfile = {
+  readonly id: typeof H3_DUAL_STAGE_PROFILE_ID
+  readonly workflow: ComfyUiPromptGraph
+  readonly referenceImageNodeId: string
+  readonly promptNodeId: string
+  readonly h3NodeId: string
+  readonly noiseNodeId: string
+  readonly firstUpscaleNodeId: string
+  readonly finalUpscaleNodeId: string
+  readonly outputNodeId: string
+  readonly requiredNodeClasses: readonly string[]
+}
+
+export const H3_DUAL_STAGE_RUNTIME_PROFILE: H3DualStageRuntimeProfile = {
+  id: H3_DUAL_STAGE_PROFILE_ID,
+  workflow: dualStageWorkflow as ComfyUiPromptGraph,
+  referenceImageNodeId: '137',
+  promptNodeId: '138',
+  h3NodeId: '309',
+  noiseNodeId: '129',
+  firstUpscaleNodeId: '213',
+  finalUpscaleNodeId: '323',
+  outputNodeId: '168',
+  requiredNodeClasses: [
+    'Load Image From Url (mtb)', 'ResizeShortestToNode', 'UNETLoader', 'CLIPLoader', 'VAELoader',
+    'LoraLoaderModelOnly', 'ModelAttentionBackend', 'MiniMaxH3ReferenceToVideo', 'easy clearCacheAll',
+    'RandomNoise', 'KSamplerSelect', 'BasicScheduler', 'BasicGuider', 'SamplerCustomAdvanced',
+    'VAEDecode', 'VAEDecodeAudio', 'ImageResizeKJv2', 'VAEEncode', 'VAEEncodeAudio', 'PT_H3ConcatAVLatent',
+    'VHS_VideoCombine',
+  ],
+}
+
+export function buildH3DualStagePromptGraph(input: {
+  readonly prompt: string
+  readonly referenceImageUrl: string
+  readonly durationSeconds: number
+  readonly aspectRatio: H3AspectRatio
+  readonly seed: number
+}): { readonly profile: H3DualStageRuntimeProfile; readonly graph: ComfyUiPromptGraph } {
+  if (!input.prompt.trim()) throw new Error('COMFYUI_H3_PROMPT_REQUIRED')
+  if (!input.referenceImageUrl.trim()) throw new Error('COMFYUI_H3_REFERENCE_IMAGE_REQUIRED')
+  if (!Number.isSafeInteger(input.seed) || input.seed < 0) throw new Error('COMFYUI_H3_SEED_INVALID')
+  if (!Number.isInteger(input.durationSeconds) || input.durationSeconds < 4 || input.durationSeconds > 15) {
+    throw new Error(`COMFYUI_H3_OPTION_UNSUPPORTED:duration=${String(input.durationSeconds)}`)
+  }
+  const graph = copyGraph(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow)
+  const firstDimensions = resolveH3Dimensions({ megapixels: 1, aspectRatio: input.aspectRatio })
+  const finalDimensions = resolveH3Dimensions({ megapixels: 2, aspectRatio: input.aspectRatio })
+  graph[H3_DUAL_STAGE_RUNTIME_PROFILE.referenceImageNodeId]!.inputs.url = input.referenceImageUrl
+  graph[H3_DUAL_STAGE_RUNTIME_PROFILE.promptNodeId]!.inputs.value = input.prompt
+  graph[H3_DUAL_STAGE_RUNTIME_PROFILE.h3NodeId]!.inputs.width = firstDimensions.width
+  graph[H3_DUAL_STAGE_RUNTIME_PROFILE.h3NodeId]!.inputs.height = firstDimensions.height
+  graph[H3_DUAL_STAGE_RUNTIME_PROFILE.h3NodeId]!.inputs.length = resolveH3DurationFrames(input.durationSeconds)
+  graph[H3_DUAL_STAGE_RUNTIME_PROFILE.noiseNodeId]!.inputs.noise_seed = input.seed
+  graph[H3_DUAL_STAGE_RUNTIME_PROFILE.firstUpscaleNodeId]!.inputs.width = firstDimensions.width
+  graph[H3_DUAL_STAGE_RUNTIME_PROFILE.firstUpscaleNodeId]!.inputs.height = firstDimensions.height
+  graph[H3_DUAL_STAGE_RUNTIME_PROFILE.finalUpscaleNodeId]!.inputs.width = finalDimensions.width
+  graph[H3_DUAL_STAGE_RUNTIME_PROFILE.finalUpscaleNodeId]!.inputs.height = finalDimensions.height
+  return { profile: H3_DUAL_STAGE_RUNTIME_PROFILE, graph }
 }
 
 function copyGraph(graph: ComfyUiPromptGraph): ComfyUiPromptGraph {
