@@ -1,6 +1,8 @@
+import type { Readable } from 'node:stream'
+
 export interface UploadObjectParams {
   key: string
-  body: Buffer
+  body: Buffer | Readable
   contentType?: string
 }
 

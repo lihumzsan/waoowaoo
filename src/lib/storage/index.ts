@@ -1,3 +1,4 @@
+import { createReadStream } from 'node:fs'
 import { createScopedLogger } from '@/lib/logging/core'
 import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import { withRetry } from '@/lib/retry'
@@ -49,6 +50,29 @@ export async function uploadObject(
     },
   })
 
+  return result.key
+}
+
+/**
+ * Uploads a local file with a fresh readable stream for every storage retry.
+ * A stream is single-use, so passing one through `uploadObject` would make a
+ * retry upload an empty or partial body.
+ */
+export async function uploadFileObject(
+  filePath: string,
+  key: string,
+  contentType?: string,
+): Promise<string> {
+  const provider = getStorageProvider()
+  const result = await withRetry({
+    operation: EXTERNAL_OPERATION.STORAGE_PUT_SAME_OBJECT,
+    scope: 'storage:upload-file',
+    run: async () => await provider.uploadObject({
+      key,
+      body: createReadStream(filePath),
+      contentType,
+    }),
+  })
   return result.key
 }
 
