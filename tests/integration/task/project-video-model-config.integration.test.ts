@@ -252,13 +252,10 @@ describe('project local video model configuration', () => {
       modelKey: COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
       runtimeSelections: {
         duration: 5,
-        generationMode: 'normal',
       },
     })).resolves.toEqual({
-      resolution: '720p',
       generateAudio: true,
       duration: 5,
-      generationMode: 'normal',
     })
   })
 
@@ -271,7 +268,7 @@ describe('project local video model configuration', () => {
         videoModel: COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
         capabilityDefaults: JSON.stringify({
           [COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY]: {
-            resolution: '480p',
+            generateAudio: true,
           },
         }),
       },
@@ -284,13 +281,10 @@ describe('project local video model configuration', () => {
       modelKey: COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
       runtimeSelections: {
         duration: 5,
-        generationMode: 'normal',
       },
     })).resolves.toEqual({
-      resolution: '480p',
       generateAudio: true,
       duration: 5,
-      generationMode: 'normal',
     })
   })
 

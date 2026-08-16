@@ -147,6 +147,30 @@ export function readComfyUiDeclaredNodeAudioOutput(
   }
 }
 
+export function readComfyUiDeclaredNodeVideoOutput(
+  value: unknown,
+  expectedNodeId: string,
+): ComfyUiOutput | null {
+  const record = asComfyUiRecord(value)
+  if (!record) return null
+  const candidate = asComfyUiRecord(record[expectedNodeId])
+    ?? (readComfyUiString(record.nodeId) === expectedNodeId ? record : null)
+  if (!candidate) return null
+  for (const field of ['gifs', 'videos', 'files']) {
+    const list = candidate[field]
+    if (!Array.isArray(list) || list.length !== 1) continue
+    const file = asComfyUiRecord(list[0])
+    const filename = readComfyUiString(file?.filename)
+    if (!filename || !/\.mp4$/iu.test(filename)) return null
+    return {
+      filename,
+      subfolder: readComfyUiString(file?.subfolder),
+      type: readComfyUiString(file?.type) || 'output',
+    }
+  }
+  return null
+}
+
 export async function readComfyUiOutputData(input: {
   readonly baseUrl: string
   readonly output: ComfyUiOutput

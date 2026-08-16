@@ -25,7 +25,7 @@ describe('project production prompt profile context', () => {
       capabilityOverrides: {},
     }
     const capabilities = resolveProjectProductionCapabilities(config)
-    expect(capabilities.video?.promptProfile).toBe('minimax_h3_v1')
+    expect(capabilities.video?.promptProfile).toBe('minimax_h3_reference_v2')
 
     const context: ProjectProductionContext = {
       schemaVersion: 8,
@@ -35,7 +35,7 @@ describe('project production prompt profile context', () => {
         name: 'H3 project',
         description: null,
         videoRatio: '9:16',
-        videoResolution: '720p',
+      videoResolution: '2mp',
         imageResolution: '1024x1024',
       },
       productionCapabilities: capabilities,
@@ -45,7 +45,7 @@ describe('project production prompt profile context', () => {
     }
 
     expect(buildAssistantRuntimeTurnContext('zh', context)).toContain(
-      '"promptProfile": "minimax_h3_v1"',
+      '"promptProfile": "minimax_h3_reference_v2"',
     )
     expect(capabilities.video?.minSegmentDurationSeconds).toBe(4)
     expect(buildAssistantRuntimeTurnContext('zh', context)).toContain(

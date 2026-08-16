@@ -8,7 +8,7 @@ const resource = (mediaType: 'video' | 'image') => ({
   schemaId: mediaType === 'video' ? 'generic.video' : 'generic.image',
   inputHash: 'a'.repeat(64),
   prompt: 'A complete prompt.',
-  modelKey: 'comfyui::minimax-h3-fast',
+  modelKey: 'comfyui::minimax-h3-dual-stage-2mp',
   inputs: [],
   imageInputPositions: [],
   audioInputPositions: [],
@@ -23,9 +23,9 @@ const basePayload = (mediaType: 'video' | 'image') => ({
   },
   protocol: 'workspace_resource_generation_v2' as const,
   resource: resource(mediaType),
-  ...(mediaType === 'video' ? { videoModel: 'comfyui::minimax-h3-fast', durationSeconds: 4 } : { imageModel: 'codex::gpt-image-2' }),
+  ...(mediaType === 'video' ? { videoModel: 'comfyui::minimax-h3-dual-stage-2mp', durationSeconds: 4 } : { imageModel: 'codex::gpt-image-2' }),
   count: 1 as const,
-  generationOptions: { resolution: '720p', generateAudio: true },
+  generationOptions: { generateAudio: true },
 })
 
 describe('frozen vocal performance task contract', () => {
