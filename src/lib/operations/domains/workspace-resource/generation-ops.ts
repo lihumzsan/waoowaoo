@@ -10,6 +10,7 @@ import {
 } from '@/lib/ai-exec/media-preflight'
 import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
 import type { CapabilityValue } from '@/lib/ai-registry/types'
+import { assertVideoPromptMatchesProfile } from '@/lib/video-generation/h3-reference-prompt'
 import { ApiError } from '@/lib/api-errors'
 import { getAssetImageFormatPolicy } from '@/lib/asset-generation'
 import {
@@ -537,6 +538,26 @@ function validateReferenceCapabilities(input: {
   }
 }
 
+function validateVideoPromptProfile(input: { readonly modelKey: string; readonly prompt: string }): void {
+  const profile = resolveBuiltinCapabilitiesByModelKey('video', input.modelKey)?.video?.promptProfile
+  if (!profile) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'VIDEO_PROMPT_PROFILE_MISSING',
+      field: 'items.prompt',
+    })
+  }
+  try {
+    assertVideoPromptMatchesProfile({ profile, prompt: input.prompt })
+  } catch (error) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'VIDEO_PROMPT_PROFILE_INVALID',
+      field: 'items.prompt',
+      reason: error instanceof Error ? error.message : String(error),
+      agentRetryableAfterCorrection: true,
+    })
+  }
+}
+
 function validateMusicCompositionCapability(input: {
   readonly modelKey: string
   readonly compositionPlan: z.infer<typeof musicCompositionPlanSchema>
@@ -903,6 +924,9 @@ async function preflightFrozenRetry(input: {
   const frozenOptions = input.audioExecution?.generationOptions ?? input.generationOptions
   const frozenPrompt = input.audioExecution?.prompt ?? input.prompt
   const frozenAudioKind = input.audioExecution?.audioKind ?? input.source.resource.audioKind
+  if (input.mediaType === 'video' && frozenPrompt) {
+    validateVideoPromptProfile({ modelKey: input.modelKey, prompt: frozenPrompt })
+  }
   if (musicSpecification) {
     validateMusicCompositionCapability({
       modelKey: input.modelKey,
@@ -1086,6 +1110,7 @@ async function buildPlannedItem(input: {
   const assetKind = item.mediaType === 'image' ? item.assetKind : null
   const audioKind = item.mediaType === 'audio' ? item.audioKind : undefined
   const modelKey = await modelForMedia(input.ctx, mediaType, assetKind, audioKind)
+  if (mediaType === 'video' && 'prompt' in item) validateVideoPromptProfile({ modelKey, prompt: item.prompt })
   const publicReferences = item.mediaType === 'audio' && item.audioKind === 'sound'
     ? []
     : ('references' in item ? item.references ?? [] : [])
