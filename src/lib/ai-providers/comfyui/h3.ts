@@ -13,9 +13,9 @@ import {
   asComfyUiRecord,
   COMFYUI_ACCEPTED_JOB_STATUSES,
   ComfyUiHttpError,
+  downloadComfyUiOutputToTemporaryFile,
   readComfyUiDeclaredNodeVideoOutput,
   readComfyUiHttpError,
-  readComfyUiOutputData,
   readComfyUiRequiredOptions,
   readComfyUiString,
   requestComfyUiJson,
@@ -23,6 +23,8 @@ import {
 
 export const COMFYUI_H3_MODEL_KEY = `comfyui::${COMFYUI_H3_MODEL_ID}`
 export const COMFYUI_H3_RUNTIME_TARGET_ID = 'h3-dual-stage-2mp' as const
+const H3_PREFLIGHT_CACHE_TTL_MS = 30_000
+const preflightReadyAtByBaseUrl = new Map<string, number>()
 
 function preAcceptRejected(error: unknown): ProviderSubmissionError {
   const message = error instanceof Error ? error.message : String(error)
@@ -41,8 +43,21 @@ function promptRejection(error: ComfyUiHttpError): ProviderSubmissionError {
 }
 
 async function preflight(baseUrl: string): Promise<void> {
-  for (const className of H3_DUAL_STAGE_RUNTIME_PROFILE.requiredNodeClasses) {
-    const info = await requestComfyUiJson(baseUrl, `/object_info/${encodeURIComponent(className)}`)
+  const now = Date.now()
+  if ((preflightReadyAtByBaseUrl.get(baseUrl) ?? 0) + H3_PREFLIGHT_CACHE_TTL_MS > now) return
+  const infoByClassName = new Map<string, Promise<unknown>>()
+  const readInfo = (className: string): Promise<unknown> => {
+    const existing = infoByClassName.get(className)
+    if (existing) return existing
+    const requested = requestComfyUiJson(baseUrl, `/object_info/${encodeURIComponent(className)}`)
+    infoByClassName.set(className, requested)
+    return requested
+  }
+  const requiredInfos = await Promise.all(H3_DUAL_STAGE_RUNTIME_PROFILE.requiredNodeClasses.map(async (className) => ({
+    className,
+    info: await readInfo(className),
+  })))
+  for (const { className, info } of requiredInfos) {
     if (!asComfyUiRecord(info)?.[className]) throw new Error(`COMFYUI_NODE_MISSING:${className}`)
   }
   const expectedModels: Array<[string, string, string]> = [
@@ -53,14 +68,20 @@ async function preflight(baseUrl: string): Promise<void> {
     ['VAELoader', 'vae_name', 'h3\\minimax_h3_video_vae_int8_convrot.safetensors'],
     ['VAELoader', 'vae_name', 'h3\\minimax_h3_audio_vae_fp32.safetensors'],
   ]
-  for (const [className, field, expected] of expectedModels) {
-    const info = await requestComfyUiJson(baseUrl, `/object_info/${encodeURIComponent(className)}`)
+  const modelInfos = await Promise.all(expectedModels.map(async ([className, field, expected]) => ({
+    className,
+    field,
+    expected,
+    info: await readInfo(className),
+  })))
+  for (const { className, field, expected, info } of modelInfos) {
     if (!readComfyUiRequiredOptions(info, className, field).includes(expected)) throw new Error(`COMFYUI_MODEL_MISSING:${expected}`)
   }
-  const resizeInfo = await requestComfyUiJson(baseUrl, '/object_info/ImageResizeKJv2')
+  const resizeInfo = await readInfo('ImageResizeKJv2')
   if (!readComfyUiRequiredOptions(resizeInfo, 'ImageResizeKJv2', 'upscale_method').includes('nvidia_rtx_vsr')) throw new Error('COMFYUI_UPSCALE_METHOD_MISSING:nvidia_rtx_vsr')
-  const attentionInfo = await requestComfyUiJson(baseUrl, '/object_info/ModelAttentionBackend')
+  const attentionInfo = await readInfo('ModelAttentionBackend')
   if (!readComfyUiRequiredOptions(attentionInfo, 'ModelAttentionBackend', 'attention').includes('comfy kitchen attention')) throw new Error('COMFYUI_ATTENTION_BACKEND_MISSING:comfy kitchen attention')
+  preflightReadyAtByBaseUrl.set(baseUrl, now)
 }
 
 function requireSelection(input: AiProviderVideoExecutionContext): void {
@@ -109,7 +130,7 @@ export async function executeComfyUiH3VideoGeneration(input: AiProviderVideoExec
 
 export type ComfyUiPollResult =
   | { status: 'pending'; pendingPhase: 'queued' | 'running' }
-  | { status: 'completed'; videoUrl: string }
+  | { status: 'completed'; temporaryMediaFile: import('@/lib/ai-providers/async-task-types').AsyncTemporaryMediaFile }
   | { status: 'failed'; failure: FailureRecord }
 
 export async function pollComfyUiH3Video(promptId: string, targetId: string = COMFYUI_H3_RUNTIME_TARGET_ID): Promise<ComfyUiPollResult> {
@@ -124,13 +145,19 @@ export async function pollComfyUiH3Video(promptId: string, targetId: string = CO
   if (status !== 'completed') throw new Error(`COMFYUI_JOB_STATUS_UNKNOWN:${status || '<missing>'}`)
   const output = readComfyUiDeclaredNodeVideoOutput(record?.outputs ?? record?.output, H3_DUAL_STAGE_RUNTIME_PROFILE.outputNodeId)
   if (!output) throw new Error(`COMFYUI_VIDEO_OUTPUT_MISSING:${H3_DUAL_STAGE_RUNTIME_PROFILE.outputNodeId}`)
-  return { status: 'completed', videoUrl: await readComfyUiOutputData({ baseUrl, output, contentType: 'video/mp4', maxBytes: MAX_VIDEO_BYTES, label: 'ComfyUI H3 dual-stage video' }) }
+  return { status: 'completed', temporaryMediaFile: await downloadComfyUiOutputToTemporaryFile({ baseUrl, output, contentType: 'video/mp4', maxBytes: MAX_VIDEO_BYTES, label: 'ComfyUI H3 dual-stage video' }) }
 }
 
 export async function cancelComfyUiH3Video(promptId: string, targetId: string = COMFYUI_H3_RUNTIME_TARGET_ID): Promise<void> {
   if (targetId !== COMFYUI_H3_RUNTIME_TARGET_ID) throw new Error(`COMFYUI_RUNTIME_TARGET_MISMATCH:${COMFYUI_H3_RUNTIME_TARGET_ID}:${targetId}`)
-  try { await requestComfyUiJson(resolveComfyUiRuntimeTarget(COMFYUI_H3_RUNTIME_TARGET_ID).baseUrl, `/api/jobs/${encodeURIComponent(promptId)}/cancel`, { method: 'POST' }) } catch (error) {
-    if (error instanceof Error && /COMFYUI_HTTP_(400|404)/u.test(error.message)) return
-    throw error
+  const baseUrl = resolveComfyUiRuntimeTarget(COMFYUI_H3_RUNTIME_TARGET_ID).baseUrl
+  try {
+    await requestComfyUiJson(baseUrl, `/api/jobs/${encodeURIComponent(promptId)}/cancel`, { method: 'POST' })
+  } catch (error) {
+    if (!(error instanceof ComfyUiHttpError) || error.status !== 400) throw error
+    const job = asComfyUiRecord(await requestComfyUiJson(baseUrl, `/api/jobs/${encodeURIComponent(promptId)}`))
+    const status = readComfyUiString(job?.status)
+    if (status === 'cancelled' || status === 'completed' || status === 'failed') return
+    throw new Error(`COMFYUI_CANCEL_REJECTED:${status || '<missing>'}`, { cause: error })
   }
 }

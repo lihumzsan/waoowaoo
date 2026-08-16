@@ -33,8 +33,8 @@ export const comfyuiAsyncTaskProvider: AsyncTaskProviderRegistration = {
         if (!('audioUrl' in result)) throw new Error(`COMFYUI_${parsed.type}_RESULT_MISSING`)
         return normalizeAsyncPollResult({ status: 'completed', resultUrl: result.audioUrl })
       }
-      if (!('videoUrl' in result)) throw new Error('COMFYUI_VIDEO_RESULT_MISSING')
-      return normalizeAsyncPollResult({ status: 'completed', videoUrl: result.videoUrl })
+      if (!('temporaryMediaFile' in result)) throw new Error('COMFYUI_VIDEO_RESULT_MISSING')
+      return normalizeAsyncPollResult({ status: 'completed', temporaryMediaFile: result.temporaryMediaFile })
     }
     return normalizeAsyncPollResult(result)
   },
