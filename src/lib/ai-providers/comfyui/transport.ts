@@ -1,12 +1,5 @@
-import { createWriteStream } from 'node:fs'
-import { mkdtemp, rm } from 'node:fs/promises'
-import { once } from 'node:events'
-import { tmpdir } from 'node:os'
-import path from 'node:path'
 import { readResponseBufferWithLimit } from '@/lib/http/body-limits'
 import { readProviderJsonResponse } from '@/lib/ai-providers/failure'
-import type { AsyncTemporaryMediaFile } from '@/lib/ai-providers/async-task-types'
-import { ApiError } from '@/lib/api-errors'
 
 export const COMFYUI_ACCEPTED_JOB_STATUSES = new Set([
   'pending',
@@ -202,69 +195,4 @@ export async function readComfyUiOutputData(input: {
   }
   const buffer = await readResponseBufferWithLimit(response, input.maxBytes, input.label)
   return `data:${actualContentType};base64,${buffer.toString('base64')}`
-}
-
-export async function downloadComfyUiOutputToTemporaryFile(input: {
-  readonly baseUrl: string
-  readonly output: ComfyUiOutput
-  readonly contentType: string
-  readonly maxBytes: number
-  readonly label: string
-}): Promise<AsyncTemporaryMediaFile> {
-  const outputTooLarge = () => new ApiError('INVALID_PARAMS', {
-    code: 'PAYLOAD_TOO_LARGE',
-    field: 'body',
-    message: `${input.label} exceeds the ${input.maxBytes} byte limit`,
-  })
-  const query = new URLSearchParams({
-    filename: input.output.filename,
-    subfolder: input.output.subfolder,
-    type: input.output.type,
-  })
-  const response = await fetch(buildComfyUiUrl(input.baseUrl, `/view?${query.toString()}`), {
-    signal: AbortSignal.timeout(120_000),
-    cache: 'no-store',
-    redirect: 'error',
-  })
-  if (!response.ok) throw new Error(`COMFYUI_OUTPUT_HTTP_${response.status}`)
-  const actualContentType = (response.headers.get('content-type') || '').split(';', 1)[0]!.trim().toLowerCase()
-  if (actualContentType !== input.contentType) {
-    throw new Error(`COMFYUI_OUTPUT_CONTENT_TYPE_INVALID:${actualContentType || '<missing>'}`)
-  }
-  const contentLength = response.headers.get('content-length')
-  if (contentLength && Number(contentLength) > input.maxBytes) {
-    throw outputTooLarge()
-  }
-  if (!response.body) throw new Error('COMFYUI_OUTPUT_BODY_MISSING')
-
-  const directory = await mkdtemp(path.join(tmpdir(), 'waoowaoo-comfyui-output-'))
-  const filePath = path.join(directory, 'output.mp4')
-  let byteLength = 0
-  const writer = createWriteStream(filePath, { flags: 'wx' })
-  const reader = response.body.getReader()
-  try {
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      byteLength += value.byteLength
-      if (byteLength > input.maxBytes) throw outputTooLarge()
-      if (!writer.write(Buffer.from(value))) await once(writer, 'drain')
-    }
-    writer.end()
-    await once(writer, 'finish')
-    if (byteLength === 0) throw new Error('COMFYUI_OUTPUT_EMPTY')
-    return { kind: 'temporary_file', path: filePath, directory, contentType: actualContentType, byteLength }
-  } catch (error) {
-    try {
-      await reader.cancel(error)
-    } catch {
-      // The primary read/write error remains the authoritative failure.
-    } finally {
-      writer.destroy()
-      await rm(directory, { recursive: true, force: true })
-    }
-    throw error
-  } finally {
-    reader.releaseLock()
-  }
 }

@@ -9,21 +9,12 @@ export interface AsyncDownloadHeaders {
   [name: string]: string
 }
 
-export type AsyncTemporaryMediaFile = {
-  readonly kind: 'temporary_file'
-  readonly path: string
-  readonly directory: string
-  readonly contentType: string
-  readonly byteLength: number
-}
-
 type AsyncPollResultFields = {
   resultUrl?: string
   imageUrl?: string
   videoUrl?: string
   actualVideoTokens?: number
   downloadHeaders?: AsyncDownloadHeaders
-  temporaryMediaFile?: AsyncTemporaryMediaFile
 }
 
 /**
@@ -119,9 +110,9 @@ export interface AsyncTaskProviderRegistration {
   /**
    * Optional provider-side cancellation of an accepted-but-unfinished job.
    * Declared here so shared callers dispatch by registry capability instead of
-   * guessing by provider name. Implementations may tolerate an error only
-   * after proving the provider job is terminal; a rejected or unknown cancel
-   * outcome must throw so callers do not report it as accepted. Any provider that reports
+   * guessing by provider name. Implementations must be idempotent and treat
+   * "already terminal / unknown request" (4xx) as a tolerated no-op; only
+   * transport/5xx failures may throw. Any provider that reports
    * `pendingPhase: 'queued'` must declare cancel so queue-timeout compensation
    * can supersede the stuck job.
    */

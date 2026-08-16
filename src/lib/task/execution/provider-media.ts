@@ -17,7 +17,6 @@ import { ProviderTaskFailureError } from '@/lib/ai-exec/provider-errors'
 import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import { processMediaResult } from '@/lib/media-process'
 import { TaskTerminatedError } from '@/lib/task/errors'
-import type { AsyncTemporaryMediaFile } from '@/lib/ai-providers/async-task-types'
 import {
   listTaskAcceptedProviderExternalIds,
   markTaskProviderInvocationReplayAuthorizedByExternalId,
@@ -373,7 +372,6 @@ export async function resolveImageSourceFromGeneration(
       externalId,
     },
   })
-  if (typeof polled.url !== 'string') throw new Error('IMAGE_ASYNC_TEMPORARY_OUTPUT_FORBIDDEN')
   return polled.url
 }
 
@@ -388,7 +386,7 @@ export async function resolveVideoSourceFromGeneration(
     options?: AiVideoExecutionOptions
     pollProgress?: { start?: number; end?: number }
   },
-): Promise<{ source: string | AsyncTemporaryMediaFile; actualVideoTokens?: number; downloadHeaders?: Record<string, string> }> {
+): Promise<{ url: string; actualVideoTokens?: number; downloadHeaders?: Record<string, string> }> {
   const logger = scopedTaskExecutionLogger(job, 'task.execution.video.generate_source')
   const startedAt = Date.now()
 
@@ -445,7 +443,7 @@ export async function resolveVideoSourceFromGeneration(
       message: 'video source generation completed',
       durationMs: Date.now() - startedAt,
     })
-    return { source: result.videoUrl }
+    return { url: result.videoUrl }
   }
 
   const externalId = normalizeExternalId(result, 'VIDEO')
@@ -464,10 +462,8 @@ export async function resolveVideoSourceFromGeneration(
       externalId,
     },
   })
-  const source = polled.temporaryMediaFile ?? polled.url
-  if (!source) throw new Error('VIDEO_ASYNC_RESULT_SOURCE_MISSING')
   return {
-    source,
+    url: polled.url,
     ...(typeof polled.actualVideoTokens === 'number'
       ? { actualVideoTokens: polled.actualVideoTokens }
       : {}),
@@ -491,12 +487,11 @@ export async function uploadImageSourceToStorage(
 }
 
 export async function uploadVideoSourceToStorage(
-  source: string | Buffer | AsyncTemporaryMediaFile,
+  source: string | Buffer,
   keyPrefix: string,
   targetId: string,
   downloadHeaders?: Record<string, string>,
   taskArtifact?: { taskId: string; artifact: string },
-  expectedDurationSeconds?: number,
 ) {
   return await processMediaResult({
     source,
@@ -505,6 +500,5 @@ export async function uploadVideoSourceToStorage(
     targetId,
     downloadHeaders,
     taskArtifact,
-    expectedDurationSeconds,
   })
 }

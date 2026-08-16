@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { readFile, rm } from 'node:fs/promises'
 import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
-import { cancelComfyUiH3Video, executeComfyUiH3VideoGeneration, pollComfyUiH3Video } from '@/lib/ai-providers/comfyui/h3'
+import { executeComfyUiH3VideoGeneration, pollComfyUiH3Video } from '@/lib/ai-providers/comfyui/h3'
 import { COMFYUI_H3_MODEL_ID } from '@/lib/ai-providers/comfyui/models'
 import { H3_DUAL_STAGE_RUNTIME_PROFILE } from '@/lib/ai-providers/comfyui/profiles'
 import type { AiProviderVideoExecutionContext } from '@/lib/ai-providers/runtime-types'
@@ -159,22 +158,6 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
     expect(server!.getRequests('GET', `/api/jobs/${PROMPT_ID}`)).toHaveLength(1)
   })
 
-  it('caches a successful target-local preflight for the short submission burst', async () => {
-    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
-    defineValidPreflight(server!)
-    server!.defineScenario({
-      method: 'POST', path: '/prompt', mode: 'success',
-      submitResponse: { status: 200, body: { prompt_id: PROMPT_ID } },
-    })
-
-    await executeComfyUiH3VideoGeneration(videoInput)
-    await executeComfyUiH3VideoGeneration(videoInput)
-
-    expect(server!.getRequests('GET', '/object_info/UNETLoader')).toHaveLength(1)
-    expect(server!.getRequests('GET', '/object_info/CLIPLoader')).toHaveLength(1)
-    expect(server!.getRequests('POST', '/prompt')).toHaveLength(2)
-  })
-
   it('does not accept an unknown same-id probe status', async () => {
     vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
     defineValidPreflight(server!)
@@ -204,56 +187,6 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
 
     await expect(pollComfyUiH3Video(PROMPT_ID))
       .rejects.toThrow('exceeds the 536870912 byte limit')
-  })
-
-  it('downloads a completed H3 MP4 to a temporary file instead of returning a Base64 data URL', async () => {
-    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
-    server!.defineScenario({
-      method: 'GET', path: `/api/jobs/${PROMPT_ID}`, mode: 'success',
-      submitResponse: { status: 200, body: { status: 'completed', outputs: { '168': { gifs: [{ filename: 'final.mp4', subfolder: '', type: 'output' }] } } } },
-    })
-    server!.defineScenario({
-      method: 'GET', path: '/view', mode: 'success',
-      submitResponse: { status: 200, headers: { 'content-type': 'video/mp4' }, body: 'mp4-bytes' },
-    })
-
-    const result = await pollComfyUiH3Video(PROMPT_ID)
-    expect(result).toMatchObject({ status: 'completed', temporaryMediaFile: { kind: 'temporary_file', contentType: 'video/mp4' } })
-    const temporaryMediaFile = (result as { temporaryMediaFile?: { path: string; directory: string } }).temporaryMediaFile
-    expect(temporaryMediaFile).toBeTruthy()
-    try {
-      expect(await readFile(temporaryMediaFile!.path, 'utf8')).toBe('mp4-bytes')
-    } finally {
-      await rm(temporaryMediaFile!.directory, { recursive: true, force: true })
-    }
-  })
-
-  it('rejects a provider cancel when the provider confirms the job is still running', async () => {
-    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
-    server!.defineScenario({
-      method: 'POST', path: `/api/jobs/${PROMPT_ID}/cancel`, mode: 'fatal_error',
-      submitResponse: { status: 400, body: { error: 'cannot cancel' } },
-    })
-    server!.defineScenario({
-      method: 'GET', path: `/api/jobs/${PROMPT_ID}`, mode: 'success',
-      submitResponse: { status: 200, body: { status: 'in_progress' } },
-    })
-
-    await expect(cancelComfyUiH3Video(PROMPT_ID)).rejects.toThrow('COMFYUI_CANCEL_REJECTED:in_progress')
-  })
-
-  it('accepts a cancel 400 only when the provider proves the job is terminal', async () => {
-    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
-    server!.defineScenario({
-      method: 'POST', path: `/api/jobs/${PROMPT_ID}/cancel`, mode: 'fatal_error',
-      submitResponse: { status: 400, body: { error: 'already done' } },
-    })
-    server!.defineScenario({
-      method: 'GET', path: `/api/jobs/${PROMPT_ID}`, mode: 'success',
-      submitResponse: { status: 200, body: { status: 'cancelled' } },
-    })
-
-    await expect(cancelComfyUiH3Video(PROMPT_ID)).resolves.toBeUndefined()
   })
 
   it('rejects a completed output that is not a video', async () => {

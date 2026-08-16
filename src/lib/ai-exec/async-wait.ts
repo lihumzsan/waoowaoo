@@ -7,22 +7,18 @@ import {
   getProviderPollIntervalMs,
   getProviderQueueTimeoutMs,
 } from './async-runtime-config'
-import type { AsyncPendingPhase, AsyncTemporaryMediaFile } from '@/lib/ai-providers/async-task-types'
+import type { AsyncPendingPhase } from '@/lib/ai-providers/async-task-types'
 import { cancelAsyncTask, pollAsyncTask } from './async-poll'
 import { ProviderTaskFailureError } from './provider-errors'
 
 const logger = createScopedLogger({ module: 'ai-exec.async-wait' })
 
-type AsyncProviderResultBase = {
+export type AsyncProviderResult = {
+  readonly url: string
   readonly status: Awaited<ReturnType<typeof pollAsyncTask>>
   readonly actualVideoTokens?: number
   readonly downloadHeaders?: Record<string, string>
 }
-
-export type AsyncProviderResult = AsyncProviderResultBase & (
-  | { readonly url: string; readonly temporaryMediaFile?: never }
-  | { readonly temporaryMediaFile: AsyncTemporaryMediaFile; readonly url?: never }
-)
 
 export type AsyncProviderPendingProgress = {
   readonly elapsedRatio: number
@@ -112,8 +108,7 @@ export async function waitForAsyncProviderResult(input: {
     const status = await pollAsyncTask(input.externalId, input.userId)
     if (status.status === 'completed') {
       const url = status.resultUrl || status.imageUrl || status.videoUrl
-      const temporaryMediaFile = status.temporaryMediaFile
-      if (!url && !temporaryMediaFile) {
+      if (!url) {
         throw new AppError(
           'EMPTY_RESPONSE',
           `External task completed without a result URL: ${input.externalId}`,
@@ -123,14 +118,12 @@ export async function waitForAsyncProviderResult(input: {
           },
         )
       }
-      const common = {
+      return {
+        url,
         status,
         ...(typeof status.actualVideoTokens === 'number' ? { actualVideoTokens: status.actualVideoTokens } : {}),
         ...(status.downloadHeaders ? { downloadHeaders: status.downloadHeaders } : {}),
       }
-      return temporaryMediaFile
-        ? { ...common, temporaryMediaFile }
-        : { ...common, url: url! }
     }
     if (status.status === 'failed') {
       throw new ProviderTaskFailureError(input.externalId, status.failure)
