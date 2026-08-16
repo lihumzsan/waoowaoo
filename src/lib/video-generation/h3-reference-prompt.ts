@@ -14,6 +14,7 @@ export type MinimaxH3ReferencePromptSections = (typeof MINIMAX_H3_REFERENCE_PROM
 const SECTION_HEADING = /^([a-z][a-z0-9_]*)\s*:\s*$/u
 const NO_BACKGROUND_MUSIC = 'Do not generate background music or musical score.'
 const PERMITTED_AUDIO = 'Retain only dialogue, environmental ambience and action sound effects.'
+const FIXED_NON_DIEGETIC_MUSIC = `None. ${NO_BACKGROUND_MUSIC}\n${PERMITTED_AUDIO}`
 
 function invalid(reason: string): Error {
   return new Error(`VIDEO_PROMPT_PROFILE_INVALID:${reason}`)
@@ -40,8 +41,7 @@ function parseSections(prompt: string): Record<MinimaxH3ReferencePromptSections,
     result[heading.name as MinimaxH3ReferencePromptSections] = body
   }
   const last = result.non_diegetic_music
-  if (!last.includes(NO_BACKGROUND_MUSIC)) throw invalid('BACKGROUND_MUSIC_FORBIDDEN')
-  if (!last.includes(PERMITTED_AUDIO)) throw invalid('PERMITTED_AUDIO_CONTRACT_MISSING')
+  if (last !== FIXED_NON_DIEGETIC_MUSIC) throw invalid('NON_DIEGETIC_MUSIC_CONTRACT_INVALID')
   return result
 }
 

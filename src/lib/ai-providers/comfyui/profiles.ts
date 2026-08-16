@@ -22,6 +22,10 @@ export function resolveH3DurationFrames(seconds: number): number {
   return minimumFrames + ((H3_FRAME_REMAINDER - (minimumFrames % H3_FRAME_GRID)) % H3_FRAME_GRID)
 }
 
+export function resolveH3EffectiveDurationSeconds(seconds: number): number {
+  return resolveH3DurationFrames(seconds) / H3_FRAMES_PER_SECOND
+}
+
 function parseAspectRatio(value: string): [number, number] {
   if (!(H3_ASPECT_RATIOS as readonly string[]).includes(value)) unsupportedOption('aspectRatio', value)
   const [width, height] = value.split(':').map((entry) => Number.parseInt(entry, 10))
