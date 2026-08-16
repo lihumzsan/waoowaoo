@@ -2,7 +2,9 @@ import type { CapabilityValue } from '@/lib/ai-registry/types'
 import type { PlatformModelPreset } from '@/lib/platform-models/types'
 import { MUSIC_KEY_SCALE_VALUES, MUSIC_TIME_SIGNATURE_VALUES } from '@/lib/workspace-resource/music-parameter-contract'
 
-export const COMFYUI_H3_MODEL_ID = 'minimax-h3-fast'
+import type { ComfyUiRuntimeTargetId } from './config'
+
+export const COMFYUI_H3_MODEL_ID = 'minimax-h3-dual-stage-2mp'
 export const COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY = `comfyui::${COMFYUI_H3_MODEL_ID}`
 export const COMFYUI_H3_DEFAULT_GENERATION_OPTIONS = {
   generateAudio: true,
@@ -20,6 +22,26 @@ export const COMFYUI_ACE_STEP_KEY_SCALE_OPTIONS = MUSIC_KEY_SCALE_VALUES
 export const COMFYUI_ACE_STEP_TIME_SIGNATURE_OPTIONS = MUSIC_TIME_SIGNATURE_VALUES
 export const COMFYUI_MOSS_TTS_LOCAL_MODEL_ID = 'moss-tts-local-1.7b'
 export const COMFYUI_MOSS_TTS_LOCAL_MODEL_KEY = `comfyui::${COMFYUI_MOSS_TTS_LOCAL_MODEL_ID}`
+
+export const COMFYUI_REGISTERED_MODEL_KEYS = [
+  COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
+  COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_KEY,
+  COMFYUI_ACE_STEP_1_5_MODEL_KEY,
+  COMFYUI_MOSS_TTS_LOCAL_MODEL_KEY,
+] as const
+
+const COMFYUI_RUNTIME_TARGET_BY_MODEL_KEY: Record<string, ComfyUiRuntimeTargetId> = {
+  [COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY]: 'h3-dual-stage-2mp',
+  [COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_KEY]: 'shared',
+  [COMFYUI_ACE_STEP_1_5_MODEL_KEY]: 'shared',
+  [COMFYUI_MOSS_TTS_LOCAL_MODEL_KEY]: 'shared',
+}
+
+export function resolveComfyUiRuntimeTargetIdForModelKey(modelKey: string): ComfyUiRuntimeTargetId {
+  const targetId = COMFYUI_RUNTIME_TARGET_BY_MODEL_KEY[modelKey]
+  if (!targetId) throw new Error(`COMFYUI_MODEL_RUNTIME_TARGET_MISSING:${modelKey}`)
+  return targetId
+}
 
 export const COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
   {

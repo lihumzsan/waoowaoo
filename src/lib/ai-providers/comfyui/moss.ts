@@ -1,7 +1,8 @@
 import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
 import { createProviderAsyncTaskFailure } from '@/lib/ai-providers/shared/async-task-status'
 import type { AiProviderSoundExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
-import { readComfyUiBaseUrl } from './config'
+import { resolveComfyUiRuntimeTarget } from './config'
+import { formatComfyUiExternalId } from './external-id'
 import { COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_ID, COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_KEY } from './models'
 import mossWorkflow from './workflows/moss-soundeffect-v2.json'
 import {
@@ -116,7 +117,7 @@ export async function executeComfyUiMossSoundGeneration(input: AiProviderSoundEx
   let baseUrl: string
   let built: ReturnType<typeof buildMossSoundEffectPromptGraph>
   try {
-    baseUrl = readComfyUiBaseUrl()
+    baseUrl = resolveComfyUiRuntimeTarget('shared').baseUrl
     built = buildMossSoundEffectPromptGraph({
       prompt: input.prompt,
       negativePrompt: options.negativePrompt,
@@ -134,13 +135,13 @@ export async function executeComfyUiMossSoundGeneration(input: AiProviderSoundEx
       body: JSON.stringify({ prompt: built.graph, prompt_id: promptId }),
     })
     if (readComfyUiString(asComfyUiRecord(raw)?.prompt_id) !== promptId) throw new Error('COMFYUI_PROMPT_ID_MISMATCH')
-    return { success: true, async: true, requestId: promptId, externalId: `COMFYUI:SOUND:${promptId}`, endpoint: 'moss-soundeffect-v2' }
+    return { success: true, async: true, requestId: promptId, externalId: formatComfyUiExternalId({ targetId: 'shared', type: 'SOUND', requestId: promptId }), endpoint: 'moss-soundeffect-v2' }
   } catch (error) {
     if (error instanceof ComfyUiHttpError && error.status >= 400 && error.status < 500) throw promptRejection(error)
     try {
       const probe = asComfyUiRecord(await requestComfyUiJson(baseUrl, `/api/jobs/${encodeURIComponent(promptId)}`))
       if (COMFYUI_ACCEPTED_JOB_STATUSES.has(readComfyUiString(probe?.status))) {
-        return { success: true, async: true, requestId: promptId, externalId: `COMFYUI:SOUND:${promptId}`, endpoint: 'moss-soundeffect-v2' }
+        return { success: true, async: true, requestId: promptId, externalId: formatComfyUiExternalId({ targetId: 'shared', type: 'SOUND', requestId: promptId }), endpoint: 'moss-soundeffect-v2' }
       }
     } catch { /* Preserve the original accepted/unknown boundary below. */ }
     throw new Error(`COMFYUI_SUBMIT_OUTCOME_UNKNOWN:${error instanceof Error ? error.message : String(error)}`)
@@ -152,8 +153,9 @@ export type MossSoundPollResult =
   | { status: 'completed'; audioUrl: string }
   | { status: 'failed'; failure: ReturnType<typeof createProviderAsyncTaskFailure> }
 
-export async function pollComfyUiMossSound(promptId: string): Promise<MossSoundPollResult> {
-  const baseUrl = readComfyUiBaseUrl()
+export async function pollComfyUiMossSound(promptId: string, targetId: string = 'shared'): Promise<MossSoundPollResult> {
+  if (targetId !== 'shared') throw new Error(`COMFYUI_RUNTIME_TARGET_MISMATCH:shared:${targetId}`)
+  const baseUrl = resolveComfyUiRuntimeTarget('shared').baseUrl
   const record = asComfyUiRecord(await requestComfyUiJson(baseUrl, `/api/jobs/${encodeURIComponent(promptId)}`))
   const status = readComfyUiString(record?.status)
   if (status === 'pending') return { status: 'pending', pendingPhase: 'queued' }
@@ -175,9 +177,10 @@ export async function pollComfyUiMossSound(promptId: string): Promise<MossSoundP
   }
 }
 
-export async function cancelComfyUiMossSound(promptId: string): Promise<void> {
+export async function cancelComfyUiMossSound(promptId: string, targetId: string = 'shared'): Promise<void> {
+  if (targetId !== 'shared') throw new Error(`COMFYUI_RUNTIME_TARGET_MISMATCH:shared:${targetId}`)
   try {
-    await requestComfyUiJson(readComfyUiBaseUrl(), `/api/jobs/${encodeURIComponent(promptId)}/cancel`, { method: 'POST' })
+    await requestComfyUiJson(resolveComfyUiRuntimeTarget('shared').baseUrl, `/api/jobs/${encodeURIComponent(promptId)}/cancel`, { method: 'POST' })
   } catch (error) {
     if (error instanceof Error && /COMFYUI_HTTP_(400|404)/u.test(error.message)) return
     throw error

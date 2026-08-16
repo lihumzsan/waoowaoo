@@ -3,7 +3,8 @@ import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
 import { createProviderAsyncTaskFailure } from '@/lib/ai-providers/shared/async-task-status'
 import type { AiProviderMusicExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 import type { MusicKeyScale, MusicTimeSignature } from '@/lib/workspace-resource/music-parameter-contract'
-import { readComfyUiBaseUrl } from './config'
+import { resolveComfyUiRuntimeTarget } from './config'
+import { formatComfyUiExternalId } from './external-id'
 import { COMFYUI_ACE_STEP_1_5_MODEL_ID, COMFYUI_ACE_STEP_1_5_MODEL_KEY } from './models'
 import {
   asComfyUiRecord,
@@ -160,7 +161,7 @@ export async function executeComfyUiAceStepMusicGeneration(input: AiProviderMusi
   let baseUrl: string
   let built: ReturnType<typeof buildAceStepMusicPromptGraph>
   try {
-    baseUrl = readComfyUiBaseUrl()
+    baseUrl = resolveComfyUiRuntimeTarget('shared').baseUrl
     built = buildAceStepMusicPromptGraph({
       prompt: input.generation.prompt,
       requestedDurationSeconds: options.durationSeconds,
@@ -187,7 +188,7 @@ export async function executeComfyUiAceStepMusicGeneration(input: AiProviderMusi
       success: true,
       async: true,
       requestId: promptId,
-      externalId: `COMFYUI:MUSIC:${promptId}`,
+      externalId: formatComfyUiExternalId({ targetId: 'shared', type: 'MUSIC', requestId: promptId }),
       endpoint: 'ace-step-1.5',
       metadata: built.durationPlan,
     }
@@ -196,7 +197,7 @@ export async function executeComfyUiAceStepMusicGeneration(input: AiProviderMusi
     try {
       const probe = asComfyUiRecord(await requestComfyUiJson(baseUrl, `/api/jobs/${encodeURIComponent(promptId)}`))
       if (COMFYUI_ACCEPTED_JOB_STATUSES.has(readComfyUiString(probe?.status))) {
-        return { success: true, async: true, requestId: promptId, externalId: `COMFYUI:MUSIC:${promptId}`, endpoint: 'ace-step-1.5', metadata: built.durationPlan }
+        return { success: true, async: true, requestId: promptId, externalId: formatComfyUiExternalId({ targetId: 'shared', type: 'MUSIC', requestId: promptId }), endpoint: 'ace-step-1.5', metadata: built.durationPlan }
       }
     } catch { /* Preserve the original accepted/unknown boundary below. */ }
     throw new Error(`COMFYUI_SUBMIT_OUTCOME_UNKNOWN:${error instanceof Error ? error.message : String(error)}`, { cause: error })
@@ -208,8 +209,9 @@ export type AceStepMusicPollResult =
   | { status: 'completed'; audioUrl: string }
   | { status: 'failed'; failure: ReturnType<typeof createProviderAsyncTaskFailure> }
 
-export async function pollComfyUiAceStepMusic(promptId: string): Promise<AceStepMusicPollResult> {
-  const baseUrl = readComfyUiBaseUrl()
+export async function pollComfyUiAceStepMusic(promptId: string, targetId: string = 'shared'): Promise<AceStepMusicPollResult> {
+  if (targetId !== 'shared') throw new Error(`COMFYUI_RUNTIME_TARGET_MISMATCH:shared:${targetId}`)
+  const baseUrl = resolveComfyUiRuntimeTarget('shared').baseUrl
   const record = asComfyUiRecord(await requestComfyUiJson(baseUrl, `/api/jobs/${encodeURIComponent(promptId)}`))
   const status = readComfyUiString(record?.status)
   if (status === 'pending') return { status: 'pending', pendingPhase: 'queued' }
@@ -231,9 +233,10 @@ export async function pollComfyUiAceStepMusic(promptId: string): Promise<AceStep
   }
 }
 
-export async function cancelComfyUiAceStepMusic(promptId: string): Promise<void> {
+export async function cancelComfyUiAceStepMusic(promptId: string, targetId: string = 'shared'): Promise<void> {
+  if (targetId !== 'shared') throw new Error(`COMFYUI_RUNTIME_TARGET_MISMATCH:shared:${targetId}`)
   try {
-    await requestComfyUiJson(readComfyUiBaseUrl(), `/api/jobs/${encodeURIComponent(promptId)}/cancel`, { method: 'POST' })
+    await requestComfyUiJson(resolveComfyUiRuntimeTarget('shared').baseUrl, `/api/jobs/${encodeURIComponent(promptId)}/cancel`, { method: 'POST' })
   } catch (error) {
     if (error instanceof Error && /COMFYUI_HTTP_(400|404)/u.test(error.message)) return
     throw error

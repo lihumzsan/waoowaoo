@@ -4,7 +4,8 @@ import { readProviderJsonResponse } from '@/lib/ai-providers/failure'
 import type { AiProviderVoiceExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 import { readOwnedMediaBytesForGeneration } from '@/lib/media/outbound-owned-media'
 import { readComfyUiDeclaredNodeAudioOutput, readComfyUiOutputData, asComfyUiRecord, readComfyUiHttpError, readComfyUiRequiredOptions, readComfyUiString, requestComfyUiJson, COMFYUI_ACCEPTED_JOB_STATUSES, type ComfyUiOutput, ComfyUiHttpError } from './transport'
-import { readComfyUiBaseUrl } from './config'
+import { resolveComfyUiRuntimeTarget } from './config'
+import { formatComfyUiExternalId } from './external-id'
 import { COMFYUI_MOSS_TTS_LOCAL_MODEL_ID, COMFYUI_MOSS_TTS_LOCAL_MODEL_KEY } from './models'
 import {
   MOSS_TTS_REFERENCE_AUDIO_MAX_BYTES,
@@ -130,7 +131,7 @@ export async function executeComfyUiMossTtsGeneration(input: AiProviderVoiceExec
   if (typeof referenceAudio !== 'string' || !referenceAudio.trim()) throw new Error('COMFYUI_MOSS_TTS_REFERENCE_AUDIO_REQUIRED')
   if (input.options?.outputFormat !== 'mp3') throw new Error('COMFYUI_MOSS_TTS_OUTPUT_FORMAT_INVALID')
   const promptId = crypto.randomUUID()
-  const baseUrl = readComfyUiBaseUrl()
+  const baseUrl = resolveComfyUiRuntimeTarget('shared').baseUrl
   let graph: ReturnType<typeof buildMossTtsPromptGraph>['graph']
   try {
     await preflight(baseUrl)
@@ -142,12 +143,12 @@ export async function executeComfyUiMossTtsGeneration(input: AiProviderVoiceExec
   try {
     const raw = await requestComfyUiJson(baseUrl, '/prompt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: graph, prompt_id: promptId }) })
     if (readComfyUiString(asComfyUiRecord(raw)?.prompt_id) !== promptId) throw new Error('COMFYUI_PROMPT_ID_MISMATCH')
-    return { success: true, async: true, requestId: promptId, externalId: `COMFYUI:VOICE:${promptId}`, endpoint: 'moss-tts-local-1.7b' }
+    return { success: true, async: true, requestId: promptId, externalId: formatComfyUiExternalId({ targetId: 'shared', type: 'VOICE', requestId: promptId }), endpoint: 'moss-tts-local-1.7b' }
   } catch (error) {
     if (error instanceof ComfyUiHttpError && error.status >= 400 && error.status < 500) throw promptRejection(error)
     try {
       const probe = asComfyUiRecord(await requestComfyUiJson(baseUrl, `/api/jobs/${encodeURIComponent(promptId)}`))
-      if (COMFYUI_ACCEPTED_JOB_STATUSES.has(readComfyUiString(probe?.status))) return { success: true, async: true, requestId: promptId, externalId: `COMFYUI:VOICE:${promptId}`, endpoint: 'moss-tts-local-1.7b' }
+      if (COMFYUI_ACCEPTED_JOB_STATUSES.has(readComfyUiString(probe?.status))) return { success: true, async: true, requestId: promptId, externalId: formatComfyUiExternalId({ targetId: 'shared', type: 'VOICE', requestId: promptId }), endpoint: 'moss-tts-local-1.7b' }
     } catch { /* preserve unknown boundary */ }
     throw new Error(`COMFYUI_SUBMIT_OUTCOME_UNKNOWN:${error instanceof Error ? error.message : String(error)}`)
   }
@@ -158,8 +159,9 @@ export type MossTtsPollResult =
   | { status: 'completed'; audioUrl: string }
   | { status: 'failed'; failure: ReturnType<typeof createProviderAsyncTaskFailure> }
 
-export async function pollComfyUiMossTts(promptId: string): Promise<MossTtsPollResult> {
-  const baseUrl = readComfyUiBaseUrl()
+export async function pollComfyUiMossTts(promptId: string, targetId: string = 'shared'): Promise<MossTtsPollResult> {
+  if (targetId !== 'shared') throw new Error(`COMFYUI_RUNTIME_TARGET_MISMATCH:shared:${targetId}`)
+  const baseUrl = resolveComfyUiRuntimeTarget('shared').baseUrl
   const record = asComfyUiRecord(await requestComfyUiJson(baseUrl, `/api/jobs/${encodeURIComponent(promptId)}`))
   const status = readComfyUiString(record?.status)
   if (status === 'pending') return { status: 'pending', pendingPhase: 'queued' }
@@ -172,8 +174,9 @@ export async function pollComfyUiMossTts(promptId: string): Promise<MossTtsPollR
   return { status: 'completed', audioUrl: await readComfyUiOutputData({ baseUrl, output, contentType: 'audio/mpeg', maxBytes: COMFYUI_MOSS_TTS_MAX_AUDIO_BYTES, label: 'ComfyUI MOSS TTS audio' }) }
 }
 
-export async function cancelComfyUiMossTts(promptId: string): Promise<void> {
-  try { await requestComfyUiJson(readComfyUiBaseUrl(), `/api/jobs/${encodeURIComponent(promptId)}/cancel`, { method: 'POST' }) } catch (error) {
+export async function cancelComfyUiMossTts(promptId: string, targetId: string = 'shared'): Promise<void> {
+  if (targetId !== 'shared') throw new Error(`COMFYUI_RUNTIME_TARGET_MISMATCH:shared:${targetId}`)
+  try { await requestComfyUiJson(resolveComfyUiRuntimeTarget('shared').baseUrl, `/api/jobs/${encodeURIComponent(promptId)}/cancel`, { method: 'POST' }) } catch (error) {
     if (error instanceof Error && /COMFYUI_HTTP_(400|404)/u.test(error.message)) return
     throw error
   }

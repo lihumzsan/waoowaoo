@@ -82,7 +82,7 @@ export async function preflightMediaGenerationOptions(input: {
   const selection = await resolveModelSelection(input.userId, input.modelKey, input.modality)
   // Provider credential/config availability is local and deterministic. Do
   // not create a Task that can only fail before HTTP.
-  await getProviderConfig(input.userId, selection.provider)
+  await getProviderConfig(input.userId, selection.provider, selection.modelKey)
   return {
     selection,
     options: normalizeMediaOptionsForSelection({

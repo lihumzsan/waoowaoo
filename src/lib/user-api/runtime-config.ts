@@ -19,7 +19,8 @@ import { getPlatformModels, getSelectableLocalVideoModels } from '@/lib/platform
 import type { UnifiedModelType } from '@/lib/ai-registry/types'
 import { isUnifiedModelType } from '@/lib/user-api/api-config-shared'
 import { AppError } from '@/lib/errors/app-error'
-import { readComfyUiBaseUrl } from '@/lib/ai-providers/comfyui/config'
+import { resolveComfyUiRuntimeTarget } from '@/lib/ai-providers/comfyui/config'
+import { resolveComfyUiRuntimeTargetIdForModelKey } from '@/lib/ai-providers/comfyui/models'
 import {
   findRuntimeModelByKey,
   resolveRuntimeModelSelection,
@@ -210,7 +211,7 @@ export interface ProviderConfig {
   baseUrl?: string
 }
 
-export async function getProviderConfig(userId: string, providerId: string): Promise<ProviderConfig> {
+export async function getProviderConfig(userId: string, providerId: string, modelKey?: string): Promise<ProviderConfig> {
   if (providerId === 'codex') {
     return {
       id: providerId,
@@ -220,7 +221,9 @@ export async function getProviderConfig(userId: string, providerId: string): Pro
   }
 
   if (providerId === 'comfyui') {
-    const baseUrl = readComfyUiBaseUrl()
+    if (!modelKey) throw new AppError('INVALID_PARAMS', 'ComfyUI model key is required for runtime target resolution', { provider: providerId })
+    const targetId = resolveComfyUiRuntimeTargetIdForModelKey(modelKey)
+    const baseUrl = resolveComfyUiRuntimeTarget(targetId).baseUrl
     return {
       id: providerId,
       name: 'ComfyUI',
