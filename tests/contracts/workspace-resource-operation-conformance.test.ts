@@ -124,8 +124,8 @@ describe('WorkspaceResource Operation registry conformance', () => {
       channel: 'tool',
       operation,
       context,
-      input: { change: { kind: 'video_model', value: 'comfyui::minimax-h3-fast' } },
-    })).resolves.toMatchObject({ input: { videoModel: 'comfyui::minimax-h3-fast' } })
+      input: { change: { kind: 'video_model', value: 'comfyui::minimax-h3-dual-stage-2mp' } },
+    })).resolves.toMatchObject({ input: { videoModel: 'comfyui::minimax-h3-dual-stage-2mp' } })
     await expect(prepareProjectAgentOperationInput({
       channel: 'tool',
       operation,
@@ -133,7 +133,7 @@ describe('WorkspaceResource Operation registry conformance', () => {
       input: { change: { kind: 'video_ratio', value: '9:16' } },
     })).resolves.toMatchObject({ input: { videoRatio: '9:16' } })
     expect(operation.inputSchema.safeParse({
-      videoModel: 'comfyui::minimax-h3-fast',
+      videoModel: 'comfyui::minimax-h3-dual-stage-2mp',
     }).success).toBe(true)
   })
 
