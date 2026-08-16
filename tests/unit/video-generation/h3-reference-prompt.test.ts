@@ -40,6 +40,17 @@ describe('MiniMax H3 reference Prompt contract', () => {
     })).toThrow('VIDEO_PROMPT_PROFILE_INVALID')
   })
 
+  it('rejects a contradictory music instruction even when the required lines are present', () => {
+    const contradictory = validPrompt.replace(
+      'None. Do not generate background music or musical score.',
+      'Generate an orchestral score.\nNone. Do not generate background music or musical score.',
+    )
+    expect(() => assertVideoPromptMatchesProfile({
+      profile: 'minimax_h3_reference_v2',
+      prompt: contradictory,
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID')
+  })
+
   it('leaves generic profile validation to its own dialect', () => {
     expect(() => assertVideoPromptMatchesProfile({ profile: 'generic_v1', prompt: 'anything' })).not.toThrow()
   })

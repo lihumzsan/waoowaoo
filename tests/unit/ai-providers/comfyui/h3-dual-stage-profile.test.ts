@@ -4,6 +4,7 @@ import {
   buildH3DualStagePromptGraph,
   resolveH3Dimensions,
   resolveH3DurationFrames,
+  resolveH3EffectiveDurationSeconds,
 } from '@/lib/ai-providers/comfyui/profiles'
 
 describe('MiniMax H3 dual-stage profile', () => {
@@ -12,6 +13,8 @@ describe('MiniMax H3 dual-stage profile', () => {
     expect(resolveH3DurationFrames(5)).toBe(124)
     expect(resolveH3DurationFrames(10)).toBe(243)
     expect(resolveH3DurationFrames(15)).toBe(362)
+    expect(resolveH3EffectiveDurationSeconds(4)).toBe(107 / 24)
+    expect(resolveH3EffectiveDurationSeconds(15)).toBe(362 / 24)
     expect(resolveH3Dimensions({ megapixels: 1, aspectRatio: '16:9' })).toEqual({ width: 1376, height: 768 })
     expect(resolveH3Dimensions({ megapixels: 2, aspectRatio: '16:9' })).toEqual({ width: 1920, height: 1088 })
   })
