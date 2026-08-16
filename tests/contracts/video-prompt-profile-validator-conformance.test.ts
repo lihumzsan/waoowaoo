@@ -28,7 +28,7 @@ describe('video prompt profile validator conformance', () => {
     }))
   })
 
-  it.each(['generic_v1', 'minimax_h3_reference_v2'] as const)(
+  it.each(['generic_v1', 'minimax_h3_v1'] as const)(
     'accepts the legal %s profile',
     (promptProfile) => {
       expect(validateModelCapabilities('video', { video: { promptProfile } })).toEqual([])

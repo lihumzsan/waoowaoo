@@ -169,7 +169,7 @@ describe('ComfyUI MOSS SoundEffect v2 contract', () => {
     await expect(executeComfyUiMossSoundGeneration(soundInput)).resolves.toMatchObject({
       success: true,
       async: true,
-      externalId: `COMFYUI:shared:SOUND:${PROMPT_ID}`,
+      externalId: `COMFYUI:SOUND:${PROMPT_ID}`,
     })
     expect(server!.getRequests('POST', '/prompt')).toHaveLength(1)
   })

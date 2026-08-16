@@ -1,6 +1,6 @@
 import type { AiProviderAdapter } from '@/lib/ai-providers/runtime-types'
 import { describeMediaVariantBase } from '@/lib/ai-providers/shared/media-adapter'
-import { buildMediaOptionSchema, booleanValidator, enumValidator, integerRangeValidator, stringArrayValidator } from '@/lib/ai-providers/shared/option-schema'
+import { buildMediaOptionSchema, booleanValidator, enumValidator, integerRangeValidator } from '@/lib/ai-providers/shared/option-schema'
 import { ACE_STEP_MIN_PROVIDER_DURATION_SECONDS, executeComfyUiAceStepMusicGeneration } from './ace-step'
 import {
   COMFYUI_ACE_STEP_1_5_MODEL_ID,
@@ -56,23 +56,18 @@ export const comfyuiAdapter: AiProviderAdapter = {
       selection,
       executionMode: 'async',
       optionSchema: buildMediaOptionSchema('video', {
-        allowedKeys: ['referenceImages'],
-        required: ['duration', 'aspectRatio', 'generateAudio'],
-        excludedKeys: ['resolution', 'lastFrameImageUrl', 'referenceAudios', 'referenceVideos', 'size', 'promptExtend', 'serviceTier', 'executionExpiresAfter', 'returnLastFrame', 'draft', 'seed', 'cameraFixed', 'watermark'],
+        allowedKeys: [],
+        required: ['duration', 'resolution', 'aspectRatio', 'generateAudio'],
+        excludedKeys: ['referenceImages', 'referenceAudios', 'referenceVideos', 'size', 'promptExtend', 'serviceTier', 'executionExpiresAfter', 'returnLastFrame', 'draft', 'seed', 'cameraFixed', 'watermark'],
         validators: {
           duration: integerRangeValidator({ min: 4, max: 15 }),
+          resolution: enumValidator(['480p', '720p']),
           aspectRatio: enumValidator(H3_ASPECT_RATIOS),
           generateAudio: booleanValidator(),
-          referenceImages: stringArrayValidator({ maxLength: 1 }),
         },
         objectValidators: [() => selection.modelId === COMFYUI_H3_MODEL_ID
           ? { ok: true }
-          : { ok: false, reason: 'unsupported_model' },
-        (options) => options.generateAudio === true
-          ? Array.isArray(options.referenceImages) && options.referenceImages.length === 1
-            ? { ok: true }
-            : { ok: false, reason: 'exactly_one_reference_image_required' }
-          : { ok: false, reason: 'generate_audio_required' }],
+          : { ok: false, reason: 'unsupported_model' }],
       }),
     }),
     execute: executeComfyUiH3VideoGeneration,

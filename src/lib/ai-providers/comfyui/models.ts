@@ -5,6 +5,7 @@ import { MUSIC_KEY_SCALE_VALUES, MUSIC_TIME_SIGNATURE_VALUES } from '@/lib/works
 export const COMFYUI_H3_MODEL_ID = 'minimax-h3-fast'
 export const COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY = `comfyui::${COMFYUI_H3_MODEL_ID}`
 export const COMFYUI_H3_DEFAULT_GENERATION_OPTIONS = {
+  resolution: '720p',
   generateAudio: true,
 } as const satisfies Record<string, CapabilityValue>
 export const COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_ID = 'moss-soundeffect-v2'
@@ -26,11 +27,12 @@ export const COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelType: 'video', provider: 'comfyui', modelId: COMFYUI_H3_MODEL_ID,
     capabilities: {
       video: {
-        promptProfile: 'minimax_h3_reference_v2',
-        supportedInputModes: ['reference'], supportsTextToVideo: false,
-        durationOptions: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-        generateAudioOptions: [true], supportGenerateAudio: true,
-        assetReferenceMultiReference: false, maxReferenceImages: 1, maxReferenceFiles: 1,
+        promptProfile: 'minimax_h3_v1',
+        supportedInputModes: ['first_frame', 'first_last_frame'], supportsTextToVideo: false,
+        generationModeOptions: ['normal', 'firstlastframe'],
+        durationOptions: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], resolutionOptions: ['480p', '720p'],
+        firstlastframe: true, generateAudioOptions: [true], supportGenerateAudio: true,
+        assetReferenceMultiReference: false,
       },
     },
   },
@@ -62,14 +64,14 @@ export const COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
 ] as const
 
 export const COMFYUI_API_CONFIG_CATALOG_MODELS = [
-  { modelId: COMFYUI_H3_MODEL_ID, name: 'MiniMax H3 Dual-Stage 2MP', type: 'video', provider: 'comfyui' },
+  { modelId: COMFYUI_H3_MODEL_ID, name: 'MiniMax H3 Fast', type: 'video', provider: 'comfyui' },
   { modelId: COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_ID, name: 'MOSS SoundEffect v2', type: 'sound', provider: 'comfyui' },
   { modelId: COMFYUI_ACE_STEP_1_5_MODEL_ID, name: 'ACE-Step 1.5', type: 'music', provider: 'comfyui' },
   { modelId: COMFYUI_MOSS_TTS_LOCAL_MODEL_ID, name: 'MOSS TTS Local 1.7B', type: 'voice', provider: 'comfyui' },
 ] as const
 
 export const COMFYUI_PLATFORM_MODEL_PRESETS: readonly PlatformModelPreset[] = [
-  { provider: 'comfyui', modelId: COMFYUI_H3_MODEL_ID, name: 'MiniMax H3 Dual-Stage 2MP', type: 'video' },
+  { provider: 'comfyui', modelId: COMFYUI_H3_MODEL_ID, name: 'MiniMax H3 Fast', type: 'video' },
   { provider: 'comfyui', modelId: COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_ID, name: 'MOSS SoundEffect v2', type: 'sound' },
   { provider: 'comfyui', modelId: COMFYUI_ACE_STEP_1_5_MODEL_ID, name: 'ACE-Step 1.5', type: 'music' },
   { provider: 'comfyui', modelId: COMFYUI_MOSS_TTS_LOCAL_MODEL_ID, name: 'MOSS TTS Local 1.7B', type: 'voice' },

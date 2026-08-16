@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
 import { executeComfyUiH3VideoGeneration, pollComfyUiH3Video } from '@/lib/ai-providers/comfyui/h3'
 import { COMFYUI_H3_MODEL_ID } from '@/lib/ai-providers/comfyui/models'
-import { H3_DUAL_STAGE_RUNTIME_PROFILE } from '@/lib/ai-providers/comfyui/profiles'
+import { H3_MODELS, H3_RUNTIME_PROFILES } from '@/lib/ai-providers/comfyui/profiles'
 import type { AiProviderVideoExecutionContext } from '@/lib/ai-providers/runtime-types'
 import { startScenarioServer } from '../../helpers/fakes/scenario-server'
 
@@ -16,29 +16,27 @@ const videoInput: AiProviderVideoExecutionContext = {
     modelKey: `comfyui::${COMFYUI_H3_MODEL_ID}`,
     variantSubKind: 'official',
   },
-  imageUrl: '',
+  imageUrl: 'https://media.example.com/first-frame.png',
   options: {
-    prompt: 'subject_definitions:\nSubject 1 is in Picture 1.\n\nsummary:\nA test video.\n\nretention_analysis:\nPreserve identity.\n\ndetailed_description:\nAt 0.00 seconds the subject moves and settles.\n\noverall_soundscape:\nRoom tone and movement.\n\nnon_diegetic_music:\nNone. Do not generate background music or musical score.\nRetain only dialogue, environmental ambience and action sound effects.',
+    prompt: 'A test video',
     duration: 10,
+    resolution: '720p',
     aspectRatio: '16:9',
     generateAudio: true,
-    referenceImages: ['https://media.example.com/reference.png'],
   },
 }
 
 function objectInfo(className: string): Record<string, unknown> {
   const required: Record<string, unknown> = {}
-  if (className === 'UNETLoader') required.unet_name = [['h3\\minimax_h3_ref2va_int8_convrot.safetensors', 'minimax_h3_fl2va_pruned_w4a8_mixed.safetensors']]
-  if (className === 'CLIPLoader') required.clip_name = [['h3\\qwen3vl_32b_minimax_h3_int8_convrot.safetensors']]
-  if (className === 'LoraLoaderModelOnly') required.lora_name = [['h3\\minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors']]
-  if (className === 'VAELoader') required.vae_name = [['h3\\minimax_h3_video_vae_int8_convrot.safetensors', 'h3\\minimax_h3_audio_vae_fp32.safetensors']]
-  if (className === 'ImageResizeKJv2') required.upscale_method = [['nvidia_rtx_vsr']]
-  if (className === 'ModelAttentionBackend') required.attention = [['comfy kitchen attention']]
+  if (className === 'UNETLoader') required.unet_name = [[H3_MODELS.diffusion]]
+  if (className === 'CLIPLoader') required.clip_name = [[H3_MODELS.textEncoder]]
+  if (className === 'LoraLoaderBypassModelOnly') required.lora_name = [[H3_MODELS.turboLora]]
+  if (className === 'VAELoader') required.vae_name = [[H3_MODELS.videoVae, H3_MODELS.audioVae]]
   return { [className]: { input: { required } } }
 }
 
 function defineValidPreflight(server: Awaited<ReturnType<typeof startScenarioServer>>) {
-  for (const className of H3_DUAL_STAGE_RUNTIME_PROFILE.requiredNodeClasses) {
+  for (const className of H3_RUNTIME_PROFILES['h3-fast-first-frame'].requiredNodeClasses) {
     server.defineScenario({
       method: 'GET',
       path: `/object_info/${encodeURIComponent(className)}`,
@@ -64,7 +62,7 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
   })
 
   it('types deterministic local graph validation as a pre-accept rejection', async () => {
-    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    vi.stubEnv('COMFYUI_BASE_URL', server!.baseUrl)
 
     await expect(executeComfyUiH3VideoGeneration({
       ...videoInput,
@@ -80,7 +78,7 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
   })
 
   it('types a missing ComfyUI base URL as a pre-accept rejection', async () => {
-    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', '')
+    vi.stubEnv('COMFYUI_BASE_URL', '')
 
     await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
       name: 'ProviderSubmissionError',
@@ -90,7 +88,7 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
   })
 
   it('types a proven prompt 4xx as a rejected submission with its diagnostic', async () => {
-    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    vi.stubEnv('COMFYUI_BASE_URL', server!.baseUrl)
     defineValidPreflight(server!)
     server!.defineScenario({
       method: 'POST',
@@ -113,7 +111,7 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
   })
 
   it('keeps a prompt 5xx as an unknown acceptance outcome after probing the same prompt id', async () => {
-    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    vi.stubEnv('COMFYUI_BASE_URL', server!.baseUrl)
     defineValidPreflight(server!)
     server!.defineScenario({
       method: 'POST',
@@ -142,7 +140,7 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
   })
 
   it('keeps a prompt 408 uncertain and probes the same prompt id', async () => {
-    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    vi.stubEnv('COMFYUI_BASE_URL', server!.baseUrl)
     defineValidPreflight(server!)
     server!.defineScenario({
       method: 'POST', path: '/prompt', mode: 'fatal_error',
@@ -159,7 +157,7 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
   })
 
   it('does not accept an unknown same-id probe status', async () => {
-    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    vi.stubEnv('COMFYUI_BASE_URL', server!.baseUrl)
     defineValidPreflight(server!)
     server!.defineScenario({
       method: 'POST', path: '/prompt', mode: 'fatal_error',
@@ -174,26 +172,26 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
       .rejects.toThrow('COMFYUI_SUBMIT_OUTCOME_UNKNOWN')
   })
 
-  it('rejects a completed video declared above the shared 512 MiB provider limit', async () => {
-    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+  it('rejects a completed video declared above the 100 MiB provider limit', async () => {
+    vi.stubEnv('COMFYUI_BASE_URL', server!.baseUrl)
     server!.defineScenario({
       method: 'GET', path: `/api/jobs/${PROMPT_ID}`, mode: 'success',
-      submitResponse: { status: 200, body: { status: 'completed', outputs: { '168': { gifs: [{ filename: 'large.mp4', subfolder: '', type: 'output' }] } } } },
+      submitResponse: { status: 200, body: { status: 'completed', outputs: { '15': { gifs: [{ filename: 'large.mp4', subfolder: '', type: 'output' }] } } } },
     })
     server!.defineScenario({
       method: 'GET', path: '/view', mode: 'success',
-      submitResponse: { status: 200, headers: { 'content-type': 'video/mp4', 'content-length': String(512 * 1024 * 1024 + 1) } },
+      submitResponse: { status: 200, headers: { 'content-type': 'video/mp4', 'content-length': String(100 * 1024 * 1024 + 1) } },
     })
 
     await expect(pollComfyUiH3Video(PROMPT_ID))
-      .rejects.toThrow('exceeds the 536870912 byte limit')
+      .rejects.toThrow('exceeds the 104857600 byte limit')
   })
 
   it('rejects a completed output that is not a video', async () => {
-    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    vi.stubEnv('COMFYUI_BASE_URL', server!.baseUrl)
     server!.defineScenario({
       method: 'GET', path: `/api/jobs/${PROMPT_ID}`, mode: 'success',
-      submitResponse: { status: 200, body: { status: 'completed', outputs: { '168': { gifs: [{ filename: 'wrong.txt', subfolder: '', type: 'output' }] } } } },
+      submitResponse: { status: 200, body: { status: 'completed', outputs: { '15': { gifs: [{ filename: 'wrong.txt', subfolder: '', type: 'output' }] } } } },
     })
     server!.defineScenario({
       method: 'GET', path: '/view', mode: 'success',
@@ -201,14 +199,14 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
     })
 
     await expect(pollComfyUiH3Video(PROMPT_ID))
-      .rejects.toThrow('COMFYUI_VIDEO_OUTPUT_MISSING')
+      .rejects.toThrow('COMFYUI_OUTPUT_CONTENT_TYPE_INVALID')
   })
 
   it('rejects a non-MP4 video container before MP4 persistence', async () => {
-    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    vi.stubEnv('COMFYUI_BASE_URL', server!.baseUrl)
     server!.defineScenario({
       method: 'GET', path: `/api/jobs/${PROMPT_ID}`, mode: 'success',
-      submitResponse: { status: 200, body: { status: 'completed', outputs: { '168': { gifs: [{ filename: 'wrong.webm', subfolder: '', type: 'output' }] } } } },
+      submitResponse: { status: 200, body: { status: 'completed', outputs: { '15': { gifs: [{ filename: 'wrong.webm', subfolder: '', type: 'output' }] } } } },
     })
     server!.defineScenario({
       method: 'GET', path: '/view', mode: 'success',
@@ -216,6 +214,6 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
     })
 
     await expect(pollComfyUiH3Video(PROMPT_ID))
-      .rejects.toThrow('COMFYUI_VIDEO_OUTPUT_MISSING')
+      .rejects.toThrow('COMFYUI_OUTPUT_CONTENT_TYPE_INVALID')
   })
 })

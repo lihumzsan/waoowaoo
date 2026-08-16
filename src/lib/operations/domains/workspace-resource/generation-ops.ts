@@ -720,6 +720,9 @@ async function compileMediaExecution(input: {
         ...(aspectRatio ? { aspectRatio } : {}),
       }
     } else if (item.mediaType === 'video') {
+      const generationMode = input.references.some((reference) => reference.role === 'last_frame')
+        ? 'firstlastframe'
+        : 'normal'
       const configured = await resolveProjectModelCapabilityGenerationOptions({
         projectId: input.ctx.projectId,
         userId: input.ctx.userId,
@@ -727,6 +730,7 @@ async function compileMediaExecution(input: {
         modelKey,
         runtimeSelections: {
           duration: item.durationSeconds,
+          generationMode,
         },
       })
       const providerConfigured = { ...configured }

@@ -174,11 +174,10 @@ describe('ComfyUI ACE-Step 1.5 music contract', () => {
         },
       },
     })
-    const parsed = resolveAsyncTaskProviderByExternalId('COMFYUI:shared:MUSIC:00000000-0000-4000-8000-000000000004')
-      .parseExternalId('COMFYUI:shared:MUSIC:00000000-0000-4000-8000-000000000004')
+    const parsed = resolveAsyncTaskProviderByExternalId('COMFYUI:MUSIC:00000000-0000-4000-8000-000000000004')
+      .parseExternalId('COMFYUI:MUSIC:00000000-0000-4000-8000-000000000004')
     expect(parsed).toEqual({
       provider: 'COMFYUI',
-      endpoint: 'shared',
       type: 'MUSIC',
       requestId: '00000000-0000-4000-8000-000000000004',
     })
