@@ -123,8 +123,8 @@ export async function executeComfyUiH3VideoGeneration(input: AiProviderVideoExec
     try {
       const probe = asComfyUiRecord(await requestComfyUiJson(target.baseUrl, `/api/jobs/${encodeURIComponent(promptId)}`))
       if (COMFYUI_ACCEPTED_JOB_STATUSES.has(readComfyUiString(probe?.status))) return { success: true, async: true, requestId: promptId, externalId: formatComfyUiExternalId({ targetId: COMFYUI_H3_RUNTIME_TARGET_ID, type: 'VIDEO', requestId: promptId }), endpoint: H3_DUAL_STAGE_RUNTIME_PROFILE.id }
-    } catch { /* preserve accepted/unknown boundary */ }
-    throw new Error(`COMFYUI_SUBMIT_OUTCOME_UNKNOWN:${error instanceof Error ? error.message : String(error)}`, { cause: error })
+      } catch { /* preserve accepted/unknown boundary */ }
+      throw new Error(`COMFYUI_SUBMIT_OUTCOME_UNKNOWN:${error instanceof Error ? error.message : String(error)}`, { cause: error })
   }
 }
 
