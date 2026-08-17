@@ -12,6 +12,7 @@ import {
   applyWorkspaceSSEEvent,
 } from '../workspace-sse-event-sync'
 import { WorkspaceSSEEventSequence } from '../workspace-sse-event-sequence'
+import { recoverWorkspaceSseEventError } from '../workspace-sse-resync'
 import {
   advanceWorkspaceSseCursor,
   EMPTY_WORKSPACE_SSE_CURSOR,
@@ -175,9 +176,20 @@ export function useSSE({ projectId, enabled = true, onEvent }: UseSSEOptions) {
       try {
         handleParsedEvent(JSON.parse(event.data || '{}'), event.lastEventId || undefined)
       } catch (error) {
+        const recovery = recoverWorkspaceSseEventError({
+          error,
+          requestSnapshotResync,
+          scheduleResync,
+        })
+        if (recovery === 'immediate_snapshot') {
+          _ulogWarn('[useSSE] event sequence requires immediate snapshot resync', {
+            projectId,
+            reason: error instanceof Error ? error.message : String(error),
+          })
+          return
+        }
         _ulogError('[useSSE] failed to parse event', error)
         // 立即重连会撞上 bootstrap 重发的同一条毒事件,形成自激循环;必须退避。
-        scheduleResync('event handling failed')
       }
     }
 

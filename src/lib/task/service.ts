@@ -4,6 +4,7 @@ import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import { withRetry } from '@/lib/retry'
 import { TASK_STATUS, type TaskStatus } from './types'
 import { projectPersistedTaskProgressPayload } from './progress-payload'
+import { canonicalJson } from '@/lib/operation-plan-contract/canonical-json'
 
 const taskModel = prisma.task
 
@@ -111,13 +112,23 @@ export async function tryUpdateTaskProgress(
       scope: 'prisma:task.progress.current',
       run: async () => await taskModel.findFirst({
         where: attemptWhere,
-        select: { payload: true },
+        select: { progress: true, payload: true },
       }),
     })
     if (!current) return false
     const mergedPayload = mergeTaskProgressPayload(current.payload, payload)
+    if (
+      current.progress === progress
+      && canonicalJson(current.payload) === canonicalJson(mergedPayload)
+    ) return false
     const result = await taskModel.updateMany({
-      where: attemptWhere,
+      where: {
+        ...attemptWhere,
+        progress: current.progress,
+        payload: {
+          equals: current.payload ?? Prisma.JsonNull,
+        },
+      },
       data: {
         progress,
         payload: toNullableJson(mergedPayload),

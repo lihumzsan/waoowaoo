@@ -234,6 +234,71 @@ describe('transactional Task batch dedupe', () => {
     expect(payload).not.toHaveProperty('done')
   })
 
+  it('does not write unchanged current-attempt progress but accepts a provider phase change', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const task = await prisma.task.create({
+      data: {
+        userId: user.id,
+        projectId: project.id,
+        type: TASK_TYPE.WORKSPACE_RESOURCE_IMAGE,
+        targetType: 'WorkspaceResource',
+        targetId: 'resource-progress-noop',
+        status: TASK_STATUS.PROCESSING,
+        attempt: 1,
+        progress: 5,
+        payload: { meta: { locale: 'zh' } },
+        queuedAt: new Date(),
+        startedAt: new Date(),
+      },
+    })
+
+    const queuedProgress = {
+      stage: 'polling_external',
+      externalPhase: 'queued' as const,
+    }
+
+    expect(await tryUpdateTaskProgress(task.id, 1, 45, queuedProgress)).toBe(true)
+    expect(await tryUpdateTaskProgress(task.id, 1, 45, queuedProgress)).toBe(false)
+    expect(await tryUpdateTaskProgress(task.id, 1, 45, {
+      stage: 'polling_external',
+      externalPhase: 'running',
+    })).toBe(true)
+  })
+
+  it('allows only one concurrent writer for the same next progress projection', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const task = await prisma.task.create({
+      data: {
+        userId: user.id,
+        projectId: project.id,
+        type: TASK_TYPE.WORKSPACE_RESOURCE_IMAGE,
+        targetType: 'WorkspaceResource',
+        targetId: 'resource-progress-concurrent',
+        status: TASK_STATUS.PROCESSING,
+        attempt: 1,
+        progress: 5,
+        payload: { meta: { locale: 'zh' } },
+        queuedAt: new Date(),
+        startedAt: new Date(),
+      },
+    })
+
+    const results = await Promise.all([
+      tryUpdateTaskProgress(task.id, 1, 45, {
+        stage: 'polling_external',
+        externalPhase: 'queued',
+      }),
+      tryUpdateTaskProgress(task.id, 1, 45, {
+        stage: 'polling_external',
+        externalPhase: 'queued',
+      }),
+    ])
+
+    expect(results.sort()).toEqual([false, true])
+  })
+
   it('rejects progress from a stale worker attempt without overwriting the current attempt', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)
