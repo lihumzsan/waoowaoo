@@ -17,11 +17,10 @@ overall_soundscape:
 Soft room tone, fabric movement, and her quiet breath.
 
 non_diegetic_music:
-None. Do not generate background music or musical score.
-Retain only dialogue, environmental ambience and action sound effects.`
+N/A`
 
 describe('MiniMax H3 reference Prompt contract', () => {
-  it('accepts the exact six ordered sections and no-background-music clause', () => {
+  it('accepts the exact six ordered sections and fixed N/A music clause', () => {
     expect(() => assertVideoPromptMatchesProfile({
       profile: 'minimax_h3_reference_v2',
       prompt: validPrompt,
@@ -31,7 +30,7 @@ describe('MiniMax H3 reference Prompt contract', () => {
   it.each([
     validPrompt.replace('retention_analysis:', 'retention_notes:'),
     validPrompt.replace('summary:\nShe turns toward the doorway.\n\n', 'summary:\n\n'),
-    validPrompt.replace('Do not generate background music or musical score.', 'Use a dramatic orchestral score.'),
+    validPrompt.replace('N/A', 'Use a dramatic orchestral score.'),
     `${validPrompt}\nunknown_heading:\nextra`,
   ])('rejects an invalid reference Prompt', (prompt) => {
     expect(() => assertVideoPromptMatchesProfile({
@@ -40,10 +39,10 @@ describe('MiniMax H3 reference Prompt contract', () => {
     })).toThrow('VIDEO_PROMPT_PROFILE_INVALID')
   })
 
-  it('rejects a contradictory music instruction even when the required lines are present', () => {
+  it('rejects the old prose music contract after the fixed N/A migration', () => {
     const contradictory = validPrompt.replace(
-      'None. Do not generate background music or musical score.',
-      'Generate an orchestral score.\nNone. Do not generate background music or musical score.',
+      'N/A',
+      'None. Do not generate background music or musical score.\nRetain only dialogue, environmental ambience and action sound effects.',
     )
     expect(() => assertVideoPromptMatchesProfile({
       profile: 'minimax_h3_reference_v2',

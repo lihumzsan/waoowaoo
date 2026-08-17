@@ -7,7 +7,7 @@
   "120": { "class_type": "VAELoader", "inputs": { "vae_name": "h3\\minimax_h3_audio_vae_fp32.safetensors" } },
   "320": { "class_type": "LoraLoaderModelOnly", "inputs": { "model": ["127", 0], "lora_name": "h3\\minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors", "strength_model": 1.0 } },
   "304": { "class_type": "ModelAttentionBackend", "inputs": { "model": ["320", 0], "attention": "comfy kitchen attention" } },
-  "306": { "class_type": "UNETLoader", "inputs": { "unet_name": "minimax_h3_fl2va_pruned_w4a8_mixed.safetensors", "weight_dtype": "default" } },
+  "306": { "class_type": "UNETLoader", "inputs": { "unet_name": "minimax_h3_ref2va_pruned_w4a8_mixed.safetensors", "weight_dtype": "default" } },
   "305": { "class_type": "ModelAttentionBackend", "inputs": { "model": ["306", 0], "attention": "comfy kitchen attention" } },
   "138": { "class_type": "PrimitiveStringMultiline", "inputs": { "value": "" } },
   "309": { "class_type": "MiniMaxH3ReferenceToVideo", "inputs": { "clip": ["128", 0], "vae": ["119", 0], "audio_vae": ["120", 0], "ref_images.ref_image_0": ["198", 0], "prompt": ["138", 0], "width": 1376, "height": 768, "length": 124, "ref_image_size": "max" } },

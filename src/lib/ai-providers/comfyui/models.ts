@@ -3,6 +3,7 @@ import type { PlatformModelPreset } from '@/lib/platform-models/types'
 import { MUSIC_KEY_SCALE_VALUES, MUSIC_TIME_SIGNATURE_VALUES } from '@/lib/workspace-resource/music-parameter-contract'
 
 import type { ComfyUiRuntimeTargetId } from './config'
+import { H3_MAX_REFERENCE_IMAGES } from './profiles'
 
 export const COMFYUI_H3_MODEL_ID = 'minimax-h3-dual-stage-2mp'
 export const COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY = `comfyui::${COMFYUI_H3_MODEL_ID}`
@@ -52,7 +53,7 @@ export const COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         supportedInputModes: ['reference'], supportsTextToVideo: false,
         durationOptions: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
         generateAudioOptions: [true], supportGenerateAudio: true,
-        assetReferenceMultiReference: false, maxReferenceImages: 1, maxReferenceFiles: 1,
+        assetReferenceMultiReference: true, maxReferenceImages: H3_MAX_REFERENCE_IMAGES, maxReferenceFiles: H3_MAX_REFERENCE_IMAGES,
       },
     },
   },

@@ -19,8 +19,9 @@ describe('ComfyUI H3 dual-stage profile', () => {
     const h3 = COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES.find((entry) => entry.modelId === COMFYUI_H3_MODEL_ID)
     expect(h3?.capabilities.video.promptProfile).toBe('minimax_h3_reference_v2')
     expect(h3?.capabilities.video.supportedInputModes).toEqual(['reference'])
-    expect(h3?.capabilities.video.maxReferenceImages).toBe(1)
-    expect(h3?.capabilities.video.maxReferenceFiles).toBe(1)
+    expect(h3?.capabilities.video.assetReferenceMultiReference).toBe(true)
+    expect(h3?.capabilities.video.maxReferenceImages).toBe(8)
+    expect(h3?.capabilities.video.maxReferenceFiles).toBe(8)
     expect(h3?.capabilities.video.durationOptions).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
   })
 
@@ -37,11 +38,12 @@ describe('ComfyUI H3 dual-stage profile', () => {
     expect(resolved.options).toMatchObject({ duration: 10, generateAudio: true })
   })
 
-  it('accepts one reference image at the real ComfyUI option boundary', () => {
+  it('accepts up to eight ordered reference images at the real ComfyUI option boundary', () => {
     const selection = { provider: 'comfyui' as const, modelId: COMFYUI_H3_MODEL_ID, modelKey: `comfyui::${COMFYUI_H3_MODEL_ID}`, variantSubKind: 'official' as const }
-    expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, referenceImages: ['https://example.com/reference.png'] } })).toMatchObject({ duration: 4, referenceImages: ['https://example.com/reference.png'] })
+    const references = Array.from({ length: 8 }, (_, index) => `https://example.com/reference-${index + 1}.png`)
+    expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, referenceImages: references } })).toMatchObject({ duration: 4, referenceImages: references })
     expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true } })).toThrow()
-    expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, referenceImages: ['a', 'b'] } })).toThrow()
+    expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, referenceImages: Array.from({ length: 9 }, () => 'a') } })).toThrow()
   })
 
   it('keeps the canonical graph wired to the final output node', () => {

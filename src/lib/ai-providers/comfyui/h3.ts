@@ -62,7 +62,7 @@ async function preflight(baseUrl: string): Promise<void> {
   }
   const expectedModels: Array<[string, string, string]> = [
     ['UNETLoader', 'unet_name', 'h3\\minimax_h3_ref2va_int8_convrot.safetensors'],
-    ['UNETLoader', 'unet_name', 'minimax_h3_fl2va_pruned_w4a8_mixed.safetensors'],
+    ['UNETLoader', 'unet_name', 'minimax_h3_ref2va_pruned_w4a8_mixed.safetensors'],
     ['CLIPLoader', 'clip_name', 'h3\\qwen3vl_32b_minimax_h3_int8_convrot.safetensors'],
     ['LoraLoaderModelOnly', 'lora_name', 'h3\\minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors'],
     ['VAELoader', 'vae_name', 'h3\\minimax_h3_video_vae_int8_convrot.safetensors'],
@@ -93,16 +93,16 @@ function buildGraph(input: AiProviderVideoExecutionContext, promptId: string) {
   const options = input.options ?? {}
   if (input.imageUrl.trim()) throw new AppError('INVALID_PARAMS', 'ComfyUI H3 reference mode does not accept a first frame', { provider: 'comfyui' })
   if (options.generateAudio !== true) throw new AppError('INVALID_PARAMS', 'ComfyUI H3 requires generateAudio=true', { provider: 'comfyui' })
-  if (options.lastFrameImageUrl || options.referenceAudios?.length || options.referenceVideos?.length) throw new AppError('INVALID_PARAMS', 'ComfyUI H3 accepts only one reference image', { provider: 'comfyui' })
-  const referenceImageUrl = options.referenceImages?.length === 1 ? options.referenceImages[0]!.trim() : ''
-  if (!referenceImageUrl) throw new AppError('INVALID_PARAMS', 'ComfyUI H3 requires exactly one reference image', { provider: 'comfyui' })
+  if (options.lastFrameImageUrl || options.referenceAudios?.length || options.referenceVideos?.length) throw new AppError('INVALID_PARAMS', 'ComfyUI H3 accepts only ordered reference images', { provider: 'comfyui' })
+  const referenceImageUrls = options.referenceImages?.map((url) => url.trim()).filter(Boolean) ?? []
+  if (referenceImageUrls.length === 0) throw new AppError('INVALID_PARAMS', 'ComfyUI H3 requires at least one reference image', { provider: 'comfyui' })
   const duration = options.duration
   const aspectRatio = options.aspectRatio
   if (typeof duration !== 'number' || !Number.isInteger(duration) || typeof aspectRatio !== 'string') throw new AppError('INVALID_PARAMS', 'ComfyUI H3 requires duration and aspectRatio', { provider: 'comfyui' })
   const seed = Number.parseInt(promptId.replace(/-/gu, '').slice(0, 12), 16)
   const prompt = options.prompt?.trim() || ''
   assertVideoPromptMatchesProfile({ profile: 'minimax_h3_reference_v2', prompt })
-  return buildH3DualStagePromptGraph({ prompt, referenceImageUrl, durationSeconds: duration, aspectRatio: aspectRatio as H3AspectRatio, seed })
+  return buildH3DualStagePromptGraph({ prompt, referenceImageUrls, durationSeconds: duration, aspectRatio: aspectRatio as H3AspectRatio, seed })
 }
 
 export async function executeComfyUiH3VideoGeneration(input: AiProviderVideoExecutionContext): Promise<GenerateResult> {

@@ -11,6 +11,9 @@ const H3_FRAMES_PER_SECOND = 24
 const H3_FRAME_GRID = 17
 const H3_FRAME_REMAINDER = 5
 const H3_MIN_FRAMES = 107
+export const H3_MAX_REFERENCE_IMAGES = 8
+const H3_REFERENCE_IMAGE_NODE_IDS = ['137', '326', '327', '328', '329', '330', '331', '332'] as const
+const H3_REFERENCE_RESIZE_NODE_IDS = ['198', '333', '334', '335', '336', '337', '338', '339'] as const
 
 function unsupportedOption(name: string, value: unknown): never {
   throw new Error(`COMFYUI_H3_OPTION_UNSUPPORTED:${name}=${String(value)}`)
@@ -52,7 +55,8 @@ export const H3_DUAL_STAGE_PROFILE_ID = 'h3-dual-stage-2mp' as const
 export type H3DualStageRuntimeProfile = {
   readonly id: typeof H3_DUAL_STAGE_PROFILE_ID
   readonly workflow: ComfyUiPromptGraph
-  readonly referenceImageNodeId: string
+  readonly referenceImageNodeIds: readonly string[]
+  readonly referenceResizeNodeIds: readonly string[]
   readonly promptNodeId: string
   readonly h3NodeId: string
   readonly noiseNodeId: string
@@ -65,7 +69,8 @@ export type H3DualStageRuntimeProfile = {
 export const H3_DUAL_STAGE_RUNTIME_PROFILE: H3DualStageRuntimeProfile = {
   id: H3_DUAL_STAGE_PROFILE_ID,
   workflow: dualStageWorkflow as ComfyUiPromptGraph,
-  referenceImageNodeId: '137', promptNodeId: '138', h3NodeId: '309', noiseNodeId: '129',
+  referenceImageNodeIds: H3_REFERENCE_IMAGE_NODE_IDS, referenceResizeNodeIds: H3_REFERENCE_RESIZE_NODE_IDS,
+  promptNodeId: '138', h3NodeId: '309', noiseNodeId: '129',
   firstUpscaleNodeId: '213', finalUpscaleNodeId: '323', outputNodeId: '168',
   requiredNodeClasses: [
     'Load Image From Url (mtb)', 'ResizeShortestToNode', 'UNETLoader', 'CLIPLoader', 'VAELoader',
@@ -82,22 +87,36 @@ function copyGraph(graph: ComfyUiPromptGraph): ComfyUiPromptGraph {
 
 export function buildH3DualStagePromptGraph(input: {
   readonly prompt: string
-  readonly referenceImageUrl: string
+  readonly referenceImageUrls: readonly string[]
   readonly durationSeconds: number
   readonly aspectRatio: H3AspectRatio
   readonly seed: number
 }): { readonly profile: H3DualStageRuntimeProfile; readonly graph: ComfyUiPromptGraph } {
   if (!input.prompt.trim()) throw new Error('COMFYUI_H3_PROMPT_REQUIRED')
-  if (!input.referenceImageUrl.trim()) throw new Error('COMFYUI_H3_REFERENCE_IMAGE_REQUIRED')
+  if (input.referenceImageUrls.length < 1 || input.referenceImageUrls.length > H3_MAX_REFERENCE_IMAGES) throw new Error(`COMFYUI_H3_REFERENCE_IMAGES_COUNT_INVALID:${H3_MAX_REFERENCE_IMAGES}`)
+  const referenceImageUrls = input.referenceImageUrls.map((url) => url.trim())
+  if (referenceImageUrls.some((url) => !url)) throw new Error('COMFYUI_H3_REFERENCE_IMAGE_REQUIRED')
   if (!Number.isSafeInteger(input.seed) || input.seed < 0) throw new Error('COMFYUI_H3_SEED_INVALID')
   const graph = copyGraph(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow)
   const firstDimensions = resolveH3Dimensions({ megapixels: 1, aspectRatio: input.aspectRatio })
   const finalDimensions = resolveH3Dimensions({ megapixels: 2, aspectRatio: input.aspectRatio })
-  graph[H3_DUAL_STAGE_RUNTIME_PROFILE.referenceImageNodeId]!.inputs.url = input.referenceImageUrl
+  const baseLoadNode = graph[H3_DUAL_STAGE_RUNTIME_PROFILE.referenceImageNodeIds[0]!]!
+  const baseResizeNode = graph[H3_DUAL_STAGE_RUNTIME_PROFILE.referenceResizeNodeIds[0]!]!
+  const h3Node = graph[H3_DUAL_STAGE_RUNTIME_PROFILE.h3NodeId]!
+  for (const key of Object.keys(h3Node.inputs)) {
+    if (key.startsWith('ref_images.ref_image_')) delete h3Node.inputs[key]
+  }
+  referenceImageUrls.forEach((url, index) => {
+    const loadNodeId = H3_DUAL_STAGE_RUNTIME_PROFILE.referenceImageNodeIds[index]!
+    const resizeNodeId = H3_DUAL_STAGE_RUNTIME_PROFILE.referenceResizeNodeIds[index]!
+    graph[loadNodeId] = { class_type: baseLoadNode.class_type, inputs: { ...baseLoadNode.inputs, url } }
+    graph[resizeNodeId] = { class_type: baseResizeNode.class_type, inputs: { ...baseResizeNode.inputs, image: [loadNodeId, 0] } }
+    h3Node.inputs[`ref_images.ref_image_${index}`] = [resizeNodeId, 0]
+  })
   graph[H3_DUAL_STAGE_RUNTIME_PROFILE.promptNodeId]!.inputs.value = input.prompt
-  graph[H3_DUAL_STAGE_RUNTIME_PROFILE.h3NodeId]!.inputs.width = firstDimensions.width
-  graph[H3_DUAL_STAGE_RUNTIME_PROFILE.h3NodeId]!.inputs.height = firstDimensions.height
-  graph[H3_DUAL_STAGE_RUNTIME_PROFILE.h3NodeId]!.inputs.length = resolveH3DurationFrames(input.durationSeconds)
+  h3Node.inputs.width = firstDimensions.width
+  h3Node.inputs.height = firstDimensions.height
+  h3Node.inputs.length = resolveH3DurationFrames(input.durationSeconds)
   graph[H3_DUAL_STAGE_RUNTIME_PROFILE.noiseNodeId]!.inputs.noise_seed = input.seed
   graph[H3_DUAL_STAGE_RUNTIME_PROFILE.firstUpscaleNodeId]!.inputs.width = firstDimensions.width
   graph[H3_DUAL_STAGE_RUNTIME_PROFILE.firstUpscaleNodeId]!.inputs.height = firstDimensions.height

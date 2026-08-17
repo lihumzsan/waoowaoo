@@ -12,9 +12,7 @@ export const MINIMAX_H3_REFERENCE_PROMPT_SECTIONS = [
 export type MinimaxH3ReferencePromptSections = (typeof MINIMAX_H3_REFERENCE_PROMPT_SECTIONS)[number]
 
 const SECTION_HEADING = /^([a-z][a-z0-9_]*)\s*:\s*$/u
-const NO_BACKGROUND_MUSIC = 'Do not generate background music or musical score.'
-const PERMITTED_AUDIO = 'Retain only dialogue, environmental ambience and action sound effects.'
-const FIXED_NON_DIEGETIC_MUSIC = `None. ${NO_BACKGROUND_MUSIC}\n${PERMITTED_AUDIO}`
+const FIXED_NON_DIEGETIC_MUSIC = 'N/A'
 
 function invalid(reason: string): Error {
   return new Error(`VIDEO_PROMPT_PROFILE_INVALID:${reason}`)

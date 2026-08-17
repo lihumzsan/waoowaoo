@@ -19,17 +19,17 @@ const videoInput: AiProviderVideoExecutionContext = {
   },
   imageUrl: '',
   options: {
-    prompt: 'subject_definitions:\nSubject 1 is in Picture 1.\n\nsummary:\nA test video.\n\nretention_analysis:\nPreserve identity.\n\ndetailed_description:\nAt 0.00 seconds the subject moves and settles.\n\noverall_soundscape:\nRoom tone and movement.\n\nnon_diegetic_music:\nNone. Do not generate background music or musical score.\nRetain only dialogue, environmental ambience and action sound effects.',
+    prompt: 'subject_definitions:\nSubject 1 is in Picture 1.\n\nsummary:\nA test video.\n\nretention_analysis:\nPreserve identity.\n\ndetailed_description:\nAt 0.00 seconds the subject moves and settles.\n\noverall_soundscape:\nRoom tone and movement.\n\nnon_diegetic_music:\nN/A',
     duration: 10,
     aspectRatio: '16:9',
     generateAudio: true,
-    referenceImages: ['https://media.example.com/reference.png'],
+    referenceImages: ['https://media.example.com/reference-1.png', 'https://media.example.com/reference-2.png'],
   },
 }
 
 function objectInfo(className: string): Record<string, unknown> {
   const required: Record<string, unknown> = {}
-  if (className === 'UNETLoader') required.unet_name = [['h3\\minimax_h3_ref2va_int8_convrot.safetensors', 'minimax_h3_fl2va_pruned_w4a8_mixed.safetensors']]
+  if (className === 'UNETLoader') required.unet_name = [['h3\\minimax_h3_ref2va_int8_convrot.safetensors', 'minimax_h3_ref2va_pruned_w4a8_mixed.safetensors']]
   if (className === 'CLIPLoader') required.clip_name = [['h3\\qwen3vl_32b_minimax_h3_int8_convrot.safetensors']]
   if (className === 'LoraLoaderModelOnly') required.lora_name = [['h3\\minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors']]
   if (className === 'VAELoader') required.vae_name = [['h3\\minimax_h3_video_vae_int8_convrot.safetensors', 'h3\\minimax_h3_audio_vae_fp32.safetensors']]
@@ -173,6 +173,24 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
     expect(server!.getRequests('GET', '/object_info/UNETLoader')).toHaveLength(1)
     expect(server!.getRequests('GET', '/object_info/CLIPLoader')).toHaveLength(1)
     expect(server!.getRequests('POST', '/prompt')).toHaveLength(2)
+  })
+
+  it('submits every ordered reference image to the matching H3 slot and keeps the ref2va second-stage UNET', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    server!.defineScenario({
+      method: 'POST', path: '/prompt', mode: 'success',
+      submitResponse: { status: 200, body: { prompt_id: PROMPT_ID } },
+    })
+
+    await executeComfyUiH3VideoGeneration(videoInput)
+    const request = server!.getRequests('POST', '/prompt')[0]
+    const body = JSON.parse(request!.bodyText) as { prompt: Record<string, { inputs?: Record<string, unknown> }> }
+    expect(body.prompt['137']?.inputs?.url).toBe('https://media.example.com/reference-1.png')
+    expect(body.prompt['326']?.inputs?.url).toBe('https://media.example.com/reference-2.png')
+    expect(body.prompt['309']?.inputs?.['ref_images.ref_image_0']).toEqual(['198', 0])
+    expect(body.prompt['309']?.inputs?.['ref_images.ref_image_1']).toEqual(['333', 0])
+    expect(body.prompt['306']?.inputs?.unet_name).toBe('minimax_h3_ref2va_pruned_w4a8_mixed.safetensors')
   })
 
   it('does not accept an unknown same-id probe status', async () => {
