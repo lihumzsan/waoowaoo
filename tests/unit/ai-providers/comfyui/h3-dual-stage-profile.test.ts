@@ -19,6 +19,10 @@ describe('MiniMax H3 dual-stage profile', () => {
     expect(resolveH3Dimensions({ megapixels: 2, aspectRatio: '16:9' })).toEqual({ width: 1920, height: 1088 })
   })
 
+  it('rounds a nine-second request up to the next valid H3 frame grid value', () => {
+    expect(resolveH3DurationFrames(9)).toBe(226)
+  })
+
   it('contains both VSR stages, both cache clears, and no Codex or LoadImage node', () => {
     const nodes = Object.values(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow)
     expect(nodes.some((node) => node.class_type === 'RH_CODEX_NODE')).toBe(false)

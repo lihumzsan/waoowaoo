@@ -19,7 +19,8 @@ function unsupportedOption(name: string, value: unknown): never {
 export function resolveH3DurationFrames(seconds: number): number {
   if (!Number.isInteger(seconds) || seconds < H3_DURATION_MIN_SECONDS || seconds > H3_DURATION_MAX_SECONDS) unsupportedOption('duration', seconds)
   const minimumFrames = Math.max(H3_MIN_FRAMES, Math.round(seconds * H3_FRAMES_PER_SECOND))
-  return minimumFrames + ((H3_FRAME_REMAINDER - (minimumFrames % H3_FRAME_GRID)) % H3_FRAME_GRID)
+  const framesUntilNextGrid = (H3_FRAME_REMAINDER - (minimumFrames % H3_FRAME_GRID) + H3_FRAME_GRID) % H3_FRAME_GRID
+  return minimumFrames + framesUntilNextGrid
 }
 
 export function resolveH3EffectiveDurationSeconds(seconds: number): number {
