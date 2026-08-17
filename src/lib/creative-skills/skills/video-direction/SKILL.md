@@ -22,7 +22,7 @@ description: Direct screenplay-based video generation with explicit continuity, 
 
 - `reference` 的素材角色和数量必须完全遵守能力声明。普通参考图不是首帧；只有 capability 明确支持且剧情要求从该画面开始时才使用 `first_frame`。
 - 每个 item 只列实际使用的 ready Resource，精确复制 `resourceId`、`contentVersion`、`role`、`channel`，顺序与 Prompt 中的媒体编号一致；不得从文件名或近似描述猜身份。
-- H3 reference v2 只接受恰好一张 `channel=image, role=reference_image`，没有 `first_frame`、`last_frame`、`reference_audio` 或 `reference_video`。缺图、多图或错误角色时停止。
+- H3 reference v2 接受 1–8 张 `channel=image, role=reference_image`，按 `references` 的顺序编号；没有 `first_frame`、`last_frame`、`reference_audio` 或 `reference_video`。缺图、超过能力上限或错误角色时停止。
 
 ## Prompt profile 选择
 
@@ -46,15 +46,15 @@ overall_soundscape:
 non_diegetic_music:
 ```
 
-除对白原文和画面内文字外正文使用英文。`subject_definitions` 必须把主体绑定到 `<Picture 1>`；`summary` 是动作摘要；`retention_analysis` 写身份、服装、比例、风格、场景和道具关系；`detailed_description` 从 0.00 秒写连续可见动作、机位、落位、视线与落点；`overall_soundscape` 只写对白、环境声、动作声和非语言人声。
+除对白原文和画面内文字外正文使用英文。`subject_definitions` 必须把每个实际使用的主体、服装、场景或道具绑定到对应的 `<Picture 1>` 至 `<Picture N>`，不得引用不存在的编号；`summary` 是动作摘要；`retention_analysis` 写身份、服装、比例、风格、场景和道具关系；`detailed_description` 从 0.00 秒写连续可见动作、机位、落位、视线与落点；`overall_soundscape` 只写对白、环境声、动作声和非语言人声。
 
-`<Picture 1>` 只锁定身份、风格、内容与场景结构，不是首帧，不得写成第一帧锚点。不得调用或描述 ComfyUI AI 节点、下游 Prompt 改写或第二套 Prompt；主 Agent 是唯一 Prompt writer。
+每个 `<Picture N>` 都只锁定其绑定的身份、风格、内容与场景结构，不是首帧，不得写成第一帧锚点。不得调用或描述 ComfyUI AI 节点、下游 Prompt 改写或第二套 Prompt；主 Agent 是唯一 Prompt writer。
 
-最后一段必须原样包含，并固定为禁用非世内音乐：
+最后一段必须原样包含：
 
 ```text
-None. Do not generate background music or musical score.
-Retain only dialogue, environmental ambience and action sound effects.
+non_diegetic_music:
+N/A
 ```
 
 不得写乐器、旋律、节拍、BPM、配乐动态或任何替代句。背景音乐由独立音乐工作流负责。
@@ -70,8 +70,8 @@ Retain only dialogue, environmental ambience and action sound effects.
 
 - 是否先有整片时间线，再有最少 Segment 与镜头；总时长、4–15 秒范围和时序是否准确？
 - 每镜是否有景别、机位、主体落位、朝向、世内视线、一个主要运镜、向前变化和可见落点？
-- 是否只使用 capability 允许的参考角色与数量，且 `<Picture 1>` 未被当作首帧？
-- H3 是否严格六段、固定两句 `non_diegetic_music`、无 BGM 词汇、无 AI 节点和无 Prompt 改写？
+- 是否只使用 capability 允许的参考角色与数量，且每个 `<Picture N>` 未被当作首帧？
+- H3 是否严格六段、固定 `non_diegetic_music: N/A`、无 AI 节点和无 Prompt 改写？
 - 对白是否逐字、自然说完、声音关系清楚；是否固定写入不生成字幕、标题、水印、拼贴、分屏或额外人物？
 
 ## 边界

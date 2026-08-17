@@ -14,6 +14,11 @@ describe('video-direction runtime Skill contract', () => {
       expect(content).toContain('silent_no_lip')
       expect(content).toContain('lip_sync_for_replacement')
       expect(content).toContain('先建立来源已有的正常基线，再显示原因或证据，最后呈现人物反应')
+      expect(content).toContain('1–8 张')
+      expect(content).toContain('<Picture 1>')
+      expect(content).toContain('<Picture N>')
+      expect(content).toContain('non_diegetic_music:\nN/A')
+      expect(content).not.toContain('None. Do not generate background music or musical score.')
     } finally {
       await rm(directory, { recursive: true, force: true })
     }
