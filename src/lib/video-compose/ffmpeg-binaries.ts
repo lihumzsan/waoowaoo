@@ -1,5 +1,6 @@
 import { execFileSync, type ExecFileOptions } from 'node:child_process'
 import { accessSync, constants, statSync } from 'node:fs'
+import { join } from 'node:path'
 import { ffmpegPath, ffprobePath } from 'ffmpeg-ffprobe-static'
 
 export type FfmpegBinaryName = 'ffmpeg' | 'ffprobe'
@@ -102,6 +103,21 @@ function assertLegacyEnvPathUnset(binaryName: FfmpegBinaryName): void {
   }
 }
 
+function configuredBinaryFileName(binaryName: FfmpegBinaryName): string {
+  return process.platform === 'win32' ? `${binaryName}.exe` : binaryName
+}
+
+function resolveConfiguredBinary(binaryName: FfmpegBinaryName): FfmpegBinaryExecution | null {
+  const directory = process.env.FFMPEG_BINARY_DIR?.trim()
+  if (!directory) return null
+
+  const execution: FfmpegBinaryExecution = {
+    command: join(directory, configuredBinaryFileName(binaryName)),
+  }
+  if (isRunnableBinary(binaryName, execution)) return execution
+  throw new Error(`FFMPEG_CONFIGURED_BINARY_UNUSABLE:${binaryName}:${execution.command}`)
+}
+
 function resolveFirstRunnableBinary(
   binaryName: FfmpegBinaryName,
   candidates: readonly FfmpegBinaryCandidate[],
@@ -140,5 +156,7 @@ export function resolveFfmpegBinary(
   options: FfmpegBinaryResolverOptions = {},
 ): FfmpegBinaryExecution {
   assertLegacyEnvPathUnset(binaryName)
+  const configuredBinary = resolveConfiguredBinary(binaryName)
+  if (configuredBinary) return configuredBinary
   return resolveStaticPackageBinary(binaryName, options.bundledCandidates)
 }
