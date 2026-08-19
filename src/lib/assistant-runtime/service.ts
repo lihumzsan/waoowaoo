@@ -119,6 +119,14 @@ function runtimeScope(input: { readonly userId: string; readonly projectId: stri
   return { userId: input.userId, projectId: input.projectId }
 }
 
+function isRuntimeSessionUnavailable(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  return (
+    error.message === 'CODEX_RUNTIME_SESSION_MISSING'
+    || error.message.startsWith('CODEX_RUNTIME_SESSION_NOT_READY:')
+  )
+}
+
 type AssistantRuntimeMessageReplayControl = {
   readonly outcome: 'resume_queued' | 'reconcile_unbound_start'
 }
@@ -434,11 +442,30 @@ export class AssistantRuntimeService {
       // the binding, and discard the unbound materialization.
       return { threadId: command.threadId, turnId: command.turnId, status: 'interrupt_requested' }
     }
-    await this.manager.interruptTurn(
-      runtimeScope(command),
-      command.threadId,
-      requested.runtimeTurnId,
-    )
+    try {
+      await this.manager.interruptTurn(
+        runtimeScope(command),
+        command.threadId,
+        requested.runtimeTurnId,
+      )
+    } catch (error) {
+      if (!isRuntimeSessionUnavailable(error) || !requested.identity) throw error
+      await settleAssistantRuntimeTurn({
+        identity: requested.identity,
+        projection: {
+          status: 'interrupted',
+          stopReason: 'cancelled_runtime_session_unavailable',
+          failure: null,
+          assistantMessage: null,
+          usage: null,
+        },
+      })
+      await publishAgentSessionViewChanged({
+        ...command,
+        attempt: requested.identity.attempt,
+        reason: 'runtime_turn_cancelled_after_session_loss',
+      })
+    }
     return { threadId: command.threadId, turnId: command.turnId, status: 'interrupt_requested' }
   }
 

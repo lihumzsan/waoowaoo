@@ -1336,14 +1336,18 @@ export async function requestAssistantRuntimeInterrupt(input: {
   readonly turnId: string
   readonly requestId: string
   readonly reason: string | null
-}): Promise<{ readonly runtimeTurnId: string | null; readonly terminal: boolean }> {
+}): Promise<{
+  readonly runtimeTurnId: string | null
+  readonly terminal: boolean
+  readonly identity: AssistantRuntimeTurnIdentity | null
+}> {
   return await prisma.$transaction(async (tx) => {
     await lockProjectScope(tx, input.scope)
     const thread = await lockThread(tx, input.scope, input.threadId)
     const turn = await tx.projectAgentTurn.findUnique({ where: { id: input.turnId } })
     if (!turn || turn.threadId !== thread.id) throw new Error('ASSISTANT_RUNTIME_TURN_SCOPE_DIVERGED')
     if (TERMINAL_TURN_STATUSES.includes(turn.status as (typeof TERMINAL_TURN_STATUSES)[number])) {
-      return { runtimeTurnId: turn.runtimeTurnId, terminal: true }
+      return { runtimeTurnId: turn.runtimeTurnId, terminal: true, identity: null }
     }
     if (turn.cancelRequestId && turn.cancelRequestId !== input.requestId) {
       throw new Error('ASSISTANT_RUNTIME_INTERRUPT_REQUEST_DIVERGED')
@@ -1363,7 +1367,7 @@ export async function requestAssistantRuntimeInterrupt(input: {
           finishedAt: new Date(),
         },
       })
-      return { runtimeTurnId: null, terminal: true }
+      return { runtimeTurnId: null, terminal: true, identity: null }
     }
     await tx.projectAgentTurn.update({
       where: { id: turn.id },
@@ -1372,7 +1376,11 @@ export async function requestAssistantRuntimeInterrupt(input: {
         cancelReason: input.reason,
       },
     })
-    return { runtimeTurnId: turn.runtimeTurnId, terminal: false }
+    return {
+      runtimeTurnId: turn.runtimeTurnId,
+      terminal: false,
+      identity: { ...turnIdentity(turn), runtimeThreadId: thread.runtimeThreadId },
+    }
   })
 }
 

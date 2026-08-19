@@ -153,13 +153,14 @@ export const GET = apiHandler(async (
   const { projectId } = await context.params
   const authResult = await requireProjectAuth(projectId)
   if (isErrorResponse(authResult)) return authResult
+  const scope = {
+    projectId,
+    userId: authResult.project.userId,
+    assistantId: 'workspace-command' as const,
+  }
 
   try {
-    const view = await getAssistantRuntimeSessionView({
-      projectId,
-      userId: authResult.session.user.id,
-      assistantId: 'workspace-command',
-    })
+    const view = await getAssistantRuntimeSessionView(scope)
     return NextResponse.json(view)
   } catch (error) {
     throw mapProjectAgentCommandError(error)
@@ -173,14 +174,17 @@ export const DELETE = apiHandler(async (
   const { projectId } = await context.params
   const authResult = await requireProjectAuth(projectId)
   if (isErrorResponse(authResult)) return authResult
+  const scope = {
+    projectId,
+    userId: authResult.project.userId,
+    assistantId: 'workspace-command' as const,
+  }
 
   try {
     const body = await readProjectAgentCommandHttpBody(request)
     const command = readClearCommand(body)
     const receipt = await getAssistantRuntimeService().clear({
-      projectId,
-      userId: authResult.session.user.id,
-      assistantId: 'workspace-command',
+      ...scope,
       threadId: command.threadId,
       requestId: command.requestId,
     })
@@ -197,10 +201,15 @@ export const POST = apiHandler(async (
   const { projectId } = await context.params
   const authResult = await requireProjectAuth(projectId)
   if (isErrorResponse(authResult)) return authResult
+  const scope = {
+    projectId,
+    userId: authResult.project.userId,
+    assistantId: 'workspace-command' as const,
+  }
   const logger = createScopedLogger({
     module: 'assistant',
     projectId,
-    userId: authResult.session.user.id,
+    userId: scope.userId,
   })
 
   try {
@@ -212,9 +221,7 @@ export const POST = apiHandler(async (
       'AGENT_TURN_SOURCE_ID_INVALID',
     )
     const receipt = await getAssistantRuntimeService().send({
-      projectId,
-      userId: authResult.session.user.id,
-      assistantId: 'workspace-command',
+      ...scope,
       sourceId,
       requestId: sourceId,
       message,
