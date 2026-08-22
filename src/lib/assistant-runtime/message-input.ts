@@ -15,7 +15,8 @@ import {
   appendProjectAssistantTextAttachmentsToUserText,
   readProjectAssistantTextAttachmentsFromMessage,
 } from '@/lib/project-agent/text-attachments'
-import type { AssistantRuntimePreparedInput } from './contracts'
+import type { AssistantRuntimePreparedInput, AssistantRuntimeTurnContext } from './contracts'
+import { formatAssistantRuntimeSelectedResourceReference } from './selected-resource-reference'
 
 const CODEX_SUPPORTED_IMAGE_MIME_TYPES = new Set([
   'image/jpeg',
@@ -62,6 +63,7 @@ export async function prepareAssistantRuntimeUserInput(input: {
   readonly message: unknown
   readonly userId: string
   readonly projectId: string
+  readonly context: AssistantRuntimeTurnContext
 }): Promise<AssistantRuntimePreparedInput> {
   const validation = await safeValidateUIMessages({ messages: [input.message] })
   if (!validation.success) throw new Error('ASSISTANT_RUNTIME_USER_MESSAGE_INVALID')
@@ -134,7 +136,10 @@ export async function prepareAssistantRuntimeUserInput(input: {
     })
   }
 
-  const visibleText = [userText, ...registrationBlocks].filter(Boolean).join('\n\n')
+  const selectedResourceBlock = input.context.selectedResource
+    ? formatAssistantRuntimeSelectedResourceReference(input.context.selectedResource)
+    : ''
+  const visibleText = [userText, selectedResourceBlock, ...registrationBlocks].filter(Boolean).join('\n\n')
   if (!visibleText && runtimeInputs.length === 0) {
     throw new Error('ASSISTANT_RUNTIME_USER_INPUT_EMPTY')
   }

@@ -1,4 +1,5 @@
 import type { PlannedOperationInvocation } from '@/lib/operations/planned-operation-invocation'
+import type { AssistantRuntimeSelectedResourceReference } from '@/lib/assistant-runtime/contracts'
 
 export type ProjectAssistantId = 'workspace-command'
 
@@ -10,6 +11,7 @@ export interface ProjectAgentContext {
   userTurnMediaResourceIds?: readonly string[]
   selectedScopeRef?: string | null
   selectedAssetId?: string | null
+  selectedResource?: AssistantRuntimeSelectedResourceReference | null
   approvedInvocationByToolCallId?: Record<string, PlannedOperationInvocation>
 }
 

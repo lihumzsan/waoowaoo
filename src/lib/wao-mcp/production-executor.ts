@@ -119,6 +119,7 @@ function normalizeTrustedContext(
         userTurnMediaResourceIds: context.userTurnMediaResourceIds ?? [],
         selectedScopeRef: context.selectedScopeRef?.trim() || null,
         selectedAssetId: context.selectedAssetId?.trim() || null,
+        selectedResource: context.selectedResource ?? null,
       },
       invocationChannel: 'tool',
       source,

@@ -68,8 +68,9 @@ describe('WorkspaceResource Operation registry conformance', () => {
     const getResource = registry.get_resource
     if (!getResource) throw new Error('Required Resource read operation missing')
     const getResourceInput = JSON.stringify(getResource.toolInputSchema)
-    expect(getResourceInput).toContain('path')
-    expect(getResourceInput).not.toContain('resourceId')
+    expect(getResourceInput).toContain('resourceId')
+    expect(getResourceInput).toContain('contentVersion')
+    expect(getResourceInput).not.toContain('"path"')
     const pathFieldByOperation = {
       create_folder: 'path',
       move_resource: 'sourcePath',

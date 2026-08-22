@@ -7,6 +7,7 @@ import {
   requireAssistantRuntimeCapabilityTurn,
   type AssistantRuntimeCapabilityTurn,
 } from '@/lib/assistant-runtime/capability-turn'
+import { parseAssistantRuntimeSelectedResourceReference } from '@/lib/assistant-runtime/selected-resource-reference'
 import type {
   WaoMcpCallContextResolver,
   WaoMcpTrustedCallContext,
@@ -347,6 +348,15 @@ async function resolveActiveRuntimeTurnBinding(
   if (!isRecord(turn.contextJson)) {
     throw new WaoMcpHttpBindingError('ACTIVE_TURN_CONTEXT_INVALID')
   }
+  let selectedResource
+  try {
+    selectedResource = parseAssistantRuntimeSelectedResourceReference(
+      turn.contextJson.selectedResource,
+      'ACTIVE_TURN_CONTEXT_INVALID',
+    )
+  } catch (error) {
+    throw new WaoMcpHttpBindingError('ACTIVE_TURN_CONTEXT_INVALID', error)
+  }
   return {
     runtimeTurnId: turn.runtimeTurnId,
     base: {
@@ -361,16 +371,19 @@ async function resolveActiveRuntimeTurnBinding(
         turn.contextJson.locale,
         'ACTIVE_TURN_CONTEXT_INVALID',
       ),
-      selectedScopeRef: parseOptionalIdentity(
-        turn.contextJson.selectedScopeRef,
-        'ACTIVE_TURN_CONTEXT_INVALID',
-      ),
+      selectedScopeRef: selectedResource
+        ? `workspaceResource:${selectedResource.resourceId}`
+        : parseOptionalIdentity(
+          turn.contextJson.selectedScopeRef,
+          'ACTIVE_TURN_CONTEXT_INVALID',
+        ),
       selectedAssetId: parseOptionalIdentity(
         turn.contextJson.selectedAssetId,
         'ACTIVE_TURN_CONTEXT_INVALID',
       ),
       userTurnText: null,
-      userTurnMediaResourceIds: [],
+      selectedResource,
+      userTurnMediaResourceIds: selectedResource ? [selectedResource.resourceId] : [],
       approvedInvocation: null,
       destructiveApproved: false,
     },

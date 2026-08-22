@@ -1,5 +1,6 @@
 import type { PlannedOperationInvocation } from '@/lib/operations/planned-operation-invocation'
 import type { JsonObject } from '@/lib/operations/types'
+import type { AssistantRuntimeSelectedResourceReference } from '@/lib/assistant-runtime/contracts'
 import type {
   ElicitRequestFormParams,
   ElicitResult,
@@ -26,6 +27,7 @@ export interface WaoMcpTrustedCallContext {
   readonly locale?: string | null
   readonly selectedScopeRef?: string | null
   readonly selectedAssetId?: string | null
+  readonly selectedResource?: AssistantRuntimeSelectedResourceReference | null
   readonly userTurnText?: string | null
   readonly userTurnMediaResourceIds?: readonly string[]
   /** Exact immutable plan Grant associated with this Turn and call, if any. */

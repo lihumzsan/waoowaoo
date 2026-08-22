@@ -72,6 +72,7 @@
   "AGENT_STEER_HANDOFF_UNCERTAIN": "追加消息的交接结果无法确认。为避免重复执行，系统不会自动重试这条消息；请发送一条新的消息继续。",
   "AGENT_START_HANDOFF_UNCERTAIN": "助手启动的交接结果无法确认。为避免重复执行，系统不会自动重试这条消息；请发送一条新的消息继续。",
   "PROJECT_AGENT_RUNTIME_FAILED": "助手未能完成本轮。已经提交的业务结果和长期任务仍会保留。",
+  "ASSISTANT_RUNTIME_MESSAGE_VIEW_TOO_LARGE": "当前助手对话历史过大，为避免再次卡住，请新建对话或先压缩历史。",
   "ASSISTANT_PROVIDER_REQUEST_INVALID": "模型服务无法接受当前对话格式。请继续当前任务或更换模型后重试。",
   "ASSISTANT_RUNTIME_PROTOCOL_ERROR": "助手运行协议与当前版本不兼容，请更新服务后重试。",
   "PROJECT_AGENT_ASSISTANT_MODEL_NOT_CONFIGURED": "请先配置助手模型，再使用项目助手。",

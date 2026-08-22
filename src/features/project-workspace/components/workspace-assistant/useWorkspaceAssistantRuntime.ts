@@ -51,6 +51,7 @@ interface UseWorkspaceAssistantRuntimeParams {
   projectId: string
   selectedScopeRef?: string | null
   selectedAssetId?: string | null
+  selectedResourceId?: string | null
 }
 
 interface UseWorkspaceAssistantRuntimeResult {
@@ -400,6 +401,7 @@ export function useWorkspaceAssistantRuntime({
   projectId,
   selectedScopeRef,
   selectedAssetId,
+  selectedResourceId,
 }: UseWorkspaceAssistantRuntimeParams): UseWorkspaceAssistantRuntimeResult {
   const locale = useLocale()
   const viewQuery = useAgentSessionView(projectId)
@@ -534,6 +536,7 @@ export function useWorkspaceAssistantRuntime({
                 locale,
                 selectedScopeRef: selectedScopeRef ?? null,
                 selectedAssetId: selectedAssetId ?? null,
+                selectedResourceId: selectedResourceId ?? null,
               },
             }),
           },
@@ -567,6 +570,7 @@ export function useWorkspaceAssistantRuntime({
       locale,
       projectId,
       selectedAssetId,
+      selectedResourceId,
       selectedScopeRef,
       refetchView,
       scopeKey,

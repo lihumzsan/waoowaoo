@@ -675,6 +675,7 @@ export default function WorkspaceAssistantPanel({
     projectId,
     selectedScopeRef: selection?.selectedScopeRef ?? null,
     selectedAssetId: selection?.selectedAssetId ?? null,
+    selectedResourceId: selection?.targetId ?? null,
   })
   const panelScopeKey = projectId
   const panelScopeKeyRef = useRef(panelScopeKey)

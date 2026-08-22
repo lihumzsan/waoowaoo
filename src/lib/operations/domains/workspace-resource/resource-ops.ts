@@ -10,7 +10,7 @@ import {
 } from '@/lib/workspace-resource/persistence'
 import {
   listWorkspaceResourceTreePage,
-  readWorkspaceResourceByPath,
+  readWorkspaceResourceAtVersion,
 } from '@/lib/workspace-resource/view-service'
 import { WORKSPACE_RESOURCE_FOLDER_SCHEMA_ID } from '@/lib/workspace-resource/schema-registry'
 import { defineOperation } from '@/lib/operations/define-operation'
@@ -43,9 +43,30 @@ const listResourcesOutputSchema = z.object({
 }).strict()
 
 const getResourceInputSchema = z.object({
-  path: z.string().trim().min(1).max(512)
-    .describe('Exact project-relative file or folder path.'),
+  resourceId: z.string().trim().min(1).max(191)
+    .describe('Stable workspace Resource ID supplied by the selected-resource context.'),
+  contentVersion: z.number().int().min(1)
+    .describe('Exact immutable Resource content version supplied by the selected-resource context.'),
 }).strict()
+
+const getResourceToolInputSchema: ProjectAgentToolInputSchema = {
+  type: 'object',
+  properties: {
+    resourceId: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 191,
+      description: 'Stable selected workspace resource ID.',
+    },
+    contentVersion: {
+      type: 'number',
+      minimum: 1,
+      description: 'Exact selected workspace resource version.',
+    },
+  },
+  required: ['resourceId', 'contentVersion'],
+  additionalProperties: false,
+}
 
 const getResourceOutputSchema = z.object({ success: z.literal(true), resource: resourceViewSchema }).strict()
 
@@ -165,20 +186,22 @@ export function createWorkspaceResourceOperations(): ProjectAgentOperationRegist
     }),
     get_resource: defineOperation({
       id: 'get_resource',
-      summary: 'Read one canonical project file or folder by its exact project-relative path.',
+      summary: 'Read one exact immutable project Resource version by resourceId plus contentVersion. List resources first when no selected-resource context is available.',
       intent: 'query',
       channels: { tool: true, api: true, mcp: true },
       effects: readEffects,
+      toolInputSchema: getResourceToolInputSchema,
       inputSchema: getResourceInputSchema,
       outputSchema: getResourceOutputSchema,
-      execute: async (ctx, input) => getResourceOutputSchema.parse({
-        success: true,
-        resource: await readWorkspaceResourceByPath({
+      execute: async (ctx, input) => {
+        const resource = await readWorkspaceResourceAtVersion({
           userId: ctx.userId,
           projectId: ctx.projectId,
-          workspacePath: input.path,
-        }),
-      }),
+          resourceId: input.resourceId,
+          contentVersion: input.contentVersion,
+        })
+        return getResourceOutputSchema.parse({ success: true, resource })
+      },
     }),
     create_folder: defineOperation({
       id: 'create_folder',

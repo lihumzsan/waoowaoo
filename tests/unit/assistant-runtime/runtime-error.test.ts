@@ -83,6 +83,92 @@ describe('Codex runtime terminal error projection', () => {
     })
   })
 
+  it('bounds oversized MCP structured output before it reaches the durable message view', () => {
+    const output = projectAssistantRuntimeToolOutput({
+      id: 'large-resource-list',
+      type: 'mcpToolCall',
+      server: 'wao',
+      tool: 'list_resources',
+      status: 'completed',
+      result: {
+        structuredContent: {
+          ok: true,
+          resources: Array.from({ length: 500 }, (_, index) => ({
+            resourceId: `resource-${index}`,
+            workspacePath: `素材/镜头-${index}`,
+            name: `镜头 ${index}`,
+            prompt: 'x'.repeat(2_000),
+          })),
+          nextCursor: 'cursor-500',
+        },
+      },
+    })
+
+    const serialized = JSON.stringify(output)
+    expect(serialized.length).toBeLessThan(20_000)
+    expect(output).toMatchObject({
+      ok: true,
+      detailsOmitted: true,
+    })
+  })
+
+  it('retains the original message snapshot failure as the terminal evidence', async () => {
+    const projector = new AssistantRuntimeEventProjector({
+      identity: {
+        projectId: 'project',
+        userId: 'user',
+        assistantId: 'workspace-command',
+        threadId: 'product-thread',
+        runtimeThreadId: 'runtime-thread',
+        turnId: 'product-turn',
+        runtimeTurnId: 'runtime-turn',
+        attempt: 1,
+        status: 'running',
+      },
+      sink: {
+        reserveChunk: () => null,
+        setMessageId: () => undefined,
+        sealChunksThrough: () => undefined,
+        publishChunksThrough: async () => undefined,
+        publishViewChanged: async () => undefined,
+      },
+      onInteraction: async () => undefined,
+      onInteractionResolved: async () => undefined,
+      onPlan: async () => undefined,
+      onMessageSnapshot: async () => { throw new Error('database snapshot write failed') },
+      onSkillsList: async () => ({ cwd: '/workspace', skills: [], errors: [] }),
+      modelKey: 'provider::model',
+    })
+
+    projector.consume({
+      type: 'notification',
+      method: 'item/completed',
+      params: {
+        threadId: 'runtime-thread',
+        turnId: 'runtime-turn',
+        item: { id: 'message-1', type: 'agentMessage', text: 'done' },
+      },
+    })
+    projector.consume({
+      type: 'notification',
+      method: 'turn/completed',
+      params: {
+        threadId: 'runtime-thread',
+        turnId: 'runtime-turn',
+        turn: { id: 'runtime-turn', status: 'completed' },
+      },
+    })
+
+    await expect(projector.terminal).resolves.toMatchObject({
+      status: 'failed',
+      stopReason: 'message_snapshot_persistence_failed',
+      failure: {
+        native: { message: 'database snapshot write failed' },
+        context: { system: 'runtime', phase: 'message_snapshot_persistence_failed' },
+      },
+    })
+  })
+
   it('classifies a stream disconnect as a retryable network failure fact', () => {
     expect(normalizeAssistantRuntimeFailure({
       message: 'stream disconnected before completion',

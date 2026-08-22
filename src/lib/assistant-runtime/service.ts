@@ -34,6 +34,7 @@ import type {
 } from './contracts'
 import { AssistantRuntimeEventProjector } from './event-projector'
 import { prepareAssistantRuntimeUserInput } from './message-input'
+import { resolveAssistantRuntimeSelectedResourceReference } from './selected-resource-reference'
 import {
   acceptAssistantRuntimeSteer,
   admitAssistantRuntimeTaskFollowUp,
@@ -127,9 +128,10 @@ function isRuntimeSessionUnavailable(error: unknown): boolean {
   )
 }
 
-type AssistantRuntimeMessageReplayControl = {
-  readonly outcome: 'resume_queued' | 'reconcile_unbound_start'
-}
+type AssistantRuntimeMessageReplayControl = Extract<
+  AssistantRuntimeMessageReplayDecision,
+  { readonly outcome: 'resume_queued' | 'reconcile_unbound_start' }
+>
 
 function isMessageReplayControl(
   value: AssistantRuntimeMessageReplayDecision | null,
@@ -232,13 +234,17 @@ export class AssistantRuntimeService {
         }
       }
       if (replay && !isMessageReplayControl(replay)) return replay
+      const resolvedCommand: AssistantRuntimeSubmitCommand = replay?.outcome === 'resume_queued'
+        ? { ...command, message: replay.message, context: replay.context }
+        : await this.resolveSelectedResourceReference(command)
       const prepared = await prepareAssistantRuntimeUserInput({
-        message: command.message,
-        userId: command.userId,
-        projectId: command.projectId,
+        message: resolvedCommand.message,
+        userId: resolvedCommand.userId,
+        projectId: resolvedCommand.projectId,
+        context: resolvedCommand.context,
       })
       const normalizedCommand: AssistantRuntimeSubmitCommand = {
-        ...command,
+        ...resolvedCommand,
         message: prepared.message,
       }
       if (replay?.outcome === 'resume_queued') {
@@ -263,6 +269,29 @@ export class AssistantRuntimeService {
         message: normalizedCommand.message,
       }, prepared, clientPayloadHash)
     })
+  }
+
+  private async resolveSelectedResourceReference(
+    command: AssistantRuntimeSubmitCommand,
+  ): Promise<AssistantRuntimeSubmitCommand> {
+    const { selectedResourceId, ...persistedContext } = command.context
+    const selectedResource = selectedResourceId
+      ? await resolveAssistantRuntimeSelectedResourceReference({
+        userId: command.userId,
+        projectId: command.projectId,
+        resourceId: selectedResourceId,
+      })
+      : command.context.selectedResource ?? null
+    return {
+      ...command,
+      context: {
+        ...persistedContext,
+        selectedScopeRef: selectedResource
+          ? `workspaceResource:${selectedResource.resourceId}`
+          : command.context.selectedScopeRef,
+        selectedResource,
+      },
+    }
   }
 
   private async submitExclusive(
@@ -949,6 +978,7 @@ export class AssistantRuntimeService {
     readonly publisher: ReturnType<typeof createAgentTurnStreamPublisher>
     readonly unsubscribe: () => void
   }): Promise<void> {
+    let durableTerminalSettled = false
     try {
       const terminal = await input.projector.terminal
       if (terminal.status === 'failed') {
@@ -962,7 +992,7 @@ export class AssistantRuntimeService {
         identity: input.started.identity,
         projection: terminal,
       })
-      await input.publisher.flush()
+      durableTerminalSettled = true
       await publishAgentSessionViewChanged({
         projectId: input.started.identity.projectId,
         userId: input.started.identity.userId,
@@ -970,6 +1000,31 @@ export class AssistantRuntimeService {
         turnId: input.started.identity.turnId,
         attempt: input.started.identity.attempt,
         reason: `runtime_turn_${terminal.status}`,
+      }).catch((error: unknown) => {
+        logger.warn({
+          action: 'assistant_runtime.terminal_view_notification_failed',
+          message: 'assistant runtime terminal view notification failed after durable settlement',
+          projectId: input.started.identity.projectId,
+          userId: input.started.identity.userId,
+          details: {
+            threadId: input.started.identity.threadId,
+            turnId: input.started.identity.turnId,
+            error: error instanceof Error ? error.message : 'UNKNOWN_ERROR',
+          },
+        })
+      })
+      await input.publisher.flush().catch((error: unknown) => {
+        logger.warn({
+          action: 'assistant_runtime.terminal_stream_flush_failed',
+          message: 'assistant runtime terminal stream flush failed after durable settlement',
+          projectId: input.started.identity.projectId,
+          userId: input.started.identity.userId,
+          details: {
+            threadId: input.started.identity.threadId,
+            turnId: input.started.identity.turnId,
+            error: error instanceof Error ? error.message : 'UNKNOWN_ERROR',
+          },
+        })
       })
     } catch (error) {
       logger.error({
@@ -980,9 +1035,11 @@ export class AssistantRuntimeService {
         details: {
           threadId: input.started.identity.threadId,
           turnId: input.started.identity.turnId,
+          durableTerminalSettled,
           error: error instanceof Error ? error.message : 'UNKNOWN_ERROR',
         },
       })
+      if (durableTerminalSettled) return
       // A terminal event was observed but its product projection did not
       // settle. Tear down this placement so the next admission must pass
       // reconcileBeforeStart instead of remaining permanently busy behind a

@@ -17,11 +17,22 @@ import type {
   AssistantRuntimeThreadIdentity,
   AssistantRuntimeTurnIdentity,
 } from './contracts'
+import { parseAssistantRuntimeSelectedResourceReference } from './selected-resource-reference'
 import { AssistantRuntimeProjectBusyError } from './contracts'
 
 const ACTIVE_TURN_STATUSES = ['queued', 'running', 'waiting_approval'] as const
 const TERMINAL_TURN_STATUSES = ['completed', 'failed', 'interrupted', 'cancelled'] as const
 const FOLLOW_UP_INPUT_MAX_BYTES = 512 * 1_024
+const MAX_ASSISTANT_THREAD_VIEW_BYTES = 4 * 1024 * 1024
+
+class AssistantRuntimeMessageViewTooLargeError extends Error {
+  readonly code = 'ASSISTANT_RUNTIME_MESSAGE_VIEW_TOO_LARGE' as const
+
+  constructor(byteLength: number) {
+    super(`Assistant message view exceeds the durable limit (${String(byteLength)} bytes)`)
+    this.name = 'AssistantRuntimeMessageViewTooLargeError'
+  }
+}
 
 type TransactionClient = Prisma.TransactionClient
 
@@ -46,7 +57,12 @@ type SteerClaimView = {
 
 export type AssistantRuntimeMessageReplayDecision =
   | AssistantRuntimeMessageReceipt
-  | { readonly outcome: 'resume_queued' | 'reconcile_unbound_start' }
+  | {
+      readonly outcome: 'resume_queued'
+      readonly message: UIMessage
+      readonly context: AssistantRuntimeSubmitCommand['context']
+    }
+  | { readonly outcome: 'reconcile_unbound_start' }
 
 function requireIdentity(value: string, code: string, maxLength = 191): string {
   if (!value || value !== value.trim() || value.length > maxLength) throw new Error(code)
@@ -85,6 +101,16 @@ async function parseMessages(value: unknown): Promise<UIMessage[]> {
 
 function serializeMessages(messages: readonly UIMessage[]): Prisma.InputJsonValue {
   return toJson(messages)
+}
+
+function serializeMessagesForNewTurn(messages: readonly UIMessage[]): Prisma.InputJsonValue {
+  const serialized = JSON.stringify(messages)
+  if (typeof serialized !== 'string') throw new Error('ASSISTANT_RUNTIME_JSON_INVALID')
+  const byteLength = Buffer.byteLength(serialized, 'utf8')
+  if (byteLength > MAX_ASSISTANT_THREAD_VIEW_BYTES) {
+    throw new AssistantRuntimeMessageViewTooLargeError(byteLength)
+  }
+  return JSON.parse(serialized) as Prisma.InputJsonValue
 }
 
 function appendMessages(existing: readonly UIMessage[], appended: readonly UIMessage[]): UIMessage[] {
@@ -288,6 +314,8 @@ export async function readAssistantRuntimeMessageReplay(
         threadId: true,
         status: true,
         runtimeTurnId: true,
+        userMessageJson: true,
+        contextJson: true,
       },
     })
     if (currentTurn && currentTurn.threadId !== prior.threadId) {
@@ -297,7 +325,15 @@ export async function readAssistantRuntimeMessageReplay(
     // ordinary admission path reclaim that queued Turn instead of acknowledging
     // work that has never reached app-server.
     if (currentTurn?.status === 'queued' && currentTurn.runtimeTurnId === null) {
-      return { outcome: 'resume_queued' }
+      const [message] = await parseMessages([currentTurn.userMessageJson])
+      if (!message || message.role !== 'user') {
+        throw new Error('ASSISTANT_RUNTIME_USER_MESSAGE_INVALID')
+      }
+      return {
+        outcome: 'resume_queued',
+        message,
+        context: parseAssistantRuntimeTurnContext(currentTurn.contextJson),
+      }
     }
     if (currentTurn?.status === 'running' && currentTurn.runtimeTurnId === null) {
       return { outcome: 'reconcile_unbound_start' }
@@ -475,7 +511,7 @@ export async function admitAssistantRuntimeTurn(input: {
     const nextMessages = appendMessages(messages, [command.message])
     const updatedThread = await tx.projectAssistantThread.update({
       where: { id: thread.id },
-      data: { messagesJson: serializeMessages(nextMessages) },
+      data: { messagesJson: serializeMessagesForNewTurn(nextMessages) },
     })
     const row = await tx.projectAgentTurn.create({
       data: {
@@ -884,7 +920,7 @@ export async function acceptAssistantRuntimeSteer(input: {
     if (!isDeepStrictEqual(nextMessages, messages)) {
       await tx.projectAssistantThread.update({
         where: { id: thread.id },
-        data: { messagesJson: serializeMessages(nextMessages) },
+        data: { messagesJson: serializeMessagesForNewTurn(nextMessages) },
       })
     }
     await tx.projectAssistantMessageCommand.update({
@@ -1572,7 +1608,7 @@ export async function markAssistantRuntimeProjectTurnsInterrupted(input: {
   })
 }
 
-function parseFollowUpContext(value: unknown): AssistantRuntimeTaskFollowUp['context'] {
+function parseAssistantRuntimeTurnContext(value: unknown): AssistantRuntimeSubmitCommand['context'] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('ASSISTANT_RUNTIME_FOLLOW_UP_CONTEXT_INVALID')
   }
@@ -1591,7 +1627,12 @@ function parseFollowUpContext(value: unknown): AssistantRuntimeTaskFollowUp['con
     locale,
     selectedScopeRef: nullable('selectedScopeRef'),
     selectedAssetId: nullable('selectedAssetId'),
+    selectedResource: parseAssistantRuntimeSelectedResourceReference(record.selectedResource),
   }
+}
+
+function parseFollowUpContext(value: unknown): AssistantRuntimeTaskFollowUp['context'] {
+  return parseAssistantRuntimeTurnContext(value)
 }
 
 type FollowUpBatchWithTasks = Prisma.FollowUpBatchGetPayload<{

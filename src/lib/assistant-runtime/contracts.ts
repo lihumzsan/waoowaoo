@@ -35,6 +35,18 @@ export type AssistantRuntimeTurnContext = {
   readonly locale: string
   readonly selectedScopeRef: string | null
   readonly selectedAssetId: string | null
+  /** Untrusted request selector; it is removed before the Turn is persisted. */
+  readonly selectedResourceId?: string | null
+  /** Omitted only by persisted Turns created before selected-resource support. */
+  readonly selectedResource?: AssistantRuntimeSelectedResourceReference | null
+}
+
+export type AssistantRuntimeSelectedResourceReference = {
+  readonly resourceId: string
+  readonly contentVersion: number
+  readonly workspacePath: string
+  readonly name: string
+  readonly mediaType: 'text' | 'image' | 'audio' | 'video'
 }
 
 export type AssistantRuntimeSubmitCommand = AssistantRuntimeScope & {

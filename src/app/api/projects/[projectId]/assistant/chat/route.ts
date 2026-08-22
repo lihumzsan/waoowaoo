@@ -85,6 +85,7 @@ function readUserTurnContext(body: ProjectAgentCommandHttpBody): {
   locale: string
   selectedScopeRef: string | null
   selectedAssetId: string | null
+  selectedResourceId: string | null
 } {
   assertExactKeys(
     body,
@@ -102,6 +103,7 @@ function readUserTurnContext(body: ProjectAgentCommandHttpBody): {
       'locale',
       'selectedScopeRef',
       'selectedAssetId',
+      'selectedResourceId',
     ]),
     'AGENT_TURN_CONTEXT_FIELDS_INVALID',
   )
@@ -118,6 +120,10 @@ function readUserTurnContext(body: ProjectAgentCommandHttpBody): {
     selectedAssetId: readNullableProjectAgentCommandString(
       contextRecord.selectedAssetId,
       'AGENT_TURN_ASSET_ID_INVALID',
+    ),
+    selectedResourceId: readNullableProjectAgentCommandString(
+      contextRecord.selectedResourceId,
+      'AGENT_TURN_SELECTED_RESOURCE_ID_INVALID',
     ),
   }
 }
@@ -229,6 +235,7 @@ export const POST = apiHandler(async (
         locale: turnContext.locale,
         selectedScopeRef: turnContext.selectedScopeRef,
         selectedAssetId: turnContext.selectedAssetId,
+        selectedResourceId: turnContext.selectedResourceId,
       },
     })
     return NextResponse.json(receipt, { status: 202 })

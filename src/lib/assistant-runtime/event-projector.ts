@@ -8,6 +8,8 @@ import type {
   RuntimeSkillsListEntry,
 } from '@/lib/codex-runtime/runtime-adapter'
 import { buildAgentTurnAssistantMessageId } from '@/lib/agent-turn/stream-publisher'
+import { createScopedLogger } from '@/lib/logging/core'
+import { normalizeAnyError } from '@/lib/errors/normalize'
 import {
   creativeRuntimeSkillReadToolName,
   resolveCreativeRuntimeSkillReadCommand,
@@ -26,6 +28,11 @@ import {
 } from './runtime-error'
 
 type UIMessagePart = UIMessage['parts'][number]
+
+const logger = createScopedLogger({ module: 'assistant-runtime.event-projector' })
+const MAX_DURABLE_TOOL_OUTPUT_BYTES = 16 * 1024
+const MAX_TOOL_OUTPUT_PREVIEW_ITEMS = 24
+const MAX_TOOL_OUTPUT_PREVIEW_KEYS = 32
 
 export type AssistantRuntimeProjectorOptions = {
   readonly identity: AssistantRuntimeTurnIdentity
@@ -91,55 +98,127 @@ function stringifySummary(value: RuntimeJsonValue | undefined): string {
     .join('\n\n')
 }
 
+function serializedByteLength(value: RuntimeJsonValue): number {
+  const serialized = JSON.stringify(value)
+  return serialized ? Buffer.byteLength(serialized, 'utf8') : 0
+}
+
+function compactResourcePreview(value: RuntimeJsonValue): RuntimeJsonValue {
+  if (!isRecord(value)) return compactRuntimeJsonValue(value, 2)
+  const output: RuntimeJsonObject = {}
+  for (const key of [
+    'resourceId',
+    'workspacePath',
+    'name',
+    'resourceKind',
+    'mediaType',
+    'status',
+    'contentVersion',
+    'taskId',
+  ] as const) {
+    if (value[key] !== undefined) output[key] = value[key]
+  }
+  return Object.keys(output).length > 0 ? output : '[details omitted]'
+}
+
+function compactRuntimeJsonValue(value: RuntimeJsonValue, depth = 0, key: string | null = null): RuntimeJsonValue {
+  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return typeof value === 'string' && value.length > 2_000 ? `${value.slice(0, 2_000)}…` : value
+  }
+  if (depth >= 2) return '[details omitted]'
+  if (Array.isArray(value)) {
+    const preview = value
+      .slice(0, MAX_TOOL_OUTPUT_PREVIEW_ITEMS)
+      .map((entry) => key === 'resources' || key === 'resource' || key === 'tasks'
+        ? compactResourcePreview(entry)
+        : compactRuntimeJsonValue(entry, depth + 1))
+    return {
+      itemCount: value.length,
+      preview,
+      ...(value.length > preview.length ? { omittedCount: value.length - preview.length } : {}),
+    }
+  }
+  const entries = Object.entries(value)
+  const output: RuntimeJsonObject = {}
+  for (const [key, entry] of entries.slice(0, MAX_TOOL_OUTPUT_PREVIEW_KEYS)) {
+    output[key] = compactRuntimeJsonValue(entry, depth + 1, key)
+  }
+  if (entries.length > MAX_TOOL_OUTPUT_PREVIEW_KEYS) {
+    output.omittedKeys = entries.length - MAX_TOOL_OUTPUT_PREVIEW_KEYS
+  }
+  return output
+}
+
+function boundRuntimeJsonValue(value: RuntimeJsonValue): RuntimeJsonValue {
+  const byteLength = serializedByteLength(value)
+  if (byteLength <= MAX_DURABLE_TOOL_OUTPUT_BYTES) return value
+  const compacted = compactRuntimeJsonValue(value)
+  if (serializedByteLength(compacted) <= MAX_DURABLE_TOOL_OUTPUT_BYTES) {
+    if (isRecord(compacted)) {
+      return { ...compacted, detailsOmitted: true, originalByteLength: byteLength }
+    }
+    return {
+      detailsOmitted: true,
+      originalByteLength: byteLength,
+      preview: compacted,
+    }
+  }
+  return {
+    detailsOmitted: true,
+    originalByteLength: byteLength,
+    keys: isRecord(value) ? Object.keys(value).slice(0, MAX_TOOL_OUTPUT_PREVIEW_KEYS) : [],
+  }
+}
+
 export function projectAssistantRuntimeToolOutput(item: RuntimeJsonObject): RuntimeJsonValue {
   const status = readString(item, 'status') ?? 'unknown'
   const type = readString(item, 'type')
   if (type === 'commandExecution') {
-    return {
+    return boundRuntimeJsonValue({
       status,
       output: item.aggregatedOutput ?? null,
       exitCode: item.exitCode ?? null,
       durationMs: item.durationMs ?? null,
-    }
+    })
   }
-  if (type === 'fileChange') return { status, changes: item.changes ?? [] }
+  if (type === 'fileChange') return boundRuntimeJsonValue({ status, changes: item.changes ?? [] })
   if (type === 'mcpToolCall') {
     const result = isRecord(item.result) ? item.result : null
     const structuredContent = result && isRecord(result.structuredContent)
       ? result.structuredContent
       : null
     if (status === 'declined' || status === 'interrupted' || status === 'cancelled') {
-      return { status, error: item.error ?? null }
+      return boundRuntimeJsonValue({ status, error: item.error ?? null })
     }
     // Wao MCP structuredContent is already the canonical success, decline, or
     // typed failure envelope. Wrapping it again changes the protocol shape and
     // hides actionable corrections from both the model and the persisted View.
-    if (structuredContent) return structuredContent
+    if (structuredContent) return boundRuntimeJsonValue(structuredContent)
     if (result?.isError === true || status === 'failed' || status === 'errored') {
-      return {
+      return boundRuntimeJsonValue({
         ok: false,
         status,
         error: item.error ?? structuredContent ?? result?.content ?? null,
-      }
+      })
     }
-    return {
+    return boundRuntimeJsonValue({
       status,
       result: result ?? item.result ?? null,
       durationMs: item.durationMs ?? null,
-    }
+    })
   }
   if (type === 'webSearch') {
-    return {
+    return boundRuntimeJsonValue({
       status: 'completed',
       action: item.action ?? null,
       results: item.results ?? [],
-    }
+    })
   }
   if (status !== 'completed') return { status }
   const result = item.result
-  if (result !== undefined) return { status, result }
+  if (result !== undefined) return boundRuntimeJsonValue({ status, result })
   const contentItems = item.contentItems
-  if (contentItems !== undefined) return { status, contentItems }
+  if (contentItems !== undefined) return boundRuntimeJsonValue({ status, contentItems })
   return { status }
 }
 
@@ -249,6 +328,7 @@ export class AssistantRuntimeEventProjector {
   private terminalProjection: AssistantRuntimeTerminalProjection | null = null
   private finalizing = false
   private persistenceFailureReason: string | null = null
+  private persistenceFailure: AssistantRuntimeFailure | null = null
   private skillsRefreshFailed = false
   private latestRuntimeFailure: AssistantRuntimeFailure | null = null
   private activeCompactionItemId: string | null = null
@@ -299,7 +379,7 @@ export class AssistantRuntimeEventProjector {
     this.queueCriticalPersistence(async () => {
       this.options.sink.sealChunksThrough(watermark)
       await this.options.onMessageSnapshot(boundaryMessage)
-      await this.options.sink.publishChunksThrough(watermark)
+      await this.publishChunksThrough(watermark, 'runtime_steer_boundary')
       await this.options.sink.publishViewChanged('runtime_steer_boundary').catch(() => undefined)
     }, 'steer_boundary_persistence_failed')
     await this.persistenceTail
@@ -759,7 +839,9 @@ export class AssistantRuntimeEventProjector {
     if (this.terminalProjection) return
     const assistantMessage = this.buildAssistantMessage()
     const failure = input.status === 'failed'
-      ? input.failure ?? assistantRuntimeFailureForStopReason(input.stopReason)
+      ? input.failure
+        ?? this.persistenceFailure
+        ?? assistantRuntimeFailureForStopReason(input.stopReason)
       : null
     const projection: AssistantRuntimeTerminalProjection = {
       status: input.status,
@@ -855,7 +937,7 @@ export class AssistantRuntimeEventProjector {
           this.pendingMessageSnapshots.delete(message.id)
           this.options.sink.sealChunksThrough(snapshot.watermark)
           await this.options.onMessageSnapshot(snapshot.message)
-          await this.options.sink.publishChunksThrough(snapshot.watermark)
+          await this.publishChunksThrough(snapshot.watermark, 'runtime_item_completed')
           if (snapshot.publishViewChanged) {
             await this.options.sink.publishViewChanged('runtime_item_completed').catch(() => undefined)
           }
@@ -871,12 +953,35 @@ export class AssistantRuntimeEventProjector {
     failureReason: string,
   ): void {
     const operation = this.persistenceTail.then(action)
-    this.persistenceTail = operation.catch(() => {
+    this.persistenceTail = operation.catch((error: unknown) => {
       this.persistenceFailureReason ??= failureReason
+      this.persistenceFailure ??= normalizeAnyError(error, {
+        fallbackCode: 'INTERNAL_ERROR',
+        context: { system: 'runtime', phase: failureReason },
+        details: { persistenceFailureReason: failureReason },
+      })
     })
     void operation.catch(() => {
       this.finish({ status: 'failed', stopReason: failureReason })
     })
+  }
+
+  private async publishChunksThrough(watermark: number, phase: string): Promise<void> {
+    try {
+      await this.options.sink.publishChunksThrough(watermark)
+    } catch (error: unknown) {
+      // Stream delivery is an ephemeral transport concern. The matching
+      // snapshot has already committed, so a delivery failure must not turn a
+      // durable Turn back into a persistence failure or leave it running.
+      logger.warn({
+        action: 'assistant_runtime.stream_delivery_failed',
+        message: 'assistant runtime stream delivery failed after durable snapshot',
+        details: {
+          phase,
+          error: error instanceof Error ? error.message : 'UNKNOWN_ERROR',
+        },
+      })
+    }
   }
 
   private matchesNotification(params: RuntimeJsonObject): boolean {

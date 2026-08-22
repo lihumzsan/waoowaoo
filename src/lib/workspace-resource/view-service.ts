@@ -228,12 +228,18 @@ function projectAncestors(
 
 async function loadViews(
   rows: readonly ResourceRow[],
-  options: { readonly includeContent: boolean },
+  options: {
+    readonly includeContent: boolean
+    readonly contentVersionsByResourceId?: ReadonlyMap<string, number>
+  },
 ): Promise<WorkspaceResourceView[]> {
   if (rows.length === 0) return []
+  const contentVersionFor = (row: ResourceRow): number => (
+    options.contentVersionsByResourceId?.get(row.id) ?? row.currentVersion
+  )
   const versionKeys = rows
-    .filter((row) => row.resourceKind === 'file' && row.currentVersion > 0)
-    .map((row) => ({ resourceId: row.id, version: row.currentVersion }))
+    .filter((row) => row.resourceKind === 'file' && contentVersionFor(row) > 0)
+    .map((row) => ({ resourceId: row.id, version: contentVersionFor(row) }))
   const lineage = versionKeys.length === 0 ? [] : await prisma.workspaceResourceLineage.findMany({
     where: { OR: versionKeys.map((entry) => ({ outputResourceId: entry.resourceId, outputVersion: entry.version })) },
     orderBy: [{ outputResourceId: 'asc' }, { outputVersion: 'asc' }, { role: 'asc' }, { position: 'asc' }],
@@ -330,6 +336,7 @@ async function loadViews(
   return await Promise.all(rows.map(async (row): Promise<WorkspaceResourceView> => {
     const resourceKind = requireResourceKind(row.resourceKind)
     const mediaType = requireMediaType(row.mediaType)
+    const contentVersion = resourceKind === 'file' ? contentVersionFor(row) : 0
     if ((resourceKind === 'folder') !== (mediaType === null)) {
       throw new Error(`WORKSPACE_RESOURCE_KIND_MEDIA_MISMATCH:${row.id}`)
     }
@@ -339,11 +346,11 @@ async function loadViews(
       if (folder) folderByPath.set(ancestorPath, folder)
     }
     const ancestors = projectAncestors(row.workspacePath, folderByPath)
-    const version = resourceKind === 'file' && row.currentVersion > 0
-      ? versionByKey.get(`${row.id}:${String(row.currentVersion)}`)
+    const version = resourceKind === 'file' && contentVersion > 0
+      ? versionByKey.get(`${row.id}:${String(contentVersion)}`)
       : undefined
-    if (resourceKind === 'file' && row.currentVersion > 0 && !version) {
-      throw new Error(`WORKSPACE_RESOURCE_VERSION_MISSING:${row.id}:${String(row.currentVersion)}`)
+    if (resourceKind === 'file' && contentVersion > 0 && !version) {
+      throw new Error(`WORKSPACE_RESOURCE_VERSION_MISSING:${row.id}:${String(contentVersion)}`)
     }
     const current: WorkspaceResourceVersionView | null = version ? {
       version: version.version,
@@ -352,7 +359,7 @@ async function loadViews(
       sizeBytes: safeNumber(version.sizeBytes),
       createdAt: version.createdAt.toISOString(),
     } : null
-    const lineageKey = `${row.id}:${String(row.currentVersion)}`
+    const lineageKey = `${row.id}:${String(contentVersion)}`
     const groupMembers = row.alternativeGroupExecutionId
       ? alternativeMembersByGroup.get(row.alternativeGroupExecutionId) ?? []
       : []
@@ -389,7 +396,7 @@ async function loadViews(
         resourceKind,
       }),
       status: requireStatus(row.status),
-      contentVersion: resourceKind === 'folder' ? 0 : row.currentVersion,
+      contentVersion,
       current,
       summary,
       prompt: row.prompt,
@@ -557,6 +564,32 @@ export async function readWorkspaceResource(input: {
   })
   if (!row) throw new Error('WORKSPACE_RESOURCE_NOT_FOUND')
   const [view] = await loadViews([row], { includeContent: true })
+  if (!view) throw new Error('WORKSPACE_RESOURCE_NOT_FOUND')
+  return view
+}
+
+export async function readWorkspaceResourceAtVersion(input: {
+  readonly userId: string
+  readonly projectId: string
+  readonly resourceId: string
+  readonly contentVersion: number
+}): Promise<WorkspaceResourceView> {
+  if (!Number.isSafeInteger(input.contentVersion) || input.contentVersion < 1) {
+    throw new Error('WORKSPACE_RESOURCE_CONTENT_VERSION_INVALID')
+  }
+  const row = await prisma.workspaceResource.findFirst({
+    where: {
+      userId: input.userId,
+      projectId: input.projectId,
+      id: input.resourceId,
+    },
+    select: resourceSelect,
+  })
+  if (!row) throw new Error('WORKSPACE_RESOURCE_NOT_FOUND')
+  const [view] = await loadViews([row], {
+    includeContent: true,
+    contentVersionsByResourceId: new Map([[input.resourceId, input.contentVersion]]),
+  })
   if (!view) throw new Error('WORKSPACE_RESOURCE_NOT_FOUND')
   return view
 }
