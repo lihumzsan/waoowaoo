@@ -60,7 +60,7 @@ export async function resolveAssistantRuntimeSelectedResourceReference(input: {
     resource = await readWorkspaceResource(input)
   } catch (error) {
     if (error instanceof Error && error.message === 'WORKSPACE_RESOURCE_NOT_FOUND') {
-      throw new Error('ASSISTANT_RUNTIME_SELECTED_RESOURCE_NOT_FOUND')
+      throw new Error('ASSISTANT_RUNTIME_SELECTED_RESOURCE_NOT_FOUND', { cause: error })
     }
     throw error
   }
