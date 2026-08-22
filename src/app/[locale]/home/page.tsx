@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback, useRef, type ClipboardEvent } from 'react'
 import { useSession } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
+import { createBrowserUuid } from '@/lib/browser-uuid'
 import Navbar from '@/components/Navbar'
 import { BrandPageLoading } from '@/components/ui/BrandLoading'
 import { AppIcon, IconGradientDefs } from '@/components/ui/icons'
@@ -208,7 +209,7 @@ export default function HomePage() {
         const isImage = file.type.toLowerCase().startsWith('image/')
           || /\.(png|jpe?g|webp)$/i.test(file.name)
         return {
-          id: crypto.randomUUID(),
+          id: createBrowserUuid(),
           file,
           fileName: file.name || 'upload',
           isImage,

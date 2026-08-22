@@ -28,6 +28,7 @@ import { API_AUTH_REQUIRED_EVENT } from '@/lib/api-fetch'
 import { isKnownErrorCode } from '@/lib/errors/codes'
 import { resolveClientErrorMessage } from '@/lib/errors/client'
 import { projectErrorForUser, type UserErrorAction } from '@/lib/errors/projection'
+import { createBrowserUuid } from '@/lib/browser-uuid'
 
 // ============================================================
 // 类型定义
@@ -79,7 +80,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         duration = 5000,
         action?: Pick<Toast, 'actionLabel' | 'onAction'>,
     ) => {
-        const id = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 9)
+        const id = createBrowserUuid()
 
         setToasts(prev => [...prev, { id, message, type, duration, ...action }])
 

@@ -1,3 +1,6 @@
+import { createBrowserUuid } from '@/lib/browser-uuid'
+import { sha256Hex } from '@/lib/sha256'
+
 const COMMAND_RECEIPT_STORAGE_PREFIX = 'workspace-assistant-command-receipt-v1'
 
 interface StoredWorkspaceAssistantCommandReceipt {
@@ -20,7 +23,9 @@ function canonicalize(value: unknown): unknown {
 }
 
 async function sha256(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+  const subtle = globalThis.crypto?.subtle
+  if (!subtle || typeof subtle.digest !== 'function') return sha256Hex(value)
+  const digest = await subtle.digest('SHA-256', new TextEncoder().encode(value))
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
@@ -101,7 +106,7 @@ export async function resolveWorkspaceAssistantUserMessageId(params: {
   const existing = stored.find((receipt) => receipt.fingerprint === fingerprint)
   if (existing) return existing.messageId
 
-  const messageId = crypto.randomUUID()
+  const messageId = createBrowserUuid()
   writeStoredReceipts(key, [...stored, { fingerprint, messageId }])
   return messageId
 }

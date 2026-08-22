@@ -1,4 +1,4 @@
-import { sha256Base64Url } from './sha256'
+import { sha256Base64Url } from '../sha256'
 
 function requireIdentityPart(value: string, code: string): string {
   const normalized = value.trim()

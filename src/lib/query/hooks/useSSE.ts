@@ -1,5 +1,6 @@
 'use client'
 import { logError as _ulogError, logWarn as _ulogWarn } from '@/lib/logging/core'
+import { createBrowserUuid } from '@/lib/browser-uuid'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -51,7 +52,7 @@ function readOrCreateConnectionId(projectId: string): string | null {
   const key = connectionIdStorageKey(projectId)
   const existing = storage?.getItem(key)
   if (existing) return existing
-  const connectionId = window.crypto.randomUUID()
+  const connectionId = createBrowserUuid()
   storage?.setItem(key, connectionId)
   return connectionId
 }

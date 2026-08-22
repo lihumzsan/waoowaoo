@@ -82,6 +82,9 @@ View、刷新恢复、破坏性确认和跨进程唤醒。Session Manager 只做
 
 ## 踩过的坑
 
+- 浏览器命令回执首版直接依赖 Secure Context 的 UUID 与摘要 API；局域网 HTTP 首次修复只替换 UUID，
+  同一发送链路的摘要仍在 POST 前失败 → 没有枚举 identity 构造依赖的全部运行能力 → 随机身份与
+  确定性摘要分别复用统一浏览器兼容入口，安全上下文原生路径与 HTTP 路径必须产生相同 wire identity。
 - steer 首版先调 runtime 再写数据库：HTTP 重试、runtime 接受后持久化失败或 Turn 先结算，都会让
   模型收到两次而产品 View 只显示一次 → 没有先于 runtime 调用的 identity 裁判 → project-scoped
   命令表在 runtime 调用前裁决 payload hash，无法证明是否交付的永久标 uncertain 且拒绝自动重发。

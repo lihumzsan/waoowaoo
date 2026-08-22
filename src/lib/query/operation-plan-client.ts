@@ -1,6 +1,7 @@
 'use client'
 
 import { apiFetch } from '@/lib/api-fetch'
+import { createBrowserUuid } from '@/lib/browser-uuid'
 import type { OperationPlanView } from '@/lib/operations/plan-contract'
 import { readClientApiError } from '@/lib/errors/client'
 import { requestJsonWithError } from '@/lib/query/mutations/mutation-shared'
@@ -12,7 +13,7 @@ export async function fetchOperationPlanView(params: {
   context?: Record<string, unknown>
   operationRequestId?: string
 }): Promise<OperationPlanView> {
-  const operationRequestId = params.operationRequestId ?? crypto.randomUUID()
+  const operationRequestId = params.operationRequestId ?? createBrowserUuid()
   const response = await apiFetch(`/api/projects/${params.projectId}/operations/${params.operationId}/plan`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Idempotency-Key': operationRequestId },

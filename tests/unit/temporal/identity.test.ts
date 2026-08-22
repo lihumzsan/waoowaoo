@@ -4,7 +4,7 @@ import {
   buildTaskWorkflowId,
   buildUserTaskSchedulerWorkflowId,
 } from '@/lib/temporal/identity'
-import { sha256Base64Url } from '@/lib/temporal/sha256'
+import { sha256Base64Url } from '@/lib/sha256'
 
 describe('Temporal workflow identity', () => {
   it('preserves the canonical SHA-256 base64url identities', () => {

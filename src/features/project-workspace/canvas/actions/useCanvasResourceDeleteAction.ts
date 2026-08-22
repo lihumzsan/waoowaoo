@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/contexts/ToastContext'
+import { createBrowserUuid } from '@/lib/browser-uuid'
 import { requestOperationMutationVoidWithError } from '@/lib/query/mutations/mutation-shared'
 import type { WorkspaceCanvasDeleteOperationView } from '../contracts/workspace-canvas-interactions'
 
@@ -41,7 +42,7 @@ export function useCanvasResourceDeleteAction(params: {
     setPending({
       operation,
       targetLabel,
-      requestId: `delete_resource:${operation.approvalInputHash}:${crypto.randomUUID()}`,
+      requestId: `delete_resource:${operation.approvalInputHash}:${createBrowserUuid()}`,
     })
     setPhase('confirming')
   }, [])

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useRef, useState } from 'react'
+import { createBrowserUuid } from '@/lib/browser-uuid'
 import { WorkspaceProvider } from './WorkspaceProvider'
 import WorkspaceAssistantPanel from './components/WorkspaceAssistantPanel'
 import ProjectWorkspaceCanvas from './canvas/ProjectWorkspaceCanvas'
@@ -46,7 +47,7 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
         onAutoStartConsumed={props.onAssistantAutoStartConsumed}
         onActiveOperationChange={setActiveFocus}
         onOpenWorkspacePath={(workspacePath) => {
-          setPathFocus({ requestId: crypto.randomUUID(), workspacePath })
+          setPathFocus({ requestId: createBrowserUuid(), workspacePath })
         }}
       />
       <div className="h-full min-w-0 overflow-hidden pr-[var(--workspace-assistant-panel-width,420px)]">

@@ -4,6 +4,7 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/contexts/ToastContext'
+import { createBrowserUuid } from '@/lib/browser-uuid'
 import type { OperationPlanView } from '@/lib/operations/plan-contract'
 import {
   executePlannedCanvasOperation,
@@ -40,7 +41,7 @@ export function useCanvasOperationAction(params: {
   const begin = useCallback(async (request: CanvasOperationRequest) => {
     if (phase !== 'idle' || busyRef.current) return
     busyRef.current = true
-    const operationRequestId = crypto.randomUUID()
+    const operationRequestId = createBrowserUuid()
     try {
       setPhase('planning')
       const plan = await fetchOperationPlanView({

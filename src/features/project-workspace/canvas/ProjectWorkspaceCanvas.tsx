@@ -17,6 +17,7 @@ import {
 } from '@xyflow/react'
 import { useTranslations } from 'next-intl'
 import { logWarn as _ulogWarn } from '@/lib/logging/core'
+import { createBrowserUuid } from '@/lib/browser-uuid'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
 import {
   useProjectData,
@@ -542,7 +543,7 @@ function ProjectWorkspaceFolderCanvas({
     if (event.detail !== 2) return
     notifyCanvasUserInteraction()
     const flow = reactFlow.screenToFlowPosition({ x: event.clientX, y: event.clientY })
-    setUploadDraft({ id: crypto.randomUUID(), position: flow })
+    setUploadDraft({ id: createBrowserUuid(), position: flow })
   }, [notifyCanvasUserInteraction, onSelectionChange, reactFlow])
   const handleMoveStart = useCallback((event: MouseEvent | TouchEvent | null) => {
     if (event) notifyCanvasUserInteraction()
@@ -595,7 +596,7 @@ function ProjectWorkspaceFolderCanvas({
   }, [locateProjectedResource, onLocateConsumed, pendingLocateResourceId])
 
   const requestAssistantDraft = useCallback((text: string | null) => {
-    onAssistantDraftRequest({ requestId: crypto.randomUUID(), text, focus: true })
+    onAssistantDraftRequest({ requestId: createBrowserUuid(), text, focus: true })
   }, [onAssistantDraftRequest])
   const beginResourceOperation = useCallback((operation: WorkspaceCanvasResourceOperationView) => {
     if (operation.confirmation === 'destructive') {

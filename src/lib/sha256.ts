@@ -188,3 +188,7 @@ export function sha256Base64Url(value: string): string {
   }
   return encoded
 }
+
+export function sha256Hex(value: string): string {
+  return Array.from(sha256Bytes(value), (byte) => byte.toString(16).padStart(2, '0')).join('')
+}

@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { createBrowserUuid } from '@/lib/browser-uuid'
 import type { ProjectAssistantMediaAttachment } from '@/lib/project-agent/media-attachments'
 import {
   uploadProjectAssistantMediaAttachment,
@@ -69,7 +70,7 @@ export function useCanvasUploadQueue(params: {
   const materialize = useCallback(async (item: CanvasUploadQueueItem) => {
     const attachmentToken = item.attachment?.attachmentToken
     if (!attachmentToken) throw new Error('CANVAS_UPLOAD_ATTACHMENT_TOKEN_REQUIRED')
-    const operationRequestId = item.materializeRequestId ?? crypto.randomUUID()
+    const operationRequestId = item.materializeRequestId ?? createBrowserUuid()
     updateItem(item.id, (current) => ({
       ...current,
       stage: 'materializing',
@@ -118,7 +119,7 @@ export function useCanvasUploadQueue(params: {
       const uploaded: CanvasUploadQueueItem = {
         ...item,
         attachment: { ...attachment, href: null },
-        materializeRequestId: crypto.randomUUID(),
+        materializeRequestId: createBrowserUuid(),
         stage: 'materializing',
         error: null,
       }
@@ -134,7 +135,7 @@ export function useCanvasUploadQueue(params: {
     position: { readonly x: number; readonly y: number },
   ) => {
     const added = files.map((file, index): CanvasUploadQueueItem => ({
-      id: crypto.randomUUID(),
+      id: createBrowserUuid(),
       file,
       position: {
         x: position.x + (index % 3) * 36,
