@@ -10,7 +10,7 @@ describe('ComfyUI H3 dual-stage profile', () => {
     expect(resolveH3DurationFrames(4)).toBe(107)
     expect(resolveH3DurationFrames(5)).toBe(124)
     expect(resolveH3DurationFrames(10)).toBe(243)
-    expect(resolveH3DurationFrames(15)).toBe(362)
+    expect(resolveH3DurationFrames(13)).toBe(328)
     expect(resolveH3Dimensions({ megapixels: 1, aspectRatio: '16:9' })).toEqual({ width: 1376, height: 768 })
     expect(resolveH3Dimensions({ megapixels: 2, aspectRatio: '16:9' })).toEqual({ width: 1920, height: 1088 })
   })
@@ -22,7 +22,7 @@ describe('ComfyUI H3 dual-stage profile', () => {
     expect(h3?.capabilities.video.assetReferenceMultiReference).toBe(true)
     expect(h3?.capabilities.video.maxReferenceImages).toBe(8)
     expect(h3?.capabilities.video.maxReferenceFiles).toBe(8)
-    expect(h3?.capabilities.video.durationOptions).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+    expect(h3?.capabilities.video.durationOptions).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
   })
 
   it('compiles the ordinary reference selection through the production resolver', () => {
@@ -36,6 +36,14 @@ describe('ComfyUI H3 dual-stage profile', () => {
     })
     expect(resolved.issues).toEqual([])
     expect(resolved.options).toMatchObject({ duration: 10, generateAudio: true })
+  })
+
+  it('rejects an H3 duration above thirteen seconds at provider preflight', () => {
+    ensureAiCatalogsRegistered()
+    const selection = { provider: 'comfyui' as const, modelId: COMFYUI_H3_MODEL_ID, modelKey: `comfyui::${COMFYUI_H3_MODEL_ID}`, variantSubKind: 'official' as const }
+    const referenceImages = ['https://example.com/reference.png']
+    expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 13, aspectRatio: '9:16', generateAudio: true, referenceImages } })).toMatchObject({ duration: 13 })
+    expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 14, aspectRatio: '9:16', generateAudio: true, referenceImages } })).toThrow()
   })
 
   it('accepts up to eight ordered reference images at the real ComfyUI option boundary', () => {

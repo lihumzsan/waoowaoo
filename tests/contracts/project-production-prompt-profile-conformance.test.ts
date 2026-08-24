@@ -48,6 +48,8 @@ describe('project production prompt profile context', () => {
       '"promptProfile": "minimax_h3_reference_v2"',
     )
     expect(capabilities.video?.minSegmentDurationSeconds).toBe(4)
+    expect(capabilities.video?.maxSegmentDurationSeconds).toBe(13)
+    expect(capabilities.video?.allowedSegmentDurationsSeconds).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
     expect(buildAssistantRuntimeTurnContext('zh', context)).toContain(
       '"vocalPerformanceMode": "native_dialogue"',
     )

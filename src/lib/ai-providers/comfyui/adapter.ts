@@ -9,7 +9,11 @@ import {
   COMFYUI_H3_MODEL_ID,
 } from './models'
 import { executeComfyUiH3VideoGeneration } from './h3'
-import { H3_MAX_REFERENCE_IMAGES } from './profiles'
+import {
+  H3_DURATION_MAX_SECONDS,
+  H3_DURATION_MIN_SECONDS,
+  H3_MAX_REFERENCE_IMAGES,
+} from './profiles'
 import { COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_ID } from './models'
 import { executeComfyUiMossSoundGeneration } from './moss'
 import { executeComfyUiMossTtsGeneration } from './tts'
@@ -61,7 +65,10 @@ export const comfyuiAdapter: AiProviderAdapter = {
         required: ['duration', 'aspectRatio', 'generateAudio'],
         excludedKeys: ['resolution', 'lastFrameImageUrl', 'referenceAudios', 'referenceVideos', 'size', 'promptExtend', 'serviceTier', 'executionExpiresAfter', 'returnLastFrame', 'draft', 'seed', 'cameraFixed', 'watermark'],
         validators: {
-          duration: integerRangeValidator({ min: 4, max: 15 }),
+          duration: integerRangeValidator({
+            min: H3_DURATION_MIN_SECONDS,
+            max: H3_DURATION_MAX_SECONDS,
+          }),
           aspectRatio: enumValidator(H3_ASPECT_RATIOS),
           generateAudio: booleanValidator(),
           referenceImages: stringArrayValidator({ maxLength: H3_MAX_REFERENCE_IMAGES }),
