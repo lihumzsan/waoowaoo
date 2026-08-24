@@ -22,20 +22,20 @@ description: Direct screenplay-based video generation with explicit continuity, 
 
 - `reference` 的素材角色和数量必须完全遵守能力声明。普通参考图不是首帧；只有 capability 明确支持且剧情要求从该画面开始时才使用 `first_frame`。
 - 每个 item 只列实际使用的 ready Resource，精确复制 `resourceId`、`contentVersion`、`role`、`channel`，顺序与 Prompt 中的媒体编号一致；不得从文件名或近似描述猜身份。
-- H3 reference v2 接受 1–8 张 `channel=image, role=reference_image`，按 `references` 的顺序编号；没有 `first_frame`、`last_frame`、`reference_audio` 或 `reference_video`。缺图、超过能力上限或错误角色时停止。
+- H3 multimodal v3 同时支持三个互斥模式：`reference` 接受 1–8 张有序 `channel=image, role=reference_image`；`first_frame` 精确接受一张 `role=first_frame`；`first_last_frame` 精确接受一张首帧和一张尾帧。三种模式都不接受 `reference_audio`、`reference_video`，也不得混合普通参考图和帧图。缺首帧、仅尾帧、重复帧、空引用、超过上限或错误角色时停止。
 
 ## Prompt profile 选择
 
 - 从系统注入的 `productionCapabilities.video.promptProfile` 选择本批次唯一最终表达方言。
 - `generic_v1` 使用下方 generic_v1 最终提示词格式。
-- `minimax_h3_reference_v2` 使用下方 H3 最终 Prompt；不得同时输出通用标签格式。
+- `minimax_h3_multimodal_v3` 使用下方 H3 最终 Prompt；不得同时输出通用标签格式。
 - 缺失或未知 profile 时停止构造可执行 items，不得根据 `modelKey`、Provider 名称或输入模式猜测，也不得回落到 `generic_v1`。
 - Profile 只改变同一导演事实的最终表达，不改变剧本、整片时间线、装段、Resource identity 或能力判定。
 
-## minimax_h3_reference_v2 最终 Prompt
+## minimax_h3_multimodal_v3 最终 Prompt
 
 - `generic_v1` 使用 generic 的标签格式；不要把其标签混进 H3。
-- `minimax_h3_reference_v2` 严格使用下列六段，顺序固定、每段只出现一次，段名在行首：
+- `minimax_h3_multimodal_v3` 严格使用下列六段，顺序固定、每段只出现一次，段名在行首：
 
 ```text
 subject_definitions:
@@ -48,7 +48,13 @@ non_diegetic_music:
 
 除对白原文和画面内文字外正文使用英文。`subject_definitions` 必须把每个实际使用的主体、服装、场景或道具绑定到对应的 `<Picture 1>` 至 `<Picture N>`，不得引用不存在的编号；`summary` 是动作摘要；`retention_analysis` 写身份、服装、比例、风格、场景和道具关系；`detailed_description` 从 0.00 秒写连续可见动作、机位、落位、视线与落点；`overall_soundscape` 只写对白、环境声、动作声和非语言人声。
 
-每个 `<Picture N>` 都只锁定其绑定的身份、风格、内容与场景结构，不是首帧，不得写成第一帧锚点。不得调用或描述 ComfyUI AI 节点、下游 Prompt 改写或第二套 Prompt；主 Agent 是唯一 Prompt writer。
+图片时序语义只由当前显式输入模式决定：
+
+- `reference`：每个 `<Picture N>` 只锁定身份、风格、内容与场景结构，不是首帧或尾帧，不得写成时间锚点。
+- `first_frame`：`detailed_description` 开头必须在同一句中把 `<Picture 1>` 明确对齐 `0.00 seconds`，再描述从该状态连续发展的动作。
+- `first_last_frame`：除首帧规则外，必须在同一句中把 `<Picture 2>` 明确对齐当前 Segment 的精确结束秒数，并描述从首帧状态连续收敛到尾帧状态的运动路径。
+
+不得调用或描述 ComfyUI AI 节点、下游 Prompt 改写或第二套 Prompt；主 Agent 是唯一 Prompt writer。
 
 最后一段必须原样包含：
 
@@ -70,7 +76,7 @@ N/A
 
 - 是否先有整片时间线，再有最少 Segment 与镜头；总时长、4–13 秒范围和时序是否准确？
 - 每镜是否有景别、机位、主体落位、朝向、世内视线、一个主要运镜、向前变化和可见落点？
-- 是否只使用 capability 允许的参考角色与数量，且每个 `<Picture N>` 未被当作首帧？
+- 是否只使用 capability 允许的参考角色与数量，三种模式互斥，且 Picture 时间锚点与当前模式及 Segment 时长一致？
 - H3 是否严格六段、固定 `non_diegetic_music: N/A`、无 AI 节点和无 Prompt 改写？
 - 对白是否逐字、自然说完、声音关系清楚；是否固定写入不生成字幕、标题、水印、拼贴、分屏或额外人物？
 

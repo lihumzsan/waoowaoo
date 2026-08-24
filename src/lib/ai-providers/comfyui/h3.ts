@@ -4,7 +4,7 @@ import { createProviderAsyncTaskFailure } from '@/lib/ai-providers/shared/async-
 import type { AiProviderVideoExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 import type { FailureRecord } from '@/lib/errors/failure'
 import { MAX_VIDEO_BYTES } from '@/lib/http/body-size-constants'
-import { assertVideoPromptMatchesProfile } from '@/lib/video-generation/h3-reference-prompt'
+import { assertVideoPromptMatchesProfile } from '@/lib/video-generation/h3-prompt'
 import { resolveComfyUiRuntimeTarget } from './config'
 import { formatComfyUiExternalId } from './external-id'
 import { COMFYUI_H3_MODEL_ID } from './models'
@@ -101,7 +101,12 @@ function buildGraph(input: AiProviderVideoExecutionContext, promptId: string) {
   if (typeof duration !== 'number' || !Number.isInteger(duration) || typeof aspectRatio !== 'string') throw new AppError('INVALID_PARAMS', 'ComfyUI H3 requires duration and aspectRatio', { provider: 'comfyui' })
   const seed = Number.parseInt(promptId.replace(/-/gu, '').slice(0, 12), 16)
   const prompt = options.prompt?.trim() || ''
-  assertVideoPromptMatchesProfile({ profile: 'minimax_h3_reference_v2', prompt })
+  assertVideoPromptMatchesProfile({
+    profile: 'minimax_h3_multimodal_v3',
+    prompt,
+    inputMode: 'reference',
+    durationSeconds: duration,
+  })
   return buildH3DualStagePromptGraph({ prompt, referenceImageUrls, durationSeconds: duration, aspectRatio: aspectRatio as H3AspectRatio, seed })
 }
 
