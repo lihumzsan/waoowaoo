@@ -196,7 +196,7 @@ promptProfile: 'minimax_h3_multimodal_v3',
 supportedInputModes: ['reference', 'first_frame', 'first_last_frame'],
 ```
 
-- [ ] 保留 runtime target、4–15 秒、现有宽高比、1–8 references、音频生成要求和 provider identity。
+- [ ] 保留 runtime target、4–13 秒、现有宽高比、1–8 references、音频生成要求和 provider identity。
 - [ ] `adapter.ts` 允许 `lastFrameImageUrl` 与 `referenceImages`，外层 `imageUrl` 继续承载首帧；删除对象层“必须有 referenceImages”的 refine。
 - [ ] adapter 只做 transport 字段校验，不重新解释业务 mode。
 - [ ] `providerTransportPreflightOptions`：reference 构造有序 placeholder references；first-last 构造 placeholder last frame；first frame 仍由外层 `imageUrl` 传递。schema preflight 与冻结 execution options 必须复用同一 helper。
@@ -330,7 +330,7 @@ export function deriveComfyUiProfileRequirements(input: {
 - [ ] `h3.ts` 把 `referenceImages` 映射为 `reference_image`，`input.imageUrl` 映射为 `first_frame`，`lastFrameImageUrl` 映射为 `last_frame`，再调用 canonical resolver。
 - [ ] 根据 resolver 结论构造 Task 4 union，执行 v3 Prompt 校验、selected graph requirements preflight 与 `/prompt` 提交。
 - [ ] 删除 reference-only 的 `imageUrl`/`lastFrameImageUrl` 拒绝和手写 `expectedModels`，不保留旧旁路。
-- [ ] 保持 `generateAudio === true`、4–15 秒/frame-grid、aspect ratio、seed、fence、accepted probe、poll/cancel、output 168、URL 下载和 external id endpoint。
+- [ ] 保持 `generateAudio === true`、4–13 秒/frame-grid、aspect ratio、seed、fence、accepted probe、poll/cancel、output 168、URL 下载和 external id endpoint。
 - [ ] selected graph 缺节点/模型/option 时提交前明确失败；不得切图或回退 shared runtime。
 
 ### 5.4 验证并提交
@@ -428,7 +428,7 @@ ffprobe -v error -show_entries format=duration -show_entries stream=index,codec_
 ```
 
 - [ ] 每个样本必须有 H.264 视频流、24fps、约 2MP 尺寸、音频流和约 4 秒 duration；首尾帧样本人工检查开头/结尾与冻结输入对应。
-- [ ] 若未实际覆盖 15 秒、全部宽高比、8 references、取消、重试及 ComfyUI 重启恢复，交付时列为盲区，不声称架构完成。
+- [ ] 若未实际覆盖 13 秒、全部宽高比、8 references、取消、重试及 ComfyUI 重启恢复，交付时列为盲区，不声称架构完成。
 
 ### 7.5 最终交付
 

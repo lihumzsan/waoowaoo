@@ -314,7 +314,7 @@ Prompt validator 接收同一个 canonical input mode resolver 的结果，在�
 - `maxReferenceImages: 8`；
 - `maxReferenceFiles: 8`，只约束普通 reference 通道；
 - `firstlastframe: true`；
-- `durationOptions: [4, 5, ..., 15]`；
+- `durationOptions: [4, 5, ..., 13]`；
 - `generateAudioOptions: [true]`；
 - 不声明参考音频或参考视频能力。
 
@@ -429,7 +429,7 @@ resolver、第二个 prompt writer、动态 canvas 转换或 fallback。
 2. reference graph 保持 1–8 张有序映射；frame graph 对首帧和首尾帧只差 `last_frame` 输入。
 3. 两个 profile 都包含 10/3 steps、0.2 denoise、两次 RTX VSR、两次 cache clear、原生音频和唯一输出 168。
 4. profile-derived preflight 精确得到各自 UNET、CLIP、VAE、LoRA、attention 和 VSR 要求。
-5. 从生产 registry 穷尽验证同一 model key 的三种模式、reference 上限、4–15 秒和固定原生音频。
+5. 从生产 registry 穷尽验证同一 model key 的三种模式、reference 上限、4–13 秒和固定原生音频。
 6. input-mode resolver 使用角色事实验证四个有效/无效边界：reference、first、first+last、混合/缺首帧。
 7. Provider submission 协议继续验证 pre-accept、400 rejected、5xx/timeout outcome unknown 和同 prompt-id probe。
 8. 运行 `npm.cmd run typecheck`、针对受影响文件的 ESLint、适用 conformance/provider checks 和
@@ -457,7 +457,7 @@ resolver、第二个 prompt writer、动态 canvas 转换或 fallback。
 代码和 capability 变更后需要重启 Windows 宿主机上的 Next.js 与 Temporal Worker，并实际确认二者 readiness。
 ComfyUI 节点、模型和外部工作流文件未改时不需要重启 8188；仍需在提交前重新做实时 preflight。
 
-若只生成最短时长小样，交付必须声明 15 秒、全部宽高比和并发组合尚未真实生成，不能用静态数学或短样片
+若只生成最短时长小样，交付必须声明 13 秒、全部宽高比和并发组合尚未真实生成，不能用静态数学或短样片
 暗示全部运行组合已通过。
 
 ## 完成定义
