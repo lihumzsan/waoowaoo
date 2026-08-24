@@ -83,7 +83,6 @@ type H3RuntimeProfileBase = {
   readonly firstUpscaleNodeId: string
   readonly finalUpscaleNodeId: string
   readonly outputNodeId: string
-  readonly requiredNodeClasses: readonly string[]
 }
 
 export type H3ReferenceDualStageRuntimeProfile = H3RuntimeProfileBase & {
@@ -115,29 +114,6 @@ export const H3_DUAL_STAGE_RUNTIME_PROFILE: H3ReferenceDualStageRuntimeProfile =
   firstUpscaleNodeId: '213',
   finalUpscaleNodeId: '323',
   outputNodeId: '168',
-  requiredNodeClasses: [
-    'Load Image From Url (mtb)',
-    'ResizeShortestToNode',
-    'UNETLoader',
-    'CLIPLoader',
-    'VAELoader',
-    'LoraLoaderModelOnly',
-    'ModelAttentionBackend',
-    'MiniMaxH3ReferenceToVideo',
-    'easy clearCacheAll',
-    'RandomNoise',
-    'KSamplerSelect',
-    'BasicScheduler',
-    'BasicGuider',
-    'SamplerCustomAdvanced',
-    'VAEDecode',
-    'VAEDecodeAudio',
-    'ImageResizeKJv2',
-    'VAEEncode',
-    'VAEEncodeAudio',
-    'PT_H3ConcatAVLatent',
-    'VHS_VideoCombine',
-  ],
 }
 
 export const H3_FRAME_DUAL_STAGE_RUNTIME_PROFILE: H3FrameDualStageRuntimeProfile = {
@@ -153,30 +129,6 @@ export const H3_FRAME_DUAL_STAGE_RUNTIME_PROFILE: H3FrameDualStageRuntimeProfile
   firstUpscaleNodeId: '213',
   finalUpscaleNodeId: '325',
   outputNodeId: '168',
-  requiredNodeClasses: [
-    'Load Image From Url (mtb)',
-    'ResizeImagesByLongerEdge',
-    'UNETLoader',
-    'CLIPLoader',
-    'VAELoader',
-    'LoraLoaderModelOnly',
-    'ModelAttentionBackend',
-    'EasyCache',
-    'MiniMaxH3ImageToVideo',
-    'easy clearCacheAll',
-    'RandomNoise',
-    'KSamplerSelect',
-    'BasicScheduler',
-    'BasicGuider',
-    'SamplerCustomAdvanced',
-    'VAEDecode',
-    'VAEDecodeAudio',
-    'ImageResizeKJv2',
-    'VAEEncode',
-    'VAEEncodeAudio',
-    'PT_H3ConcatAVLatent',
-    'VHS_VideoCombine',
-  ],
 }
 
 type H3PromptGraphCommonInput = {

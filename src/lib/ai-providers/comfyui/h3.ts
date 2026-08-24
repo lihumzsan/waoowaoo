@@ -5,10 +5,17 @@ import type { AiProviderVideoExecutionContext, GenerateResult } from '@/lib/ai-p
 import type { FailureRecord } from '@/lib/errors/failure'
 import { MAX_VIDEO_BYTES } from '@/lib/http/body-size-constants'
 import { assertVideoPromptMatchesProfile } from '@/lib/video-generation/h3-prompt'
+import { resolveVideoInputMode, type VideoInputReference } from '@/lib/video-generation/input-mode'
 import { resolveComfyUiRuntimeTarget } from './config'
 import { formatComfyUiExternalId } from './external-id'
 import { COMFYUI_H3_MODEL_ID } from './models'
-import { H3_DUAL_STAGE_RUNTIME_PROFILE, buildH3PromptGraph, type H3AspectRatio } from './profiles'
+import { deriveComfyUiProfileRequirements, type ComfyUiProfileRequirementOption } from './profile-requirements'
+import {
+  H3_DUAL_STAGE_RUNTIME_PROFILE,
+  buildH3PromptGraph,
+  type H3AspectRatio,
+  type H3DualStageRuntimeProfile,
+} from './profiles'
 import {
   asComfyUiRecord,
   COMFYUI_ACCEPTED_JOB_STATUSES,
@@ -24,7 +31,7 @@ import {
 export const COMFYUI_H3_MODEL_KEY = `comfyui::${COMFYUI_H3_MODEL_ID}`
 export const COMFYUI_H3_RUNTIME_TARGET_ID = 'h3-dual-stage-2mp' as const
 const H3_PREFLIGHT_CACHE_TTL_MS = 30_000
-const preflightReadyAtByBaseUrl = new Map<string, number>()
+const preflightReadyAtByTargetProfile = new Map<string, number>()
 
 function preAcceptRejected(error: unknown): ProviderSubmissionError {
   const message = error instanceof Error ? error.message : String(error)
@@ -42,9 +49,24 @@ function promptRejection(error: ComfyUiHttpError): ProviderSubmissionError {
   })
 }
 
-async function preflight(baseUrl: string): Promise<void> {
+function missingOptionError(option: ComfyUiProfileRequirementOption): Error {
+  if (['UNETLoader', 'CLIPLoader', 'VAELoader', 'LoraLoaderModelOnly'].includes(option.classType)) {
+    return new Error(`COMFYUI_MODEL_MISSING:${option.value}`)
+  }
+  return new Error(`COMFYUI_OPTION_MISSING:${option.classType}:${option.inputName}:${option.value}`)
+}
+
+async function preflight(
+  baseUrl: string,
+  profile: H3DualStageRuntimeProfile,
+): Promise<void> {
+  const requirements = deriveComfyUiProfileRequirements({
+    profileId: profile.id,
+    graph: profile.workflow,
+  })
+  const cacheKey = `${baseUrl}\u0000${requirements.fingerprint}`
   const now = Date.now()
-  if ((preflightReadyAtByBaseUrl.get(baseUrl) ?? 0) + H3_PREFLIGHT_CACHE_TTL_MS > now) return
+  if ((preflightReadyAtByTargetProfile.get(cacheKey) ?? 0) + H3_PREFLIGHT_CACHE_TTL_MS > now) return
   const infoByClassName = new Map<string, Promise<unknown>>()
   const readInfo = (className: string): Promise<unknown> => {
     const existing = infoByClassName.get(className)
@@ -53,49 +75,60 @@ async function preflight(baseUrl: string): Promise<void> {
     infoByClassName.set(className, requested)
     return requested
   }
-  const requiredInfos = await Promise.all(H3_DUAL_STAGE_RUNTIME_PROFILE.requiredNodeClasses.map(async (className) => ({
+  const requiredInfos = await Promise.all(requirements.nodeClasses.map(async (className) => ({
     className,
     info: await readInfo(className),
   })))
   for (const { className, info } of requiredInfos) {
     if (!asComfyUiRecord(info)?.[className]) throw new Error(`COMFYUI_NODE_MISSING:${className}`)
   }
-  const expectedModels: Array<[string, string, string]> = [
-    ['UNETLoader', 'unet_name', 'h3\\minimax_h3_ref2va_int8_convrot.safetensors'],
-    ['UNETLoader', 'unet_name', 'minimax_h3_ref2va_pruned_w4a8_mixed.safetensors'],
-    ['CLIPLoader', 'clip_name', 'h3\\qwen3vl_32b_minimax_h3_int8_convrot.safetensors'],
-    ['LoraLoaderModelOnly', 'lora_name', 'h3\\minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors'],
-    ['VAELoader', 'vae_name', 'h3\\minimax_h3_video_vae_int8_convrot.safetensors'],
-    ['VAELoader', 'vae_name', 'h3\\minimax_h3_audio_vae_fp32.safetensors'],
-  ]
-  const modelInfos = await Promise.all(expectedModels.map(async ([className, field, expected]) => ({
-    className,
-    field,
-    expected,
-    info: await readInfo(className),
+  const optionInfos = await Promise.all(requirements.options.map(async (option) => ({
+    option,
+    info: await readInfo(option.classType),
   })))
-  for (const { className, field, expected, info } of modelInfos) {
-    if (!readComfyUiRequiredOptions(info, className, field).includes(expected)) throw new Error(`COMFYUI_MODEL_MISSING:${expected}`)
+  for (const { option, info } of optionInfos) {
+    if (!readComfyUiRequiredOptions(info, option.classType, option.inputName).includes(option.value)) {
+      throw missingOptionError(option)
+    }
   }
-  const resizeInfo = await readInfo('ImageResizeKJv2')
-  if (!readComfyUiRequiredOptions(resizeInfo, 'ImageResizeKJv2', 'upscale_method').includes('nvidia_rtx_vsr')) throw new Error('COMFYUI_UPSCALE_METHOD_MISSING:nvidia_rtx_vsr')
-  const attentionInfo = await readInfo('ModelAttentionBackend')
-  if (!readComfyUiRequiredOptions(attentionInfo, 'ModelAttentionBackend', 'attention').includes('comfy kitchen attention')) throw new Error('COMFYUI_ATTENTION_BACKEND_MISSING:comfy kitchen attention')
-  preflightReadyAtByBaseUrl.set(baseUrl, now)
+  preflightReadyAtByTargetProfile.set(cacheKey, now)
 }
 
 function requireSelection(input: AiProviderVideoExecutionContext): void {
   if (input.selection.provider !== 'comfyui' || input.selection.modelId !== COMFYUI_H3_MODEL_ID || input.selection.modelKey !== COMFYUI_H3_MODEL_KEY) throw new AppError('INVALID_PARAMS', `Unsupported ComfyUI H3 model: ${input.selection.modelKey}`, { provider: 'comfyui' })
 }
 
+function normalizedReferenceUrls(values: readonly string[] | undefined): string[] {
+  if (!values) return []
+  const urls = values.map((url) => url.trim())
+  if (urls.some((url) => !url)) {
+    throw new AppError('INVALID_PARAMS', 'ComfyUI H3 reference image URLs must be non-empty', { provider: 'comfyui' })
+  }
+  return urls
+}
+
 function buildGraph(input: AiProviderVideoExecutionContext, promptId: string) {
   requireSelection(input)
   const options = input.options ?? {}
-  if (input.imageUrl.trim()) throw new AppError('INVALID_PARAMS', 'ComfyUI H3 reference mode does not accept a first frame', { provider: 'comfyui' })
   if (options.generateAudio !== true) throw new AppError('INVALID_PARAMS', 'ComfyUI H3 requires generateAudio=true', { provider: 'comfyui' })
-  if (options.lastFrameImageUrl || options.referenceAudios?.length || options.referenceVideos?.length) throw new AppError('INVALID_PARAMS', 'ComfyUI H3 accepts only ordered reference images', { provider: 'comfyui' })
-  const referenceImageUrls = options.referenceImages?.map((url) => url.trim()).filter(Boolean) ?? []
-  if (referenceImageUrls.length === 0) throw new AppError('INVALID_PARAMS', 'ComfyUI H3 requires at least one reference image', { provider: 'comfyui' })
+  if (options.referenceAudios?.length || options.referenceVideos?.length) {
+    throw new AppError('INVALID_PARAMS', 'ComfyUI H3 does not accept reference audio or video', { provider: 'comfyui' })
+  }
+  const referenceImageUrls = normalizedReferenceUrls(options.referenceImages)
+  const firstFrameUrl = input.imageUrl.trim()
+  const lastFrameUrl = options.lastFrameImageUrl?.trim() ?? ''
+  if (options.lastFrameImageUrl !== undefined && !lastFrameUrl) {
+    throw new AppError('INVALID_PARAMS', 'ComfyUI H3 last frame URL must be non-empty', { provider: 'comfyui' })
+  }
+  const references: VideoInputReference[] = [
+    ...referenceImageUrls.map(() => ({ channel: 'image' as const, role: 'reference_image' })),
+    ...(firstFrameUrl ? [{ channel: 'image' as const, role: 'first_frame' }] : []),
+    ...(lastFrameUrl ? [{ channel: 'image' as const, role: 'last_frame' }] : []),
+  ]
+  const inputMode = resolveVideoInputMode(references).mode
+  if (inputMode === 'text_to_video') {
+    throw new AppError('INVALID_PARAMS', 'ComfyUI H3 requires explicit image input', { provider: 'comfyui' })
+  }
   const duration = options.duration
   const aspectRatio = options.aspectRatio
   if (typeof duration !== 'number' || !Number.isInteger(duration) || typeof aspectRatio !== 'string') throw new AppError('INVALID_PARAMS', 'ComfyUI H3 requires duration and aspectRatio', { provider: 'comfyui' })
@@ -104,16 +137,34 @@ function buildGraph(input: AiProviderVideoExecutionContext, promptId: string) {
   assertVideoPromptMatchesProfile({
     profile: 'minimax_h3_multimodal_v3',
     prompt,
-    inputMode: 'reference',
+    inputMode,
     durationSeconds: duration,
   })
-  return buildH3PromptGraph({
-    mode: 'reference',
+  const common = {
     prompt,
-    referenceImageUrls,
     durationSeconds: duration,
     aspectRatio: aspectRatio as H3AspectRatio,
     seed,
+  }
+  if (inputMode === 'reference') {
+    return buildH3PromptGraph({
+      ...common,
+      mode: 'reference',
+      referenceImageUrls,
+    })
+  }
+  if (inputMode === 'first_frame') {
+    return buildH3PromptGraph({
+      ...common,
+      mode: 'first_frame',
+      firstFrameUrl,
+    })
+  }
+  return buildH3PromptGraph({
+    ...common,
+    mode: 'first_last_frame',
+    firstFrameUrl,
+    lastFrameUrl,
   })
 }
 
@@ -124,7 +175,7 @@ export async function executeComfyUiH3VideoGeneration(input: AiProviderVideoExec
   try {
     target = resolveComfyUiRuntimeTarget(COMFYUI_H3_RUNTIME_TARGET_ID)
     built = buildGraph(input, promptId)
-    await preflight(target.baseUrl)
+    await preflight(target.baseUrl, built.profile)
   } catch (error) { throw preAcceptRejected(error) }
   try {
     const raw = await requestComfyUiJson(target.baseUrl, '/prompt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: built.graph, prompt_id: promptId }) })
