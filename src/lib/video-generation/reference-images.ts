@@ -1,3 +1,5 @@
+import { resolveVideoInputMode } from './input-mode'
+
 export type VideoReferenceImageRole = 'reference_image' | 'first_frame' | 'last_frame'
 
 export type VideoReferenceImageSource = 'asset' | 'upload' | 'generated'
@@ -33,22 +35,12 @@ export function normalizeVideoReferenceImages(
 ): readonly VideoReferenceImage[] {
   const result: VideoReferenceImage[] = []
   const seenReferenceUrls = new Set<string>()
-  let firstFrameSeen = false
-  let lastFrameSeen = false
 
   images.forEach((image, index) => {
     const url = typeof image.url === 'string' ? image.url.trim() : ''
     if (!url) throw new Error('VIDEO_REFERENCE_IMAGE_URL_REQUIRED')
     const role = image.role
 
-    if (role === 'first_frame') {
-      if (firstFrameSeen) throw new Error('VIDEO_REFERENCE_FIRST_FRAME_DUPLICATE')
-      firstFrameSeen = true
-    }
-    if (role === 'last_frame') {
-      if (lastFrameSeen) throw new Error('VIDEO_REFERENCE_LAST_FRAME_DUPLICATE')
-      lastFrameSeen = true
-    }
     if (role === 'reference_image') {
       if (seenReferenceUrls.has(url)) return
       seenReferenceUrls.add(url)
@@ -73,17 +65,17 @@ export function resolveProviderVideoReferencePayload(input: {
   readonly referenceImages: readonly VideoReferenceImageInput[]
 }): ProviderVideoReferencePayload {
   const references = normalizeVideoReferenceImages(input.referenceImages)
-  if (references.length === 0) {
-    return { imageUrl: '', options: {} }
-  }
+  const resolvedMode = resolveVideoInputMode(references.map((reference) => ({
+    channel: 'image' as const,
+    role: reference.role,
+  })))
 
   const firstFrame = references.find((image) => image.role === 'first_frame')
   const lastFrame = references.find((image) => image.role === 'last_frame')
   const referenceImages = references.filter((image) => image.role === 'reference_image')
 
-  if (firstFrame || lastFrame) {
-    if (!firstFrame) throw new Error('VIDEO_REFERENCE_FIRST_FRAME_REQUIRED')
-    if (referenceImages.length > 0) throw new Error('VIDEO_REFERENCE_MODE_CONFLICT')
+  if (resolvedMode.mode === 'first_frame' || resolvedMode.mode === 'first_last_frame') {
+    if (!firstFrame) throw new Error('VIDEO_MODEL_FRAME_INPUT_INVALID')
     return {
       imageUrl: firstFrame.url,
       options: {
@@ -92,8 +84,8 @@ export function resolveProviderVideoReferencePayload(input: {
     }
   }
 
-  if (referenceImages.length === 0) {
-    throw new Error('VIDEO_REFERENCE_IMAGE_REQUIRED')
+  if (resolvedMode.mode === 'text_to_video') {
+    return { imageUrl: '', options: {} }
   }
   return {
     imageUrl: '',

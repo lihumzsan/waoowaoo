@@ -11,6 +11,11 @@ import {
 import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
 import type { CapabilityValue } from '@/lib/ai-registry/types'
 import { assertVideoPromptMatchesProfile } from '@/lib/video-generation/h3-reference-prompt'
+import {
+  resolveVideoInputMode,
+  VideoInputModeError,
+  type VideoInputReference,
+} from '@/lib/video-generation/input-mode'
 import { ApiError } from '@/lib/api-errors'
 import { getAssetImageFormatPolicy } from '@/lib/asset-generation'
 import {
@@ -420,46 +425,32 @@ function validateReferenceCapabilities(input: {
 
   if (input.mediaType === 'video') {
     const capabilities = resolveBuiltinCapabilitiesByModelKey('video', input.modelKey)?.video
-    if (
-      imageReferences.some((reference) => !['first_frame', 'last_frame', 'reference_image'].includes(reference.role))
-      || audioReferences.some((reference) => reference.role !== 'reference_audio')
-      || videoReferences.some((reference) => reference.role !== 'reference_video')
-    ) {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'VIDEO_REFERENCE_ROLE_INVALID',
-        field: 'references',
-      })
+    const providerReferences = input.references.flatMap((reference): VideoInputReference[] => (
+      reference.channel === 'context'
+        ? []
+        : [{ channel: reference.channel, role: reference.role }]
+    ))
+    let resolvedMode: ReturnType<typeof resolveVideoInputMode>
+    try {
+      resolvedMode = resolveVideoInputMode(providerReferences)
+    } catch (error) {
+      if (error instanceof VideoInputModeError) {
+        throw new ApiError('INVALID_PARAMS', {
+          code: error.code,
+          field: 'references',
+        }, { cause: error })
+      }
+      throw error
     }
-    const firstFrames = imageReferences.filter((reference) => reference.role === 'first_frame')
-    const lastFrames = imageReferences.filter((reference) => reference.role === 'last_frame')
-    const referenceImages = imageReferences.filter((reference) => reference.role === 'reference_image')
-    const usesFrames = firstFrames.length > 0 || lastFrames.length > 0
-    const usesReferences = referenceImages.length > 0 || audioReferences.length > 0 || videoReferences.length > 0
-    const inputMode = usesFrames
-      ? lastFrames.length > 0 ? 'first_last_frame' : 'first_frame'
-      : usesReferences ? 'reference' : 'text_to_video'
-    if (!capabilities?.supportedInputModes?.includes(inputMode)) {
+    if (!capabilities?.supportedInputModes?.includes(resolvedMode.mode)) {
       throw new ApiError('INVALID_PARAMS', {
         code: 'VIDEO_MODEL_INPUT_MODE_UNSUPPORTED',
         field: 'references',
-        inputMode,
-      })
-    }
-    if (
-      usesFrames
-      && (
-        firstFrames.length !== 1
-        || lastFrames.length > 1
-        || usesReferences
-      )
-    ) {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'VIDEO_MODEL_FRAME_INPUT_INVALID',
-        field: 'references',
+        inputMode: resolvedMode.mode,
       })
     }
     const maxImages = capabilities?.maxReferenceImages ?? 0
-    if (referenceImages.length > maxImages) {
+    if (resolvedMode.referenceImageCount > maxImages) {
       throw new ApiError('INVALID_PARAMS', {
         code: 'VIDEO_MODEL_REFERENCE_LIMIT_EXCEEDED',
         field: 'references',
@@ -467,7 +458,7 @@ function validateReferenceCapabilities(input: {
       })
     }
     const maxAudios = capabilities?.maxReferenceAudios ?? 0
-    if (audioReferences.length > maxAudios) {
+    if (resolvedMode.referenceAudioCount > maxAudios) {
       throw new ApiError('INVALID_PARAMS', {
         code: 'VIDEO_MODEL_AUDIO_REFERENCE_LIMIT_EXCEEDED',
         field: 'references',
@@ -475,16 +466,18 @@ function validateReferenceCapabilities(input: {
       })
     }
     const maxVideos = capabilities?.maxReferenceVideos ?? 0
-    if (videoReferences.length > maxVideos) {
+    if (resolvedMode.referenceVideoCount > maxVideos) {
       throw new ApiError('INVALID_PARAMS', {
         code: 'VIDEO_MODEL_VIDEO_REFERENCE_LIMIT_EXCEEDED',
         field: 'references',
         limit: maxVideos,
       })
     }
-    const referenceFileCount = referenceImages.length + audioReferences.length + videoReferences.length
+    const referenceFileCount = resolvedMode.referenceImageCount
+      + resolvedMode.referenceAudioCount
+      + resolvedMode.referenceVideoCount
     const maxReferenceFiles = capabilities?.maxReferenceFiles ?? 0
-    if (usesReferences && referenceFileCount > maxReferenceFiles) {
+    if (resolvedMode.mode === 'reference' && referenceFileCount > maxReferenceFiles) {
       throw new ApiError('INVALID_PARAMS', {
         code: 'VIDEO_MODEL_TOTAL_REFERENCE_LIMIT_EXCEEDED',
         field: 'references',
@@ -493,9 +486,9 @@ function validateReferenceCapabilities(input: {
     }
     if (
       capabilities?.referenceAudioRequiresVisual === true
-      && audioReferences.length > 0
-      && referenceImages.length === 0
-      && videoReferences.length === 0
+      && resolvedMode.referenceAudioCount > 0
+      && resolvedMode.referenceImageCount === 0
+      && resolvedMode.referenceVideoCount === 0
     ) {
       throw new ApiError('INVALID_PARAMS', {
         code: 'VIDEO_MODEL_REFERENCE_AUDIO_REQUIRES_VISUAL',
