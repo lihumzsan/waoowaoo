@@ -61,6 +61,14 @@ describe('ComfyUI H3 dual-stage profile', () => {
     expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: false } })).toThrow()
   })
 
+  it('rejects an H3 duration above thirteen seconds at provider preflight', () => {
+    ensureAiCatalogsRegistered()
+    const selection = { provider: 'comfyui' as const, modelId: COMFYUI_H3_MODEL_ID, modelKey: `comfyui::${COMFYUI_H3_MODEL_ID}`, variantSubKind: 'official' as const }
+    const referenceImages = ['https://example.com/reference.png']
+    expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 13, aspectRatio: '9:16', generateAudio: true, referenceImages } })).toMatchObject({ duration: 13 })
+    expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 14, aspectRatio: '9:16', generateAudio: true, referenceImages } })).toThrow()
+  })
+
   it('keeps the canonical graph wired to the final output node', () => {
     const nodes = Object.values(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow)
     expect(nodes.filter((node) => node.class_type === 'easy clearCacheAll')).toHaveLength(2)
