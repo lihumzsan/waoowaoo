@@ -132,7 +132,6 @@ export type VideoInputMode =
 
 export const VIDEO_PROMPT_PROFILES = [
   'generic_v1',
-  'minimax_h3_reference_v2',
   'minimax_h3_multimodal_v3',
 ] as const
 

@@ -52,11 +52,12 @@ export const COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelType: 'video', provider: 'comfyui', modelId: COMFYUI_H3_MODEL_ID,
     capabilities: {
       video: {
-        promptProfile: 'minimax_h3_reference_v2',
-        supportedInputModes: ['reference'], supportsTextToVideo: false,
+        promptProfile: 'minimax_h3_multimodal_v3',
+        supportedInputModes: ['reference', 'first_frame', 'first_last_frame'], supportsTextToVideo: false,
         durationOptions: [...H3_DURATION_OPTIONS_SECONDS],
         generateAudioOptions: [true], supportGenerateAudio: true,
-        assetReferenceMultiReference: true, maxReferenceImages: H3_MAX_REFERENCE_IMAGES, maxReferenceFiles: H3_MAX_REFERENCE_IMAGES,
+        assetReferenceMultiReference: true, firstlastframe: true,
+        maxReferenceImages: H3_MAX_REFERENCE_IMAGES, maxReferenceFiles: H3_MAX_REFERENCE_IMAGES,
       },
     },
   },

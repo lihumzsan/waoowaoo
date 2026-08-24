@@ -102,10 +102,6 @@ export function assertVideoPromptMatchesProfile(input: {
   if (input.profile === 'generic_v1') return
   if (!input.prompt.trim()) throw invalid('PROMPT_EMPTY')
   const sections = parseSections(input.prompt)
-  if (input.profile === 'minimax_h3_reference_v2') {
-    if (input.inputMode !== 'reference') throw invalid('INPUT_MODE_UNSUPPORTED')
-    return
-  }
   if (input.profile !== 'minimax_h3_multimodal_v3') throw invalid('PROFILE_UNKNOWN')
   assertH3InputMode(input.inputMode, input.durationSeconds, sections)
 }

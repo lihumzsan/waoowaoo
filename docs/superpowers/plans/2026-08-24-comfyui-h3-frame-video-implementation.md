@@ -164,7 +164,7 @@ git commit -m "feat(video): define H3 multimodal prompt contract"
 
 **Files:**
 
-- Modify: `src/lib/ai-providers/models.ts`
+- Modify: `src/lib/ai-providers/comfyui/models.ts`
 - Modify: `src/lib/ai-providers/comfyui/adapter.ts`
 - Modify: `src/lib/operations/domains/workspace-resource/generation-ops.ts`
 - Modify: `tests/contracts/comfyui-h3-profile-conformance.test.ts`
@@ -214,7 +214,7 @@ git diff --check
 - [ ] Commit:
 
 ```powershell
-git add src/lib/ai-providers/models.ts src/lib/ai-providers/comfyui/adapter.ts src/lib/operations/domains/workspace-resource/generation-ops.ts tests/contracts/comfyui-h3-profile-conformance.test.ts tests/integration/task/project-video-model-config.integration.test.ts
+git add src/lib/ai-providers/comfyui/models.ts src/lib/ai-providers/comfyui/adapter.ts src/lib/operations/domains/workspace-resource/generation-ops.ts tests/contracts/comfyui-h3-profile-conformance.test.ts tests/integration/task/project-video-model-config.integration.test.ts
 git commit -m "feat(video): expose H3 frame input modes"
 ```
 
