@@ -17,6 +17,7 @@ import {
 } from '@/lib/http/body-limits'
 import { detectMimeFromBuffer } from '@/lib/media/outbound-image'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
+import { readStoredImageFacts } from '@/lib/media/stored-image-facts'
 import { defineOperation } from '@/lib/operations/define-operation'
 import {
   requireProjectAgentOperationRequest,
@@ -25,6 +26,7 @@ import {
 import { prisma } from '@/lib/prisma'
 import { buildProjectAssistantAttachmentToken } from '@/lib/project-agent/media-attachments/attachment-token'
 import { deleteObject, uploadObject } from '@/lib/storage'
+import { StorageObjectSizeExceededError } from '@/lib/storage/errors'
 
 type UploadFileLike = {
   name: string
@@ -194,7 +196,7 @@ export function createMediaUploadApiOperations(): ProjectAgentOperationRegistryD
                   select: {
                     publicId: true,
                     sha256: true,
-                    mimeType: true,
+                    storageKey: true,
                   },
                 },
               },
@@ -220,8 +222,26 @@ export function createMediaUploadApiOperations(): ProjectAgentOperationRegistryD
             message: 'only ready image Resources with stored media can be attached to the assistant',
           })
         }
-        const accepted = resolveUserUploadAcceptedMedia(current.media.mimeType)
-        if (!accepted || accepted.mediaType !== 'image' || !current.media.sha256) {
+        let storedImage: Awaited<ReturnType<typeof readStoredImageFacts>>
+        try {
+          storedImage = await readStoredImageFacts(current.media.storageKey)
+        } catch (error) {
+          if (!(error instanceof StorageObjectSizeExceededError)) throw error
+          throw new ApiError('INVALID_PARAMS', {
+            code: 'RESOURCE_ATTACHMENT_MEDIA_UNSUPPORTED',
+            field: 'resourceId',
+            message: 'the stored media cannot enter the bounded attachment protocol',
+          }, { cause: error })
+        }
+        const accepted = resolveUserUploadAcceptedMedia(storedImage.mimeType)
+        if (
+          !accepted
+          || accepted.mediaType !== 'image'
+          || (
+            current.media.sha256 !== null
+            && current.media.sha256.toLowerCase() !== storedImage.sha256
+          )
+        ) {
           throw new ApiError('INVALID_PARAMS', {
             code: 'RESOURCE_ATTACHMENT_MEDIA_UNSUPPORTED',
             field: 'resourceId',
@@ -238,7 +258,7 @@ export function createMediaUploadApiOperations(): ProjectAgentOperationRegistryD
           mediaType: 'image',
           fileName: `${name.slice(0, 190)}.${accepted.extension}`,
           name,
-          sha256: current.media.sha256.toLowerCase(),
+          sha256: storedImage.sha256,
         })
         return uploadMediaOutputSchema.parse({
           success: true,

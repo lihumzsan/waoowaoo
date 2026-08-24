@@ -4,6 +4,8 @@ import {
 } from '@/lib/workspace-resource/generation-contract'
 import { resolveOwnedImageUrlForGeneration } from '@/lib/media/outbound-image'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
+import { readStoredImageFacts } from '@/lib/media/stored-image-facts'
+import { resolveUserUploadAcceptedMedia } from '@/lib/workspace-resource/upload-contract'
 import { resolveWorkspaceResourceInputMedia } from '@/lib/workspace-resource/input-media'
 import { reportTaskProgress } from '../progress'
 import type { TaskExecutionContext } from '../context'
@@ -88,7 +90,16 @@ export async function handleWorkspaceResourceImageTask(
     taskId: data.taskId,
     artifact: `workspace-resource:${payload.resource.resourceId}`,
   })
-  const media = await ensureMediaObjectFromStorageKey(storageKey)
+  const storedImage = await readStoredImageFacts(storageKey)
+  const accepted = resolveUserUploadAcceptedMedia(storedImage.mimeType)
+  if (!accepted || accepted.mediaType !== 'image') {
+    throw new Error(`WORKSPACE_RESOURCE_IMAGE_FORMAT_UNSUPPORTED:${storageKey}`)
+  }
+  const media = await ensureMediaObjectFromStorageKey(storageKey, {
+    sha256: storedImage.sha256,
+    mimeType: accepted.mimeType,
+    sizeBytes: storedImage.sizeBytes,
+  })
   return {
     mediaId: media.id,
     imageUrl: media.url,

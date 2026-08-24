@@ -97,20 +97,19 @@ export async function ensureMediaObjectFromStorageKey(
 ): Promise<MediaRef> {
   const storageKey = normalizeStorageKey(rawStorageKey)
   const mediaModel = mediaModelFor(client)
-
-  const existing = (await mediaModel.findUnique({ where: { storageKey } })) as MediaObjectRow | null
-  if (existing != null) {
-    return mapMediaObjectToRef(existing)
+  const hasExplicitMetadata = metadata !== undefined
+    && Object.values(metadata).some((value) => value !== null && value !== undefined)
+  if (!hasExplicitMetadata) {
+    const existing = (await mediaModel.findUnique({ where: { storageKey } })) as MediaObjectRow | null
+    if (existing != null) return mapMediaObjectToRef(existing)
   }
-
   const publicId = stablePublicIdFromStorageKey(storageKey)
   try {
     const created = (await mediaModel.upsert({
-      where: { publicId },
+      where: { storageKey },
       update: {
-        storageKey,
         sha256: metadata?.sha256 ?? undefined,
-        mimeType: metadata?.mimeType ?? guessMimeTypeFromStorageKey(storageKey),
+        mimeType: metadata?.mimeType ?? undefined,
         sizeBytes: metadata?.sizeBytes == null ? undefined : BigInt(metadata.sizeBytes),
         width: metadata?.width ?? undefined,
         height: metadata?.height ?? undefined,
@@ -134,8 +133,7 @@ export async function ensureMediaObjectFromStorageKey(
     // created/updated the row.  Re-fetch instead of crashing.
     const code = (error as { code?: string })?.code
     if (code === 'P2002') {
-      const fallback = (await mediaModel.findUnique({ where: { publicId } })) as MediaObjectRow | null
-        ?? (await mediaModel.findUnique({ where: { storageKey } })) as MediaObjectRow | null
+      const fallback = (await mediaModel.findUnique({ where: { storageKey } })) as MediaObjectRow | null
       if (fallback) return mapMediaObjectToRef(fallback)
     }
     throw error

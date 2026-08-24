@@ -1,9 +1,6 @@
-import { createHash } from 'node:crypto'
 import type { Prisma } from '@prisma/client'
-import { MAX_IMAGE_BYTES } from '@/lib/http/body-limits'
-import { detectMimeFromBuffer } from '@/lib/media/media-mime'
+import { readStoredImageFacts } from '@/lib/media/stored-image-facts'
 import { prisma } from '@/lib/prisma'
-import { getObjectBuffer } from '@/lib/storage'
 import { StorageObjectSizeExceededError } from '@/lib/storage/errors'
 import { resolveUserUploadAcceptedMedia } from '@/lib/workspace-resource/upload-contract'
 import {
@@ -37,9 +34,9 @@ export async function resolveProjectAssistantImageAttachmentDataUrl(input: {
       `PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MEDIA_TYPE_INVALID:${registration.payload.publicId}`,
     )
   }
-  let bytes: Buffer
+  let storedImage: Awaited<ReturnType<typeof readStoredImageFacts>>
   try {
-    bytes = await getObjectBuffer(registration.media.storageKey, { maxBytes: MAX_IMAGE_BYTES })
+    storedImage = await readStoredImageFacts(registration.media.storageKey)
   } catch (error) {
     if (error instanceof StorageObjectSizeExceededError) {
       throw new Error(
@@ -49,20 +46,18 @@ export async function resolveProjectAssistantImageAttachmentDataUrl(input: {
     }
     throw error
   }
-  const mimeType = detectMimeFromBuffer(bytes)
-  const accepted = resolveUserUploadAcceptedMedia(mimeType)
+  const accepted = resolveUserUploadAcceptedMedia(storedImage.mimeType)
   if (!accepted || accepted.mediaType !== 'image') {
     throw new Error(
       `PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MEDIA_TYPE_INVALID:${registration.payload.publicId}`,
     )
   }
-  const sha256 = createHash('sha256').update(bytes).digest('hex')
-  if (sha256 !== registration.payload.sha256) {
+  if (storedImage.sha256 !== registration.payload.sha256) {
     throw new Error(
       `PROJECT_ASSISTANT_MEDIA_ATTACHMENT_CONTENT_MISMATCH:${registration.payload.publicId}`,
     )
   }
-  return `data:${accepted.mimeType};base64,${bytes.toString('base64')}`
+  return `data:${accepted.mimeType};base64,${storedImage.bytes.toString('base64')}`
 }
 
 /**
