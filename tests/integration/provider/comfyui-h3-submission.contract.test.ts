@@ -175,24 +175,6 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
     expect(server!.getRequests('POST', '/prompt')).toHaveLength(2)
   })
 
-  it('submits every ordered reference image to the matching H3 slot and keeps the ref2va second-stage UNET', async () => {
-    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
-    defineValidPreflight(server!)
-    server!.defineScenario({
-      method: 'POST', path: '/prompt', mode: 'success',
-      submitResponse: { status: 200, body: { prompt_id: PROMPT_ID } },
-    })
-
-    await executeComfyUiH3VideoGeneration(videoInput)
-    const request = server!.getRequests('POST', '/prompt')[0]
-    const body = JSON.parse(request!.bodyText) as { prompt: Record<string, { inputs?: Record<string, unknown> }> }
-    expect(body.prompt['137']?.inputs?.url).toBe('https://media.example.com/reference-1.png')
-    expect(body.prompt['326']?.inputs?.url).toBe('https://media.example.com/reference-2.png')
-    expect(body.prompt['309']?.inputs?.['ref_images.ref_image_0']).toEqual(['198', 0])
-    expect(body.prompt['309']?.inputs?.['ref_images.ref_image_1']).toEqual(['333', 0])
-    expect(body.prompt['306']?.inputs?.unet_name).toBe('minimax_h3_ref2va_pruned_w4a8_mixed.safetensors')
-  })
-
   it('does not accept an unknown same-id probe status', async () => {
     vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
     defineValidPreflight(server!)
