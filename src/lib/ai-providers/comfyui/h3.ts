@@ -8,7 +8,7 @@ import { assertVideoPromptMatchesProfile } from '@/lib/video-generation/h3-promp
 import { resolveComfyUiRuntimeTarget } from './config'
 import { formatComfyUiExternalId } from './external-id'
 import { COMFYUI_H3_MODEL_ID } from './models'
-import { H3_DUAL_STAGE_RUNTIME_PROFILE, buildH3DualStagePromptGraph, type H3AspectRatio } from './profiles'
+import { H3_DUAL_STAGE_RUNTIME_PROFILE, buildH3PromptGraph, type H3AspectRatio } from './profiles'
 import {
   asComfyUiRecord,
   COMFYUI_ACCEPTED_JOB_STATUSES,
@@ -107,7 +107,14 @@ function buildGraph(input: AiProviderVideoExecutionContext, promptId: string) {
     inputMode: 'reference',
     durationSeconds: duration,
   })
-  return buildH3DualStagePromptGraph({ prompt, referenceImageUrls, durationSeconds: duration, aspectRatio: aspectRatio as H3AspectRatio, seed })
+  return buildH3PromptGraph({
+    mode: 'reference',
+    prompt,
+    referenceImageUrls,
+    durationSeconds: duration,
+    aspectRatio: aspectRatio as H3AspectRatio,
+    seed,
+  })
 }
 
 export async function executeComfyUiH3VideoGeneration(input: AiProviderVideoExecutionContext): Promise<GenerateResult> {
@@ -122,12 +129,12 @@ export async function executeComfyUiH3VideoGeneration(input: AiProviderVideoExec
   try {
     const raw = await requestComfyUiJson(target.baseUrl, '/prompt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: built.graph, prompt_id: promptId }) })
     if (readComfyUiString(asComfyUiRecord(raw)?.prompt_id) !== promptId) throw new Error('COMFYUI_PROMPT_ID_MISMATCH')
-    return { success: true, async: true, requestId: promptId, externalId: formatComfyUiExternalId({ targetId: COMFYUI_H3_RUNTIME_TARGET_ID, type: 'VIDEO', requestId: promptId }), endpoint: H3_DUAL_STAGE_RUNTIME_PROFILE.id }
+    return { success: true, async: true, requestId: promptId, externalId: formatComfyUiExternalId({ targetId: COMFYUI_H3_RUNTIME_TARGET_ID, type: 'VIDEO', requestId: promptId }), endpoint: COMFYUI_H3_RUNTIME_TARGET_ID }
   } catch (error) {
     if (error instanceof ComfyUiHttpError && error.status === 400) throw promptRejection(error)
     try {
       const probe = asComfyUiRecord(await requestComfyUiJson(target.baseUrl, `/api/jobs/${encodeURIComponent(promptId)}`))
-      if (COMFYUI_ACCEPTED_JOB_STATUSES.has(readComfyUiString(probe?.status))) return { success: true, async: true, requestId: promptId, externalId: formatComfyUiExternalId({ targetId: COMFYUI_H3_RUNTIME_TARGET_ID, type: 'VIDEO', requestId: promptId }), endpoint: H3_DUAL_STAGE_RUNTIME_PROFILE.id }
+      if (COMFYUI_ACCEPTED_JOB_STATUSES.has(readComfyUiString(probe?.status))) return { success: true, async: true, requestId: promptId, externalId: formatComfyUiExternalId({ targetId: COMFYUI_H3_RUNTIME_TARGET_ID, type: 'VIDEO', requestId: promptId }), endpoint: COMFYUI_H3_RUNTIME_TARGET_ID }
       } catch { /* preserve accepted/unknown boundary */ }
       throw new Error(`COMFYUI_SUBMIT_OUTCOME_UNKNOWN:${error instanceof Error ? error.message : String(error)}`, { cause: error })
   }
