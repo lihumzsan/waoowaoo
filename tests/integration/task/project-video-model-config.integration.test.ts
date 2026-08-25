@@ -97,14 +97,16 @@ async function configureCustomVideoModel(userId: string) {
 async function seedReadyImage(input: {
   userId: string
   projectId: string
+  label?: string
 }): Promise<{ resourceId: string; contentVersion: number }> {
+  const label = input.label ?? 'source'
   const resourceId = buildWorkspaceResourceId({
     operationId: 'project_video_model_config_source',
-    requestId: input.projectId,
+    requestId: `${input.projectId}:${label}`,
     memberIndex: 0,
   })
   const media = await ensureMediaObjectFromStorageKey(
-    `tests/project-video-model-config/${input.projectId}.png`,
+    `tests/project-video-model-config/${input.projectId}-${label}.png`,
     {
       mimeType: 'image/png',
       sizeBytes: 1,
@@ -143,6 +145,31 @@ async function seedReadyImage(input: {
       },
     })
   })
+}
+
+function h3Prompt(inputMode: 'reference' | 'first_frame' | 'first_last_frame', durationSeconds: number): string {
+  const detailedDescription = inputMode === 'reference'
+    ? 'At 0.00 seconds she turns toward the doorway and settles facing it.'
+    : inputMode === 'first_frame'
+      ? 'At 0.00 seconds, <Picture 1> is the exact opening frame; she turns toward the doorway.'
+      : `At 0.00 seconds, <Picture 1> is the exact opening frame; at ${String(durationSeconds)}.00 seconds she settles exactly into <Picture 2>.`
+  return `subject_definitions:
+<Subject 1> is the woman represented by the supplied picture inputs.
+
+summary:
+She turns toward the doorway.
+
+retention_analysis:
+Preserve her identity, clothing, and room layout.
+
+detailed_description:
+${detailedDescription}
+
+overall_soundscape:
+Soft room tone and fabric movement.
+
+non_diegetic_music:
+N/A`
 }
 
 function videoOptions(value: unknown): Array<{ value: string }> {
@@ -338,6 +365,92 @@ describe('project local video model configuration', () => {
         field: 'video',
         reason: expect.stringMatching(/^CAPABILITY_VALUE_NOT_ALLOWED:/),
       }),
+    })
+  })
+
+  it('plans all three H3 image input modes and rejects invalid frame combinations', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const first = await seedReadyImage({ userId: user.id, projectId: project.id, label: 'first' })
+    const second = await seedReadyImage({ userId: user.id, projectId: project.id, label: 'second' })
+    await prisma.project.update({
+      where: { id: project.id },
+      data: {
+        videoModel: COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
+        videoRatio: '9:16',
+      },
+    })
+    const operation = createProjectAgentOperationRegistryForApi().create_video
+    const plan = async (input: {
+      readonly itemId: string
+      readonly inputMode: 'reference' | 'first_frame' | 'first_last_frame'
+      readonly references: readonly {
+        readonly resourceId: string
+        readonly contentVersion: number
+        readonly role: 'reference_image' | 'first_frame' | 'last_frame'
+        readonly channel: 'image'
+      }[]
+    }) => {
+      const parsed = operation.inputSchema.safeParse({
+        request: {
+          kind: 'new',
+          items: [{
+            itemId: input.itemId,
+            name: `H3 ${input.inputMode}`,
+            mediaType: 'video',
+            schemaId: WORKSPACE_RESOURCE_SCHEMA.VIDEO_SEGMENT,
+            prompt: h3Prompt(input.inputMode, 4),
+            references: input.references,
+            durationSeconds: 4,
+            vocalPerformanceMode: 'silent_no_lip',
+            count: 1,
+          }],
+        },
+      })
+      expect(parsed.success).toBe(true)
+      if (!parsed.success) throw new Error('create_video mode input must be valid')
+      return await planOperation({
+        operation,
+        ctx: operationContext(user.id, project.id),
+        input: parsed.data,
+      })
+    }
+
+    await expect(plan({
+      itemId: 'reference',
+      inputMode: 'reference',
+      references: [{ ...first, role: 'reference_image', channel: 'image' }],
+    })).resolves.toBeDefined()
+    await expect(plan({
+      itemId: 'first-frame',
+      inputMode: 'first_frame',
+      references: [{ ...first, role: 'first_frame', channel: 'image' }],
+    })).resolves.toBeDefined()
+    await expect(plan({
+      itemId: 'first-last-frame',
+      inputMode: 'first_last_frame',
+      references: [
+        { ...first, role: 'first_frame', channel: 'image' },
+        { ...second, role: 'last_frame', channel: 'image' },
+      ],
+    })).resolves.toBeDefined()
+
+    await expect(plan({
+      itemId: 'last-only',
+      inputMode: 'first_last_frame',
+      references: [{ ...second, role: 'last_frame', channel: 'image' }],
+    })).rejects.toMatchObject({
+      details: expect.objectContaining({ code: 'VIDEO_MODEL_FRAME_INPUT_INVALID' }),
+    })
+    await expect(plan({
+      itemId: 'mixed',
+      inputMode: 'first_frame',
+      references: [
+        { ...first, role: 'first_frame', channel: 'image' },
+        { ...second, role: 'reference_image', channel: 'image' },
+      ],
+    })).rejects.toMatchObject({
+      details: expect.objectContaining({ code: 'VIDEO_REFERENCE_MODE_CONFLICT' }),
     })
   })
 

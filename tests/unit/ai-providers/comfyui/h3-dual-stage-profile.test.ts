@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   H3_DUAL_STAGE_RUNTIME_PROFILE,
-  buildH3DualStagePromptGraph,
+  buildH3PromptGraph,
   resolveH3Dimensions,
   resolveH3DurationFrames,
   resolveH3EffectiveDurationSeconds,
@@ -38,14 +38,16 @@ describe('MiniMax H3 dual-stage profile', () => {
   })
 
   it('binds ordered reference URLs, prompt, one-stage length, and both output sizes without mutating the profile', () => {
-    const first = buildH3DualStagePromptGraph({
+    const first = buildH3PromptGraph({
+      mode: 'reference',
       prompt: 'subject_definitions:\nSubject 1 is in Picture 1.',
       referenceImageUrls: ['https://example.test/reference-1.png', 'https://example.test/reference-2.png'],
       durationSeconds: 4,
       aspectRatio: '16:9',
       seed: 7,
     })
-    const second = buildH3DualStagePromptGraph({
+    const second = buildH3PromptGraph({
+      mode: 'reference',
       prompt: 'subject_definitions:\nSubject 1 is in Picture 1.',
       referenceImageUrls: ['https://example.test/reference-3.png'],
       durationSeconds: 13,

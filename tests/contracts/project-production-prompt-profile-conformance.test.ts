@@ -25,7 +25,12 @@ describe('project production prompt profile context', () => {
       capabilityOverrides: {},
     }
     const capabilities = resolveProjectProductionCapabilities(config)
-    expect(capabilities.video?.promptProfile).toBe('minimax_h3_reference_v2')
+    expect(capabilities.video?.promptProfile).toBe('minimax_h3_multimodal_v3')
+    expect(capabilities.video?.supportedInputModes).toEqual([
+      'reference',
+      'first_frame',
+      'first_last_frame',
+    ])
 
     const context: ProjectProductionContext = {
       schemaVersion: 8,
@@ -45,7 +50,7 @@ describe('project production prompt profile context', () => {
     }
 
     expect(buildAssistantRuntimeTurnContext('zh', context)).toContain(
-      '"promptProfile": "minimax_h3_reference_v2"',
+      '"promptProfile": "minimax_h3_multimodal_v3"',
     )
     expect(capabilities.video?.minSegmentDurationSeconds).toBe(4)
     expect(capabilities.video?.maxSegmentDurationSeconds).toBe(13)

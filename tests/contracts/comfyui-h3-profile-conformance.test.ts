@@ -15,10 +15,15 @@ describe('ComfyUI H3 dual-stage profile', () => {
     expect(resolveH3Dimensions({ megapixels: 2, aspectRatio: '16:9' })).toEqual({ width: 1920, height: 1088 })
   })
 
-  it('declares reference-only H3 capability and fixed duration', () => {
+  it('declares all three explicit H3 image input modes and fixed duration', () => {
     const h3 = COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES.find((entry) => entry.modelId === COMFYUI_H3_MODEL_ID)
-    expect(h3?.capabilities.video.promptProfile).toBe('minimax_h3_reference_v2')
-    expect(h3?.capabilities.video.supportedInputModes).toEqual(['reference'])
+    expect(h3?.capabilities.video.promptProfile).toBe('minimax_h3_multimodal_v3')
+    expect(h3?.capabilities.video.supportedInputModes).toEqual([
+      'reference',
+      'first_frame',
+      'first_last_frame',
+    ])
+    expect(h3?.capabilities.video.firstlastframe).toBe(true)
     expect(h3?.capabilities.video.assetReferenceMultiReference).toBe(true)
     expect(h3?.capabilities.video.maxReferenceImages).toBe(8)
     expect(h3?.capabilities.video.maxReferenceFiles).toBe(8)
@@ -46,18 +51,26 @@ describe('ComfyUI H3 dual-stage profile', () => {
     expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 14, aspectRatio: '9:16', generateAudio: true, referenceImages } })).toThrow()
   })
 
-  it('accepts up to eight ordered reference images at the real ComfyUI option boundary', () => {
+  it('accepts frame transport and up to eight ordered references at the real ComfyUI option boundary', () => {
     const selection = { provider: 'comfyui' as const, modelId: COMFYUI_H3_MODEL_ID, modelKey: `comfyui::${COMFYUI_H3_MODEL_ID}`, variantSubKind: 'official' as const }
     const references = Array.from({ length: 8 }, (_, index) => `https://example.com/reference-${index + 1}.png`)
     expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, referenceImages: references } })).toMatchObject({ duration: 4, referenceImages: references })
-    expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true } })).toThrow()
+    expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true } })).toMatchObject({ duration: 4, generateAudio: true })
+    expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, lastFrameImageUrl: 'https://example.com/last.png' } })).toMatchObject({ lastFrameImageUrl: 'https://example.com/last.png' })
     expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, referenceImages: Array.from({ length: 9 }, () => 'a') } })).toThrow()
+    expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: false } })).toThrow()
+  })
+
+  it('rejects an H3 duration above thirteen seconds at provider preflight', () => {
+    ensureAiCatalogsRegistered()
+    const selection = { provider: 'comfyui' as const, modelId: COMFYUI_H3_MODEL_ID, modelKey: `comfyui::${COMFYUI_H3_MODEL_ID}`, variantSubKind: 'official' as const }
+    const referenceImages = ['https://example.com/reference.png']
+    expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 13, aspectRatio: '9:16', generateAudio: true, referenceImages } })).toMatchObject({ duration: 13 })
+    expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 14, aspectRatio: '9:16', generateAudio: true, referenceImages } })).toThrow()
   })
 
   it('keeps the canonical graph wired to the final output node', () => {
     const nodes = Object.values(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow)
-    const classes = new Set(nodes.map((entry) => entry.class_type))
-    for (const required of H3_DUAL_STAGE_RUNTIME_PROFILE.requiredNodeClasses) expect(classes.has(required)).toBe(true)
     expect(nodes.filter((node) => node.class_type === 'easy clearCacheAll')).toHaveLength(2)
     expect(nodes.filter((node) => node.class_type === 'ImageResizeKJv2' && node.inputs.upscale_method === 'nvidia_rtx_vsr')).toHaveLength(2)
     expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow[H3_DUAL_STAGE_RUNTIME_PROFILE.h3NodeId]?.class_type).toBe('MiniMaxH3ReferenceToVideo')

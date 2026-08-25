@@ -1,6 +1,6 @@
 import type { AiProviderAdapter } from '@/lib/ai-providers/runtime-types'
 import { describeMediaVariantBase } from '@/lib/ai-providers/shared/media-adapter'
-import { buildMediaOptionSchema, booleanValidator, enumValidator, integerRangeValidator, stringArrayValidator } from '@/lib/ai-providers/shared/option-schema'
+import { buildMediaOptionSchema, booleanValidator, enumValidator, integerRangeValidator, nonEmptyStringValidator, stringArrayValidator } from '@/lib/ai-providers/shared/option-schema'
 import { ACE_STEP_MIN_PROVIDER_DURATION_SECONDS, executeComfyUiAceStepMusicGeneration } from './ace-step'
 import {
   COMFYUI_ACE_STEP_1_5_MODEL_ID,
@@ -61,9 +61,9 @@ export const comfyuiAdapter: AiProviderAdapter = {
       selection,
       executionMode: 'async',
       optionSchema: buildMediaOptionSchema('video', {
-        allowedKeys: ['referenceImages'],
+        allowedKeys: ['referenceImages', 'lastFrameImageUrl'],
         required: ['duration', 'aspectRatio', 'generateAudio'],
-        excludedKeys: ['resolution', 'lastFrameImageUrl', 'referenceAudios', 'referenceVideos', 'size', 'promptExtend', 'serviceTier', 'executionExpiresAfter', 'returnLastFrame', 'draft', 'seed', 'cameraFixed', 'watermark'],
+        excludedKeys: ['resolution', 'referenceAudios', 'referenceVideos', 'size', 'promptExtend', 'serviceTier', 'executionExpiresAfter', 'returnLastFrame', 'draft', 'seed', 'cameraFixed', 'watermark'],
         validators: {
           duration: integerRangeValidator({
             min: H3_DURATION_MIN_SECONDS,
@@ -72,14 +72,13 @@ export const comfyuiAdapter: AiProviderAdapter = {
           aspectRatio: enumValidator(H3_ASPECT_RATIOS),
           generateAudio: booleanValidator(),
           referenceImages: stringArrayValidator({ maxLength: H3_MAX_REFERENCE_IMAGES }),
+          lastFrameImageUrl: nonEmptyStringValidator(),
         },
         objectValidators: [() => selection.modelId === COMFYUI_H3_MODEL_ID
           ? { ok: true }
           : { ok: false, reason: 'unsupported_model' },
         (options) => options.generateAudio === true
-          ? Array.isArray(options.referenceImages) && options.referenceImages.length >= 1 && options.referenceImages.length <= H3_MAX_REFERENCE_IMAGES
-            ? { ok: true }
-            : { ok: false, reason: 'reference_image_required' }
+          ? { ok: true }
           : { ok: false, reason: 'generate_audio_required' }],
       }),
     }),

@@ -3,7 +3,10 @@ import { readFile, rm } from 'node:fs/promises'
 import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
 import { cancelComfyUiH3Video, executeComfyUiH3VideoGeneration, pollComfyUiH3Video } from '@/lib/ai-providers/comfyui/h3'
 import { COMFYUI_H3_MODEL_ID } from '@/lib/ai-providers/comfyui/models'
-import { H3_DUAL_STAGE_RUNTIME_PROFILE } from '@/lib/ai-providers/comfyui/profiles'
+import {
+  H3_DUAL_STAGE_RUNTIME_PROFILE,
+  H3_FRAME_DUAL_STAGE_RUNTIME_PROFILE,
+} from '@/lib/ai-providers/comfyui/profiles'
 import type { AiProviderVideoExecutionContext } from '@/lib/ai-providers/runtime-types'
 import { startScenarioServer } from '../../helpers/fakes/scenario-server'
 
@@ -27,9 +30,38 @@ const videoInput: AiProviderVideoExecutionContext = {
   },
 }
 
+const firstFrameInput: AiProviderVideoExecutionContext = {
+  ...videoInput,
+  imageUrl: 'https://media.example.com/first.png',
+  options: {
+    ...videoInput.options,
+    prompt: videoInput.options!.prompt!.replace(
+      'At 0.00 seconds the subject moves and settles.',
+      'At 0.00 seconds, <Picture 1> is the exact opening frame; the subject moves and settles.',
+    ),
+    referenceImages: undefined,
+  },
+}
+
+const firstLastFrameInput: AiProviderVideoExecutionContext = {
+  ...firstFrameInput,
+  options: {
+    ...firstFrameInput.options,
+    prompt: firstFrameInput.options!.prompt!.replace(
+      'the subject moves and settles.',
+      'the subject moves and at 10.00 seconds settles exactly into <Picture 2>.',
+    ),
+    lastFrameImageUrl: 'https://media.example.com/last.png',
+  },
+}
+
 function objectInfo(className: string): Record<string, unknown> {
   const required: Record<string, unknown> = {}
-  if (className === 'UNETLoader') required.unet_name = [['h3\\minimax_h3_ref2va_int8_convrot.safetensors', 'minimax_h3_ref2va_pruned_w4a8_mixed.safetensors']]
+  if (className === 'UNETLoader') required.unet_name = [[
+    'h3\\minimax_h3_ref2va_pruned_int8_convrot.safetensors',
+    'h3\\minimax_h3_fl2va_int8_convrot.safetensors',
+    'h3\\minimax_h3_fl2va_pruned_int8_convrot.safetensors',
+  ]]
   if (className === 'CLIPLoader') required.clip_name = [['h3\\qwen3vl_32b_minimax_h3_int8_convrot.safetensors']]
   if (className === 'LoraLoaderModelOnly') required.lora_name = [['h3\\minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors']]
   if (className === 'VAELoader') required.vae_name = [['h3\\minimax_h3_video_vae_int8_convrot.safetensors', 'h3\\minimax_h3_audio_vae_fp32.safetensors']]
@@ -39,7 +71,11 @@ function objectInfo(className: string): Record<string, unknown> {
 }
 
 function defineValidPreflight(server: Awaited<ReturnType<typeof startScenarioServer>>) {
-  for (const className of H3_DUAL_STAGE_RUNTIME_PROFILE.requiredNodeClasses) {
+  const classes = new Set([
+    ...Object.values(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow).map((node) => node.class_type),
+    ...Object.values(H3_FRAME_DUAL_STAGE_RUNTIME_PROFILE.workflow).map((node) => node.class_type),
+  ])
+  for (const className of classes) {
     server.defineScenario({
       method: 'GET',
       path: `/object_info/${encodeURIComponent(className)}`,
@@ -173,6 +209,101 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
     expect(server!.getRequests('GET', '/object_info/UNETLoader')).toHaveLength(1)
     expect(server!.getRequests('GET', '/object_info/CLIPLoader')).toHaveLength(1)
     expect(server!.getRequests('POST', '/prompt')).toHaveLength(2)
+  })
+
+  it('submits every ordered reference image to the matching H3 slot without changing the frozen reference graph', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    server!.defineScenario({
+      method: 'POST', path: '/prompt', mode: 'success',
+      submitResponse: { status: 200, body: { prompt_id: PROMPT_ID } },
+    })
+
+    await executeComfyUiH3VideoGeneration(videoInput)
+    const request = server!.getRequests('POST', '/prompt')[0]
+    const body = JSON.parse(request!.bodyText) as { prompt: Record<string, { inputs?: Record<string, unknown> }> }
+    expect(body.prompt['137']?.inputs?.url).toBe('https://media.example.com/reference-1.png')
+    expect(body.prompt['326']?.inputs?.url).toBe('https://media.example.com/reference-2.png')
+    expect(body.prompt['309']?.inputs?.['ref_images.ref_image_0']).toEqual(['198', 0])
+    expect(body.prompt['309']?.inputs?.['ref_images.ref_image_1']).toEqual(['333', 0])
+  })
+
+  it('routes first-frame and first-last-frame transport through the same frame profile', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    server!.defineScenario({
+      method: 'POST', path: '/prompt', mode: 'success',
+      submitResponse: { status: 200, body: { prompt_id: PROMPT_ID } },
+    })
+
+    const referenceResult = await executeComfyUiH3VideoGeneration(videoInput)
+    const firstResult = await executeComfyUiH3VideoGeneration(firstFrameInput)
+    const firstLastResult = await executeComfyUiH3VideoGeneration(firstLastFrameInput)
+    expect(referenceResult.endpoint).toBe('h3-dual-stage-2mp')
+    expect(firstResult.endpoint).toBe('h3-dual-stage-2mp')
+    expect(firstLastResult.endpoint).toBe('h3-dual-stage-2mp')
+
+    const requests = server!.getRequests('POST', '/prompt')
+    const referenceGraph = JSON.parse(requests[0]!.bodyText).prompt as Record<string, { class_type: string; inputs: Record<string, unknown> }>
+    const firstGraph = JSON.parse(requests[1]!.bodyText).prompt as Record<string, { class_type: string; inputs: Record<string, unknown> }>
+    const firstLastGraph = JSON.parse(requests[2]!.bodyText).prompt as Record<string, { class_type: string; inputs: Record<string, unknown> }>
+    expect(referenceGraph['309']?.class_type).toBe('MiniMaxH3ReferenceToVideo')
+    expect(firstGraph['309']?.class_type).toBe('MiniMaxH3ImageToVideo')
+    expect(firstGraph['137']?.inputs.url).toBe('https://media.example.com/first.png')
+    expect(firstGraph['309']?.inputs.first_frame).toEqual(['198', 0])
+    expect(firstGraph['309']?.inputs.last_frame).toBeUndefined()
+    expect(firstGraph['326']).toBeUndefined()
+    expect(firstGraph['327']).toBeUndefined()
+    expect(firstLastGraph['309']?.class_type).toBe('MiniMaxH3ImageToVideo')
+    expect(firstLastGraph['326']?.inputs.url).toBe('https://media.example.com/last.png')
+    expect(firstLastGraph['309']?.inputs.last_frame).toEqual(['327', 0])
+  })
+
+  it('keys the preflight cache by the selected frozen profile fingerprint', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    server!.defineScenario({
+      method: 'POST', path: '/prompt', mode: 'success',
+      submitResponse: { status: 200, body: { prompt_id: PROMPT_ID } },
+    })
+
+    await executeComfyUiH3VideoGeneration(videoInput)
+    await executeComfyUiH3VideoGeneration(firstFrameInput)
+
+    expect(server!.getRequests('GET', '/object_info/UNETLoader')).toHaveLength(2)
+    expect(server!.getRequests('GET', '/object_info/MiniMaxH3ReferenceToVideo')).toHaveLength(1)
+    expect(server!.getRequests('GET', '/object_info/MiniMaxH3ImageToVideo')).toHaveLength(1)
+  })
+
+  it('rejects invalid mixed, last-only, audio, and video references before prompt submission', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    const invalidInputs: AiProviderVideoExecutionContext[] = [
+      {
+        ...firstFrameInput,
+        options: { ...firstFrameInput.options, referenceImages: ['https://media.example.com/reference.png'] },
+      },
+      {
+        ...firstLastFrameInput,
+        imageUrl: '',
+      },
+      {
+        ...videoInput,
+        options: { ...videoInput.options, referenceAudios: ['https://media.example.com/reference.mp3'] },
+      },
+      {
+        ...videoInput,
+        options: { ...videoInput.options, referenceVideos: ['https://media.example.com/reference.mp4'] },
+      },
+    ]
+
+    for (const input of invalidInputs) {
+      await expect(executeComfyUiH3VideoGeneration(input)).rejects.toMatchObject({
+        name: 'ProviderSubmissionError',
+        disposition: 'pre_accept_rejected',
+        externalId: null,
+      })
+    }
+    expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
   })
 
   it('does not accept an unknown same-id probe status', async () => {
