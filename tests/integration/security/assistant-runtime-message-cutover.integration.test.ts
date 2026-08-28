@@ -240,11 +240,73 @@ describe('Assistant message legacy cutover', () => {
       expect(fingerprintMismatchApply.status).toBe(1)
       expect(fingerprintMismatchApply.stderr)
         .toContain('ASSISTANT_MESSAGE_CUTOVER_TARGET_FINGERPRINT_DIVERGED')
+      const fingerprintMismatchPreflight = runCutover(targetUrl, 'preflight')
+      expect(fingerprintMismatchPreflight.status).toBe(1)
+      expect(fingerprintMismatchPreflight.stderr)
+        .toContain('ASSISTANT_MESSAGE_CUTOVER_TARGET_FINGERPRINT_DIVERGED')
+      const fingerprintMismatchVerify = runCutover(targetUrl, 'verify')
+      expect(fingerprintMismatchVerify.status).toBe(1)
+      expect(fingerprintMismatchVerify.stderr)
+        .toContain('ASSISTANT_MESSAGE_CUTOVER_TARGET_FINGERPRINT_DIVERGED')
       await target.execute(`
         UPDATE _wao_assistant_message_cutover
         SET activeFingerprint = ?
         WHERE cutoverId = 'assistant-message-normalization-v1'
       `, [activeFingerprint])
+
+      await target.execute(
+        'DELETE FROM project_assistant_message_archives WHERE archiveId = ? AND messageId = ?',
+        [archivedTarget.archiveId, archivedTarget.messageId],
+      )
+      const countMismatchPreflight = runCutover(targetUrl, 'preflight')
+      expect(countMismatchPreflight.status).toBe(1)
+      expect(countMismatchPreflight.stderr)
+        .toContain('ASSISTANT_MESSAGE_CUTOVER_TARGET_COUNT_DIVERGED')
+      const countMismatchVerify = runCutover(targetUrl, 'verify')
+      expect(countMismatchVerify.status).toBe(1)
+      expect(countMismatchVerify.stderr)
+        .toContain('ASSISTANT_MESSAGE_CUTOVER_TARGET_COUNT_DIVERGED')
+      await target.execute(`
+        INSERT INTO project_assistant_message_archives (
+          archiveId, messageId, position, messageJson, byteLength, revision, createdAt, updatedAt
+        ) VALUES (?, ?, ?, CAST(? AS JSON), ?, ?, ?, ?)
+      `, [
+        archivedTarget.archiveId,
+        archivedTarget.messageId,
+        archivedTarget.position,
+        JSON.stringify(archivedTarget.messageJson),
+        archivedTarget.byteLength,
+        archivedTarget.revision,
+        archivedTarget.createdAt,
+        archivedTarget.updatedAt,
+      ])
+
+      await target.execute(`
+        UPDATE _wao_assistant_message_cutover
+        SET phase = 'CLAIMED'
+        WHERE cutoverId = 'assistant-message-normalization-v1'
+      `)
+      const stalePhasePreflight = runCutover(targetUrl, 'preflight')
+      expect(stalePhasePreflight.status).toBe(1)
+      expect(stalePhasePreflight.stderr)
+        .toContain('ASSISTANT_MESSAGE_CUTOVER_LEDGER_PHASE_INCOMPATIBLE_WITH_SCHEMA')
+      const stalePhaseVerify = runCutover(targetUrl, 'verify')
+      expect(stalePhaseVerify.status).toBe(1)
+      expect(stalePhaseVerify.stderr)
+        .toContain('ASSISTANT_MESSAGE_CUTOVER_LEDGER_PHASE_INCOMPATIBLE_WITH_SCHEMA')
+      await target.execute(`
+        UPDATE _wao_assistant_message_cutover
+        SET phase = 'ARCHIVE_LEGACY_DROPPED'
+        WHERE cutoverId = 'assistant-message-normalization-v1'
+      `)
+      const pendingLedgerPreflight = runCutover(targetUrl, 'preflight')
+      expect({ status: pendingLedgerPreflight.status, stderr: pendingLedgerPreflight.stderr })
+        .toEqual({ status: 0, stderr: '' })
+      expect(pendingLedgerPreflight.stdout).toContain('normalized-ledger-pending')
+      const pendingLedgerVerify = runCutover(targetUrl, 'verify')
+      expect(pendingLedgerVerify.status).toBe(1)
+      expect(pendingLedgerVerify.stderr)
+        .toContain('ASSISTANT_MESSAGE_CUTOVER_LEDGER_NOT_COMPLETE')
       const finalApply = runCutover(targetUrl, 'apply')
       expect({ status: finalApply.status, stderr: finalApply.stderr }).toEqual({ status: 0, stderr: '' })
 

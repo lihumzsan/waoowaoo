@@ -183,7 +183,8 @@ Visit [http://localhost:13000](http://localhost:13000) (Method 1 & 2) or [http:/
 > When running the app directly, do not skip `npm run db:push`. It synchronizes the Prisma schema before the application and workers start.
 >
 > If `project_assistant_threads` or `project_assistant_thread_archives` still has
-> `messagesJson`, stop Web and the Temporal worker, take a backup, then run
+> `messagesJson`, or the normalized message tables do not yet have non-null `byteLength`,
+> stop Web and the Temporal worker, take a backup, then run
 > `npm run db:assistant-messages:preflight`, `npm run db:assistant-messages:apply`, and
 > `npm run db:assistant-messages:verify` in that order. The cutover rejects active Turns and
 > invalid or oversize legacy messages, and resumes from its recorded phase. `db:push` fails

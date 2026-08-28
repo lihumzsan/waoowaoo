@@ -180,7 +180,8 @@ npm run dev
 > 跳过 `npm run db:push` 会导致数据库表结构缺失；请务必在启动应用与 worker 前运行。
 >
 > 如果旧库的 `project_assistant_threads` 或 `project_assistant_thread_archives` 仍有
-> `messagesJson`，先停止 Web 与 Temporal worker、完成备份，并依次执行
+> `messagesJson`，或者 normalized message 表尚缺非空 `byteLength`，先停止 Web 与
+> Temporal worker、完成备份，并依次执行
 > `npm run db:assistant-messages:preflight`、`npm run db:assistant-messages:apply` 和
 > `npm run db:assistant-messages:verify`。切换入口会拒绝 active Turn、非法或超大的旧消息，
 > 并可从已记录阶段继续执行；`db:push` 在切换完成前会 fail closed，禁止改用

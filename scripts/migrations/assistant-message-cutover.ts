@@ -784,19 +784,26 @@ async function verifyNormalizedData(connection: Connection): Promise<void> {
   }
 }
 
-async function finalizeNormalizedLedgerCutover(connection: Connection): Promise<void> {
-  let ledger = await readLedger(connection)
+async function requireNormalizedLedgerTargetMatches(connection: Connection): Promise<LedgerRow> {
+  const ledger = await readLedger(connection)
   if (!ledger) throw new Error('ASSISTANT_MESSAGE_CUTOVER_LEDGER_MISSING')
   if (CUTOVER_PHASE_ORDER[ledger.phase] < CUTOVER_PHASE_ORDER.ACTIVE_LEGACY_DROPPED) {
     throw new Error('ASSISTANT_MESSAGE_CUTOVER_LEDGER_PHASE_INCOMPATIBLE_WITH_SCHEMA')
   }
+  await verifyNormalizedData(connection)
+  assertNormalizedPlanMatchesLedger(await buildNormalizedPlan(connection), ledger)
+  return ledger
+}
+
+async function finalizeNormalizedLedgerCutover(connection: Connection): Promise<void> {
+  const ledger = await requireNormalizedLedgerTargetMatches(connection)
   await advancePhase(connection, ledger.phase, 'ARCHIVE_LEGACY_DROPPED')
-  ledger = await readLedger(connection)
-  if (!ledger || ledger.phase !== 'ARCHIVE_LEGACY_DROPPED') {
+  const completedLedger = await readLedger(connection)
+  if (!completedLedger || completedLedger.phase !== 'ARCHIVE_LEGACY_DROPPED') {
     throw new Error('ASSISTANT_MESSAGE_CUTOVER_LEDGER_NOT_COMPLETE')
   }
   await verifyNormalizedData(connection)
-  assertNormalizedPlanMatchesLedger(await buildNormalizedPlan(connection), ledger)
+  assertNormalizedPlanMatchesLedger(await buildNormalizedPlan(connection), completedLedger)
   await execute(connection, `DROP TABLE ${quoteIdentifier(LEDGER_TABLE)}`)
 }
 
@@ -883,6 +890,11 @@ async function preflight(connection: Connection): Promise<Record<string, unknown
   const state = await readSchemaState(connection)
   if (isFresh(state)) return { mode: 'preflight', state: 'fresh' }
   if (hasNormalizedShape(state)) {
+    if (state.ledger) {
+      await requireNoActiveTurns(connection)
+      await requireNormalizedLedgerTargetMatches(connection)
+      return { mode: 'preflight', state: 'normalized-ledger-pending' }
+    }
     await verifyNormalizedData(connection)
     return { mode: 'preflight', state: 'normalized' }
   }
@@ -924,6 +936,11 @@ async function guard(connection: Connection): Promise<Record<string, unknown>> {
 }
 
 async function verify(connection: Connection): Promise<Record<string, unknown>> {
+  const state = await readSchemaState(connection)
+  if (state.ledger) {
+    await requireNormalizedLedgerTargetMatches(connection)
+    throw new Error('ASSISTANT_MESSAGE_CUTOVER_LEDGER_NOT_COMPLETE')
+  }
   await verifyNormalizedData(connection)
   return { mode: 'verify', state: 'normalized' }
 }
