@@ -16,6 +16,8 @@ import {
 const DEFAULT_MESSAGE_PAGE_SIZE = 50
 const MAX_MESSAGE_PAGE_SIZE = 100
 const MAX_MESSAGE_PAGE_BYTES = 4 * 1_024 * 1_024
+const JSON_ARRAY_FRAME_BYTES = 2
+const JSON_ARRAY_SEPARATOR_BYTES = 1
 
 type TransactionClient = Prisma.TransactionClient
 
@@ -105,14 +107,15 @@ async function readPageRows(
     select: { position: true, byteLength: true },
   })
   const selectedMetadata: typeof metadataRows = []
-  let selectedBytes = 0
+  let selectedBytes = JSON_ARRAY_FRAME_BYTES
   for (const row of metadataRows.slice(0, limit)) {
     if (!Number.isSafeInteger(row.byteLength) || row.byteLength <= 0) {
       throw new Error('ASSISTANT_RUNTIME_MESSAGE_BYTE_LENGTH_INVALID')
     }
-    if (selectedBytes + row.byteLength > MAX_MESSAGE_PAGE_BYTES) break
+    const separatorBytes = selectedMetadata.length === 0 ? 0 : JSON_ARRAY_SEPARATOR_BYTES
+    if (selectedBytes + separatorBytes + row.byteLength > MAX_MESSAGE_PAGE_BYTES) break
     selectedMetadata.push(row)
-    selectedBytes += row.byteLength
+    selectedBytes += separatorBytes + row.byteLength
   }
   if (metadataRows.length > 0 && selectedMetadata.length === 0) {
     throw new Error('ASSISTANT_RUNTIME_MESSAGE_PAGE_BYTE_BUDGET_EXHAUSTED')

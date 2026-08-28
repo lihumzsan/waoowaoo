@@ -185,4 +185,70 @@ describe('Assistant Runtime normalized message persistence', () => {
     expect(oldest.messages.map((message) => message.id)).toEqual(['small-message-001'])
     expect(oldest.messagePage).toEqual({ hasMore: false, before: null })
   })
+
+  it('includes JSON array framing in the message page byte budget', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const scope = {
+      projectId: project.id,
+      userId: user.id,
+      assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
+    }
+    const thread = await getOrCreateAssistantRuntimeThread(scope)
+    const targetMessageBytes = MESSAGE_PAGE_BYTE_BUDGET / 4
+    const messages = Array.from({ length: 4 }, (_, index): UIMessage => {
+      const base: UIMessage = {
+        id: `boundary-message-${String(index + 1)}`,
+        role: 'user',
+        parts: [{ type: 'text', text: '' }],
+      }
+      const baseBytes = Buffer.byteLength(JSON.stringify(base), 'utf8')
+      return {
+        ...base,
+        parts: [{ type: 'text', text: 'x'.repeat(targetMessageBytes - baseBytes) }],
+      }
+    })
+    expect(messages.map((message) => Buffer.byteLength(JSON.stringify(message), 'utf8')))
+      .toEqual([targetMessageBytes, targetMessageBytes, targetMessageBytes, targetMessageBytes])
+
+    await prisma.$transaction(async (tx) => {
+      await tx.projectAssistantMessage.createMany({
+        data: messages.map((message, index) => ({
+          threadId: thread.threadId,
+          messageId: message.id,
+          position: index + 1,
+          messageJson: message as unknown as Prisma.InputJsonValue,
+          byteLength: targetMessageBytes,
+        })),
+      })
+      await tx.projectAssistantThread.update({
+        where: { id: thread.threadId },
+        data: { nextMessagePosition: messages.length + 1 },
+      })
+    })
+
+    const latest = await readAssistantRuntimeMessagePage({
+      scope,
+      threadId: thread.threadId,
+      before: null,
+      limit: 4,
+    })
+    expect(latest.messages.map((message) => message.id)).toEqual([
+      'boundary-message-2',
+      'boundary-message-3',
+      'boundary-message-4',
+    ])
+    expect(Buffer.byteLength(JSON.stringify(latest.messages), 'utf8'))
+      .toBeLessThanOrEqual(MESSAGE_PAGE_BYTE_BUDGET)
+    expect(latest.messagePage).toEqual({ hasMore: true, before: '2' })
+
+    const oldest = await readAssistantRuntimeMessagePage({
+      scope,
+      threadId: thread.threadId,
+      before: latest.messagePage.before,
+      limit: 4,
+    })
+    expect(oldest.messages.map((message) => message.id)).toEqual(['boundary-message-1'])
+    expect(oldest.messagePage).toEqual({ hasMore: false, before: null })
+  })
 })
