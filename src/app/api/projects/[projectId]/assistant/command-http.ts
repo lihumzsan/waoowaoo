@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { ApiError } from '@/lib/api-errors'
 import { AssistantRuntimeProjectBusyError } from '@/lib/assistant-runtime'
+import { findCarriedFailureRecord } from '@/lib/errors/normalize'
 
 export type ProjectAgentCommandHttpBody = Record<string, unknown>
 
@@ -124,6 +125,10 @@ export function mapProjectAgentCommandError(error: unknown): ApiError {
       code: 'AGENT_THREAD_BUSY',
       message: error.message,
     })
+  }
+  const carriedFailure = findCarriedFailureRecord(error)
+  if (carriedFailure) {
+    return ApiError.fromFailure(carriedFailure, error)
   }
   const errorText = collectErrorText(error)
   const agentTurnCode = readAgentTurnErrorCode(errorText)

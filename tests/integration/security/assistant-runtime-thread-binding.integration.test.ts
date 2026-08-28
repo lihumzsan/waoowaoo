@@ -11,7 +11,7 @@ describe('Assistant Runtime native Thread binding', () => {
     await resetBillingState()
   })
 
-  it('replaces only the expected native Thread id and preserves Wao messages', async () => {
+  it('binds only an unbound native Thread id and preserves Wao messages', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)
     const messages = [{
@@ -24,13 +24,14 @@ describe('Assistant Runtime native Thread binding', () => {
         projectId: project.id,
         userId: user.id,
         assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
-        runtimeThreadId: 'native-old-thread',
+        runtimeThreadId: null,
         nextMessagePosition: 2,
         messages: {
           create: {
             messageId: messages[0].id,
             position: 1,
             messageJson: messages[0] as unknown as Prisma.InputJsonValue,
+            byteLength: Buffer.byteLength(JSON.stringify(messages[0]), 'utf8'),
           },
         },
       },
@@ -40,16 +41,13 @@ describe('Assistant Runtime native Thread binding', () => {
       userId: user.id,
       assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
     }
-    const replacement = {
+    const binding = {
       scope,
       threadId: thread.id,
       runtimeThreadId: 'native-new-thread',
-      expectedRuntimeThreadId: 'native-old-thread',
-    } as Parameters<typeof bindAssistantRuntimeThread>[0] & {
-      readonly expectedRuntimeThreadId: string
     }
 
-    await expect(bindAssistantRuntimeThread(replacement)).resolves.toMatchObject({
+    await expect(bindAssistantRuntimeThread(binding)).resolves.toMatchObject({
       runtimeThreadId: 'native-new-thread',
     })
 
@@ -67,9 +65,8 @@ describe('Assistant Runtime native Thread binding', () => {
     })
 
     await expect(bindAssistantRuntimeThread({
-      ...replacement,
+      ...binding,
       runtimeThreadId: 'native-third-thread',
-      expectedRuntimeThreadId: 'different-native-thread',
     })).rejects.toThrow('ASSISTANT_RUNTIME_CODEX_THREAD_ID_DIVERGED')
 
     await expect(prisma.projectAssistantThread.findUniqueOrThrow({

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { ASSISTANT_RUNTIME_ASSISTANT_ID } from '@/lib/assistant-runtime/contracts'
 import { RedisAssistantRuntimeOwnership } from '@/lib/assistant-runtime/runtime-ownership'
 import { AssistantRuntimeService } from '@/lib/assistant-runtime/service'
+import { parseFailureRecord } from '@/lib/errors/failure'
 import type {
   AssistantRuntimeAccess,
   AssistantRuntimeModelConfiguration,
@@ -16,21 +17,16 @@ import type {
   RuntimeInitializeResult,
   RuntimeRequestId,
   RuntimeServerRequestResponse,
-  RuntimeSkillsListParams,
   RuntimeSkillsListResponse,
   RuntimeThread,
   RuntimeThreadReadParams,
-  RuntimeThreadResumeParams,
-  RuntimeThreadStartParams,
   RuntimeTurn,
-  RuntimeTurnInterruptParams,
   RuntimeTurnStartParams,
   RuntimeTurnSteerParams,
 } from '@/lib/codex-runtime/runtime-adapter'
 import type {
   RuntimeContainerAdapter,
   RuntimeContainerHandle,
-  RuntimeContainerLaunchRequest,
 } from '@/lib/codex-runtime/runtime-container'
 import {
   RuntimeSessionManager,
@@ -64,12 +60,12 @@ class DeterministicRuntimeAdapter implements RuntimeAdapter {
     }
   }
 
-  async startThread(_params: RuntimeThreadStartParams): Promise<RuntimeThread> {
+  async startThread(): Promise<RuntimeThread> {
     if (this.startThreadFails) throw new Error('NATIVE_THREAD_START_REJECTED')
     return { id: runtimeThreadId, raw: {} }
   }
 
-  async resumeThread(_params: RuntimeThreadResumeParams): Promise<RuntimeThread> {
+  async resumeThread(): Promise<RuntimeThread> {
     throw new Error('NATIVE_THREAD_RESUME_REJECTED')
   }
 
@@ -77,7 +73,7 @@ class DeterministicRuntimeAdapter implements RuntimeAdapter {
     return { id: params.threadId, raw: {} }
   }
 
-  async listSkills(_params: RuntimeSkillsListParams): Promise<RuntimeSkillsListResponse> {
+  async listSkills(): Promise<RuntimeSkillsListResponse> {
     return { data: [{ cwd: runtimeWorkspaceDirectory, skills: [], errors: [] }] }
   }
 
@@ -90,7 +86,7 @@ class DeterministicRuntimeAdapter implements RuntimeAdapter {
     return params.expectedTurnId
   }
 
-  async interruptTurn(_params: RuntimeTurnInterruptParams): Promise<void> {}
+  async interruptTurn(): Promise<void> {}
 
   hasPendingServerRequest(requestId: RuntimeRequestId): boolean {
     return !this.closed && this.pendingServerRequests.has(requestId)
@@ -123,6 +119,50 @@ class DeterministicRuntimeAdapter implements RuntimeAdapter {
       },
     }
     for (const listener of this.listeners) listener(event)
+  }
+
+  completeTurnWithAgentMessage(text: string): void {
+    if (!this.lastTurnThreadId) throw new Error('TEST_RUNTIME_TURN_NOT_STARTED')
+    const itemEvent: RuntimeEvent = {
+      type: 'notification',
+      method: 'item/completed',
+      params: {
+        threadId: this.lastTurnThreadId,
+        turnId: runtimeTurnId,
+        item: { id: 'oversize-agent-message', type: 'agentMessage', text },
+      },
+    }
+    for (const listener of this.listeners) listener(itemEvent)
+    this.completeTurn()
+  }
+
+  failTurnWithAgentMessage(text: string): void {
+    if (!this.lastTurnThreadId) throw new Error('TEST_RUNTIME_TURN_NOT_STARTED')
+    const itemEvent: RuntimeEvent = {
+      type: 'notification',
+      method: 'item/completed',
+      params: {
+        threadId: this.lastTurnThreadId,
+        turnId: runtimeTurnId,
+        item: { id: 'oversize-agent-message', type: 'agentMessage', text },
+      },
+    }
+    const terminalEvent: RuntimeEvent = {
+      type: 'notification',
+      method: 'turn/completed',
+      params: {
+        threadId: this.lastTurnThreadId,
+        turn: {
+          id: runtimeTurnId,
+          status: 'failed',
+          error: { message: 'NATIVE_RUNTIME_TURN_FAILED', codexErrorInfo: 'other' },
+        },
+      },
+    }
+    for (const listener of this.listeners) {
+      listener(itemEvent)
+      listener(terminalEvent)
+    }
   }
 
   requestUserDecision(): void {
@@ -160,16 +200,16 @@ class DeterministicRuntimeContainer implements RuntimeContainerAdapter {
 
   constructor(private readonly startThreadFails = false) {}
 
-  async reconcile(_scopeId: string): Promise<void> {}
+  async reconcile(): Promise<void> {}
 
-  async launch(_request: RuntimeContainerLaunchRequest): Promise<RuntimeContainerHandle> {
+  async launch(): Promise<RuntimeContainerHandle> {
     const runtime = new DeterministicRuntimeAdapter(this.startThreadFails)
     this.runtimes.push(runtime)
     return {
       runtime,
       runtimeWorkspaceDirectory,
       identity: `test-runtime-container-${this.runtimes.length}`,
-      stop: async (_mode) => await runtime.shutdown(),
+      stop: async () => await runtime.shutdown(),
     }
   }
 
@@ -177,6 +217,18 @@ class DeterministicRuntimeContainer implements RuntimeContainerAdapter {
     const latest = this.runtimes.at(-1)
     if (!latest) throw new Error('TEST_RUNTIME_NOT_LAUNCHED')
     latest.completeTurn()
+  }
+
+  completeLatestTurnWithAgentMessage(text: string): void {
+    const latest = this.runtimes.at(-1)
+    if (!latest) throw new Error('TEST_RUNTIME_NOT_LAUNCHED')
+    latest.completeTurnWithAgentMessage(text)
+  }
+
+  failLatestTurnWithAgentMessage(text: string): void {
+    const latest = this.runtimes.at(-1)
+    if (!latest) throw new Error('TEST_RUNTIME_NOT_LAUNCHED')
+    latest.failTurnWithAgentMessage(text)
   }
 
   requestLatestUserDecision(): void {
@@ -230,7 +282,7 @@ describe('Assistant Runtime native Thread recovery', () => {
     await resetBillingState()
   })
 
-  it('replaces an unresumable native Thread without losing Wao conversation facts', async () => {
+  it('fails closed when the bound native Thread cannot resume', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)
     const priorMessage: UIMessage = {
@@ -250,6 +302,7 @@ describe('Assistant Runtime native Thread recovery', () => {
             messageId: priorMessage.id,
             position: 1,
             messageJson: priorMessage as unknown as Prisma.InputJsonValue,
+            byteLength: Buffer.byteLength(JSON.stringify(priorMessage), 'utf8'),
           },
         },
       },
@@ -295,15 +348,7 @@ describe('Assistant Runtime native Thread recovery', () => {
         sourceId: message.id,
         message,
         context: { locale: 'zh', selectedScopeRef: null, selectedAssetId: null },
-      })).resolves.toMatchObject({
-        outcome: 'accepted',
-        threadId: thread.id,
-        runtimeThreadId,
-        runtimeTurnId,
-      })
-
-      container.completeLatestTurn()
-      await service.waitForTurnSettlements({ projectId: project.id, userId: user.id })
+      })).rejects.toThrow('NATIVE_THREAD_RESUME_REJECTED')
 
       await expect(prisma.projectAssistantThread.findUniqueOrThrow({
         where: { id: thread.id },
@@ -312,7 +357,7 @@ describe('Assistant Runtime native Thread recovery', () => {
           messages: { orderBy: { position: 'asc' }, select: { messageJson: true } },
         },
       })).resolves.toMatchObject({
-        runtimeThreadId,
+        runtimeThreadId: 'native-unresumable-thread',
         messages: expect.arrayContaining([
           { messageJson: priorMessage },
           { messageJson: expect.objectContaining({ id: message.id, role: 'user', parts: message.parts }) },
@@ -320,10 +365,17 @@ describe('Assistant Runtime native Thread recovery', () => {
       })
       await expect(prisma.projectAgentTurn.count({ where: { threadId: thread.id } }))
         .resolves.toBe(1)
+      const failedTurn = await prisma.projectAgentTurn.findFirstOrThrow({
+        where: { threadId: thread.id },
+        select: { failure: true },
+      })
+      const failure = parseFailureRecord(failedTurn.failure)
+      expect(failure?.interpretation.code).toBe('PROJECT_AGENT_RUNTIME_FAILED')
+      expect(failure?.native.message).toContain('NATIVE_THREAD_RESUME_REJECTED')
     } finally {
       await manager.shutdownAll()
     }
-    expect(closedPlacements).toHaveLength(2)
+    expect(closedPlacements).toHaveLength(1)
     expect(closedPlacements).toEqual(closedPlacements.map(() => ({
       scope: { projectId: project.id, userId: user.id },
       ownerToken: access.ownerToken,
@@ -343,13 +395,14 @@ describe('Assistant Runtime native Thread recovery', () => {
         projectId: project.id,
         userId: user.id,
         assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
-        runtimeThreadId: 'native-still-bound-thread',
+        runtimeThreadId: null,
         nextMessagePosition: 2,
         messages: {
           create: {
             messageId: priorMessage.id,
             position: 1,
             messageJson: priorMessage as unknown as Prisma.InputJsonValue,
+            byteLength: Buffer.byteLength(JSON.stringify(priorMessage), 'utf8'),
           },
         },
       },
@@ -397,7 +450,7 @@ describe('Assistant Runtime native Thread recovery', () => {
           messages: { orderBy: { position: 'asc' }, select: { messageJson: true } },
         },
       })).resolves.toMatchObject({
-        runtimeThreadId: 'native-still-bound-thread',
+        runtimeThreadId: null,
         messages: expect.arrayContaining([
           { messageJson: priorMessage },
           { messageJson: expect.objectContaining({ id: message.id, role: 'user', parts: message.parts }) },
@@ -405,6 +458,65 @@ describe('Assistant Runtime native Thread recovery', () => {
       })
       await expect(prisma.projectAgentTurn.count({ where: { threadId: thread.id } }))
         .resolves.toBe(1)
+    } finally {
+      await manager.shutdownAll()
+    }
+  })
+
+  it('settles an oversize assistant snapshot as one stable failed Turn', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const container = new DeterministicRuntimeContainer()
+    const manager = new RuntimeSessionManager({
+      container,
+      persistence: testPersistence,
+      ownership: new RedisAssistantRuntimeOwnership(),
+      idleTimeoutMs: 60_000,
+      closePlacementTransportSessions: async () => undefined,
+      waitForTurnSettlement: async () => undefined,
+      onError: () => undefined,
+    })
+    const access: AssistantRuntimeAccess = {
+      environment: { WAO_MCP_TEST_TOKEN: 'test-token' },
+      bearerToken: 'test-token',
+      ownerToken: `owner_${randomUUID()}`,
+    }
+    const service = new AssistantRuntimeService({
+      manager,
+      access: { get: async () => access, invalidate: () => undefined },
+      models: { resolve: async () => testModel(project) },
+    })
+    const message: UIMessage = {
+      id: 'user-message-before-oversize-reply',
+      role: 'user',
+      parts: [{ type: 'text', text: 'produce an intentionally oversize reply' }],
+    }
+
+    try {
+      const receipt = await service.send({
+        projectId: project.id,
+        userId: user.id,
+        assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
+        requestId: randomUUID(),
+        sourceId: message.id,
+        message,
+        context: { locale: 'zh', selectedScopeRef: null, selectedAssetId: null },
+      })
+      container.failLatestTurnWithAgentMessage('x'.repeat(1_100_000))
+
+      await expect(service.waitForTurnSettlements({
+        projectId: project.id,
+        userId: user.id,
+      })).resolves.toBeUndefined()
+
+      const turn = await prisma.projectAgentTurn.findUniqueOrThrow({
+        where: { id: receipt.turnId },
+        select: { status: true, assistantMessageId: true, failure: true },
+      })
+      expect(turn.status).toBe('failed')
+      expect(turn.assistantMessageId).toBeNull()
+      expect(parseFailureRecord(turn.failure)?.interpretation.code)
+        .toBe('ASSISTANT_RUNTIME_MESSAGE_TOO_LARGE')
     } finally {
       await manager.shutdownAll()
     }

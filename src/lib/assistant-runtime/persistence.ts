@@ -5,7 +5,7 @@ import type { UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
 import { buildAgentTurnAssistantMessageId } from '@/lib/agent-turn/stream-publisher'
 import { projectErrorForModel } from '@/lib/errors/projection'
-import { parseFailureRecord } from '@/lib/errors/failure'
+import { parseFailureRecord, type FailureRecord } from '@/lib/errors/failure'
 import { parseProjectAgentPlanSnapshot } from '@/lib/project-agent/plan'
 import type {
   AssistantRuntimeInteractionView,
@@ -313,19 +313,8 @@ export async function bindAssistantRuntimeThread(input: {
   readonly scope: AssistantRuntimeScope
   readonly threadId: string
   readonly runtimeThreadId: string
-  /**
-   * The native id observed before a replacement. Omitting it keeps the first
-   * bind contract: only an unbound product Thread can receive a new native id.
-   */
-  readonly expectedRuntimeThreadId?: string | null
 }): Promise<ThreadView> {
   requireIdentity(input.runtimeThreadId, 'ASSISTANT_RUNTIME_CODEX_THREAD_ID_INVALID')
-  if (input.expectedRuntimeThreadId !== undefined && input.expectedRuntimeThreadId !== null) {
-    requireIdentity(
-      input.expectedRuntimeThreadId,
-      'ASSISTANT_RUNTIME_EXPECTED_CODEX_THREAD_ID_INVALID',
-    )
-  }
   return await prisma.$transaction(async (tx) => {
     await lockProjectScope(tx, input.scope)
     const row = await lockThread(tx, input.scope, input.threadId)
@@ -333,8 +322,7 @@ export async function bindAssistantRuntimeThread(input: {
     if (row.runtimeThreadId === input.runtimeThreadId) {
       return threadView(row)
     }
-    const expectedRuntimeThreadId = input.expectedRuntimeThreadId ?? null
-    if (row.runtimeThreadId !== expectedRuntimeThreadId) {
+    if (row.runtimeThreadId !== null) {
       throw new Error('ASSISTANT_RUNTIME_CODEX_THREAD_ID_DIVERGED')
     }
     const updated = await tx.projectAssistantThread.update({
@@ -571,6 +559,7 @@ export async function failAssistantRuntimeTurnStart(input: {
   readonly threadId: string
   readonly turnId: string
   readonly reason: string
+  readonly failure: FailureRecord
 }): Promise<void> {
   await prisma.$transaction(async (tx) => {
     await lockProjectScope(tx, input.scope)
@@ -593,7 +582,7 @@ export async function failAssistantRuntimeTurnStart(input: {
       data: {
         status: turn.cancelRequestId ? 'cancelled' : 'interrupted',
         stopReason: turn.cancelRequestId ? 'cancelled_before_binding' : input.reason,
-        failure: Prisma.DbNull,
+        failure: turn.cancelRequestId ? Prisma.DbNull : toJson(input.failure),
         finishedAt: new Date(),
       },
     })
@@ -606,6 +595,7 @@ export async function failAssistantRuntimeBoundTurnStart(input: {
   readonly turnId: string
   readonly runtimeTurnId: string
   readonly reason: string
+  readonly failure: FailureRecord
 }): Promise<void> {
   await prisma.$transaction(async (tx) => {
     await lockProjectScope(tx, input.scope)
@@ -631,7 +621,7 @@ export async function failAssistantRuntimeBoundTurnStart(input: {
       data: {
         status: turn.cancelRequestId ? 'cancelled' : 'interrupted',
         stopReason: turn.cancelRequestId ? 'cancelled_during_projection_start' : input.reason,
-        failure: Prisma.DbNull,
+        failure: turn.cancelRequestId ? Prisma.DbNull : toJson(input.failure),
         finishedAt: new Date(),
       },
     })

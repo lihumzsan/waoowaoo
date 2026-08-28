@@ -837,12 +837,14 @@ export class AssistantRuntimeEventProjector {
     readonly failure?: AssistantRuntimeFailure | null
   }): void {
     if (this.terminalProjection) return
-    const assistantMessage = this.buildAssistantMessage()
     const failure = input.status === 'failed'
-      ? input.failure
-        ?? this.persistenceFailure
+      ? this.persistenceFailure
+        ?? input.failure
         ?? assistantRuntimeFailureForStopReason(input.stopReason)
       : null
+    const assistantMessage = failure?.interpretation.code === 'ASSISTANT_RUNTIME_MESSAGE_TOO_LARGE'
+      ? null
+      : this.buildAssistantMessage()
     const projection: AssistantRuntimeTerminalProjection = {
       status: input.status,
       stopReason: input.stopReason,

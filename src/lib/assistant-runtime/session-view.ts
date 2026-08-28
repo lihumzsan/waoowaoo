@@ -62,9 +62,11 @@ function toTurnView(row: {
     plan: status === 'running' || status === 'waiting_approval'
       ? parseProjectAgentPlanSnapshot(row.planJson)
       : null,
-    assistantMessageId: row.assistantMessageId ?? (row.startedAt
+    assistantMessageId: row.assistantMessageId ?? (
+      row.startedAt && (status === 'running' || status === 'waiting_approval')
       ? buildAgentTurnAssistantMessageId({ turnId: row.id, attempt: row.attempt })
-      : null),
+      : null
+    ),
     stopReason: row.stopReason,
     errorCode: failure?.interpretation.code ?? null,
     errorDiagnostic: failure && hasProviderFailureEvidence(failure)

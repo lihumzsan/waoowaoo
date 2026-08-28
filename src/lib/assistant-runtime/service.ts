@@ -16,6 +16,7 @@ import {
   publishAgentSessionViewChanged,
 } from '@/lib/agent-turn/stream-publisher'
 import { createScopedLogger } from '@/lib/logging/core'
+import { attachFailureToThrown, normalizeAnyError } from '@/lib/errors/normalize'
 import type {
   AssistantRuntimeAdmissionReceipt,
   AssistantRuntimeClearCommand,
@@ -338,13 +339,18 @@ export class AssistantRuntimeService {
         runtimeThreadId: thread.runtimeThreadId,
       })
     } catch (error) {
+      const failure = normalizeAnyError(error, {
+        fallbackCode: 'PROJECT_AGENT_RUNTIME_FAILED',
+        context: { system: 'runtime', phase: 'thread_prepare' },
+      })
       await failAssistantRuntimeTurnStart({
         scope: command,
         threadId: admission.thread.threadId,
         turnId: admission.turn.turnId,
         reason: 'runtime_thread_prepare_failed',
+        failure,
       }).catch(() => undefined)
-      throw error
+      throw attachFailureToThrown(error, failure)
     }
     const started = await this.startProjection({
       scope: command,
@@ -713,21 +719,17 @@ export class AssistantRuntimeService {
       access,
       contractRevision: session.contractRevision,
     })
-    const preparedRuntime = await this.ensureThreadWithRecovery({
-      scope,
-      access,
+    const runtime = await this.manager.ensureThread(scope, {
       productThreadId: input.threadId,
       runtimeThreadId: input.runtimeThreadId,
+      expectedContractRevision: session.contractRevision,
       configuration: model.thread,
-      contractRevision: session.contractRevision,
     })
-    const runtime = preparedRuntime.runtime
     try {
       await bindAssistantRuntimeThread({
         scope: input.scope,
         threadId: input.threadId,
         runtimeThreadId: runtime.runtimeThreadId,
-        expectedRuntimeThreadId: preparedRuntime.replacesRuntimeThreadId,
       })
     } catch (bindError) {
       if (runtime.disposition === 'started') {
@@ -744,52 +746,6 @@ export class AssistantRuntimeService {
       throw bindError
     }
     return { threadId: input.threadId, runtime, model }
-  }
-
-  private async ensureThreadWithRecovery(input: {
-    readonly scope: RuntimeSessionScope
-    readonly access: AssistantRuntimeAccess
-    readonly productThreadId: string
-    readonly runtimeThreadId: string | null
-    readonly configuration: AssistantRuntimeModelConfiguration['thread']
-    readonly contractRevision: string
-  }): Promise<{
-    readonly runtime: RuntimeThreadSessionView
-    readonly replacesRuntimeThreadId: string | null
-  }> {
-    try {
-      const runtime = await this.manager.ensureThread(input.scope, {
-        productThreadId: input.productThreadId,
-        runtimeThreadId: input.runtimeThreadId,
-        expectedContractRevision: input.contractRevision,
-        configuration: input.configuration,
-      })
-      return { runtime, replacesRuntimeThreadId: null }
-    } catch (resumeError) {
-      if (!input.runtimeThreadId) throw resumeError
-
-      // Wao's durable messages and task facts stay untouched. Native Codex
-      // history cannot be reconstructed from them, so only discard the failed
-      // App Server session and establish one new native Thread/MCP session.
-      await this.manager.stop(input.scope, 'shutdown', input.access.ownerToken)
-      const replacement = await this.manager.ensure(input.scope, {
-        environment: input.access.environment,
-        ownerToken: input.access.ownerToken,
-      })
-      if (replacement.contractRevision !== input.contractRevision) {
-        throw new Error('ASSISTANT_RUNTIME_CONTRACT_CHANGED_DURING_THREAD_RECOVERY')
-      }
-      const runtime = await this.manager.ensureThread(input.scope, {
-        productThreadId: input.productThreadId,
-        runtimeThreadId: null,
-        expectedContractRevision: input.contractRevision,
-        configuration: input.configuration,
-      })
-      return {
-        runtime,
-        replacesRuntimeThreadId: input.runtimeThreadId,
-      }
-    }
   }
 
   private async startProjection(input: {
@@ -936,6 +892,10 @@ export class AssistantRuntimeService {
       return started
     } catch (error) {
       unsubscribe()
+      const failure = normalizeAnyError(error, {
+        fallbackCode: 'PROJECT_AGENT_RUNTIME_FAILED',
+        context: { system: 'runtime', phase: 'turn_start' },
+      })
       if (!runtimeTurnId) {
         try {
           await failAssistantRuntimeTurnStart({
@@ -943,6 +903,7 @@ export class AssistantRuntimeService {
             threadId: input.preparedThread.threadId,
             turnId: input.turn.turnId,
             reason: 'runtime_turn_start_failed',
+            failure,
           })
           resolveSettlement()
         } catch (settlementError) {
@@ -955,6 +916,7 @@ export class AssistantRuntimeService {
             threadId: input.preparedThread.threadId,
             turnId: input.turn.turnId,
             reason: 'runtime_turn_binding_failed',
+            failure,
           })
           resolveSettlement()
         } catch (settlementError) {
@@ -969,6 +931,7 @@ export class AssistantRuntimeService {
             turnId: input.turn.turnId,
             runtimeTurnId,
             reason: 'runtime_projection_start_failed',
+            failure,
           })
           resolveSettlement()
         } catch (settlementError) {
@@ -980,7 +943,7 @@ export class AssistantRuntimeService {
           ownerToken: access.ownerToken,
         }).catch(() => undefined)
       }
-      throw error
+      throw attachFailureToThrown(error, failure)
     }
   }
 

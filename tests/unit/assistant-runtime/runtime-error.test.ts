@@ -5,6 +5,8 @@ import {
   projectAssistantRuntimeToolOutput,
 } from '@/lib/assistant-runtime/event-projector'
 import type { UnifiedErrorCode } from '@/lib/errors/codes'
+import { attachFailureToThrown, normalizeAnyError } from '@/lib/errors/normalize'
+import { mapProjectAgentCommandError } from '@/app/api/projects/[projectId]/assistant/command-http'
 
 function expectedRuntimeFailure(code: UnifiedErrorCode, message: string) {
   return {
@@ -27,6 +29,22 @@ function expectedRuntimeFailure(code: UnifiedErrorCode, message: string) {
 }
 
 describe('Codex runtime terminal error projection', () => {
+  it('preserves the carried runtime FailureRecord at the HTTP boundary', () => {
+    const native = new Error('NATIVE_THREAD_RESUME_REJECTED')
+    const failure = normalizeAnyError(native, {
+      fallbackCode: 'PROJECT_AGENT_RUNTIME_FAILED',
+      context: { system: 'runtime', phase: 'thread_prepare' },
+    })
+
+    const mapped = mapProjectAgentCommandError(attachFailureToThrown(native, failure))
+
+    expect(mapped.failure).toStrictEqual(failure)
+    expect(mapped.failure.context).toEqual({
+      system: 'runtime',
+      phase: 'thread_prepare',
+    })
+  })
+
   it('projects canonical MCP structured output instead of the transport envelope', () => {
     expect(projectAssistantRuntimeToolOutput({
       id: 'tool-call',
