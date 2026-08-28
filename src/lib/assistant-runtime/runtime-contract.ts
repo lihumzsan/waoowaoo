@@ -5,9 +5,9 @@ import {
 } from '@/lib/ai-prompts/project-agent-system'
 import {
   creativeSkillRoutingInstructions,
-  readCreativeRuntimeConfiguration,
   type CreativeRuntimeSkillFile,
 } from '@/lib/creative-skills'
+import { readCreativeRuntimeConfiguration } from '@/lib/creative-skills/runtime-skills'
 
 const ASSISTANT_RUNTIME_CONTRACT_SCHEMA = 'wao-assistant-runtime-contract-v1'
 

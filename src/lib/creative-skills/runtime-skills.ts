@@ -139,12 +139,11 @@ export async function readCreativeRuntimeConfiguration(): Promise<readonly Creat
 
 export async function materializeCreativeRuntimeConfiguration(
   runtimeSkillsDirectory: string,
-  configuration?: readonly CreativeRuntimeSkillFile[],
+  configuration: readonly CreativeRuntimeSkillFile[],
 ): Promise<void> {
   const skillsDirectory = runtimeSkillsDirectory
-  const resolvedConfiguration = configuration ?? await readCreativeRuntimeConfiguration()
   await mkdir(skillsDirectory, { recursive: true, mode: 0o700 })
-  await Promise.all(resolvedConfiguration.map(async (skill) => {
+  await Promise.all(configuration.map(async (skill) => {
     const skillDirectory = path.join(skillsDirectory, skill.skillId)
     await mkdir(skillDirectory, { recursive: true, mode: 0o700 })
     await writeFile(

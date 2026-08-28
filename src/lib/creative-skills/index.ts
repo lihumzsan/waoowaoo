@@ -8,7 +8,6 @@ export {
   CREATIVE_RUNTIME_SKILLS,
   creativeSkillRoutingInstructions,
   materializeCreativeRuntimeConfiguration,
-  readCreativeRuntimeConfiguration,
 } from './runtime-skills'
 export {
   isCreativeSkillId,
