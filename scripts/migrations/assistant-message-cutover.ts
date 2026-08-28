@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
 import mysql, {
   type Connection,
-  type ExecuteValues,
   type ResultSetHeader,
   type RowDataPacket,
 } from 'mysql2/promise'
@@ -132,9 +131,9 @@ async function queryRows<Row extends RowDataPacket>(
 async function execute(
   connection: Connection,
   sql: string,
-  values: ExecuteValues[] = [],
+  values: readonly unknown[] = [],
 ): Promise<ResultSetHeader> {
-  const [result] = await connection.execute<ResultSetHeader>(sql, values)
+  const [result] = await connection.execute<ResultSetHeader>(sql, [...values])
   return result
 }
 
