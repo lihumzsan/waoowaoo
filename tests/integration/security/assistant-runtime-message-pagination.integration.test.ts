@@ -15,8 +15,9 @@ import { createTestProject, createTestUser } from '../../helpers/billing-fixture
 import { resetBillingState } from '../../helpers/db-reset'
 import { prisma } from '../../helpers/prisma'
 
-const SEEDED_MESSAGE_COUNT = 72
-const SEEDED_TEXT_BYTES = 70 * 1_024
+const SEEDED_MESSAGE_COUNT = 60
+const SEEDED_TEXT_BYTES = 110 * 1_024
+const MESSAGE_PAGE_BYTE_BUDGET = 4 * 1_024 * 1_024
 
 function seededMessage(position: number): UIMessage {
   return {
@@ -53,6 +54,7 @@ describe('Assistant Runtime normalized message persistence', () => {
           messageId: message.id,
           position: index + 1,
           messageJson: message as unknown as Prisma.InputJsonValue,
+          byteLength: Buffer.byteLength(JSON.stringify(message), 'utf8'),
         })),
       })
       await tx.projectAssistantThread.update({
@@ -87,24 +89,27 @@ describe('Assistant Runtime normalized message persistence', () => {
 
     const session = await getAssistantRuntimeSessionView(scope)
     expect(session.protocol).toBe('assistant_runtime_session_view_v2')
-    expect(session.thread?.messages).toHaveLength(50)
-    expect(session.thread?.messages[0]?.id).toBe('seeded-message-024')
-    expect(session.thread?.messages.at(-1)?.id).toBe(nextMessage.id)
-    expect(session.thread?.messagePage).toEqual({
-      hasMore: true,
-      before: '24',
-    })
+    const latestMessages = session.thread?.messages ?? []
+    expect(Buffer.byteLength(JSON.stringify(latestMessages), 'utf8'))
+      .toBeLessThanOrEqual(MESSAGE_PAGE_BYTE_BUDGET)
+    expect(latestMessages.at(-1)?.id).toBe(nextMessage.id)
+    expect(session.thread?.messagePage.hasMore).toBe(true)
+    expect(session.thread?.messagePage.before).not.toBeNull()
 
     const older = await readAssistantRuntimeMessagePage({
       scope,
       threadId: thread.threadId,
       before: session.thread?.messagePage.before ?? null,
-      limit: 50,
+      limit: 100,
     })
-    expect(older.messages).toHaveLength(23)
+    expect(Buffer.byteLength(JSON.stringify(older.messages), 'utf8'))
+      .toBeLessThanOrEqual(MESSAGE_PAGE_BYTE_BUDGET)
     expect(older.messages[0]?.id).toBe('seeded-message-001')
-    expect(older.messages.at(-1)?.id).toBe('seeded-message-023')
     expect(older.messagePage).toEqual({ hasMore: false, before: null })
+    expect([...older.messages, ...latestMessages].map((message) => message.id)).toEqual([
+      ...seeded.map((message) => message.id),
+      nextMessage.id,
+    ])
 
     const clear = {
       scope,
@@ -127,5 +132,57 @@ describe('Assistant Runtime normalized message persistence', () => {
     expect(archivedMessages).toHaveLength(SEEDED_MESSAGE_COUNT + 1)
     expect(archivedMessages[0]?.messageId).toBe('seeded-message-001')
     expect(archivedMessages.at(-1)?.messageId).toBe(nextMessage.id)
+  })
+
+  it('enforces the independent 100-message page cap', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const scope = {
+      projectId: project.id,
+      userId: user.id,
+      assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
+    }
+    const thread = await getOrCreateAssistantRuntimeThread(scope)
+    const messages = Array.from({ length: 101 }, (_, index): UIMessage => ({
+      id: `small-message-${String(index + 1).padStart(3, '0')}`,
+      role: 'user',
+      parts: [{ type: 'text', text: `message ${String(index + 1)}` }],
+    }))
+    await prisma.$transaction(async (tx) => {
+      await tx.projectAssistantMessage.createMany({
+        data: messages.map((message, index) => ({
+          threadId: thread.threadId,
+          messageId: message.id,
+          position: index + 1,
+          messageJson: message as unknown as Prisma.InputJsonValue,
+          byteLength: Buffer.byteLength(JSON.stringify(message), 'utf8'),
+        })),
+      })
+      await tx.projectAssistantThread.update({
+        where: { id: thread.threadId },
+        data: { nextMessagePosition: messages.length + 1 },
+      })
+    })
+
+    const latest = await readAssistantRuntimeMessagePage({
+      scope,
+      threadId: thread.threadId,
+      before: null,
+      limit: 100,
+    })
+    expect(latest.messages).toHaveLength(100)
+    expect(latest.messages[0]?.id).toBe('small-message-002')
+    expect(latest.messages.at(-1)?.id).toBe('small-message-101')
+    expect(latest.messagePage.hasMore).toBe(true)
+    expect(latest.messagePage.before).not.toBeNull()
+
+    const oldest = await readAssistantRuntimeMessagePage({
+      scope,
+      threadId: thread.threadId,
+      before: latest.messagePage.before,
+      limit: 100,
+    })
+    expect(oldest.messages.map((message) => message.id)).toEqual(['small-message-001'])
+    expect(oldest.messagePage).toEqual({ hasMore: false, before: null })
   })
 })

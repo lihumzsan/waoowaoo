@@ -4,7 +4,7 @@
     "src/types/next-auth.d.ts",
     "scripts/billing-cleanup-pending-freezes.ts",
     "scripts/billing-reconcile-ledger.ts",
-    "scripts/bplus-cutover-preflight.ts",
+    "scripts/migrations/assistant-message-cutover.ts",
     "scripts/check-image-urls-contract.ts",
     "scripts/check-media-normalization.ts",
     "scripts/check-outbound-image-runtime-sample.ts",

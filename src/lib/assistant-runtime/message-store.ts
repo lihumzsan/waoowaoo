@@ -7,10 +7,15 @@ import {
 import { safeValidateUIMessages, type UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
 import type { AssistantRuntimeScope } from './contracts'
+import {
+  AssistantRuntimeMessageTooLargeError,
+  parseAssistantRuntimeMessage,
+  serializeAssistantRuntimeMessage,
+} from './message-serialization'
 
 const DEFAULT_MESSAGE_PAGE_SIZE = 50
 const MAX_MESSAGE_PAGE_SIZE = 100
-const MAX_ASSISTANT_MESSAGE_BYTES = 1 * 1_024 * 1_024
+const MAX_MESSAGE_PAGE_BYTES = 4 * 1_024 * 1_024
 
 type TransactionClient = Prisma.TransactionClient
 
@@ -23,15 +28,6 @@ export type AssistantRuntimeMessagePage = {
   }
 }
 
-export class AssistantRuntimeMessageTooLargeError extends Error {
-  readonly code = 'ASSISTANT_RUNTIME_MESSAGE_TOO_LARGE' as const
-
-  constructor(byteLength: number) {
-    super(`ASSISTANT_RUNTIME_MESSAGE_TOO_LARGE:${String(byteLength)}`)
-    this.name = 'AssistantRuntimeMessageTooLargeError'
-  }
-}
-
 function requireMessageId(value: string): string {
   if (!value || value !== value.trim() || value.length > 191) {
     throw new Error('ASSISTANT_RUNTIME_MESSAGE_ID_INVALID')
@@ -39,25 +35,7 @@ function requireMessageId(value: string): string {
   return value
 }
 
-function toJson(value: unknown): Prisma.InputJsonValue {
-  const serialized = JSON.stringify(value)
-  if (serialized === undefined) throw new Error('ASSISTANT_RUNTIME_JSON_INVALID')
-  const byteLength = Buffer.byteLength(serialized, 'utf8')
-  if (byteLength > MAX_ASSISTANT_MESSAGE_BYTES) {
-    throw new AssistantRuntimeMessageTooLargeError(byteLength)
-  }
-  return JSON.parse(serialized) as Prisma.InputJsonValue
-}
-
-export async function parseAssistantRuntimeMessage(value: unknown): Promise<UIMessage> {
-  const validation = await safeValidateUIMessages({ messages: [value] })
-  const message = validation.success ? validation.data[0] : null
-  if (!message || (message.role !== 'user' && message.role !== 'assistant')) {
-    throw new Error('ASSISTANT_RUNTIME_MESSAGE_INVALID')
-  }
-  requireMessageId(message.id)
-  return message
-}
+export { AssistantRuntimeMessageTooLargeError, parseAssistantRuntimeMessage }
 
 async function parseRows(rows: readonly ProjectAssistantMessage[]): Promise<UIMessage[]> {
   if (rows.length === 0) return []
@@ -76,6 +54,10 @@ async function parseRows(rows: readonly ProjectAssistantMessage[]): Promise<UIMe
     }
     if (message.role !== 'user' && message.role !== 'assistant') {
       throw new Error('ASSISTANT_RUNTIME_MESSAGE_ROLE_INVALID')
+    }
+    const serialized = JSON.stringify(row.messageJson)
+    if (!serialized || Buffer.byteLength(serialized, 'utf8') !== row.byteLength) {
+      throw new Error('ASSISTANT_RUNTIME_MESSAGE_BYTE_LENGTH_DIVERGED')
     }
     requireMessageId(message.id)
     if (ids.has(message.id)) throw new Error('ASSISTANT_RUNTIME_MESSAGE_ID_DUPLICATE')
@@ -113,23 +95,48 @@ async function readPageRows(
 ): Promise<AssistantRuntimeMessagePage> {
   const before = parseBeforeCursor(input.before)
   const limit = parsePageLimit(input.limit)
-  const descendingRows = await tx.projectAssistantMessage.findMany({
+  const metadataRows = await tx.projectAssistantMessage.findMany({
     where: {
       threadId: input.threadId,
       ...(before === null ? {} : { position: { lt: before } }),
     },
     orderBy: { position: 'desc' },
     take: limit + 1,
+    select: { position: true, byteLength: true },
   })
-  const hasMore = descendingRows.length > limit
-  const selectedRows = descendingRows.slice(0, limit).reverse()
+  const selectedMetadata: typeof metadataRows = []
+  let selectedBytes = 0
+  for (const row of metadataRows.slice(0, limit)) {
+    if (!Number.isSafeInteger(row.byteLength) || row.byteLength <= 0) {
+      throw new Error('ASSISTANT_RUNTIME_MESSAGE_BYTE_LENGTH_INVALID')
+    }
+    if (selectedBytes + row.byteLength > MAX_MESSAGE_PAGE_BYTES) break
+    selectedMetadata.push(row)
+    selectedBytes += row.byteLength
+  }
+  if (metadataRows.length > 0 && selectedMetadata.length === 0) {
+    throw new Error('ASSISTANT_RUNTIME_MESSAGE_PAGE_BYTE_BUDGET_EXHAUSTED')
+  }
+  const hasMore = metadataRows.length > selectedMetadata.length
+  const selectedRows = selectedMetadata.length === 0
+    ? []
+    : await tx.projectAssistantMessage.findMany({
+        where: {
+          threadId: input.threadId,
+          position: { in: selectedMetadata.map((row) => row.position) },
+        },
+        orderBy: { position: 'asc' },
+      })
+  if (selectedRows.length !== selectedMetadata.length) {
+    throw new Error('ASSISTANT_RUNTIME_MESSAGE_PAGE_CHANGED')
+  }
   const messages = await parseRows(selectedRows)
   return {
     threadId: input.threadId,
     messages,
     messagePage: {
       hasMore,
-      before: hasMore ? String(selectedRows[0]?.position) : null,
+      before: hasMore ? String(selectedMetadata.at(-1)?.position) : null,
     },
   }
 }
@@ -194,11 +201,15 @@ export async function appendAssistantRuntimeMessage(
     readonly afterMessageId?: string | null
   },
 ): Promise<ProjectAssistantThread> {
-  const message = await parseAssistantRuntimeMessage(input.message)
-  const messageJson = toJson(message)
+  const serializedMessage = await serializeAssistantRuntimeMessage(input.message)
+  const message = serializedMessage.message
+  const messageJson = serializedMessage.json as Prisma.InputJsonValue
   const existing = await readExistingMessage(tx, input.thread.id, message.id)
   if (existing) {
-    if (!isDeepStrictEqual(existing.messageJson, messageJson)) {
+    if (
+      !isDeepStrictEqual(existing.messageJson, messageJson)
+      || existing.byteLength !== serializedMessage.byteLength
+    ) {
       throw new Error(`ASSISTANT_RUNTIME_MESSAGE_ID_CONFLICT:${message.id}`)
     }
     return input.thread
@@ -225,6 +236,7 @@ export async function appendAssistantRuntimeMessage(
       messageId: message.id,
       position: input.thread.nextMessagePosition,
       messageJson,
+      byteLength: serializedMessage.byteLength,
     },
   })
   return await tx.projectAssistantThread.update({
@@ -240,11 +252,12 @@ export async function upsertAssistantRuntimeMessage(
     readonly message: UIMessage
   },
 ): Promise<ProjectAssistantThread> {
-  const message = await parseAssistantRuntimeMessage(input.message)
+  const serializedMessage = await serializeAssistantRuntimeMessage(input.message)
+  const message = serializedMessage.message
   if (message.role !== 'assistant') {
     throw new Error('ASSISTANT_RUNTIME_ASSISTANT_MESSAGE_REQUIRED')
   }
-  const messageJson = toJson(message)
+  const messageJson = serializedMessage.json as Prisma.InputJsonValue
   const existing = await readExistingMessage(tx, input.thread.id, message.id)
   if (!existing) {
     return await appendAssistantRuntimeMessage(tx, { thread: input.thread, message })
@@ -253,7 +266,12 @@ export async function upsertAssistantRuntimeMessage(
   if (prior.role !== 'assistant') {
     throw new Error(`ASSISTANT_RUNTIME_MESSAGE_ID_CONFLICT:${message.id}`)
   }
-  if (isDeepStrictEqual(existing.messageJson, messageJson)) return input.thread
+  if (isDeepStrictEqual(existing.messageJson, messageJson)) {
+    if (existing.byteLength !== serializedMessage.byteLength) {
+      throw new Error('ASSISTANT_RUNTIME_MESSAGE_BYTE_LENGTH_DIVERGED')
+    }
+    return input.thread
+  }
   await tx.projectAssistantMessage.update({
     where: {
       threadId_messageId: {
@@ -263,6 +281,7 @@ export async function upsertAssistantRuntimeMessage(
     },
     data: {
       messageJson,
+      byteLength: serializedMessage.byteLength,
       revision: { increment: 1 },
     },
   })
@@ -288,6 +307,7 @@ export async function archiveAssistantRuntimeMessages(
       messageId,
       position,
       messageJson,
+      byteLength,
       revision,
       createdAt,
       updatedAt
@@ -297,6 +317,7 @@ export async function archiveAssistantRuntimeMessages(
       messageId,
       position,
       messageJson,
+      byteLength,
       revision,
       createdAt,
       updatedAt

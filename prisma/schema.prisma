@@ -89,6 +89,7 @@ model ProjectAssistantMessage {
   messageId   String                 @db.VarChar(191)
   position    Int
   messageJson Json
+  byteLength  Int
   revision    Int                    @default(0)
   createdAt   DateTime               @default(now())
   updatedAt   DateTime               @updatedAt
@@ -199,6 +200,7 @@ model ProjectAssistantMessageArchive {
   messageId   String                        @db.VarChar(191)
   position    Int
   messageJson Json
+  byteLength  Int
   revision    Int
   createdAt   DateTime
   updatedAt   DateTime

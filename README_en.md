@@ -182,6 +182,13 @@ Visit [http://localhost:13000](http://localhost:13000) (Method 1 & 2) or [http:/
 > [!WARNING]
 > When running the app directly, do not skip `npm run db:push`. It synchronizes the Prisma schema before the application and workers start.
 >
+> If `project_assistant_threads` or `project_assistant_thread_archives` still has
+> `messagesJson`, stop Web and the Temporal worker, take a backup, then run
+> `npm run db:assistant-messages:preflight`, `npm run db:assistant-messages:apply`, and
+> `npm run db:assistant-messages:verify` in that order. The cutover rejects active Turns and
+> invalid or oversize legacy messages, and resumes from its recorded phase. `db:push` fails
+> closed until the cutover is complete; never replace it with `--accept-data-loss`.
+>
 > Pre-create the object-storage bucket and grant the configured credentials permission to check
 > the bucket and read, write, and delete objects. `S3_ENDPOINT` is the HTTPS endpoint for reads,
 > signing, and control operations and must be reachable by external AI providers.
