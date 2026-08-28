@@ -18,11 +18,11 @@ async function resolveOracleDatabaseUrl(): Promise<string> {
 
 async function queryOne(
   sql: string,
-  parameters: readonly unknown[],
+  parameters: readonly string[],
 ): Promise<RowDataPacket | null> {
   const connection = await mysql.createConnection(await resolveOracleDatabaseUrl())
   try {
-    const [rows] = await connection.query<RowDataPacket[]>(sql, parameters)
+    const [rows] = await connection.query<RowDataPacket[]>(sql, [...parameters])
     return rows[0] ?? null
   } finally {
     await connection.end()
