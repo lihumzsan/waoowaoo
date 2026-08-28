@@ -135,6 +135,27 @@ type AssistantRuntimeMessageReplayControl = Extract<
   { readonly outcome: 'resume_queued' | 'reconcile_unbound_start' }
 >
 
+type AssistantRuntimeSettlementBarrier = {
+  readonly resolve: () => void
+  readonly reject: (error: unknown) => void
+}
+
+class AssistantRuntimeFreshThreadBindingError extends Error {
+  readonly cause: unknown
+  readonly ownerToken: string
+
+  constructor(cause: unknown, ownerToken: string) {
+    super('ASSISTANT_RUNTIME_FRESH_THREAD_BINDING_FAILED')
+    this.name = 'AssistantRuntimeFreshThreadBindingError'
+    this.cause = cause
+    this.ownerToken = ownerToken
+  }
+}
+
+function unwrapThreadPreparationError(error: unknown): unknown {
+  return error instanceof AssistantRuntimeFreshThreadBindingError ? error.cause : error
+}
+
 function isMessageReplayControl(
   value: AssistantRuntimeMessageReplayDecision | null,
 ): value is AssistantRuntimeMessageReplayControl {
@@ -202,6 +223,39 @@ export class AssistantRuntimeService {
       ))
       .map((entry) => entry.promise)
     await Promise.all(pending)
+  }
+
+  private openSettlementBarrier(
+    scope: RuntimeSessionScope,
+    turnId: string,
+  ): AssistantRuntimeSettlementBarrier {
+    if (this.settlementBarriers.has(turnId)) {
+      throw new Error('ASSISTANT_RUNTIME_TURN_SETTLEMENT_ALREADY_REGISTERED')
+    }
+    let resolve!: () => void
+    let reject!: (error: unknown) => void
+    const promise = new Promise<void>((resolvePromise, rejectPromise) => {
+      resolve = resolvePromise
+      reject = rejectPromise
+    })
+    const entry = { scope, promise }
+    this.settlementBarriers.set(turnId, entry)
+    void promise.then(() => {
+      if (this.settlementBarriers.get(turnId) === entry) {
+        this.settlementBarriers.delete(turnId)
+      }
+    }, () => undefined)
+    return { resolve, reject }
+  }
+
+  private async cleanupFailedFreshThreadBinding(
+    scope: AssistantRuntimeSubmitCommand | AssistantRuntimeTaskFollowUp,
+    error: unknown,
+  ): Promise<void> {
+    if (!(error instanceof AssistantRuntimeFreshThreadBindingError)) return
+    const sessionScope = runtimeScope(scope)
+    await this.manager.stop(sessionScope, 'shutdown', error.ownerToken)
+    await this.manager.clearPersistentScope(sessionScope, error.ownerToken)
   }
 
   private async runProjectTransition<T>(
@@ -331,6 +385,7 @@ export class AssistantRuntimeService {
       attempt: null,
       reason: 'runtime_turn_admitted',
     })
+    const settlement = this.openSettlementBarrier(runtimeScope(command), admission.turn.turnId)
     let preparedThread: PreparedThread
     try {
       preparedThread = await this.prepareThread({
@@ -339,18 +394,38 @@ export class AssistantRuntimeService {
         runtimeThreadId: thread.runtimeThreadId,
       })
     } catch (error) {
-      const failure = normalizeAnyError(error, {
+      const preparationError = unwrapThreadPreparationError(error)
+      const failure = normalizeAnyError(preparationError, {
         fallbackCode: 'PROJECT_AGENT_RUNTIME_FAILED',
         context: { system: 'runtime', phase: 'thread_prepare' },
       })
-      await failAssistantRuntimeTurnStart({
-        scope: command,
-        threadId: admission.thread.threadId,
-        turnId: admission.turn.turnId,
-        reason: 'runtime_thread_prepare_failed',
-        failure,
-      }).catch(() => undefined)
-      throw attachFailureToThrown(error, failure)
+      try {
+        await failAssistantRuntimeTurnStart({
+          scope: command,
+          threadId: admission.thread.threadId,
+          turnId: admission.turn.turnId,
+          reason: 'runtime_thread_prepare_failed',
+          failure,
+        })
+        settlement.resolve()
+      } catch (settlementError) {
+        settlement.reject(settlementError)
+        const combined = new AggregateError(
+          [attachFailureToThrown(preparationError, failure), settlementError],
+          'ASSISTANT_RUNTIME_THREAD_PREPARE_SETTLEMENT_FAILED',
+        )
+        throw attachFailureToThrown(combined, failure)
+      }
+      try {
+        await this.cleanupFailedFreshThreadBinding(command, error)
+      } catch (cleanupError) {
+        const combined = new AggregateError(
+          [attachFailureToThrown(preparationError, failure), cleanupError],
+          'ASSISTANT_RUNTIME_THREAD_PREPARE_CLEANUP_FAILED',
+        )
+        throw attachFailureToThrown(combined, failure)
+      }
+      throw attachFailureToThrown(preparationError, failure)
     }
     const started = await this.startProjection({
       scope: command,
@@ -359,6 +434,7 @@ export class AssistantRuntimeService {
       sourceId: command.sourceId,
       locale: command.context.locale,
       inputs: prepared.inputs,
+      settlement,
     })
     return {
       outcome: 'accepted',
@@ -664,12 +740,29 @@ export class AssistantRuntimeService {
         runtimeThreadId: thread.runtimeThreadId,
       })
     } catch (error) {
-      await rollbackAssistantRuntimeTaskFollowUpPreparation({
-        batchId,
-        turnId: admission.turn.turnId,
-      })
-      throw error
+      const preparationError = unwrapThreadPreparationError(error)
+      try {
+        await rollbackAssistantRuntimeTaskFollowUpPreparation({
+          batchId,
+          turnId: admission.turn.turnId,
+        })
+      } catch (rollbackError) {
+        throw new AggregateError(
+          [preparationError, rollbackError],
+          'ASSISTANT_RUNTIME_FOLLOW_UP_PREPARATION_ROLLBACK_FAILED',
+        )
+      }
+      try {
+        await this.cleanupFailedFreshThreadBinding(followUp, error)
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [preparationError, cleanupError],
+          'ASSISTANT_RUNTIME_FOLLOW_UP_PREPARATION_CLEANUP_FAILED',
+        )
+      }
+      throw preparationError
     }
+    const settlement = this.openSettlementBarrier(runtimeScope(followUp), admission.turn.turnId)
     const started = await this.startProjection({
       scope: followUp,
       preparedThread,
@@ -677,6 +770,7 @@ export class AssistantRuntimeService {
       sourceId: followUp.batchId,
       locale: followUp.context.locale,
       inputs: followUp.inputs,
+      settlement,
     })
     return {
       outcome: 'accepted',
@@ -733,15 +827,7 @@ export class AssistantRuntimeService {
       })
     } catch (bindError) {
       if (runtime.disposition === 'started') {
-        try {
-          await this.manager.stop(scope, 'shutdown', access.ownerToken)
-          await this.manager.clearPersistentScope(scope, access.ownerToken)
-        } catch (cleanupError) {
-          throw new AggregateError(
-            [bindError, cleanupError],
-            'ASSISTANT_RUNTIME_THREAD_BINDING_AND_CLEANUP_FAILED',
-          )
-        }
+        throw new AssistantRuntimeFreshThreadBindingError(bindError, access.ownerToken)
       }
       throw bindError
     }
@@ -755,25 +841,9 @@ export class AssistantRuntimeService {
     readonly sourceId: string
     readonly locale: string
     readonly inputs: readonly RuntimeUserInput[]
+    readonly settlement: AssistantRuntimeSettlementBarrier
   }): Promise<StartedProjection> {
     const scope = runtimeScope(input.scope)
-    let resolveSettlement!: () => void
-    let rejectSettlement!: (error: unknown) => void
-    const settlementPromise = new Promise<void>((resolve, reject) => {
-      resolveSettlement = resolve
-      rejectSettlement = reject
-    })
-    const settlementEntry = { scope, promise: settlementPromise }
-    this.settlementBarriers.set(input.turn.turnId, settlementEntry)
-    const removeSettlementBarrier = (): void => {
-      if (this.settlementBarriers.get(input.turn.turnId) === settlementEntry) {
-        this.settlementBarriers.delete(input.turn.turnId)
-      }
-    }
-    // A successful terminal write no longer needs to fence placement release.
-    // A failed write remains registered so stop/recovery observes the rejection
-    // and keeps the placement blocked instead of releasing an unsettled Turn.
-    void settlementPromise.then(removeSettlementBarrier, () => undefined)
     const pendingEvents: RuntimeEvent[] = []
     let projector: AssistantRuntimeEventProjector | null = null
     const unsubscribe = this.manager.subscribe(scope, (managerEvent) => {
@@ -879,7 +949,7 @@ export class AssistantRuntimeService {
       for (const event of pendingEvents.splice(0)) projector.consume(event)
       const completion = this.monitorProjection({ started, projector, publisher, unsubscribe })
       this.liveTurns.set(identity.turnId, { started, projector, completion })
-      void completion.then(resolveSettlement, rejectSettlement)
+      void completion.then(input.settlement.resolve, input.settlement.reject)
       void completion
       await publishAgentSessionViewChanged({
         projectId: identity.projectId,
@@ -905,9 +975,9 @@ export class AssistantRuntimeService {
             reason: 'runtime_turn_start_failed',
             failure,
           })
-          resolveSettlement()
+          input.settlement.resolve()
         } catch (settlementError) {
-          rejectSettlement(settlementError)
+          input.settlement.reject(settlementError)
         }
       } else if (!bindingState.identity) {
         try {
@@ -918,9 +988,9 @@ export class AssistantRuntimeService {
             reason: 'runtime_turn_binding_failed',
             failure,
           })
-          resolveSettlement()
+          input.settlement.resolve()
         } catch (settlementError) {
-          rejectSettlement(settlementError)
+          input.settlement.reject(settlementError)
         }
         await this.manager.discardUnboundTurn(scope).catch(() => undefined)
       } else {
@@ -933,9 +1003,9 @@ export class AssistantRuntimeService {
             reason: 'runtime_projection_start_failed',
             failure,
           })
-          resolveSettlement()
+          input.settlement.resolve()
         } catch (settlementError) {
-          rejectSettlement(settlementError)
+          input.settlement.reject(settlementError)
         }
         const access = await this.access.get(scope)
         await this.manager.recover(scope, {

@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import type { UIMessage } from 'ai'
 import { Prisma } from '@prisma/client'
+import mysql from 'mysql2/promise'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ASSISTANT_RUNTIME_ASSISTANT_ID } from '@/lib/assistant-runtime/contracts'
 import { RedisAssistantRuntimeOwnership } from '@/lib/assistant-runtime/runtime-ownership'
 import { AssistantRuntimeService } from '@/lib/assistant-runtime/service'
 import { parseFailureRecord } from '@/lib/errors/failure'
+import { findCarriedFailureRecord } from '@/lib/errors/normalize'
 import type {
   AssistantRuntimeAccess,
   AssistantRuntimeModelConfiguration,
@@ -459,6 +461,198 @@ describe('Assistant Runtime native Thread recovery', () => {
       await expect(prisma.projectAgentTurn.count({ where: { threadId: thread.id } }))
         .resolves.toBe(1)
     } finally {
+      await manager.shutdownAll()
+    }
+  })
+
+  it('settles a failed native Thread binding before placement cleanup waits', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const thread = await prisma.projectAssistantThread.create({
+      data: {
+        projectId: project.id,
+        userId: user.id,
+        assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
+      },
+    })
+    const container = new DeterministicRuntimeContainer()
+    let service: AssistantRuntimeService | null = null
+    let cleanupObservedQueuedTurn = false
+    const sourceId = 'native-thread-binding-settlement-message'
+    const manager = new RuntimeSessionManager({
+      container,
+      persistence: testPersistence,
+      ownership: new RedisAssistantRuntimeOwnership(),
+      idleTimeoutMs: 60_000,
+      closePlacementTransportSessions: async () => undefined,
+      waitForTurnSettlement: async (scope) => {
+        const turn = await prisma.projectAgentTurn.findFirstOrThrow({
+          where: { sourceId },
+          select: { status: true },
+        })
+        if (turn.status === 'queued') {
+          cleanupObservedQueuedTurn = true
+          throw new Error('TEST_PLACEMENT_STOPPED_BEFORE_DURABLE_SETTLEMENT')
+        }
+        if (!service) throw new Error('TEST_ASSISTANT_RUNTIME_SERVICE_MISSING')
+        await service.waitForTurnSettlements(scope)
+      },
+      onError: () => undefined,
+    })
+    const access: AssistantRuntimeAccess = {
+      environment: { WAO_MCP_TEST_TOKEN: 'test-token' },
+      bearerToken: 'test-token',
+      ownerToken: `owner_${randomUUID()}`,
+    }
+    service = new AssistantRuntimeService({
+      manager,
+      access: { get: async () => access, invalidate: () => undefined },
+      models: { resolve: async () => testModel(project) },
+    })
+    const message: UIMessage = {
+      id: sourceId,
+      role: 'user',
+      parts: [{ type: 'text', text: 'reject the first native Thread binding' }],
+    }
+    const triggerName = 'test_reject_assistant_native_thread_binding'
+    const databaseUrl = process.env.DATABASE_URL
+    if (!databaseUrl) throw new Error('TEST_DATABASE_URL_REQUIRED')
+    const database = await mysql.createConnection(databaseUrl)
+
+    try {
+      await database.query(`DROP TRIGGER IF EXISTS ${triggerName}`)
+      await database.query(`
+        CREATE TRIGGER ${triggerName}
+        BEFORE UPDATE ON project_assistant_threads
+        FOR EACH ROW
+        BEGIN
+          IF OLD.id = ${database.escape(thread.id)}
+            AND OLD.runtimeThreadId IS NULL
+            AND NEW.runtimeThreadId IS NOT NULL THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'TEST_ASSISTANT_NATIVE_THREAD_BIND_REJECTED';
+          END IF;
+        END
+      `)
+
+      let sendError: unknown = null
+      try {
+        await service.send({
+          projectId: project.id,
+          userId: user.id,
+          assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
+          requestId: randomUUID(),
+          sourceId: message.id,
+          message,
+          context: { locale: 'zh', selectedScopeRef: null, selectedAssetId: null },
+        })
+      } catch (error) {
+        sendError = error
+      }
+
+      expect(cleanupObservedQueuedTurn).toBe(false)
+      expect(findCarriedFailureRecord(sendError)?.native.message)
+        .toContain('TEST_ASSISTANT_NATIVE_THREAD_BIND_REJECTED')
+      await expect(service.waitForTurnSettlements({
+        projectId: project.id,
+        userId: user.id,
+      })).resolves.toBeUndefined()
+      await expect(prisma.projectAgentTurn.findFirstOrThrow({
+        where: { sourceId },
+        select: { status: true, failure: true },
+      })).resolves.toMatchObject({
+        status: 'interrupted',
+        failure: expect.any(Object),
+      })
+      await expect(prisma.projectAssistantThread.findUniqueOrThrow({
+        where: { id: thread.id },
+        select: { runtimeThreadId: true },
+      })).resolves.toEqual({ runtimeThreadId: null })
+    } finally {
+      await database.query(`DROP TRIGGER IF EXISTS ${triggerName}`)
+      await database.end()
+      await manager.shutdownAll()
+    }
+  })
+
+  it('keeps a failed prepare settlement visible and fenced', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const manager = new RuntimeSessionManager({
+      container: new DeterministicRuntimeContainer(true),
+      persistence: testPersistence,
+      ownership: new RedisAssistantRuntimeOwnership(),
+      idleTimeoutMs: 60_000,
+      closePlacementTransportSessions: async () => undefined,
+      waitForTurnSettlement: async () => undefined,
+      onError: () => undefined,
+    })
+    const access: AssistantRuntimeAccess = {
+      environment: { WAO_MCP_TEST_TOKEN: 'test-token' },
+      bearerToken: 'test-token',
+      ownerToken: `owner_${randomUUID()}`,
+    }
+    const service = new AssistantRuntimeService({
+      manager,
+      access: { get: async () => access, invalidate: () => undefined },
+      models: { resolve: async () => testModel(project) },
+    })
+    const message: UIMessage = {
+      id: 'prepare-settlement-failure-message',
+      role: 'user',
+      parts: [{ type: 'text', text: 'preserve both prepare and settlement failures' }],
+    }
+    const triggerName = 'test_reject_assistant_prepare_settlement'
+    const databaseUrl = process.env.DATABASE_URL
+    if (!databaseUrl) throw new Error('TEST_DATABASE_URL_REQUIRED')
+    const database = await mysql.createConnection(databaseUrl)
+
+    try {
+      await database.query(`DROP TRIGGER IF EXISTS ${triggerName}`)
+      await database.query(`
+        CREATE TRIGGER ${triggerName}
+        BEFORE UPDATE ON project_agent_turns
+        FOR EACH ROW
+        BEGIN
+          IF NEW.sourceId = 'prepare-settlement-failure-message' AND NEW.status = 'interrupted' THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'TEST_ASSISTANT_PREPARE_SETTLEMENT_REJECTED';
+          END IF;
+        END
+      `)
+
+      let sendError: unknown = null
+      try {
+        await service.send({
+          projectId: project.id,
+          userId: user.id,
+          assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
+          requestId: randomUUID(),
+          sourceId: message.id,
+          message,
+          context: { locale: 'zh', selectedScopeRef: null, selectedAssetId: null },
+        })
+      } catch (error) {
+        sendError = error
+      }
+
+      expect(sendError).toBeInstanceOf(AggregateError)
+      expect(findCarriedFailureRecord(sendError)?.native.message)
+        .toContain('NATIVE_THREAD_START_REJECTED')
+      expect((sendError as AggregateError).errors.map((error) => String(error)))
+        .toEqual(expect.arrayContaining([
+          expect.stringContaining('NATIVE_THREAD_START_REJECTED'),
+          expect.stringContaining('TEST_ASSISTANT_PREPARE_SETTLEMENT_REJECTED'),
+        ]))
+      await expect(service.waitForTurnSettlements({
+        projectId: project.id,
+        userId: user.id,
+      })).rejects.toThrow('TEST_ASSISTANT_PREPARE_SETTLEMENT_REJECTED')
+      await expect(prisma.projectAgentTurn.findFirstOrThrow({
+        where: { sourceId: message.id },
+        select: { status: true, failure: true },
+      })).resolves.toEqual({ status: 'queued', failure: null })
+    } finally {
+      await database.query(`DROP TRIGGER IF EXISTS ${triggerName}`)
+      await database.end()
       await manager.shutdownAll()
     }
   })

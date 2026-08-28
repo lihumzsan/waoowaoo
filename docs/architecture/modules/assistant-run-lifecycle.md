@@ -135,3 +135,10 @@ View、刷新恢复、破坏性确认和跨进程唤醒。Session Manager 只做
 - 产品消息首版把完整会话作为一个持久写入单元，后来只在用户准入入口增加总量保护；projector 与终态
   writer 仍能增长同一事实，最终让后续准入永久失败 → 防线只覆盖一个调用方而没有覆盖真实存储边界 →
   消息按 canonical identity 独立持久化，准入、快照、终态和归档复用同一消息存储裁判（ARL-03/07）。
+- 消息拆表切换首次引入恢复 ledger 后，`preflight` 与最终 `verify` 仍先按 normalized schema 判定完成，
+  中断阶段及目标 count/fingerprint 因而可被跳过 → writer 记录了恢复事实但最终校验没有消费它 → ledger
+  存在时所有入口先校验阶段与目标指纹，只有 ledger 删除后才能报告最终完成（ARL-03/07）。
+- Runtime 失败治理首次只统一了 thread prepare 的原生 FailureRecord，却沿用旧 catch 吞掉其终态写入失败，
+  且结算屏障直到后续 `startProjection` 才建立 → 失败事实统一了但早期 writer 失败路径仍未纳入生命周期 →
+  屏障前移到 prepare 之前，先完成或拒绝持久结算再清理 fresh placement，持久化失败同时保留原始失败并
+  阻断 placement 释放（ARL-07/17、FG-01/04）。
