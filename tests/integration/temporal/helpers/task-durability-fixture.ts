@@ -314,7 +314,6 @@ export async function createTaskDurabilityFixture(): Promise<TaskDurabilityFixtu
       projectId,
       userId,
       assistantId: 'workspace-command',
-      messagesJson: [],
     },
   })
   await prisma.projectAgentTurn.create({

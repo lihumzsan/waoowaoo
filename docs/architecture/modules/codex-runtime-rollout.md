@@ -36,6 +36,11 @@ API 凭据和按 scope 隔离的 Codex Home 保存原生 Thread/history，不经
   唯一权威；数据库 View 是聊天展示、确认归因和产品刷新事实。Product Thread 在首个原生 Turn
   前绑定 native thread id；产品消息绝不 seed、修补或重建模型历史。两份事实服务不同消费者，任何
   一方都不得被解释为另一方的恢复 fallback。
+- **CRR-06A — 静态 Agent 合约拥有唯一运行水位。** 实际 base/developer instructions 与 registry
+  生成的全部 Runtime Skills 共同派生一个 contract revision；placement 只执行物化时冻结的同一
+  revision。准入发现旧 revision 时，活跃 Turn 必须先自然结算；没有活跃 Turn 时由 Session Manager
+  唯一替换 placement，并以持久 native thread identity 和新合约恢复，禁止依赖重启、idle timer、
+  Skill 版本字符串或产品消息回灌完成正确性接力。
 - **CRR-07 — MCP 是唯一系统能力桥。** 真实媒体、导入、批量生产与破坏性操作只经带当前 Turn
   凭据的 MCP；Capability Service 仍是业务实现，MCP 不复制逻辑。Runtime bearer 只证明能力调用权，
   绝不证明用户同意——破坏性 writer 必须验证浏览器侧已持久化的同 Turn 决定。每次调用由同一
@@ -125,3 +130,7 @@ API 凭据和按 scope 隔离的 Codex Home 保存原生 Thread/history，不经
 - Runtime state 曾只在成功 completion/idle 时复制到对象存储；失败或进程被杀时最新用户消息没有进入
   bundle，恢复又用不含该消息的产品 View seed 新线程，导致约束回退 → checkpoint 与 UI seed 是两个
   竞争历史 writer → 删除两者，模型历史只由持久 Codex home 原生维护（CRR-06/08）。
+- 搜索工具切换曾证明持久 native Thread 会保留旧指令，但当时只把 revision 要求写进事故结论，没有
+  建立实际合约 resolver；后续 Creative Skill 虽升级版本，活跃 placement 仍只比较环境指纹并继续执行
+  旧分段规则 → 上一版防线没有进入真实准入与物化路径 → exact instructions 与生成后 Skills 派生唯一
+  revision，Session Manager 在安全 Turn 边界替换旧 placement（CRR-06A）。

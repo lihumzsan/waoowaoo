@@ -44,11 +44,12 @@ export type AssistantRuntimePendingInteractionView = {
 }
 
 export type AssistantRuntimeSessionView = {
-  readonly protocol: 'assistant_runtime_session_view_v1'
+  readonly protocol: 'assistant_runtime_session_view_v2'
   readonly scope: AssistantRuntimeSessionViewScope
   readonly thread: {
     readonly threadId: string
     readonly messages: readonly UIMessage[]
+    readonly messagePage: AssistantRuntimeMessagePageInfo
     readonly createdAt: string
     readonly updatedAt: string
   } | null
@@ -86,6 +87,19 @@ export type AssistantRuntimeSessionView = {
     readonly notifiedAt: string | null
     readonly cancelledAt: string | null
   }[]
+}
+
+export type AssistantRuntimeMessagePageInfo = {
+  readonly hasMore: boolean
+  readonly before: string | null
+}
+
+export type AssistantRuntimeMessagePageView = {
+  readonly protocol: 'assistant_runtime_message_page_v1'
+  readonly scope: AssistantRuntimeSessionViewScope
+  readonly threadId: string
+  readonly messages: readonly UIMessage[]
+  readonly messagePage: AssistantRuntimeMessagePageInfo
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -310,7 +324,7 @@ export function buildAssistantRuntimeServerResponse(input: {
 export async function parseAssistantRuntimeSessionView(
   value: unknown,
 ): Promise<AssistantRuntimeSessionView> {
-  if (!isRecord(value) || value.protocol !== 'assistant_runtime_session_view_v1') {
+  if (!isRecord(value) || value.protocol !== 'assistant_runtime_session_view_v2') {
     throw new Error('ASSISTANT_RUNTIME_SESSION_VIEW_PROTOCOL_INVALID')
   }
   if (!isRecord(value.scope) || value.scope.assistantId !== 'workspace-command') {
@@ -324,7 +338,11 @@ export async function parseAssistantRuntimeSessionView(
     throw new Error('ASSISTANT_RUNTIME_SESSION_VIEW_COLLECTION_INVALID')
   }
   if (value.thread !== null) {
-    if (!isRecord(value.thread) || !Array.isArray(value.thread.messages)) {
+    if (
+      !isRecord(value.thread)
+      || !Array.isArray(value.thread.messages)
+      || !isMessagePageInfo(value.thread.messagePage)
+    ) {
       throw new Error('ASSISTANT_RUNTIME_SESSION_VIEW_THREAD_INVALID')
     }
     if (value.thread.messages.length > 0) {
@@ -350,6 +368,39 @@ export async function parseAssistantRuntimeSessionView(
     }
   }
   return value as unknown as AssistantRuntimeSessionView
+}
+
+function isMessagePageInfo(value: unknown): value is AssistantRuntimeMessagePageInfo {
+  if (!isRecord(value) || typeof value.hasMore !== 'boolean') return false
+  if (value.before !== null && (
+    typeof value.before !== 'string'
+    || !/^[1-9][0-9]*$/.test(value.before)
+    || !Number.isSafeInteger(Number(value.before))
+  )) return false
+  return value.hasMore ? value.before !== null : value.before === null
+}
+
+export async function parseAssistantRuntimeMessagePageView(
+  value: unknown,
+): Promise<AssistantRuntimeMessagePageView> {
+  if (
+    !isRecord(value)
+    || value.protocol !== 'assistant_runtime_message_page_v1'
+    || !isRecord(value.scope)
+    || value.scope.assistantId !== 'workspace-command'
+    || typeof value.threadId !== 'string'
+    || !value.threadId
+    || !Array.isArray(value.messages)
+    || !isMessagePageInfo(value.messagePage)
+  ) {
+    throw new Error('ASSISTANT_RUNTIME_MESSAGE_PAGE_INVALID')
+  }
+  if (value.messages.length > 0) {
+    const parsed = await safeValidateUIMessages({ messages: value.messages })
+    if (!parsed.success) throw new Error('ASSISTANT_RUNTIME_MESSAGE_PAGE_MESSAGES_INVALID')
+    value.messages = parsed.data
+  }
+  return value as unknown as AssistantRuntimeMessagePageView
 }
 
 export type AgentSessionView = AssistantRuntimeSessionView

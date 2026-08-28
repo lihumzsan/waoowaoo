@@ -25,7 +25,6 @@ describe('Assistant Runtime capability Turn fence', () => {
         userId: user.id,
         assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
         runtimeThreadId: null,
-        messagesJson: [],
       },
     })
     const runtimeTurnId = `runtime_turn_${randomUUID()}`
@@ -97,7 +96,6 @@ describe('Assistant Runtime capability Turn fence', () => {
         userId: user.id,
         assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
         runtimeThreadId: null,
-        messagesJson: [],
       },
     })
     const runtimeTurnId = `runtime_turn_${randomUUID()}`
@@ -165,7 +163,6 @@ describe('Assistant Runtime capability Turn fence', () => {
         userId: user.id,
         assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
         runtimeThreadId: `runtime_thread_${randomUUID()}`,
-        messagesJson: [],
       },
     })
     const sourceId = `source_${randomUUID()}`

@@ -132,3 +132,6 @@ View、刷新恢复、破坏性确认和跨进程唤醒。Session Manager 只做
 - Codex 切换曾把 `turn/plan/updated` 写回旧版 Thread 级计划本，停止后的 Plan 因而残留并可能被下一
   Turn 误认；旧实现只替换了事件来源，没有重新核对事实 scope → Plan 改由精确 Turn identity 写入，
   终态不再进入当前 View（ARL-03）。
+- 产品消息首版把完整会话作为一个持久写入单元，后来只在用户准入入口增加总量保护；projector 与终态
+  writer 仍能增长同一事实，最终让后续准入永久失败 → 防线只覆盖一个调用方而没有覆盖真实存储边界 →
+  消息按 canonical identity 独立持久化，准入、快照、终态和归档复用同一消息存储裁判（ARL-03/07）。

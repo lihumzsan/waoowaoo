@@ -187,8 +187,12 @@ class DeterministicRuntimeContainer implements RuntimeContainerAdapter {
 }
 
 const testPersistence: RuntimeSessionPersistence = {
+  readContractRevision: async () => 'a'.repeat(64),
   reconcileBeforeStart: async () => undefined,
-  materialize: async () => ({ hostWorkspaceDirectory: runtimeWorkspaceDirectory }),
+  materialize: async (_scope, contractRevision) => ({
+    hostWorkspaceDirectory: runtimeWorkspaceDirectory,
+    contractRevision,
+  }),
   destroyMaterialization: async () => undefined,
   clearScope: async () => undefined,
 }
@@ -240,7 +244,14 @@ describe('Assistant Runtime native Thread recovery', () => {
         userId: user.id,
         assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
         runtimeThreadId: 'native-unresumable-thread',
-        messagesJson: [priorMessage] as unknown as Prisma.InputJsonValue,
+        nextMessagePosition: 2,
+        messages: {
+          create: {
+            messageId: priorMessage.id,
+            position: 1,
+            messageJson: priorMessage as unknown as Prisma.InputJsonValue,
+          },
+        },
       },
     })
     const container = new DeterministicRuntimeContainer()
@@ -296,12 +307,15 @@ describe('Assistant Runtime native Thread recovery', () => {
 
       await expect(prisma.projectAssistantThread.findUniqueOrThrow({
         where: { id: thread.id },
-        select: { runtimeThreadId: true, messagesJson: true },
+        select: {
+          runtimeThreadId: true,
+          messages: { orderBy: { position: 'asc' }, select: { messageJson: true } },
+        },
       })).resolves.toMatchObject({
         runtimeThreadId,
-        messagesJson: expect.arrayContaining([
-          priorMessage,
-          expect.objectContaining({ id: message.id, role: 'user', parts: message.parts }),
+        messages: expect.arrayContaining([
+          { messageJson: priorMessage },
+          { messageJson: expect.objectContaining({ id: message.id, role: 'user', parts: message.parts }) },
         ]),
       })
       await expect(prisma.projectAgentTurn.count({ where: { threadId: thread.id } }))
@@ -330,7 +344,14 @@ describe('Assistant Runtime native Thread recovery', () => {
         userId: user.id,
         assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
         runtimeThreadId: 'native-still-bound-thread',
-        messagesJson: [priorMessage] as unknown as Prisma.InputJsonValue,
+        nextMessagePosition: 2,
+        messages: {
+          create: {
+            messageId: priorMessage.id,
+            position: 1,
+            messageJson: priorMessage as unknown as Prisma.InputJsonValue,
+          },
+        },
       },
     })
     const manager = new RuntimeSessionManager({
@@ -371,12 +392,15 @@ describe('Assistant Runtime native Thread recovery', () => {
 
       await expect(prisma.projectAssistantThread.findUniqueOrThrow({
         where: { id: thread.id },
-        select: { runtimeThreadId: true, messagesJson: true },
+        select: {
+          runtimeThreadId: true,
+          messages: { orderBy: { position: 'asc' }, select: { messageJson: true } },
+        },
       })).resolves.toMatchObject({
         runtimeThreadId: 'native-still-bound-thread',
-        messagesJson: expect.arrayContaining([
-          priorMessage,
-          expect.objectContaining({ id: message.id, role: 'user', parts: message.parts }),
+        messages: expect.arrayContaining([
+          { messageJson: priorMessage },
+          { messageJson: expect.objectContaining({ id: message.id, role: 'user', parts: message.parts }) },
         ]),
       })
       await expect(prisma.projectAgentTurn.count({ where: { threadId: thread.id } }))

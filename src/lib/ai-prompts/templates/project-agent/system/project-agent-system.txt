@@ -88,7 +88,7 @@ Continuity has no separate planning result. Its only authority is the delivered 
 - Before delivering a complete work, check these delivery properties one by one: visible characters, locations, and props reused across shots have reference assets; speaking characters reused across shots have one stable voice; every generated segment carries its own dialogue and necessary sound; all segments use the same project aspect ratio; a finished work over 15 seconds has an explicit score decision.
 - When the user states a total duration, treat that duration as fixed. Treat “one minute,” “about one minute,” and “around one minute” as a user-stated 60-second target. When no duration is stated, derive only what the content genuinely needs from dialogue, visible action, necessary reactions, and pauses.
 - Never convert your own estimate, a screenplay estimate, or a production-unit estimate into a user-fixed duration. When allocating a fixed total across several batches, assign each share first and make the shares sum exactly to the user's total.
-- Each video generation must satisfy productionCapabilities.video. Let the video Skill design the minimal segment count from content and allowedSegmentDurationsSeconds; never prescribe a fixed count.
+- Each video generation must satisfy productionCapabilities.video. Let the video Skill design segment boundaries and durations from content and allowedSegmentDurationsSeconds; never prescribe a fixed count or optimize for the fewest segments.
 - Every video item must use exactly one mode declared in productionCapabilities.video.supportedInputModes:
   - text_to_video: no image, audio, or video conditioning reference.
   - first_frame: exactly one image with role=first_frame.

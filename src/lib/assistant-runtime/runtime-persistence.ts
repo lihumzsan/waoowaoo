@@ -7,6 +7,10 @@ import {
   type RuntimeSessionScope,
 } from '@/lib/codex-runtime/runtime-session-manager'
 import { materializeCreativeRuntimeConfiguration } from '@/lib/creative-skills'
+import {
+  readAssistantRuntimeContractSnapshot,
+  requireAdmittedAssistantRuntimeContractSnapshot,
+} from './runtime-contract'
 import { markAssistantRuntimeProjectTurnsInterrupted } from './persistence'
 
 const MATERIALIZATION_DIRECTORY = 'materializations'
@@ -56,6 +60,10 @@ export class AssistantRuntimePersistence implements RuntimeSessionPersistence {
     this.scopedCodexHome = input.scopedCodexHome
   }
 
+  async readContractRevision(): Promise<string> {
+    return (await readAssistantRuntimeContractSnapshot()).revision
+  }
+
   async reconcileBeforeStart(scope: RuntimeSessionScope): Promise<void> {
     await markAssistantRuntimeProjectTurnsInterrupted({
       scope,
@@ -65,7 +73,11 @@ export class AssistantRuntimePersistence implements RuntimeSessionPersistence {
     })
   }
 
-  async materialize(scope: RuntimeSessionScope): Promise<RuntimeSessionMaterialization> {
+  async materialize(
+    scope: RuntimeSessionScope,
+    expectedContractRevision: string,
+  ): Promise<RuntimeSessionMaterialization> {
+    const contract = requireAdmittedAssistantRuntimeContractSnapshot(expectedContractRevision)
     const materializationsRoot = path.join(this.hostRoot, MATERIALIZATION_DIRECTORY)
     const codexHomesRoot = path.join(this.hostRoot, CODEX_HOME_DIRECTORY)
     await ensurePrivateDirectory(this.hostRoot)
@@ -76,13 +88,17 @@ export class AssistantRuntimePersistence implements RuntimeSessionPersistence {
     const workspace = path.join(disposableRoot, 'workspace')
     try {
       await ensurePrivateDirectory(workspace)
-      await materializeCreativeRuntimeConfiguration(path.join(workspace, '.agents', 'skills'))
+      await materializeCreativeRuntimeConfiguration(
+        path.join(workspace, '.agents', 'skills'),
+        contract.runtimeSkills,
+      )
       const codexHome = this.scopedCodexHome
         ? path.join(codexHomesRoot, buildRuntimeSessionScopeId(scope))
         : undefined
       if (codexHome) await ensurePrivateDirectory(codexHome)
       return {
         hostWorkspaceDirectory: workspace,
+        contractRevision: contract.revision,
         ...(codexHome ? { hostCodexHomeDirectory: codexHome } : {}),
       }
     } catch (error) {

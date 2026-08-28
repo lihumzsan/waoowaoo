@@ -1,5 +1,4 @@
 import { Prisma } from '@prisma/client'
-import { safeValidateUIMessages, type UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
 import { buildAgentTurnAssistantMessageId } from '@/lib/agent-turn/stream-publisher'
 import { hasProviderFailureEvidence, parseFailureRecord } from '@/lib/errors/failure'
@@ -13,6 +12,7 @@ import type {
   AssistantRuntimeSessionView,
   AssistantRuntimeSessionViewScope,
 } from './view-contract'
+import { readLatestAssistantRuntimeMessagePage } from './message-store'
 
 const RECENT_TURN_LIMIT = 24
 const RECENT_BATCH_LIMIT = 24
@@ -78,13 +78,6 @@ function toTurnView(row: {
   }
 }
 
-async function parseMessages(value: unknown): Promise<readonly UIMessage[]> {
-  if (Array.isArray(value) && value.length === 0) return []
-  const parsed = await safeValidateUIMessages({ messages: value })
-  if (!parsed.success) throw new Error('ASSISTANT_RUNTIME_VIEW_MESSAGES_INVALID')
-  return parsed.data
-}
-
 function parseInteraction(row: {
   readonly id: string
   readonly turnId: string
@@ -148,7 +141,7 @@ export async function getAssistantRuntimeSessionView(
     })
     if (!thread) {
       return {
-        protocol: 'assistant_runtime_session_view_v1',
+        protocol: 'assistant_runtime_session_view_v2',
         scope: input,
         thread: null,
         currentTurn: null,
@@ -164,7 +157,7 @@ export async function getAssistantRuntimeSessionView(
       || thread.assistantId !== input.assistantId
     ) throw new Error('ASSISTANT_RUNTIME_VIEW_THREAD_SCOPE_DIVERGED')
 
-    const [openRows, recentRows, interactions, batches, currentResourceTaskRows, messages] = await Promise.all([
+    const [openRows, recentRows, interactions, batches, currentResourceTaskRows, messagePage] = await Promise.all([
       tx.projectAgentTurn.findMany({
         where: { threadId: thread.id, status: { in: [...ACTIVE_STATUSES] } },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -201,7 +194,7 @@ export async function getAssistantRuntimeSessionView(
         },
         select: { id: true, taskId: true },
       }),
-      parseMessages(thread.messagesJson),
+      readLatestAssistantRuntimeMessagePage(tx, thread.id),
     ])
     if (openRows.length > 65) throw new Error('ASSISTANT_RUNTIME_VIEW_OPEN_TURN_LIMIT_EXCEEDED')
     if (interactions.length > 1) throw new Error('ASSISTANT_RUNTIME_VIEW_INTERACTION_CONFLICT')
@@ -263,11 +256,12 @@ export async function getAssistantRuntimeSessionView(
       }]
     })
     return {
-      protocol: 'assistant_runtime_session_view_v1',
+      protocol: 'assistant_runtime_session_view_v2',
       scope: input,
       thread: {
         threadId: thread.id,
-        messages,
+        messages: messagePage.messages,
+        messagePage: messagePage.messagePage,
         createdAt: thread.createdAt.toISOString(),
         updatedAt: thread.updatedAt.toISOString(),
       },

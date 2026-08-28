@@ -8,6 +8,7 @@ export {
   CREATIVE_RUNTIME_SKILLS,
   creativeSkillRoutingInstructions,
   materializeCreativeRuntimeConfiguration,
+  readCreativeRuntimeConfiguration,
 } from './runtime-skills'
 export {
   isCreativeSkillId,
@@ -35,4 +36,7 @@ export type {
   CreativeDomainKind,
 } from './types'
 export type { CreativeOutput } from './output-registry'
-export type { CreativeRuntimeSkillDefinition } from './runtime-skills'
+export type {
+  CreativeRuntimeSkillDefinition,
+  CreativeRuntimeSkillFile,
+} from './runtime-skills'

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
 import { Prisma, type ProjectAgentTurn, type ProjectAssistantThread } from '@prisma/client'
-import { safeValidateUIMessages, type UIMessage } from 'ai'
+import type { UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
 import { buildAgentTurnAssistantMessageId } from '@/lib/agent-turn/stream-publisher'
 import { projectErrorForModel } from '@/lib/errors/projection'
@@ -19,25 +19,20 @@ import type {
 } from './contracts'
 import { parseAssistantRuntimeSelectedResourceReference } from './selected-resource-reference'
 import { AssistantRuntimeProjectBusyError } from './contracts'
+import {
+  appendAssistantRuntimeMessage,
+  archiveAssistantRuntimeMessages,
+  parseAssistantRuntimeMessage,
+  upsertAssistantRuntimeMessage,
+} from './message-store'
 
 const ACTIVE_TURN_STATUSES = ['queued', 'running', 'waiting_approval'] as const
 const TERMINAL_TURN_STATUSES = ['completed', 'failed', 'interrupted', 'cancelled'] as const
 const FOLLOW_UP_INPUT_MAX_BYTES = 512 * 1_024
-const MAX_ASSISTANT_THREAD_VIEW_BYTES = 4 * 1024 * 1024
-
-class AssistantRuntimeMessageViewTooLargeError extends Error {
-  readonly code = 'ASSISTANT_RUNTIME_MESSAGE_VIEW_TOO_LARGE' as const
-
-  constructor(byteLength: number) {
-    super(`Assistant message view exceeds the durable limit (${String(byteLength)} bytes)`)
-    this.name = 'AssistantRuntimeMessageViewTooLargeError'
-  }
-}
 
 type TransactionClient = Prisma.TransactionClient
 
 type ThreadView = AssistantRuntimeThreadIdentity & {
-  readonly messages: readonly UIMessage[]
   readonly createdAt: Date
   readonly updatedAt: Date
 }
@@ -86,98 +81,18 @@ function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(serialized) as Prisma.InputJsonValue
 }
 
-async function parseMessages(value: unknown): Promise<UIMessage[]> {
-  if (Array.isArray(value) && value.length === 0) return []
-  const validation = await safeValidateUIMessages({ messages: value })
-  if (!validation.success) throw new Error('ASSISTANT_RUNTIME_MESSAGES_INVALID')
-  const ids = new Set<string>()
-  for (const message of validation.data) {
-    requireIdentity(message.id, 'ASSISTANT_RUNTIME_MESSAGE_ID_INVALID')
-    if (ids.has(message.id)) throw new Error('ASSISTANT_RUNTIME_MESSAGE_ID_DUPLICATE')
-    ids.add(message.id)
-  }
-  return validation.data
-}
-
-function serializeMessages(messages: readonly UIMessage[]): Prisma.InputJsonValue {
-  return toJson(messages)
-}
-
-function serializeMessagesForNewTurn(messages: readonly UIMessage[]): Prisma.InputJsonValue {
-  const serialized = JSON.stringify(messages)
-  if (typeof serialized !== 'string') throw new Error('ASSISTANT_RUNTIME_JSON_INVALID')
-  const byteLength = Buffer.byteLength(serialized, 'utf8')
-  if (byteLength > MAX_ASSISTANT_THREAD_VIEW_BYTES) {
-    throw new AssistantRuntimeMessageViewTooLargeError(byteLength)
-  }
-  return JSON.parse(serialized) as Prisma.InputJsonValue
-}
-
-function appendMessages(existing: readonly UIMessage[], appended: readonly UIMessage[]): UIMessage[] {
-  const next = [...existing]
-  const byId = new Map(next.map((message) => [message.id, message] as const))
-  for (const message of appended) {
-    const prior = byId.get(message.id)
-    if (prior) {
-      if (!isDeepStrictEqual(prior, message)) {
-        throw new Error(`ASSISTANT_RUNTIME_MESSAGE_ID_CONFLICT:${message.id}`)
-      }
-      continue
-    }
-    byId.set(message.id, message)
-    next.push(message)
-  }
-  return next
-}
-
-function insertMessageAfter(
-  existing: readonly UIMessage[],
-  message: UIMessage,
-  afterMessageId: string | null,
-): UIMessage[] {
-  const prior = existing.find((candidate) => candidate.id === message.id)
-  if (prior) {
-    if (!isDeepStrictEqual(prior, message)) {
-      throw new Error(`ASSISTANT_RUNTIME_MESSAGE_ID_CONFLICT:${message.id}`)
-    }
-    return [...existing]
-  }
-  if (!afterMessageId) return [...existing, message]
-  const insertionIndex = existing.findIndex((candidate) => candidate.id === afterMessageId)
-  if (insertionIndex < 0) return [...existing, message]
-  return [
-    ...existing.slice(0, insertionIndex + 1),
-    message,
-    ...existing.slice(insertionIndex + 1),
-  ]
-}
-
-function upsertMessage(existing: readonly UIMessage[], message: UIMessage): UIMessage[] {
-  const index = existing.findIndex((candidate) => candidate.id === message.id)
-  if (index < 0) return [...existing, message]
-  const prior = existing[index]
-  if (isDeepStrictEqual(prior, message)) return [...existing]
-  if (prior.role !== 'assistant' || message.role !== 'assistant') {
-    throw new Error(`ASSISTANT_RUNTIME_MESSAGE_ID_CONFLICT:${message.id}`)
-  }
-  const next = [...existing]
-  next[index] = message
-  return next
-}
-
 function normalizePlanForStorage(value: unknown): Prisma.InputJsonValue | typeof Prisma.JsonNull {
   const snapshot = parseProjectAgentPlanSnapshot(value)
   return snapshot ? toJson(snapshot) : Prisma.JsonNull
 }
 
-function threadView(row: ProjectAssistantThread, messages: readonly UIMessage[]): ThreadView {
+function threadView(row: ProjectAssistantThread): ThreadView {
   return {
     projectId: row.projectId,
     userId: row.userId,
     assistantId: 'workspace-command',
     threadId: row.id,
     runtimeThreadId: row.runtimeThreadId,
-    messages,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }
@@ -325,8 +240,8 @@ export async function readAssistantRuntimeMessageReplay(
     // ordinary admission path reclaim that queued Turn instead of acknowledging
     // work that has never reached app-server.
     if (currentTurn?.status === 'queued' && currentTurn.runtimeTurnId === null) {
-      const [message] = await parseMessages([currentTurn.userMessageJson])
-      if (!message || message.role !== 'user') {
+      const message = await parseAssistantRuntimeMessage(currentTurn.userMessageJson)
+      if (message.role !== 'user') {
         throw new Error('ASSISTANT_RUNTIME_USER_MESSAGE_INVALID')
       }
       return {
@@ -385,13 +300,12 @@ export async function getOrCreateAssistantRuntimeThread(
         projectId: scope.projectId,
         userId: scope.userId,
         assistantId: 'workspace-command',
-        messagesJson: serializeMessages([]),
       },
     })
     if (row.clearRequestId) {
       throw new Error('ASSISTANT_RUNTIME_CLEAR_IN_PROGRESS')
     }
-    return threadView(row, await parseMessages(row.messagesJson))
+    return threadView(row)
   })
 }
 
@@ -417,7 +331,7 @@ export async function bindAssistantRuntimeThread(input: {
     const row = await lockThread(tx, input.scope, input.threadId)
     if (row.clearRequestId) throw new Error('ASSISTANT_RUNTIME_CLEAR_IN_PROGRESS')
     if (row.runtimeThreadId === input.runtimeThreadId) {
-      return threadView(row, await parseMessages(row.messagesJson))
+      return threadView(row)
     }
     const expectedRuntimeThreadId = input.expectedRuntimeThreadId ?? null
     if (row.runtimeThreadId !== expectedRuntimeThreadId) {
@@ -427,7 +341,7 @@ export async function bindAssistantRuntimeThread(input: {
       where: { id: row.id },
       data: { runtimeThreadId: input.runtimeThreadId },
     })
-    return threadView(updated, await parseMessages(updated.messagesJson))
+    return threadView(updated)
   })
 }
 
@@ -482,7 +396,7 @@ export async function admitAssistantRuntimeTurn(input: {
       }
       return {
         replayed: true,
-        thread: threadView(thread, await parseMessages(thread.messagesJson)),
+        thread: threadView(thread),
         turn: { ...turnIdentity(priorTurn), runtimeThreadId: thread.runtimeThreadId },
       }
     }
@@ -507,11 +421,9 @@ export async function admitAssistantRuntimeTurn(input: {
     })
     if (active) throw new AssistantRuntimeProjectBusyError()
 
-    const messages = await parseMessages(thread.messagesJson)
-    const nextMessages = appendMessages(messages, [command.message])
-    const updatedThread = await tx.projectAssistantThread.update({
-      where: { id: thread.id },
-      data: { messagesJson: serializeMessagesForNewTurn(nextMessages) },
+    const updatedThread = await appendAssistantRuntimeMessage(tx, {
+      thread,
+      message: command.message,
     })
     const row = await tx.projectAgentTurn.create({
       data: {
@@ -548,7 +460,7 @@ export async function admitAssistantRuntimeTurn(input: {
     })
     return {
       replayed: false,
-      thread: threadView(updatedThread, nextMessages),
+      thread: threadView(updatedThread),
       turn: { ...turnIdentity(row), runtimeThreadId: updatedThread.runtimeThreadId },
     }
   })
@@ -911,18 +823,11 @@ export async function acceptAssistantRuntimeSteer(input: {
     if (handoff.status !== 'pending') {
       throw new Error('ASSISTANT_RUNTIME_STEER_HANDOFF_UNCERTAIN')
     }
-    const messages = await parseMessages(thread.messagesJson)
-    const nextMessages = insertMessageAfter(
-      messages,
-      input.message,
-      input.assistantBoundaryMessageId,
-    )
-    if (!isDeepStrictEqual(nextMessages, messages)) {
-      await tx.projectAssistantThread.update({
-        where: { id: thread.id },
-        data: { messagesJson: serializeMessagesForNewTurn(nextMessages) },
-      })
-    }
+    await appendAssistantRuntimeMessage(tx, {
+      thread,
+      message: input.message,
+      afterMessageId: input.assistantBoundaryMessageId,
+    })
     await tx.projectAssistantMessageCommand.update({
       where: { id: handoff.id },
       data: {
@@ -1274,14 +1179,10 @@ export async function persistAssistantRuntimeMessageSnapshot(input: {
     ) {
       throw new Error('ASSISTANT_RUNTIME_MESSAGE_SNAPSHOT_SCOPE_DIVERGED')
     }
-    const messages = await parseMessages(thread.messagesJson)
-    const nextMessages = upsertMessage(messages, input.message)
-    if (!isDeepStrictEqual(nextMessages, messages)) {
-      await tx.projectAssistantThread.update({
-        where: { id: thread.id },
-        data: { messagesJson: serializeMessages(nextMessages) },
-      })
-    }
+    await upsertAssistantRuntimeMessage(tx, {
+      thread,
+      message: input.message,
+    })
   })
 }
 
@@ -1325,28 +1226,20 @@ export async function settleAssistantRuntimeTurn(input: {
       if (turn.assistantMessageId !== null || !input.projection.assistantMessage) {
         throw new Error('ASSISTANT_RUNTIME_SETTLEMENT_REPLAY_DIVERGED')
       }
-      const messages = await parseMessages(thread.messagesJson)
-      const nextMessages = upsertMessage(messages, input.projection.assistantMessage)
-      if (!isDeepStrictEqual(nextMessages, messages)) {
-        await tx.projectAssistantThread.update({
-          where: { id: thread.id },
-          data: { messagesJson: serializeMessages(nextMessages) },
-        })
-      }
+      await upsertAssistantRuntimeMessage(tx, {
+        thread,
+        message: input.projection.assistantMessage,
+      })
       await tx.projectAgentTurn.update({
         where: { id: turn.id },
         data: { assistantMessageId: projectedMessageId },
       })
       return
     }
-    const messages = await parseMessages(thread.messagesJson)
-    const nextMessages = input.projection.assistantMessage
-      ? upsertMessage(messages, input.projection.assistantMessage)
-      : messages
-    if (!isDeepStrictEqual(nextMessages, messages)) {
-      await tx.projectAssistantThread.update({
-        where: { id: thread.id },
-        data: { messagesJson: serializeMessages(nextMessages) },
+    if (input.projection.assistantMessage) {
+      await upsertAssistantRuntimeMessage(tx, {
+        thread,
+        message: input.projection.assistantMessage,
       })
     }
     await tx.agentTurnInteraction.updateMany({
@@ -1481,26 +1374,26 @@ export async function clearAssistantRuntimeThread(input: {
     if (thread.clearRequestId !== input.requestId) {
       throw new Error('ASSISTANT_RUNTIME_CLEAR_NOT_CLAIMED')
     }
-    const messages = await parseMessages(thread.messagesJson)
     const activeTurns = await tx.projectAgentTurn.findMany({
       where: { threadId: thread.id, status: { in: [...ACTIVE_TURN_STATUSES] } },
       select: { id: true },
     })
-    await tx.projectAssistantThreadArchive.upsert({
-      where: { threadId: thread.id },
-      update: {},
-      create: {
+    const archive = await tx.projectAssistantThreadArchive.create({
+      data: {
         threadId: thread.id,
         projectId: thread.projectId,
         userId: thread.userId,
         assistantId: thread.assistantId,
         runtimeThreadId: thread.runtimeThreadId,
-        messagesJson: serializeMessages(messages),
         clearRequestId: input.requestId,
         cancelledTurnIds: toJson(activeTurns.map((turn) => turn.id)),
         threadCreatedAt: thread.createdAt,
         threadUpdatedAt: thread.updatedAt,
       },
+    })
+    await archiveAssistantRuntimeMessages(tx, {
+      threadId: thread.id,
+      archiveId: archive.id,
     })
     await tx.agentTurnInteraction.updateMany({
       where: { turn: { threadId: thread.id }, status: { in: ['pending', 'delivery_pending', 'decided'] } },
@@ -1821,7 +1714,7 @@ export async function admitAssistantRuntimeTaskFollowUp(input: {
       }
       return {
         replayed: true,
-        thread: threadView(thread, await parseMessages(thread.messagesJson)),
+        thread: threadView(thread),
         turn: { ...turnIdentity(existing), runtimeThreadId: thread.runtimeThreadId },
         followUp,
       }
@@ -1867,7 +1760,7 @@ export async function admitAssistantRuntimeTaskFollowUp(input: {
     }
     return {
       replayed: false,
-      thread: threadView(thread, await parseMessages(thread.messagesJson)),
+      thread: threadView(thread),
       turn: { ...turnIdentity(created), runtimeThreadId: thread.runtimeThreadId },
       followUp,
     }

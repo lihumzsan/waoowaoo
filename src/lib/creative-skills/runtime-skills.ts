@@ -11,6 +11,11 @@ import type { CreativeDomainKind, CreativeOutputKind, CreativeSkillId } from './
 
 type ProfessionalSkillId = Exclude<CreativeSkillId, 'creative-core'>
 
+export type CreativeRuntimeSkillFile = {
+  readonly skillId: ProfessionalSkillId
+  readonly content: string
+}
+
 export type CreativeRuntimeSkillDefinition = {
   readonly kind: CreativeDomainKind
   readonly title: string
@@ -125,18 +130,26 @@ async function buildRuntimeSkill(skill: CreativeRuntimeSkillDefinition): Promise
   ].filter((value): value is string => value !== null).join('\n\n')
 }
 
+export async function readCreativeRuntimeConfiguration(): Promise<readonly CreativeRuntimeSkillFile[]> {
+  return await Promise.all(CREATIVE_RUNTIME_SKILLS.map(async (skill) => ({
+    skillId: skill.skillIds[1],
+    content: `${await buildRuntimeSkill(skill)}\n`,
+  })))
+}
+
 export async function materializeCreativeRuntimeConfiguration(
   runtimeSkillsDirectory: string,
+  configuration?: readonly CreativeRuntimeSkillFile[],
 ): Promise<void> {
   const skillsDirectory = runtimeSkillsDirectory
+  const resolvedConfiguration = configuration ?? await readCreativeRuntimeConfiguration()
   await mkdir(skillsDirectory, { recursive: true, mode: 0o700 })
-  await Promise.all(CREATIVE_RUNTIME_SKILLS.map(async (skill) => {
-    const professionalSkillId = skill.skillIds[1]
-    const skillDirectory = path.join(skillsDirectory, professionalSkillId)
+  await Promise.all(resolvedConfiguration.map(async (skill) => {
+    const skillDirectory = path.join(skillsDirectory, skill.skillId)
     await mkdir(skillDirectory, { recursive: true, mode: 0o700 })
     await writeFile(
       path.join(skillDirectory, 'SKILL.md'),
-      `${await buildRuntimeSkill(skill)}\n`,
+      skill.content,
       { mode: 0o600 },
     )
   }))

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { Prisma } from '@prisma/client'
 import { ASSISTANT_RUNTIME_ASSISTANT_ID } from '@/lib/assistant-runtime/contracts'
 import { bindAssistantRuntimeThread } from '@/lib/assistant-runtime/persistence'
 import { createTestProject, createTestUser } from '../../helpers/billing-fixtures'
@@ -24,7 +25,14 @@ describe('Assistant Runtime native Thread binding', () => {
         userId: user.id,
         assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
         runtimeThreadId: 'native-old-thread',
-        messagesJson: messages,
+        nextMessagePosition: 2,
+        messages: {
+          create: {
+            messageId: messages[0].id,
+            position: 1,
+            messageJson: messages[0] as unknown as Prisma.InputJsonValue,
+          },
+        },
       },
     })
     const scope = {
@@ -47,10 +55,15 @@ describe('Assistant Runtime native Thread binding', () => {
 
     await expect(prisma.projectAssistantThread.findUniqueOrThrow({
       where: { id: thread.id },
-      select: { runtimeThreadId: true, messagesJson: true },
+      select: {
+        runtimeThreadId: true,
+        nextMessagePosition: true,
+        messages: { orderBy: { position: 'asc' }, select: { messageJson: true } },
+      },
     })).resolves.toEqual({
       runtimeThreadId: 'native-new-thread',
-      messagesJson: messages,
+      nextMessagePosition: 2,
+      messages: [{ messageJson: messages[0] }],
     })
 
     await expect(bindAssistantRuntimeThread({
@@ -61,10 +74,15 @@ describe('Assistant Runtime native Thread binding', () => {
 
     await expect(prisma.projectAssistantThread.findUniqueOrThrow({
       where: { id: thread.id },
-      select: { runtimeThreadId: true, messagesJson: true },
+      select: {
+        runtimeThreadId: true,
+        nextMessagePosition: true,
+        messages: { orderBy: { position: 'asc' }, select: { messageJson: true } },
+      },
     })).resolves.toEqual({
       runtimeThreadId: 'native-new-thread',
-      messagesJson: messages,
+      nextMessagePosition: 2,
+      messages: [{ messageJson: messages[0] }],
     })
   })
 })

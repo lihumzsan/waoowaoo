@@ -167,7 +167,6 @@ export async function createTaskDependencyGateFixture(input: {
       projectId,
       userId,
       assistantId: 'workspace-command',
-      messagesJson: [],
     },
   })
   await prisma.projectAgentTurn.create({

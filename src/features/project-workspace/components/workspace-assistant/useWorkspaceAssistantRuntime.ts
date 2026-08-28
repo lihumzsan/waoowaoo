@@ -14,11 +14,12 @@ import {
   type ThreadMessageLike,
 } from '@assistant-ui/react'
 import { useLocale } from 'next-intl'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useAgentSessionView } from '@/lib/query/hooks'
 import {
   isAssistantRuntimeApprovalRequest,
   isAssistantRuntimeInputRequest,
+  parseAssistantRuntimeMessagePageView,
   type AgentSessionPendingInteractionView,
   type AgentSessionView,
 } from '@/lib/assistant-runtime/view-contract'
@@ -38,6 +39,13 @@ import {
   clearWorkspaceAssistantUserMessageReceipt,
   resolveWorkspaceAssistantUserMessageId,
 } from './workspace-assistant-command-receipt'
+import {
+  createAssistantMessageHistoryState,
+  isAssistantMessageHistoryRequestCurrent,
+  reduceAssistantMessageHistoryState,
+  type AssistantMessageHistoryPage,
+  type AssistantMessageHistoryRequestIdentity,
+} from './assistant-message-history-state'
 import { createClientApiError, parseClientError } from '@/lib/errors/client'
 
 export interface WorkspaceAssistantSendMessageInput {
@@ -66,6 +74,9 @@ interface UseWorkspaceAssistantRuntimeResult {
   error: Error | undefined
   viewError: string | null
   viewLoading: boolean
+  hasEarlierMessages: boolean
+  earlierMessagesLoading: boolean
+  loadEarlierMessages: () => Promise<void>
   sendMessage: (input: WorkspaceAssistantSendMessageInput) => Promise<void>
   sendHiddenMessage: (text: string, sourceKey?: string) => Promise<void>
   stopReply: () => Promise<void>
@@ -229,6 +240,24 @@ function isActiveTurn(view: AgentSessionView | null): boolean {
     view?.currentTurn?.status === 'running' ||
     view?.currentTurn?.status === 'waiting_approval'
   )
+}
+
+function assistantMessageHistoryPage(
+  scopeKey: string,
+  view: AgentSessionView | null,
+): AssistantMessageHistoryPage {
+  return {
+    scopeKey,
+    threadId: view?.thread?.threadId ?? null,
+    messages: [...(view?.thread?.messages ?? [])],
+    before: view?.thread?.messagePage.before ?? null,
+    hasMore: view?.thread?.messagePage.hasMore ?? false,
+  }
+}
+
+type ActiveAssistantMessageHistoryRequest = {
+  readonly identity: AssistantMessageHistoryRequestIdentity
+  readonly controller: AbortController
 }
 
 function readDecidedInteractionResult(
@@ -426,6 +455,13 @@ export function useWorkspaceAssistantRuntime({
     scopeKey: string
     value: Error | null
   }>(() => ({ scopeKey, value: null }))
+  const [persistedHistoryState, dispatchPersistedHistory] = useReducer(
+    reduceAssistantMessageHistoryState,
+    assistantMessageHistoryPage(scopeKey, view),
+    createAssistantMessageHistoryState,
+  )
+  const activeHistoryRequestRef = useRef<ActiveAssistantMessageHistoryRequest | null>(null)
+  const historyRequestSequenceRef = useRef(0)
   const optimisticMessages = useMemo(
     () => (optimisticState.scopeKey === scopeKey ? optimisticState.messages : []),
     [optimisticState, scopeKey],
@@ -457,10 +493,98 @@ export function useWorkspaceAssistantRuntime({
     },
     [scopeKey],
   )
-  const persistedMessages = useMemo(
-    () => [...(view?.thread?.messages ?? [])],
-    [view?.thread?.messages],
-  )
+  const currentThreadId = view?.thread?.threadId ?? null
+  const effectivePersistedHistory =
+    persistedHistoryState.scopeKey === scopeKey
+    && persistedHistoryState.threadId === currentThreadId
+      ? persistedHistoryState
+      : createAssistantMessageHistoryState(assistantMessageHistoryPage(scopeKey, view))
+  const effectivePersistedHistoryRef = useRef(effectivePersistedHistory)
+  effectivePersistedHistoryRef.current = effectivePersistedHistory
+  const persistedMessages = effectivePersistedHistory.messages
+  useEffect(() => {
+    const action = {
+      type: 'view_synced' as const,
+      page: assistantMessageHistoryPage(scopeKey, view),
+    }
+    const projected = reduceAssistantMessageHistoryState(
+      effectivePersistedHistoryRef.current,
+      action,
+    )
+    const active = activeHistoryRequestRef.current
+    if (active && !isAssistantMessageHistoryRequestCurrent(projected, active.identity)) {
+      activeHistoryRequestRef.current = null
+      active.controller.abort()
+    }
+    dispatchPersistedHistory(action)
+  }, [scopeKey, view])
+  const loadEarlierMessages = useCallback(async (): Promise<void> => {
+    const history = effectivePersistedHistory
+    if (
+      !history.threadId
+      || !history.hasMore
+      || !history.before
+      || history.activeRequest
+      || activeHistoryRequestRef.current
+    ) return
+    const request: AssistantMessageHistoryRequestIdentity = {
+      requestId: historyRequestSequenceRef.current + 1,
+      scopeKey,
+      threadId: history.threadId,
+      before: history.before,
+    }
+    historyRequestSequenceRef.current = request.requestId
+    const controller = new AbortController()
+    activeHistoryRequestRef.current = { identity: request, controller }
+    dispatchPersistedHistory({ type: 'load_started', request })
+    try {
+      const query = new URLSearchParams({
+        threadId: request.threadId,
+        before: request.before,
+      })
+      const response = await apiFetch(
+        `/api/projects/${encodeURIComponent(projectId)}/assistant/messages?${query.toString()}`,
+        { signal: controller.signal },
+      )
+      if (!response.ok) {
+        throw await readCommandError(response, 'ASSISTANT_RUNTIME_MESSAGE_PAGE_REQUEST_FAILED')
+      }
+      const page = await parseAssistantRuntimeMessagePageView(
+        await response.json().catch(() => null),
+      )
+      if (
+        page.scope.projectId !== projectId
+        || page.scope.assistantId !== 'workspace-command'
+        || page.threadId !== request.threadId
+      ) {
+        throw new Error('ASSISTANT_RUNTIME_MESSAGE_PAGE_SCOPE_DIVERGED')
+      }
+      if (activeHistoryRequestRef.current?.identity !== request) return
+      dispatchPersistedHistory({
+        type: 'load_succeeded',
+        request,
+        page: {
+          messages: page.messages,
+          before: page.messagePage.before,
+          hasMore: page.messagePage.hasMore,
+        },
+      })
+    } catch (error) {
+      if (activeHistoryRequestRef.current?.identity !== request) return
+      const normalized = error instanceof Error ? error : new Error(String(error))
+      dispatchPersistedHistory({ type: 'load_failed', request })
+      throw normalized
+    } finally {
+      if (activeHistoryRequestRef.current?.identity === request) {
+        activeHistoryRequestRef.current = null
+      }
+    }
+  }, [effectivePersistedHistory, projectId, scopeKey])
+  useEffect(() => () => {
+    const active = activeHistoryRequestRef.current
+    activeHistoryRequestRef.current = null
+    active?.controller.abort()
+  }, [])
   const refetchView = useCallback(async (): Promise<AgentSessionView | null> => {
     const result = await refetchAgentSessionView({ cancelRefetch: true })
     if (result.error) return null
@@ -771,6 +895,9 @@ export function useWorkspaceAssistantRuntime({
     error: commandError ?? undefined,
     viewError: viewQuery.error ? parseClientError(viewQuery.error).code ?? 'INTERNAL_ERROR' : null,
     viewLoading: viewQuery.isLoading,
+    hasEarlierMessages: effectivePersistedHistory.hasMore,
+    earlierMessagesLoading: effectivePersistedHistory.activeRequest !== null,
+    loadEarlierMessages,
     sendMessage,
     sendHiddenMessage,
     stopReply,

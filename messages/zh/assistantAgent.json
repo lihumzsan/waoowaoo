@@ -22,6 +22,8 @@
     "continueInterruptedInstruction": "继续上一轮未完成的任务。先检查当前项目文件、计划和已提交任务，只继续尚未完成的部分；不要重复已经完成或已经提交的操作。",
     "undelivered": "未送达",
     "sessionStateError": "无法刷新助手状态，请重试或刷新页面后再继续。",
+    "loadEarlierMessages": "加载更早的消息",
+    "loadingEarlierMessages": "正在加载更早的消息…",
     "backgroundFollowUpRunning": "正在整理已完成任务的结果…",
     "settings": "助手设置",
     "settingsError": "设置加载失败，点击重试。",

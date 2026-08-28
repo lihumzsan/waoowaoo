@@ -72,7 +72,7 @@
   "AGENT_STEER_HANDOFF_UNCERTAIN": "The appended message handoff could not be confirmed. To avoid duplicate execution, this message will not be retried automatically; send a new message to continue.",
   "AGENT_START_HANDOFF_UNCERTAIN": "The assistant start handoff could not be confirmed. To avoid duplicate execution, this message will not be retried automatically; send a new message to continue.",
   "PROJECT_AGENT_RUNTIME_FAILED": "The assistant could not complete this turn. Your committed work and long-running tasks remain preserved.",
-  "ASSISTANT_RUNTIME_MESSAGE_VIEW_TOO_LARGE": "This assistant conversation is too large to continue safely. Start a new conversation or compact the history first.",
+  "ASSISTANT_RUNTIME_MESSAGE_TOO_LARGE": "One assistant message is too large to save safely. Shorten it or remove attachments and retry.",
   "ASSISTANT_PROVIDER_REQUEST_INVALID": "The model provider could not accept this conversation format. Continue the task or switch models and try again.",
   "ASSISTANT_RUNTIME_PROTOCOL_ERROR": "The assistant runtime protocol is incompatible with this version. Update the service and try again.",
   "PROJECT_AGENT_ASSISTANT_MODEL_NOT_CONFIGURED": "Configure an assistant model before using the project assistant.",

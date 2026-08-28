@@ -82,6 +82,7 @@ export interface AssistantRuntimeModelResolver {
   resolve(input: {
     readonly scope: RuntimeSessionScope
     readonly access: AssistantRuntimeAccess
+    readonly contractRevision: string
   }): Promise<AssistantRuntimeModelConfiguration>
 }
 
@@ -703,10 +704,14 @@ export class AssistantRuntimeService {
   }): Promise<PreparedThread> {
     const scope = runtimeScope(input.scope)
     const access = await this.access.get(scope)
-    const model = await this.models.resolve({ scope, access })
-    await this.manager.ensure(scope, {
+    const session = await this.manager.ensure(scope, {
       environment: access.environment,
       ownerToken: access.ownerToken,
+    })
+    const model = await this.models.resolve({
+      scope,
+      access,
+      contractRevision: session.contractRevision,
     })
     const preparedRuntime = await this.ensureThreadWithRecovery({
       scope,
@@ -714,6 +719,7 @@ export class AssistantRuntimeService {
       productThreadId: input.threadId,
       runtimeThreadId: input.runtimeThreadId,
       configuration: model.thread,
+      contractRevision: session.contractRevision,
     })
     const runtime = preparedRuntime.runtime
     try {
@@ -746,6 +752,7 @@ export class AssistantRuntimeService {
     readonly productThreadId: string
     readonly runtimeThreadId: string | null
     readonly configuration: AssistantRuntimeModelConfiguration['thread']
+    readonly contractRevision: string
   }): Promise<{
     readonly runtime: RuntimeThreadSessionView
     readonly replacesRuntimeThreadId: string | null
@@ -754,6 +761,7 @@ export class AssistantRuntimeService {
       const runtime = await this.manager.ensureThread(input.scope, {
         productThreadId: input.productThreadId,
         runtimeThreadId: input.runtimeThreadId,
+        expectedContractRevision: input.contractRevision,
         configuration: input.configuration,
       })
       return { runtime, replacesRuntimeThreadId: null }
@@ -764,13 +772,17 @@ export class AssistantRuntimeService {
       // history cannot be reconstructed from them, so only discard the failed
       // App Server session and establish one new native Thread/MCP session.
       await this.manager.stop(input.scope, 'shutdown', input.access.ownerToken)
-      await this.manager.ensure(input.scope, {
+      const replacement = await this.manager.ensure(input.scope, {
         environment: input.access.environment,
         ownerToken: input.access.ownerToken,
       })
+      if (replacement.contractRevision !== input.contractRevision) {
+        throw new Error('ASSISTANT_RUNTIME_CONTRACT_CHANGED_DURING_THREAD_RECOVERY')
+      }
       const runtime = await this.manager.ensureThread(input.scope, {
         productThreadId: input.productThreadId,
         runtimeThreadId: null,
+        expectedContractRevision: input.contractRevision,
         configuration: input.configuration,
       })
       return {

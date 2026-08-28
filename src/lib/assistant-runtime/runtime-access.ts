@@ -10,20 +10,13 @@ import {
   CODEX_DEFAULT_MODEL_ID,
 } from '@/lib/ai-providers/codex/constants'
 import {
-  CREATIVE_RUNTIME_SKILLS,
-  CREATIVE_SKILL_REGISTRY,
-  creativeSkillRoutingInstructions,
-  creativeOutputJsonSchema,
-} from '@/lib/creative-skills'
-import {
-  buildProjectAgentBasePrompt,
-  buildProjectAgentSystemPrompt,
-} from '@/lib/ai-prompts/project-agent-system'
-import {
   formatProjectProductionContext,
   readProjectProductionContext,
   type ProjectProductionContext,
 } from '@/lib/project-production-context'
+import {
+  requireAdmittedAssistantRuntimeContractSnapshot,
+} from './runtime-contract'
 
 const MCP_PATH = '/api/internal/codex-runtime/mcp'
 const WAO_MCP_RUNTIME_BEARER_ENV_KEY = 'WAO_MCP_RUNTIME_BEARER_TOKEN' as const
@@ -33,16 +26,6 @@ const WAO_MCP_RUNTIME_BEARER_ENV_KEY = 'WAO_MCP_RUNTIME_BEARER_TOKEN' as const
 // placement authorization; Wao still owns plan validity, idempotency,
 // cancellation, and execution state.
 const WAO_MCP_TOOL_TIMEOUT_SECONDS = 60 * 60
-
-export const ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS = buildProjectAgentSystemPrompt(
-  creativeSkillRoutingInstructions(),
-)
-
-// The custom base replaces Codex's built-in coding-agent base prompt. It keeps
-// the load-bearing channel, formatting, update, and autonomy contract verbatim
-// and drops the Codex identity plus coding-only rules (apply_patch/git editing
-// constraints, review mindset, frontend design).
-export const ASSISTANT_RUNTIME_BASE_INSTRUCTIONS = buildProjectAgentBasePrompt()
 
 export const ASSISTANT_RUNTIME_CODEX_VERSION = '0.147.0-alpha.6.6' as const
 
@@ -97,15 +80,6 @@ export const ASSISTANT_RUNTIME_STATIC_CONTRACT = {
       required: true,
       defaultToolsApprovalMode: 'approve',
     },
-  },
-  creativeRuntime: {
-    primaryAgentGlobalInstructions: ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
-    skills: CREATIVE_SKILL_REGISTRY,
-    runtimeSkills: CREATIVE_RUNTIME_SKILLS,
-    outputSchemas: Object.fromEntries(CREATIVE_RUNTIME_SKILLS.map((skill) => [
-      skill.outputKind,
-      creativeOutputJsonSchema(skill.outputKind),
-    ])),
   },
 } as const
 
@@ -209,6 +183,7 @@ export async function resolveAssistantRuntimeModelConfiguration(
   input: {
     readonly scope: RuntimeSessionScope
     readonly access: AssistantRuntimeAccess
+    readonly contractRevision: string
   },
 ): Promise<AssistantRuntimeModelConfiguration> {
   const waoBaseUrl = requireAbsoluteHttpUrl(
@@ -216,6 +191,7 @@ export async function resolveAssistantRuntimeModelConfiguration(
     'ASSISTANT_RUNTIME_WAO_BASE_URL_REQUIRED',
   )
   const projectProductionContext = await readProjectProductionContext(input.scope)
+  const contract = requireAdmittedAssistantRuntimeContractSnapshot(input.contractRevision)
   const sandbox = runtimeSandboxMode()
   const config = runtimeConfig({
     mcpUrl: `${waoBaseUrl}${MCP_PATH}`,
@@ -228,8 +204,8 @@ export async function resolveAssistantRuntimeModelConfiguration(
     sandbox,
     config,
     serviceName: threadContract.serviceName,
-    baseInstructions: ASSISTANT_RUNTIME_BASE_INSTRUCTIONS,
-    developerInstructions: ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
+    baseInstructions: contract.baseInstructions,
+    developerInstructions: contract.developerInstructions,
     personality: threadContract.personality,
     ephemeral: threadContract.ephemeral,
   }
@@ -244,8 +220,8 @@ export async function resolveAssistantRuntimeModelConfiguration(
         approvalPolicy: threadContract.approvalPolicy,
         sandbox,
         config,
-        baseInstructions: ASSISTANT_RUNTIME_BASE_INSTRUCTIONS,
-        developerInstructions: ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
+        baseInstructions: contract.baseInstructions,
+        developerInstructions: contract.developerInstructions,
         personality: threadContract.personality,
       },
     },

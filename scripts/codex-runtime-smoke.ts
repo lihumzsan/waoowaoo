@@ -29,9 +29,9 @@ import {
 } from '@/lib/wao-mcp/user-decision'
 import type { WaoMcpOperationExecutorResult } from '@/lib/wao-mcp/contracts'
 import { AssistantRuntimePersistence } from '@/lib/assistant-runtime/runtime-persistence'
+import { readAssistantRuntimeContractSnapshot } from '@/lib/assistant-runtime/runtime-contract'
 import {
   ASSISTANT_RUNTIME_CODEX_VERSION,
-  ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
   ASSISTANT_RUNTIME_STATIC_CONTRACT,
 } from '@/lib/assistant-runtime/runtime-access'
 import {
@@ -523,7 +523,8 @@ async function runAppServerSmoke(params: {
   await writeFile(sharedHomeSentinel, 'preserve me\n')
   const sharedHomeBefore = await listRelativeNames(sharedHome)
   const persistenceScope = { userId: 'runtime-smoke-user', projectId: 'runtime-smoke-project' }
-  const materialization = await persistence.materialize(persistenceScope)
+  const contract = await readAssistantRuntimeContractSnapshot()
+  const materialization = await persistence.materialize(persistenceScope, contract.revision)
   assert.equal(
     'hostCodexHomeDirectory' in materialization,
     false,
@@ -601,7 +602,8 @@ async function runAppServerSmoke(params: {
       approvalPolicy,
       sandbox: 'read-only',
       config: nativeRuntimeConfig,
-      developerInstructions: ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
+      baseInstructions: contract.baseInstructions,
+      developerInstructions: contract.developerInstructions,
       ephemeral: false,
     })
     assert.equal((await firstRuntime.readThread({ threadId: thread.id })).id, thread.id)
@@ -646,6 +648,8 @@ async function runAppServerSmoke(params: {
         approvalPolicy,
         sandbox: 'read-only',
         config: nativeRuntimeConfig,
+        baseInstructions: contract.baseInstructions,
+        developerInstructions: contract.developerInstructions,
       })
       assert.equal(resumedThread.id, thread.id)
       resumed = true
@@ -705,8 +709,9 @@ async function runNativeConcurrencySmoke(rootDir: string): Promise<void> {
   const sharedHomeBefore = await listRelativeNames(sharedHome)
   const scopeA = { userId: 'runtime-concurrency-user-a', projectId: 'runtime-concurrency-project-a' }
   const scopeB = { userId: 'runtime-concurrency-user-b', projectId: 'runtime-concurrency-project-b' }
-  const materializationA = await persistence.materialize(scopeA)
-  const materializationB = await persistence.materialize(scopeB)
+  const contract = await readAssistantRuntimeContractSnapshot()
+  const materializationA = await persistence.materialize(scopeA, contract.revision)
+  const materializationB = await persistence.materialize(scopeB, contract.revision)
   const managerA = new LocalRuntimeManager({
     clientInfo: { name: 'wao-runtime-concurrency-a', title: 'Wao Codex Runtime Concurrency A', version: '0.1.0' },
     env: { ...process.env, WAO_MCP_RUNTIME_BEARER_TOKEN: 'runtime-concurrency-token-a' },
@@ -742,7 +747,8 @@ async function runNativeConcurrencySmoke(rootDir: string): Promise<void> {
         approvalPolicy,
         sandbox: 'read-only',
         config,
-        developerInstructions: ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
+        baseInstructions: contract.baseInstructions,
+        developerInstructions: contract.developerInstructions,
         ephemeral: false,
       }),
       runtimeB.startThread({
@@ -751,7 +757,8 @@ async function runNativeConcurrencySmoke(rootDir: string): Promise<void> {
         approvalPolicy,
         sandbox: 'read-only',
         config,
-        developerInstructions: ASSISTANT_RUNTIME_DEVELOPER_INSTRUCTIONS,
+        baseInstructions: contract.baseInstructions,
+        developerInstructions: contract.developerInstructions,
         ephemeral: false,
       }),
     ])

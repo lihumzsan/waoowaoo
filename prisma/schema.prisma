@@ -64,23 +64,40 @@ model MutationEntry {
 }
 
 model ProjectAssistantThread {
-  id              String             @id @default(uuid())
-  projectId       String
-  userId          String
-  assistantId     String
-  runtimeThreadId String?            @unique @db.VarChar(191)
-  clearRequestId  String?            @db.VarChar(128)
-  messagesJson    Json
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-  project         Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  turns           ProjectAgentTurn[]
+  id                  String                    @id @default(uuid())
+  projectId           String
+  userId              String
+  assistantId         String
+  runtimeThreadId     String?                   @unique @db.VarChar(191)
+  clearRequestId      String?                   @db.VarChar(128)
+  nextMessagePosition Int                       @default(1)
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  project             Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user                User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages            ProjectAssistantMessage[]
+  turns               ProjectAgentTurn[]
 
   @@unique([projectId, userId, assistantId])
   @@index([projectId, updatedAt])
   @@index([userId, updatedAt])
   @@map("project_assistant_threads")
+}
+
+model ProjectAssistantMessage {
+  threadId    String
+  messageId   String                 @db.VarChar(191)
+  position    Int
+  messageJson Json
+  revision    Int                    @default(0)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  thread      ProjectAssistantThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@id([threadId, messageId])
+  @@unique([threadId, position])
+  @@index([threadId, updatedAt])
+  @@map("project_assistant_messages")
 }
 
 model ProjectAgentTurn {
@@ -157,24 +174,39 @@ model AgentTurnInteraction {
 /// 用户清空会话时的系统内归档：对用户不可见，仅供依权限的滥用调查/争议追溯。
 /// 不挂 Project 外键——项目删除后归档仍需保留；挂 User 级联——账号注销时一并清除。
 model ProjectAssistantThreadArchive {
-  id               String   @id @default(uuid())
+  id               String                           @id @default(uuid())
   threadId         String
   projectId        String
   userId           String
   assistantId      String
-  runtimeThreadId  String?  @db.VarChar(191)
-  messagesJson     Json
-  clearRequestId   String?  @db.VarChar(128)
+  runtimeThreadId  String?                          @db.VarChar(191)
+  clearRequestId   String?                          @db.VarChar(128)
   cancelledTurnIds Json?
   threadCreatedAt  DateTime
   threadUpdatedAt  DateTime
-  archivedAt       DateTime @default(now())
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  archivedAt       DateTime                         @default(now())
+  user             User                             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages         ProjectAssistantMessageArchive[]
 
   @@unique([threadId])
   @@index([projectId, userId, archivedAt])
   @@index([userId, archivedAt])
   @@map("project_assistant_thread_archives")
+}
+
+model ProjectAssistantMessageArchive {
+  archiveId   String
+  messageId   String                        @db.VarChar(191)
+  position    Int
+  messageJson Json
+  revision    Int
+  createdAt   DateTime
+  updatedAt   DateTime
+  archive     ProjectAssistantThreadArchive @relation(fields: [archiveId], references: [id], onDelete: Cascade)
+
+  @@id([archiveId, messageId])
+  @@unique([archiveId, position])
+  @@map("project_assistant_message_archives")
 }
 
 /// 用户消息的唯一命令身份与 handoff tombstone。它不挂 Thread/Turn 外键，

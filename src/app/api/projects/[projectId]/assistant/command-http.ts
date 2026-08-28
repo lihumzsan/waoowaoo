@@ -153,6 +153,12 @@ export function mapProjectAgentCommandError(error: unknown): ApiError {
       message: agentTurnCode,
     })
   }
+  if (agentTurnCode === 'ASSISTANT_RUNTIME_MESSAGE_TOO_LARGE') {
+    return new ApiError('ASSISTANT_RUNTIME_MESSAGE_TOO_LARGE', {
+      code: agentTurnCode,
+      message: agentTurnCode,
+    })
+  }
   if (
     agentTurnCode === 'ASSISTANT_RUNTIME_CODEX_LOGIN_REQUIRED'
     || agentTurnCode === 'ASSISTANT_RUNTIME_CODEX_LOCAL_DRIVER_REQUIRED'

@@ -31,7 +31,6 @@ async function createBindingFixture(taskCount: number) {
       projectId: project.id,
       userId: user.id,
       assistantId: 'workspace-command',
-      messagesJson: [],
     },
   })
   await prisma.projectAgentTurn.create({

@@ -358,7 +358,7 @@ export const ERROR_CATALOG = {
   AGENT_STEER_HANDOFF_UNCERTAIN: defineErrorSpec('AGENT_STEER_HANDOFF_UNCERTAIN', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant steer handoff outcome is unknown'),
   AGENT_START_HANDOFF_UNCERTAIN: defineErrorSpec('AGENT_START_HANDOFF_UNCERTAIN', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant turn start handoff outcome is unknown'),
   PROJECT_AGENT_RUNTIME_FAILED: defineErrorSpec('PROJECT_AGENT_RUNTIME_FAILED', 502, true, ERROR_CATEGORY.SYSTEM, 'Assistant runtime failed'),
-  ASSISTANT_RUNTIME_MESSAGE_VIEW_TOO_LARGE: defineErrorSpec('ASSISTANT_RUNTIME_MESSAGE_VIEW_TOO_LARGE', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant message history is too large to continue safely'),
+  ASSISTANT_RUNTIME_MESSAGE_TOO_LARGE: defineErrorSpec('ASSISTANT_RUNTIME_MESSAGE_TOO_LARGE', 413, false, ERROR_CATEGORY.VALIDATION, 'One assistant message is too large to persist safely'),
   ASSISTANT_PROVIDER_REQUEST_INVALID: defineErrorSpec('ASSISTANT_PROVIDER_REQUEST_INVALID', 400, false, ERROR_CATEGORY.PROVIDER, 'The assistant provider rejected the conversation request'),
   ASSISTANT_RUNTIME_PROTOCOL_ERROR: defineErrorSpec('ASSISTANT_RUNTIME_PROTOCOL_ERROR', 502, false, ERROR_CATEGORY.SYSTEM, 'The assistant runtime protocol is incompatible'),
   PROJECT_AGENT_ASSISTANT_MODEL_NOT_CONFIGURED: defineErrorSpec('PROJECT_AGENT_ASSISTANT_MODEL_NOT_CONFIGURED', 400, false, ERROR_CATEGORY.PROVIDER, 'Assistant model is not configured'),

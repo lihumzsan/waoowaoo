@@ -25,13 +25,20 @@ export type RuntimeSessionScope = {
   readonly projectId: string
 }
 
-export type RuntimeSessionMaterialization = RuntimeContainerMaterialization
+export type RuntimeSessionMaterialization = RuntimeContainerMaterialization & {
+  readonly contractRevision: string
+}
 export type RuntimeSessionStopReason = 'idle' | 'shutdown' | 'recover'
 export interface RuntimeSessionPersistence {
+  /** Resolve the exact static instructions and Runtime Skills contract currently on disk. */
+  readContractRevision(): Promise<string>
   /** Idempotently settle an abandoned product Turn before a new placement. */
   reconcileBeforeStart(scope: RuntimeSessionScope): Promise<void>
   /** Materialize disposable scratch and the scope's stable native Codex home. */
-  materialize(scope: RuntimeSessionScope): Promise<RuntimeSessionMaterialization>
+  materialize(
+    scope: RuntimeSessionScope,
+    expectedContractRevision: string,
+  ): Promise<RuntimeSessionMaterialization>
   /** Delete disposable scratch; the Codex home remains on the durable volume. */
   destroyMaterialization(materialization: RuntimeSessionMaterialization): Promise<void>
   /** Idempotently delete the scope's opaque native Codex home. */
@@ -76,12 +83,15 @@ export type RuntimeThreadSessionOptions = {
   readonly productThreadId: string
   /** Native Codex Thread identity persisted by the product binding. */
   readonly runtimeThreadId: string | null
+  /** Placement revision whose exact instructions produced this thread configuration. */
+  readonly expectedContractRevision: string
   readonly configuration: RuntimeSessionThreadConfiguration
 }
 
 export type RuntimeSessionView = {
   readonly scopeId: string
   readonly containerIdentity: string
+  readonly contractRevision: string
 }
 
 export type RuntimeThreadSessionView = {
@@ -155,7 +165,7 @@ type SessionEntry = {
   lastActivityAt: number
   activeTurn: ActiveTurn | null
   skillsStale: boolean
-  transition: Promise<void> | null
+  transition: Promise<unknown> | null
 }
 
 type SessionSlot = {
@@ -201,6 +211,17 @@ export class RuntimeSessionManager {
     scopeValue: RuntimeSessionScope,
     launchOptions: RuntimeSessionLaunchOptions,
   ): Promise<RuntimeSessionView> {
+    const contractRevision = requireContractRevision(
+      await this.options.persistence.readContractRevision(),
+    )
+    return await this.startOrResumeAtRevision(scopeValue, launchOptions, contractRevision)
+  }
+
+  private async startOrResumeAtRevision(
+    scopeValue: RuntimeSessionScope,
+    launchOptions: RuntimeSessionLaunchOptions,
+    contractRevision: string,
+  ): Promise<RuntimeSessionView> {
     if (this.shuttingDown) throw new Error('CODEX_RUNTIME_SESSION_MANAGER_SHUTTING_DOWN')
     const scope = normalizeScope(scopeValue)
     const scopeId = buildRuntimeSessionScopeId(scope)
@@ -219,14 +240,35 @@ export class RuntimeSessionManager {
       if (entry.ownership.ownerToken !== ownerToken) {
         throw new Error('CODEX_RUNTIME_SESSION_OWNER_TOKEN_DIVERGED')
       }
+      if (entry.transition) {
+        await entry.transition
+        return await this.startOrResumeAtRevision(scope, launchOptions, contractRevision)
+      }
+      if (entry.materialization.contractRevision !== contractRevision) {
+        if (entry.activeTurn) {
+          await entry.ownership.assertCurrent()
+          if (entry.transition) {
+            await entry.transition
+            return await this.startOrResumeAtRevision(scope, launchOptions, contractRevision)
+          }
+          if (entry.status !== 'ready' || !entry.activeTurn) {
+            return await this.startOrResumeAtRevision(scope, launchOptions, contractRevision)
+          }
+          entry.lastActivityAt = Date.now()
+          return toSessionView(entry)
+        }
+        const replacement = this.replaceContractEntry(entry, launchOptions, contractRevision)
+        entry.transition = replacement
+        return await replacement
+      }
       await entry.ownership.assertCurrent()
+      if (entry.transition) {
+        await entry.transition
+        return await this.startOrResumeAtRevision(scope, launchOptions, contractRevision)
+      }
       if (entry.status === 'ready') {
         entry.lastActivityAt = Date.now()
         return toSessionView(entry)
-      }
-      if (entry.transition) {
-        await entry.transition
-        return await this.startOrResume(scope, launchOptions)
       }
       throw new Error(`CODEX_RUNTIME_SESSION_NOT_READY:${entry.status}`)
     }
@@ -241,6 +283,7 @@ export class RuntimeSessionManager {
         environment,
         environmentFingerprint,
         ownerToken,
+        contractRevision,
       ),
     }
     this.slots.set(scopeId, slot)
@@ -259,8 +302,10 @@ export class RuntimeSessionManager {
     scope: RuntimeSessionScope,
     options: RuntimeThreadSessionOptions,
   ): Promise<RuntimeThreadSessionView> {
+    const expectedContractRevision = requireContractRevision(options.expectedContractRevision)
     const session = await this.requireReadyEntry(scope)
     await session.ownership.assertCurrent()
+    requireThreadContractAdmission(session, expectedContractRevision)
     const productThreadId = requireIdentity(
       options.productThreadId,
       'CODEX_RUNTIME_PRODUCT_THREAD_ID_INVALID',
@@ -279,6 +324,7 @@ export class RuntimeSessionManager {
       entry: this.startThreadSession(session, {
         ...options,
         productThreadId,
+        expectedContractRevision,
       }),
     }
     session.threads.set(productThreadId, slot)
@@ -380,7 +426,10 @@ export class RuntimeSessionManager {
     const slot = this.slots.get(scopeId)
     if (!slot) return
     const entry = await slot.entry
-    if (entry.transition) return await entry.transition
+    if (entry.transition) {
+      await entry.transition
+      return
+    }
     const transition = (async () => {
       entry.status = 'stopping'
       await entry.container.stop('force').catch(() => undefined)
@@ -468,11 +517,15 @@ export class RuntimeSessionManager {
     launchOptions: RuntimeSessionLaunchOptions,
   ): Promise<RuntimeSessionView> {
     const scope = normalizeScope(scopeValue)
-    const threads = await this.readManagedThreadsForScope(scope)
+    const previous = await this.readEntryForScope(scope)
+    const threads = previous ? await this.readThreads(previous) : []
+    const previousContractRevision = previous?.materialization.contractRevision ?? null
     await this.stop(scope, 'recover')
     const specs = buildRecoverySpecsFromThreads(threads)
     const view = await this.startOrResume(scope, launchOptions)
-    await this.restoreThreads(scope, specs)
+    if (previousContractRevision === null || previousContractRevision === view.contractRevision) {
+      await this.restoreThreads(scope, specs, view.contractRevision)
+    }
     return view
   }
 
@@ -489,7 +542,10 @@ export class RuntimeSessionManager {
     if (expectedOwnerToken && entry.ownership.ownerToken !== expectedOwnerToken) {
       throw new Error('CODEX_RUNTIME_SESSION_OWNER_TOKEN_DIVERGED')
     }
-    if (entry.transition) return await entry.transition
+    if (entry.transition) {
+      await entry.transition
+      return await this.stop(scope, reason, expectedOwnerToken)
+    }
     const transition = this.stopEntry(entry, reason)
     entry.transition = transition
     return await transition
@@ -569,6 +625,7 @@ export class RuntimeSessionManager {
     environment: Readonly<Record<string, string>>,
     environmentFingerprint: string,
     ownerToken: string,
+    contractRevision: string,
   ): Promise<SessionEntry> {
     const ownership = await this.options.ownership.acquire(scope, ownerToken)
     requireIdentity(ownership.ownerToken, 'CODEX_RUNTIME_SESSION_OWNER_TOKEN_INVALID')
@@ -579,7 +636,10 @@ export class RuntimeSessionManager {
     try {
       await this.options.container.reconcile(scopeId)
       await this.options.persistence.reconcileBeforeStart(scope)
-      materialization = validateMaterialization(await this.options.persistence.materialize(scope))
+      materialization = validateMaterialization(
+        await this.options.persistence.materialize(scope, contractRevision),
+        contractRevision,
+      )
       container = await this.options.container.launch({
         scopeId,
         ownerToken: ownership.ownerToken,
@@ -641,6 +701,7 @@ export class RuntimeSessionManager {
     options: RuntimeThreadSessionOptions,
   ): Promise<ManagedThread> {
     await session.ownership.assertCurrent()
+    requireThreadContractAdmission(session, options.expectedContractRevision)
     const thread = options.runtimeThreadId
       ? await session.container.runtime.resumeThread({
           ...options.configuration.resume,
@@ -775,11 +836,13 @@ export class RuntimeSessionManager {
       await entry.ownership.release()
       await this.deleteSlot(entry)
       if (!this.shuttingDown && !hadActiveTurn) {
-        await this.startOrResume(entry.scope, {
+        const view = await this.startOrResume(entry.scope, {
           environment: entry.environment,
           ownerToken: entry.ownership.ownerToken,
         })
-        await this.restoreThreads(entry.scope, specs)
+        if (view.contractRevision === entry.materialization.contractRevision) {
+          await this.restoreThreads(entry.scope, specs, view.contractRevision)
+        }
       }
     } catch (error) {
       await entry.container.stop('force').catch((stopError: unknown) => {
@@ -847,11 +910,21 @@ export class RuntimeSessionManager {
     }
   }
 
-  private async readManagedThreadsForScope(scope: RuntimeSessionScope): Promise<ManagedThread[]> {
+  private async readEntryForScope(scope: RuntimeSessionScope): Promise<SessionEntry | null> {
     const normalized = normalizeScope(scope)
     const slot = this.slots.get(buildRuntimeSessionScopeId(normalized))
-    if (!slot) return []
-    return await this.readThreads(await slot.entry)
+    return slot ? await slot.entry : null
+  }
+
+  private async replaceContractEntry(
+    entry: SessionEntry,
+    launchOptions: RuntimeSessionLaunchOptions,
+    contractRevision: string,
+  ): Promise<RuntimeSessionView> {
+    entry.status = 'recovering'
+    this.publish(entry.scopeId, { type: 'state', state: 'recovering' })
+    await this.stopEntry(entry, 'recover')
+    return await this.startOrResumeAtRevision(entry.scope, launchOptions, contractRevision)
   }
 
   private async closePlacementTransportSessions(entry: SessionEntry): Promise<void> {
@@ -865,9 +938,13 @@ export class RuntimeSessionManager {
     return buildRecoverySpecsFromThreads(await this.readThreads(entry))
   }
 
-  private async restoreThreads(scope: RuntimeSessionScope, specs: readonly ThreadRecoverySpec[]): Promise<void> {
+  private async restoreThreads(
+    scope: RuntimeSessionScope,
+    specs: readonly ThreadRecoverySpec[],
+    expectedContractRevision: string,
+  ): Promise<void> {
     for (const spec of specs) {
-      await this.ensureThread(scope, spec)
+      await this.ensureThread(scope, { ...spec, expectedContractRevision })
     }
   }
 
@@ -939,9 +1016,34 @@ function fingerprintEnvironment(environment: Readonly<Record<string, string>>): 
   return hash.digest('hex')
 }
 
-function validateMaterialization(value: RuntimeSessionMaterialization): RuntimeSessionMaterialization {
-  if (!value.hostWorkspaceDirectory) {
+function validateMaterialization(
+  value: RuntimeSessionMaterialization,
+  expectedContractRevision: string,
+): RuntimeSessionMaterialization {
+  if (
+    !value.hostWorkspaceDirectory
+    || requireContractRevision(value.contractRevision) !== expectedContractRevision
+  ) {
     throw new Error('CODEX_RUNTIME_SESSION_MATERIALIZATION_INVALID')
+  }
+  return value
+}
+
+function requireThreadContractAdmission(
+  session: SessionEntry,
+  expectedContractRevision: string,
+): void {
+  if (session.status !== 'ready') {
+    throw new Error(`CODEX_RUNTIME_SESSION_NOT_READY:${session.status}`)
+  }
+  if (session.materialization.contractRevision !== expectedContractRevision) {
+    throw new Error('CODEX_RUNTIME_SESSION_CONTRACT_REVISION_MISMATCH')
+  }
+}
+
+function requireContractRevision(value: string): string {
+  if (!/^[a-f0-9]{64}$/u.test(value)) {
+    throw new Error('CODEX_RUNTIME_CONTRACT_REVISION_INVALID')
   }
   return value
 }
@@ -968,6 +1070,7 @@ function toSessionView(entry: SessionEntry): RuntimeSessionView {
   return {
     scopeId: entry.scopeId,
     containerIdentity: entry.container.identity,
+    contractRevision: entry.materialization.contractRevision,
   }
 }
 

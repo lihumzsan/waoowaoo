@@ -73,6 +73,7 @@ import {
   type WorkspaceAssistantFailureView,
 } from './workspace-assistant/workspace-assistant-panel-state'
 import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
+import { useToast } from '@/contexts/ToastContext'
 import { WorkspaceAssistantWorkspaceLinkProvider } from './workspace-assistant/workspace-assistant-workspace-link'
 
 interface WorkspaceAssistantPanelProps {
@@ -671,6 +672,7 @@ export default function WorkspaceAssistantPanel({
   const t = useTranslations('assistantAgent')
   const tErrors = useTranslations('errors')
   const resolveClientError = useClientErrorMessage()
+  const { showError } = useToast()
   const assistantRuntime = useWorkspaceAssistantRuntime({
     projectId,
     selectedScopeRef: selection?.selectedScopeRef ?? null,
@@ -976,6 +978,24 @@ export default function WorkspaceAssistantPanel({
                   >
                     <div className="mx-auto min-w-0 w-full max-w-[40rem]">
                       <div className="space-y-6">
+                          {assistantRuntime.hasEarlierMessages ? (
+                            <div className="flex justify-center">
+                              <button
+                                type="button"
+                                disabled={assistantRuntime.earlierMessagesLoading}
+                                className="rounded-full bg-[var(--glass-tone-surface)] px-3 py-1.5 text-xs text-[var(--glass-tone-muted-fg)] shadow-[var(--glass-tone-shadow)] transition-colors hover:text-[var(--glass-tone-fg)] disabled:cursor-wait disabled:opacity-60"
+                                onClick={() => {
+                                  void assistantRuntime.loadEarlierMessages().catch((error: unknown) => {
+                                    showError(error, t('panel.sessionStateError'))
+                                  })
+                                }}
+                              >
+                                {assistantRuntime.earlierMessagesLoading
+                                  ? t('panel.loadingEarlierMessages')
+                                  : t('panel.loadEarlierMessages')}
+                              </button>
+                            </div>
+                          ) : null}
                           <ThreadPrimitive.Messages>
                             {() => (
                               <WorkspaceAssistantThreadMessage
