@@ -12,6 +12,7 @@ import {
   settleWorkspaceResourceFailureInTransaction,
 } from './persistence'
 import { parseWorkspaceResourceVideoMergeTaskPayload } from './video-merge-contract'
+import { parseWorkspaceResourceVideoFrameTaskPayload } from './video-frame-contract'
 import { parseWorkspaceResourceVoiceoverTaskPayload, parseWorkspaceResourceVoiceoverMixTaskPayload } from './voiceover-contract'
 
 type TerminalTask = {
@@ -45,6 +46,21 @@ function readString(record: Record<string, unknown>, key: string): string | null
 }
 
 function parseTerminalResourcePayload(task: TerminalTask): TerminalResourcePayload {
+  if (task.type === TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_FRAME) {
+    const payload = parseWorkspaceResourceVideoFrameTaskPayload(task.payload ?? {})
+    return {
+      resourceId: payload.resource.resourceId,
+      mediaType: payload.resource.mediaType,
+      schemaId: payload.resource.schemaId,
+      prompt: payload.resource.prompt,
+      inputHash: payload.resource.inputHash,
+      inputs: payload.resource.inputs,
+      generationOptions: payload.resource.generationOptions,
+      toolCallId: payload.resource.toolCallId,
+      sourceTurnId: null,
+      vocalPerformanceMode: null,
+    }
+  }
   if (task.type === TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE) {
     const payload = parseWorkspaceResourceVideoMergeTaskPayload(task.payload ?? {})
     return {

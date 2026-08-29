@@ -36,6 +36,7 @@
     "workspaceResourceVoiceover": "旁白配音生成",
     "workspaceResourceVoiceoverMix": "旁白混入视频",
     "workspaceResourceVideo": "视频资源生成",
+    "workspaceResourceVideoFrame": "视频帧提取",
     "workspaceResourceVideoMerge": "视频资源合并",
     "generic": "任务"
   },

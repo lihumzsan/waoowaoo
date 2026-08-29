@@ -36,6 +36,7 @@
     "workspaceResourceVoiceover": "Voiceover generation",
     "workspaceResourceVoiceoverMix": "Voiceover video mix",
     "workspaceResourceVideo": "Video resource generation",
+    "workspaceResourceVideoFrame": "Video frame extraction",
     "workspaceResourceVideoMerge": "Video resource merge",
     "generic": "Task"
   },

@@ -1,14 +1,15 @@
-import { TASK_EVENT_TYPE, TASK_TYPE } from './types'
+import { isTaskType, TASK_EVENT_TYPE, TASK_TYPE, type TaskType } from './types'
 
-const TASK_TYPE_LABELS: Record<string, string> = {
+const TASK_TYPE_LABELS = {
   [TASK_TYPE.WORKSPACE_RESOURCE_IMAGE]: 'progress.taskType.workspaceResourceImage',
   [TASK_TYPE.WORKSPACE_RESOURCE_AUDIO]: 'progress.taskType.workspaceResourceAudio',
   [TASK_TYPE.WORKSPACE_RESOURCE_VOICE]: 'progress.taskType.workspaceResourceVoice',
   [TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER]: 'progress.taskType.workspaceResourceVoiceover',
   [TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER_MIX]: 'progress.taskType.workspaceResourceVoiceoverMix',
   [TASK_TYPE.WORKSPACE_RESOURCE_VIDEO]: 'progress.taskType.workspaceResourceVideo',
+  [TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_FRAME]: 'progress.taskType.workspaceResourceVideoFrame',
   [TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE]: 'progress.taskType.workspaceResourceVideoMerge',
-}
+} satisfies Record<TaskType, string>
 
 const STAGE_LABELS: Record<string, string> = {
   received: 'progress.stage.received',
@@ -31,8 +32,8 @@ function asString(value: unknown): string | null {
 }
 
 export function getTaskTypeLabel(taskType?: string | null) {
-  if (!taskType) return 'progress.taskType.generic'
-  return TASK_TYPE_LABELS[taskType] || 'progress.taskType.generic'
+  if (!isTaskType(taskType)) return 'progress.taskType.generic'
+  return TASK_TYPE_LABELS[taskType]
 }
 
 export function getTaskStageLabel(stage?: string | null) {

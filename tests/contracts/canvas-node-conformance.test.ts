@@ -7,6 +7,8 @@ import {
   resolveWorkspaceCanvasNodeSize,
 } from '@/features/project-workspace/canvas/node-presentation-profiles'
 import { WORKSPACE_CANVAS_NODE_DEFINITIONS } from '@/features/project-workspace/canvas/registry/workspace-canvas-node-registry'
+import { TASK_DEFINITIONS } from '@/lib/task/definition'
+import type { TaskType } from '@/lib/task/types'
 import { WORKSPACE_RESOURCE_MEDIA_TYPES } from '@/lib/workspace-resource/contracts'
 import { WORKSPACE_RESOURCE_SCHEMA } from '@/lib/workspace-resource/schema-registry'
 
@@ -32,6 +34,19 @@ describe('workspace Canvas node registry conformance', () => {
         expect(definition.taskTypes).toContain(fixture.taskTarget.taskType)
       }
     }
+  })
+
+  it('tracks every Task whose terminal output is a WorkspaceResource on resource cards', () => {
+    const workspaceResourceTaskTypes = Object.entries(TASK_DEFINITIONS)
+      .flatMap(([taskType, definition]) => (
+        definition.terminalOutputMaterializer === 'workspace_resource'
+          ? [taskType as TaskType]
+          : []
+      ))
+      .sort()
+
+    expect([...WORKSPACE_CANVAS_NODE_DEFINITIONS.resourceCard.taskTypes].sort())
+      .toEqual(workspaceResourceTaskTypes)
   })
 
   it('declares a media presentation for every WorkspaceResource media type', () => {

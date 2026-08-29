@@ -5,6 +5,7 @@ import {
 import { handleWorkspaceResourceAudioTask } from './handlers/workspace-resource-audio'
 import { handleWorkspaceResourceImageTask } from './handlers/workspace-resource-image'
 import { handleWorkspaceResourceVideoMergeTask } from './handlers/workspace-resource-video-merge'
+import { handleWorkspaceResourceVideoFrameTask } from './handlers/workspace-resource-video-frame'
 import { handleWorkspaceResourceVideoTask } from './handlers/workspace-resource-video'
 import { handleWorkspaceResourceVoiceTask } from './handlers/workspace-resource-voice'
 import { handleWorkspaceResourceVoiceoverTask } from './handlers/workspace-resource-voiceover'
@@ -23,6 +24,7 @@ const TASK_EXECUTION_HANDLERS = {
   workspace_resource_voiceover: handleWorkspaceResourceVoiceoverTask,
   workspace_resource_voiceover_mix: handleWorkspaceResourceVoiceoverMixTask,
   workspace_resource_video: handleWorkspaceResourceVideoTask,
+  workspace_resource_video_frame: handleWorkspaceResourceVideoFrameTask,
   workspace_resource_video_merge: handleWorkspaceResourceVideoMergeTask,
 } satisfies Record<TaskExecutionHandlerKey, TaskExecutionHandler>
 

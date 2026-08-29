@@ -13,6 +13,7 @@ export type TaskExecutionHandlerKey =
   | 'workspace_resource_voiceover'
   | 'workspace_resource_voiceover_mix'
   | 'workspace_resource_video'
+  | 'workspace_resource_video_frame'
   | 'workspace_resource_video_merge'
 
 export type TaskExecutionProtocol = 'handler_result_checkpoint'
@@ -131,6 +132,19 @@ export const TASK_DEFINITIONS = {
     'workspace_resource',
     'reference',
     'reference',
+  ),
+  [TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_FRAME]: definition(
+    'workspace_resource_video_frame',
+    1,
+    'video',
+    'workspace_resources',
+    'none',
+    'none',
+    'none',
+    'workspace_resource',
+    'reference',
+    'reference',
+    'none',
   ),
   [TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE]: definition(
     'workspace_resource_video_merge',

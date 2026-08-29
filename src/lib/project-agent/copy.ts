@@ -13,6 +13,7 @@ const PROJECT_AGENT_OPERATION_TITLE_COPY: Record<string, ProjectAgentOperationTi
   create_audio: { zh: '生成音频资源', en: 'Generate audio resource' },
   create_video: { zh: '生成视频资源', en: 'Generate video resource' },
   merge_videos: { zh: '合并视频资源', en: 'Merge video resources' },
+  extract_video_frame: { zh: '提取视频帧', en: 'Extract video frame' },
   rerun_failed_production_items: { zh: '重试失败资源', en: 'Retry failed resources' },
   move_resource: { zh: '移动项目资源', en: 'Move project resource' },
   delete_resource: { zh: '删除项目资源', en: 'Delete project resource' },
