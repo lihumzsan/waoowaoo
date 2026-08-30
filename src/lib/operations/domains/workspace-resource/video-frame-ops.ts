@@ -33,7 +33,7 @@ const extractVideoFrameInputSchema = z.object({
     contentVersion: z.number().int().positive(),
   }).strict(),
   selector: videoFrameSelectorSchema.describe(
-    'Required frame selection. last_decodable means the final successfully decoded frame of the first video stream, without avoiding black or fade frames.',
+    'Required frame selection from the first video stream. first_decodable selects the first successfully decoded frame; last_decodable selects the final successfully decoded frame. Neither selector avoids black or fade frames.',
   ),
 }).strict()
 
@@ -72,7 +72,7 @@ export function createWorkspaceResourceVideoFrameOperations(): ProjectAgentOpera
       confirmation: { kind: 'none', required: false },
       assistantWriteAuthority: {
         kind: 'temporal_operation_execution',
-        contractRevision: 'extract_video_frame/v1',
+        contractRevision: 'extract_video_frame/v2',
         followUpPolicy: 'after_all_terminal',
       },
       inputSchema: extractVideoFrameInputSchema,

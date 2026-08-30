@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { taskRuntimePayloadEnvelopeShape } from '@/lib/task/progress-payload'
 import { workspaceResourceLifecycleProjectionSchema } from './task-runtime-envelope'
 
-export const VIDEO_FRAME_SELECTORS = ['last_decodable'] as const
+export const VIDEO_FRAME_SELECTORS = ['first_decodable', 'last_decodable'] as const
 export const videoFrameSelectorSchema = z.enum(VIDEO_FRAME_SELECTORS)
 export type VideoFrameSelector = z.infer<typeof videoFrameSelectorSchema>
 

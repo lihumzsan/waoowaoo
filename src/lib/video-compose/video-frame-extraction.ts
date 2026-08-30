@@ -1,4 +1,5 @@
 import { stat } from 'node:fs/promises'
+import type { VideoFrameSelector } from '@/lib/workspace-resource/video-frame-contract'
 import type { FfmpegCommandRunner } from './ffmpeg-command'
 
 function requireFilePath(value: string, field: 'source' | 'output'): string {
@@ -7,7 +8,21 @@ function requireFilePath(value: string, field: 'source' | 'output'): string {
   return normalized
 }
 
-export function buildLastDecodableFrameFfmpegArgs(input: {
+function buildSelectionFfmpegArgs(selector: VideoFrameSelector): readonly string[] {
+  switch (selector) {
+    case 'first_decodable':
+      return ['-frames:v', '1', '-update', '1']
+    case 'last_decodable':
+      return ['-update', '1']
+    default: {
+      const unsupportedSelector: never = selector
+      throw new Error(`VIDEO_FRAME_SELECTOR_UNSUPPORTED:${String(unsupportedSelector)}`)
+    }
+  }
+}
+
+export function buildDecodableVideoFrameFfmpegArgs(input: {
+  readonly selector: VideoFrameSelector
   readonly sourcePath: string
   readonly outputPath: string
 }): readonly string[] {
@@ -24,18 +39,18 @@ export function buildLastDecodableFrameFfmpegArgs(input: {
     '-dn',
     '-fps_mode',
     'passthrough',
-    '-update',
-    '1',
+    ...buildSelectionFfmpegArgs(input.selector),
     outputPath,
   ]
 }
 
-export async function extractLastDecodableVideoFrame(input: {
+export async function extractDecodableVideoFrame(input: {
   readonly runCommand: FfmpegCommandRunner
+  readonly selector: VideoFrameSelector
   readonly sourcePath: string
   readonly outputPath: string
 }): Promise<void> {
-  await input.runCommand('ffmpeg', buildLastDecodableFrameFfmpegArgs(input))
+  await input.runCommand('ffmpeg', buildDecodableVideoFrameFfmpegArgs(input))
   try {
     const output = await stat(input.outputPath)
     if (!output.isFile() || output.size <= 0) throw new Error('VIDEO_FRAME_OUTPUT_INVALID')

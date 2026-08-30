@@ -11,7 +11,7 @@ import {
   createFfmpegCommandRunner,
   probeMediaDurationSeconds,
 } from '@/lib/video-compose/ffmpeg-command'
-import { extractLastDecodableVideoFrame } from '@/lib/video-compose/video-frame-extraction'
+import { extractDecodableVideoFrame } from '@/lib/video-compose/video-frame-extraction'
 import { resolveUserUploadAcceptedMedia } from '@/lib/workspace-resource/upload-contract'
 import { resolveWorkspaceResourceInputMedia } from '@/lib/workspace-resource/input-media'
 import { parseWorkspaceResourceVideoFrameTaskPayload } from '@/lib/workspace-resource/video-frame-contract'
@@ -42,18 +42,19 @@ export async function handleWorkspaceResourceVideoFrameTask(
   try {
     await reportTaskProgress(context, 15, { stage: 'workspace_resource_prepare' })
     const sourcePath = path.join(workspaceDir, 'source-video')
-    const outputPath = path.join(workspaceDir, 'last-frame.png')
+    const outputPath = path.join(workspaceDir, 'selected-frame.png')
     await writeFile(sourcePath, await getObjectBuffer(source.storageKey))
     const expectedDurationSeconds = source.durationMs === null
       ? await probeMediaDurationSeconds(sourcePath, 'workspace_resource_video_frame_probe_duration')
       : source.durationMs / 1000
 
     await reportTaskProgress(context, 55, { stage: 'workspace_resource_generate' })
-    await extractLastDecodableVideoFrame({
+    await extractDecodableVideoFrame({
       runCommand: createFfmpegCommandRunner({
         stage: 'workspace_resource_video_frame_extract',
         expectedDurationSeconds,
       }),
+      selector: payload.resource.generationOptions.selector,
       sourcePath,
       outputPath,
     })
