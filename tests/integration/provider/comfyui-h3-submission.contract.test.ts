@@ -22,7 +22,7 @@ const videoInput: AiProviderVideoExecutionContext = {
   },
   imageUrl: '',
   options: {
-    prompt: 'subject_definitions:\nSubject 1 is in Picture 1.\n\nsummary:\nA test video.\n\nretention_analysis:\nPreserve identity.\n\ndetailed_description:\nAt 0.00 seconds the subject moves and settles.\n\noverall_soundscape:\nRoom tone and movement.\n\nnon_diegetic_music:\nN/A',
+    prompt: 'subject_definitions:\nSubject 1 is in Picture 1.\n\nsummary:\nA test video.\n\nretention_analysis:\nPreserve identity.\n\ndetailed_description:\n[Shot 1] The subject moves and settles.\n\noverall_soundscape:\nRoom tone and movement.\n\nnon_diegetic_music:\nN/A',
     duration: 10,
     aspectRatio: '16:9',
     generateAudio: true,
@@ -36,8 +36,8 @@ const firstFrameInput: AiProviderVideoExecutionContext = {
   options: {
     ...videoInput.options,
     prompt: videoInput.options!.prompt!.replace(
-      'At 0.00 seconds the subject moves and settles.',
-      'At 0.00 seconds, <Picture 1> is the exact opening frame; the subject moves and settles.',
+      '[Shot 1] The subject moves and settles.',
+      '[Shot 1] <Picture 1> aligns with 0.00 seconds and shows the subject moving and settling.',
     ),
     referenceImages: undefined,
   },
@@ -48,8 +48,8 @@ const firstLastFrameInput: AiProviderVideoExecutionContext = {
   options: {
     ...firstFrameInput.options,
     prompt: firstFrameInput.options!.prompt!.replace(
-      'the subject moves and settles.',
-      'the subject moves and at 10.00 seconds settles exactly into <Picture 2>.',
+      'shows the subject moving and settling.',
+      'shows the subject moving and settling exactly into <Picture 2> at 10.00 seconds.',
     ),
     lastFrameImageUrl: 'https://media.example.com/last.png',
   },

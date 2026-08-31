@@ -11,7 +11,7 @@ retention_analysis:
 Preserve her identity, clothing, and the room layout from <Picture 1>.
 
 detailed_description:
-At 0.00 seconds she notices the doorway, turns, and settles facing it.
+[Shot 1] She notices the doorway, turns, and settles facing it.
 
 overall_soundscape:
 Soft room tone, fabric movement, and her quiet breath.
@@ -20,8 +20,8 @@ non_diegetic_music:
 N/A`
 
 const firstFramePrompt = referencePrompt.replace(
-  'At 0.00 seconds she notices the doorway',
-  'At 0.00 seconds, <Picture 1> is the exact opening frame; she notices the doorway',
+  '[Shot 1] She notices the doorway',
+  '[Shot 1] <Picture 1> aligns with 0.00 seconds and shows her noticing the doorway',
 )
 
 const firstLastFramePrompt = firstFramePrompt.replace(
@@ -97,6 +97,78 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
       inputMode: 'reference',
       prompt: contradictory,
     })).toThrow('VIDEO_PROMPT_PROFILE_INVALID')
+  })
+
+  it.each([
+    {
+      name: 'a detailed description without the required first shot marker',
+      prompt: referencePrompt.replace('[Shot 1] ', ''),
+      reason: 'DETAILED_DESCRIPTION_SHOT_1_REQUIRED',
+    },
+    {
+      name: 'a dialogue tag outside detailed_description',
+      prompt: referencePrompt.replace(
+        'She turns toward the doorway.',
+        'She speaks the provided line. <d>[Chinese]不要走。</d>',
+      ),
+      reason: 'DIALOGUE_TAG_SECTION_INVALID:summary',
+    },
+    {
+      name: 'the unsupported dialogue cutoff tag',
+      prompt: referencePrompt.replace(
+        'turns, and settles',
+        'says: <d>[Chinese]不要<cutoff></d>, turns, and settles',
+      ),
+      reason: 'DIALOGUE_CUTOFF_UNSUPPORTED',
+    },
+  ])('rejects $name', ({ prompt, reason }) => {
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+    })).toThrow(`VIDEO_PROMPT_PROFILE_INVALID:${reason}`)
+  })
+
+  it('treats verbatim dialogue as opaque to shot syntax validation', () => {
+    const prompt = referencePrompt.replace(
+      'she notices the doorway, turns, and settles facing it.',
+      'she says: <d>[English]The camera cuts to [Shot 2].</d> and settles facing the doorway.',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+    })).not.toThrow()
+  })
+
+  it.each([
+    {
+      name: 'a skipped shot number',
+      detail: '[Shot 1] She turns. [Shot 3] At 00:02.000, the camera cuts to the doorway.',
+      reason: 'SHOT_SEQUENCE_INVALID:2',
+    },
+    {
+      name: 'a cut announced before the next shot marker',
+      detail: '[Shot 1] She turns. At 00:02.000, the camera cuts to the doorway. [Shot 2] She settles.',
+      reason: 'SHOT_TRANSITION_INVALID:2',
+    },
+    {
+      name: 'a cut at the exact segment end',
+      detail: '[Shot 1] She turns. [Shot 2] At 00:04.000, the camera cuts to the doorway.',
+      reason: 'SHOT_TIME_OUT_OF_RANGE:2',
+    },
+    {
+      name: 'a second shot at the exact segment start',
+      detail: '[Shot 1] She turns. [Shot 2] At 00:00.000, the camera cuts to the doorway.',
+      reason: 'SHOT_TIME_OUT_OF_RANGE:2',
+    },
+  ])('rejects $name', ({ detail, reason }) => {
+    const prompt = referencePrompt.replace(
+      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      detail,
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+    })).toThrow(`VIDEO_PROMPT_PROFILE_INVALID:${reason}`)
   })
 
   it('leaves generic profile validation to its own dialect', () => {

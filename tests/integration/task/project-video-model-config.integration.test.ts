@@ -149,10 +149,10 @@ async function seedReadyImage(input: {
 
 function h3Prompt(inputMode: 'reference' | 'first_frame' | 'first_last_frame', durationSeconds: number): string {
   const detailedDescription = inputMode === 'reference'
-    ? 'At 0.00 seconds she turns toward the doorway and settles facing it.'
+    ? '[Shot 1] She turns toward the doorway and settles facing it.'
     : inputMode === 'first_frame'
-      ? 'At 0.00 seconds, <Picture 1> is the exact opening frame; she turns toward the doorway.'
-      : `At 0.00 seconds, <Picture 1> is the exact opening frame; at ${String(durationSeconds)}.00 seconds she settles exactly into <Picture 2>.`
+      ? '[Shot 1] <Picture 1> aligns with 0.00 seconds and shows her turning toward the doorway.'
+      : `[Shot 1] <Picture 1> aligns with 0.00 seconds and shows her turning toward the doorway; at ${String(durationSeconds)}.00 seconds she settles exactly into <Picture 2>.`
   return `subject_definitions:
 <Subject 1> is the woman represented by the supplied picture inputs.
 

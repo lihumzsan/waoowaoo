@@ -1,6 +1,6 @@
 ---
 name: video-direction
-description: Direct screenplay-based video generation with explicit continuity, physical performance, reference identity, structured timing, sound relationships, and executable final prompts.
+description: Use when directing screenplay-based video generation that requires continuity, physical performance, reference identity, structured timing, sound relationships, or executable final prompts.
 ---
 
 # 视频导演与生成设计
@@ -18,7 +18,7 @@ description: Direct screenplay-based video generation with explicit continuity, 
 - H3 中完整节拍超过 13 秒且没有合法切点时，停止构造可执行 items 并报告输入内容与能力策略冲突；合法纠正只能是修改来源内容或形成真实语义切点。这里只报告失败事实和合法纠正条件，不调用 `wao.request_user_decision`、不创建新的 alignment checkpoint，也不替用户选择或提交超长 Segment。
 - 单段包含对白且来源顺序与完整节拍允许时，以对白的主要表演位于视频中段为正向布局目标：开头只使用来源已有或理解当前动作所必需的最短建立；对白后存在来源明确的动作或反应时用它形成结尾落点。来源没有后续动作或反应时，以最后音节和同步口型在当前姿态中的自然完成作为落点，不新增事件、反应、动作或额外停顿；若来源事实迫使对白抵达片尾，保留来源顺序与完整性，不为形式上的居中编造内容。
 - 相邻 Segment 承接已完成状态，不重演转身、拿取、到达、对白或上一段落点。默认跨段只保证身份、服装、道具、空间、光线与声音相容；当相邻独立 Segment 明确要求从前段结束画面连续开始时，按“末帧派生续接”规则锁定后段的精确起点，但仍不得宣称模型生成的整条接缝天然无缝。
-- 表演写可见物理事实：呼吸、视线、下颌、肩颈、手部、步态与接触几何；不写内心解释或空泛情绪副词。一镜一种主要运镜，默认硬切。
+- 表演写可见物理事实：呼吸、视线、下颌、肩颈、手部、步态与接触几何；不写内心解释或空泛情绪副词。一镜一种主要运镜，默认硬切。需要切镜时，新镜头必须增加主体、空间、状态、视点或时间信息；只有景别或轻微角度变化时继续当前镜头并使用运镜。
 - 先建立来源已有的正常基线，再显示原因或证据，最后呈现人物反应；反应必须由当前或前一可见事件触发。
 - 从系统注入的 `productionCapabilities.video.supportedInputModes` 和 `promptProfile` 选择输入与表达；未知或不支持时停止，不按 modelKey 猜测、静默降级或换 Provider。
 - `vocalPerformanceMode` 每个 item 必须显式填写且不放进 `generationOptions`；对白逐字、自然说完，`silent_no_lip` 时在 warnings 说明用户选择导致的对白不执行。
@@ -62,13 +62,28 @@ overall_soundscape:
 non_diegetic_music:
 ```
 
-除对白原文和画面内文字外正文使用英文。`subject_definitions` 必须把每个实际使用的主体、服装、场景或道具绑定到对应的 `<Picture 1>` 至 `<Picture N>`，不得引用不存在的编号；`summary` 是动作摘要；`retention_analysis` 写身份、服装、比例、风格、场景和道具关系；`detailed_description` 从 0.00 秒写连续可见动作、机位、落位、视线与落点；`overall_soundscape` 只写对白、环境声、动作声和非语言人声。
+除对白原文和画面内文字外正文使用英文。`subject_definitions` 必须把每个实际使用的主体、服装、场景或道具绑定到对应的 `<Picture 1>` 至 `<Picture N>`，不得引用不存在的编号；`summary` 只用英文概括动作与参考关系，发声事件写成 `speaks the provided line`，不引用原句、不放 `<d>`；`retention_analysis` 写身份、服装、比例、风格、场景和道具关系；`detailed_description` 按播放顺序写连续可见动作、机位、落位、视线、对白与逐镜同步声音；`overall_soundscape` 用一个连续英文段落归纳全片环境声、动作声和非语言人声，不复述对白、歌唱或逐镜时间线。
+
+### H3 镜头、运镜与声音语法
+
+- `detailed_description` 必须直接以 `[Shot 1]` 开始，首镜标记后直接进入画面内容，永远不写 `[Shot 1] At 00:00...`。`reference` 形如 `[Shot 1] A medium-wide shot frames ...`；帧模式形如 `[Shot 1] <Picture 1> aligns with 0.00 seconds and shows ...`。每次真实切镜都在切点处直接开始新标记 `[Shot N] At MM:SS.mmm, the camera cuts to ...`，切镜结构只写成 `[Shot 1] ... [Shot 2] At 00:04.000, the camera cuts to ...`；上一镜结尾不预告 cut，也不得写 cut 而不递增镜号。错误形态 `[Shot 1] ... At 00:04.000, the camera cuts ... [Shot 2] ...` 必须改写为 `[Shot 1] ... [Shot 2] At 00:04.000, the camera cuts ...`。切点必须在 Segment 时长内严格递增；只有来源明确要求时才把 `cuts` 换成 dissolve、fade 或 wipe。
+- 时间阶段不是镜头边界：同一连续物理动作或同一主要运镜能够承载的内容只使用一个 `[Shot 1]`，可在镜内用 `At MM:SS.mmm` 描述动作阶段。用户明确要求单镜头时不得切镜；`first_last_frame` 默认用单镜连续插值，只有来源明确规定多镜时才增加镜头。
+- 运镜作为当前镜头中的自然英文动词句，不堆标签。H3 类型为 `Zoom In/Out`、`Push In/Pull Out`、`Pan Left/Right`、`Truck Left/Right`、`Tilt Up/Down`、`Pedestal Up/Down`、`Arc Shot`、`Tracking Shot`、`Static Shot`、`POV`、`Roll Clockwise/Counterclockwise` 或 `Shake Slightly/Strongly`，但正文统一使用 `The camera + 小写动词`：`zooms`、`pushes`、`pulls`、`pans`、`trucks`、`tilts`、`pedestals`、`arcs`、`tracks`、`holds a static shot`、`uses a POV shot`、`rolls` 或 `shakes`。默认中等幅度和正常速度不写；来源要求小幅、大幅、慢速或快速时分别写 `with small/large amplitude` 与 `at slow/fast speed`。例如 `The camera pulls out with small amplitude at slow speed.`；默认值时直接写 `The camera tracks the woman.`，不写 `natural/normal speed`、`medium amplitude`、`performs a Pull Out` 或 `a slow Push In`。
+- 实际说话或歌唱的声音源按首次发声顺序获得稳定 `(S1)`、`(S2)`；跨镜复用同一 ID，从不发声的角色不分配 ID。把身份、ID、动作与发声写成一个句子。多人同声说同一句来源原文时，使用一个复合 ID 和一个 `<d>`；多人同时说不同来源原文时，每条台词分别保留自己的稳定 ID 与独立 `<d>`，并在块外说明二者重叠。首次发声时只用来源已有的身份与声音事实建立说话人，身份短语、ID、动作和语气放在 `<d>` 外；不在同一事件里重复声明说话人或添加 `says exactly:`、`the first speaker is`。
+- `<d>` 内只放 `[Language]` 与用户或来源逐字提供的对白、歌词，不加反引号、说话人说明、voiceover 字样或翻译。画面内属于场景本身的招牌、便签或标签使用 ASCII 英文双引号并逐字保留，例如 `a sign reading "营业中"`；字幕、播放器文字和界面 overlay 不是场景文字，不得复制或生成。
+- `voiceover` 必须在同一句中把来源人物、稳定 ID、`<d>` 和“所有可见人物均不做口型”绑定；不能只约束发声者本人。对白跨切镜时，把 `<scenetrans>` 放在前后两个 `<d>` 内的连接点并明确声音连续跨切。本地 H3 方言不使用 `<cutoff>`；对白无法在合法时长内逐字自然说完时，按时长—内容冲突停止构造可执行 item。下列代码块只展示结构，花括号占位符必须由来源事实替换且不得原样输出；不得复制其中的主体、场景、动作或时间：
+
+```text
+[Shot 1] {source-backed framing and action}. {source-backed speaker} (S1) says: <d>[Language]{verbatim source line before the cut}<scenetrans></d> The same voice continues seamlessly across the cut.
+[Shot 2] At {MM:SS.mmm}, the camera cuts to {source-backed framing}. The same voice carries over as {source-backed speaker} (S1) says: <d>[Language]<scenetrans>{verbatim source line after the cut}</d>
+```
+- 完整对白、歌词和对应 `<d>` 只出现在 `detailed_description`。除 `silent_no_lip` 固定使用 `overall_soundscape: N/A` 外，`overall_soundscape` 用 1–4 句概括环境声、物理动作声和非语言人声，不包含 `<d>`，不复述对白或歌唱，也不写非世内音乐。
 
 图片时序语义只由当前显式输入模式决定：
 
 - `reference`：每个 `<Picture N>` 只锁定身份、风格、内容与场景结构，不是首帧或尾帧，不得写成时间锚点。
-- `first_frame`：`detailed_description` 开头必须在同一句中把 `<Picture 1>` 明确对齐 `0.00 seconds`，再描述从该状态连续发展的动作。
-- `first_last_frame`：除首帧规则外，必须在同一句中把 `<Picture 2>` 明确对齐当前 Segment 的精确结束秒数，并描述从首帧状态连续收敛到尾帧状态的运动路径。
+- `first_frame`：`detailed_description` 的 `[Shot 1]` 后第一句必须把 `<Picture 1>` 明确对齐 `0.00 seconds`，再描述从该状态连续发展的动作。
+- `first_last_frame`：除首帧规则外，必须在同一句中把 `<Picture 2>` 明确对齐当前 Segment 的精确结束秒数，并描述从首帧状态连续收敛到尾帧状态的运动路径。来源明确要求多镜时，`<Picture 2>` 只属于最后一个 `[Shot N]`，在该镜结尾成为 Segment 的最终视觉状态，其后不得再有镜头、动作或状态变化。
 
 不得调用或描述 ComfyUI AI 节点、下游 Prompt 改写或第二套 Prompt；主 Agent 是唯一 Prompt writer。
 
@@ -93,10 +108,12 @@ N/A
 - 时长意图是否先正确区分用户固定目标与 Agent 自主推导；固定目标是否能由 `allowedSegmentDurationsSeconds` 中的时长精确组成、每段是否合法且没有填充内容，`derive` 是否按完整来源节拍选择最短充分值，无法满足时是否按目标—能力或时长—内容冲突原地停止？
 - 对 H3 中所有由 Agent 选择的单段时长（包括 `fixed` 总时长下的分配与 `derive`），简单内容是否真实使用 4–6 秒、常规段是否保持在 10 秒内、11–13 秒是否只用于完整长对白节拍、每段是否都在 4–13 秒硬边界内；溢出失败是否只列出合法纠正条件且没有新增 decision checkpoint，其他 Prompt profile 是否只服从注入的合法时长集合？
 - 每镜是否有景别、机位、主体落位、朝向、世内视线、一个主要运镜、向前变化和可见落点？
+- `detailed_description` 是否直接以 `[Shot 1]` 开始、每次真实切镜都用递增的 `[Shot N] At MM:SS.mmm`、连续动作没有被时间块机械拆镜、单镜要求与 `first_last_frame` 默认单镜是否保留？
+- 运镜是否写成自然英文动词句并在来源要求时明确幅度与速度；除对白原文和画面文字外是否没有中文或混合语言残留？
 - 是否只使用 capability 允许的参考角色与数量，三种模式互斥，且 Picture 时间锚点与当前模式及 Segment 时长一致？
 - 要求前段末画面续接时，是否先从前段精确 ready 版本派生 `last_decodable` 图片，再把其精确 ready 版本作为后段唯一 `first_frame`，且失败时没有参考图或时间偏移 fallback？
 - H3 是否严格六段、固定 `non_diegetic_music: N/A`、无 AI 节点和无 Prompt 改写？
-- 对白是否逐字、自然说完并在来源允许时主要位于中段；对白后的落点是否只使用来源已有动作或反应，不存在时是否以说话表演自然完成而没有新增内容？声音关系是否清楚，是否固定写入不生成字幕、标题、水印、拼贴、分屏或额外人物？
+- 对白是否逐字、自然说完且没有 `<cutoff>`，并在来源允许时主要位于中段；每个声音源是否有稳定 `(Sx)`，同句齐声是否使用复合 ID、不同台词重叠是否分别保留 ID 与 `<d>`，`<d>` 是否只在 `detailed_description`，跨切 `<scenetrans>` 是否在两个 `<d>` 内，voiceover 是否明确所有可见人物均不做口型？对白后的落点是否只使用来源已有动作或反应，不存在时是否以说话表演自然完成而没有新增内容？声音关系是否清楚，是否固定写入不生成字幕、标题、水印、拼贴、分屏或额外人物？
 
 ## 边界
 

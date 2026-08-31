@@ -17,6 +17,12 @@ export type MinimaxH3PromptSection = (typeof MINIMAX_H3_PROMPT_SECTIONS)[number]
 const SECTION_HEADING = /^([a-z][a-z0-9_]*)\s*:\s*$/u
 const TIME_EXPRESSION = /(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?)\b/giu
 const FIXED_NON_DIEGETIC_MUSIC = 'N/A'
+const DIALOGUE_TAG = /<\/?d>/u
+const DIALOGUE_CUTOFF_TAG = /<cutoff>/u
+const DIALOGUE_BLOCK = /<d>[\s\S]*?<\/d>/gu
+const SHOT_MARKER = /\[Shot (\d+)\]/gu
+const SHOT_TRANSITION = /^\[Shot (\d+)\] At (\d{2}):(\d{2}\.\d{3}), the camera (?:cuts|dissolves|fades|wipes)\b/u
+const CAMERA_TRANSITION = /\bthe camera (?:cuts|dissolves|fades|wipes)\b/gu
 
 function invalid(reason: string): Error {
   return new Error('VIDEO_PROMPT_PROFILE_INVALID:' + reason)
@@ -62,6 +68,66 @@ function hasPictureTimeAnchor(input: {
   })
 }
 
+function parseShotTime(minutesText: string, secondsText: string): number | null {
+  const minutes = Number(minutesText)
+  const seconds = Number(secondsText)
+  if (!Number.isInteger(minutes) || minutes < 0 || !Number.isFinite(seconds) || seconds < 0 || seconds >= 60) {
+    return null
+  }
+  return minutes * 60 + seconds
+}
+
+function assertH3PromptStructure(
+  sections: Readonly<Record<MinimaxH3PromptSection, string>>,
+  durationSeconds: number,
+): void {
+  for (const section of MINIMAX_H3_PROMPT_SECTIONS) {
+    const body = sections[section]
+    if (DIALOGUE_CUTOFF_TAG.test(body)) throw invalid('DIALOGUE_CUTOFF_UNSUPPORTED')
+    if (section !== 'detailed_description' && DIALOGUE_TAG.test(body)) {
+      throw invalid('DIALOGUE_TAG_SECTION_INVALID:' + section)
+    }
+  }
+
+  const detailedDescription = sections.detailed_description
+  if (!detailedDescription.startsWith('[Shot 1]')) {
+    throw invalid('DETAILED_DESCRIPTION_SHOT_1_REQUIRED')
+  }
+
+  const structuralDescription = detailedDescription.replace(
+    DIALOGUE_BLOCK,
+    (dialogue) => ' '.repeat(dialogue.length),
+  )
+  const shots = Array.from(structuralDescription.matchAll(SHOT_MARKER))
+  let previousShotTime = 0
+  for (let index = 0; index < shots.length; index += 1) {
+    const shot = shots[index]!
+    const expectedShotNumber = index + 1
+    if (Number(shot[1]) !== expectedShotNumber) {
+      throw invalid('SHOT_SEQUENCE_INVALID:' + String(expectedShotNumber))
+    }
+    if (index === 0) continue
+
+    const transition = SHOT_TRANSITION.exec(structuralDescription.slice(shot.index))
+    if (!transition || Number(transition[1]) !== expectedShotNumber) {
+      throw invalid('SHOT_TRANSITION_INVALID:' + String(expectedShotNumber))
+    }
+    const shotTime = parseShotTime(transition[2]!, transition[3]!)
+    if (
+      shotTime === null
+      || shotTime <= previousShotTime
+      || !Number.isFinite(durationSeconds)
+      || shotTime >= durationSeconds
+    ) {
+      throw invalid('SHOT_TIME_OUT_OF_RANGE:' + String(expectedShotNumber))
+    }
+    previousShotTime = shotTime
+  }
+
+  const transitionCount = Array.from(structuralDescription.matchAll(CAMERA_TRANSITION)).length
+  if (transitionCount !== shots.length - 1) throw invalid('SHOT_TRANSITION_ORPHANED')
+}
+
 function assertH3InputMode(
   inputMode: VideoInputMode,
   durationSeconds: number,
@@ -103,6 +169,7 @@ export function assertVideoPromptMatchesProfile(input: {
   if (!input.prompt.trim()) throw invalid('PROMPT_EMPTY')
   const sections = parseSections(input.prompt)
   if (input.profile !== 'minimax_h3_multimodal_v3') throw invalid('PROFILE_UNKNOWN')
+  assertH3PromptStructure(sections, input.durationSeconds)
   assertH3InputMode(input.inputMode, input.durationSeconds, sections)
 }
 
