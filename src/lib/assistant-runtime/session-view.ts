@@ -19,6 +19,122 @@ const RECENT_BATCH_LIMIT = 24
 const ACTIVE_STATUSES = ['queued', 'running', 'waiting_approval'] as const
 const TERMINAL_TASK_STATUSES = new Set(['completed', 'failed', 'canceled', 'dismissed'])
 
+// Keep every JSON column out of the ordered phase. MySQL otherwise copies the
+// selected JSON values into its filesort rows and can exhaust sort memory.
+const TURN_VIEW_ORDER_SELECT = {
+  id: true,
+  requestId: true,
+  sourceKind: true,
+  sourceId: true,
+  status: true,
+  attempt: true,
+  assistantMessageId: true,
+  stopReason: true,
+  cancelReason: true,
+  startedAt: true,
+  finishedAt: true,
+  createdAt: true,
+  updatedAt: true,
+} as const satisfies Prisma.ProjectAgentTurnSelect
+
+const TURN_VIEW_DETAILS_SELECT = {
+  id: true,
+  planJson: true,
+  failure: true,
+} as const satisfies Prisma.ProjectAgentTurnSelect
+
+type TurnViewOrderRow = Prisma.ProjectAgentTurnGetPayload<{
+  select: typeof TURN_VIEW_ORDER_SELECT
+}>
+
+type TurnViewDetailsRow = Prisma.ProjectAgentTurnGetPayload<{
+  select: typeof TURN_VIEW_DETAILS_SELECT
+}>
+
+type TurnViewRow = TurnViewOrderRow & Omit<TurnViewDetailsRow, 'id'>
+
+const INTERACTION_VIEW_ORDER_SELECT = {
+  id: true,
+  turnId: true,
+  version: true,
+  status: true,
+  runtimeRequestId: true,
+  createdAt: true,
+} as const satisfies Prisma.AgentTurnInteractionSelect
+
+const INTERACTION_VIEW_DETAILS_SELECT = {
+  id: true,
+  payloadJson: true,
+  responseJson: true,
+} as const satisfies Prisma.AgentTurnInteractionSelect
+
+type InteractionViewOrderRow = Prisma.AgentTurnInteractionGetPayload<{
+  select: typeof INTERACTION_VIEW_ORDER_SELECT
+}>
+
+type InteractionViewDetailsRow = Prisma.AgentTurnInteractionGetPayload<{
+  select: typeof INTERACTION_VIEW_DETAILS_SELECT
+}>
+
+type InteractionViewRow = InteractionViewOrderRow & Omit<InteractionViewDetailsRow, 'id'>
+
+const FOLLOW_UP_BATCH_VIEW_SELECT = {
+  id: true,
+  originTurnId: true,
+  callId: true,
+  operationId: true,
+  status: true,
+  notifiedTurnId: true,
+  createdAt: true,
+  readyAt: true,
+  notifiedAt: true,
+  cancelledAt: true,
+  members: {
+    orderBy: { taskId: 'asc' as const },
+    select: {
+      task: {
+        select: {
+          id: true,
+          operationId: true,
+          type: true,
+          targetType: true,
+          targetId: true,
+          status: true,
+          createdAt: true,
+          finishedAt: true,
+        },
+      },
+    },
+  },
+} as const satisfies Prisma.FollowUpBatchSelect
+
+const TASK_FAILURE_SELECT = {
+  id: true,
+  failure: true,
+} as const satisfies Prisma.TaskSelect
+
+function hydrateTurnRows(
+  rows: readonly TurnViewOrderRow[],
+  detailsById: ReadonlyMap<string, TurnViewDetailsRow>,
+): TurnViewRow[] {
+  return rows.map((row) => {
+    const details = detailsById.get(row.id)
+    if (!details) throw new Error(`ASSISTANT_RUNTIME_VIEW_TURN_DETAILS_MISSING:${row.id}`)
+    return { ...row, planJson: details.planJson, failure: details.failure }
+  })
+}
+
+function hydrateInteractionRows(
+  rows: readonly InteractionViewOrderRow[],
+  detailsById: ReadonlyMap<string, InteractionViewDetailsRow>,
+): InteractionViewRow[] {
+  return rows.map((row) => {
+    const details = detailsById.get(row.id)
+    if (!details) throw new Error(`ASSISTANT_RUNTIME_VIEW_INTERACTION_DETAILS_MISSING:${row.id}`)
+    return { ...row, payloadJson: details.payloadJson, responseJson: details.responseJson }
+  })
+}
+
 function parseTurnStatus(value: string): AssistantRuntimeSessionTurnView['status'] {
   if (
     value === 'queued' || value === 'running' || value === 'waiting_approval'
@@ -33,23 +149,7 @@ function parseSourceKind(value: string): AssistantRuntimeSessionTurnView['source
   throw new Error(`ASSISTANT_RUNTIME_VIEW_SOURCE_KIND_INVALID:${value}`)
 }
 
-function toTurnView(row: {
-  readonly id: string
-  readonly requestId: string
-  readonly sourceKind: string
-  readonly sourceId: string
-  readonly status: string
-  readonly attempt: number
-  readonly planJson: Prisma.JsonValue | null
-  readonly assistantMessageId: string | null
-  readonly stopReason: string | null
-  readonly failure: Prisma.JsonValue | null
-  readonly cancelReason: string | null
-  readonly startedAt: Date | null
-  readonly finishedAt: Date | null
-  readonly createdAt: Date
-  readonly updatedAt: Date
-}): AssistantRuntimeSessionTurnView {
+function toTurnView(row: TurnViewRow): AssistantRuntimeSessionTurnView {
   const status = parseTurnStatus(row.status)
   const failure = parseFailureRecord(row.failure)
   return {
@@ -159,16 +259,25 @@ export async function getAssistantRuntimeSessionView(
       || thread.assistantId !== input.assistantId
     ) throw new Error('ASSISTANT_RUNTIME_VIEW_THREAD_SCOPE_DIVERGED')
 
-    const [openRows, recentRows, interactions, batches, currentResourceTaskRows, messagePage] = await Promise.all([
+    const [
+      openOrderRows,
+      recentOrderRows,
+      interactionOrderRows,
+      batches,
+      currentResourceTaskRows,
+      messagePage,
+    ] = await Promise.all([
       tx.projectAgentTurn.findMany({
         where: { threadId: thread.id, status: { in: [...ACTIVE_STATUSES] } },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         take: 66,
+        select: TURN_VIEW_ORDER_SELECT,
       }),
       tx.projectAgentTurn.findMany({
         where: { threadId: thread.id },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: RECENT_TURN_LIMIT,
+        select: TURN_VIEW_ORDER_SELECT,
       }),
       tx.agentTurnInteraction.findMany({
         where: {
@@ -176,17 +285,13 @@ export async function getAssistantRuntimeSessionView(
           status: { in: ['pending', 'delivery_pending', 'decided'] },
         },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        select: INTERACTION_VIEW_ORDER_SELECT,
       }),
       tx.followUpBatch.findMany({
         where: { threadId: thread.id },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: RECENT_BATCH_LIMIT,
-        include: {
-          members: {
-            orderBy: { taskId: 'asc' },
-            include: { task: true },
-          },
-        },
+        select: FOLLOW_UP_BATCH_VIEW_SELECT,
       }),
       tx.workspaceResource.findMany({
         where: {
@@ -198,8 +303,39 @@ export async function getAssistantRuntimeSessionView(
       }),
       readLatestAssistantRuntimeMessagePage(tx, thread.id),
     ])
-    if (openRows.length > 65) throw new Error('ASSISTANT_RUNTIME_VIEW_OPEN_TURN_LIMIT_EXCEEDED')
-    if (interactions.length > 1) throw new Error('ASSISTANT_RUNTIME_VIEW_INTERACTION_CONFLICT')
+    if (openOrderRows.length > 65) throw new Error('ASSISTANT_RUNTIME_VIEW_OPEN_TURN_LIMIT_EXCEEDED')
+    if (interactionOrderRows.length > 1) throw new Error('ASSISTANT_RUNTIME_VIEW_INTERACTION_CONFLICT')
+    const turnIds = [...new Set([...openOrderRows, ...recentOrderRows].map((row) => row.id))]
+    const interactionIds = interactionOrderRows.map((row) => row.id)
+    const failedTaskIds = batches.flatMap((batch) => batch.members.flatMap(({ task }) => (
+      task.status === 'failed' ? [task.id] : []
+    )))
+    const [turnDetails, interactionDetails, taskFailures] = await Promise.all([
+      turnIds.length === 0
+        ? Promise.resolve([])
+        : tx.projectAgentTurn.findMany({
+            where: { id: { in: turnIds } },
+            select: TURN_VIEW_DETAILS_SELECT,
+          }),
+      interactionIds.length === 0
+        ? Promise.resolve([])
+        : tx.agentTurnInteraction.findMany({
+            where: { id: { in: interactionIds } },
+            select: INTERACTION_VIEW_DETAILS_SELECT,
+          }),
+      failedTaskIds.length === 0
+        ? Promise.resolve([])
+        : tx.task.findMany({
+            where: { id: { in: failedTaskIds } },
+            select: TASK_FAILURE_SELECT,
+          }),
+    ])
+    const turnDetailsById = new Map(turnDetails.map((row) => [row.id, row] as const))
+    const interactionDetailsById = new Map(interactionDetails.map((row) => [row.id, row] as const))
+    const taskFailureById = new Map(taskFailures.map((row) => [row.id, row.failure] as const))
+    const openRows = hydrateTurnRows(openOrderRows, turnDetailsById)
+    const recentRows = hydrateTurnRows(recentOrderRows, turnDetailsById)
+    const interactions = hydrateInteractionRows(interactionOrderRows, interactionDetailsById)
     const open = openRows.map(toTurnView)
     const recent = recentRows.map(toTurnView)
     const executing = open.filter((turn) => turn.status === 'running' || turn.status === 'waiting_approval')
@@ -221,6 +357,9 @@ export async function getAssistantRuntimeSessionView(
           ? currentTaskByResourceId.get(task.targetId)
           : undefined
         if (currentTaskId && currentTaskId !== task.id) return []
+        if (task.status === 'failed' && !taskFailureById.has(task.id)) {
+          throw new Error(`ASSISTANT_RUNTIME_VIEW_TASK_FAILURE_MISSING:${task.id}`)
+        }
         return [{
         taskId: task.id,
         operationId: task.operationId,
@@ -230,7 +369,7 @@ export async function getAssistantRuntimeSessionView(
         status: task.status,
         terminal: TERMINAL_TASK_STATUSES.has(task.status),
         errorCode: task.status === 'failed'
-          ? parseFailureRecord(task.failure)?.interpretation.code ?? 'INTERNAL_ERROR'
+          ? parseFailureRecord(taskFailureById.get(task.id))?.interpretation.code ?? 'INTERNAL_ERROR'
           : null,
         createdAt: task.createdAt.toISOString(),
         finishedAt: task.finishedAt?.toISOString() ?? null,

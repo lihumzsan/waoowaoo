@@ -27,6 +27,30 @@ function seededMessage(position: number): UIMessage {
   }
 }
 
+function persistedLargeFailure(diagnostic: string): Prisma.InputJsonObject {
+  return {
+    version: 2,
+    native: {
+      name: 'Error',
+      message: 'large persisted diagnostic',
+      code: null,
+      statusCode: null,
+      requestId: null,
+      metadata: { diagnostic },
+      cause: null,
+    },
+    interpretation: { code: 'INTERNAL_ERROR', details: null },
+    context: { system: 'application' },
+    recovery: {
+      operation: null,
+      effect: 'unknown',
+      taskReplay: 'forbidden',
+      attempts: 1,
+    },
+    frames: [],
+  }
+}
+
 describe('Assistant Runtime normalized message persistence', () => {
   beforeEach(async () => {
     await resetBillingState()
@@ -250,5 +274,164 @@ describe('Assistant Runtime normalized message persistence', () => {
     })
     expect(oldest.messages.map((message) => message.id)).toEqual(['boundary-message-1'])
     expect(oldest.messagePage).toEqual({ hasMore: false, before: null })
+  })
+
+  it('reads the session view without sorting large turn JSON payloads', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const scope = {
+      projectId: project.id,
+      userId: user.id,
+      assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
+    }
+    const thread = await getOrCreateAssistantRuntimeThread(scope)
+    const largeText = 'x'.repeat(512 * 1_024)
+    const largeFailure = persistedLargeFailure(largeText)
+    const turnCount = 32
+    const turns = Array.from({ length: turnCount }, (_, index) => ({
+      id: `large-payload-turn-${String(index + 1).padStart(3, '0')}`,
+      threadId: thread.threadId,
+      projectId: project.id,
+      userId: user.id,
+      sourceKind: 'user',
+      sourceId: `large-payload-source-${String(index + 1).padStart(3, '0')}`,
+      payloadHash: 'c'.repeat(64),
+      requestId: `large-payload-request-${String(index + 1).padStart(3, '0')}`,
+      status: 'completed',
+      attempt: 1,
+      userMessageJson: {
+        id: `large-payload-source-${String(index + 1).padStart(3, '0')}`,
+        role: 'user',
+        parts: [{ type: 'text', text: largeText }],
+      },
+      contextJson: { locale: 'zh', selectedScopeRef: null, selectedAssetId: null },
+      planJson: { diagnostic: largeText },
+      failure: largeFailure,
+      createdAt: new Date(Date.now() - (turnCount - index) * 1_000),
+    }))
+
+    await prisma.projectAgentTurn.createMany({ data: turns })
+
+    await expect(getAssistantRuntimeSessionView(scope)).resolves.toMatchObject({
+      protocol: 'assistant_runtime_session_view_v2',
+      thread: { threadId: thread.threadId },
+      currentTurn: { turnId: 'large-payload-turn-032' },
+    })
+  })
+
+  it('reads one pending interaction without sorting its large runtime payload', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const scope = {
+      projectId: project.id,
+      userId: user.id,
+      assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
+    }
+    const thread = await getOrCreateAssistantRuntimeThread(scope)
+    const turnId = 'large-interaction-turn'
+
+    await prisma.projectAgentTurn.create({
+      data: {
+        id: turnId,
+        threadId: thread.threadId,
+        projectId: project.id,
+        userId: user.id,
+        sourceKind: 'user',
+        sourceId: 'large-interaction-source',
+        payloadHash: 'd'.repeat(64),
+        requestId: 'large-interaction-request',
+        status: 'running',
+        attempt: 1,
+        contextJson: { locale: 'zh' },
+        startedAt: new Date(),
+      },
+    })
+    await prisma.agentTurnInteraction.create({
+      data: {
+        id: 'large-pending-interaction',
+        turnId,
+        kind: 'runtime_request',
+        status: 'pending',
+        runtimeRequestId: 'large-runtime-request',
+        payloadJson: {
+          requestId: 'large-runtime-request',
+          method: 'mcpServer/elicitation/request',
+          params: {
+            threadId: 'large-runtime-thread',
+            turnId,
+            mode: 'form',
+            message: 'Provide a value',
+            requestedSchema: { type: 'object', properties: {} },
+            _meta: { diagnostic: 'x'.repeat(8 * 1_024 * 1_024) },
+          },
+        },
+      },
+    })
+
+    await expect(getAssistantRuntimeSessionView(scope)).resolves.toMatchObject({
+      pendingInteraction: {
+        interactionId: 'large-pending-interaction',
+        runtimeRequestId: 'large-runtime-request',
+      },
+    })
+  })
+
+  it('reads follow-up batches without sorting large task JSON payloads', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const scope = {
+      projectId: project.id,
+      userId: user.id,
+      assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
+    }
+    const thread = await getOrCreateAssistantRuntimeThread(scope)
+    const largeText = 'x'.repeat(512 * 1_024)
+    const taskCount = 32
+    const taskIds = Array.from(
+      { length: taskCount },
+      (_, index) => `large-follow-up-task-${String(index + 1).padStart(3, '0')}`,
+    )
+
+    await prisma.task.createMany({
+      data: taskIds.map((taskId) => ({
+        id: taskId,
+        userId: user.id,
+        projectId: project.id,
+        type: 'test_large_follow_up',
+        targetType: 'Project',
+        targetId: project.id,
+        status: 'failed',
+        operationId: 'assistant_test_large_follow_up',
+        payload: { diagnostic: largeText },
+        result: { diagnostic: largeText },
+        failure: persistedLargeFailure(largeText),
+        finishedAt: new Date(),
+      })),
+    })
+    await prisma.followUpBatch.create({
+      data: {
+        id: 'large-follow-up-batch',
+        executionKey: 'large-follow-up-execution',
+        threadId: thread.threadId,
+        originTurnId: 'large-follow-up-origin-turn',
+        callId: 'large-follow-up-call',
+        projectId: project.id,
+        userId: user.id,
+        assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
+        operationId: 'assistant_test_large_follow_up',
+        contextJson: { diagnostic: largeText },
+        status: 'ready',
+        members: {
+          create: taskIds.map((taskId) => ({ taskId, status: 'settled' })),
+        },
+      },
+    })
+
+    await expect(getAssistantRuntimeSessionView(scope)).resolves.toMatchObject({
+      followUpBatches: [{
+        batchId: 'large-follow-up-batch',
+        progress: { total: taskCount, failed: taskCount },
+      }],
+    })
   })
 })

@@ -161,6 +161,7 @@ export type RuntimeSkillMetadata = {
   readonly path: string
   readonly scope: 'user' | 'repo' | 'system' | 'admin'
   readonly enabled: boolean
+  readonly pluginId: string | null
 }
 
 export type RuntimeSkillError = {

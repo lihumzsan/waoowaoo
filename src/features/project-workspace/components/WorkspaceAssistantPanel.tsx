@@ -65,6 +65,7 @@ import { useWorkspaceAssistantRuntime } from './workspace-assistant/useWorkspace
 import {
   parseWorkspaceAssistantFailureText,
   resolveWorkspaceAssistantFailureView,
+  resolveWorkspaceAssistantRecoveryAction,
   resolveWorkspaceAssistantResendDraft,
   resolveWorkspaceAssistantUndeliveredUserMessage,
   shouldShowWorkspaceAssistantDeliveryFailure,
@@ -912,15 +913,18 @@ export default function WorkspaceAssistantPanel({
       mediaAttachments: [],
     }).catch(() => undefined)
   }, [sendMessage, t])
-  const canContinueInterruptedTurn = Boolean(
-    currentTurn?.startedAt
-      && (
-        currentTurn.status === 'failed'
-        || (currentTurn.status === 'interrupted' && currentTurn.cancelReason !== 'user_cancelled')
-      ),
-  )
+  const startNewConversation = useCallback(() => {
+    void assistantRuntime.startNewConversation().catch(() => undefined)
+  }, [assistantRuntime])
   const failureActionPending = assistantRuntime.pending || assistantRuntime.viewLoading
-  const continueAction = canContinueInterruptedTurn
+  const recoveryActionKind = resolveWorkspaceAssistantRecoveryAction({
+    turnStatus: currentTurn?.status ?? null,
+    turnStartedAt: currentTurn?.startedAt ?? null,
+    cancelReason: currentTurn?.cancelReason ?? null,
+    failureAction: runFailureView.action,
+    canResend: Boolean(resendDraft),
+  })
+  const continueAction = recoveryActionKind === 'continue'
     ? {
         label: t('panel.continueInterrupted'),
         pendingLabel: t('panel.continuing'),
@@ -928,7 +932,15 @@ export default function WorkspaceAssistantPanel({
         onClick: continueInterruptedTurn,
       }
     : null
-  const resendAction = resendDraft
+  const newConversationAction = recoveryActionKind === 'new_conversation'
+    ? {
+        label: tErrors('actions.new_conversation'),
+        pendingLabel: t('panel.loading'),
+        pending: failureActionPending,
+        onClick: startNewConversation,
+      }
+    : null
+  const resendAction = recoveryActionKind === 'resend' && resendDraft
     ? {
         label: t('panel.resend'),
         pendingLabel: t('panel.sending'),
@@ -936,6 +948,7 @@ export default function WorkspaceAssistantPanel({
         onClick: resendUndeliveredMessage,
       }
     : null
+  const recoveryAction = newConversationAction ?? continueAction ?? resendAction
   return (
     <aside
       className="pointer-events-none fixed inset-y-0 right-0 z-20 w-0"
@@ -1024,7 +1037,7 @@ export default function WorkspaceAssistantPanel({
                           {showRunFailureNotice ? (
                             <WorkspaceAssistantRunFailureNotice
                               failure={runFailureView}
-                              action={continueAction ?? resendAction}
+                              action={recoveryAction}
                             />
                           ) : null}
                           {showInterruptedNotice ? (
@@ -1038,7 +1051,7 @@ export default function WorkspaceAssistantPanel({
                                   : null,
                                 action: null,
                               }}
-                              action={continueAction ?? resendAction}
+                              action={recoveryAction}
                             />
                           ) : null}
                           {serverPendingApproval ? (

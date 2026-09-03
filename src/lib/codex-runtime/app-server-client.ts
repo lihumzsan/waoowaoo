@@ -177,11 +177,11 @@ function parseSkillScope(value: unknown): RuntimeSkillMetadata['scope'] {
   throw new CodexAppServerProtocolError('SKILLS_LIST_SKILL_SCOPE_INVALID')
 }
 
-function parseSkill(value: unknown): RuntimeSkillMetadata {
+export function parseRuntimeSkillMetadata(value: unknown): RuntimeSkillMetadata {
   if (!isRecord(value)) throw new CodexAppServerProtocolError('SKILLS_LIST_SKILL_INVALID')
   assertOnlyKeys(
     value,
-    ['name', 'description', 'shortDescription', 'interface', 'dependencies', 'path', 'scope', 'enabled'],
+    ['name', 'description', 'shortDescription', 'interface', 'dependencies', 'path', 'scope', 'enabled', 'pluginId'],
     'SKILLS_LIST_SKILL_FIELDS_INVALID',
   )
   if (hasOwn(value, 'shortDescription') && value.shortDescription !== undefined) {
@@ -193,12 +193,16 @@ function parseSkill(value: unknown): RuntimeSkillMetadata {
   if (hasOwn(value, 'dependencies') && value.dependencies !== undefined) {
     requireJsonValue(value.dependencies, 'SKILLS_LIST_SKILL_DEPENDENCIES_INVALID')
   }
+  if (!hasOwn(value, 'pluginId') || (value.pluginId !== null && typeof value.pluginId !== 'string')) {
+    throw new CodexAppServerProtocolError('SKILLS_LIST_SKILL_PLUGIN_ID_INVALID')
+  }
   return {
     name: requireString(value.name, 'SKILLS_LIST_SKILL_NAME_INVALID'),
     description: requireString(value.description, 'SKILLS_LIST_SKILL_DESCRIPTION_INVALID'),
     path: requireString(value.path, 'SKILLS_LIST_SKILL_PATH_INVALID'),
     scope: parseSkillScope(value.scope),
     enabled: requireBoolean(value.enabled, 'SKILLS_LIST_SKILL_ENABLED_INVALID'),
+    pluginId: value.pluginId,
   }
 }
 
@@ -210,7 +214,7 @@ function parseSkillsListEntry(value: unknown): RuntimeSkillsListEntry {
   }
   return {
     cwd: requireString(value.cwd, 'SKILLS_LIST_ENTRY_CWD_INVALID'),
-    skills: value.skills.map(parseSkill),
+    skills: value.skills.map(parseRuntimeSkillMetadata),
     errors: value.errors.map((error) => {
       if (!isRecord(error)) throw new CodexAppServerProtocolError('SKILLS_LIST_ERROR_INVALID')
       assertOnlyKeys(error, ['path', 'message'], 'SKILLS_LIST_ERROR_FIELDS_INVALID')

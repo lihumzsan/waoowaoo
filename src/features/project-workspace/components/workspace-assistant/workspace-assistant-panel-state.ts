@@ -179,6 +179,45 @@ export interface WorkspaceAssistantFailureView {
   readonly action: UserErrorAction
 }
 
+export type WorkspaceAssistantRecoveryAction =
+  | 'continue'
+  | 'new_conversation'
+  | 'resend'
+  | null
+
+/**
+ * Resolve one recovery action from the persisted Turn facts and the shared
+ * error catalogue. A terminal failure may create a continuation Turn only
+ * when its canonical action is retry; context exhaustion must start with a
+ * fresh native thread instead of sending another message into the full one.
+ */
+export function resolveWorkspaceAssistantRecoveryAction(params: {
+  readonly turnStatus: AssistantRuntimeSessionTurnView['status'] | null
+  readonly turnStartedAt: string | null
+  readonly cancelReason: string | null
+  readonly failureAction: UserErrorAction
+  readonly canResend: boolean
+}): WorkspaceAssistantRecoveryAction {
+  if (params.turnStatus === 'failed' || params.turnStatus === 'interrupted') {
+    if (params.failureAction === 'new_conversation') return 'new_conversation'
+    if (params.failureAction !== null && params.failureAction !== 'retry') return null
+  }
+  if (params.turnStatus === 'failed') {
+    if (params.failureAction !== 'retry') return null
+    return params.turnStartedAt
+      ? 'continue'
+      : params.canResend ? 'resend' : null
+  }
+  if (
+    params.turnStatus === 'interrupted'
+    && params.cancelReason !== 'user_cancelled'
+  ) {
+    if (params.turnStartedAt) return 'continue'
+    return params.canResend ? 'resend' : null
+  }
+  return null
+}
+
 /**
  * Single decision point for how any assistant failure is presented. The
  * headline is the localized text of the canonical error code — the same

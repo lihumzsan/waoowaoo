@@ -77,6 +77,7 @@ interface UseWorkspaceAssistantRuntimeResult {
   hasEarlierMessages: boolean
   earlierMessagesLoading: boolean
   loadEarlierMessages: () => Promise<void>
+  startNewConversation: () => Promise<void>
   sendMessage: (input: WorkspaceAssistantSendMessageInput) => Promise<void>
   sendHiddenMessage: (text: string, sourceKey?: string) => Promise<void>
   stopReply: () => Promise<void>
@@ -717,6 +718,50 @@ export function useWorkspaceAssistantRuntime({
     [submitUserMessage],
   )
 
+  const startNewConversation = useCallback(async (): Promise<void> => {
+    const threadId = view?.thread?.threadId
+    if (!threadId) return
+    const commandScopeKey = scopeKey
+    setCommandError(null)
+    setCommandPending(true)
+    try {
+      const response = await apiFetch(
+        `/api/projects/${encodeURIComponent(projectId)}/assistant/chat`,
+        {
+          method: 'DELETE',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            threadId,
+            requestId: `assistant-thread-clear:${threadId}`,
+          }),
+        },
+      )
+      if (!response.ok) {
+        throw await readCommandError(response, 'PROJECT_AGENT_RUNTIME_FAILED')
+      }
+      setOptimisticMessages([])
+      await refetchView()
+    } catch (error) {
+      const normalized = error instanceof Error ? error : new Error(String(error))
+      if (scopeKeyRef.current === commandScopeKey) {
+        setCommandError(normalized)
+      }
+      throw normalized
+    } finally {
+      if (scopeKeyRef.current === commandScopeKey) {
+        setCommandPending(false)
+      }
+    }
+  }, [
+    projectId,
+    refetchView,
+    scopeKey,
+    setCommandError,
+    setCommandPending,
+    setOptimisticMessages,
+    view?.thread?.threadId,
+  ])
+
   const stopReply = useCallback(async () => {
     const turn = view?.currentTurn
     const threadId = view?.thread?.threadId
@@ -898,6 +943,7 @@ export function useWorkspaceAssistantRuntime({
     hasEarlierMessages: effectivePersistedHistory.hasMore,
     earlierMessagesLoading: effectivePersistedHistory.activeRequest !== null,
     loadEarlierMessages,
+    startNewConversation,
     sendMessage,
     sendHiddenMessage,
     stopReply,
