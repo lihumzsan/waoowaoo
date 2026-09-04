@@ -3,10 +3,11 @@ import {
   H3_FRAME_DUAL_STAGE_RUNTIME_PROFILE,
   buildH3PromptGraph,
 } from '@/lib/ai-providers/comfyui/profiles'
+import { resolveH3DurationPlan } from '@/lib/video-generation/h3-duration'
 
 const commonInput = {
   prompt: 'subject_definitions:\nSubject 1 is represented by Picture 1.',
-  durationSeconds: 4,
+  frameCount: resolveH3DurationPlan(4).frameCount,
   aspectRatio: '16:9' as const,
   seed: 17,
 }

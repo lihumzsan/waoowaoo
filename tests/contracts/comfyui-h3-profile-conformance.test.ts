@@ -8,15 +8,18 @@ import {
   H3_DUAL_STAGE_RUNTIME_PROFILE,
   buildH3PromptGraph,
   resolveH3Dimensions,
-  resolveH3DurationFrames,
 } from '@/lib/ai-providers/comfyui/profiles'
+import {
+  resolveH3ContinuationDurationPlan,
+  resolveH3DurationPlan,
+} from '@/lib/video-generation/h3-duration'
 
 describe('ComfyUI H3 dual-stage profile', () => {
   it('aligns duration and derives the delivery dimensions from the generation canvas', () => {
-    expect(resolveH3DurationFrames(4)).toBe(107)
-    expect(resolveH3DurationFrames(5)).toBe(124)
-    expect(resolveH3DurationFrames(10)).toBe(243)
-    expect(resolveH3DurationFrames(13)).toBe(328)
+    expect(resolveH3DurationPlan(4).frameCount).toBe(107)
+    expect(resolveH3DurationPlan(5).frameCount).toBe(124)
+    expect(resolveH3DurationPlan(10).frameCount).toBe(243)
+    expect(resolveH3DurationPlan(13).frameCount).toBe(328)
     expect(resolveH3Dimensions({ megapixels: 1, aspectRatio: '16:9' })).toEqual({ width: 1376, height: 768 })
     expect(resolveH3Dimensions({ megapixels: 2, aspectRatio: '16:9' })).toEqual({ width: 2064, height: 1152 })
   })
@@ -24,23 +27,25 @@ describe('ComfyUI H3 dual-stage profile', () => {
   it.each(H3_ASPECT_RATIOS)('keeps the effective %s delivery canvas aligned across every H3 input mode', (aspectRatio) => {
     const common = {
       prompt: 'subject_definitions:\nSubject 1 remains visually consistent.',
-      durationSeconds: 4,
       aspectRatio,
       seed: 17,
     }
     const builds = [
       buildH3PromptGraph({
         ...common,
+        frameCount: resolveH3DurationPlan(4).frameCount,
         mode: 'reference',
         referenceImageUrls: ['https://example.test/reference.png'],
       }),
       buildH3PromptGraph({
         ...common,
+        frameCount: resolveH3DurationPlan(4).frameCount,
         mode: 'first_frame',
         firstFrameUrl: 'https://example.test/first.png',
       }),
       buildH3PromptGraph({
         ...common,
+        frameCount: resolveH3ContinuationDurationPlan(4).frameCount,
         mode: 'continuation',
         continuationFrameFilenames: Array.from(
           { length: 22 },
@@ -88,7 +93,7 @@ describe('ComfyUI H3 dual-stage profile', () => {
     expect(h3?.capabilities.video.durationOptions).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
     expect(h3?.capabilities.video.continuationInput).toMatchObject({
       minSourceDurationMs: 917,
-      maxSourceDurationMs: 13_041,
+      maxSourceDurationMs: 13_708,
       sourceAspectRatioByTarget: {
         '9:16': { width: 1152, height: 2064 },
       },
@@ -106,14 +111,6 @@ describe('ComfyUI H3 dual-stage profile', () => {
     })
     expect(resolved.issues).toEqual([])
     expect(resolved.options).toMatchObject({ duration: 10, generateAudio: true })
-  })
-
-  it('rejects an H3 duration above thirteen seconds at provider preflight', () => {
-    ensureAiCatalogsRegistered()
-    const selection = { provider: 'comfyui' as const, modelId: COMFYUI_H3_MODEL_ID, modelKey: `comfyui::${COMFYUI_H3_MODEL_ID}`, variantSubKind: 'official' as const }
-    const referenceImages = ['https://example.com/reference.png']
-    expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 13, aspectRatio: '9:16', generateAudio: true, referenceImages } })).toMatchObject({ duration: 13 })
-    expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 14, aspectRatio: '9:16', generateAudio: true, referenceImages } })).toThrow()
   })
 
   it('accepts frame transport and up to eight ordered references at the real ComfyUI option boundary', () => {

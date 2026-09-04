@@ -12,6 +12,10 @@ import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabili
 import type { CapabilityValue } from '@/lib/ai-registry/types'
 import { assertVideoPromptMatchesProfile } from '@/lib/video-generation/h3-prompt'
 import {
+  resolveH3ContinuationDurationPlan,
+  resolveH3DurationPlan,
+} from '@/lib/video-generation/h3-duration'
+import {
   resolveVideoInputMode,
   VideoInputModeError,
   type ResolvedVideoInputMode,
@@ -555,11 +559,17 @@ function validateVideoPromptProfile(input: {
     })
   }
   try {
+    const inputMode = resolveOperationVideoInputMode(input.references).mode
+    const timelineDurationSeconds = profile === 'minimax_h3_multimodal_v3'
+      ? (inputMode === 'continuation'
+          ? resolveH3ContinuationDurationPlan(input.durationSeconds)
+          : resolveH3DurationPlan(input.durationSeconds)).promptEndSeconds
+      : input.durationSeconds
     assertVideoPromptMatchesProfile({
       profile,
       prompt: input.prompt,
-      inputMode: resolveOperationVideoInputMode(input.references).mode,
-      durationSeconds: input.durationSeconds,
+      inputMode,
+      timelineDurationSeconds,
     })
   } catch (error) {
     throw new ApiError('INVALID_PARAMS', {

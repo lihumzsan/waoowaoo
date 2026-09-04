@@ -12,7 +12,6 @@ import {
   resolveVideoInputMode,
   type VideoInputReference,
 } from '@/lib/video-generation/input-mode'
-import type { H3VideoTimelinePolicy } from '@/lib/video-compose/h3-duration-trim'
 import type { TaskExecutionContext } from '../context'
 import {
   requireTaskProviderRouteSelection,
@@ -172,11 +171,6 @@ export async function handleWorkspaceResourceVideoTask(
   if (continuationVideos.length > 1) {
     throw new Error(`WORKSPACE_RESOURCE_VIDEO_CONTINUATION_INPUT_INVALID:${data.taskId}`)
   }
-  const h3TimelinePolicy: H3VideoTimelinePolicy = inputMode === 'continuation'
-    ? 'drop_guide_then_trim'
-    : inputMode === 'first_last_frame'
-      ? 'retime'
-      : 'trim'
   const options = payload.generationOptions
   const durationSeconds = payload.durationSeconds
   if (!durationSeconds) {
@@ -205,14 +199,13 @@ export async function handleWorkspaceResourceVideoTask(
     generated.source,
     'workspace-resource',
     payload.resource.resourceId,
+    inputMode === 'continuation' ? 'drop_h3_continuation_guide' : 'preserve',
     generated.downloadHeaders,
     { taskId: data.taskId, artifact: `workspace-resource:${payload.resource.resourceId}` },
-    durationSeconds,
-    h3TimelinePolicy,
   )
   const media = await ensureMediaObjectFromStorageKey(uploadedVideo.storageKey, {
     mimeType: 'video/mp4',
-    durationMs: durationSeconds * 1000,
+    durationMs: uploadedVideo.observedDurationMs,
     width: uploadedVideo.width,
     height: uploadedVideo.height,
   })
@@ -222,7 +215,7 @@ export async function handleWorkspaceResourceVideoTask(
     storageKey: media.storageKey,
     modelKey: providerRoute.modelKey,
     provider: providerRoute.provider,
-    durationMs: durationSeconds * 1000,
+    durationMs: uploadedVideo.observedDurationMs,
     width: uploadedVideo.width,
     height: uploadedVideo.height,
     ...(typeof generated.actualVideoTokens === 'number'

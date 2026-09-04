@@ -26,7 +26,7 @@ const firstFramePrompt = referencePrompt.replace(
 
 const firstLastFramePrompt = firstFramePrompt.replace(
   'turns, and settles facing it.',
-  'turns, and at 4.00 seconds settles exactly into <Picture 2>.',
+  'turns, and at 4.458 seconds settles exactly into <Picture 2>.',
 )
 
 const continuationPrompt = referencePrompt
@@ -42,13 +42,14 @@ const continuationPrompt = referencePrompt
 function assertH3Prompt(input: {
   readonly prompt: string
   readonly inputMode: 'reference' | 'first_frame' | 'first_last_frame' | 'continuation'
-  readonly durationSeconds?: number
+  readonly timelineDurationSeconds?: number
 }): void {
   assertVideoPromptMatchesProfile({
     profile: 'minimax_h3_multimodal_v3',
     prompt: input.prompt,
     inputMode: input.inputMode,
-    durationSeconds: input.durationSeconds ?? 4,
+    timelineDurationSeconds: input.timelineDurationSeconds
+      ?? (input.inputMode === 'continuation' ? 5.167 : 4.458),
   })
 }
 
@@ -76,13 +77,13 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
     expect(() => assertH3Prompt({
       inputMode: 'first_last_frame',
       prompt: firstLastFramePrompt,
-      durationSeconds: 4,
+      timelineDurationSeconds: 4.458,
     })).not.toThrow()
 
     expect(() => assertH3Prompt({
       inputMode: 'first_last_frame',
       prompt: firstLastFramePrompt,
-      durationSeconds: 6,
+      timelineDurationSeconds: 6.583,
     })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:LAST_FRAME_ANCHOR_REQUIRED')
   })
 
@@ -101,13 +102,13 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
     expect(() => assertH3Prompt({
       inputMode: 'continuation',
       prompt: promptWithTransition,
-      durationSeconds: 4,
+      timelineDurationSeconds: 5.167,
     })).not.toThrow()
 
     expect(() => assertH3Prompt({
       inputMode: 'continuation',
-      prompt: promptWithTransition.replace('00:04.500', '00:04.917'),
-      durationSeconds: 4,
+      prompt: promptWithTransition.replace('00:04.500', '00:05.167'),
+      timelineDurationSeconds: 5.167,
     })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:SHOT_TIME_OUT_OF_RANGE:2')
   })
 
@@ -119,7 +120,7 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
     expect(() => assertH3Prompt({
       inputMode: 'continuation',
       prompt,
-      durationSeconds: 4,
+      timelineDurationSeconds: 5.167,
     })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:SHOT_TIME_OUT_OF_RANGE:2')
   })
 
@@ -131,7 +132,7 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
     expect(() => assertH3Prompt({
       inputMode: 'continuation',
       prompt,
-      durationSeconds: 4,
+      timelineDurationSeconds: 5.167,
     })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:TIMED_EVENT_OUT_OF_RANGE:00:00.500')
   })
 
@@ -154,7 +155,7 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
     expect(() => assertH3Prompt({
       inputMode: 'continuation',
       prompt,
-      durationSeconds: 4,
+      timelineDurationSeconds: 5.167,
     })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:CONTINUATION_TIME_FORMAT_INVALID')
   })
 
@@ -166,7 +167,7 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
     expect(() => assertH3Prompt({
       inputMode: 'continuation',
       prompt,
-      durationSeconds: 4,
+      timelineDurationSeconds: 5.167,
     })).not.toThrow()
   })
 
@@ -181,7 +182,7 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
     expect(() => assertH3Prompt({
       inputMode: 'continuation',
       prompt,
-      durationSeconds: 4,
+      timelineDurationSeconds: 5.167,
     })).toThrow(`VIDEO_PROMPT_PROFILE_INVALID:CONTINUATION_TIME_SECTION_INVALID:${section}`)
   })
 
@@ -193,7 +194,7 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
     expect(() => assertH3Prompt({
       inputMode: 'continuation',
       prompt,
-      durationSeconds: 4,
+      timelineDurationSeconds: 5.167,
     })).not.toThrow()
   })
 
@@ -201,8 +202,20 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
     expect(() => assertH3Prompt({
       inputMode: 'continuation',
       prompt: continuationPrompt.replace('preceding motion guide.', '<Picture 1>.'),
-      durationSeconds: 4,
+      timelineDurationSeconds: 5.167,
     })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:CONTINUATION_PICTURE_ANCHOR_FORBIDDEN')
+  })
+
+  it('allows dialogue in first-last-frame mode when the user requires frame control', () => {
+    const dialoguePrompt = firstLastFramePrompt.replace(
+      'turns, and at 4.458 seconds',
+      'says: <d>[Chinese]不要走。</d>, turns, and at 4.458 seconds',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'first_last_frame',
+      prompt: dialoguePrompt,
+      timelineDurationSeconds: 4.458,
+    })).not.toThrow()
   })
 
   it.each([
@@ -281,7 +294,7 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
     },
     {
       name: 'a cut at the exact segment end',
-      detail: '[Shot 1] She turns. [Shot 2] At 00:04.000, the camera cuts to the doorway.',
+      detail: '[Shot 1] She turns. [Shot 2] At 00:04.458, the camera cuts to the doorway.',
       reason: 'SHOT_TIME_OUT_OF_RANGE:2',
     },
     {
@@ -305,7 +318,7 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
       profile: 'generic_v1',
       prompt: 'anything',
       inputMode: 'text_to_video',
-      durationSeconds: 4,
+      timelineDurationSeconds: 4.458,
     })).not.toThrow()
   })
 })

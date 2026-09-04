@@ -50,7 +50,7 @@ const firstLastFrameInput: AiProviderVideoExecutionContext = {
     ...firstFrameInput.options,
     prompt: firstFrameInput.options!.prompt!.replace(
       'shows the subject moving and settling.',
-      'shows the subject moving and settling exactly into <Picture 2> at 10.00 seconds.',
+      'shows the subject moving and settling exactly into <Picture 2> at 10.125 seconds.',
     ),
     lastFrameImageUrl: 'https://media.example.com/last.png',
   },

@@ -1,10 +1,6 @@
 import dualStageWorkflow from './workflows/h3-dual-stage-2mp.json'
 import frameDualStageWorkflow from './workflows/h3-frame-dual-stage-2mp.json'
-import {
-  H3_CONTINUATION_GUIDE_FRAMES,
-  H3_FRAMES_PER_SECOND,
-  H3_MAX_SEGMENT_DURATION_SECONDS,
-} from '@/lib/video-generation/h3-timeline'
+import { H3_CONTINUATION_GUIDE_FRAMES } from '@/lib/video-generation/h3-timeline'
 
 export const H3_ASPECT_RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16', '9:21'] as const
 export type H3AspectRatio = (typeof H3_ASPECT_RATIOS)[number]
@@ -14,12 +10,6 @@ export type ComfyUiPromptGraph = Record<string, {
   readonly inputs: Record<string, unknown>
 }>
 
-export const H3_DURATION_OPTIONS_SECONDS = [4, 5, 6, 7, 8, 9, 10, 11, 12, H3_MAX_SEGMENT_DURATION_SECONDS] as const
-export const H3_DURATION_MIN_SECONDS = H3_DURATION_OPTIONS_SECONDS[0]
-export const H3_DURATION_MAX_SECONDS = H3_MAX_SEGMENT_DURATION_SECONDS
-const H3_FRAME_GRID = 17
-const H3_FRAME_REMAINDER = 5
-const H3_MIN_FRAMES = 107
 const H3_DELIVERY_SCALE_NUMERATOR = 3
 const H3_DELIVERY_SCALE_DENOMINATOR = 2
 export const H3_MAX_REFERENCE_IMAGES = 8
@@ -29,39 +19,6 @@ const H3_REFERENCE_RESIZE_NODE_IDS = ['198', '333', '334', '335', '336', '337', 
 function unsupportedOption(name: string, value: unknown): never {
   throw new Error('COMFYUI_H3_OPTION_UNSUPPORTED:' + name + '=' + String(value))
 }
-export function resolveH3DurationFrames(seconds: number): number {
-  if (!Number.isInteger(seconds) || seconds < H3_DURATION_MIN_SECONDS || seconds > H3_DURATION_MAX_SECONDS) {
-    unsupportedOption('duration', seconds)
-  }
-  const minimumFrames = Math.max(H3_MIN_FRAMES, Math.round(seconds * H3_FRAMES_PER_SECOND))
-  const framesUntilNextGrid = (
-    H3_FRAME_REMAINDER
-    - (minimumFrames % H3_FRAME_GRID)
-    + H3_FRAME_GRID
-  ) % H3_FRAME_GRID
-  return minimumFrames + framesUntilNextGrid
-}
-
-export function resolveH3ContinuationDurationFrames(seconds: number): number {
-  if (!Number.isInteger(seconds) || seconds < H3_DURATION_MIN_SECONDS || seconds > H3_DURATION_MAX_SECONDS) {
-    unsupportedOption('duration', seconds)
-  }
-  const minimumFrames = Math.max(
-    H3_MIN_FRAMES,
-    Math.round(seconds * H3_FRAMES_PER_SECOND) + H3_CONTINUATION_GUIDE_FRAMES,
-  )
-  const framesUntilNextGrid = (
-    H3_FRAME_REMAINDER
-    - (minimumFrames % H3_FRAME_GRID)
-    + H3_FRAME_GRID
-  ) % H3_FRAME_GRID
-  return minimumFrames + framesUntilNextGrid
-}
-
-export function resolveH3EffectiveDurationSeconds(seconds: number): number {
-  return resolveH3DurationFrames(seconds) / H3_FRAMES_PER_SECOND
-}
-
 function parseAspectRatio(value: string): [number, number] {
   if (!(H3_ASPECT_RATIOS as readonly string[]).includes(value)) unsupportedOption('aspectRatio', value)
   const [width, height] = value.split(':').map((entry) => Number.parseInt(entry, 10))
@@ -247,7 +204,7 @@ export const H3_CONTINUATION_DUAL_STAGE_RUNTIME_PROFILE: H3ContinuationDualStage
 
 type H3PromptGraphCommonInput = {
   readonly prompt: string
-  readonly durationSeconds: number
+  readonly frameCount: number
   readonly aspectRatio: H3AspectRatio
   readonly seed: number
 }
@@ -288,6 +245,9 @@ function copyGraph(graph: ComfyUiPromptGraph): ComfyUiPromptGraph {
 
 function validateCommonInput(input: H3PromptGraphCommonInput): void {
   if (!input.prompt.trim()) throw new Error('COMFYUI_H3_PROMPT_REQUIRED')
+  if (!Number.isSafeInteger(input.frameCount) || input.frameCount <= 0) {
+    throw new Error(`COMFYUI_H3_FRAME_COUNT_INVALID:${String(input.frameCount)}`)
+  }
   if (!Number.isSafeInteger(input.seed) || input.seed < 0) {
     throw new Error('COMFYUI_H3_SEED_INVALID')
   }
@@ -297,7 +257,6 @@ function applyCommonInputs(
   profile: H3DualStageRuntimeProfile,
   graph: ComfyUiPromptGraph,
   input: H3PromptGraphCommonInput,
-  durationFrames: number = resolveH3DurationFrames(input.durationSeconds),
 ): void {
   const firstDimensions = resolveH3Dimensions({
     megapixels: 1,
@@ -325,7 +284,7 @@ function applyCommonInputs(
   promptNode.inputs.value = input.prompt
   h3Node.inputs.width = firstDimensions.width
   h3Node.inputs.height = firstDimensions.height
-  h3Node.inputs.length = durationFrames
+  h3Node.inputs.length = input.frameCount
   noiseNode.inputs.noise_seed = input.seed
   firstUpscaleNode.inputs.width = firstDimensions.width
   firstUpscaleNode.inputs.height = firstDimensions.height
@@ -441,12 +400,7 @@ function buildContinuationPromptGraph(
     if (!node) throw new Error('COMFYUI_H3_PROFILE_NODE_MISSING:' + profile.id)
     node.inputs.image = filenames[index]!
   })
-  applyCommonInputs(
-    profile,
-    graph,
-    input,
-    resolveH3ContinuationDurationFrames(input.durationSeconds),
-  )
+  applyCommonInputs(profile, graph, input)
   return { profile, graph }
 }
 

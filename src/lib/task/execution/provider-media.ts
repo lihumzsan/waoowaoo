@@ -1,4 +1,6 @@
 import { describeUnknownError } from '@/lib/errors/normalize'
+import { rm, stat } from 'node:fs/promises'
+import path from 'node:path'
 import { createScopedLogger } from '@/lib/logging/core'
 import { withLogContext } from '@/lib/logging/context'
 import {
@@ -18,7 +20,8 @@ import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import { processMediaResult } from '@/lib/media-process'
 import { TaskTerminatedError } from '@/lib/task/errors'
 import type { AsyncTemporaryMediaFile } from '@/lib/ai-providers/async-task-types'
-import type { H3VideoTimelinePolicy } from '@/lib/video-compose/h3-duration-trim'
+import { removeH3ContinuationGuide } from '@/lib/video-compose/h3-continuation-delivery'
+import { probeMediaDurationSeconds } from '@/lib/video-compose/ffmpeg-command'
 import { probeVideoDimensions } from '@/lib/video-compose/video-merge-ffmpeg'
 import {
   listTaskAcceptedProviderExternalIds,
@@ -500,33 +503,70 @@ export async function uploadVideoSourceToStorage(
   source: string | Buffer | AsyncTemporaryMediaFile,
   keyPrefix: string,
   targetId: string,
+  deliveryPolicy: 'preserve' | 'drop_h3_continuation_guide',
   downloadHeaders?: Record<string, string>,
   taskArtifact?: { taskId: string; artifact: string },
-  expectedDurationSeconds?: number,
-  h3TimelinePolicy?: H3VideoTimelinePolicy,
 ): Promise<{
   readonly storageKey: string
+  readonly observedDurationMs: number
   readonly width: number
   readonly height: number
 }> {
-  if (typeof source !== 'object' || Buffer.isBuffer(source) || source.kind !== 'temporary_file') {
-    throw new Error('WORKSPACE_RESOURCE_VIDEO_TEMPORARY_SOURCE_REQUIRED')
+  if (typeof source !== 'object' || Buffer.isBuffer(source)) {
+    throw new Error('VIDEO_OUTPUT_DURATION_UNOBSERVABLE')
   }
 
-  let dimensions: { readonly width: number; readonly height: number } | undefined
-  const storageKey = await processMediaResult({
-    source,
-    type: 'video',
-    keyPrefix,
-    targetId,
-    downloadHeaders,
-    taskArtifact,
-    expectedDurationSeconds,
-    h3TimelinePolicy,
-    inspectPreparedFile: async (filePath) => {
-      dimensions = await probeVideoDimensions(filePath)
-    },
-  })
-  if (!dimensions) throw new Error('WORKSPACE_RESOURCE_VIDEO_DIMENSIONS_MISSING')
-  return { storageKey, ...dimensions }
+  try {
+    assertGeneratedTemporaryVideo(source)
+    let preparedSource = source
+    if (deliveryPolicy === 'drop_h3_continuation_guide') {
+      const preparedPath = path.join(source.directory, 'continuation-delivery.mp4')
+      await removeH3ContinuationGuide({
+        inputPath: source.path,
+        outputPath: preparedPath,
+      })
+      const preparedStat = await stat(preparedPath)
+      preparedSource = {
+        ...source,
+        path: preparedPath,
+        byteLength: preparedStat.size,
+      }
+    }
+    const [observedDurationMs, dimensions] = await Promise.all([
+      probeGeneratedTemporaryVideoDurationMs(preparedSource),
+      probeVideoDimensions(preparedSource.path),
+    ])
+    const storageKey = await processMediaResult({
+      source: preparedSource,
+      type: 'video',
+      keyPrefix,
+      targetId,
+      downloadHeaders,
+      taskArtifact,
+    })
+    return { storageKey, observedDurationMs, ...dimensions }
+  } finally {
+    await rm(source.directory, { recursive: true, force: true })
+  }
+}
+
+function assertGeneratedTemporaryVideo(source: AsyncTemporaryMediaFile): void {
+  if (source.kind !== 'temporary_file' || source.contentType !== 'video/mp4') {
+    throw new Error('VIDEO_OUTPUT_TEMPORARY_FILE_INVALID')
+  }
+}
+
+export async function probeGeneratedTemporaryVideoDurationMs(
+  source: AsyncTemporaryMediaFile,
+): Promise<number> {
+  assertGeneratedTemporaryVideo(source)
+  const durationSeconds = await probeMediaDurationSeconds(
+    source.path,
+    'workspace_resource_video_probe_duration',
+  )
+  const durationMs = Math.round(durationSeconds * 1000)
+  if (!Number.isSafeInteger(durationMs) || durationMs <= 0) {
+    throw new Error('VIDEO_OUTPUT_DURATION_INVALID')
+  }
+  return durationMs
 }

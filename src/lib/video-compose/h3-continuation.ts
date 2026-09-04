@@ -3,8 +3,8 @@ import path from 'node:path'
 import {
   H3_CONTINUATION_GUIDE_FRAMES,
   H3_FRAMES_PER_SECOND,
-  H3_MAX_SEGMENT_DURATION_SECONDS,
 } from '@/lib/video-generation/h3-timeline'
+import { H3_CONTINUATION_MAX_SOURCE_DURATION_MS } from '@/lib/video-generation/h3-duration'
 import { probeMediaDurationSeconds, runFfmpegCommand } from './ffmpeg-command'
 import { probeVideoDimensions } from './video-merge-ffmpeg'
 
@@ -15,7 +15,6 @@ const H3_CONTINUATION_MAX_DECODED_FRAMES = (
 const H3_CONTINUATION_TAIL_WINDOW_SECONDS = (
   H3_CONTINUATION_MAX_DECODED_FRAMES / H3_FRAMES_PER_SECOND
 )
-const H3_CONTINUATION_DURATION_TOLERANCE_SECONDS = 1 / H3_FRAMES_PER_SECOND
 
 function requireCanvasDimension(value: number, field: 'width' | 'height'): number {
   if (!Number.isSafeInteger(value) || value <= 0 || value % 32 !== 0) {
@@ -51,8 +50,8 @@ export async function extractH3ContinuationGuide(input: {
     throw new Error(`H3_CONTINUATION_SOURCE_TOO_SHORT:${String(sourceDurationSeconds)}`)
   }
   if (
-    sourceDurationSeconds
-    > H3_MAX_SEGMENT_DURATION_SECONDS + H3_CONTINUATION_DURATION_TOLERANCE_SECONDS
+    sourceDurationSeconds * 1_000
+    > H3_CONTINUATION_MAX_SOURCE_DURATION_MS
   ) {
     throw new Error(`H3_CONTINUATION_SOURCE_TOO_LONG:${String(sourceDurationSeconds)}`)
   }
