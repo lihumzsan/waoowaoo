@@ -5,6 +5,7 @@ import type { AiProviderVideoExecutionContext, GenerateResult } from '@/lib/ai-p
 import type { FailureRecord } from '@/lib/errors/failure'
 import { MAX_VIDEO_BYTES } from '@/lib/http/body-size-constants'
 import { assertVideoPromptMatchesProfile } from '@/lib/video-generation/h3-prompt'
+import { resolveH3DurationPlan } from '@/lib/video-generation/h3-duration'
 import { resolveVideoInputMode, type VideoInputReference } from '@/lib/video-generation/input-mode'
 import { resolveComfyUiRuntimeTarget } from './config'
 import { formatComfyUiExternalId } from './external-id'
@@ -132,17 +133,18 @@ function buildGraph(input: AiProviderVideoExecutionContext, promptId: string) {
   const duration = options.duration
   const aspectRatio = options.aspectRatio
   if (typeof duration !== 'number' || !Number.isInteger(duration) || typeof aspectRatio !== 'string') throw new AppError('INVALID_PARAMS', 'ComfyUI H3 requires duration and aspectRatio', { provider: 'comfyui' })
+  const durationPlan = resolveH3DurationPlan(duration)
   const seed = Number.parseInt(promptId.replace(/-/gu, '').slice(0, 12), 16)
   const prompt = options.prompt?.trim() || ''
   assertVideoPromptMatchesProfile({
     profile: 'minimax_h3_multimodal_v3',
     prompt,
     inputMode,
-    durationSeconds: duration,
+    timelineDurationSeconds: durationPlan.promptEndSeconds,
   })
   const common = {
     prompt,
-    durationSeconds: duration,
+    frameCount: durationPlan.frameCount,
     aspectRatio: aspectRatio as H3AspectRatio,
     seed,
   }

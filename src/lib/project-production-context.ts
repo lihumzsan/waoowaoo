@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS } from '@/lib/workspace-resource/generation-contract'
 import type { VideoInputMode, VideoPromptProfile } from '@/lib/ai-registry/types'
 import type { VocalPerformanceMode } from '@/lib/workspace-resource/vocal-performance-contract'
+import { resolveH3DurationPlan } from '@/lib/video-generation/h3-duration'
 
 export type ProjectProductionCapabilities = {
   readonly video: {
@@ -12,6 +13,10 @@ export type ProjectProductionCapabilities = {
     readonly promptProfile: VideoPromptProfile
     readonly aspectRatio: string
     readonly allowedSegmentDurationsSeconds: readonly number[]
+    readonly segmentDurationPlans: ReadonlyArray<{
+      readonly requestedDurationSeconds: number
+      readonly promptEndSeconds: number
+    }>
     readonly minSegmentDurationSeconds: number
     readonly maxSegmentDurationSeconds: number
     readonly maxReferenceImages: number
@@ -63,7 +68,7 @@ export type ProjectProductionCapabilities = {
 }
 
 export type ProjectProductionContext = {
-  readonly schemaVersion: 8
+  readonly schemaVersion: 9
   readonly version: string
   readonly project: {
     readonly projectId: string
@@ -101,6 +106,16 @@ export function resolveProjectProductionCapabilities(config: ProjectModelConfig)
   )).sort((left, right) => left - right)
   const minSegmentDurationSeconds = allowedSegmentDurationsSeconds[0]
   const maxSegmentDurationSeconds = allowedSegmentDurationsSeconds.at(-1)
+  const segmentDurationPlans = allowedSegmentDurationsSeconds.map((requestedDurationSeconds) => {
+    if (video?.promptProfile === 'minimax_h3_multimodal_v3') {
+      const plan = resolveH3DurationPlan(requestedDurationSeconds)
+      return {
+        requestedDurationSeconds,
+        promptEndSeconds: plan.promptEndSeconds,
+      }
+    }
+    return { requestedDurationSeconds, promptEndSeconds: requestedDurationSeconds }
+  })
   const videoCapabilities = config.videoModel
     && config.videoRatio
     && video
@@ -111,6 +126,7 @@ export function resolveProjectProductionCapabilities(config: ProjectModelConfig)
         promptProfile: video.promptProfile,
         aspectRatio: config.videoRatio,
         allowedSegmentDurationsSeconds,
+        segmentDurationPlans,
         minSegmentDurationSeconds,
         maxSegmentDurationSeconds,
         maxReferenceImages: video.maxReferenceImages ?? 1,
@@ -221,7 +237,7 @@ export async function readProjectProductionContext(input: {
   ])
   if (!project) throw new ProjectProductionContextError()
   const value: Omit<ProjectProductionContext, 'version'> = {
-    schemaVersion: 8,
+    schemaVersion: 9,
     project: {
       projectId: project.id,
       name: project.name,

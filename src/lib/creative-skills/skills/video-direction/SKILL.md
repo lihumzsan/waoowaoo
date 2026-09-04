@@ -21,6 +21,8 @@ description: Use when directing screenplay-based video generation that requires 
 - 表演写可见物理事实：呼吸、视线、下颌、肩颈、手部、步态与接触几何；不写内心解释或空泛情绪副词。一镜一种主要运镜，默认硬切。需要切镜时，新镜头必须增加主体、空间、状态、视点或时间信息；只有景别或轻微角度变化时继续当前镜头并使用运镜。
 - 先建立来源已有的正常基线，再显示原因或证据，最后呈现人物反应；反应必须由当前或前一可见事件触发。
 - 从系统注入的 `productionCapabilities.video.supportedInputModes` 和 `promptProfile` 选择输入与表达；未知或不支持时停止，不按 modelKey 猜测、静默降级或换 Provider。
+- H3 内容包含 `<d>...</d>` 且用户没有明确要求首帧或首尾帧控制时，优先使用 `reference_image` 输入进入 Ref2VA；这是提高原生对白表演适配度的导演偏好，不是能力硬限制。用户明确要求从指定首帧开始或收敛到指定尾帧时，该画面控制优先，仍使用 `first_frame` 或 `first_last_frame`，不得因存在对白而拒绝、改写或偷偷换成 Ref2VA。
+- `durationSeconds` 始终填写用户选择的整数 Segment 时长；H3 Prompt 中的精确结束时间必须取同一 `requestedDurationSeconds` 对应的 `productionCapabilities.video.segmentDurationPlans.promptEndSeconds`。例如用户选择 4 秒时仍提交 `durationSeconds: 4`，Prompt 尾帧锚点使用注入值 `4.458 seconds`；不得要求用户计算、提供或确认小数时长。
 - `vocalPerformanceMode` 每个 item 必须显式填写且不放进 `generationOptions`；对白逐字、自然说完，`silent_no_lip` 时在 warnings 说明用户选择导致的对白不执行。
 
 ## 参考素材
@@ -83,7 +85,7 @@ non_diegetic_music:
 
 - `reference`：每个 `<Picture N>` 只锁定身份、风格、内容与场景结构，不是首帧或尾帧，不得写成时间锚点。
 - `first_frame`：`detailed_description` 的 `[Shot 1]` 后第一句必须把 `<Picture 1>` 明确对齐 `0.00 seconds`，再描述从该状态连续发展的动作。
-- `first_last_frame`：除首帧规则外，必须在同一句中把 `<Picture 2>` 明确对齐当前 Segment 的精确结束秒数，并描述从首帧状态连续收敛到尾帧状态的运动路径。来源明确要求多镜时，`<Picture 2>` 只属于最后一个 `[Shot N]`，在该镜结尾成为 Segment 的最终视觉状态，其后不得再有镜头、动作或状态变化。
+- `first_last_frame`：除首帧规则外，必须在同一句中把 `<Picture 2>` 明确对齐当前 Segment 的 `segmentDurationPlans.promptEndSeconds`，并描述从首帧状态连续收敛到尾帧状态的运动路径。来源明确要求多镜时，`<Picture 2>` 只属于最后一个 `[Shot N]`，在该镜结尾成为 Segment 的最终视觉状态，其后不得再有镜头、动作或状态变化。
 
 不得调用或描述 ComfyUI AI 节点、下游 Prompt 改写或第二套 Prompt；主 Agent 是唯一 Prompt writer。
 
@@ -111,6 +113,7 @@ N/A
 - `detailed_description` 是否直接以 `[Shot 1]` 开始、每次真实切镜都用递增的 `[Shot N] At MM:SS.mmm`、连续动作没有被时间块机械拆镜、单镜要求与 `first_last_frame` 默认单镜是否保留？
 - 运镜是否写成自然英文动词句并在来源要求时明确幅度与速度；除对白原文和画面文字外是否没有中文或混合语言残留？
 - 是否只使用 capability 允许的参考角色与数量，三种模式互斥，且 Picture 时间锚点与当前模式及 Segment 时长一致？
+- H3 有对白且无明确帧控制时是否优先选择 Ref2VA；用户明确要求首帧或首尾帧时是否保留 FL2VA，而没有把偏好变成硬限制？`durationSeconds` 是否仍为用户选择的整数，所有 H3 Prompt 结束锚点是否使用对应的 `segmentDurationPlans.promptEndSeconds`？
 - 要求前段末画面续接时，是否先从前段精确 ready 版本派生 `last_decodable` 图片，再把其精确 ready 版本作为后段唯一 `first_frame`，且失败时没有参考图或时间偏移 fallback？
 - H3 是否严格六段、固定 `non_diegetic_music: N/A`、无 AI 节点和无 Prompt 改写？
 - 对白是否逐字、自然说完且没有 `<cutoff>`，并在来源允许时主要位于中段；每个声音源是否有稳定 `(Sx)`，同句齐声是否使用复合 ID、不同台词重叠是否分别保留 ID 与 `<d>`，`<d>` 是否只在 `detailed_description`，跨切 `<scenetrans>` 是否在两个 `<d>` 内，voiceover 是否明确所有可见人物均不做口型？对白后的落点是否只使用来源已有动作或反应，不存在时是否以说话表演自然完成而没有新增内容？声音关系是否清楚，是否固定写入不生成字幕、标题、水印、拼贴、分屏或额外人物？

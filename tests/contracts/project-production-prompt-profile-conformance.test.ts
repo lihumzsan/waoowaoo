@@ -33,7 +33,7 @@ describe('project production prompt profile context', () => {
     ])
 
     const context: ProjectProductionContext = {
-      schemaVersion: 8,
+      schemaVersion: 9,
       version: 'contract-version',
       project: {
         projectId: 'project-1',
@@ -55,6 +55,19 @@ describe('project production prompt profile context', () => {
     expect(capabilities.video?.minSegmentDurationSeconds).toBe(4)
     expect(capabilities.video?.maxSegmentDurationSeconds).toBe(13)
     expect(capabilities.video?.allowedSegmentDurationsSeconds).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
+    expect(capabilities.video?.segmentDurationPlans[0]).toEqual({
+      requestedDurationSeconds: 4,
+      promptEndSeconds: 4.458,
+    })
+    expect(capabilities.video?.segmentDurationPlans.find((plan) => (
+      plan.requestedDurationSeconds === 8
+    ))).toEqual({
+      requestedDurationSeconds: 8,
+      promptEndSeconds: 8,
+    })
+    expect(buildAssistantRuntimeTurnContext('zh', context)).toContain(
+      '"promptEndSeconds": 4.458',
+    )
     expect(buildAssistantRuntimeTurnContext('zh', context)).toContain(
       '"vocalPerformanceMode": "native_dialogue"',
     )

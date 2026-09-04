@@ -10,10 +10,12 @@ import {
 } from './models'
 import { executeComfyUiH3VideoGeneration } from './h3'
 import {
-  H3_DURATION_MAX_SECONDS,
-  H3_DURATION_MIN_SECONDS,
   H3_MAX_REFERENCE_IMAGES,
 } from './profiles'
+import {
+  H3_DURATION_MAX_SECONDS,
+  H3_DURATION_MIN_SECONDS,
+} from '@/lib/video-generation/h3-duration'
 import { COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_ID } from './models'
 import { executeComfyUiMossSoundGeneration } from './moss'
 import { executeComfyUiMossTtsGeneration } from './tts'

@@ -150,17 +150,16 @@ export async function handleWorkspaceResourceVideoTask(
     'media:video:primary',
   )
   await reportTaskProgress(context, 90, { stage: 'workspace_resource_persist' })
-  const storageKey = await uploadVideoSourceToStorage(
+  const { storageKey, observedDurationMs } = await uploadVideoSourceToStorage(
     generated.source,
     'workspace-resource',
     payload.resource.resourceId,
     generated.downloadHeaders,
     { taskId: data.taskId, artifact: `workspace-resource:${payload.resource.resourceId}` },
-    durationSeconds,
   )
   const media = await ensureMediaObjectFromStorageKey(storageKey, {
     mimeType: 'video/mp4',
-    durationMs: durationSeconds * 1000,
+    durationMs: observedDurationMs,
   })
   return {
     mediaId: media.id,
@@ -168,7 +167,7 @@ export async function handleWorkspaceResourceVideoTask(
     storageKey: media.storageKey,
     modelKey: providerRoute.modelKey,
     provider: providerRoute.provider,
-    durationMs: durationSeconds * 1000,
+    durationMs: observedDurationMs,
     ...(typeof generated.actualVideoTokens === 'number'
       ? { actualVideoTokens: generated.actualVideoTokens }
       : {}),

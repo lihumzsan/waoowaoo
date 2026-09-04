@@ -1,4 +1,5 @@
 import { describeUnknownError } from '@/lib/errors/normalize'
+import { rm } from 'node:fs/promises'
 import { createScopedLogger } from '@/lib/logging/core'
 import { withLogContext } from '@/lib/logging/context'
 import {
@@ -18,6 +19,7 @@ import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import { processMediaResult } from '@/lib/media-process'
 import { TaskTerminatedError } from '@/lib/task/errors'
 import type { AsyncTemporaryMediaFile } from '@/lib/ai-providers/async-task-types'
+import { probeMediaDurationSeconds } from '@/lib/video-compose/ffmpeg-command'
 import {
   listTaskAcceptedProviderExternalIds,
   markTaskProviderInvocationReplayAuthorizedByExternalId,
@@ -496,15 +498,39 @@ export async function uploadVideoSourceToStorage(
   targetId: string,
   downloadHeaders?: Record<string, string>,
   taskArtifact?: { taskId: string; artifact: string },
-  expectedDurationSeconds?: number,
 ) {
-  return await processMediaResult({
-    source,
-    type: 'video',
-    keyPrefix,
-    targetId,
-    downloadHeaders,
-    taskArtifact,
-    expectedDurationSeconds,
-  })
+  if (typeof source !== 'object' || Buffer.isBuffer(source)) {
+    throw new Error('VIDEO_OUTPUT_DURATION_UNOBSERVABLE')
+  }
+  try {
+    const observedDurationMs = await probeGeneratedTemporaryVideoDurationMs(source)
+    const storageKey = await processMediaResult({
+      source,
+      type: 'video',
+      keyPrefix,
+      targetId,
+      downloadHeaders,
+      taskArtifact,
+    })
+    return { storageKey, observedDurationMs }
+  } finally {
+    await rm(source.directory, { recursive: true, force: true })
+  }
+}
+
+export async function probeGeneratedTemporaryVideoDurationMs(
+  source: AsyncTemporaryMediaFile,
+): Promise<number> {
+  if (source.kind !== 'temporary_file' || source.contentType !== 'video/mp4') {
+    throw new Error('VIDEO_OUTPUT_TEMPORARY_FILE_INVALID')
+  }
+  const durationSeconds = await probeMediaDurationSeconds(
+    source.path,
+    'workspace_resource_video_probe_duration',
+  )
+  const durationMs = Math.round(durationSeconds * 1000)
+  if (!Number.isSafeInteger(durationMs) || durationMs <= 0) {
+    throw new Error('VIDEO_OUTPUT_DURATION_INVALID')
+  }
+  return durationMs
 }

@@ -3,14 +3,15 @@ import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { normalizeMediaOptionsForSelection } from '@/lib/ai-exec/media-preflight'
 import { findBuiltinCapabilities, resolveGenerationOptionsForModel } from '@/lib/ai-registry/capabilities-catalog'
 import { COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES, COMFYUI_H3_MODEL_ID } from '@/lib/ai-providers/comfyui/models'
-import { H3_DUAL_STAGE_RUNTIME_PROFILE, resolveH3Dimensions, resolveH3DurationFrames } from '@/lib/ai-providers/comfyui/profiles'
+import { H3_DUAL_STAGE_RUNTIME_PROFILE, resolveH3Dimensions } from '@/lib/ai-providers/comfyui/profiles'
+import { resolveH3DurationPlan } from '@/lib/video-generation/h3-duration'
 
 describe('ComfyUI H3 dual-stage profile', () => {
   it('aligns duration and fixed 1MP/2MP dimensions', () => {
-    expect(resolveH3DurationFrames(4)).toBe(107)
-    expect(resolveH3DurationFrames(5)).toBe(124)
-    expect(resolveH3DurationFrames(10)).toBe(243)
-    expect(resolveH3DurationFrames(13)).toBe(328)
+    expect(resolveH3DurationPlan(4).frameCount).toBe(107)
+    expect(resolveH3DurationPlan(5).frameCount).toBe(124)
+    expect(resolveH3DurationPlan(10).frameCount).toBe(243)
+    expect(resolveH3DurationPlan(13).frameCount).toBe(328)
     expect(resolveH3Dimensions({ megapixels: 1, aspectRatio: '16:9' })).toEqual({ width: 1376, height: 768 })
     expect(resolveH3Dimensions({ megapixels: 2, aspectRatio: '16:9' })).toEqual({ width: 1920, height: 1088 })
   })

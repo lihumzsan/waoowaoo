@@ -4,9 +4,9 @@ import { MUSIC_KEY_SCALE_VALUES, MUSIC_TIME_SIGNATURE_VALUES } from '@/lib/works
 
 import type { ComfyUiRuntimeTargetId } from './config'
 import {
-  H3_DURATION_OPTIONS_SECONDS,
   H3_MAX_REFERENCE_IMAGES,
 } from './profiles'
+import { H3_DURATION_OPTIONS_SECONDS } from '@/lib/video-generation/h3-duration'
 
 export const COMFYUI_H3_MODEL_ID = 'minimax-h3-dual-stage-2mp'
 export const COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY = `comfyui::${COMFYUI_H3_MODEL_ID}`

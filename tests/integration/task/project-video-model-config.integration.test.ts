@@ -147,12 +147,12 @@ async function seedReadyImage(input: {
   })
 }
 
-function h3Prompt(inputMode: 'reference' | 'first_frame' | 'first_last_frame', durationSeconds: number): string {
+function h3Prompt(inputMode: 'reference' | 'first_frame' | 'first_last_frame', promptEndSeconds: number): string {
   const detailedDescription = inputMode === 'reference'
     ? '[Shot 1] She turns toward the doorway and settles facing it.'
     : inputMode === 'first_frame'
       ? '[Shot 1] <Picture 1> aligns with 0.00 seconds and shows her turning toward the doorway.'
-      : `[Shot 1] <Picture 1> aligns with 0.00 seconds and shows her turning toward the doorway; at ${String(durationSeconds)}.00 seconds she settles exactly into <Picture 2>.`
+      : `[Shot 1] <Picture 1> aligns with 0.00 seconds and shows her turning toward the doorway; at ${String(promptEndSeconds)} seconds she settles exactly into <Picture 2>.`
   return `subject_definitions:
 <Subject 1> is the woman represented by the supplied picture inputs.
 
@@ -399,7 +399,7 @@ describe('project local video model configuration', () => {
             name: `H3 ${input.inputMode}`,
             mediaType: 'video',
             schemaId: WORKSPACE_RESOURCE_SCHEMA.VIDEO_SEGMENT,
-            prompt: h3Prompt(input.inputMode, 4),
+            prompt: h3Prompt(input.inputMode, 4.458),
             references: input.references,
             durationSeconds: 4,
             vocalPerformanceMode: 'silent_no_lip',

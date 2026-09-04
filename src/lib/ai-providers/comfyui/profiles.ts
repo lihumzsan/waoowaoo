@@ -9,13 +9,6 @@ export type ComfyUiPromptGraph = Record<string, {
   readonly inputs: Record<string, unknown>
 }>
 
-export const H3_DURATION_OPTIONS_SECONDS = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13] as const
-export const H3_DURATION_MIN_SECONDS = H3_DURATION_OPTIONS_SECONDS[0]
-export const H3_DURATION_MAX_SECONDS = H3_DURATION_OPTIONS_SECONDS.at(-1)!
-const H3_FRAMES_PER_SECOND = 24
-const H3_FRAME_GRID = 17
-const H3_FRAME_REMAINDER = 5
-const H3_MIN_FRAMES = 107
 export const H3_MAX_REFERENCE_IMAGES = 8
 const H3_REFERENCE_IMAGE_NODE_IDS = ['137', '326', '327', '328', '329', '330', '331', '332'] as const
 const H3_REFERENCE_RESIZE_NODE_IDS = ['198', '333', '334', '335', '336', '337', '338', '339'] as const
@@ -23,23 +16,6 @@ const H3_REFERENCE_RESIZE_NODE_IDS = ['198', '333', '334', '335', '336', '337', 
 function unsupportedOption(name: string, value: unknown): never {
   throw new Error('COMFYUI_H3_OPTION_UNSUPPORTED:' + name + '=' + String(value))
 }
-export function resolveH3DurationFrames(seconds: number): number {
-  if (!Number.isInteger(seconds) || seconds < H3_DURATION_MIN_SECONDS || seconds > H3_DURATION_MAX_SECONDS) {
-    unsupportedOption('duration', seconds)
-  }
-  const minimumFrames = Math.max(H3_MIN_FRAMES, Math.round(seconds * H3_FRAMES_PER_SECOND))
-  const framesUntilNextGrid = (
-    H3_FRAME_REMAINDER
-    - (minimumFrames % H3_FRAME_GRID)
-    + H3_FRAME_GRID
-  ) % H3_FRAME_GRID
-  return minimumFrames + framesUntilNextGrid
-}
-
-export function resolveH3EffectiveDurationSeconds(seconds: number): number {
-  return resolveH3DurationFrames(seconds) / H3_FRAMES_PER_SECOND
-}
-
 function parseAspectRatio(value: string): [number, number] {
   if (!(H3_ASPECT_RATIOS as readonly string[]).includes(value)) unsupportedOption('aspectRatio', value)
   const [width, height] = value.split(':').map((entry) => Number.parseInt(entry, 10))
@@ -133,7 +109,7 @@ export const H3_FRAME_DUAL_STAGE_RUNTIME_PROFILE: H3FrameDualStageRuntimeProfile
 
 type H3PromptGraphCommonInput = {
   readonly prompt: string
-  readonly durationSeconds: number
+  readonly frameCount: number
   readonly aspectRatio: H3AspectRatio
   readonly seed: number
 }
@@ -168,6 +144,9 @@ function copyGraph(graph: ComfyUiPromptGraph): ComfyUiPromptGraph {
 
 function validateCommonInput(input: H3PromptGraphCommonInput): void {
   if (!input.prompt.trim()) throw new Error('COMFYUI_H3_PROMPT_REQUIRED')
+  if (!Number.isSafeInteger(input.frameCount) || input.frameCount <= 0) {
+    throw new Error(`COMFYUI_H3_FRAME_COUNT_INVALID:${String(input.frameCount)}`)
+  }
   if (!Number.isSafeInteger(input.seed) || input.seed < 0) {
     throw new Error('COMFYUI_H3_SEED_INVALID')
   }
@@ -197,7 +176,7 @@ function applyCommonInputs(
   promptNode.inputs.value = input.prompt
   h3Node.inputs.width = firstDimensions.width
   h3Node.inputs.height = firstDimensions.height
-  h3Node.inputs.length = resolveH3DurationFrames(input.durationSeconds)
+  h3Node.inputs.length = input.frameCount
   noiseNode.inputs.noise_seed = input.seed
   firstUpscaleNode.inputs.width = firstDimensions.width
   firstUpscaleNode.inputs.height = firstDimensions.height

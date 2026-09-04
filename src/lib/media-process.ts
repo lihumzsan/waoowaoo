@@ -1,5 +1,4 @@
 import { rm, stat } from 'node:fs/promises'
-import path from 'node:path'
 import { downloadAndUploadImage, downloadAndUploadVideo, generateUniqueKey, toFetchableUrl, uploadFileObject, uploadObject } from '@/lib/storage'
 import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import { assertFileSizeWithinLimit, decodeBase64WithLimit, MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, readResponseBufferWithLimit } from '@/lib/http/body-limits'
@@ -7,7 +6,6 @@ import { fetchSafeOutboundMedia } from '@/lib/media/outbound-fetch'
 import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import { withRetry } from '@/lib/retry'
 import type { AsyncTemporaryMediaFile } from '@/lib/ai-providers/async-task-types'
-import { trimH3VideoToRequestedDuration } from '@/lib/video-compose/h3-duration-trim'
 
 export interface ProcessMediaOptions {
   source: string | Buffer | AsyncTemporaryMediaFile
@@ -16,7 +14,6 @@ export interface ProcessMediaOptions {
   targetId: string
   downloadHeaders?: Record<string, string>
   taskArtifact?: { taskId: string; artifact: string }
-  expectedDurationSeconds?: number
 }
 
 const MIME_BY_EXT: Record<string, string> = {
@@ -50,22 +47,11 @@ export async function processMediaResult(options: ProcessMediaOptions): Promise<
 
   if (typeof source === 'object' && !Buffer.isBuffer(source)) {
     const maxBytes = type === 'image' ? MAX_IMAGE_BYTES : type === 'audio' ? MAX_AUDIO_BYTES : MAX_VIDEO_BYTES
-    let sourcePath = source.path
     try {
       if (source.kind !== 'temporary_file') throw new Error(`TEMPORARY_MEDIA_KIND_INVALID:${String(source.kind)}`)
       if (source.contentType !== contentType) throw new Error(`TEMPORARY_MEDIA_CONTENT_TYPE_INVALID:${source.contentType}`)
-      assertFileSizeWithinLimit(await stat(sourcePath), maxBytes, `${type} result`)
-      if (type === 'video' && options.expectedDurationSeconds !== undefined) {
-        const trimmedPath = path.join(source.directory, 'trimmed.mp4')
-        await trimH3VideoToRequestedDuration({
-          inputPath: sourcePath,
-          outputPath: trimmedPath,
-          durationSeconds: options.expectedDurationSeconds,
-        })
-        sourcePath = trimmedPath
-        assertFileSizeWithinLimit(await stat(sourcePath), MAX_VIDEO_BYTES, 'video result')
-      }
-      return await uploadFileObject(sourcePath, key, contentType)
+      assertFileSizeWithinLimit(await stat(source.path), maxBytes, `${type} result`)
+      return await uploadFileObject(source.path, key, contentType)
     } finally {
       await rm(source.directory, { recursive: true, force: true })
     }

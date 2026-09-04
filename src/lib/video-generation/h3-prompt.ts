@@ -63,7 +63,8 @@ function hasPictureTimeAnchor(input: {
   return clauses.some((clause) => {
     if (!clause.includes(picture)) return false
     return Array.from(clause.matchAll(TIME_EXPRESSION)).some((match) => (
-      match[1] !== undefined && Number(match[1]) === input.seconds
+      match[1] !== undefined
+      && Math.round(Number(match[1]) * 1000) === Math.round(input.seconds * 1000)
     ))
   })
 }
@@ -79,7 +80,7 @@ function parseShotTime(minutesText: string, secondsText: string): number | null 
 
 function assertH3PromptStructure(
   sections: Readonly<Record<MinimaxH3PromptSection, string>>,
-  durationSeconds: number,
+  timelineDurationSeconds: number,
 ): void {
   for (const section of MINIMAX_H3_PROMPT_SECTIONS) {
     const body = sections[section]
@@ -116,8 +117,8 @@ function assertH3PromptStructure(
     if (
       shotTime === null
       || shotTime <= previousShotTime
-      || !Number.isFinite(durationSeconds)
-      || shotTime >= durationSeconds
+      || !Number.isFinite(timelineDurationSeconds)
+      || shotTime >= timelineDurationSeconds
     ) {
       throw invalid('SHOT_TIME_OUT_OF_RANGE:' + String(expectedShotNumber))
     }
@@ -130,14 +131,14 @@ function assertH3PromptStructure(
 
 function assertH3InputMode(
   inputMode: VideoInputMode,
-  durationSeconds: number,
+  timelineDurationSeconds: number,
   sections: Readonly<Record<MinimaxH3PromptSection, string>>,
 ): void {
   if (inputMode === 'reference') return
   if (inputMode !== 'first_frame' && inputMode !== 'first_last_frame') {
     throw invalid('INPUT_MODE_UNSUPPORTED')
   }
-  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+  if (!Number.isFinite(timelineDurationSeconds) || timelineDurationSeconds <= 0) {
     throw invalid('DURATION_INVALID')
   }
   if (!hasPictureTimeAnchor({
@@ -152,7 +153,7 @@ function assertH3InputMode(
     && !hasPictureTimeAnchor({
       detailedDescription: sections.detailed_description,
       pictureNumber: 2,
-      seconds: durationSeconds,
+      seconds: timelineDurationSeconds,
     })
   ) {
     throw invalid('LAST_FRAME_ANCHOR_REQUIRED')
@@ -163,14 +164,14 @@ export function assertVideoPromptMatchesProfile(input: {
   readonly profile: VideoPromptProfile
   readonly prompt: string
   readonly inputMode: VideoInputMode
-  readonly durationSeconds: number
+  readonly timelineDurationSeconds: number
 }): void {
   if (input.profile === 'generic_v1') return
   if (!input.prompt.trim()) throw invalid('PROMPT_EMPTY')
   const sections = parseSections(input.prompt)
   if (input.profile !== 'minimax_h3_multimodal_v3') throw invalid('PROFILE_UNKNOWN')
-  assertH3PromptStructure(sections, input.durationSeconds)
-  assertH3InputMode(input.inputMode, input.durationSeconds, sections)
+  assertH3PromptStructure(sections, input.timelineDurationSeconds)
+  assertH3InputMode(input.inputMode, input.timelineDurationSeconds, sections)
 }
 
 export function parseMinimaxH3Prompt(

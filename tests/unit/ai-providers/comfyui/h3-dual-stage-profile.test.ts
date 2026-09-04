@@ -3,29 +3,26 @@ import {
   H3_DUAL_STAGE_RUNTIME_PROFILE,
   buildH3PromptGraph,
   resolveH3Dimensions,
-  resolveH3DurationFrames,
-  resolveH3EffectiveDurationSeconds,
 } from '@/lib/ai-providers/comfyui/profiles'
+import { resolveH3DurationPlan } from '@/lib/video-generation/h3-duration'
 
 describe('MiniMax H3 dual-stage profile', () => {
   it('keeps the provider frame grid and fixed 1MP/2MP dimensions', () => {
-    expect(resolveH3DurationFrames(4)).toBe(107)
-    expect(resolveH3DurationFrames(5)).toBe(124)
-    expect(resolveH3DurationFrames(10)).toBe(243)
-    expect(resolveH3DurationFrames(13)).toBe(328)
-    expect(resolveH3EffectiveDurationSeconds(4)).toBe(107 / 24)
-    expect(resolveH3EffectiveDurationSeconds(13)).toBe(328 / 24)
+    expect(resolveH3DurationPlan(4).frameCount).toBe(107)
+    expect(resolveH3DurationPlan(5).frameCount).toBe(124)
+    expect(resolveH3DurationPlan(10).frameCount).toBe(243)
+    expect(resolveH3DurationPlan(13).frameCount).toBe(328)
     expect(resolveH3Dimensions({ megapixels: 1, aspectRatio: '16:9' })).toEqual({ width: 1376, height: 768 })
     expect(resolveH3Dimensions({ megapixels: 2, aspectRatio: '16:9' })).toEqual({ width: 1920, height: 1088 })
   })
 
   it('rounds a nine-second request up to the next valid H3 frame grid value', () => {
-    expect(resolveH3DurationFrames(9)).toBe(226)
+    expect(resolveH3DurationPlan(9).frameCount).toBe(226)
   })
 
   it('rejects H3 graph durations above thirteen seconds', () => {
-    expect(() => resolveH3DurationFrames(14)).toThrow('COMFYUI_H3_OPTION_UNSUPPORTED:duration=14')
-    expect(() => resolveH3DurationFrames(15)).toThrow('COMFYUI_H3_OPTION_UNSUPPORTED:duration=15')
+    expect(() => resolveH3DurationPlan(14)).toThrow('H3_REQUESTED_DURATION_INVALID:14')
+    expect(() => resolveH3DurationPlan(15)).toThrow('H3_REQUESTED_DURATION_INVALID:15')
   })
 
   it('contains both VSR stages, both cache clears, and no Codex or LoadImage node', () => {
@@ -42,7 +39,7 @@ describe('MiniMax H3 dual-stage profile', () => {
       mode: 'reference',
       prompt: 'subject_definitions:\nSubject 1 is in Picture 1.',
       referenceImageUrls: ['https://example.test/reference-1.png', 'https://example.test/reference-2.png'],
-      durationSeconds: 4,
+      frameCount: resolveH3DurationPlan(4).frameCount,
       aspectRatio: '16:9',
       seed: 7,
     })
@@ -50,7 +47,7 @@ describe('MiniMax H3 dual-stage profile', () => {
       mode: 'reference',
       prompt: 'subject_definitions:\nSubject 1 is in Picture 1.',
       referenceImageUrls: ['https://example.test/reference-3.png'],
-      durationSeconds: 13,
+      frameCount: resolveH3DurationPlan(13).frameCount,
       aspectRatio: '9:16',
       seed: 8,
     })
