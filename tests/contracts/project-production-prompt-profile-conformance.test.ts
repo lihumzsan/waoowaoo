@@ -30,6 +30,7 @@ describe('project production prompt profile context', () => {
       'reference',
       'first_frame',
       'first_last_frame',
+      'continuation',
     ])
 
     const context: ProjectProductionContext = {

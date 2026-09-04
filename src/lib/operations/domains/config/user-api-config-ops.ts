@@ -37,7 +37,7 @@ const apiConfigInputSchema = z.object({
   workflowConcurrency: z.object({
     analysis: z.number().int().min(1).optional(),
     image: z.number().int().min(1).optional(),
-    video: z.number().int().min(1).optional(),
+    video: z.literal(1).optional(),
   }).strict().optional(),
 }).strict()
 

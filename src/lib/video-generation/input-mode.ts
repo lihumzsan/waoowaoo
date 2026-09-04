@@ -7,6 +7,7 @@ export type VideoInputReference = {
 export type VideoInputModeErrorCode =
   | 'VIDEO_REFERENCE_ROLE_INVALID'
   | 'VIDEO_MODEL_FRAME_INPUT_INVALID'
+  | 'VIDEO_CONTINUATION_INPUT_INVALID'
   | 'VIDEO_REFERENCE_MODE_CONFLICT'
 
 export class VideoInputModeError extends Error {
@@ -26,13 +27,14 @@ export type ResolvedVideoInputMode = {
   readonly referenceImageCount: number
   readonly referenceAudioCount: number
   readonly referenceVideoCount: number
+  readonly continuationVideoCount: number
   readonly usesLastFrame: boolean
 }
 
 const ROLES_BY_CHANNEL = {
   image: new Set(['first_frame', 'last_frame', 'reference_image']),
   audio: new Set(['reference_audio']),
-  video: new Set(['reference_video']),
+  video: new Set(['reference_video', 'continuation_video']),
 } satisfies Record<VideoInputReference['channel'], ReadonlySet<string>>
 
 export function resolveVideoInputMode(
@@ -54,12 +56,24 @@ export function resolveVideoInputMode(
     reference.channel === 'image' && reference.role === 'reference_image'
   )).length
   const referenceAudioCount = references.filter((reference) => reference.channel === 'audio').length
-  const referenceVideoCount = references.filter((reference) => reference.channel === 'video').length
+  const referenceVideoCount = references.filter((reference) => (
+    reference.channel === 'video' && reference.role === 'reference_video'
+  )).length
+  const continuationVideoCount = references.filter((reference) => (
+    reference.channel === 'video' && reference.role === 'continuation_video'
+  )).length
   const usesFrames = firstFrameCount > 0 || lastFrameCount > 0
   const usesReferences = referenceImageCount > 0 || referenceAudioCount > 0 || referenceVideoCount > 0
+  const usesContinuation = continuationVideoCount > 0
 
-  if (usesFrames && usesReferences) {
+  if (
+    (usesFrames && usesReferences)
+    || (usesContinuation && (usesFrames || usesReferences))
+  ) {
     throw new VideoInputModeError('VIDEO_REFERENCE_MODE_CONFLICT')
+  }
+  if (continuationVideoCount > 1) {
+    throw new VideoInputModeError('VIDEO_CONTINUATION_INPUT_INVALID')
   }
   if (
     usesFrames
@@ -71,7 +85,9 @@ export function resolveVideoInputMode(
     throw new VideoInputModeError('VIDEO_MODEL_FRAME_INPUT_INVALID')
   }
 
-  const mode: VideoInputMode = usesFrames
+  const mode: VideoInputMode = usesContinuation
+    ? 'continuation'
+    : usesFrames
     ? lastFrameCount === 1 ? 'first_last_frame' : 'first_frame'
     : usesReferences ? 'reference' : 'text_to_video'
 
@@ -82,6 +98,7 @@ export function resolveVideoInputMode(
     referenceImageCount,
     referenceAudioCount,
     referenceVideoCount,
+    continuationVideoCount,
     usesLastFrame: lastFrameCount === 1,
   }
 }

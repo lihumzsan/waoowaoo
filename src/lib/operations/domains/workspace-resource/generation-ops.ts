@@ -310,7 +310,8 @@ function providerTransportPreflightOptions(input: {
   readonly imageCount: number
   readonly referenceImageCount: number
   readonly audioCount: number
-  readonly videoCount: number
+  readonly referenceVideoCount: number
+  readonly continuationVideoCount: number
   readonly usesLastFrame: boolean
   readonly durationSeconds: number | null
 }): Record<string, unknown> {
@@ -328,8 +329,11 @@ function providerTransportPreflightOptions(input: {
     ...(input.mediaType === 'video' && input.audioCount > 0
       ? { referenceAudios: providerPlaceholderUrls(input.audioCount, 'audio') }
       : {}),
-    ...(input.mediaType === 'video' && input.videoCount > 0
-      ? { referenceVideos: providerPlaceholderUrls(input.videoCount, 'video') }
+    ...(input.mediaType === 'video' && input.referenceVideoCount > 0
+      ? { referenceVideos: providerPlaceholderUrls(input.referenceVideoCount, 'video') }
+      : {}),
+    ...(input.mediaType === 'video' && input.continuationVideoCount === 1
+      ? { continuationVideoUrl: providerPlaceholderUrls(1, 'video')[0] }
       : {}),
   }
 }
@@ -648,11 +652,110 @@ async function validateReferenceMediaCapabilities(input: {
   readonly ctx: ProjectAgentOperationContext
   readonly mediaType: PlannedResource['mediaType']
   readonly modelKey: string
+  readonly aspectRatio: string | null
   readonly publicReferences: readonly z.infer<typeof generationReferenceSchema>[]
   readonly frozenReferences: readonly WorkspaceResourceInputRef[]
 }): Promise<void> {
   if (input.mediaType !== 'video') return
   const capabilities = resolveBuiltinCapabilitiesByModelKey('video', input.modelKey)?.video
+  const inputMode = resolveOperationVideoInputMode(input.publicReferences).mode
+  if (inputMode === 'continuation') {
+    const continuationInput = capabilities?.continuationInput
+    if (!continuationInput) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'VIDEO_CONTINUATION_SOURCE_CONTRACT_MISSING',
+        field: 'references',
+        modelKey: input.modelKey,
+      })
+    }
+    const expectedAspectRatio = input.aspectRatio
+      ? continuationInput.sourceAspectRatioByTarget[input.aspectRatio]
+      : undefined
+    if (!input.aspectRatio || !expectedAspectRatio) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'VIDEO_CONTINUATION_TARGET_ASPECT_RATIO_UNSUPPORTED',
+        field: 'references',
+        modelKey: input.modelKey,
+        aspectRatio: input.aspectRatio,
+      })
+    }
+    const continuationPositions = new Set(input.publicReferences.flatMap((reference, position) => (
+      reference.channel === 'video' && reference.role === 'continuation_video'
+        ? [position]
+        : []
+    )))
+    const continuationReferences = input.frozenReferences.filter((reference) => (
+      continuationPositions.has(reference.position)
+    ))
+    const [source] = await resolveWorkspaceResourceInputMedia({
+      userId: input.ctx.userId,
+      projectId: input.ctx.projectId,
+      references: continuationReferences,
+      expectedMediaType: 'video',
+    })
+    if (!source || continuationReferences.length !== 1) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'VIDEO_CONTINUATION_SOURCE_INVALID',
+        field: 'references',
+      })
+    }
+    if (source.durationMs === null) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'VIDEO_CONTINUATION_SOURCE_DURATION_UNKNOWN',
+        field: 'references',
+        resourceId: source.reference.resourceId,
+        contentVersion: source.reference.contentVersion,
+        agentRetryableAfterCorrection: true,
+      })
+    }
+    if (source.durationMs < continuationInput.minSourceDurationMs) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'VIDEO_CONTINUATION_SOURCE_TOO_SHORT',
+        field: 'references',
+        resourceId: source.reference.resourceId,
+        contentVersion: source.reference.contentVersion,
+        actualDurationMs: source.durationMs,
+        minimumDurationMs: continuationInput.minSourceDurationMs,
+        agentRetryableAfterCorrection: true,
+      })
+    }
+    if (source.durationMs > continuationInput.maxSourceDurationMs) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'VIDEO_CONTINUATION_SOURCE_TOO_LONG',
+        field: 'references',
+        resourceId: source.reference.resourceId,
+        contentVersion: source.reference.contentVersion,
+        actualDurationMs: source.durationMs,
+        maximumDurationMs: continuationInput.maxSourceDurationMs,
+        agentRetryableAfterCorrection: true,
+      })
+    }
+    if (source.width === null || source.height === null) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'VIDEO_CONTINUATION_SOURCE_DIMENSIONS_UNKNOWN',
+        field: 'references',
+        resourceId: source.reference.resourceId,
+        contentVersion: source.reference.contentVersion,
+        agentRetryableAfterCorrection: true,
+      })
+    }
+    if (
+      source.width * expectedAspectRatio.height
+      !== source.height * expectedAspectRatio.width
+    ) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'VIDEO_CONTINUATION_SOURCE_DIMENSIONS_MISMATCH',
+        field: 'references',
+        resourceId: source.reference.resourceId,
+        contentVersion: source.reference.contentVersion,
+        actualWidth: source.width,
+        actualHeight: source.height,
+        expectedWidth: expectedAspectRatio.width,
+        expectedHeight: expectedAspectRatio.height,
+        agentRetryableAfterCorrection: true,
+      })
+    }
+  }
   const minimumDurationMs = capabilities?.minReferenceAudioDurationMs
   const maximumTotalDurationMs = capabilities?.maxTotalReferenceAudioDurationMs
   if (minimumDurationMs === undefined && maximumTotalDurationMs === undefined) return
@@ -803,7 +906,12 @@ async function compileMediaExecution(input: {
       ? input.references.filter((reference) => reference.channel === 'image' && reference.role === 'reference_image').length
       : 0
     const audioCount = input.references.filter((reference) => reference.channel === 'audio').length
-    const videoCount = input.references.filter((reference) => reference.channel === 'video').length
+    const referenceVideoCount = input.references.filter((reference) => (
+      reference.channel === 'video' && reference.role === 'reference_video'
+    )).length
+    const continuationVideoCount = input.references.filter((reference) => (
+      reference.channel === 'video' && reference.role === 'continuation_video'
+    )).length
     const usesLastFrame = item.mediaType === 'video'
       && input.references.some((reference) => reference.role === 'last_frame')
     const durationSeconds = item.mediaType === 'video'
@@ -816,7 +924,8 @@ async function compileMediaExecution(input: {
       imageCount,
       referenceImageCount,
       audioCount,
-      videoCount,
+      referenceVideoCount,
+      continuationVideoCount,
       usesLastFrame,
       durationSeconds,
     })
@@ -836,7 +945,8 @@ async function compileMediaExecution(input: {
       imageCount,
       referenceImageCount,
       audioCount,
-      videoCount,
+      referenceVideoCount,
+      continuationVideoCount,
       usesLastFrame,
       durationSeconds,
     })
@@ -921,6 +1031,9 @@ async function preflightFrozenRetry(input: {
     ctx: input.ctx,
     mediaType: input.mediaType,
     modelKey: input.modelKey,
+    aspectRatio: typeof input.generationOptions.aspectRatio === 'string'
+      ? input.generationOptions.aspectRatio
+      : null,
     publicReferences: references,
     frozenReferences: input.source.resource.inputs,
   })
@@ -961,6 +1074,11 @@ async function preflightFrozenRetry(input: {
   ))
   const usesLastFrame = imageReferences.some((reference) => reference?.role === 'last_frame')
   const referenceImageCount = imageReferences.filter((reference) => reference?.role === 'reference_image').length
+  const videoReferences = input.source.resource.videoInputPositions.map((position) => (
+    inputByPosition.get(position)
+  ))
+  const referenceVideoCount = videoReferences.filter((reference) => reference?.role === 'reference_video').length
+  const continuationVideoCount = videoReferences.filter((reference) => reference?.role === 'continuation_video').length
   const options = providerTransportPreflightOptions({
     mediaType: input.mediaType,
     options: musicSpecification
@@ -969,7 +1087,8 @@ async function preflightFrozenRetry(input: {
     imageCount: input.source.resource.imageInputPositions.length,
     referenceImageCount,
     audioCount: input.source.resource.audioInputPositions.length,
-    videoCount: input.source.resource.videoInputPositions.length,
+    referenceVideoCount,
+    continuationVideoCount,
     usesLastFrame,
     durationSeconds: input.audioExecution?.durationSeconds ?? input.source.durationSeconds ?? null,
   })
@@ -1142,6 +1261,7 @@ async function buildPlannedItem(input: {
     ctx: input.ctx,
     mediaType,
     modelKey,
+    aspectRatio,
     publicReferences,
     frozenReferences: references,
   })

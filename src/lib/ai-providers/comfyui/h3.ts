@@ -1,9 +1,15 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import { AppError } from '@/lib/errors/app-error'
 import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
 import { createProviderAsyncTaskFailure } from '@/lib/ai-providers/shared/async-task-status'
 import type { AiProviderVideoExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 import type { FailureRecord } from '@/lib/errors/failure'
 import { MAX_VIDEO_BYTES } from '@/lib/http/body-size-constants'
+import { readOwnedMediaBytesForGeneration } from '@/lib/media/outbound-owned-media'
+import { extractH3ContinuationGuide } from '@/lib/video-compose/h3-continuation'
+import { H3_CONTINUATION_GUIDE_FRAMES } from '@/lib/video-generation/h3-timeline'
 import { assertVideoPromptMatchesProfile } from '@/lib/video-generation/h3-prompt'
 import { resolveVideoInputMode, type VideoInputReference } from '@/lib/video-generation/input-mode'
 import { resolveComfyUiRuntimeTarget } from './config'
@@ -11,11 +17,14 @@ import { formatComfyUiExternalId } from './external-id'
 import { COMFYUI_H3_MODEL_ID } from './models'
 import { deriveComfyUiProfileRequirements, type ComfyUiProfileRequirementOption } from './profile-requirements'
 import {
+  H3_CONTINUATION_DUAL_STAGE_PROFILE_ID,
   H3_DUAL_STAGE_RUNTIME_PROFILE,
   buildH3PromptGraph,
+  resolveH3Dimensions,
   type H3AspectRatio,
   type H3DualStageRuntimeProfile,
 } from './profiles'
+import { uploadH3ContinuationFrames } from './h3-input-upload'
 import {
   asComfyUiRecord,
   COMFYUI_ACCEPTED_JOB_STATUSES,
@@ -32,6 +41,27 @@ export const COMFYUI_H3_MODEL_KEY = `comfyui::${COMFYUI_H3_MODEL_ID}`
 export const COMFYUI_H3_RUNTIME_TARGET_ID = 'h3-dual-stage-2mp' as const
 const H3_PREFLIGHT_CACHE_TTL_MS = 30_000
 const preflightReadyAtByTargetProfile = new Map<string, number>()
+type H3NodeInputSchemaLocation = 'required' | 'optional'
+type H3NodeInputContract = Readonly<{
+  location: H3NodeInputSchemaLocation
+  type: string | null
+}>
+const H3_CONTINUATION_NODE_INPUT_TYPES = {
+  LoadImage: {
+    image: { location: 'required', type: null },
+  },
+  ImageBatch: {
+    image1: { location: 'required', type: 'IMAGE' },
+    image2: { location: 'required', type: 'IMAGE' },
+  },
+  MiniMaxH3AddGuide: {
+    positive: { location: 'required', type: 'CONDITIONING' },
+    latent: { location: 'required', type: 'LATENT' },
+    vae: { location: 'optional', type: 'VAE' },
+    image: { location: 'optional', type: 'IMAGE' },
+    frame_idx: { location: 'required', type: 'INT' },
+  },
+} as const satisfies Readonly<Record<string, Readonly<Record<string, H3NodeInputContract>>>>
 
 function preAcceptRejected(error: unknown): ProviderSubmissionError {
   const message = error instanceof Error ? error.message : String(error)
@@ -56,10 +86,53 @@ function missingOptionError(option: ComfyUiProfileRequirementOption): Error {
   return new Error(`COMFYUI_OPTION_MISSING:${option.classType}:${option.inputName}:${option.value}`)
 }
 
+function assertNodeInputContract(
+  info: unknown,
+  className: string,
+  inputs: Readonly<Record<string, H3NodeInputContract>>,
+): void {
+  const node = asComfyUiRecord(asComfyUiRecord(info)?.[className])
+  const input = asComfyUiRecord(node?.input)
+  for (const [inputName, contract] of Object.entries(inputs)) {
+    const schema = asComfyUiRecord(input?.[contract.location])
+    const definition = schema?.[inputName]
+    if (
+      !Array.isArray(definition)
+      || definition.length === 0
+      || (contract.type !== null && definition[0] !== contract.type)
+    ) {
+      throw new Error(`COMFYUI_NODE_INPUT_INCOMPATIBLE:${className}:${inputName}:${contract.type ?? contract.location}`)
+    }
+  }
+}
+
+function assertContinuationGraphContract(profile: H3DualStageRuntimeProfile): void {
+  if (profile.id !== H3_CONTINUATION_DUAL_STAGE_PROFILE_ID) return
+  const guide = profile.workflow[profile.continuationGuideNodeId]
+  if (!guide || guide.class_type !== 'MiniMaxH3AddGuide') {
+    throw new Error('COMFYUI_H3_CONTINUATION_GRAPH_INCOMPATIBLE:guide')
+  }
+  const image = guide.inputs.image
+  const expectedImageNodeId = profile.continuationBatchNodeIds.at(-1)
+  if (!Array.isArray(image) || image[0] !== expectedImageNodeId || image[1] !== 0) {
+    throw new Error('COMFYUI_H3_CONTINUATION_GRAPH_INCOMPATIBLE:image')
+  }
+  const vae = guide.inputs.vae
+  if (
+    !Array.isArray(vae)
+    || typeof vae[0] !== 'string'
+    || vae[1] !== 0
+    || profile.workflow[vae[0]]?.class_type !== 'VAELoader'
+  ) {
+    throw new Error('COMFYUI_H3_CONTINUATION_GRAPH_INCOMPATIBLE:vae')
+  }
+}
+
 async function preflight(
   baseUrl: string,
   profile: H3DualStageRuntimeProfile,
 ): Promise<void> {
+  assertContinuationGraphContract(profile)
   const requirements = deriveComfyUiProfileRequirements({
     profileId: profile.id,
     graph: profile.workflow,
@@ -81,6 +154,14 @@ async function preflight(
   })))
   for (const { className, info } of requiredInfos) {
     if (!asComfyUiRecord(info)?.[className]) throw new Error(`COMFYUI_NODE_MISSING:${className}`)
+  }
+  if (profile.id === H3_CONTINUATION_DUAL_STAGE_PROFILE_ID) {
+    const infoByClassName = new Map(
+      requiredInfos.map(({ className, info }) => [className, info]),
+    )
+    for (const [className, inputs] of Object.entries(H3_CONTINUATION_NODE_INPUT_TYPES)) {
+      assertNodeInputContract(infoByClassName.get(className), className, inputs)
+    }
   }
   const optionInfos = await Promise.all(requirements.options.map(async (option) => ({
     option,
@@ -107,7 +188,17 @@ function normalizedReferenceUrls(values: readonly string[] | undefined): string[
   return urls
 }
 
-function buildGraph(input: AiProviderVideoExecutionContext, promptId: string) {
+function continuationPlaceholderFilenames(promptId: string): readonly string[] {
+  return Array.from({ length: H3_CONTINUATION_GUIDE_FRAMES }, (_, index) => (
+    `waoowaoo/${promptId}/continuation-${String(index).padStart(2, '0')}.png`
+  ))
+}
+
+function buildGraph(
+  input: AiProviderVideoExecutionContext,
+  promptId: string,
+  continuationFrameFilenames: readonly string[] = continuationPlaceholderFilenames(promptId),
+) {
   requireSelection(input)
   const options = input.options ?? {}
   if (options.generateAudio !== true) throw new AppError('INVALID_PARAMS', 'ComfyUI H3 requires generateAudio=true', { provider: 'comfyui' })
@@ -117,17 +208,22 @@ function buildGraph(input: AiProviderVideoExecutionContext, promptId: string) {
   const referenceImageUrls = normalizedReferenceUrls(options.referenceImages)
   const firstFrameUrl = input.imageUrl.trim()
   const lastFrameUrl = options.lastFrameImageUrl?.trim() ?? ''
+  const continuationVideoUrl = options.continuationVideoUrl?.trim() ?? ''
   if (options.lastFrameImageUrl !== undefined && !lastFrameUrl) {
     throw new AppError('INVALID_PARAMS', 'ComfyUI H3 last frame URL must be non-empty', { provider: 'comfyui' })
+  }
+  if (options.continuationVideoUrl !== undefined && !continuationVideoUrl) {
+    throw new AppError('INVALID_PARAMS', 'ComfyUI H3 continuation video URL must be non-empty', { provider: 'comfyui' })
   }
   const references: VideoInputReference[] = [
     ...referenceImageUrls.map(() => ({ channel: 'image' as const, role: 'reference_image' })),
     ...(firstFrameUrl ? [{ channel: 'image' as const, role: 'first_frame' }] : []),
     ...(lastFrameUrl ? [{ channel: 'image' as const, role: 'last_frame' }] : []),
+    ...(continuationVideoUrl ? [{ channel: 'video' as const, role: 'continuation_video' }] : []),
   ]
   const inputMode = resolveVideoInputMode(references).mode
   if (inputMode === 'text_to_video') {
-    throw new AppError('INVALID_PARAMS', 'ComfyUI H3 requires explicit image input', { provider: 'comfyui' })
+    throw new AppError('INVALID_PARAMS', 'ComfyUI H3 requires explicit media input', { provider: 'comfyui' })
   }
   const duration = options.duration
   const aspectRatio = options.aspectRatio
@@ -147,36 +243,84 @@ function buildGraph(input: AiProviderVideoExecutionContext, promptId: string) {
     seed,
   }
   if (inputMode === 'reference') {
-    return buildH3PromptGraph({
+    return { ...buildH3PromptGraph({
       ...common,
       mode: 'reference',
       referenceImageUrls,
-    })
+    }), inputMode }
   }
   if (inputMode === 'first_frame') {
-    return buildH3PromptGraph({
+    return { ...buildH3PromptGraph({
       ...common,
       mode: 'first_frame',
       firstFrameUrl,
-    })
+    }), inputMode }
   }
-  return buildH3PromptGraph({
-    ...common,
-    mode: 'first_last_frame',
-    firstFrameUrl,
-    lastFrameUrl,
-  })
+  if (inputMode === 'first_last_frame') {
+    return { ...buildH3PromptGraph({
+      ...common,
+      mode: 'first_last_frame',
+      firstFrameUrl,
+      lastFrameUrl,
+    }), inputMode }
+  }
+  return {
+    ...buildH3PromptGraph({
+      ...common,
+      mode: 'continuation',
+      continuationFrameFilenames,
+    }),
+    inputMode,
+    continuationVideoUrl,
+  }
 }
 
 export async function executeComfyUiH3VideoGeneration(input: AiProviderVideoExecutionContext): Promise<GenerateResult> {
   const promptId = crypto.randomUUID()
   let target: ReturnType<typeof resolveComfyUiRuntimeTarget>
   let built: ReturnType<typeof buildGraph>
+  let continuationWorkspaceDir: string | null = null
   try {
     target = resolveComfyUiRuntimeTarget(COMFYUI_H3_RUNTIME_TARGET_ID)
     built = buildGraph(input, promptId)
     await preflight(target.baseUrl, built.profile)
+    if (built.inputMode === 'continuation') {
+      const media = await readOwnedMediaBytesForGeneration(
+        built.continuationVideoUrl,
+        input.userId,
+        {
+          maxBytes: MAX_VIDEO_BYTES,
+          label: 'owned H3 continuation video',
+          supportedMimeTypes: new Set(['video/mp4', 'video/webm', 'video/quicktime']),
+        },
+      )
+      continuationWorkspaceDir = await mkdtemp(
+        path.join(tmpdir(), `waoowaoo-h3-continuation-${promptId}-`),
+      )
+      const sourcePath = path.join(continuationWorkspaceDir, 'source-video')
+      await writeFile(sourcePath, media.bytes)
+      const dimensions = resolveH3Dimensions({
+        megapixels: 1,
+        aspectRatio: input.options!.aspectRatio as H3AspectRatio,
+      })
+      const framePaths = await extractH3ContinuationGuide({
+        inputPath: sourcePath,
+        workspaceDir: path.join(continuationWorkspaceDir, 'guide'),
+        ...dimensions,
+      })
+      const uploaded = await uploadH3ContinuationFrames({
+        baseUrl: target.baseUrl,
+        promptId,
+        framePaths,
+      })
+      built = buildGraph(input, promptId, uploaded)
+    }
   } catch (error) { throw preAcceptRejected(error) }
+  finally {
+    if (continuationWorkspaceDir) {
+      await rm(continuationWorkspaceDir, { recursive: true, force: true })
+    }
+  }
   try {
     const raw = await requestComfyUiJson(target.baseUrl, '/prompt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: built.graph, prompt_id: promptId }) })
     if (readComfyUiString(asComfyUiRecord(raw)?.prompt_id) !== promptId) throw new Error('COMFYUI_PROMPT_ID_MISMATCH')

@@ -1,8 +1,8 @@
 {
   "137": { "class_type": "Load Image From Url (mtb)", "inputs": { "url": "", "retry_count": 3, "retry_interval": 1 } },
-  "198": { "class_type": "ResizeImagesByLongerEdge", "inputs": { "images": ["137", 0], "longer_edge": 800 } },
+  "198": { "class_type": "ImageResizeKJv2", "inputs": { "image": ["137", 0], "width": 1376, "height": 768, "upscale_method": "lanczos", "keep_proportion": "crop", "pad_color": "0, 0, 0", "crop_position": "center", "divisible_by": 32, "device": "cpu" } },
   "326": { "class_type": "Load Image From Url (mtb)", "inputs": { "url": "", "retry_count": 3, "retry_interval": 1 } },
-  "327": { "class_type": "ResizeImagesByLongerEdge", "inputs": { "images": ["326", 0], "longer_edge": 800 } },
+  "327": { "class_type": "ImageResizeKJv2", "inputs": { "image": ["326", 0], "width": 1376, "height": 768, "upscale_method": "lanczos", "keep_proportion": "crop", "pad_color": "0, 0, 0", "crop_position": "center", "divisible_by": 32, "device": "cpu" } },
   "127": { "class_type": "UNETLoader", "inputs": { "unet_name": "h3\\minimax_h3_fl2va_int8_convrot.safetensors", "weight_dtype": "default" } },
   "128": { "class_type": "CLIPLoader", "inputs": { "clip_name": "h3\\qwen3vl_32b_minimax_h3_int8_convrot.safetensors", "type": "minimax", "device": "default" } },
   "119": { "class_type": "VAELoader", "inputs": { "vae_name": "h3\\minimax_h3_video_vae_int8_convrot.safetensors" } },
@@ -32,7 +32,7 @@
   "232": { "class_type": "BasicGuider", "inputs": { "model": ["231", 0], "conditioning": ["309", 0] } },
   "222": { "class_type": "SamplerCustomAdvanced", "inputs": { "noise": ["129", 0], "guider": ["232", 0], "sampler": ["224", 0], "sigmas": ["223", 0], "latent_image": ["216", 0] } },
   "225": { "class_type": "VAEDecode", "inputs": { "samples": ["222", 0], "vae": ["119", 0] } },
-  "325": { "class_type": "ImageResizeKJv2", "inputs": { "image": ["225", 0], "width": 1920, "height": 1088, "upscale_method": "nvidia_rtx_vsr", "keep_proportion": "crop", "pad_color": "0, 0, 0", "crop_position": "center", "divisible_by": 32, "device": "cpu" } },
+  "325": { "class_type": "ImageResizeKJv2", "inputs": { "image": ["225", 0], "width": 1920, "height": 1088, "upscale_method": "nvidia_rtx_vsr", "keep_proportion": "crop", "pad_color": "0, 0, 0", "crop_position": "center", "divisible_by": 16, "device": "cpu" } },
   "162": { "class_type": "easy clearCacheAll", "inputs": { "anything": ["309", 1] } },
   "168": { "class_type": "VHS_VideoCombine", "inputs": { "images": ["325", 0], "audio": ["121", 0], "frame_rate": 24, "loop_count": 0, "filename_prefix": "waoowaoo/h3-frame-dual-stage-2mp", "format": "video/h264-mp4", "pix_fmt": "yuv420p", "crf": 10, "save_metadata": true, "trim_to_audio": false, "pingpong": false, "save_output": true } }
 }

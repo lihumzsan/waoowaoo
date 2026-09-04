@@ -29,9 +29,19 @@ const firstLastFramePrompt = firstFramePrompt.replace(
   'turns, and at 4.00 seconds settles exactly into <Picture 2>.',
 )
 
+const continuationPrompt = referencePrompt
+  .replace(
+    '<Subject 1> is the woman in <Picture 1>.',
+    '<Subject 1> is the established woman from the preceding motion guide.',
+  )
+  .replace(
+    'Preserve her identity, clothing, and the room layout from <Picture 1>.',
+    'Continue the inherited identity, pose, motion direction, and room layout from the preceding motion guide.',
+  )
+
 function assertH3Prompt(input: {
   readonly prompt: string
-  readonly inputMode: 'reference' | 'first_frame' | 'first_last_frame'
+  readonly inputMode: 'reference' | 'first_frame' | 'first_last_frame' | 'continuation'
   readonly durationSeconds?: number
 }): void {
   assertVideoPromptMatchesProfile({
@@ -74,6 +84,125 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
       prompt: firstLastFramePrompt,
       durationSeconds: 6,
     })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:LAST_FRAME_ANCHOR_REQUIRED')
+  })
+
+  it('accepts continuation without inventing a Picture time anchor', () => {
+    expect(() => assertH3Prompt({
+      inputMode: 'continuation',
+      prompt: continuationPrompt,
+    })).not.toThrow()
+  })
+
+  it('validates continuation shot times against the internal guide plus novel duration', () => {
+    const promptWithTransition = continuationPrompt.replace(
+      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] Her inherited motion continues. [Shot 2] At 00:04.500, the camera cuts to the doorway.',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'continuation',
+      prompt: promptWithTransition,
+      durationSeconds: 4,
+    })).not.toThrow()
+
+    expect(() => assertH3Prompt({
+      inputMode: 'continuation',
+      prompt: promptWithTransition.replace('00:04.500', '00:04.917'),
+      durationSeconds: 4,
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:SHOT_TIME_OUT_OF_RANGE:2')
+  })
+
+  it('rejects a continuation shot transition inside the inherited guide interval', () => {
+    const prompt = continuationPrompt.replace(
+      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] Her inherited motion continues. [Shot 2] At 00:00.500, the camera cuts to the doorway.',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'continuation',
+      prompt,
+      durationSeconds: 4,
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:SHOT_TIME_OUT_OF_RANGE:2')
+  })
+
+  it('rejects a same-shot timed event inside the inherited guide interval', () => {
+    const prompt = continuationPrompt.replace(
+      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] Her inherited motion continues. At 00:00.500, she turns toward the doorway.',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'continuation',
+      prompt,
+      durationSeconds: 4,
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:TIMED_EVENT_OUT_OF_RANGE:00:00.500')
+  })
+
+  it.each([
+    'at 0.500 seconds',
+    'At 0.500 sec',
+    'AT 0.500s',
+    'at .500 s',
+    'At 500ms',
+    'at 00:00.500',
+    'After 0.500 seconds',
+    '0.500 seconds later',
+    'At 00:00.5000',
+    'At 0:00.500',
+  ])('rejects non-canonical continuation time %s instead of bypassing the guide interval', (timeExpression) => {
+    const prompt = continuationPrompt.replace(
+      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      `[Shot 1] Her inherited motion continues. ${timeExpression}, she turns toward the doorway.`,
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'continuation',
+      prompt,
+      durationSeconds: 4,
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:CONTINUATION_TIME_FORMAT_INVALID')
+  })
+
+  it('keeps time-like text inside dialogue opaque to continuation timing validation', () => {
+    const prompt = continuationPrompt.replace(
+      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] She says <d>[English]Meet me at 0.500 seconds.</d> and turns toward the doorway.',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'continuation',
+      prompt,
+      durationSeconds: 4,
+    })).not.toThrow()
+  })
+
+  it.each([
+    ['summary', 'After 0.500 seconds she turns.'],
+    ['retention_analysis', 'At 00:00.500, preserve her inherited motion.'],
+  ])('rejects continuation timing instructions from the %s section', (section, value) => {
+    const prompt = continuationPrompt.replace(
+      new RegExp(`${section}:\\n[^\\n]+`, 'u'),
+      `${section}:\n${value}`,
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'continuation',
+      prompt,
+      durationSeconds: 4,
+    })).toThrow(`VIDEO_PROMPT_PROFILE_INVALID:CONTINUATION_TIME_SECTION_INVALID:${section}`)
+  })
+
+  it('accepts a continuation timed event at the first millisecond after the guide interval', () => {
+    const prompt = continuationPrompt.replace(
+      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] Her inherited motion continues. At 00:00.917, she turns toward the doorway.',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'continuation',
+      prompt,
+      durationSeconds: 4,
+    })).not.toThrow()
+  })
+
+  it('forbids every Picture anchor in continuation mode', () => {
+    expect(() => assertH3Prompt({
+      inputMode: 'continuation',
+      prompt: continuationPrompt.replace('preceding motion guide.', '<Picture 1>.'),
+      durationSeconds: 4,
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:CONTINUATION_PICTURE_ANCHOR_FORBIDDEN')
   })
 
   it.each([

@@ -98,13 +98,16 @@ export function normalizeWorkflowConcurrencyInput(rawWorkflowConcurrency: unknow
       rawWorkflowConcurrency.video,
       DEFAULT_VIDEO_WORKFLOW_CONCURRENCY,
     )
-    if (value !== rawWorkflowConcurrency.video) {
+    if (
+      value !== rawWorkflowConcurrency.video
+      || value !== DEFAULT_VIDEO_WORKFLOW_CONCURRENCY
+    ) {
       throw new ApiError('INVALID_PARAMS', {
         code: 'INVALID_PARAMS',
         field: 'workflowConcurrency.video',
       })
     }
-    normalized.video = value
+    normalized.video = DEFAULT_VIDEO_WORKFLOW_CONCURRENCY
   }
 
   return normalized

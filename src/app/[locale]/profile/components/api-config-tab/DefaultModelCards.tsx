@@ -248,6 +248,7 @@ function CompactConcurrencyControl({
     description,
     decreaseLabel,
     increaseLabel,
+    fixed = false,
     onChange,
 }: {
     value: number
@@ -255,12 +256,13 @@ function CompactConcurrencyControl({
     description: string
     decreaseLabel: string
     increaseLabel: string
+    fixed?: boolean
     onChange: (rawValue: string) => void
 }) {
     const updateByStep = useCallback((nextValue: number) => {
-        if (nextValue < 1) return
+        if (fixed || nextValue < 1) return
         onChange(String(nextValue))
-    }, [onChange])
+    }, [fixed, onChange])
 
     return (
         <div className="flex shrink-0 items-center gap-1.5" title={description}>
@@ -271,7 +273,7 @@ function CompactConcurrencyControl({
                 <button
                     type="button"
                     aria-label={`${decreaseLabel}: ${label}`}
-                    disabled={value <= 1}
+                    disabled={fixed || value <= 1}
                     onClick={() => updateByStep(value - 1)}
                     className="flex h-5 w-5 cursor-pointer items-center justify-center rounded-md text-[var(--glass-text-secondary)] transition-all hover:bg-[var(--glass-bg-hover)] hover:text-[var(--glass-text-primary)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100"
                 >
@@ -280,17 +282,20 @@ function CompactConcurrencyControl({
                 <input
                     type="number"
                     min={1}
+                    max={fixed ? 1 : undefined}
                     step={1}
                     aria-label={label}
                     value={value}
+                    readOnly={fixed}
                     onChange={(event) => onChange(event.target.value)}
                     className="h-5 w-6 bg-transparent p-0 text-center text-[11px] font-semibold text-[var(--glass-text-primary)] outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
                 <button
                     type="button"
                     aria-label={`${increaseLabel}: ${label}`}
+                    disabled={fixed}
                     onClick={() => updateByStep(value + 1)}
-                    className="flex h-5 w-5 cursor-pointer items-center justify-center rounded-md text-[var(--glass-text-secondary)] transition-all hover:bg-[var(--glass-bg-hover)] hover:text-[var(--glass-text-primary)] active:scale-95"
+                    className="flex h-5 w-5 cursor-pointer items-center justify-center rounded-md text-[var(--glass-text-secondary)] transition-all hover:bg-[var(--glass-bg-hover)] hover:text-[var(--glass-text-primary)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100"
                 >
                     <AppIcon name="plus" className="h-3 w-3" />
                 </button>
@@ -426,6 +431,7 @@ export function DefaultModelCards(allProps: DefaultModelCardsProps) {
                                 description={t('workflowConcurrency.video')}
                                 decreaseLabel={t('workflowConcurrency.decrease')}
                                 increaseLabel={t('workflowConcurrency.increase')}
+                                fixed
                                 onChange={(rawValue) => handleWorkflowConcurrencyChange('video', rawValue)}
                             />
                         </div>

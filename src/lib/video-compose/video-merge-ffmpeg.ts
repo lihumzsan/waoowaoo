@@ -2,6 +2,10 @@ import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { runFfmpegCommand } from './ffmpeg-command'
 
+const MIN_VIDEO_FRAME_RATE = 1
+const MAX_VIDEO_FRAME_RATE = 120
+const FRAME_RATE_PATTERN = /^([1-9]\d*)\/([1-9]\d*)$/u
+
 export async function probeVideoDimensions(filePath: string): Promise<{
   readonly width: number
   readonly height: number
@@ -32,6 +36,7 @@ export async function normalizeVideoClip(input: {
   readonly durationSeconds: number
   readonly width: number
   readonly height: number
+  readonly frameRate: string
 }): Promise<void> {
   await runFfmpegCommand('ffmpeg', [
     '-y',
@@ -40,7 +45,7 @@ export async function normalizeVideoClip(input: {
     '-t',
     input.durationSeconds.toFixed(3),
     '-vf',
-    `scale=${input.width}:${input.height}:force_original_aspect_ratio=decrease,pad=${input.width}:${input.height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p`,
+    `scale=${input.width}:${input.height}:force_original_aspect_ratio=decrease,pad=${input.width}:${input.height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${input.frameRate},format=yuv420p`,
     '-an',
     '-c:v',
     'libx264',
@@ -53,6 +58,37 @@ export async function normalizeVideoClip(input: {
     stage: 'workspace_resource_video_merge_normalize',
     expectedDurationSeconds: input.durationSeconds,
   })
+}
+
+export async function probeVideoFrameRate(filePath: string): Promise<string> {
+  const result = await runFfmpegCommand('ffprobe', [
+    '-v',
+    'error',
+    '-select_streams',
+    'v:0',
+    '-show_entries',
+    'stream=avg_frame_rate',
+    '-of',
+    'default=noprint_wrappers=1:nokey=1',
+    filePath,
+  ], { stage: 'workspace_resource_video_merge_probe_fps' })
+  const match = FRAME_RATE_PATTERN.exec(result.stdout.trim())
+  const numerator = Number.parseInt(match?.[1] ?? '', 10)
+  const denominator = Number.parseInt(match?.[2] ?? '', 10)
+  const frameRate = numerator / denominator
+  if (
+    !match
+    || !Number.isSafeInteger(numerator)
+    || numerator <= 0
+    || !Number.isSafeInteger(denominator)
+    || denominator <= 0
+    || !Number.isFinite(frameRate)
+    || frameRate < MIN_VIDEO_FRAME_RATE
+    || frameRate > MAX_VIDEO_FRAME_RATE
+  ) {
+    throw new Error('WORKSPACE_RESOURCE_VIDEO_MERGE_FRAME_RATE_INVALID')
+  }
+  return `${String(numerator)}/${String(denominator)}`
 }
 
 function escapeConcatPath(filePath: string): string {
@@ -112,6 +148,7 @@ export async function composeVideoMergeVideoTrack(input: {
     return sourcePath
   }
 
+  const frameRate = await probeVideoFrameRate(sourcePath)
   const normalizedPaths: string[] = []
   for (const [index, currentSourcePath] of input.sourcePaths.entries()) {
     const durationSeconds = input.durations[index]
@@ -123,6 +160,7 @@ export async function composeVideoMergeVideoTrack(input: {
       durationSeconds,
       width: input.width,
       height: input.height,
+      frameRate,
     })
     normalizedPaths.push(normalizedPath)
   }

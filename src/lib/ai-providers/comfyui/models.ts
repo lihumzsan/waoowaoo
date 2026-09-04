@@ -4,9 +4,16 @@ import { MUSIC_KEY_SCALE_VALUES, MUSIC_TIME_SIGNATURE_VALUES } from '@/lib/works
 
 import type { ComfyUiRuntimeTargetId } from './config'
 import {
+  H3_ASPECT_RATIOS,
   H3_DURATION_OPTIONS_SECONDS,
   H3_MAX_REFERENCE_IMAGES,
+  resolveH3Dimensions,
+  type H3AspectRatio,
 } from './profiles'
+import {
+  H3_CONTINUATION_MAX_SOURCE_DURATION_MS,
+  H3_CONTINUATION_MIN_SOURCE_DURATION_MS,
+} from '@/lib/video-generation/h3-timeline'
 
 export const COMFYUI_H3_MODEL_ID = 'minimax-h3-dual-stage-2mp'
 export const COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY = `comfyui::${COMFYUI_H3_MODEL_ID}`
@@ -41,6 +48,13 @@ const COMFYUI_RUNTIME_TARGET_BY_MODEL_KEY: Record<string, ComfyUiRuntimeTargetId
   [COMFYUI_MOSS_TTS_LOCAL_MODEL_KEY]: 'shared',
 }
 
+const H3_CONTINUATION_SOURCE_ASPECT_RATIO_BY_TARGET = Object.fromEntries(
+  H3_ASPECT_RATIOS.map((aspectRatio) => [
+    aspectRatio,
+    resolveH3Dimensions({ megapixels: 2, aspectRatio }),
+  ]),
+) as Record<H3AspectRatio, { readonly width: number; readonly height: number }>
+
 export function resolveComfyUiRuntimeTargetIdForModelKey(modelKey: string): ComfyUiRuntimeTargetId {
   const targetId = COMFYUI_RUNTIME_TARGET_BY_MODEL_KEY[modelKey]
   if (!targetId) throw new Error(`COMFYUI_MODEL_RUNTIME_TARGET_MISSING:${modelKey}`)
@@ -53,11 +67,16 @@ export const COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     capabilities: {
       video: {
         promptProfile: 'minimax_h3_multimodal_v3',
-        supportedInputModes: ['reference', 'first_frame', 'first_last_frame'], supportsTextToVideo: false,
+        supportedInputModes: ['reference', 'first_frame', 'first_last_frame', 'continuation'], supportsTextToVideo: false,
         durationOptions: [...H3_DURATION_OPTIONS_SECONDS],
         generateAudioOptions: [true], supportGenerateAudio: true,
         assetReferenceMultiReference: true, firstlastframe: true,
         maxReferenceImages: H3_MAX_REFERENCE_IMAGES, maxReferenceFiles: H3_MAX_REFERENCE_IMAGES,
+        continuationInput: {
+          minSourceDurationMs: H3_CONTINUATION_MIN_SOURCE_DURATION_MS,
+          maxSourceDurationMs: H3_CONTINUATION_MAX_SOURCE_DURATION_MS,
+          sourceAspectRatioByTarget: H3_CONTINUATION_SOURCE_ASPECT_RATIO_BY_TARGET,
+        },
       },
     },
   },

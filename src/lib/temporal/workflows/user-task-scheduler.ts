@@ -8,12 +8,16 @@ import {
   continueAsNew,
   defineUpdate,
   defineQuery,
+  patched,
   proxyActivities,
   setHandler,
   startChild,
   workflowInfo,
 } from '@temporalio/workflow'
-import type { WorkflowConcurrencyConfig } from '@/lib/workflow-concurrency'
+import {
+  DEFAULT_VIDEO_WORKFLOW_CONCURRENCY,
+  type WorkflowConcurrencyConfig,
+} from '../../workflow-concurrency'
 import { buildTaskWorkflowId } from '../identity'
 import { encodeTemporalFailure, temporalInvariantFailure } from '../failure'
 import {
@@ -45,6 +49,7 @@ import {
 import { taskWorkflow } from './task'
 
 const RECENT_DEDUPE_LIMIT = 2_048
+const SERIAL_VIDEO_CAPACITY_PATCH = 'user-task-scheduler-serial-video-capacity-v1'
 
 const enqueueTask = defineUpdate<ScheduledTaskReceipt, [ScheduledTaskRequest]>(
   USER_TASK_SCHEDULER_UPDATE_NAME.ENQUEUE,
@@ -839,6 +844,12 @@ export async function userTaskSchedulerWorkflow(
   }
 
   while (true) {
+    if (patched(SERIAL_VIDEO_CAPACITY_PATCH)) {
+      slotLimits = {
+        ...slotLimits,
+        video: DEFAULT_VIDEO_WORKFLOW_CONCURRENCY,
+      }
+    }
     await startQueuedTasks()
 
     if (workflowInfo().continueAsNewSuggested && allHandlersFinished()) {

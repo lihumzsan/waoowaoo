@@ -49,7 +49,7 @@ export const videoGenerationReferenceSchema = z.discriminatedUnion('channel', [
   }).strict(),
   generationReferenceSchema.extend({
     channel: z.literal('video'),
-    role: z.literal('reference_video'),
+    role: z.enum(['reference_video', 'continuation_video']),
   }).strict(),
 ])
 

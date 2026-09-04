@@ -128,6 +128,7 @@ export type VideoInputMode =
   | 'text_to_video'
   | 'first_frame'
   | 'first_last_frame'
+  | 'continuation'
   | 'reference'
 
 export const VIDEO_PROMPT_PROFILES = [
@@ -136,6 +137,15 @@ export const VIDEO_PROMPT_PROFILES = [
 ] as const
 
 export type VideoPromptProfile = (typeof VIDEO_PROMPT_PROFILES)[number]
+
+export interface VideoContinuationInputCapabilities {
+  minSourceDurationMs: number
+  maxSourceDurationMs: number
+  sourceAspectRatioByTarget: Record<string, {
+    width: number
+    height: number
+  }>
+}
 
 export interface VideoCapabilities {
   promptProfile: VideoPromptProfile
@@ -155,6 +165,7 @@ export interface VideoCapabilities {
   referenceAudioRequiresVisual?: boolean
   minReferenceAudioDurationMs?: number
   maxTotalReferenceAudioDurationMs?: number
+  continuationInput?: VideoContinuationInputCapabilities
   fieldI18n?: CapabilityFieldI18nMap
 }
 
@@ -270,6 +281,7 @@ const VIDEO_ALLOWED_FIELDS = new Set<keyof VideoCapabilities>([
   'referenceAudioRequiresVisual',
   'minReferenceAudioDurationMs',
   'maxTotalReferenceAudioDurationMs',
+  'continuationInput',
   'fieldI18n',
 ])
 
@@ -571,6 +583,7 @@ function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unk
     'text_to_video',
     'first_frame',
     'first_last_frame',
+    'continuation',
     'reference',
   ])
   if (
@@ -586,6 +599,91 @@ function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unk
       field: 'capabilities.video.supportedInputModes',
       message: 'supportedInputModes must contain unique canonical video input modes',
     })
+  }
+
+  const supportsContinuation = isStringArray(supportedInputModes)
+    && supportedInputModes.includes('continuation')
+  const continuationInput = raw.continuationInput
+  if (supportsContinuation && !isRecord(continuationInput)) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.video.continuationInput',
+      message: 'continuationInput must declare the source media contract',
+    })
+  } else if (continuationInput !== undefined && !isRecord(continuationInput)) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.video.continuationInput',
+      message: 'continuationInput must be an object',
+    })
+  }
+  if (isRecord(continuationInput)) {
+    const allowedFields = new Set([
+      'minSourceDurationMs',
+      'maxSourceDurationMs',
+      'sourceAspectRatioByTarget',
+    ])
+    for (const field of Object.keys(continuationInput)) {
+      if (allowedFields.has(field)) continue
+      issues.push({
+        code: 'CAPABILITY_FIELD_INVALID',
+        field: `capabilities.video.continuationInput.${field}`,
+        message: `Unknown continuation input field: ${field}`,
+      })
+    }
+    const minimum = continuationInput.minSourceDurationMs
+    const maximum = continuationInput.maxSourceDurationMs
+    if (!Number.isSafeInteger(minimum) || (minimum as number) <= 0) {
+      issues.push({
+        code: 'CAPABILITY_FIELD_INVALID',
+        field: 'capabilities.video.continuationInput.minSourceDurationMs',
+        message: 'minSourceDurationMs must be a positive integer',
+      })
+    }
+    if (!Number.isSafeInteger(maximum) || (maximum as number) <= 0) {
+      issues.push({
+        code: 'CAPABILITY_FIELD_INVALID',
+        field: 'capabilities.video.continuationInput.maxSourceDurationMs',
+        message: 'maxSourceDurationMs must be a positive integer',
+      })
+    }
+    if (
+      Number.isSafeInteger(minimum)
+      && Number.isSafeInteger(maximum)
+      && (minimum as number) > (maximum as number)
+    ) {
+      issues.push({
+        code: 'CAPABILITY_FIELD_INVALID',
+        field: 'capabilities.video.continuationInput.maxSourceDurationMs',
+        message: 'maxSourceDurationMs must be at least minSourceDurationMs',
+      })
+    }
+    const dimensionsByAspectRatio = continuationInput.sourceAspectRatioByTarget
+    if (!isRecord(dimensionsByAspectRatio) || Object.keys(dimensionsByAspectRatio).length === 0) {
+      issues.push({
+        code: 'CAPABILITY_FIELD_INVALID',
+        field: 'capabilities.video.continuationInput.sourceAspectRatioByTarget',
+        message: 'sourceAspectRatioByTarget must be a non-empty object',
+      })
+    } else {
+      for (const [aspectRatio, dimensions] of Object.entries(dimensionsByAspectRatio)) {
+        if (
+          !aspectRatio.trim()
+          || !isRecord(dimensions)
+          || Object.keys(dimensions).some((field) => field !== 'width' && field !== 'height')
+          || !Number.isSafeInteger(dimensions.width)
+          || (dimensions.width as number) <= 0
+          || !Number.isSafeInteger(dimensions.height)
+          || (dimensions.height as number) <= 0
+        ) {
+          issues.push({
+            code: 'CAPABILITY_FIELD_INVALID',
+            field: `capabilities.video.continuationInput.sourceAspectRatioByTarget.${aspectRatio}`,
+            message: 'Continuation source aspect ratio must contain positive integer width and height',
+          })
+        }
+      }
+    }
   }
 
   if (raw.supportsTextToVideo !== undefined && typeof raw.supportsTextToVideo !== 'boolean') {

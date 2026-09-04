@@ -2,6 +2,7 @@ import type {
   VideoInputMode,
   VideoPromptProfile,
 } from '@/lib/ai-registry/types'
+import { H3_CONTINUATION_GUIDE_SECONDS } from './h3-timeline'
 
 export const MINIMAX_H3_PROMPT_SECTIONS = [
   'subject_definitions',
@@ -23,6 +24,11 @@ const DIALOGUE_BLOCK = /<d>[\s\S]*?<\/d>/gu
 const SHOT_MARKER = /\[Shot (\d+)\]/gu
 const SHOT_TRANSITION = /^\[Shot (\d+)\] At (\d{2}):(\d{2}\.\d{3}), the camera (?:cuts|dissolves|fades|wipes)\b/u
 const CAMERA_TRANSITION = /\bthe camera (?:cuts|dissolves|fades|wipes)\b/gu
+const TIMED_EVENT = /\bAt (\d{2}):(\d{2}\.\d{3})\b/gu
+const CLOCK_LIKE_TIME = /\b\d+\s*:\s*\d+(?:\s*[.,]\s*\d+)*\b/gu
+const CANONICAL_CLOCK_TIMED_EVENT = /^At \d{2}:\d{2}\.\d{3}$/u
+const UNIT_TIMED_EVENT = /(?:\b\d+(?:\.\d*)?|\.\d+)\s*(?:milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|hours?|hrs?)\b/iu
+const PICTURE_ANCHOR = /<Picture\s+\d+>/u
 
 function invalid(reason: string): Error {
   return new Error('VIDEO_PROMPT_PROFILE_INVALID:' + reason)
@@ -77,9 +83,21 @@ function parseShotTime(minutesText: string, secondsText: string): number | null 
   return minutes * 60 + seconds
 }
 
+function isCanonicalClockTimedEvent(
+  input: string,
+  clockIndex: number,
+  clockText: string,
+): boolean {
+  const prefixIndex = clockIndex - 3
+  if (prefixIndex < 0 || input.slice(prefixIndex, clockIndex) !== 'At ') return false
+  if (prefixIndex > 0 && /[A-Za-z0-9_]/u.test(input[prefixIndex - 1]!)) return false
+  return CANONICAL_CLOCK_TIMED_EVENT.test(input.slice(prefixIndex, clockIndex + clockText.length))
+}
+
 function assertH3PromptStructure(
   sections: Readonly<Record<MinimaxH3PromptSection, string>>,
-  durationSeconds: number,
+  timelineOriginSeconds: number,
+  timelineEndSeconds: number,
 ): void {
   for (const section of MINIMAX_H3_PROMPT_SECTIONS) {
     const body = sections[section]
@@ -98,8 +116,28 @@ function assertH3PromptStructure(
     DIALOGUE_BLOCK,
     (dialogue) => ' '.repeat(dialogue.length),
   )
+  if (timelineOriginSeconds > 0) {
+    for (const section of MINIMAX_H3_PROMPT_SECTIONS) {
+      if (section === 'detailed_description') continue
+      const body = sections[section]
+      if (UNIT_TIMED_EVENT.test(body) || Array.from(body.matchAll(CLOCK_LIKE_TIME)).length > 0) {
+        throw invalid(`CONTINUATION_TIME_SECTION_INVALID:${section}`)
+      }
+    }
+  }
+  if (
+    timelineOriginSeconds > 0
+    && (
+      UNIT_TIMED_EVENT.test(structuralDescription)
+      || Array.from(structuralDescription.matchAll(CLOCK_LIKE_TIME)).some((match) => (
+        !isCanonicalClockTimedEvent(structuralDescription, match.index, match[0])
+      ))
+    )
+  ) {
+    throw invalid('CONTINUATION_TIME_FORMAT_INVALID')
+  }
   const shots = Array.from(structuralDescription.matchAll(SHOT_MARKER))
-  let previousShotTime = 0
+  let previousShotTime = timelineOriginSeconds
   for (let index = 0; index < shots.length; index += 1) {
     const shot = shots[index]!
     const expectedShotNumber = index + 1
@@ -116,8 +154,7 @@ function assertH3PromptStructure(
     if (
       shotTime === null
       || shotTime <= previousShotTime
-      || !Number.isFinite(durationSeconds)
-      || shotTime >= durationSeconds
+      || shotTime >= timelineEndSeconds
     ) {
       throw invalid('SHOT_TIME_OUT_OF_RANGE:' + String(expectedShotNumber))
     }
@@ -126,6 +163,17 @@ function assertH3PromptStructure(
 
   const transitionCount = Array.from(structuralDescription.matchAll(CAMERA_TRANSITION)).length
   if (transitionCount !== shots.length - 1) throw invalid('SHOT_TRANSITION_ORPHANED')
+
+  for (const match of structuralDescription.matchAll(TIMED_EVENT)) {
+    const eventTime = parseShotTime(match[1]!, match[2]!)
+    if (
+      eventTime === null
+      || eventTime < timelineOriginSeconds
+      || eventTime >= timelineEndSeconds
+    ) {
+      throw invalid(`TIMED_EVENT_OUT_OF_RANGE:${match[1]}:${match[2]}`)
+    }
+  }
 }
 
 function assertH3InputMode(
@@ -133,6 +181,12 @@ function assertH3InputMode(
   durationSeconds: number,
   sections: Readonly<Record<MinimaxH3PromptSection, string>>,
 ): void {
+  if (inputMode === 'continuation') {
+    if (Object.values(sections).some((section) => PICTURE_ANCHOR.test(section))) {
+      throw invalid('CONTINUATION_PICTURE_ANCHOR_FORBIDDEN')
+    }
+    return
+  }
   if (inputMode === 'reference') return
   if (inputMode !== 'first_frame' && inputMode !== 'first_last_frame') {
     throw invalid('INPUT_MODE_UNSUPPORTED')
@@ -167,9 +221,19 @@ export function assertVideoPromptMatchesProfile(input: {
 }): void {
   if (input.profile === 'generic_v1') return
   if (!input.prompt.trim()) throw invalid('PROMPT_EMPTY')
+  if (!Number.isFinite(input.durationSeconds) || input.durationSeconds <= 0) {
+    throw invalid('DURATION_INVALID')
+  }
   const sections = parseSections(input.prompt)
   if (input.profile !== 'minimax_h3_multimodal_v3') throw invalid('PROFILE_UNKNOWN')
-  assertH3PromptStructure(sections, input.durationSeconds)
+  const timelineOriginSeconds = input.inputMode === 'continuation'
+    ? H3_CONTINUATION_GUIDE_SECONDS
+    : 0
+  assertH3PromptStructure(
+    sections,
+    timelineOriginSeconds,
+    timelineOriginSeconds + input.durationSeconds,
+  )
   assertH3InputMode(input.inputMode, input.durationSeconds, sections)
 }
 

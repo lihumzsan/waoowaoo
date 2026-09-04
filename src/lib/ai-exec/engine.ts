@@ -73,6 +73,7 @@ export type AiVideoExecutionOptions = {
   referenceImages?: string[];
   referenceAudios?: string[];
   referenceVideos?: string[];
+  continuationVideoUrl?: string;
   [key: string]: string | number | boolean | string[] | undefined;
 };
 

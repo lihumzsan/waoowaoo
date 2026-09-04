@@ -12,7 +12,10 @@ import {
 } from './types'
 import type { CapabilitySelections } from '@/lib/ai-registry/types'
 import type { EffectiveDefaultModelsView } from '@/lib/user-api/api-config-types'
-import { normalizeWorkflowConcurrencyValue } from '@/lib/workflow-concurrency'
+import {
+    DEFAULT_VIDEO_WORKFLOW_CONCURRENCY,
+    normalizeWorkflowConcurrencyValue,
+} from '@/lib/workflow-concurrency'
 import { useApiConfigSaver } from './editor'
 import type { ApiConfigSaveError } from './editor'
 import { useUserApiConfigQuery } from './query'
@@ -229,7 +232,9 @@ export function useProviders(): UseProvidersReturn {
     }, [performSave])
 
     const updateWorkflowConcurrency = useCallback((field: keyof WorkflowConcurrency, value: number) => {
-        const nextValue = normalizeWorkflowConcurrencyValue(value, DEFAULT_WORKFLOW_CONCURRENCY[field])
+        const nextValue = field === 'video'
+            ? DEFAULT_VIDEO_WORKFLOW_CONCURRENCY
+            : normalizeWorkflowConcurrencyValue(value, DEFAULT_WORKFLOW_CONCURRENCY[field])
         setWorkflowConcurrency((previous) => {
             const next = { ...previous, [field]: nextValue }
             latestWorkflowConcurrencyRef.current = next

@@ -2,6 +2,7 @@ type MediaReferenceOptions = {
   readonly referenceImages?: unknown
   readonly referenceAudios?: unknown
   readonly referenceVideos?: unknown
+  readonly continuationVideoUrl?: unknown
   readonly lastFrameImageUrl?: unknown
 }
 type MediaRequestIdentityInput = {
@@ -60,6 +61,9 @@ export function createMediaProviderRequestIdentity<T extends MediaRequestIdentit
     if ('referenceVideos' in options) {
       options.referenceVideos = stableMediaUrlArray(options.referenceVideos, 'referenceVideos')
     }
+    if ('continuationVideoUrl' in options && options.continuationVideoUrl !== undefined) {
+      options.continuationVideoUrl = stableMediaUrl(options.continuationVideoUrl, 'continuationVideoUrl')
+    }
     if ('lastFrameImageUrl' in options && options.lastFrameImageUrl !== undefined) {
       options.lastFrameImageUrl = stableMediaUrl(options.lastFrameImageUrl, 'lastFrameImageUrl')
     }
@@ -83,6 +87,9 @@ export function assertVideoMediaReferencesUseAbsoluteHttpUrls(input: {
   assertAbsoluteHttpMediaArray(mediaOptions.referenceImages, 'referenceImages')
   assertAbsoluteHttpMediaArray(mediaOptions.referenceAudios, 'referenceAudios')
   assertAbsoluteHttpMediaArray(mediaOptions.referenceVideos, 'referenceVideos')
+  if (mediaOptions.continuationVideoUrl !== undefined) {
+    assertAbsoluteHttpMediaUrl(mediaOptions.continuationVideoUrl, 'continuationVideoUrl')
+  }
   if (mediaOptions.lastFrameImageUrl !== undefined) {
     assertAbsoluteHttpMediaUrl(mediaOptions.lastFrameImageUrl, 'lastFrameImageUrl')
   }

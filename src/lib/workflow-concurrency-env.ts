@@ -1,4 +1,5 @@
 import {
+  DEFAULT_VIDEO_WORKFLOW_CONCURRENCY,
   DEFAULT_WORKFLOW_CONCURRENCY_CONFIG,
   type WorkflowConcurrencyConfig,
 } from '@/lib/workflow-concurrency'
@@ -6,8 +7,7 @@ import {
 const ENV_KEYS = {
   analysis: 'DEFAULT_WORKFLOW_CONCURRENCY_ANALYSIS',
   image: 'DEFAULT_WORKFLOW_CONCURRENCY_IMAGE',
-  video: 'DEFAULT_WORKFLOW_CONCURRENCY_VIDEO',
-} as const satisfies Record<keyof WorkflowConcurrencyConfig, string>
+} as const satisfies Record<'analysis' | 'image', string>
 
 type WorkflowConcurrencyEnv = Record<string, string | undefined>
 
@@ -41,10 +41,6 @@ export function getDefaultWorkflowConcurrencyConfig(
       DEFAULT_WORKFLOW_CONCURRENCY_CONFIG.image,
       env,
     ),
-    video: readPositiveIntegerEnv(
-      ENV_KEYS.video,
-      DEFAULT_WORKFLOW_CONCURRENCY_CONFIG.video,
-      env,
-    ),
+    video: DEFAULT_VIDEO_WORKFLOW_CONCURRENCY,
   }
 }

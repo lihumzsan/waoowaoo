@@ -28,6 +28,7 @@ describe('resolveVideoInputMode', () => {
       referenceImageCount: 0,
       referenceAudioCount: 0,
       referenceVideoCount: 0,
+      continuationVideoCount: 0,
       usesLastFrame: false,
     })
   })
@@ -64,6 +65,7 @@ describe('resolveVideoInputMode', () => {
       referenceImageCount: 0,
       referenceAudioCount: 0,
       referenceVideoCount: 0,
+      continuationVideoCount: 0,
       usesLastFrame: false,
     })
   })
@@ -79,6 +81,7 @@ describe('resolveVideoInputMode', () => {
       referenceImageCount: 0,
       referenceAudioCount: 0,
       referenceVideoCount: 0,
+      continuationVideoCount: 0,
       usesLastFrame: true,
     })
   })
@@ -94,8 +97,41 @@ describe('resolveVideoInputMode', () => {
       referenceImageCount: 0,
       referenceAudioCount: 1,
       referenceVideoCount: 1,
+      continuationVideoCount: 0,
       usesLastFrame: false,
     })
+  })
+
+  it('resolves one explicit continuation video as continuation mode', () => {
+    expect(resolveVideoInputMode([
+      { channel: 'video', role: 'continuation_video' },
+    ])).toEqual({
+      mode: 'continuation',
+      firstFrameCount: 0,
+      lastFrameCount: 0,
+      referenceImageCount: 0,
+      referenceAudioCount: 0,
+      referenceVideoCount: 0,
+      continuationVideoCount: 1,
+      usesLastFrame: false,
+    })
+  })
+
+  it('rejects duplicate or mixed continuation inputs', () => {
+    expectModeError([
+      { channel: 'video', role: 'continuation_video' },
+      { channel: 'video', role: 'continuation_video' },
+    ], 'VIDEO_CONTINUATION_INPUT_INVALID')
+
+    expectModeError([
+      { channel: 'video', role: 'continuation_video' },
+      { channel: 'image', role: 'first_frame' },
+    ], 'VIDEO_REFERENCE_MODE_CONFLICT')
+
+    expectModeError([
+      { channel: 'video', role: 'continuation_video' },
+      { channel: 'video', role: 'reference_video' },
+    ], 'VIDEO_REFERENCE_MODE_CONFLICT')
   })
 
   it('rejects a last frame without a first frame', () => {

@@ -34,4 +34,30 @@ describe('video prompt profile validator conformance', () => {
       expect(validateModelCapabilities('video', { video: { promptProfile } })).toEqual([])
     },
   )
+
+  it('requires an explicit source contract when continuation is supported', () => {
+    expect(validateModelCapabilities('video', {
+      video: {
+        promptProfile: 'minimax_h3_multimodal_v3',
+        supportedInputModes: ['continuation'],
+      },
+    })).toContainEqual(expect.objectContaining({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.video.continuationInput',
+    }))
+
+    expect(validateModelCapabilities('video', {
+      video: {
+        promptProfile: 'minimax_h3_multimodal_v3',
+        supportedInputModes: ['continuation'],
+        continuationInput: {
+          minSourceDurationMs: 917,
+          maxSourceDurationMs: 13_041,
+          sourceAspectRatioByTarget: {
+            '9:16': { width: 1152, height: 2064 },
+          },
+        },
+      },
+    })).toEqual([])
+  })
 })

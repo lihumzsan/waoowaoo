@@ -61,7 +61,7 @@ export const comfyuiAdapter: AiProviderAdapter = {
       selection,
       executionMode: 'async',
       optionSchema: buildMediaOptionSchema('video', {
-        allowedKeys: ['referenceImages', 'lastFrameImageUrl'],
+        allowedKeys: ['referenceImages', 'lastFrameImageUrl', 'continuationVideoUrl'],
         required: ['duration', 'aspectRatio', 'generateAudio'],
         excludedKeys: ['resolution', 'referenceAudios', 'referenceVideos', 'size', 'promptExtend', 'serviceTier', 'executionExpiresAfter', 'returnLastFrame', 'draft', 'seed', 'cameraFixed', 'watermark'],
         validators: {
@@ -73,6 +73,7 @@ export const comfyuiAdapter: AiProviderAdapter = {
           generateAudio: booleanValidator(),
           referenceImages: stringArrayValidator({ maxLength: H3_MAX_REFERENCE_IMAGES }),
           lastFrameImageUrl: nonEmptyStringValidator(),
+          continuationVideoUrl: nonEmptyStringValidator(),
         },
         objectValidators: [() => selection.modelId === COMFYUI_H3_MODEL_ID
           ? { ok: true }

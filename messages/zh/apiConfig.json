@@ -155,7 +155,7 @@
     "analysis": "分析流程并发",
     "image": "图片任务并发",
     "imageDescription": "同时处理的图片生成/编辑任务数量",
-    "video": "视频流程并发",
+    "video": "视频生成串行",
     "decrease": "减少",
     "increase": "增加"
   },

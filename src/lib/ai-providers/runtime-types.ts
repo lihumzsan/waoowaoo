@@ -87,6 +87,7 @@ export type AiProviderVideoExecutionContext = {
     referenceImages?: string[]
     referenceAudios?: string[]
     referenceVideos?: string[]
+    continuationVideoUrl?: string
     [key: string]: unknown
   }
 }

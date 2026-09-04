@@ -5,6 +5,7 @@ import { cancelComfyUiH3Video, executeComfyUiH3VideoGeneration, pollComfyUiH3Vid
 import { COMFYUI_H3_MODEL_ID } from '@/lib/ai-providers/comfyui/models'
 import {
   H3_DUAL_STAGE_RUNTIME_PROFILE,
+  H3_CONTINUATION_DUAL_STAGE_RUNTIME_PROFILE,
   H3_FRAME_DUAL_STAGE_RUNTIME_PROFILE,
 } from '@/lib/ai-providers/comfyui/profiles'
 import type { AiProviderVideoExecutionContext } from '@/lib/ai-providers/runtime-types'
@@ -55,8 +56,22 @@ const firstLastFrameInput: AiProviderVideoExecutionContext = {
   },
 }
 
+const continuationInput: AiProviderVideoExecutionContext = {
+  ...videoInput,
+  options: {
+    ...videoInput.options,
+    prompt: videoInput.options!.prompt!.replace(
+      'Preserve identity.',
+      'Continue the inherited identity, pose, camera motion, and action direction.',
+    ),
+    referenceImages: undefined,
+    continuationVideoUrl: 'https://media.example.com/previous.mp4',
+  },
+}
+
 function objectInfo(className: string): Record<string, unknown> {
   const required: Record<string, unknown> = {}
+  const optional: Record<string, unknown> = {}
   if (className === 'UNETLoader') required.unet_name = [[
     'h3\\minimax_h3_ref2va_pruned_int8_convrot.safetensors',
     'h3\\minimax_h3_fl2va_int8_convrot.safetensors',
@@ -65,15 +80,28 @@ function objectInfo(className: string): Record<string, unknown> {
   if (className === 'CLIPLoader') required.clip_name = [['h3\\qwen3vl_32b_minimax_h3_int8_convrot.safetensors']]
   if (className === 'LoraLoaderModelOnly') required.lora_name = [['h3\\minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors']]
   if (className === 'VAELoader') required.vae_name = [['h3\\minimax_h3_video_vae_int8_convrot.safetensors', 'h3\\minimax_h3_audio_vae_fp32.safetensors']]
-  if (className === 'ImageResizeKJv2') required.upscale_method = [['nvidia_rtx_vsr']]
+  if (className === 'ImageResizeKJv2') required.upscale_method = [['nvidia_rtx_vsr', 'lanczos']]
   if (className === 'ModelAttentionBackend') required.attention = [['comfy kitchen attention']]
-  return { [className]: { input: { required } } }
+  if (className === 'LoadImage') required.image = [['example.png']]
+  if (className === 'ImageBatch') {
+    required.image1 = ['IMAGE']
+    required.image2 = ['IMAGE']
+  }
+  if (className === 'MiniMaxH3AddGuide') {
+    required.positive = ['CONDITIONING']
+    required.latent = ['LATENT']
+    required.frame_idx = ['INT']
+    optional.vae = ['VAE']
+    optional.image = ['IMAGE']
+  }
+  return { [className]: { input: { required, optional } } }
 }
 
 function defineValidPreflight(server: Awaited<ReturnType<typeof startScenarioServer>>) {
   const classes = new Set([
     ...Object.values(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow).map((node) => node.class_type),
     ...Object.values(H3_FRAME_DUAL_STAGE_RUNTIME_PROFILE.workflow).map((node) => node.class_type),
+    ...Object.values(H3_CONTINUATION_DUAL_STAGE_RUNTIME_PROFILE.workflow).map((node) => node.class_type),
   ])
   for (const className of classes) {
     server.defineScenario({
@@ -273,6 +301,150 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
     expect(server!.getRequests('GET', '/object_info/UNETLoader')).toHaveLength(2)
     expect(server!.getRequests('GET', '/object_info/MiniMaxH3ReferenceToVideo')).toHaveLength(1)
     expect(server!.getRequests('GET', '/object_info/MiniMaxH3ImageToVideo')).toHaveLength(1)
+  })
+
+  it('fails continuation before upload when the selected AddGuide node is missing', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    server!.defineScenario({
+      method: 'GET',
+      path: '/object_info/MiniMaxH3AddGuide',
+      mode: 'success',
+      submitResponse: { status: 200, body: {} },
+    })
+
+    await expect(executeComfyUiH3VideoGeneration(continuationInput)).rejects.toMatchObject({
+      name: 'ProviderSubmissionError',
+      disposition: 'pre_accept_rejected',
+      externalId: null,
+      message: expect.stringContaining('COMFYUI_NODE_MISSING:MiniMaxH3AddGuide'),
+    })
+    expect(server!.getRequests('GET', '/object_info/MiniMaxH3AddGuide')).toHaveLength(1)
+    expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
+    expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
+  })
+
+  it('fails locally when the selected continuation graph omits the required image guide', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    const guide = H3_CONTINUATION_DUAL_STAGE_RUNTIME_PROFILE.workflow[
+      H3_CONTINUATION_DUAL_STAGE_RUNTIME_PROFILE.continuationGuideNodeId
+    ]!
+    const originalImage = guide.inputs.image
+    delete guide.inputs.image
+
+    try {
+      await expect(executeComfyUiH3VideoGeneration(continuationInput)).rejects.toMatchObject({
+        name: 'ProviderSubmissionError',
+        disposition: 'pre_accept_rejected',
+        externalId: null,
+        message: expect.stringContaining('COMFYUI_H3_CONTINUATION_GRAPH_INCOMPATIBLE:image'),
+      })
+      expect(server!.getRequests('GET', '/object_info/MiniMaxH3AddGuide')).toHaveLength(0)
+      expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
+      expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
+    } finally {
+      guide.inputs.image = originalImage
+    }
+  })
+
+  it('fails locally when the selected continuation graph references a non-VAE guide source', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    const guide = H3_CONTINUATION_DUAL_STAGE_RUNTIME_PROFILE.workflow[
+      H3_CONTINUATION_DUAL_STAGE_RUNTIME_PROFILE.continuationGuideNodeId
+    ]!
+    const originalVae = guide.inputs.vae
+    guide.inputs.vae = ['999', 0]
+
+    try {
+      await expect(executeComfyUiH3VideoGeneration(continuationInput)).rejects.toMatchObject({
+        name: 'ProviderSubmissionError',
+        disposition: 'pre_accept_rejected',
+        externalId: null,
+        message: expect.stringContaining('COMFYUI_H3_CONTINUATION_GRAPH_INCOMPATIBLE:vae'),
+      })
+      expect(server!.getRequests('GET', '/object_info/MiniMaxH3AddGuide')).toHaveLength(0)
+      expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
+      expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
+    } finally {
+      guide.inputs.vae = originalVae
+    }
+  })
+
+  it('fails continuation before upload when an AddGuide input port is incompatible', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    const incompatible = objectInfo('MiniMaxH3AddGuide')
+    const optional = (
+      incompatible.MiniMaxH3AddGuide as { input: { optional: Record<string, unknown> } }
+    ).input.optional
+    optional.image = ['MASK']
+    server!.defineScenario({
+      method: 'GET',
+      path: '/object_info/MiniMaxH3AddGuide',
+      mode: 'success',
+      submitResponse: { status: 200, body: incompatible },
+    })
+
+    await expect(executeComfyUiH3VideoGeneration(continuationInput)).rejects.toMatchObject({
+      name: 'ProviderSubmissionError',
+      disposition: 'pre_accept_rejected',
+      externalId: null,
+      message: expect.stringContaining('COMFYUI_NODE_INPUT_INCOMPATIBLE:MiniMaxH3AddGuide:image:IMAGE'),
+    })
+    expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
+    expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
+  })
+
+  it('requires AddGuide image inputs in the official optional schema section', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    const wrongSection = objectInfo('MiniMaxH3AddGuide')
+    const input = (
+      wrongSection.MiniMaxH3AddGuide as {
+        input: {
+          required: Record<string, unknown>
+          optional: Record<string, unknown>
+        }
+      }
+    ).input
+    input.required.image = input.optional.image
+    delete input.optional.image
+    server!.defineScenario({
+      method: 'GET',
+      path: '/object_info/MiniMaxH3AddGuide',
+      mode: 'success',
+      submitResponse: { status: 200, body: wrongSection },
+    })
+
+    await expect(executeComfyUiH3VideoGeneration(continuationInput)).rejects.toMatchObject({
+      name: 'ProviderSubmissionError',
+      disposition: 'pre_accept_rejected',
+      externalId: null,
+      message: expect.stringContaining('COMFYUI_NODE_INPUT_INCOMPATIBLE:MiniMaxH3AddGuide:image:IMAGE'),
+    })
+    expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
+    expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
+  })
+
+  it('accepts the official AddGuide schema before resolving owned continuation media', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+
+    let captured: unknown = null
+    try {
+      await executeComfyUiH3VideoGeneration(continuationInput)
+    } catch (error) {
+      captured = error
+    }
+    expect(captured).toMatchObject({
+      name: 'ProviderSubmissionError',
+      disposition: 'pre_accept_rejected',
+      externalId: null,
+    })
+    expect((captured as Error).message).not.toContain('COMFYUI_NODE_')
+    expect(server!.getRequests('GET', '/object_info/MiniMaxH3AddGuide')).toHaveLength(1)
+    expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
+    expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
   })
 
   it('rejects invalid mixed, last-only, audio, and video references before prompt submission', async () => {

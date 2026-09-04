@@ -28,7 +28,7 @@
   "232": { "class_type": "BasicGuider", "inputs": { "model": ["305", 0], "conditioning": ["309", 0] } },
   "222": { "class_type": "SamplerCustomAdvanced", "inputs": { "noise": ["129", 0], "guider": ["232", 0], "sampler": ["224", 0], "sigmas": ["223", 0], "latent_image": ["216", 0] } },
   "225": { "class_type": "VAEDecode", "inputs": { "samples": ["222", 0], "vae": ["119", 0] } },
-  "323": { "class_type": "ImageResizeKJv2", "inputs": { "image": ["225", 0], "width": 1920, "height": 1088, "upscale_method": "nvidia_rtx_vsr", "keep_proportion": "crop", "pad_color": "0, 0, 0", "crop_position": "center", "divisible_by": 32, "device": "cpu" } },
+  "323": { "class_type": "ImageResizeKJv2", "inputs": { "image": ["225", 0], "width": 1920, "height": 1088, "upscale_method": "nvidia_rtx_vsr", "keep_proportion": "crop", "pad_color": "0, 0, 0", "crop_position": "center", "divisible_by": 16, "device": "cpu" } },
   "162": { "class_type": "easy clearCacheAll", "inputs": { "anything": ["309", 1] } },
   "168": { "class_type": "VHS_VideoCombine", "inputs": { "images": ["323", 0], "audio": ["121", 0], "frame_rate": 24, "loop_count": 0, "filename_prefix": "waoowaoo/h3-dual-stage-2mp", "format": "video/h264-mp4", "pix_fmt": "yuv420p", "crf": 10, "save_metadata": true, "trim_to_audio": false, "pingpong": false, "save_output": true } }
 }

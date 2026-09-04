@@ -29,8 +29,18 @@ describe('MiniMax H3 frame dual-stage profile', () => {
     expect(firstLastFrame.profile).toBe(firstFrame.profile)
     expect(firstFrame.graph['137']?.inputs.url).toBe('https://example.test/first.png')
     expect(firstFrame.graph['198']).toEqual({
-      class_type: 'ResizeImagesByLongerEdge',
-      inputs: { images: ['137', 0], longer_edge: 800 },
+      class_type: 'ImageResizeKJv2',
+      inputs: {
+        image: ['137', 0],
+        width: 1376,
+        height: 768,
+        upscale_method: 'lanczos',
+        keep_proportion: 'crop',
+        pad_color: '0, 0, 0',
+        crop_position: 'center',
+        divisible_by: 32,
+        device: 'cpu',
+      },
     })
     expect(firstFrame.graph['309']?.inputs.first_frame).toEqual(['198', 0])
     expect(firstFrame.graph['309']?.inputs.last_frame).toBeUndefined()
@@ -39,8 +49,18 @@ describe('MiniMax H3 frame dual-stage profile', () => {
 
     expect(firstLastFrame.graph['326']?.inputs.url).toBe('https://example.test/last.png')
     expect(firstLastFrame.graph['327']).toEqual({
-      class_type: 'ResizeImagesByLongerEdge',
-      inputs: { images: ['326', 0], longer_edge: 800 },
+      class_type: 'ImageResizeKJv2',
+      inputs: {
+        image: ['326', 0],
+        width: 1376,
+        height: 768,
+        upscale_method: 'lanczos',
+        keep_proportion: 'crop',
+        pad_color: '0, 0, 0',
+        crop_position: 'center',
+        divisible_by: 32,
+        device: 'cpu',
+      },
     })
     expect(firstLastFrame.graph['309']?.inputs.last_frame).toEqual(['327', 0])
   })
@@ -67,8 +87,8 @@ describe('MiniMax H3 frame dual-stage profile', () => {
       upscale_method: 'nvidia_rtx_vsr',
     })
     expect(graph['325']?.inputs).toMatchObject({
-      width: 1920,
-      height: 1088,
+      width: 2064,
+      height: 1152,
       upscale_method: 'nvidia_rtx_vsr',
     })
     expect(Object.values(graph).filter((node) => node.class_type === 'EasyCache')).toHaveLength(2)

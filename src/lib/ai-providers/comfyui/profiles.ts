@@ -1,5 +1,10 @@
 import dualStageWorkflow from './workflows/h3-dual-stage-2mp.json'
 import frameDualStageWorkflow from './workflows/h3-frame-dual-stage-2mp.json'
+import {
+  H3_CONTINUATION_GUIDE_FRAMES,
+  H3_FRAMES_PER_SECOND,
+  H3_MAX_SEGMENT_DURATION_SECONDS,
+} from '@/lib/video-generation/h3-timeline'
 
 export const H3_ASPECT_RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16', '9:21'] as const
 export type H3AspectRatio = (typeof H3_ASPECT_RATIOS)[number]
@@ -9,13 +14,14 @@ export type ComfyUiPromptGraph = Record<string, {
   readonly inputs: Record<string, unknown>
 }>
 
-export const H3_DURATION_OPTIONS_SECONDS = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13] as const
+export const H3_DURATION_OPTIONS_SECONDS = [4, 5, 6, 7, 8, 9, 10, 11, 12, H3_MAX_SEGMENT_DURATION_SECONDS] as const
 export const H3_DURATION_MIN_SECONDS = H3_DURATION_OPTIONS_SECONDS[0]
-export const H3_DURATION_MAX_SECONDS = H3_DURATION_OPTIONS_SECONDS.at(-1)!
-const H3_FRAMES_PER_SECOND = 24
+export const H3_DURATION_MAX_SECONDS = H3_MAX_SEGMENT_DURATION_SECONDS
 const H3_FRAME_GRID = 17
 const H3_FRAME_REMAINDER = 5
 const H3_MIN_FRAMES = 107
+const H3_DELIVERY_SCALE_NUMERATOR = 3
+const H3_DELIVERY_SCALE_DENOMINATOR = 2
 export const H3_MAX_REFERENCE_IMAGES = 8
 const H3_REFERENCE_IMAGE_NODE_IDS = ['137', '326', '327', '328', '329', '330', '331', '332'] as const
 const H3_REFERENCE_RESIZE_NODE_IDS = ['198', '333', '334', '335', '336', '337', '338', '339'] as const
@@ -28,6 +34,22 @@ export function resolveH3DurationFrames(seconds: number): number {
     unsupportedOption('duration', seconds)
   }
   const minimumFrames = Math.max(H3_MIN_FRAMES, Math.round(seconds * H3_FRAMES_PER_SECOND))
+  const framesUntilNextGrid = (
+    H3_FRAME_REMAINDER
+    - (minimumFrames % H3_FRAME_GRID)
+    + H3_FRAME_GRID
+  ) % H3_FRAME_GRID
+  return minimumFrames + framesUntilNextGrid
+}
+
+export function resolveH3ContinuationDurationFrames(seconds: number): number {
+  if (!Number.isInteger(seconds) || seconds < H3_DURATION_MIN_SECONDS || seconds > H3_DURATION_MAX_SECONDS) {
+    unsupportedOption('duration', seconds)
+  }
+  const minimumFrames = Math.max(
+    H3_MIN_FRAMES,
+    Math.round(seconds * H3_FRAMES_PER_SECOND) + H3_CONTINUATION_GUIDE_FRAMES,
+  )
   const framesUntilNextGrid = (
     H3_FRAME_REMAINDER
     - (minimumFrames % H3_FRAME_GRID)
@@ -59,20 +81,34 @@ export function resolveH3Dimensions(input: {
     unsupportedOption('megapixels', input.megapixels)
   }
   const [ratioWidth, ratioHeight] = parseAspectRatio(input.aspectRatio)
-  const area = input.megapixels * 1024 * 1024
+  const area = 1024 * 1024
   const width = Math.sqrt(area * (ratioWidth / ratioHeight))
   const height = area / width
-  return {
+  const generationDimensions = {
     width: roundToMultiple(width, 32),
     height: roundToMultiple(height, 32),
+  }
+  if (input.megapixels === 1) return generationDimensions
+  return deriveH3DeliveryDimensions(generationDimensions)
+}
+
+function deriveH3DeliveryDimensions(input: {
+  readonly width: number
+  readonly height: number
+}): { readonly width: number; readonly height: number } {
+  return {
+    width: input.width * H3_DELIVERY_SCALE_NUMERATOR / H3_DELIVERY_SCALE_DENOMINATOR,
+    height: input.height * H3_DELIVERY_SCALE_NUMERATOR / H3_DELIVERY_SCALE_DENOMINATOR,
   }
 }
 
 export const H3_REFERENCE_DUAL_STAGE_PROFILE_ID = 'h3-reference-dual-stage-2mp' as const
 export const H3_FRAME_DUAL_STAGE_PROFILE_ID = 'h3-frame-dual-stage-2mp' as const
+export const H3_CONTINUATION_DUAL_STAGE_PROFILE_ID = 'h3-continuation-dual-stage-2mp' as const
 export type H3GraphProfileId =
   | typeof H3_REFERENCE_DUAL_STAGE_PROFILE_ID
   | typeof H3_FRAME_DUAL_STAGE_PROFILE_ID
+  | typeof H3_CONTINUATION_DUAL_STAGE_PROFILE_ID
 
 type H3RuntimeProfileBase = {
   readonly id: H3GraphProfileId
@@ -99,9 +135,17 @@ export type H3FrameDualStageRuntimeProfile = H3RuntimeProfileBase & {
   readonly lastFrameResizeNodeId: string
 }
 
+export type H3ContinuationDualStageRuntimeProfile = H3RuntimeProfileBase & {
+  readonly id: typeof H3_CONTINUATION_DUAL_STAGE_PROFILE_ID
+  readonly continuationImageNodeIds: readonly string[]
+  readonly continuationBatchNodeIds: readonly string[]
+  readonly continuationGuideNodeId: string
+}
+
 export type H3DualStageRuntimeProfile =
   | H3ReferenceDualStageRuntimeProfile
   | H3FrameDualStageRuntimeProfile
+  | H3ContinuationDualStageRuntimeProfile
 
 export const H3_DUAL_STAGE_RUNTIME_PROFILE: H3ReferenceDualStageRuntimeProfile = {
   id: H3_REFERENCE_DUAL_STAGE_PROFILE_ID,
@@ -123,6 +167,76 @@ export const H3_FRAME_DUAL_STAGE_RUNTIME_PROFILE: H3FrameDualStageRuntimeProfile
   firstFrameResizeNodeId: '198',
   lastFrameImageNodeId: '326',
   lastFrameResizeNodeId: '327',
+  promptNodeId: '138',
+  h3NodeId: '309',
+  noiseNodeId: '129',
+  firstUpscaleNodeId: '213',
+  finalUpscaleNodeId: '325',
+  outputNodeId: '168',
+}
+
+const H3_CONTINUATION_IMAGE_NODE_IDS = Array.from(
+  { length: H3_CONTINUATION_GUIDE_FRAMES },
+  (_, index) => String(400 + index),
+)
+const H3_CONTINUATION_BATCH_NODE_IDS = Array.from(
+  { length: H3_CONTINUATION_GUIDE_FRAMES - 1 },
+  (_, index) => String(422 + index),
+)
+const H3_CONTINUATION_GUIDE_NODE_ID = '443'
+
+function createContinuationWorkflow(): ComfyUiPromptGraph {
+  const graph = copyGraph(frameDualStageWorkflow as ComfyUiPromptGraph)
+  delete graph['137']
+  delete graph['198']
+  delete graph['326']
+  delete graph['327']
+  const h3Node = graph['309']
+  if (!h3Node) throw new Error('COMFYUI_H3_PROFILE_NODE_MISSING:h3-continuation-dual-stage-2mp')
+  delete h3Node.inputs.first_frame
+  delete h3Node.inputs.last_frame
+
+  H3_CONTINUATION_IMAGE_NODE_IDS.forEach((nodeId, index) => {
+    graph[nodeId] = {
+      class_type: 'LoadImage',
+      inputs: { image: `continuation-${String(index).padStart(2, '0')}.png` },
+    }
+  })
+  H3_CONTINUATION_BATCH_NODE_IDS.forEach((nodeId, index) => {
+    graph[nodeId] = {
+      class_type: 'ImageBatch',
+      inputs: {
+        image1: index === 0
+          ? [H3_CONTINUATION_IMAGE_NODE_IDS[0]!, 0]
+          : [H3_CONTINUATION_BATCH_NODE_IDS[index - 1]!, 0],
+        image2: [H3_CONTINUATION_IMAGE_NODE_IDS[index + 1]!, 0],
+      },
+    }
+  })
+  graph[H3_CONTINUATION_GUIDE_NODE_ID] = {
+    class_type: 'MiniMaxH3AddGuide',
+    inputs: {
+      positive: ['309', 0],
+      latent: ['309', 1],
+      vae: ['119', 0],
+      image: [H3_CONTINUATION_BATCH_NODE_IDS.at(-1)!, 0],
+      frame_idx: 0,
+    },
+  }
+  for (const guiderNodeId of ['126', '232']) {
+    const guider = graph[guiderNodeId]
+    if (!guider) throw new Error('COMFYUI_H3_PROFILE_NODE_MISSING:h3-continuation-dual-stage-2mp')
+    guider.inputs.conditioning = [H3_CONTINUATION_GUIDE_NODE_ID, 0]
+  }
+  return graph
+}
+
+export const H3_CONTINUATION_DUAL_STAGE_RUNTIME_PROFILE: H3ContinuationDualStageRuntimeProfile = {
+  id: H3_CONTINUATION_DUAL_STAGE_PROFILE_ID,
+  workflow: createContinuationWorkflow(),
+  continuationImageNodeIds: H3_CONTINUATION_IMAGE_NODE_IDS,
+  continuationBatchNodeIds: H3_CONTINUATION_BATCH_NODE_IDS,
+  continuationGuideNodeId: H3_CONTINUATION_GUIDE_NODE_ID,
   promptNodeId: '138',
   h3NodeId: '309',
   noiseNodeId: '129',
@@ -154,10 +268,16 @@ export type H3FirstLastFramePromptGraphInput = H3PromptGraphCommonInput & {
   readonly lastFrameUrl: string
 }
 
+export type H3ContinuationPromptGraphInput = H3PromptGraphCommonInput & {
+  readonly mode: 'continuation'
+  readonly continuationFrameFilenames: readonly string[]
+}
+
 export type H3PromptGraphInput =
   | H3ReferencePromptGraphInput
   | H3FirstFramePromptGraphInput
   | H3FirstLastFramePromptGraphInput
+  | H3ContinuationPromptGraphInput
 
 function copyGraph(graph: ComfyUiPromptGraph): ComfyUiPromptGraph {
   return Object.fromEntries(Object.entries(graph).map(([nodeId, node]) => [
@@ -177,15 +297,13 @@ function applyCommonInputs(
   profile: H3DualStageRuntimeProfile,
   graph: ComfyUiPromptGraph,
   input: H3PromptGraphCommonInput,
+  durationFrames: number = resolveH3DurationFrames(input.durationSeconds),
 ): void {
   const firstDimensions = resolveH3Dimensions({
     megapixels: 1,
     aspectRatio: input.aspectRatio,
   })
-  const finalDimensions = resolveH3Dimensions({
-    megapixels: 2,
-    aspectRatio: input.aspectRatio,
-  })
+  const finalDimensions = deriveH3DeliveryDimensions(firstDimensions)
   const h3Node = graph[profile.h3NodeId]
   const promptNode = graph[profile.promptNodeId]
   const noiseNode = graph[profile.noiseNodeId]
@@ -194,15 +312,34 @@ function applyCommonInputs(
   if (!h3Node || !promptNode || !noiseNode || !firstUpscaleNode || !finalUpscaleNode) {
     throw new Error('COMFYUI_H3_PROFILE_NODE_MISSING:' + profile.id)
   }
+  const finalDivisibleBy = finalUpscaleNode.inputs.divisible_by
+  if (
+    typeof finalDivisibleBy !== 'number'
+    || !Number.isSafeInteger(finalDivisibleBy)
+    || finalDivisibleBy <= 0
+    || finalDimensions.width % finalDivisibleBy !== 0
+    || finalDimensions.height % finalDivisibleBy !== 0
+  ) {
+    throw new Error('COMFYUI_H3_DELIVERY_DIMENSIONS_INCOMPATIBLE:' + profile.id)
+  }
   promptNode.inputs.value = input.prompt
   h3Node.inputs.width = firstDimensions.width
   h3Node.inputs.height = firstDimensions.height
-  h3Node.inputs.length = resolveH3DurationFrames(input.durationSeconds)
+  h3Node.inputs.length = durationFrames
   noiseNode.inputs.noise_seed = input.seed
   firstUpscaleNode.inputs.width = firstDimensions.width
   firstUpscaleNode.inputs.height = firstDimensions.height
   finalUpscaleNode.inputs.width = finalDimensions.width
   finalUpscaleNode.inputs.height = finalDimensions.height
+
+  if (profile.id === H3_FRAME_DUAL_STAGE_PROFILE_ID) {
+    for (const resizeNodeId of [profile.firstFrameResizeNodeId, profile.lastFrameResizeNodeId]) {
+      const resizeNode = graph[resizeNodeId]
+      if (!resizeNode) continue
+      resizeNode.inputs.width = firstDimensions.width
+      resizeNode.inputs.height = firstDimensions.height
+    }
+  }
 }
 
 function buildReferencePromptGraph(
@@ -284,6 +421,35 @@ function buildFramePromptGraph(
   return { profile, graph }
 }
 
+function buildContinuationPromptGraph(
+  input: H3ContinuationPromptGraphInput,
+): { readonly profile: H3ContinuationDualStageRuntimeProfile; readonly graph: ComfyUiPromptGraph } {
+  if (input.continuationFrameFilenames.length !== H3_CONTINUATION_GUIDE_FRAMES) {
+    throw new Error('COMFYUI_H3_CONTINUATION_FRAME_COUNT_INVALID')
+  }
+  const filenames = input.continuationFrameFilenames.map((filename) => filename.trim())
+  if (filenames.some((filename) => !filename)) {
+    throw new Error('COMFYUI_H3_CONTINUATION_FRAME_REQUIRED')
+  }
+  if (new Set(filenames).size !== filenames.length) {
+    throw new Error('COMFYUI_H3_CONTINUATION_FRAME_DUPLICATE')
+  }
+  const profile = H3_CONTINUATION_DUAL_STAGE_RUNTIME_PROFILE
+  const graph = copyGraph(profile.workflow)
+  profile.continuationImageNodeIds.forEach((nodeId, index) => {
+    const node = graph[nodeId]
+    if (!node) throw new Error('COMFYUI_H3_PROFILE_NODE_MISSING:' + profile.id)
+    node.inputs.image = filenames[index]!
+  })
+  applyCommonInputs(
+    profile,
+    graph,
+    input,
+    resolveH3ContinuationDurationFrames(input.durationSeconds),
+  )
+  return { profile, graph }
+}
+
 export function buildH3PromptGraph(
   input: H3ReferencePromptGraphInput,
 ): { readonly profile: H3ReferenceDualStageRuntimeProfile; readonly graph: ComfyUiPromptGraph }
@@ -291,10 +457,13 @@ export function buildH3PromptGraph(
   input: H3FirstFramePromptGraphInput | H3FirstLastFramePromptGraphInput,
 ): { readonly profile: H3FrameDualStageRuntimeProfile; readonly graph: ComfyUiPromptGraph }
 export function buildH3PromptGraph(
+  input: H3ContinuationPromptGraphInput,
+): { readonly profile: H3ContinuationDualStageRuntimeProfile; readonly graph: ComfyUiPromptGraph }
+export function buildH3PromptGraph(
   input: H3PromptGraphInput,
 ): { readonly profile: H3DualStageRuntimeProfile; readonly graph: ComfyUiPromptGraph } {
   validateCommonInput(input)
-  return input.mode === 'reference'
-    ? buildReferencePromptGraph(input)
-    : buildFramePromptGraph(input)
+  if (input.mode === 'reference') return buildReferencePromptGraph(input)
+  if (input.mode === 'continuation') return buildContinuationPromptGraph(input)
+  return buildFramePromptGraph(input)
 }

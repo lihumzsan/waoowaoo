@@ -114,7 +114,7 @@ export function parseWorkflowConcurrency(raw: unknown): WorkflowConcurrency {
   return {
     analysis: normalizeWorkflowConcurrencyValue(raw.analysis, DEFAULT_WORKFLOW_CONCURRENCY.analysis),
     image: normalizeWorkflowConcurrencyValue(raw.image, DEFAULT_WORKFLOW_CONCURRENCY.image),
-    video: normalizeWorkflowConcurrencyValue(raw.video, DEFAULT_WORKFLOW_CONCURRENCY.video),
+    video: DEFAULT_VIDEO_WORKFLOW_CONCURRENCY,
   }
 }
 

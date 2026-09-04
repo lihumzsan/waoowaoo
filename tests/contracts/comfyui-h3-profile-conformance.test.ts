@@ -3,31 +3,96 @@ import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { normalizeMediaOptionsForSelection } from '@/lib/ai-exec/media-preflight'
 import { findBuiltinCapabilities, resolveGenerationOptionsForModel } from '@/lib/ai-registry/capabilities-catalog'
 import { COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES, COMFYUI_H3_MODEL_ID } from '@/lib/ai-providers/comfyui/models'
-import { H3_DUAL_STAGE_RUNTIME_PROFILE, resolveH3Dimensions, resolveH3DurationFrames } from '@/lib/ai-providers/comfyui/profiles'
+import {
+  H3_ASPECT_RATIOS,
+  H3_DUAL_STAGE_RUNTIME_PROFILE,
+  buildH3PromptGraph,
+  resolveH3Dimensions,
+  resolveH3DurationFrames,
+} from '@/lib/ai-providers/comfyui/profiles'
 
 describe('ComfyUI H3 dual-stage profile', () => {
-  it('aligns duration and fixed 1MP/2MP dimensions', () => {
+  it('aligns duration and derives the delivery dimensions from the generation canvas', () => {
     expect(resolveH3DurationFrames(4)).toBe(107)
     expect(resolveH3DurationFrames(5)).toBe(124)
     expect(resolveH3DurationFrames(10)).toBe(243)
     expect(resolveH3DurationFrames(13)).toBe(328)
     expect(resolveH3Dimensions({ megapixels: 1, aspectRatio: '16:9' })).toEqual({ width: 1376, height: 768 })
-    expect(resolveH3Dimensions({ megapixels: 2, aspectRatio: '16:9' })).toEqual({ width: 1920, height: 1088 })
+    expect(resolveH3Dimensions({ megapixels: 2, aspectRatio: '16:9' })).toEqual({ width: 2064, height: 1152 })
   })
 
-  it('declares all three explicit H3 image input modes and fixed duration', () => {
+  it.each(H3_ASPECT_RATIOS)('keeps the effective %s delivery canvas aligned across every H3 input mode', (aspectRatio) => {
+    const common = {
+      prompt: 'subject_definitions:\nSubject 1 remains visually consistent.',
+      durationSeconds: 4,
+      aspectRatio,
+      seed: 17,
+    }
+    const builds = [
+      buildH3PromptGraph({
+        ...common,
+        mode: 'reference',
+        referenceImageUrls: ['https://example.test/reference.png'],
+      }),
+      buildH3PromptGraph({
+        ...common,
+        mode: 'first_frame',
+        firstFrameUrl: 'https://example.test/first.png',
+      }),
+      buildH3PromptGraph({
+        ...common,
+        mode: 'continuation',
+        continuationFrameFilenames: Array.from(
+          { length: 22 },
+          (_, index) => `continuation-${String(index).padStart(2, '0')}.png`,
+        ),
+      }),
+    ]
+
+    for (const built of builds) {
+      const generationNode = built.graph[built.profile.h3NodeId]
+      const deliveryNode = built.graph[built.profile.finalUpscaleNodeId]
+      const generationWidth = generationNode?.inputs.width
+      const generationHeight = generationNode?.inputs.height
+      const deliveryWidth = deliveryNode?.inputs.width
+      const deliveryHeight = deliveryNode?.inputs.height
+      const divisibleBy = deliveryNode?.inputs.divisible_by
+      expect([
+        generationWidth,
+        generationHeight,
+        deliveryWidth,
+        deliveryHeight,
+        divisibleBy,
+      ].every(Number.isSafeInteger)).toBe(true)
+      expect((deliveryWidth as number) % (divisibleBy as number)).toBe(0)
+      expect((deliveryHeight as number) % (divisibleBy as number)).toBe(0)
+      expect((generationWidth as number) * (deliveryHeight as number)).toBe(
+        (generationHeight as number) * (deliveryWidth as number),
+      )
+    }
+  })
+
+  it('declares all four explicit H3 input modes and fixed duration', () => {
     const h3 = COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES.find((entry) => entry.modelId === COMFYUI_H3_MODEL_ID)
     expect(h3?.capabilities.video.promptProfile).toBe('minimax_h3_multimodal_v3')
     expect(h3?.capabilities.video.supportedInputModes).toEqual([
       'reference',
       'first_frame',
       'first_last_frame',
+      'continuation',
     ])
     expect(h3?.capabilities.video.firstlastframe).toBe(true)
     expect(h3?.capabilities.video.assetReferenceMultiReference).toBe(true)
     expect(h3?.capabilities.video.maxReferenceImages).toBe(8)
     expect(h3?.capabilities.video.maxReferenceFiles).toBe(8)
     expect(h3?.capabilities.video.durationOptions).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
+    expect(h3?.capabilities.video.continuationInput).toMatchObject({
+      minSourceDurationMs: 917,
+      maxSourceDurationMs: 13_041,
+      sourceAspectRatioByTarget: {
+        '9:16': { width: 1152, height: 2064 },
+      },
+    })
   })
 
   it('compiles the ordinary reference selection through the production resolver', () => {
@@ -57,6 +122,7 @@ describe('ComfyUI H3 dual-stage profile', () => {
     expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, referenceImages: references } })).toMatchObject({ duration: 4, referenceImages: references })
     expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true } })).toMatchObject({ duration: 4, generateAudio: true })
     expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, lastFrameImageUrl: 'https://example.com/last.png' } })).toMatchObject({ lastFrameImageUrl: 'https://example.com/last.png' })
+    expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, continuationVideoUrl: 'https://example.com/previous.mp4' } })).toMatchObject({ continuationVideoUrl: 'https://example.com/previous.mp4' })
     expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, referenceImages: Array.from({ length: 9 }, () => 'a') } })).toThrow()
     expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: false } })).toThrow()
   })

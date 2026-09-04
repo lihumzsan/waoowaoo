@@ -17,7 +17,7 @@ description: Use when directing screenplay-based video generation that requires 
 - H3 中只有“完整对白节拍”在 10 秒内放不下时，才逐级使用最短充分的 11–13 秒；判断对象是来源要求的最短必要建立、自然对白和来源已有结尾落点的总时长，不是对白文字单独的说话时间。完整节拍超过 13 秒时只在完整句、说话轮次或真实语义边界拆分，逐字内容和顺序不变；没有合法切点时按下一条的溢出失败规则处理，禁止强拆、加速和截断。
 - H3 中完整节拍超过 13 秒且没有合法切点时，停止构造可执行 items 并报告输入内容与能力策略冲突；合法纠正只能是修改来源内容或形成真实语义切点。这里只报告失败事实和合法纠正条件，不调用 `wao.request_user_decision`、不创建新的 alignment checkpoint，也不替用户选择或提交超长 Segment。
 - 单段包含对白且来源顺序与完整节拍允许时，以对白的主要表演位于视频中段为正向布局目标：开头只使用来源已有或理解当前动作所必需的最短建立；对白后存在来源明确的动作或反应时用它形成结尾落点。来源没有后续动作或反应时，以最后音节和同步口型在当前姿态中的自然完成作为落点，不新增事件、反应、动作或额外停顿；若来源事实迫使对白抵达片尾，保留来源顺序与完整性，不为形式上的居中编造内容。
-- 相邻 Segment 承接已完成状态，不重演转身、拿取、到达、对白或上一段落点。默认跨段只保证身份、服装、道具、空间、光线与声音相容；当相邻独立 Segment 明确要求从前段结束画面连续开始时，按“末帧派生续接”规则锁定后段的精确起点，但仍不得宣称模型生成的整条接缝天然无缝。
+- 相邻 Segment 承接已完成状态，不重演转身、拿取、到达、对白或上一段落点。默认跨段只保证身份、服装、道具、空间、光线与声音相容；当相邻独立 Segment 明确要求从前段结束画面连续开始时，按“多帧运动续接”规则锁定后段的精确起点，但仍不得宣称模型生成的整条接缝天然无缝。
 - 表演写可见物理事实：呼吸、视线、下颌、肩颈、手部、步态与接触几何；不写内心解释或空泛情绪副词。一镜一种主要运镜，默认硬切。需要切镜时，新镜头必须增加主体、空间、状态、视点或时间信息；只有景别或轻微角度变化时继续当前镜头并使用运镜。
 - 先建立来源已有的正常基线，再显示原因或证据，最后呈现人物反应；反应必须由当前或前一可见事件触发。
 - 从系统注入的 `productionCapabilities.video.supportedInputModes` 和 `promptProfile` 选择输入与表达；未知或不支持时停止，不按 modelKey 猜测、静默降级或换 Provider。
@@ -27,18 +27,18 @@ description: Use when directing screenplay-based video generation that requires 
 
 - `reference` 的素材角色和数量必须完全遵守能力声明。普通参考图不是首帧；只有 capability 明确支持且剧情要求从该画面开始时才使用 `first_frame`。
 - 每个 item 只列实际使用的 ready Resource，精确复制 `resourceId`、`contentVersion`、`role`、`channel`，顺序与 Prompt 中的媒体编号一致；不得从文件名或近似描述猜身份。
-- H3 multimodal v3 同时支持三个互斥模式：`reference` 接受 1–8 张有序 `channel=image, role=reference_image`；`first_frame` 精确接受一张 `role=first_frame`；`first_last_frame` 精确接受一张首帧和一张尾帧。三种模式都不接受 `reference_audio`、`reference_video`，也不得混合普通参考图和帧图。缺首帧、仅尾帧、重复帧、空引用、超过上限或错误角色时停止。
+- H3 multimodal v3 同时支持四个互斥模式：`reference` 接受 1–8 张有序 `channel=image, role=reference_image`；`first_frame` 精确接受一张 `role=first_frame`；`first_last_frame` 精确接受一张首帧和一张尾帧；`continuation` 精确接受一个 `channel=video, role=continuation_video` 的前段 ready 视频。四种模式都不接受 `reference_audio`、`reference_video`，也不得互相混合。缺首帧、仅尾帧、重复帧、重复 continuation、空引用、超过上限或错误角色时停止。
 
-### 末帧派生续接
+### 多帧运动续接
 
 当相邻独立 Segment 必须从前段结束画面连续开始，且前段视频 Resource 已为 `ready` 时，执行顺序固定为：
 
-1. 对前段的精确 `resourceId + contentVersion` 调用 `extract_video_frame`，显式传入 `selector=last_decodable`；
-2. 等派生图片 Resource 到达 `ready`，不得用视频 URL、临时截图或上一轮普通参考图代替；
-3. 后段只把该图片的精确版本作为 `channel=image, role=first_frame` 提交；只有另有独立目标结束图片时，才与它组成 `first_last_frame`；
-4. 抽帧失败、取消或没有 ready 图片终态时停止后段提交并报告失败，不得降级为 `reference_image` 或改用近尾时间帧。
+1. 后段只把前段视频的精确 `resourceId + contentVersion` 作为 `channel=video, role=continuation_video` 提交；不得先派生单张尾帧，也不得用视频 URL、临时截图或普通参考图代替；
+2. continuation 内部使用前段最后 22 帧（24fps，约 0.9167 秒）作为不可改写的运动上下文，后段 Prompt 从该上下文的退出姿态、运动方向和镜头趋势继续，不重演这段上下文；Prompt 内的事件与切镜时间使用内部时钟，统一在用户所见新内容时间上加 0.9167 秒，不得早于 0.9167 秒，且必须严格小于 `用户所见 Segment 时长 + 0.9167 秒`；
+3. 用户指定独立目标结束图片时，continuation 与 `last_frame` 仍不可混用；应拆成另一个有明确创作边界的 Segment，或报告当前 H3 输入模式冲突；
+4. 前段不是 ready、精确版本不可用、续接输入失败或运行时不支持多帧 guide 时停止后段提交并报告失败，不得降级为 `first_frame`、`reference_image` 或 `reference_video`。
 
-该流程只派生可复用首帧输入，不改变来源对白、动作边界、Segment 时长或 Prompt writer。
+该流程只把前段运动历史作为显式生成条件，不改变来源对白、动作边界、用户所见 Segment 时长或 Prompt writer。
 
 ## Prompt profile 选择
 
@@ -62,7 +62,7 @@ overall_soundscape:
 non_diegetic_music:
 ```
 
-除对白原文和画面内文字外正文使用英文。`subject_definitions` 必须把每个实际使用的主体、服装、场景或道具绑定到对应的 `<Picture 1>` 至 `<Picture N>`，不得引用不存在的编号；`summary` 只用英文概括动作与参考关系，发声事件写成 `speaks the provided line`，不引用原句、不放 `<d>`；`retention_analysis` 写身份、服装、比例、风格、场景和道具关系；`detailed_description` 按播放顺序写连续可见动作、机位、落位、视线、对白与逐镜同步声音；`overall_soundscape` 用一个连续英文段落归纳全片环境声、动作声和非语言人声，不复述对白、歌唱或逐镜时间线。
+除对白原文和画面内文字外正文使用英文。除 `continuation` 外，`subject_definitions` 必须把每个实际使用的主体、服装、场景或道具绑定到对应的 `<Picture 1>` 至 `<Picture N>`，不得引用不存在的编号；`continuation` 不使用不存在的 Picture 标签，而是用已冻结的前段事实定义继续出现的主体与场景。`summary` 只用英文概括动作与参考关系，发声事件写成 `speaks the provided line`，不引用原句、不放 `<d>`；`retention_analysis` 写身份、服装、比例、风格、场景和道具关系，continuation 还必须写明继承进入点的姿态、运动方向、接触关系和镜头运动；`detailed_description` 按播放顺序写连续可见动作、机位、落位、视线、对白与逐镜同步声音；`overall_soundscape` 用一个连续英文段落归纳全片环境声、动作声和非语言人声，不复述对白、歌唱或逐镜时间线。
 
 ### H3 镜头、运镜与声音语法
 
@@ -84,6 +84,7 @@ non_diegetic_music:
 - `reference`：每个 `<Picture N>` 只锁定身份、风格、内容与场景结构，不是首帧或尾帧，不得写成时间锚点。
 - `first_frame`：`detailed_description` 的 `[Shot 1]` 后第一句必须把 `<Picture 1>` 明确对齐 `0.00 seconds`，再描述从该状态连续发展的动作。
 - `first_last_frame`：除首帧规则外，必须在同一句中把 `<Picture 2>` 明确对齐当前 Segment 的精确结束秒数，并描述从首帧状态连续收敛到尾帧状态的运动路径。来源明确要求多镜时，`<Picture 2>` 只属于最后一个 `[Shot N]`，在该镜结尾成为 Segment 的最终视觉状态，其后不得再有镜头、动作或状态变化。
+- `continuation`：不写 `<Picture N>` 时间锚点。内部最初 22 帧是前段不可改写的运动上下文，用户所见时长从第一个新帧开始；`detailed_description` 直接延续其退出姿态、速度、方向、接触关系和运镜趋势，不复述或重新表演上下文。需要写事件或切镜时间时，把用户所见时间统一加 0.9167 秒，例如新内容开始后 2 秒写为 `00:02.917`。
 
 不得调用或描述 ComfyUI AI 节点、下游 Prompt 改写或第二套 Prompt；主 Agent 是唯一 Prompt writer。
 
@@ -110,8 +111,8 @@ N/A
 - 每镜是否有景别、机位、主体落位、朝向、世内视线、一个主要运镜、向前变化和可见落点？
 - `detailed_description` 是否直接以 `[Shot 1]` 开始、每次真实切镜都用递增的 `[Shot N] At MM:SS.mmm`、连续动作没有被时间块机械拆镜、单镜要求与 `first_last_frame` 默认单镜是否保留？
 - 运镜是否写成自然英文动词句并在来源要求时明确幅度与速度；除对白原文和画面文字外是否没有中文或混合语言残留？
-- 是否只使用 capability 允许的参考角色与数量，三种模式互斥，且 Picture 时间锚点与当前模式及 Segment 时长一致？
-- 要求前段末画面续接时，是否先从前段精确 ready 版本派生 `last_decodable` 图片，再把其精确 ready 版本作为后段唯一 `first_frame`，且失败时没有参考图或时间偏移 fallback？
+- 是否只使用 capability 允许的参考角色与数量，四种模式互斥，且 Picture 时间锚点与当前模式及 Segment 时长一致？
+- 要求前段运动连续续接时，是否把前段精确 ready 视频版本作为后段唯一 `continuation_video`，且失败时没有单尾帧、参考图、reference video 或时间偏移 fallback？
 - H3 是否严格六段、固定 `non_diegetic_music: N/A`、无 AI 节点和无 Prompt 改写？
 - 对白是否逐字、自然说完且没有 `<cutoff>`，并在来源允许时主要位于中段；每个声音源是否有稳定 `(Sx)`，同句齐声是否使用复合 ID、不同台词重叠是否分别保留 ID 与 `<d>`，`<d>` 是否只在 `detailed_description`，跨切 `<scenetrans>` 是否在两个 `<d>` 内，voiceover 是否明确所有可见人物均不做口型？对白后的落点是否只使用来源已有动作或反应，不存在时是否以说话表演自然完成而没有新增内容？声音关系是否清楚，是否固定写入不生成字幕、标题、水印、拼贴、分屏或额外人物？
 

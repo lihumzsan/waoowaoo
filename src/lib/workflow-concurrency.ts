@@ -1,6 +1,6 @@
 export const DEFAULT_ANALYSIS_WORKFLOW_CONCURRENCY = 5
 export const DEFAULT_IMAGE_WORKFLOW_CONCURRENCY = 20
-export const DEFAULT_VIDEO_WORKFLOW_CONCURRENCY = 20
+export const DEFAULT_VIDEO_WORKFLOW_CONCURRENCY = 1
 
 export interface WorkflowConcurrencyConfig {
   analysis: number
@@ -41,9 +41,9 @@ export function normalizeWorkflowConcurrencyConfig(
       value?.image,
       fallback.image,
     ),
-    video: normalizeWorkflowConcurrencyValue(
-      value?.video,
-      fallback.video,
-    ),
+    // ComfyUI video jobs must enter the provider one at a time. Keep this
+    // capacity fixed even when an older preference or environment default is
+    // greater than one; the Temporal scheduler owns the durable serialization.
+    video: DEFAULT_VIDEO_WORKFLOW_CONCURRENCY,
   }
 }

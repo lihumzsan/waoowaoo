@@ -18,6 +18,8 @@ import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
 import { processMediaResult } from '@/lib/media-process'
 import { TaskTerminatedError } from '@/lib/task/errors'
 import type { AsyncTemporaryMediaFile } from '@/lib/ai-providers/async-task-types'
+import type { H3VideoTimelinePolicy } from '@/lib/video-compose/h3-duration-trim'
+import { probeVideoDimensions } from '@/lib/video-compose/video-merge-ffmpeg'
 import {
   listTaskAcceptedProviderExternalIds,
   markTaskProviderInvocationReplayAuthorizedByExternalId,
@@ -385,6 +387,7 @@ export async function resolveVideoSourceFromGeneration(
     referenceImages: readonly VideoReferenceImageInput[]
     referenceAudios?: readonly string[]
     referenceVideos?: readonly string[]
+    continuationVideoUrl?: string
     options?: AiVideoExecutionOptions
     pollProgress?: { start?: number; end?: number }
   },
@@ -435,6 +438,9 @@ export async function resolveVideoSourceFromGeneration(
             : {}),
           ...(params.referenceVideos && params.referenceVideos.length > 0
             ? { referenceVideos: [...params.referenceVideos] }
+            : {}),
+          ...(params.continuationVideoUrl
+            ? { continuationVideoUrl: params.continuationVideoUrl }
             : {}),
         },
         { key: 'media:video:primary' },
@@ -497,8 +503,18 @@ export async function uploadVideoSourceToStorage(
   downloadHeaders?: Record<string, string>,
   taskArtifact?: { taskId: string; artifact: string },
   expectedDurationSeconds?: number,
-) {
-  return await processMediaResult({
+  h3TimelinePolicy?: H3VideoTimelinePolicy,
+): Promise<{
+  readonly storageKey: string
+  readonly width: number
+  readonly height: number
+}> {
+  if (typeof source !== 'object' || Buffer.isBuffer(source) || source.kind !== 'temporary_file') {
+    throw new Error('WORKSPACE_RESOURCE_VIDEO_TEMPORARY_SOURCE_REQUIRED')
+  }
+
+  let dimensions: { readonly width: number; readonly height: number } | undefined
+  const storageKey = await processMediaResult({
     source,
     type: 'video',
     keyPrefix,
@@ -506,5 +522,11 @@ export async function uploadVideoSourceToStorage(
     downloadHeaders,
     taskArtifact,
     expectedDurationSeconds,
+    h3TimelinePolicy,
+    inspectPreparedFile: async (filePath) => {
+      dimensions = await probeVideoDimensions(filePath)
+    },
   })
+  if (!dimensions) throw new Error('WORKSPACE_RESOURCE_VIDEO_DIMENSIONS_MISSING')
+  return { storageKey, ...dimensions }
 }
