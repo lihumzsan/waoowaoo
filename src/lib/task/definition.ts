@@ -119,7 +119,7 @@ export const TASK_DEFINITIONS = {
     'workspace_resource_voiceover', 3, 'image', 'workspace_resources', 'none', 'none', 'none', 'workspace_resource', 'reference', 'reference', 'required', 30 * 24 * 60 * 60 * 1000,
   ),
   [TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER_MIX]: definition(
-    'workspace_resource_voiceover_mix', 1, 'video', 'workspace_resources', 'none', 'none', 'none', 'workspace_resource', 'reference', 'reference', 'none', 30 * 24 * 60 * 60 * 1000,
+    'workspace_resource_voiceover_mix', 1, 'image', 'workspace_resources', 'none', 'none', 'none', 'workspace_resource', 'reference', 'reference', 'none', 30 * 24 * 60 * 60 * 1000,
   ),
   [TASK_TYPE.WORKSPACE_RESOURCE_VIDEO]: definition(
     'workspace_resource_video',
@@ -136,7 +136,7 @@ export const TASK_DEFINITIONS = {
   [TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_FRAME]: definition(
     'workspace_resource_video_frame',
     1,
-    'video',
+    'image',
     'workspace_resources',
     'none',
     'none',
@@ -149,7 +149,7 @@ export const TASK_DEFINITIONS = {
   [TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE]: definition(
     'workspace_resource_video_merge',
     1,
-    'video',
+    'image',
     'workspace_resources',
     'none',
     'none',
