@@ -150,6 +150,19 @@ describe('ComfyUI H3 dual-stage profile', () => {
     expect(nodes.filter((node) => node.class_type === 'ImageResizeKJv2' && node.inputs.upscale_method === 'nvidia_rtx_vsr')).toHaveLength(2)
     expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow[H3_DUAL_STAGE_RUNTIME_PROFILE.h3NodeId]?.class_type).toBe('MiniMaxH3ReferenceToVideo')
     expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow[H3_DUAL_STAGE_RUNTIME_PROFILE.outputNodeId]?.class_type).toBe('VHS_VideoCombine')
+    expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['120']).toEqual({
+      class_type: 'VAELoader',
+      inputs: { vae_name: 'h3\\minimax_h3_audio_vae_fp32.safetensors' },
+    })
+    expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['309']?.inputs.audio_vae).toEqual(['120', 0])
+    expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['121']).toEqual({
+      class_type: 'VAEDecodeAudio',
+      inputs: {
+        samples: ['125', 1],
+        vae: ['120', 0],
+      },
+    })
+    expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['168']?.inputs.audio).toEqual(['121', 0])
   })
 
   it('builds zero, one, and three ordered H3 reference-audio inputs and rejects a fourth', () => {

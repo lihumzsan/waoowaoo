@@ -376,6 +376,29 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
     expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
   })
 
+  it('rejects a reference graph whose final mux bypasses the canonical audio decoder', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    const outputNode = H3_DUAL_STAGE_RUNTIME_PROFILE.workflow[
+      H3_DUAL_STAGE_RUNTIME_PROFILE.outputNodeId
+    ]!
+    const originalAudio = outputNode.inputs.audio
+    outputNode.inputs.audio = ['120', 0]
+    try {
+      await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
+        name: 'ProviderSubmissionError',
+        disposition: 'pre_accept_rejected',
+        externalId: null,
+        message: expect.stringContaining(
+          'COMFYUI_H3_REFERENCE_AUDIO_GRAPH_INCOMPATIBLE:output_audio',
+        ),
+      })
+    } finally {
+      outputNode.inputs.audio = originalAudio
+    }
+    expect(server!.getRequests('GET', '/object_info/UNETLoader')).toHaveLength(0)
+    expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
+  })
+
   it('routes first-frame and first-last-frame transport through the same frame profile', async () => {
     vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
     defineValidPreflight(server!)

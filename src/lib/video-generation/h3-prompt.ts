@@ -31,7 +31,6 @@ const UNIT_TIMED_EVENT = /(?:\b\d+(?:\.\d*)?|\.\d+)\s*(?:milliseconds?|msecs?|ms
 const PICTURE_ANCHOR = /<Picture\s+\d+>/u
 const MEDIA_REFERENCE = /<(Picture|Audio)\s+(\d+)>/gu
 const SUBJECT_SPEAKER = /<Subject\s+(\d+)>\s*\(S(\d+)\)/gu
-const DIALOGUE_BLOCK_PRESENT = /<d>[\s\S]*?<\/d>/u
 
 export type H3PromptReferenceManifest = {
   readonly pictureCount: number
@@ -252,7 +251,8 @@ function assertH3ReferenceManifest(
     if (definitionLines.length === 0) {
       throw invalid(`AUDIO_REFERENCE_MISSING:${String(audioNumber)}`)
     }
-    if (definitionLines.length !== 1) {
+    const audioTokenCount = sections.subject_definitions.split(audioToken).length - 1
+    if (definitionLines.length !== 1 || audioTokenCount !== 1) {
       throw invalid(`AUDIO_SPEAKER_BINDING_INVALID:${String(audioNumber)}`)
     }
     const bindings = Array.from(definitionLines[0]!.matchAll(SUBJECT_SPEAKER))
@@ -276,10 +276,16 @@ function assertH3ReferenceManifest(
     if (!retained) {
       throw invalid(`AUDIO_SPEAKER_RETENTION_MISSING:${String(audioNumber)}`)
     }
-    if (
-      !sections.detailed_description.includes(subjectSpeaker)
-      || !DIALOGUE_BLOCK_PRESENT.test(sections.detailed_description)
-    ) {
+    const boundSpeakerOwnsDialogue = sections.detailed_description
+      .split('\n')
+      .some((line) => Array.from(line.matchAll(DIALOGUE_BLOCK)).some((dialogue) => {
+        const speakerBindingsBeforeDialogue = Array.from(
+          line.slice(0, dialogue.index).matchAll(SUBJECT_SPEAKER),
+        )
+        const owner = speakerBindingsBeforeDialogue.at(-1)
+        return Number(owner?.[1]) === subjectNumber && Number(owner?.[2]) === speakerNumber
+      }))
+    if (!boundSpeakerOwnsDialogue) {
       throw invalid(`AUDIO_SPEAKER_DIALOGUE_MISSING:${String(audioNumber)}`)
     }
   }

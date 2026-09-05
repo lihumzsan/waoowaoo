@@ -46,7 +46,7 @@ const mediaExecutionLogger = createScopedLogger({ module: "ai-exec.media" });
 
 export type AiMediaExecutionModality = Extract<
   AiModality,
-  "image" | "video" | "music" | "sound" | "voice"
+  "image" | "video" | "music" | "sound"
 >;
 
 export type AiImageExecutionOptions = {
@@ -96,13 +96,6 @@ export type AiSoundExecutionOptions = {
   outputFormat?: "mp3";
 };
 
-export type AiVoiceExecutionOptions = {
-  language?: string;
-  referenceAudio?: string;
-  referenceAudioDurationMs?: number;
-  outputFormat?: "mp3";
-};
-
 export type AiMediaExecutionInput =
   | {
       modality: "image";
@@ -136,14 +129,6 @@ export type AiMediaExecutionInput =
       modelKey: string;
       prompt: string;
       options?: AiSoundExecutionOptions;
-    }
-  | {
-      modality: "voice";
-      userId: string;
-      modelKey: string;
-      description: string;
-      text: string;
-      options?: AiVoiceExecutionOptions;
     };
 
 async function executeProviderRouteWithoutFence<TResult>(
@@ -327,35 +312,6 @@ export async function executeMediaGeneration(
             }),
         };
       }
-      case "voice": {
-        const modalityAdapter = adapter[input.modality];
-        if (!modalityAdapter) {
-          throw new Error(
-            `AI_PROVIDER_MODALITY_UNSUPPORTED:${routeSelection.provider}:${input.modality}`,
-          );
-        }
-        const options = normalizeMediaOptionsForSelection({
-          selection: routeSelection,
-          modality: input.modality,
-          options: input.options,
-        }) as AiVoiceExecutionOptions | undefined;
-        const context = {
-          userId: input.userId,
-          selection: routeSelection,
-          description: input.description,
-          text: input.text,
-          options,
-        };
-        return {
-          provider: routeSelection.provider,
-          modelKey: routeSelection.modelKey,
-          request: createMediaProviderRequestIdentity({
-            ...input,
-            modelKey: routeSelection.modelKey,
-          }),
-          execute: async () => await modalityAdapter.execute(context),
-        };
-      }
     }
   };
   // Logging-only wrapper around the provider execution throat; it swallows its
@@ -449,8 +405,7 @@ export async function executeMediaGeneration(
 
   if (
     (input.modality !== "music" &&
-      input.modality !== "sound" &&
-      input.modality !== "voice") ||
+      input.modality !== "sound") ||
     !result.async
   )
     return result;

@@ -124,7 +124,7 @@ function getDirectRuntimePlatformModels(mediaType?: ModelMediaType): CustomModel
   if (mediaType === 'video' && isSelfHostedUserProviderCredentialMode(deployment)) {
     return getSelectableLocalVideoModels()
   }
-  if (mediaType === 'voice' || isPlatformProviderCredentialMode(deployment)) {
+  if (isPlatformProviderCredentialMode(deployment)) {
     return [...getPlatformModels()]
   }
   return getPlatformModels().filter((model) => (
@@ -136,13 +136,8 @@ function getDirectRuntimePlatformModels(mediaType?: ModelMediaType): CustomModel
 async function getRuntimeModels(userId: string, mediaType?: ModelMediaType): Promise<CustomModel[]> {
   const deployment = getDeploymentConfig()
   const directPlatformModels = getDirectRuntimePlatformModels(mediaType)
-  // PG-16:voice 是平台固定模态,模型 identity 在任何凭证模式下都由平台目录唯一声明
-  // (用户配置面不存在 voice 类型)。provider 凭证仍按部署模式解析:
-  // user-key 部署用用户自己的 FAL provider key,缺失时报 PROVIDER_NOT_FOUND/API_KEY_MISSING,
-  // 而不是误导性的 MODEL_NOT_FOUND。
   if (
-    mediaType === 'voice'
-    || (mediaType === 'video' && isSelfHostedUserProviderCredentialMode(deployment))
+    (mediaType === 'video' && isSelfHostedUserProviderCredentialMode(deployment))
     || isPlatformProviderCredentialMode(deployment)
   ) {
     return directPlatformModels

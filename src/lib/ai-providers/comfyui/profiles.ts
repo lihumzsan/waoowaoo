@@ -17,6 +17,7 @@ export const H3_MAX_REFERENCE_AUDIOS = 3
 const H3_REFERENCE_IMAGE_NODE_IDS = ['137', '326', '327', '328', '329', '330', '331', '332'] as const
 const H3_REFERENCE_RESIZE_NODE_IDS = ['198', '333', '334', '335', '336', '337', '338', '339'] as const
 const H3_REFERENCE_AUDIO_NODE_IDS = ['340', '341', '342'] as const
+export const H3_AUDIO_VAE_NAME = 'h3\\minimax_h3_audio_vae_fp32.safetensors' as const
 
 function unsupportedOption(name: string, value: unknown): never {
   throw new Error('COMFYUI_H3_OPTION_UNSUPPORTED:' + name + '=' + String(value))
@@ -85,6 +86,9 @@ export type H3ReferenceDualStageRuntimeProfile = H3RuntimeProfileBase & {
   readonly referenceImageNodeIds: readonly string[]
   readonly referenceResizeNodeIds: readonly string[]
   readonly referenceAudioNodeIds: readonly string[]
+  readonly audioVaeNodeId: string
+  readonly audioDecodeNodeId: string
+  readonly audioSamplerNodeId: string
 }
 
 export type H3FrameDualStageRuntimeProfile = H3RuntimeProfileBase & {
@@ -113,6 +117,9 @@ export const H3_DUAL_STAGE_RUNTIME_PROFILE: H3ReferenceDualStageRuntimeProfile =
   referenceImageNodeIds: H3_REFERENCE_IMAGE_NODE_IDS,
   referenceResizeNodeIds: H3_REFERENCE_RESIZE_NODE_IDS,
   referenceAudioNodeIds: H3_REFERENCE_AUDIO_NODE_IDS,
+  audioVaeNodeId: '120',
+  audioDecodeNodeId: '121',
+  audioSamplerNodeId: '125',
   promptNodeId: '138',
   h3NodeId: '309',
   noiseNodeId: '129',

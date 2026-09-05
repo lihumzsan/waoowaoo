@@ -141,6 +141,18 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
     })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:AUDIO_SPEAKER_BINDING_INVALID:1')
   })
 
+  it('rejects one audio token repeated on the same definition line', () => {
+    const prompt = referenceAudioPrompt.replace(
+      '<Audio 1> is the voice-timbre reference for <Subject 1> (S1).',
+      '<Audio 1> and <Audio 1> are the voice-timbre reference for <Subject 1> (S1).',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+      references: { pictureCount: 1, audioCount: 1 },
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:AUDIO_SPEAKER_BINDING_INVALID:1')
+  })
+
   it('requires the audio-bound speaker in retention and dialogue', () => {
     const withoutRetention = referenceAudioPrompt.replace(
       '<Audio 1>: reference - <Subject 1> (S1) follows its vocal timbre and measured delivery without copying the original signal.',
@@ -159,6 +171,18 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
     expect(() => assertH3Prompt({
       inputMode: 'reference',
       prompt: withoutDialogueSpeaker,
+      references: { pictureCount: 1, audioCount: 1 },
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:AUDIO_SPEAKER_DIALOGUE_MISSING:1')
+  })
+
+  it('rejects dialogue owned only by a different subject and speaker', () => {
+    const prompt = referenceAudioPrompt.replace(
+      '[Shot 1] <Subject 1> (S1) faces camera and says <d>[Chinese]这是新台词。</d>',
+      '[Shot 1] <Subject 1> (S1) watches while <Subject 2> (S2) says <d>[Chinese]这是新台词。</d>',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
       references: { pictureCount: 1, audioCount: 1 },
     })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:AUDIO_SPEAKER_DIALOGUE_MISSING:1')
   })

@@ -27,6 +27,7 @@ import { COMFYUI_H3_MODEL_ID } from './models'
 import { deriveComfyUiProfileRequirements, type ComfyUiProfileRequirementOption } from './profile-requirements'
 import {
   H3_CONTINUATION_DUAL_STAGE_PROFILE_ID,
+  H3_AUDIO_VAE_NAME,
   H3_DUAL_STAGE_RUNTIME_PROFILE,
   H3_REFERENCE_DUAL_STAGE_PROFILE_ID,
   buildH3PromptGraph,
@@ -156,17 +157,42 @@ function assertReferenceAudioGraphContract(profile: H3DualStageRuntimeProfile): 
   const audioNodeId = profile.referenceAudioNodeIds[0]
   const audioNode = audioNodeId ? profile.workflow[audioNodeId] : undefined
   const h3Node = profile.workflow[profile.h3NodeId]
+  const audioVaeNode = profile.workflow[profile.audioVaeNodeId]
+  const audioDecodeNode = profile.workflow[profile.audioDecodeNodeId]
+  const audioSamplerNode = profile.workflow[profile.audioSamplerNodeId]
+  const outputNode = profile.workflow[profile.outputNodeId]
   if (!audioNode || audioNode.class_type !== 'LoadAudio' || typeof audioNode.inputs.audio !== 'string') {
     throw new Error('COMFYUI_H3_REFERENCE_AUDIO_GRAPH_INCOMPATIBLE:LoadAudio')
   }
   const audioVae = h3Node?.inputs.audio_vae
   if (
     !Array.isArray(audioVae)
-    || typeof audioVae[0] !== 'string'
+    || audioVae[0] !== profile.audioVaeNodeId
     || audioVae[1] !== 0
-    || profile.workflow[audioVae[0]]?.class_type !== 'VAELoader'
+    || audioVaeNode?.class_type !== 'VAELoader'
+    || audioVaeNode.inputs.vae_name !== H3_AUDIO_VAE_NAME
   ) {
     throw new Error('COMFYUI_H3_REFERENCE_AUDIO_GRAPH_INCOMPATIBLE:audio_vae')
+  }
+  if (
+    audioSamplerNode?.class_type !== 'SamplerCustomAdvanced'
+    || audioDecodeNode?.class_type !== 'VAEDecodeAudio'
+    || !Array.isArray(audioDecodeNode.inputs.samples)
+    || audioDecodeNode.inputs.samples[0] !== profile.audioSamplerNodeId
+    || audioDecodeNode.inputs.samples[1] !== 1
+    || !Array.isArray(audioDecodeNode.inputs.vae)
+    || audioDecodeNode.inputs.vae[0] !== profile.audioVaeNodeId
+    || audioDecodeNode.inputs.vae[1] !== 0
+  ) {
+    throw new Error('COMFYUI_H3_REFERENCE_AUDIO_GRAPH_INCOMPATIBLE:audio_decode')
+  }
+  if (
+    outputNode?.class_type !== 'VHS_VideoCombine'
+    || !Array.isArray(outputNode.inputs.audio)
+    || outputNode.inputs.audio[0] !== profile.audioDecodeNodeId
+    || outputNode.inputs.audio[1] !== 0
+  ) {
+    throw new Error('COMFYUI_H3_REFERENCE_AUDIO_GRAPH_INCOMPATIBLE:output_audio')
   }
   const referenceAudio = h3Node?.inputs['ref_audios.ref_audio_0']
   if (!Array.isArray(referenceAudio) || referenceAudio[0] !== audioNodeId || referenceAudio[1] !== 0) {
