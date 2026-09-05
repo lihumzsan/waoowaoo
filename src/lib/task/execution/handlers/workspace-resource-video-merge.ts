@@ -13,13 +13,11 @@ import {
   muxVideoMergeTimedAudioCues,
   renderVideoMergeClipAudio,
 } from '@/lib/video-compose/video-merge-audio'
-import {
-  createFfmpegCommandRunner,
-  probeMediaDurationSeconds,
-} from '@/lib/video-compose/ffmpeg-command'
+import { createFfmpegCommandRunner } from '@/lib/video-compose/ffmpeg-command'
 import {
   composeVideoMergeVideoTrack,
   probeVideoDimensions,
+  probeVideoDurationSeconds,
 } from '@/lib/video-compose/video-merge-ffmpeg'
 import { reportTaskProgress } from '../progress'
 import type { TaskExecutionContext } from '../context'
@@ -102,12 +100,20 @@ export async function handleWorkspaceResourceVideoMergeTask(
     }
     const dimensions = await probeVideoDimensions(sourcePaths[0] ?? '')
     const durations = await Promise.all(sourcePaths.map(async (sourcePath) => (
-      await probeMediaDurationSeconds(sourcePath, 'workspace_resource_video_merge_probe_duration')
+      await probeVideoDurationSeconds(sourcePath)
     )))
+
+    const { stitchedPath, clipDurations } = await composeVideoMergeVideoTrack({
+      sourcePaths,
+      durations,
+      workspaceDir,
+      width: dimensions.width,
+      height: dimensions.height,
+    })
     const audioPaths: string[] = []
     let hasSourceAudio = false
     for (const [index, sourcePath] of sourcePaths.entries()) {
-      const durationSeconds = durations[index]
+      const durationSeconds = clipDurations[index]
       if (!durationSeconds) throw new Error(`WORKSPACE_RESOURCE_VIDEO_MERGE_DURATION_MISSING:${String(index)}`)
       if (usesSourceAudio) {
         const audioPath = path.join(workspaceDir, `audio-${String(index)}.wav`)
@@ -126,17 +132,7 @@ export async function handleWorkspaceResourceVideoMergeTask(
     }
 
     await reportTaskProgress(context, 65, { stage: 'workspace_resource_video_merge_compose' })
-    const stitchedPath = await composeVideoMergeVideoTrack({
-      sourcePaths,
-      durations,
-      workspaceDir,
-      width: dimensions.width,
-      height: dimensions.height,
-    })
-    const stitchedDurationSeconds = await probeMediaDurationSeconds(
-      stitchedPath,
-      'workspace_resource_video_merge_probe_duration',
-    )
+    const stitchedDurationSeconds = await probeVideoDurationSeconds(stitchedPath)
     const mainAudioPath = usesSourceAudio ? path.join(workspaceDir, 'audio.wav') : null
     if (mainAudioPath) {
       await concatVideoMergeAudioClips({

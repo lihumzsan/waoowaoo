@@ -23,7 +23,7 @@ describe('video merge single-video track preparation', () => {
       '-c:v', 'libx264', '-pix_fmt', 'yuv420p', sourcePath,
     ], { stage: 'video_merge_track_test_source', expectedDurationSeconds: DURATION_SECONDS })
 
-    const result = await composeVideoMergeVideoTrack({
+    const { stitchedPath: result } = await composeVideoMergeVideoTrack({
       sourcePaths: [sourcePath],
       durations: [DURATION_SECONDS],
       workspaceDir,
@@ -53,7 +53,7 @@ describe('video merge single-video track preparation', () => {
       '-c:v', 'libx264', '-pix_fmt', 'yuv420p', secondPath,
     ], { stage: 'video_merge_track_second_test_source', expectedDurationSeconds: DURATION_SECONDS })
 
-    const result = await composeVideoMergeVideoTrack({
+    const { stitchedPath: result } = await composeVideoMergeVideoTrack({
       sourcePaths: [firstPath, secondPath],
       durations: [DURATION_SECONDS, DURATION_SECONDS],
       workspaceDir,
