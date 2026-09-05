@@ -541,6 +541,7 @@ describe('project local video model configuration', () => {
     const audio2s = await seedReadyAudio({ userId: user.id, projectId: project.id, label: 'audio-2s', durationMs: 2_000 })
     const audio5sA = await seedReadyAudio({ userId: user.id, projectId: project.id, label: 'audio-5s-a', durationMs: 5_000 })
     const audio5sB = await seedReadyAudio({ userId: user.id, projectId: project.id, label: 'audio-5s-b', durationMs: 5_000 })
+    const audio5sC = await seedReadyAudio({ userId: user.id, projectId: project.id, label: 'audio-5s-c', durationMs: 5_000 })
     const audio8s = await seedReadyAudio({ userId: user.id, projectId: project.id, label: 'audio-8s', durationMs: 8_000 })
     const audio1999 = await seedReadyAudio({ userId: user.id, projectId: project.id, label: 'audio-1999', durationMs: 1_999 })
     const audio5001 = await seedReadyAudio({ userId: user.id, projectId: project.id, label: 'audio-5001', durationMs: 5_001 })
@@ -594,7 +595,7 @@ describe('project local video model configuration', () => {
       imageReference,
       audioReference(audio5sA),
       audioReference(audio5sB),
-      audioReference(audio2s),
+      audioReference(audio5sC),
     ], 3)).resolves.toBeDefined()
 
     const rejected = [
