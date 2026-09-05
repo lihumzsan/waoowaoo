@@ -146,7 +146,23 @@ function objectInfo(className: string): Record<string, unknown> {
     optional.vae = ['VAE']
     optional.image = ['IMAGE']
   }
-  if (className === 'MiniMaxH3ReferenceToVideo') optional.ref_audios = ['AUDIO']
+  if (className === 'MiniMaxH3ReferenceToVideo') {
+    optional.ref_audios = [
+      'COMFY_AUTOGROW_V3',
+      {
+        template: {
+          input: {
+            required: {
+              ref_audio: ['AUDIO', {}],
+            },
+          },
+          prefix: 'ref_audio_',
+          min: 0,
+          max: 3,
+        },
+      },
+    ]
+  }
   if (className === 'MiniMaxH3ReferenceToVideo') required.audio_vae = ['VAE']
   return { [className]: { input: { required, optional } } }
 }
@@ -349,6 +365,42 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
     expect(body.prompt['309']?.inputs['ref_audios.ref_audio_0']).toEqual(['340', 0])
   })
 
+  it('submits an image-only reference graph when optional reference-audio nodes are unavailable', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    const withoutReferenceAudio = objectInfo('MiniMaxH3ReferenceToVideo')
+    const optional = (
+      withoutReferenceAudio.MiniMaxH3ReferenceToVideo as { input: { optional: Record<string, unknown> } }
+    ).input.optional
+    delete optional.ref_audios
+    server!.defineScenario({
+      method: 'GET',
+      path: '/object_info/MiniMaxH3ReferenceToVideo',
+      mode: 'success',
+      submitResponse: { status: 200, body: withoutReferenceAudio },
+    })
+    server!.defineScenario({
+      method: 'GET',
+      path: '/object_info/LoadAudio',
+      mode: 'success',
+      submitResponse: { status: 200, body: {} },
+    })
+    server!.defineScenario({
+      method: 'POST',
+      path: '/prompt',
+      mode: 'success',
+      submitResponse: { status: 200, body: { prompt_id: PROMPT_ID } },
+    })
+
+    const result = await executeComfyUiH3VideoGeneration(videoInput)
+
+    expect(result.externalId).toBe(`COMFYUI:h3-dual-stage-2mp:VIDEO:${PROMPT_ID}`)
+    const body = JSON.parse(server!.getRequests('POST', '/prompt')[0]!.bodyText) as {
+      prompt: Record<string, { inputs: Record<string, unknown> }>
+    }
+    expect(body.prompt['309']?.inputs['ref_audios.ref_audio_0']).toBeUndefined()
+  })
+
   it('rejects an incompatible H3 reference-audio port before uploading bytes', async () => {
     vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
     defineValidPreflight(server!)
@@ -356,7 +408,10 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
     const optional = (
       incompatible.MiniMaxH3ReferenceToVideo as { input: { optional: Record<string, unknown> } }
     ).input.optional
-    delete optional.ref_audios
+    const refAudios = optional.ref_audios as [string, {
+      template: { input: { required: Record<string, unknown> } }
+    }]
+    refAudios[1].template.input.required.ref_audio = ['MASK', {}]
     server!.defineScenario({
       method: 'GET',
       path: '/object_info/MiniMaxH3ReferenceToVideo',

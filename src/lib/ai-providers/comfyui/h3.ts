@@ -29,6 +29,7 @@ import {
   H3_CONTINUATION_DUAL_STAGE_PROFILE_ID,
   H3_AUDIO_VAE_NAME,
   H3_DUAL_STAGE_RUNTIME_PROFILE,
+  H3_MAX_REFERENCE_AUDIOS,
   H3_REFERENCE_DUAL_STAGE_PROFILE_ID,
   buildH3PromptGraph,
   resolveH3Dimensions,
@@ -78,12 +79,13 @@ const H3_CONTINUATION_NODE_INPUT_TYPES = {
   },
 } as const satisfies Readonly<Record<string, Readonly<Record<string, H3NodeInputContract>>>>
 const H3_REFERENCE_NODE_INPUT_TYPES = {
-  LoadAudio: {
-    audio: { location: 'required', type: null },
-  },
   MiniMaxH3ReferenceToVideo: {
     audio_vae: { location: 'required', type: 'VAE' },
-    ref_audios: { location: 'optional', type: 'AUDIO' },
+  },
+} as const satisfies Readonly<Record<string, Readonly<Record<string, H3NodeInputContract>>>>
+const H3_REFERENCE_AUDIO_NODE_INPUT_TYPES = {
+  LoadAudio: {
+    audio: { location: 'required', type: null },
   },
 } as const satisfies Readonly<Record<string, Readonly<Record<string, H3NodeInputContract>>>>
 
@@ -127,6 +129,31 @@ function assertNodeInputContract(
     ) {
       throw new Error(`COMFYUI_NODE_INPUT_INCOMPATIBLE:${className}:${inputName}:${contract.type ?? contract.location}`)
     }
+  }
+}
+
+function assertReferenceAudioInputContract(info: unknown): void {
+  const className = 'MiniMaxH3ReferenceToVideo'
+  const node = asComfyUiRecord(asComfyUiRecord(info)?.[className])
+  const input = asComfyUiRecord(node?.input)
+  const optional = asComfyUiRecord(input?.optional)
+  const definition = optional?.ref_audios
+  const options = Array.isArray(definition) ? asComfyUiRecord(definition[1]) : null
+  const template = asComfyUiRecord(options?.template)
+  const templateInput = asComfyUiRecord(template?.input)
+  const templateRequired = asComfyUiRecord(templateInput?.required)
+  const refAudioDefinition = templateRequired?.ref_audio
+  if (
+    !Array.isArray(definition)
+    || definition[0] !== 'COMFY_AUTOGROW_V3'
+    || !Array.isArray(refAudioDefinition)
+    || refAudioDefinition[0] !== 'AUDIO'
+    || template?.prefix !== 'ref_audio_'
+    || template?.min !== 0
+    || typeof template.max !== 'number'
+    || template.max < H3_MAX_REFERENCE_AUDIOS
+  ) {
+    throw new Error(`COMFYUI_NODE_INPUT_INCOMPATIBLE:${className}:ref_audios:AUDIO`)
   }
 }
 
@@ -203,6 +230,7 @@ function assertReferenceAudioGraphContract(profile: H3DualStageRuntimeProfile): 
 async function preflight(
   baseUrl: string,
   profile: H3DualStageRuntimeProfile,
+  requiresReferenceAudio: boolean,
 ): Promise<void> {
   assertContinuationGraphContract(profile)
   assertReferenceAudioGraphContract(profile)
@@ -210,7 +238,10 @@ async function preflight(
     profileId: profile.id,
     graph: profile.workflow,
   })
-  const cacheKey = `${baseUrl}\u0000${requirements.fingerprint}`
+  const requiredNodeClasses = profile.id === H3_REFERENCE_DUAL_STAGE_PROFILE_ID && !requiresReferenceAudio
+    ? requirements.nodeClasses.filter((className) => className !== 'LoadAudio')
+    : requirements.nodeClasses
+  const cacheKey = `${baseUrl}\u0000${requirements.fingerprint}\u0000reference-audio:${String(requiresReferenceAudio)}`
   const now = Date.now()
   if ((preflightReadyAtByTargetProfile.get(cacheKey) ?? 0) + H3_PREFLIGHT_CACHE_TTL_MS > now) return
   const infoByClassName = new Map<string, Promise<unknown>>()
@@ -221,7 +252,7 @@ async function preflight(
     infoByClassName.set(className, requested)
     return requested
   }
-  const requiredInfos = await Promise.all(requirements.nodeClasses.map(async (className) => ({
+  const requiredInfos = await Promise.all(requiredNodeClasses.map(async (className) => ({
     className,
     info: await readInfo(className),
   })))
@@ -242,6 +273,12 @@ async function preflight(
     )
     for (const [className, inputs] of Object.entries(H3_REFERENCE_NODE_INPUT_TYPES)) {
       assertNodeInputContract(infoByClassName.get(className), className, inputs)
+    }
+    if (requiresReferenceAudio) {
+      for (const [className, inputs] of Object.entries(H3_REFERENCE_AUDIO_NODE_INPUT_TYPES)) {
+        assertNodeInputContract(infoByClassName.get(className), className, inputs)
+      }
+      assertReferenceAudioInputContract(infoByClassName.get('MiniMaxH3ReferenceToVideo'))
     }
   }
   const optionInfos = await Promise.all(requirements.options.map(async (option) => ({
@@ -425,7 +462,11 @@ export async function executeComfyUiH3VideoGeneration(input: AiProviderVideoExec
       referenceAudioFilenames: referenceAudioPlaceholderFilenames(promptId, referenceAudioUrls.length),
     }
     built = buildGraph(input, promptId, initialPreparedInputs)
-    await preflight(target.baseUrl, built.profile)
+    await preflight(
+      target.baseUrl,
+      built.profile,
+      built.inputMode === 'reference' && built.referenceAudioUrls.length > 0,
+    )
     if (built.inputMode === 'reference' && built.referenceAudioUrls.length > 0) {
       const files = await readH3ReferenceAudioFiles({
         urls: built.referenceAudioUrls,
