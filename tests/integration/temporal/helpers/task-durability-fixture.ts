@@ -159,7 +159,7 @@ async function submitFixtureTask(input: {
                 name: `Task durability ${input.suffix}`,
               },
             ]),
-            protocol: 'workspace_resource_video_merge_v1',
+            protocol: 'workspace_resource_video_merge_v2',
             resource: {
               resourceId,
               mediaType: 'video',

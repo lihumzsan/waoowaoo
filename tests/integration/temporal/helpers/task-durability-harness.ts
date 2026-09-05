@@ -251,6 +251,7 @@ export interface TaskDependencyGateWorkerHarness {
   readonly taskClient: TemporalTaskClient
   queryScheduler(userId: string): Promise<UserTaskSchedulerView>
   fetchTaskHistory(taskId: string): Promise<History>
+  waitForTaskWorkflowCompletion(taskId: string): Promise<void>
   releaseHeldSource(): void
   waitForTaskStatus(taskId: string, status: 'queued' | 'processing' | 'completed' | 'failed' | 'canceled'): Promise<void>
   waitForTerminalPostCommitFault(): Promise<TaskTerminalReceipt>
@@ -267,6 +268,7 @@ export async function startTaskDependencyGateWorker(input: {
   const workerIdentity = buildTestWorkerIdentity('task-dependency-gate')
   const connection = await NativeConnection.connect(buildTemporalConnectionOptions(config))
   const connected = await connectTemporalClient()
+  const followUpServer = await startFollowUpAdmissionServer()
   const held = deferred<void>()
   const terminalFault = deferred<TaskTerminalReceipt>()
   let released = input.heldSourceTaskId === null
@@ -297,7 +299,7 @@ export async function startTaskDependencyGateWorker(input: {
       shutdownGraceTime: '5 seconds',
     })
   } catch (error) {
-    await Promise.allSettled([connection.close(), connected.close()])
+    await Promise.allSettled([connection.close(), connected.close(), followUpServer.close()])
     throw error
   }
   const run = worker.run()
@@ -321,6 +323,11 @@ export async function startTaskDependencyGateWorker(input: {
       return await connected.client.workflow
         .getHandle(buildTaskWorkflowId(taskId))
         .fetchHistory()
+    },
+    async waitForTaskWorkflowCompletion(taskId) {
+      await connected.client.workflow
+        .getHandle(buildTaskWorkflowId(taskId))
+        .result()
     },
     releaseHeldSource() {
       if (released) return
@@ -353,7 +360,7 @@ export async function startTaskDependencyGateWorker(input: {
       try {
         await run
       } finally {
-        await Promise.allSettled([connection.close(), connected.close()])
+        await Promise.allSettled([connection.close(), connected.close(), followUpServer.close()])
       }
     },
   }

@@ -223,6 +223,11 @@ describe('Temporal dependency gate durability', () => {
     await expect(
       prisma.taskExecutionCheckpoint.count({ where: { taskId: activeFixture.mixTaskId, stepKey: '__handler_result__' } }),
     ).resolves.toBe(1)
+    await Promise.all([
+      activeWorker.waitForTaskWorkflowCompletion(activeFixture.source1TaskId),
+      activeWorker.waitForTaskWorkflowCompletion(activeFixture.source2TaskId),
+      activeWorker.waitForTaskWorkflowCompletion(activeFixture.mixTaskId),
+    ])
   }, 120_000)
 
   it('cancels a waiting dependent through Scheduler and replays the same terminal receipt', async () => {
