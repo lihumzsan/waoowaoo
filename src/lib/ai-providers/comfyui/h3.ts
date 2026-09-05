@@ -254,6 +254,7 @@ function buildGraph(
       ...common,
       mode: 'reference',
       referenceImageUrls,
+      referenceAudioFilenames: [],
     }), inputMode }
   }
   if (inputMode === 'first_frame') {

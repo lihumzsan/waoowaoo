@@ -1,7 +1,7 @@
 import { resolveOwnedMediaForGeneration } from '@/lib/media/outbound-owned-media'
 
-const MAX_VIDEO_REFERENCE_AUDIO_BYTES = 15 * 1024 * 1024
-const SUPPORTED_VIDEO_REFERENCE_AUDIO_MIME_TYPES = new Set([
+export const MAX_VIDEO_REFERENCE_AUDIO_BYTES = 15 * 1024 * 1024
+export const VIDEO_REFERENCE_AUDIO_MIME_TYPES: ReadonlySet<string> = new Set([
   'audio/mpeg',
   'audio/wav',
 ])
@@ -24,7 +24,7 @@ export class OutboundAudioNormalizeError extends Error {
   }
 }
 
-function normalizeAudioMimeType(mimeType: string): string {
+export function normalizeVideoReferenceAudioMimeType(mimeType: string): string {
   if (mimeType === 'audio/mp3') return 'audio/mpeg'
   if (mimeType === 'audio/x-wav' || mimeType === 'audio/wave') return 'audio/wav'
   return mimeType
@@ -46,8 +46,8 @@ export async function resolveOwnedAudioUrlForGeneration(
   const media = await resolveOwnedMediaForGeneration(normalizedInput, userId, {
     maxBytes: MAX_VIDEO_REFERENCE_AUDIO_BYTES,
     label: 'owned outbound video reference audio',
-    supportedMimeTypes: SUPPORTED_VIDEO_REFERENCE_AUDIO_MIME_TYPES,
-    normalizeMimeType: normalizeAudioMimeType,
+    supportedMimeTypes: VIDEO_REFERENCE_AUDIO_MIME_TYPES,
+    normalizeMimeType: normalizeVideoReferenceAudioMimeType,
   })
   return media.url
 }

@@ -13,8 +13,10 @@ export type ComfyUiPromptGraph = Record<string, {
 const H3_DELIVERY_SCALE_NUMERATOR = 3
 const H3_DELIVERY_SCALE_DENOMINATOR = 2
 export const H3_MAX_REFERENCE_IMAGES = 8
+export const H3_MAX_REFERENCE_AUDIOS = 3
 const H3_REFERENCE_IMAGE_NODE_IDS = ['137', '326', '327', '328', '329', '330', '331', '332'] as const
 const H3_REFERENCE_RESIZE_NODE_IDS = ['198', '333', '334', '335', '336', '337', '338', '339'] as const
+const H3_REFERENCE_AUDIO_NODE_IDS = ['340', '341', '342'] as const
 
 function unsupportedOption(name: string, value: unknown): never {
   throw new Error('COMFYUI_H3_OPTION_UNSUPPORTED:' + name + '=' + String(value))
@@ -82,6 +84,7 @@ export type H3ReferenceDualStageRuntimeProfile = H3RuntimeProfileBase & {
   readonly id: typeof H3_REFERENCE_DUAL_STAGE_PROFILE_ID
   readonly referenceImageNodeIds: readonly string[]
   readonly referenceResizeNodeIds: readonly string[]
+  readonly referenceAudioNodeIds: readonly string[]
 }
 
 export type H3FrameDualStageRuntimeProfile = H3RuntimeProfileBase & {
@@ -109,6 +112,7 @@ export const H3_DUAL_STAGE_RUNTIME_PROFILE: H3ReferenceDualStageRuntimeProfile =
   workflow: dualStageWorkflow as ComfyUiPromptGraph,
   referenceImageNodeIds: H3_REFERENCE_IMAGE_NODE_IDS,
   referenceResizeNodeIds: H3_REFERENCE_RESIZE_NODE_IDS,
+  referenceAudioNodeIds: H3_REFERENCE_AUDIO_NODE_IDS,
   promptNodeId: '138',
   h3NodeId: '309',
   noiseNodeId: '129',
@@ -212,6 +216,7 @@ type H3PromptGraphCommonInput = {
 export type H3ReferencePromptGraphInput = H3PromptGraphCommonInput & {
   readonly mode: 'reference'
   readonly referenceImageUrls: readonly string[]
+  readonly referenceAudioFilenames: readonly string[]
 }
 
 export type H3FirstFramePromptGraphInput = H3PromptGraphCommonInput & {
@@ -316,16 +321,28 @@ function buildReferencePromptGraph(
   if (referenceImageUrls.some((url) => !url)) {
     throw new Error('COMFYUI_H3_REFERENCE_IMAGE_REQUIRED')
   }
+  if (input.referenceAudioFilenames.length > H3_MAX_REFERENCE_AUDIOS) {
+    throw new Error(
+      'COMFYUI_H3_REFERENCE_AUDIOS_COUNT_INVALID:' + String(H3_MAX_REFERENCE_AUDIOS),
+    )
+  }
+  const referenceAudioFilenames = input.referenceAudioFilenames.map((filename) => filename.trim())
+  if (referenceAudioFilenames.some((filename) => !filename)) {
+    throw new Error('COMFYUI_H3_REFERENCE_AUDIO_REQUIRED')
+  }
   const profile = H3_DUAL_STAGE_RUNTIME_PROFILE
   const graph = copyGraph(profile.workflow)
   const baseLoadNode = graph[profile.referenceImageNodeIds[0]!]
   const baseResizeNode = graph[profile.referenceResizeNodeIds[0]!]
+  const baseAudioNode = graph[profile.referenceAudioNodeIds[0]!]
   const h3Node = graph[profile.h3NodeId]
-  if (!baseLoadNode || !baseResizeNode || !h3Node) {
+  if (!baseLoadNode || !baseResizeNode || !baseAudioNode || !h3Node) {
     throw new Error('COMFYUI_H3_PROFILE_NODE_MISSING:' + profile.id)
   }
+  for (const nodeId of profile.referenceAudioNodeIds) delete graph[nodeId]
   for (const key of Object.keys(h3Node.inputs)) {
     if (key.startsWith('ref_images.ref_image_')) delete h3Node.inputs[key]
+    if (key.startsWith('ref_audios.ref_audio_')) delete h3Node.inputs[key]
   }
   referenceImageUrls.forEach((url, index) => {
     const loadNodeId = profile.referenceImageNodeIds[index]!
@@ -339,6 +356,14 @@ function buildReferencePromptGraph(
       inputs: { ...baseResizeNode.inputs, image: [loadNodeId, 0] },
     }
     h3Node.inputs['ref_images.ref_image_' + String(index)] = [resizeNodeId, 0]
+  })
+  referenceAudioFilenames.forEach((filename, index) => {
+    const loadNodeId = profile.referenceAudioNodeIds[index]!
+    graph[loadNodeId] = {
+      class_type: baseAudioNode.class_type,
+      inputs: { ...baseAudioNode.inputs, audio: filename },
+    }
+    h3Node.inputs['ref_audios.ref_audio_' + String(index)] = [loadNodeId, 0]
   })
   applyCommonInputs(profile, graph, input)
   return { profile, graph }

@@ -36,6 +36,7 @@ describe('ComfyUI H3 dual-stage profile', () => {
         frameCount: resolveH3DurationPlan(4).frameCount,
         mode: 'reference',
         referenceImageUrls: ['https://example.test/reference.png'],
+        referenceAudioFilenames: [],
       }),
       buildH3PromptGraph({
         ...common,
@@ -138,5 +139,45 @@ describe('ComfyUI H3 dual-stage profile', () => {
     expect(nodes.filter((node) => node.class_type === 'ImageResizeKJv2' && node.inputs.upscale_method === 'nvidia_rtx_vsr')).toHaveLength(2)
     expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow[H3_DUAL_STAGE_RUNTIME_PROFILE.h3NodeId]?.class_type).toBe('MiniMaxH3ReferenceToVideo')
     expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow[H3_DUAL_STAGE_RUNTIME_PROFILE.outputNodeId]?.class_type).toBe('VHS_VideoCombine')
+  })
+
+  it('builds zero, one, and three ordered H3 reference-audio inputs and rejects a fourth', () => {
+    const referenceInput = {
+      prompt: 'subject_definitions:\n<Subject 1> is the person in <Picture 1>.',
+      frameCount: 107,
+      aspectRatio: '9:16',
+      seed: 17,
+      mode: 'reference',
+      referenceImageUrls: ['https://example.test/reference.png'],
+    } as const
+    const zeroAudio = buildH3PromptGraph({
+      ...referenceInput,
+      referenceAudioFilenames: [],
+    })
+    const oneAudio = buildH3PromptGraph({
+      ...referenceInput,
+      referenceAudioFilenames: ['waoowaoo/prompt/reference-audio-00.mp3'],
+    })
+    const threeAudio = buildH3PromptGraph({
+      ...referenceInput,
+      referenceAudioFilenames: [
+        'waoowaoo/prompt/reference-audio-00.mp3',
+        'waoowaoo/prompt/reference-audio-01.wav',
+        'waoowaoo/prompt/reference-audio-02.mp3',
+      ],
+    })
+
+    expect(zeroAudio.graph['340']).toBeUndefined()
+    expect(zeroAudio.graph['309']?.inputs['ref_audios.ref_audio_0']).toBeUndefined()
+    expect(oneAudio.graph['340']).toEqual({
+      class_type: 'LoadAudio',
+      inputs: { audio: 'waoowaoo/prompt/reference-audio-00.mp3' },
+    })
+    expect(oneAudio.graph['309']?.inputs['ref_audios.ref_audio_0']).toEqual(['340', 0])
+    expect(threeAudio.graph['309']?.inputs['ref_audios.ref_audio_2']).toEqual(['342', 0])
+    expect(() => buildH3PromptGraph({
+      ...referenceInput,
+      referenceAudioFilenames: ['1.wav', '2.wav', '3.wav', '4.wav'],
+    })).toThrow('COMFYUI_H3_REFERENCE_AUDIOS_COUNT_INVALID:3')
   })
 })
