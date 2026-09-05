@@ -11,6 +11,29 @@ import {
 import type { AiProviderVideoExecutionContext } from '@/lib/ai-providers/runtime-types'
 import { startScenarioServer } from '../../helpers/fakes/scenario-server'
 
+vi.mock('@/lib/media/outbound-owned-media', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/media/outbound-owned-media')>()
+  return {
+    ...actual,
+    readOwnedMediaBytesForGeneration: async (
+      input: string,
+      userId: string,
+      options: Parameters<typeof actual.readOwnedMediaBytesForGeneration>[2],
+    ) => {
+      if (input === 'https://media.example.com/reference.mp3') {
+        return {
+          bytes: Buffer.from([0x49, 0x44, 0x33, 0x04]),
+          storageKey: 'tests/h3/reference.mp3',
+          contentType: 'audio/mpeg',
+          sizeBytes: 4,
+          durationMs: 2_000,
+        }
+      }
+      return await actual.readOwnedMediaBytesForGeneration(input, userId, options)
+    },
+  }
+})
+
 const PROMPT_ID = '00000000-0000-4000-8000-000000000001'
 
 const videoInput: AiProviderVideoExecutionContext = {
@@ -28,6 +51,34 @@ const videoInput: AiProviderVideoExecutionContext = {
     aspectRatio: '16:9',
     generateAudio: true,
     referenceImages: ['https://media.example.com/reference-1.png', 'https://media.example.com/reference-2.png'],
+  },
+}
+
+const referenceAudioInput: AiProviderVideoExecutionContext = {
+  ...videoInput,
+  options: {
+    ...videoInput.options,
+    prompt: `subject_definitions:
+<Subject 1> (S1) is the person shown in <Picture 1>.
+<Audio 1> is the voice-timbre reference for <Subject 1> (S1).
+
+summary:
+<Subject 1> speaks one new line.
+
+retention_analysis:
+<Picture 1>: reference - preserve <Subject 1>.
+<Audio 1>: reference - <Subject 1> (S1) follows its vocal timbre and measured delivery without copying the original signal.
+
+detailed_description:
+[Shot 1] <Subject 1> (S1) faces camera and says <d>[Chinese]这是新台词。</d>
+
+overall_soundscape:
+Clean speech with quiet room tone.
+
+non_diegetic_music:
+N/A`,
+    referenceImages: ['https://media.example.com/reference-1.png'],
+    referenceAudios: ['https://media.example.com/reference.mp3'],
   },
 }
 
@@ -83,6 +134,7 @@ function objectInfo(className: string): Record<string, unknown> {
   if (className === 'ImageResizeKJv2') required.upscale_method = [['nvidia_rtx_vsr', 'lanczos']]
   if (className === 'ModelAttentionBackend') required.attention = [['comfy kitchen attention']]
   if (className === 'LoadImage') required.image = [['example.png']]
+  if (className === 'LoadAudio') required.audio = [['example.mp3']]
   if (className === 'ImageBatch') {
     required.image1 = ['IMAGE']
     required.image2 = ['IMAGE']
@@ -94,6 +146,8 @@ function objectInfo(className: string): Record<string, unknown> {
     optional.vae = ['VAE']
     optional.image = ['IMAGE']
   }
+  if (className === 'MiniMaxH3ReferenceToVideo') optional.ref_audios = ['AUDIO']
+  if (className === 'MiniMaxH3ReferenceToVideo') required.audio_vae = ['VAE']
   return { [className]: { input: { required, optional } } }
 }
 
@@ -254,6 +308,72 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
     expect(body.prompt['326']?.inputs?.url).toBe('https://media.example.com/reference-2.png')
     expect(body.prompt['309']?.inputs?.['ref_images.ref_image_0']).toEqual(['198', 0])
     expect(body.prompt['309']?.inputs?.['ref_images.ref_image_1']).toEqual(['333', 0])
+  })
+
+  it('uploads one owned reference audio and submits one graph with the matching H3 audio slot', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    server!.defineScenario({
+      method: 'POST',
+      path: '/upload/image',
+      mode: 'success',
+      pollSequence: [{
+        status: 200,
+        body: {
+          name: 'reference-audio-00.mp3',
+          subfolder: `waoowaoo/${PROMPT_ID}`,
+          type: 'input',
+        },
+      }],
+    })
+    server!.defineScenario({
+      method: 'POST',
+      path: '/prompt',
+      mode: 'success',
+      submitResponse: { status: 200, body: { prompt_id: PROMPT_ID } },
+    })
+
+    const result = await executeComfyUiH3VideoGeneration(referenceAudioInput)
+
+    expect(result.externalId).toBe(`COMFYUI:h3-dual-stage-2mp:VIDEO:${PROMPT_ID}`)
+    expect(server!.getRequests('POST', '/upload/image')).toHaveLength(1)
+    const promptRequests = server!.getRequests('POST', '/prompt')
+    expect(promptRequests).toHaveLength(1)
+    const body = JSON.parse(promptRequests[0]!.bodyText) as {
+      prompt: Record<string, { class_type: string; inputs: Record<string, unknown> }>
+    }
+    expect(body.prompt['340']).toEqual({
+      class_type: 'LoadAudio',
+      inputs: { audio: `waoowaoo/${PROMPT_ID}/reference-audio-00.mp3` },
+    })
+    expect(body.prompt['309']?.inputs['ref_audios.ref_audio_0']).toEqual(['340', 0])
+  })
+
+  it('rejects an incompatible H3 reference-audio port before uploading bytes', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    const incompatible = objectInfo('MiniMaxH3ReferenceToVideo')
+    const optional = (
+      incompatible.MiniMaxH3ReferenceToVideo as { input: { optional: Record<string, unknown> } }
+    ).input.optional
+    delete optional.ref_audios
+    server!.defineScenario({
+      method: 'GET',
+      path: '/object_info/MiniMaxH3ReferenceToVideo',
+      mode: 'success',
+      submitResponse: { status: 200, body: incompatible },
+    })
+
+    await expect(executeComfyUiH3VideoGeneration(referenceAudioInput)).rejects.toMatchObject({
+      name: 'ProviderSubmissionError',
+      disposition: 'pre_accept_rejected',
+      externalId: null,
+      message: expect.stringContaining(
+        'COMFYUI_NODE_INPUT_INCOMPATIBLE:MiniMaxH3ReferenceToVideo:ref_audios:AUDIO',
+      ),
+    })
+    expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
+    expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
   })
 
   it('routes first-frame and first-last-frame transport through the same frame profile', async () => {
@@ -447,7 +567,7 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
     expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
   })
 
-  it('rejects invalid mixed, last-only, audio, and video references before prompt submission', async () => {
+  it('rejects invalid mixed, last-only, audio-only, and video references before prompt submission', async () => {
     vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
     const invalidInputs: AiProviderVideoExecutionContext[] = [
       {
@@ -460,7 +580,10 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
       },
       {
         ...videoInput,
-        options: { ...videoInput.options, referenceAudios: ['https://media.example.com/reference.mp3'] },
+        options: {
+          ...referenceAudioInput.options,
+          referenceImages: undefined,
+        },
       },
       {
         ...videoInput,

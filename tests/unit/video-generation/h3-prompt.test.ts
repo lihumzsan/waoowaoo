@@ -19,6 +19,26 @@ Soft room tone, fabric movement, and her quiet breath.
 non_diegetic_music:
 N/A`
 
+const referenceAudioPrompt = `subject_definitions:
+<Subject 1> (S1) is the person shown in <Picture 1>.
+<Audio 1> is the voice-timbre reference for <Subject 1> (S1).
+
+summary:
+<Subject 1> speaks one new line.
+
+retention_analysis:
+<Picture 1>: reference - preserve <Subject 1>.
+<Audio 1>: reference - <Subject 1> (S1) follows its vocal timbre and measured delivery without copying the original signal.
+
+detailed_description:
+[Shot 1] <Subject 1> (S1) faces camera and says <d>[Chinese]这是新台词。</d>
+
+overall_soundscape:
+Clean speech with quiet room tone.
+
+non_diegetic_music:
+N/A`
+
 const firstFramePrompt = referencePrompt.replace(
   '[Shot 1] She notices the doorway',
   '[Shot 1] <Picture 1> aligns with 0.00 seconds and shows her noticing the doorway',
@@ -43,6 +63,10 @@ function assertH3Prompt(input: {
   readonly prompt: string
   readonly inputMode: 'reference' | 'first_frame' | 'first_last_frame' | 'continuation'
   readonly timelineDurationSeconds?: number
+  readonly references?: {
+    readonly pictureCount: number
+    readonly audioCount: number
+  }
 }): void {
   assertVideoPromptMatchesProfile({
     profile: 'minimax_h3_multimodal_v3',
@@ -50,6 +74,14 @@ function assertH3Prompt(input: {
     inputMode: input.inputMode,
     timelineDurationSeconds: input.timelineDurationSeconds
       ?? (input.inputMode === 'continuation' ? 5.167 : 4.458),
+    references: input.references ?? {
+      pictureCount: input.inputMode === 'first_last_frame'
+        ? 2
+        : input.inputMode === 'continuation'
+          ? 0
+          : 1,
+      audioCount: 0,
+    },
   })
 }
 
@@ -59,6 +91,76 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
       inputMode: 'reference',
       prompt: referencePrompt,
     })).not.toThrow()
+  })
+
+  it('binds one reference audio to one explicit subject and speaker identity', () => {
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt: referenceAudioPrompt,
+      references: { pictureCount: 1, audioCount: 1 },
+    })).not.toThrow()
+  })
+
+  it('rejects media reference indexes above the frozen manifest', () => {
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt: referenceAudioPrompt.replaceAll('<Audio 1>', '<Audio 2>'),
+      references: { pictureCount: 1, audioCount: 1 },
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:MEDIA_REFERENCE_INDEX_OUT_OF_RANGE:Audio:2')
+  })
+
+  it('rejects a frozen audio omitted from the prompt', () => {
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt: referencePrompt,
+      references: { pictureCount: 1, audioCount: 1 },
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:AUDIO_REFERENCE_MISSING:1')
+  })
+
+  it('rejects an audio definition without one subject and speaker binding', () => {
+    const prompt = referenceAudioPrompt.replace(
+      '<Audio 1> is the voice-timbre reference for <Subject 1> (S1).',
+      '<Audio 1> is the voice-timbre reference.',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+      references: { pictureCount: 1, audioCount: 1 },
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:AUDIO_SPEAKER_BINDING_INVALID:1')
+  })
+
+  it('rejects one audio bound to two speaker identities', () => {
+    const prompt = referenceAudioPrompt.replace(
+      '<Audio 1> is the voice-timbre reference for <Subject 1> (S1).',
+      '<Audio 1> is the voice-timbre reference for <Subject 1> (S1) and <Subject 2> (S2).',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+      references: { pictureCount: 1, audioCount: 1 },
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:AUDIO_SPEAKER_BINDING_INVALID:1')
+  })
+
+  it('requires the audio-bound speaker in retention and dialogue', () => {
+    const withoutRetention = referenceAudioPrompt.replace(
+      '<Audio 1>: reference - <Subject 1> (S1) follows its vocal timbre and measured delivery without copying the original signal.',
+      '<Audio 1>: reference - preserve the vocal timbre.',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt: withoutRetention,
+      references: { pictureCount: 1, audioCount: 1 },
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:AUDIO_SPEAKER_RETENTION_MISSING:1')
+
+    const withoutDialogueSpeaker = referenceAudioPrompt.replace(
+      '[Shot 1] <Subject 1> (S1) faces camera and says',
+      '[Shot 1] The person faces camera and says',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt: withoutDialogueSpeaker,
+      references: { pictureCount: 1, audioCount: 1 },
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:AUDIO_SPEAKER_DIALOGUE_MISSING:1')
   })
 
   it('requires Picture 1 to be the explicit 0.00-second anchor in first-frame mode', () => {
@@ -319,6 +421,7 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
       prompt: 'anything',
       inputMode: 'text_to_video',
       timelineDurationSeconds: 4.458,
+      references: { pictureCount: 0, audioCount: 0 },
     })).not.toThrow()
   })
 })

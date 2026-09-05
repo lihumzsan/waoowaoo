@@ -559,7 +559,8 @@ function validateVideoPromptProfile(input: {
     })
   }
   try {
-    const inputMode = resolveOperationVideoInputMode(input.references).mode
+    const resolvedInputMode = resolveOperationVideoInputMode(input.references)
+    const inputMode = resolvedInputMode.mode
     const timelineDurationSeconds = profile === 'minimax_h3_multimodal_v3'
       ? (inputMode === 'continuation'
           ? resolveH3ContinuationDurationPlan(input.durationSeconds)
@@ -570,6 +571,16 @@ function validateVideoPromptProfile(input: {
       prompt: input.prompt,
       inputMode,
       timelineDurationSeconds,
+      references: {
+        pictureCount: inputMode === 'reference'
+          ? resolvedInputMode.referenceImageCount
+          : inputMode === 'first_last_frame'
+            ? 2
+            : inputMode === 'first_frame'
+              ? 1
+              : 0,
+        audioCount: resolvedInputMode.referenceAudioCount,
+      },
     })
   } catch (error) {
     throw new ApiError('INVALID_PARAMS', {

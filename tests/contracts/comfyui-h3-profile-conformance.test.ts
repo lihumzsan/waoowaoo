@@ -89,8 +89,15 @@ describe('ComfyUI H3 dual-stage profile', () => {
     ])
     expect(h3?.capabilities.video.firstlastframe).toBe(true)
     expect(h3?.capabilities.video.assetReferenceMultiReference).toBe(true)
-    expect(h3?.capabilities.video.maxReferenceImages).toBe(8)
-    expect(h3?.capabilities.video.maxReferenceFiles).toBe(8)
+    expect(h3?.capabilities.video).toMatchObject({
+      maxReferenceImages: 8,
+      maxReferenceAudios: 3,
+      maxReferenceVideos: 0,
+      maxReferenceFiles: 11,
+      referenceAudioRequiresVisual: true,
+      minReferenceAudioDurationMs: 2_000,
+      maxTotalReferenceAudioDurationMs: 15_000,
+    })
     expect(h3?.capabilities.video.durationOptions).toEqual([4, 5, 6, 7, 8, 9, 10, 11])
     expect(h3?.capabilities.video.continuationInput).toMatchObject({
       minSourceDurationMs: 917,
@@ -117,11 +124,15 @@ describe('ComfyUI H3 dual-stage profile', () => {
   it('accepts frame transport and up to eight ordered references at the real ComfyUI option boundary', () => {
     const selection = { provider: 'comfyui' as const, modelId: COMFYUI_H3_MODEL_ID, modelKey: `comfyui::${COMFYUI_H3_MODEL_ID}`, variantSubKind: 'official' as const }
     const references = Array.from({ length: 8 }, (_, index) => `https://example.com/reference-${index + 1}.png`)
+    const referenceAudios = Array.from({ length: 3 }, (_, index) => `https://example.com/reference-${index + 1}.mp3`)
     expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, referenceImages: references } })).toMatchObject({ duration: 4, referenceImages: references })
+    expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, referenceImages: references.slice(0, 1), referenceAudios } })).toMatchObject({ referenceAudios })
     expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true } })).toMatchObject({ duration: 4, generateAudio: true })
     expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, lastFrameImageUrl: 'https://example.com/last.png' } })).toMatchObject({ lastFrameImageUrl: 'https://example.com/last.png' })
     expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, continuationVideoUrl: 'https://example.com/previous.mp4' } })).toMatchObject({ continuationVideoUrl: 'https://example.com/previous.mp4' })
     expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, referenceImages: Array.from({ length: 9 }, () => 'a') } })).toThrow()
+    expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, referenceImages: references.slice(0, 1), referenceAudios: Array.from({ length: 4 }, () => 'a') } })).toThrow()
+    expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, referenceImages: references.slice(0, 1), referenceVideos: ['https://example.com/reference.mp4'] } })).toThrow()
     expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: false } })).toThrow()
   })
 

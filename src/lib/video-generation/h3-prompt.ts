@@ -29,6 +29,14 @@ const CLOCK_LIKE_TIME = /\b\d+\s*:\s*\d+(?:\s*[.,]\s*\d+)*\b/gu
 const CANONICAL_CLOCK_TIMED_EVENT = /^At \d{2}:\d{2}\.\d{3}$/u
 const UNIT_TIMED_EVENT = /(?:\b\d+(?:\.\d*)?|\.\d+)\s*(?:milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|hours?|hrs?)\b/iu
 const PICTURE_ANCHOR = /<Picture\s+\d+>/u
+const MEDIA_REFERENCE = /<(Picture|Audio)\s+(\d+)>/gu
+const SUBJECT_SPEAKER = /<Subject\s+(\d+)>\s*\(S(\d+)\)/gu
+const DIALOGUE_BLOCK_PRESENT = /<d>[\s\S]*?<\/d>/u
+
+export type H3PromptReferenceManifest = {
+  readonly pictureCount: number
+  readonly audioCount: number
+}
 
 function invalid(reason: string): Error {
   return new Error('VIDEO_PROMPT_PROFILE_INVALID:' + reason)
@@ -214,11 +222,75 @@ function assertH3InputMode(
   }
 }
 
+function assertH3ReferenceManifest(
+  sections: Readonly<Record<MinimaxH3PromptSection, string>>,
+  references: H3PromptReferenceManifest,
+): void {
+  if (
+    !Number.isSafeInteger(references.pictureCount)
+    || references.pictureCount < 0
+    || !Number.isSafeInteger(references.audioCount)
+    || references.audioCount < 0
+  ) {
+    throw invalid('REFERENCE_MANIFEST_INVALID')
+  }
+  for (const section of MINIMAX_H3_PROMPT_SECTIONS) {
+    for (const match of sections[section].matchAll(MEDIA_REFERENCE)) {
+      const modality = match[1]!
+      const number = Number(match[2])
+      const limit = modality === 'Picture' ? references.pictureCount : references.audioCount
+      if (!Number.isSafeInteger(number) || number < 1 || number > limit) {
+        throw invalid(`MEDIA_REFERENCE_INDEX_OUT_OF_RANGE:${modality}:${String(number)}`)
+      }
+    }
+  }
+  for (let audioNumber = 1; audioNumber <= references.audioCount; audioNumber += 1) {
+    const audioToken = `<Audio ${String(audioNumber)}>`
+    const definitionLines = sections.subject_definitions
+      .split('\n')
+      .filter((line) => line.includes(audioToken))
+    if (definitionLines.length === 0) {
+      throw invalid(`AUDIO_REFERENCE_MISSING:${String(audioNumber)}`)
+    }
+    if (definitionLines.length !== 1) {
+      throw invalid(`AUDIO_SPEAKER_BINDING_INVALID:${String(audioNumber)}`)
+    }
+    const bindings = Array.from(definitionLines[0]!.matchAll(SUBJECT_SPEAKER))
+    if (bindings.length !== 1) {
+      throw invalid(`AUDIO_SPEAKER_BINDING_INVALID:${String(audioNumber)}`)
+    }
+    const subjectNumber = Number(bindings[0]![1])
+    const speakerNumber = Number(bindings[0]![2])
+    if (
+      !Number.isSafeInteger(subjectNumber)
+      || subjectNumber < 1
+      || !Number.isSafeInteger(speakerNumber)
+      || speakerNumber < 1
+    ) {
+      throw invalid(`AUDIO_SPEAKER_BINDING_INVALID:${String(audioNumber)}`)
+    }
+    const subjectSpeaker = `<Subject ${String(subjectNumber)}> (S${String(speakerNumber)})`
+    const retained = sections.retention_analysis
+      .split('\n')
+      .some((line) => line.includes(audioToken) && line.includes(subjectSpeaker))
+    if (!retained) {
+      throw invalid(`AUDIO_SPEAKER_RETENTION_MISSING:${String(audioNumber)}`)
+    }
+    if (
+      !sections.detailed_description.includes(subjectSpeaker)
+      || !DIALOGUE_BLOCK_PRESENT.test(sections.detailed_description)
+    ) {
+      throw invalid(`AUDIO_SPEAKER_DIALOGUE_MISSING:${String(audioNumber)}`)
+    }
+  }
+}
+
 export function assertVideoPromptMatchesProfile(input: {
   readonly profile: VideoPromptProfile
   readonly prompt: string
   readonly inputMode: VideoInputMode
   readonly timelineDurationSeconds: number
+  readonly references: H3PromptReferenceManifest
 }): void {
   if (input.profile === 'generic_v1') return
   if (!input.prompt.trim()) throw invalid('PROMPT_EMPTY')
@@ -236,6 +308,7 @@ export function assertVideoPromptMatchesProfile(input: {
     input.timelineDurationSeconds,
   )
   assertH3InputMode(input.inputMode, input.timelineDurationSeconds, sections)
+  assertH3ReferenceManifest(sections, input.references)
 }
 
 export function parseMinimaxH3Prompt(

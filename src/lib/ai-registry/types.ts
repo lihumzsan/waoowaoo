@@ -778,12 +778,12 @@ function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unk
 
   if (
     raw.maxReferenceVideos !== undefined
-    && (!Number.isInteger(raw.maxReferenceVideos) || (raw.maxReferenceVideos as number) <= 0)
+    && (!Number.isInteger(raw.maxReferenceVideos) || (raw.maxReferenceVideos as number) < 0)
   ) {
     issues.push({
       code: 'CAPABILITY_FIELD_INVALID',
       field: 'capabilities.video.maxReferenceVideos',
-      message: 'maxReferenceVideos must be a positive integer',
+      message: 'maxReferenceVideos must be a non-negative integer',
     })
   }
 

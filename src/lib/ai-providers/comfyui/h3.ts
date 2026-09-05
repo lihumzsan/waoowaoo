@@ -8,6 +8,11 @@ import type { AiProviderVideoExecutionContext, GenerateResult } from '@/lib/ai-p
 import type { FailureRecord } from '@/lib/errors/failure'
 import { MAX_VIDEO_BYTES } from '@/lib/http/body-size-constants'
 import { readOwnedMediaBytesForGeneration } from '@/lib/media/outbound-owned-media'
+import {
+  MAX_VIDEO_REFERENCE_AUDIO_BYTES,
+  VIDEO_REFERENCE_AUDIO_MIME_TYPES,
+  normalizeVideoReferenceAudioMimeType,
+} from '@/lib/media/outbound-audio'
 import { extractH3ContinuationGuide } from '@/lib/video-compose/h3-continuation'
 import { H3_CONTINUATION_GUIDE_FRAMES } from '@/lib/video-generation/h3-timeline'
 import { assertVideoPromptMatchesProfile } from '@/lib/video-generation/h3-prompt'
@@ -23,12 +28,17 @@ import { deriveComfyUiProfileRequirements, type ComfyUiProfileRequirementOption 
 import {
   H3_CONTINUATION_DUAL_STAGE_PROFILE_ID,
   H3_DUAL_STAGE_RUNTIME_PROFILE,
+  H3_REFERENCE_DUAL_STAGE_PROFILE_ID,
   buildH3PromptGraph,
   resolveH3Dimensions,
   type H3AspectRatio,
   type H3DualStageRuntimeProfile,
 } from './profiles'
-import { uploadH3ContinuationFrames } from './h3-input-upload'
+import {
+  uploadH3ContinuationFrames,
+  uploadH3ReferenceAudios,
+  type H3ReferenceAudioFile,
+} from './h3-input-upload'
 import {
   asComfyUiRecord,
   COMFYUI_ACCEPTED_JOB_STATUSES,
@@ -64,6 +74,15 @@ const H3_CONTINUATION_NODE_INPUT_TYPES = {
     vae: { location: 'optional', type: 'VAE' },
     image: { location: 'optional', type: 'IMAGE' },
     frame_idx: { location: 'required', type: 'INT' },
+  },
+} as const satisfies Readonly<Record<string, Readonly<Record<string, H3NodeInputContract>>>>
+const H3_REFERENCE_NODE_INPUT_TYPES = {
+  LoadAudio: {
+    audio: { location: 'required', type: null },
+  },
+  MiniMaxH3ReferenceToVideo: {
+    audio_vae: { location: 'required', type: 'VAE' },
+    ref_audios: { location: 'optional', type: 'AUDIO' },
   },
 } as const satisfies Readonly<Record<string, Readonly<Record<string, H3NodeInputContract>>>>
 
@@ -132,11 +151,35 @@ function assertContinuationGraphContract(profile: H3DualStageRuntimeProfile): vo
   }
 }
 
+function assertReferenceAudioGraphContract(profile: H3DualStageRuntimeProfile): void {
+  if (profile.id !== H3_REFERENCE_DUAL_STAGE_PROFILE_ID) return
+  const audioNodeId = profile.referenceAudioNodeIds[0]
+  const audioNode = audioNodeId ? profile.workflow[audioNodeId] : undefined
+  const h3Node = profile.workflow[profile.h3NodeId]
+  if (!audioNode || audioNode.class_type !== 'LoadAudio' || typeof audioNode.inputs.audio !== 'string') {
+    throw new Error('COMFYUI_H3_REFERENCE_AUDIO_GRAPH_INCOMPATIBLE:LoadAudio')
+  }
+  const audioVae = h3Node?.inputs.audio_vae
+  if (
+    !Array.isArray(audioVae)
+    || typeof audioVae[0] !== 'string'
+    || audioVae[1] !== 0
+    || profile.workflow[audioVae[0]]?.class_type !== 'VAELoader'
+  ) {
+    throw new Error('COMFYUI_H3_REFERENCE_AUDIO_GRAPH_INCOMPATIBLE:audio_vae')
+  }
+  const referenceAudio = h3Node?.inputs['ref_audios.ref_audio_0']
+  if (!Array.isArray(referenceAudio) || referenceAudio[0] !== audioNodeId || referenceAudio[1] !== 0) {
+    throw new Error('COMFYUI_H3_REFERENCE_AUDIO_GRAPH_INCOMPATIBLE:ref_audios')
+  }
+}
+
 async function preflight(
   baseUrl: string,
   profile: H3DualStageRuntimeProfile,
 ): Promise<void> {
   assertContinuationGraphContract(profile)
+  assertReferenceAudioGraphContract(profile)
   const requirements = deriveComfyUiProfileRequirements({
     profileId: profile.id,
     graph: profile.workflow,
@@ -167,6 +210,14 @@ async function preflight(
       assertNodeInputContract(infoByClassName.get(className), className, inputs)
     }
   }
+  if (profile.id === H3_REFERENCE_DUAL_STAGE_PROFILE_ID) {
+    const infoByClassName = new Map(
+      requiredInfos.map(({ className, info }) => [className, info]),
+    )
+    for (const [className, inputs] of Object.entries(H3_REFERENCE_NODE_INPUT_TYPES)) {
+      assertNodeInputContract(infoByClassName.get(className), className, inputs)
+    }
+  }
   const optionInfos = await Promise.all(requirements.options.map(async (option) => ({
     option,
     info: await readInfo(option.classType),
@@ -183,11 +234,14 @@ function requireSelection(input: AiProviderVideoExecutionContext): void {
   if (input.selection.provider !== 'comfyui' || input.selection.modelId !== COMFYUI_H3_MODEL_ID || input.selection.modelKey !== COMFYUI_H3_MODEL_KEY) throw new AppError('INVALID_PARAMS', `Unsupported ComfyUI H3 model: ${input.selection.modelKey}`, { provider: 'comfyui' })
 }
 
-function normalizedReferenceUrls(values: readonly string[] | undefined): string[] {
+function normalizedMediaUrls(
+  values: readonly string[] | undefined,
+  label: 'image' | 'audio',
+): string[] {
   if (!values) return []
   const urls = values.map((url) => url.trim())
   if (urls.some((url) => !url)) {
-    throw new AppError('INVALID_PARAMS', 'ComfyUI H3 reference image URLs must be non-empty', { provider: 'comfyui' })
+    throw new AppError('INVALID_PARAMS', `ComfyUI H3 reference ${label} URLs must be non-empty`, { provider: 'comfyui' })
   }
   return urls
 }
@@ -198,18 +252,53 @@ function continuationPlaceholderFilenames(promptId: string): readonly string[] {
   ))
 }
 
+function referenceAudioPlaceholderFilenames(promptId: string, count: number): readonly string[] {
+  return Array.from({ length: count }, (_, index) => (
+    `waoowaoo/${promptId}/reference-audio-${String(index).padStart(2, '0')}.mp3`
+  ))
+}
+
+type H3PreparedInputs = {
+  readonly continuationFrameFilenames: readonly string[]
+  readonly referenceAudioFilenames: readonly string[]
+}
+
+async function readH3ReferenceAudioFiles(input: {
+  readonly urls: readonly string[]
+  readonly userId: string
+}): Promise<readonly H3ReferenceAudioFile[]> {
+  return await Promise.all(input.urls.map(async (url): Promise<H3ReferenceAudioFile> => {
+    const media = await readOwnedMediaBytesForGeneration(url, input.userId, {
+      maxBytes: MAX_VIDEO_REFERENCE_AUDIO_BYTES,
+      label: 'owned H3 reference audio',
+      supportedMimeTypes: VIDEO_REFERENCE_AUDIO_MIME_TYPES,
+      normalizeMimeType: normalizeVideoReferenceAudioMimeType,
+      requireDetectedMimeType: true,
+    })
+    if (media.contentType !== 'audio/mpeg' && media.contentType !== 'audio/wav') {
+      throw new Error(`COMFYUI_H3_REFERENCE_AUDIO_FORMAT_UNSUPPORTED:${media.contentType}`)
+    }
+    return {
+      bytes: new Uint8Array(media.bytes),
+      contentType: media.contentType,
+      extension: media.contentType === 'audio/mpeg' ? 'mp3' : 'wav',
+    }
+  }))
+}
+
 function buildGraph(
   input: AiProviderVideoExecutionContext,
   promptId: string,
-  continuationFrameFilenames: readonly string[] = continuationPlaceholderFilenames(promptId),
+  prepared: H3PreparedInputs,
 ) {
   requireSelection(input)
   const options = input.options ?? {}
   if (options.generateAudio !== true) throw new AppError('INVALID_PARAMS', 'ComfyUI H3 requires generateAudio=true', { provider: 'comfyui' })
-  if (options.referenceAudios?.length || options.referenceVideos?.length) {
-    throw new AppError('INVALID_PARAMS', 'ComfyUI H3 does not accept reference audio or video', { provider: 'comfyui' })
+  if (options.referenceVideos?.length) {
+    throw new AppError('INVALID_PARAMS', 'ComfyUI H3 does not accept reference video', { provider: 'comfyui' })
   }
-  const referenceImageUrls = normalizedReferenceUrls(options.referenceImages)
+  const referenceImageUrls = normalizedMediaUrls(options.referenceImages, 'image')
+  const referenceAudioUrls = normalizedMediaUrls(options.referenceAudios, 'audio')
   const firstFrameUrl = input.imageUrl.trim()
   const lastFrameUrl = options.lastFrameImageUrl?.trim() ?? ''
   const continuationVideoUrl = options.continuationVideoUrl?.trim() ?? ''
@@ -221,6 +310,7 @@ function buildGraph(
   }
   const references: VideoInputReference[] = [
     ...referenceImageUrls.map(() => ({ channel: 'image' as const, role: 'reference_image' })),
+    ...referenceAudioUrls.map(() => ({ channel: 'audio' as const, role: 'reference_audio' })),
     ...(firstFrameUrl ? [{ channel: 'image' as const, role: 'first_frame' }] : []),
     ...(lastFrameUrl ? [{ channel: 'image' as const, role: 'last_frame' }] : []),
     ...(continuationVideoUrl ? [{ channel: 'video' as const, role: 'continuation_video' }] : []),
@@ -228,6 +318,9 @@ function buildGraph(
   const inputMode = resolveVideoInputMode(references).mode
   if (inputMode === 'text_to_video') {
     throw new AppError('INVALID_PARAMS', 'ComfyUI H3 requires explicit media input', { provider: 'comfyui' })
+  }
+  if (referenceAudioUrls.length > 0 && referenceImageUrls.length === 0) {
+    throw new AppError('INVALID_PARAMS', 'ComfyUI H3 reference audio requires a reference image', { provider: 'comfyui' })
   }
   const duration = options.duration
   const aspectRatio = options.aspectRatio
@@ -242,6 +335,16 @@ function buildGraph(
     prompt,
     inputMode,
     timelineDurationSeconds: durationPlan.promptEndSeconds,
+    references: {
+      pictureCount: inputMode === 'reference'
+        ? referenceImageUrls.length
+        : inputMode === 'first_last_frame'
+          ? 2
+          : inputMode === 'first_frame'
+            ? 1
+            : 0,
+      audioCount: referenceAudioUrls.length,
+    },
   })
   const common = {
     prompt,
@@ -254,8 +357,8 @@ function buildGraph(
       ...common,
       mode: 'reference',
       referenceImageUrls,
-      referenceAudioFilenames: [],
-    }), inputMode }
+      referenceAudioFilenames: prepared.referenceAudioFilenames,
+    }), inputMode, referenceAudioUrls }
   }
   if (inputMode === 'first_frame') {
     return { ...buildH3PromptGraph({
@@ -276,7 +379,7 @@ function buildGraph(
     ...buildH3PromptGraph({
       ...common,
       mode: 'continuation',
-      continuationFrameFilenames,
+      continuationFrameFilenames: prepared.continuationFrameFilenames,
     }),
     inputMode,
     continuationVideoUrl,
@@ -290,8 +393,28 @@ export async function executeComfyUiH3VideoGeneration(input: AiProviderVideoExec
   let continuationWorkspaceDir: string | null = null
   try {
     target = resolveComfyUiRuntimeTarget(COMFYUI_H3_RUNTIME_TARGET_ID)
-    built = buildGraph(input, promptId)
+    const referenceAudioUrls = normalizedMediaUrls(input.options?.referenceAudios, 'audio')
+    const initialPreparedInputs: H3PreparedInputs = {
+      continuationFrameFilenames: continuationPlaceholderFilenames(promptId),
+      referenceAudioFilenames: referenceAudioPlaceholderFilenames(promptId, referenceAudioUrls.length),
+    }
+    built = buildGraph(input, promptId, initialPreparedInputs)
     await preflight(target.baseUrl, built.profile)
+    if (built.inputMode === 'reference' && built.referenceAudioUrls.length > 0) {
+      const files = await readH3ReferenceAudioFiles({
+        urls: built.referenceAudioUrls,
+        userId: input.userId,
+      })
+      const uploaded = await uploadH3ReferenceAudios({
+        baseUrl: target.baseUrl,
+        promptId,
+        files,
+      })
+      built = buildGraph(input, promptId, {
+        ...initialPreparedInputs,
+        referenceAudioFilenames: uploaded,
+      })
+    }
     if (built.inputMode === 'continuation') {
       const media = await readOwnedMediaBytesForGeneration(
         built.continuationVideoUrl,
@@ -321,7 +444,10 @@ export async function executeComfyUiH3VideoGeneration(input: AiProviderVideoExec
         promptId,
         framePaths,
       })
-      built = buildGraph(input, promptId, uploaded)
+      built = buildGraph(input, promptId, {
+        ...initialPreparedInputs,
+        continuationFrameFilenames: uploaded,
+      })
     }
   } catch (error) { throw preAcceptRejected(error) }
   finally {

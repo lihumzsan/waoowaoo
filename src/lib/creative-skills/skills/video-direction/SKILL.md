@@ -30,7 +30,7 @@ description: Use when directing screenplay-based video generation that requires 
 
 - `reference` 的素材角色和数量必须完全遵守能力声明。普通参考图不是首帧；只有 capability 明确支持且剧情要求从该画面开始时才使用 `first_frame`。
 - 每个 item 只列实际使用的 ready Resource，精确复制 `resourceId`、`contentVersion`、`role`、`channel`，顺序与 Prompt 中的媒体编号一致；不得从文件名或近似描述猜身份。
-- H3 multimodal v3 同时支持四个互斥模式：`reference` 接受 1–8 张有序 `channel=image, role=reference_image`；`first_frame` 精确接受一张 `role=first_frame`；`first_last_frame` 精确接受一张首帧和一张尾帧；`continuation` 精确接受一个 `channel=video, role=continuation_video` 的前段 ready 视频。四种模式都不接受 `reference_audio`、`reference_video`，也不得互相混合。缺首帧、仅尾帧、重复帧、重复 continuation、空引用、超过上限或错误角色时停止。
+- H3 multimodal v3 同时支持四个互斥模式：`reference` 接受 1–8 张有序 `channel=image, role=reference_image`，并可搭配 1–3 段有序 `channel=audio, role=reference_audio`；图片与音频合计最多 11 个文件。每段参考音频至少 2,000 ms，全部参考音频合计最多 15,000 ms，且音频必须搭配至少一张参考图。`first_frame` 精确接受一张 `role=first_frame`；`first_last_frame` 精确接受一张首帧和一张尾帧；`continuation` 精确接受一个 `channel=video, role=continuation_video` 的前段 ready 视频。`reference_video` 仍不支持，参考音频不得与帧或 continuation 模式混合。缺首帧、仅尾帧、重复帧、重复 continuation、空引用、超过上限或错误角色时停止。
 
 ### 多帧运动续接
 
@@ -65,7 +65,31 @@ overall_soundscape:
 non_diegetic_music:
 ```
 
-除对白原文和画面内文字外正文使用英文。除 `continuation` 外，`subject_definitions` 必须把每个实际使用的主体、服装、场景或道具绑定到对应的 `<Picture 1>` 至 `<Picture N>`，不得引用不存在的编号；`continuation` 不使用不存在的 Picture 标签，而是用已冻结的前段事实定义继续出现的主体与场景。`summary` 只用英文概括动作与参考关系，发声事件写成 `speaks the provided line`，不引用原句、不放 `<d>`；`retention_analysis` 写身份、服装、比例、风格、场景和道具关系，continuation 还必须写明继承进入点的姿态、运动方向、接触关系和镜头运动；`detailed_description` 按播放顺序写连续可见动作、机位、落位、视线、对白与逐镜同步声音；`overall_soundscape` 用一个连续英文段落归纳全片环境声、动作声和非语言人声，不复述对白、歌唱或逐镜时间线。
+除对白原文和画面内文字外正文使用英文。除 `continuation` 外，`subject_definitions` 必须把每个实际使用的主体、服装、场景或道具绑定到对应的 `<Picture 1>` 至 `<Picture N>`，不得引用不存在的编号；使用参考音频时，每个 `<Audio N>` 必须恰好定义一次并绑定一个明确的 `<Subject M> (Sx)`，编号顺序与同模态冻结顺序一致。`continuation` 不使用不存在的 Picture 或 Audio 标签，而是用已冻结的前段事实定义继续出现的主体与场景。`summary` 只用英文概括动作与参考关系，发声事件写成 `speaks the provided line`，不引用原句、不放 `<d>`；`retention_analysis` 写身份、服装、比例、风格、场景和道具关系，并为每个 Audio 重复同一 Subject/Speaker 绑定，continuation 还必须写明继承进入点的姿态、运动方向、接触关系和镜头运动；`detailed_description` 按播放顺序写连续可见动作、机位、落位、视线、对白与逐镜同步声音，使用音色参考时必须出现相同的 `<Subject M> (Sx)` 和 `<d>`；`overall_soundscape` 用一个连续英文段落归纳全片环境声、动作声和非语言人声，不复述对白、歌唱或逐镜时间线。
+
+参考音色的标准结构如下，实际主体、编号和台词必须来自当前冻结输入与来源事实：
+
+```text
+subject_definitions:
+<Subject 1> (S1) is the person shown in <Picture 1>.
+<Audio 1> is the voice-timbre reference for <Subject 1> (S1).
+
+summary:
+<Subject 1> speaks one new line.
+
+retention_analysis:
+<Picture 1>: reference - preserve <Subject 1>.
+<Audio 1>: reference - <Subject 1> (S1) follows its vocal timbre and measured delivery without copying the original signal.
+
+detailed_description:
+[Shot 1] <Subject 1> (S1) faces camera and says <d>[Chinese]这是新台词。</d>
+
+overall_soundscape:
+Clean speech with quiet room tone.
+
+non_diegetic_music:
+N/A
+```
 
 ### H3 镜头、运镜与声音语法
 
@@ -84,7 +108,7 @@ non_diegetic_music:
 
 图片时序语义只由当前显式输入模式决定：
 
-- `reference`：每个 `<Picture N>` 只锁定身份、风格、内容与场景结构，不是首帧或尾帧，不得写成时间锚点。
+- `reference`：每个 `<Picture N>` 只锁定身份、风格、内容与场景结构，不是首帧或尾帧，不得写成时间锚点。每个 `<Audio N>` 只提供绑定人物的音色、节奏和表达参考，不复制原始音频信号；普通音色参考仍使用当前任务的新台词。
 - `first_frame`：`detailed_description` 的 `[Shot 1]` 后第一句必须把 `<Picture 1>` 明确对齐 `0.00 seconds`，再描述从该状态连续发展的动作。
 - `first_last_frame`：除首帧规则外，必须在同一句中把 `<Picture 2>` 明确对齐匹配 `first_last_frame + requestedDurationSeconds` 条目的 `promptEndSeconds`，并描述从首帧状态连续收敛到尾帧状态的运动路径。来源明确要求多镜时，`<Picture 2>` 只属于最后一个 `[Shot N]`，在该镜结尾成为 Segment 的最终视觉状态，其后不得再有镜头、动作或状态变化。
 - `continuation`：不写 `<Picture N>` 时间锚点；`detailed_description` 直接延续运动上下文的退出姿态、速度、方向、接触关系和运镜趋势。时间换算与范围完全遵守上方“多帧运动续接”的匹配条目，不复述或重新表演上下文。
@@ -114,7 +138,7 @@ N/A
 - 每镜是否有景别、机位、主体落位、朝向、世内视线、一个主要运镜、向前变化和可见落点？
 - `detailed_description` 是否直接以 `[Shot 1]` 开始、每次真实切镜都用递增的 `[Shot N] At MM:SS.mmm`、连续动作没有被时间块机械拆镜、单镜要求与 `first_last_frame` 默认单镜是否保留？
 - 运镜是否写成自然英文动词句并在来源要求时明确幅度与速度；除对白原文和画面文字外是否没有中文或混合语言残留？
-- 是否只使用 capability 允许的参考角色与数量，四种模式互斥，且 Picture 时间锚点与当前模式及 Segment 时长一致？
+- 是否只使用 capability 允许的参考角色与数量，四种模式互斥，且 Picture 时间锚点与当前模式及 Segment 时长一致；每个 Audio 是否绑定唯一 Subject/Speaker 并在 retention 与对白中复用？
 - 是否先满足运动续接或明确帧控制，再应用对白 Ref2VA 偏好？`durationSeconds` 是否仍为合法整数，时间条目是否同时匹配输入模式和请求时长，所有锚点是否使用该条目的内部时钟？
 - 要求前段运动连续续接时，是否把前段精确 ready 视频版本作为后段唯一 `continuation_video`，且失败时没有单尾帧、参考图、reference video 或时间偏移 fallback？
 - H3 是否严格六段、固定 `non_diegetic_music: N/A`、无 AI 节点和无 Prompt 改写？

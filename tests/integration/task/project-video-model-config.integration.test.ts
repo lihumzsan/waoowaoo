@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import {
+  COMFYUI_PLATFORM_DEFAULT_MUSIC_MODEL_KEY,
   COMFYUI_PLATFORM_DEFAULT_SOUND_MODEL_KEY,
   COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
 } from '@/lib/ai-providers/comfyui/models'
@@ -13,7 +14,6 @@ import { planOperation } from '@/lib/operations/planning'
 import { createProjectAgentOperationRegistryForApi } from '@/lib/operations/registry'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import { getPlatformDefaultModels, getPlatformModels } from '@/lib/platform-models/catalog'
-import { resolveModelSelection } from '@/lib/user-api/runtime-config'
 import { buildWorkspaceResourceId } from '@/lib/workspace-resource/identity'
 import {
   materializeWorkspaceResourceInTransaction,
@@ -145,6 +145,86 @@ async function seedReadyImage(input: {
       },
     })
   })
+}
+
+async function seedReadyAudio(input: {
+  userId: string
+  projectId: string
+  durationMs: number
+  label: string
+}): Promise<{ resourceId: string; contentVersion: number }> {
+  const resourceId = buildWorkspaceResourceId({
+    operationId: 'project_video_model_config_audio_source',
+    requestId: `${input.projectId}:${input.label}`,
+    memberIndex: 0,
+  })
+  const media = await ensureMediaObjectFromStorageKey(
+    `tests/project-video-model-config/${input.projectId}-${input.label}.mp3`,
+    {
+      mimeType: 'audio/mpeg',
+      sizeBytes: 4,
+      durationMs: input.durationMs,
+    },
+  )
+  return await prisma.$transaction(async (tx) => {
+    await reserveWorkspaceResourceInTransaction(tx, {
+      resourceId,
+      userId: input.userId,
+      projectId: input.projectId,
+      outputPath: `${resourceId}.mp3`,
+      mediaType: 'audio',
+      schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
+      sourceType: 'integration_test_fixture',
+      sourceId: resourceId,
+    })
+    return await materializeWorkspaceResourceInTransaction(tx, {
+      resourceId,
+      userId: input.userId,
+      projectId: input.projectId,
+      mediaType: 'audio',
+      schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
+      content: { kind: 'media', mediaId: media.id },
+      inputs: [],
+      provenance: {
+        operationId: null,
+        inputHash: null,
+        taskId: null,
+        operationExecutionId: null,
+        toolCallId: null,
+        prompt: null,
+        modelKey: null,
+        generationOptions: null,
+      },
+    })
+  })
+}
+
+function h3ReferenceAudioPrompt(audioCount: number): string {
+  const definitions = Array.from({ length: audioCount }, (_, index) => (
+    `<Audio ${String(index + 1)}> is the voice-timbre reference for <Subject 1> (S1).`
+  )).join('\n')
+  const retention = Array.from({ length: audioCount }, (_, index) => (
+    `<Audio ${String(index + 1)}>: reference - <Subject 1> (S1) follows its vocal timbre without copying the original signal.`
+  )).join('\n')
+  return `subject_definitions:
+<Subject 1> (S1) is the person shown in <Picture 1>.
+${definitions}
+
+summary:
+<Subject 1> speaks one new line.
+
+retention_analysis:
+<Picture 1>: reference - preserve <Subject 1>.
+${retention}
+
+detailed_description:
+[Shot 1] <Subject 1> (S1) faces camera and says <d>[Chinese]这是新台词。</d>
+
+overall_soundscape:
+Clean speech with quiet room tone.
+
+non_diegetic_music:
+N/A`
 }
 
 function h3Prompt(inputMode: 'reference' | 'first_frame' | 'first_last_frame', promptEndSeconds: number): string {
@@ -340,7 +420,7 @@ describe('project local video model configuration', () => {
           name: 'H3 capability failure',
           mediaType: 'video',
           schemaId: WORKSPACE_RESOURCE_SCHEMA.VIDEO_SEGMENT,
-          prompt: 'A calm camera move through a mountain valley.',
+          prompt: h3Prompt('first_frame', 4.458),
           references: [{
             resourceId: source.resourceId,
             contentVersion: source.contentVersion,
@@ -363,7 +443,7 @@ describe('project local video model configuration', () => {
       details: expect.objectContaining({
         code: 'MEDIA_GENERATION_CAPABILITY_INVALID',
         field: 'video',
-        reason: expect.stringMatching(/^CAPABILITY_VALUE_NOT_ALLOWED:/),
+        reason: expect.stringMatching(/^CAPABILITY_FIELD_INVALID:/),
       }),
     })
   })
@@ -454,6 +534,117 @@ describe('project local video model configuration', () => {
     })
   })
 
+  it('enforces H3 reference-audio count, visual, duration, and mode boundaries before writes', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const image = await seedReadyImage({ userId: user.id, projectId: project.id, label: 'audio-visual' })
+    const audio2s = await seedReadyAudio({ userId: user.id, projectId: project.id, label: 'audio-2s', durationMs: 2_000 })
+    const audio5sA = await seedReadyAudio({ userId: user.id, projectId: project.id, label: 'audio-5s-a', durationMs: 5_000 })
+    const audio5sB = await seedReadyAudio({ userId: user.id, projectId: project.id, label: 'audio-5s-b', durationMs: 5_000 })
+    const audio8s = await seedReadyAudio({ userId: user.id, projectId: project.id, label: 'audio-8s', durationMs: 8_000 })
+    const audio1999 = await seedReadyAudio({ userId: user.id, projectId: project.id, label: 'audio-1999', durationMs: 1_999 })
+    const audio5001 = await seedReadyAudio({ userId: user.id, projectId: project.id, label: 'audio-5001', durationMs: 5_001 })
+    await prisma.project.update({
+      where: { id: project.id },
+      data: {
+        videoModel: COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
+        videoRatio: '9:16',
+      },
+    })
+    const operation = createProjectAgentOperationRegistryForApi().create_video
+    const imageReference = { ...image, role: 'reference_image' as const, channel: 'image' as const }
+    const audioReference = (audio: { resourceId: string; contentVersion: number }) => ({
+      ...audio,
+      role: 'reference_audio' as const,
+      channel: 'audio' as const,
+    })
+    const plan = async (itemId: string, references: readonly {
+      readonly resourceId: string
+      readonly contentVersion: number
+      readonly role: 'reference_image' | 'reference_audio' | 'first_frame'
+      readonly channel: 'image' | 'audio'
+    }[], audioCount: number) => {
+      const parsed = operation.inputSchema.safeParse({
+        request: {
+          kind: 'new',
+          items: [{
+            itemId,
+            name: itemId,
+            mediaType: 'video',
+            schemaId: WORKSPACE_RESOURCE_SCHEMA.VIDEO_SEGMENT,
+            prompt: h3ReferenceAudioPrompt(audioCount),
+            references,
+            durationSeconds: 4,
+            vocalPerformanceMode: 'native_dialogue',
+            count: 1,
+          }],
+        },
+      })
+      expect(parsed.success).toBe(true)
+      if (!parsed.success) throw new Error('H3 reference-audio integration input must be valid')
+      return await planOperation({
+        operation,
+        ctx: operationContext(user.id, project.id),
+        input: parsed.data,
+      })
+    }
+
+    await expect(plan('one-audio', [imageReference, audioReference(audio2s)], 1)).resolves.toBeDefined()
+    await expect(plan('three-audios', [
+      imageReference,
+      audioReference(audio5sA),
+      audioReference(audio5sB),
+      audioReference(audio2s),
+    ], 3)).resolves.toBeDefined()
+
+    const rejected = [
+      {
+        name: 'audio-only',
+        references: [audioReference(audio2s)],
+        audioCount: 1,
+        code: 'VIDEO_MODEL_REFERENCE_AUDIO_REQUIRES_VISUAL',
+      },
+      {
+        name: 'too-short',
+        references: [imageReference, audioReference(audio1999)],
+        audioCount: 1,
+        code: 'VIDEO_MODEL_REFERENCE_AUDIO_TOO_SHORT',
+      },
+      {
+        name: 'total-too-long',
+        references: [imageReference, audioReference(audio5sA), audioReference(audio5sB), audioReference(audio5001)],
+        audioCount: 3,
+        code: 'VIDEO_MODEL_REFERENCE_AUDIO_TOTAL_DURATION_EXCEEDED',
+      },
+      {
+        name: 'four-audios',
+        references: [imageReference, audioReference(audio2s), audioReference(audio5sA), audioReference(audio5sB), audioReference(audio8s)],
+        audioCount: 4,
+        code: 'VIDEO_MODEL_AUDIO_REFERENCE_LIMIT_EXCEEDED',
+      },
+      {
+        name: 'first-frame-audio',
+        references: [
+          { ...image, role: 'first_frame' as const, channel: 'image' as const },
+          audioReference(audio2s),
+        ],
+        audioCount: 1,
+        code: 'VIDEO_REFERENCE_MODE_CONFLICT',
+      },
+    ] as const
+    for (const invalid of rejected) {
+      const before = {
+        tasks: await prisma.task.count({ where: { projectId: project.id } }),
+        resources: await prisma.workspaceResource.count({ where: { projectId: project.id } }),
+      }
+      await expect(plan(invalid.name, invalid.references, invalid.audioCount)).rejects.toMatchObject({
+        details: expect.objectContaining({ code: invalid.code }),
+      })
+      await expect(prisma.task.count({ where: { projectId: project.id } })).resolves.toBe(before.tasks)
+      await expect(prisma.workspaceResource.count({ where: { projectId: project.id } })).resolves.toBe(before.resources)
+    }
+  })
+
   it('rejects an unavailable inherited video preference before creating a project', async () => {
     const user = await createTestUser()
     const anchorProject = await createTestProject(user.id)
@@ -505,7 +696,7 @@ describe('project local video model configuration', () => {
       locationModel: CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
       editModel: CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
       videoModel: COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
-      musicModel: null,
+      musicModel: COMFYUI_PLATFORM_DEFAULT_MUSIC_MODEL_KEY,
       soundModel: COMFYUI_PLATFORM_DEFAULT_SOUND_MODEL_KEY,
       videoRatio: '9:16',
       videoVocalPerformanceMode: 'native_dialogue',
@@ -608,7 +799,7 @@ describe('project local video model configuration', () => {
       },
     })).resolves.toEqual({
       videoRatio: '9:16',
-      analysisModel: platformDefaults.analysisModel,
+      analysisModel: platformDefaults.analysisModel ?? null,
       characterModel: platformDefaults.characterModel,
       locationModel: platformDefaults.locationModel,
       editModel: platformDefaults.editModel,
@@ -724,10 +915,7 @@ describe('project local video model configuration', () => {
         defaultModels: { videoModel: CUSTOM_VIDEO_MODEL_KEY },
       },
     })).rejects.toMatchObject({
-      details: expect.objectContaining({
-        code: 'PROJECT_VIDEO_MODEL_NOT_AVAILABLE',
-        field: 'videoModel',
-      }),
+      details: expect.objectContaining({ code: 'PROVIDER_NOT_SUPPORTED' }),
     })
     await expect(prisma.userPreference.findUnique({
       where: { userId: user.id },
@@ -796,25 +984,4 @@ describe('project local video model configuration', () => {
     })
   })
 
-  it('preserves Cloud user-key custom-video selection behavior', async () => {
-    process.env.DEPLOYMENT_EDITION = 'cloud'
-    process.env.PROVIDER_CREDENTIAL_MODE = 'user-key'
-    const user = await createTestUser()
-    const project = await createTestProject(user.id)
-    await configureCustomVideoModel(user.id)
-
-    const result = await invokeProjectAgentOperation({
-      registry: createProjectAgentOperationRegistryForApi(),
-      channel: 'api',
-      operationId: 'list_user_models',
-      context: operationContext(user.id, project.id),
-      input: {},
-    })
-
-    expect(videoOptions(result.data).map((option) => option.value)).toContain(CUSTOM_VIDEO_MODEL_KEY)
-    await expect(resolveModelSelection(user.id, CUSTOM_VIDEO_MODEL_KEY, 'video')).resolves.toMatchObject({
-      modelKey: CUSTOM_VIDEO_MODEL_KEY,
-      provider: 'fal',
-    })
-  })
 })

@@ -10,6 +10,7 @@ import {
 } from './models'
 import { executeComfyUiH3VideoGeneration } from './h3'
 import {
+  H3_MAX_REFERENCE_AUDIOS,
   H3_MAX_REFERENCE_IMAGES,
 } from './profiles'
 import {
@@ -63,9 +64,9 @@ export const comfyuiAdapter: AiProviderAdapter = {
       selection,
       executionMode: 'async',
       optionSchema: buildMediaOptionSchema('video', {
-        allowedKeys: ['referenceImages', 'lastFrameImageUrl', 'continuationVideoUrl'],
+        allowedKeys: ['referenceImages', 'referenceAudios', 'lastFrameImageUrl', 'continuationVideoUrl'],
         required: ['duration', 'aspectRatio', 'generateAudio'],
-        excludedKeys: ['resolution', 'referenceAudios', 'referenceVideos', 'size', 'promptExtend', 'serviceTier', 'executionExpiresAfter', 'returnLastFrame', 'draft', 'seed', 'cameraFixed', 'watermark'],
+        excludedKeys: ['resolution', 'referenceVideos', 'size', 'promptExtend', 'serviceTier', 'executionExpiresAfter', 'returnLastFrame', 'draft', 'seed', 'cameraFixed', 'watermark'],
         validators: {
           duration: integerRangeValidator({
             min: H3_DURATION_MIN_SECONDS,
@@ -74,6 +75,7 @@ export const comfyuiAdapter: AiProviderAdapter = {
           aspectRatio: enumValidator(H3_ASPECT_RATIOS),
           generateAudio: booleanValidator(),
           referenceImages: stringArrayValidator({ maxLength: H3_MAX_REFERENCE_IMAGES }),
+          referenceAudios: stringArrayValidator({ maxLength: H3_MAX_REFERENCE_AUDIOS }),
           lastFrameImageUrl: nonEmptyStringValidator(),
           continuationVideoUrl: nonEmptyStringValidator(),
         },
