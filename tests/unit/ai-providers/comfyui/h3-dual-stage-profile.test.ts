@@ -12,7 +12,7 @@ describe('MiniMax H3 dual-stage profile', () => {
     expect(resolveH3DurationPlan(4).frameCount).toBe(107)
     expect(resolveH3DurationPlan(5).frameCount).toBe(124)
     expect(resolveH3DurationPlan(10).frameCount).toBe(243)
-    expect(resolveH3DurationPlan(13).frameCount).toBe(328)
+    expect(resolveH3DurationPlan(11).frameCount).toBe(277)
     expect(resolveH3Dimensions({ megapixels: 1, aspectRatio: '16:9' })).toEqual({ width: 1376, height: 768 })
     expect(resolveH3Dimensions({ megapixels: 2, aspectRatio: '16:9' })).toEqual({ width: 2064, height: 1152 })
   })
@@ -46,9 +46,9 @@ describe('MiniMax H3 dual-stage profile', () => {
     expect(resolveH3DurationPlan(9).frameCount).toBe(226)
   })
 
-  it('rejects H3 graph durations above thirteen seconds', () => {
-    expect(() => resolveH3DurationPlan(14)).toThrow('H3_REQUESTED_DURATION_INVALID:14')
-    expect(() => resolveH3DurationPlan(15)).toThrow('H3_REQUESTED_DURATION_INVALID:15')
+  it('rejects H3 graph durations above eleven seconds', () => {
+    expect(() => resolveH3DurationPlan(12)).toThrow('H3_REQUESTED_DURATION_INVALID:12')
+    expect(() => resolveH3DurationPlan(13)).toThrow('H3_REQUESTED_DURATION_INVALID:13')
   })
 
   it('contains both VSR stages, both cache clears, and no Codex or LoadImage node', () => {
@@ -73,7 +73,7 @@ describe('MiniMax H3 dual-stage profile', () => {
       mode: 'reference',
       prompt: 'subject_definitions:\nSubject 1 is in Picture 1.',
       referenceImageUrls: ['https://example.test/reference-3.png'],
-      frameCount: resolveH3DurationPlan(13).frameCount,
+      frameCount: resolveH3DurationPlan(11).frameCount,
       aspectRatio: '9:16',
       seed: 8,
     })
@@ -87,7 +87,7 @@ describe('MiniMax H3 dual-stage profile', () => {
     expect(first.graph[first.profile.h3NodeId]?.inputs.length).toBe(107)
     expect(first.graph[first.profile.firstUpscaleNodeId]?.inputs.width).toBe(1376)
     expect(first.graph[first.profile.finalUpscaleNodeId]?.inputs.height).toBe(1152)
-    expect(second.graph[second.profile.h3NodeId]?.inputs.length).toBe(328)
+    expect(second.graph[second.profile.h3NodeId]?.inputs.length).toBe(277)
     expect(second.graph[second.profile.firstUpscaleNodeId]?.inputs.width).toBe(768)
     expect(second.graph[second.profile.finalUpscaleNodeId]?.inputs.height).toBe(2064)
     expect(second.graph[second.profile.h3NodeId]?.inputs['ref_images.ref_image_1']).toBeUndefined()

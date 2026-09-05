@@ -19,7 +19,7 @@ describe('ComfyUI H3 dual-stage profile', () => {
     expect(resolveH3DurationPlan(4).frameCount).toBe(107)
     expect(resolveH3DurationPlan(5).frameCount).toBe(124)
     expect(resolveH3DurationPlan(10).frameCount).toBe(243)
-    expect(resolveH3DurationPlan(13).frameCount).toBe(328)
+    expect(resolveH3DurationPlan(11).frameCount).toBe(277)
     expect(resolveH3Dimensions({ megapixels: 1, aspectRatio: '16:9' })).toEqual({ width: 1376, height: 768 })
     expect(resolveH3Dimensions({ megapixels: 2, aspectRatio: '16:9' })).toEqual({ width: 2064, height: 1152 })
   })
@@ -90,10 +90,10 @@ describe('ComfyUI H3 dual-stage profile', () => {
     expect(h3?.capabilities.video.assetReferenceMultiReference).toBe(true)
     expect(h3?.capabilities.video.maxReferenceImages).toBe(8)
     expect(h3?.capabilities.video.maxReferenceFiles).toBe(8)
-    expect(h3?.capabilities.video.durationOptions).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
+    expect(h3?.capabilities.video.durationOptions).toEqual([4, 5, 6, 7, 8, 9, 10, 11])
     expect(h3?.capabilities.video.continuationInput).toMatchObject({
       minSourceDurationMs: 917,
-      maxSourceDurationMs: 13_708,
+      maxSourceDurationMs: 11_583,
       sourceAspectRatioByTarget: {
         '9:16': { width: 1152, height: 2064 },
       },
@@ -124,12 +124,12 @@ describe('ComfyUI H3 dual-stage profile', () => {
     expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: false } })).toThrow()
   })
 
-  it('rejects an H3 duration above thirteen seconds at provider preflight', () => {
+  it('rejects an H3 duration above eleven seconds at provider preflight', () => {
     ensureAiCatalogsRegistered()
     const selection = { provider: 'comfyui' as const, modelId: COMFYUI_H3_MODEL_ID, modelKey: `comfyui::${COMFYUI_H3_MODEL_ID}`, variantSubKind: 'official' as const }
     const referenceImages = ['https://example.com/reference.png']
-    expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 13, aspectRatio: '9:16', generateAudio: true, referenceImages } })).toMatchObject({ duration: 13 })
-    expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 14, aspectRatio: '9:16', generateAudio: true, referenceImages } })).toThrow()
+    expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 11, aspectRatio: '9:16', generateAudio: true, referenceImages } })).toMatchObject({ duration: 11 })
+    expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 12, aspectRatio: '9:16', generateAudio: true, referenceImages } })).toThrow()
   })
 
   it('keeps the canonical graph wired to the final output node', () => {

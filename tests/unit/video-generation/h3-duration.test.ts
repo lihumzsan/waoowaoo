@@ -31,8 +31,6 @@ describe('H3 duration plan', () => {
       { requestedDurationSeconds: 9, frameCount: 226, promptEndSeconds: 9.417 },
       { requestedDurationSeconds: 10, frameCount: 243, promptEndSeconds: 10.125 },
       { requestedDurationSeconds: 11, frameCount: 277, promptEndSeconds: 11.542 },
-      { requestedDurationSeconds: 12, frameCount: 294, promptEndSeconds: 12.25 },
-      { requestedDurationSeconds: 13, frameCount: 328, promptEndSeconds: 13.667 },
     ])
   })
 
@@ -42,14 +40,14 @@ describe('H3 duration plan', () => {
       frameCount: 124,
       promptEndSeconds: 5.167,
     })
-    expect(resolveH3ContinuationDurationPlan(13)).toEqual({
-      requestedDurationSeconds: 13,
-      frameCount: 345,
-      promptEndSeconds: 14.375,
+    expect(resolveH3ContinuationDurationPlan(11)).toEqual({
+      requestedDurationSeconds: 11,
+      frameCount: 294,
+      promptEndSeconds: 12.25,
     })
   })
 
-  it.each([3, 4.5, 14, Number.NaN])('rejects unsupported request duration %s', (duration) => {
+  it.each([3, 4.5, 12, 13, 14, Number.NaN])('rejects unsupported request duration %s', (duration) => {
     expect(() => resolveH3DurationPlan(duration)).toThrow(
       `H3_REQUESTED_DURATION_INVALID:${String(duration)}`,
     )
