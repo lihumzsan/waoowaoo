@@ -55,6 +55,14 @@ function platformImageOptions(): Record<string, CapabilityValue> {
   return options
 }
 
+function requirePlatformRuntimeModelKey(
+  purpose: PlatformRuntimePurpose,
+  modelKey: string | null | undefined,
+): string {
+  if (typeof modelKey === 'string' && modelKey.trim()) return modelKey.trim()
+  throw new Error(`PLATFORM_RUNTIME_MODEL_MISSING:${purpose}`)
+}
+
 export function getPlatformVideoGenerationOptions(): Record<string, CapabilityValue> {
   const options: Record<string, CapabilityValue> = {
     generateAudio: true,
@@ -91,7 +99,7 @@ function resolveModelKey(purpose: PlatformRuntimePurpose): string {
     case 'music':
       return defaults.musicModel
     case 'sound':
-      return defaults.soundModel
+      return requirePlatformRuntimeModelKey(purpose, defaults.soundModel)
   }
 }
 
@@ -138,7 +146,6 @@ export function getPlatformCapabilityDefaults(): CapabilitySelections {
   const imageOptions = platformImageOptions()
   const videoOptions = getPlatformVideoGenerationOptions()
   const musicOptions = getPlatformMusicGenerationOptions()
-  const soundOptions = getPlatformSoundGenerationOptions()
 
   for (const purpose of ['character-image', 'location-image', 'edit-image'] as const) {
     const plan = getPlatformRuntimePlan(purpose)
@@ -165,7 +172,5 @@ export function getPlatformCapabilityDefaults(): CapabilitySelections {
     COMFYUI_PLATFORM_DEFAULT_MUSIC_MODEL_KEY,
     COMFYUI_ACE_STEP_DEFAULT_GENERATION_OPTIONS,
   )
-  assignCapabilityDefault(defaults, getPlatformRuntimePlan('sound').modelKey, soundOptions)
-
   return defaults
 }

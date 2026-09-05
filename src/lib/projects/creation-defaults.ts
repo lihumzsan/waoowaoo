@@ -6,7 +6,6 @@ import {
 import { parseStoredModels } from '@/lib/user-api/api-config-model-normalization'
 import {
   COMFYUI_PLATFORM_DEFAULT_MUSIC_MODEL_KEY,
-  COMFYUI_PLATFORM_DEFAULT_SOUND_MODEL_KEY,
   COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
 } from '@/lib/ai-providers/comfyui/models'
 import { CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY } from '@/lib/ai-providers/codex/models'
@@ -20,7 +19,6 @@ export const LOCAL_PROJECT_DEFAULT_MODELS = Object.freeze({
   editModel: CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
   videoModel: COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
   musicModel: COMFYUI_PLATFORM_DEFAULT_MUSIC_MODEL_KEY,
-  soundModel: COMFYUI_PLATFORM_DEFAULT_SOUND_MODEL_KEY,
 })
 
 export const LOCAL_PROJECT_DEFAULT_CAPABILITY_SELECTIONS: CapabilitySelections = Object.freeze({

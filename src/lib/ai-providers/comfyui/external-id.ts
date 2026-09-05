@@ -4,9 +4,9 @@ import {
   type ComfyUiRuntimeTargetId,
 } from './config'
 
-export type ComfyUiAsyncType = 'VIDEO' | 'MUSIC' | 'SOUND' | 'VOICE'
+export type ComfyUiAsyncType = 'VIDEO' | 'MUSIC'
 
-const COMFYUI_ASYNC_TYPES: readonly ComfyUiAsyncType[] = ['VIDEO', 'MUSIC', 'SOUND', 'VOICE']
+const COMFYUI_ASYNC_TYPES: readonly ComfyUiAsyncType[] = ['VIDEO', 'MUSIC']
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
 
 function isRuntimeTargetId(value: string): value is ComfyUiRuntimeTargetId {

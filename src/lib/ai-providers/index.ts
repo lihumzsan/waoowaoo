@@ -39,7 +39,7 @@ export function resolveAsyncTaskProviderByExternalId(
   if (!registration) {
     throw new Error(
       `无法识别的 externalId 格式: "${externalId}". ` +
-        `支持的格式: COMFYUI:<targetId>:VIDEO|MUSIC|SOUND|VOICE:promptId`,
+        `支持的格式: COMFYUI:<targetId>:VIDEO|MUSIC:promptId`,
     );
   }
   return registration;

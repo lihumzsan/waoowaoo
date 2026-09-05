@@ -171,7 +171,7 @@ describe('frozen workspace audio execution contract', () => {
         schemaId: 'project.sound_effect_audio',
         inputHash: 'a'.repeat(64),
         prompt: 'Rain on a metal roof.',
-        modelKey: 'comfyui::moss-soundeffect-v2',
+        modelKey: 'test::sound-provider',
         inputs: [],
         imageInputPositions: [],
         audioInputPositions: [],
@@ -179,7 +179,7 @@ describe('frozen workspace audio execution contract', () => {
         toolCallId: null,
         sourceTurnId: null,
       },
-      soundModel: 'comfyui::moss-soundeffect-v2',
+      soundModel: 'test::sound-provider',
       durationSeconds: 6,
       count: 1,
       generationOptions: {

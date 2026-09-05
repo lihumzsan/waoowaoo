@@ -3,9 +3,10 @@ import type { UnifiedModelType } from '@/lib/ai-registry/types'
 import {
   PLATFORM_DEFAULT_MODEL_KEYS,
   PLATFORM_MODEL_INPUTS,
+  type PlatformDefaultModels,
   type PlatformDefaultModelField,
 } from '@/lib/ai-registry/platform-models'
-import type { DefaultModelsPayload, StoredModel } from '@/lib/user-api/api-config-types'
+import type { StoredModel } from '@/lib/user-api/api-config-types'
 import type { PlatformModelPreset } from './types'
 
 const PLATFORM_DEFAULT_MODEL_TYPES: Record<PlatformDefaultModelField, UnifiedModelType> = {
@@ -14,7 +15,6 @@ const PLATFORM_DEFAULT_MODEL_TYPES: Record<PlatformDefaultModelField, UnifiedMod
   editModel: 'image',
   videoModel: 'video',
   musicModel: 'music',
-  soundModel: 'sound',
 }
 
 const PLATFORM_DEFAULT_MODEL_ENV: Record<PlatformDefaultModelField, string> = {
@@ -23,7 +23,6 @@ const PLATFORM_DEFAULT_MODEL_ENV: Record<PlatformDefaultModelField, string> = {
   editModel: 'PLATFORM_DEFAULT_EDIT_MODEL',
   videoModel: 'PLATFORM_DEFAULT_VIDEO_MODEL',
   musicModel: 'PLATFORM_DEFAULT_MUSIC_MODEL',
-  soundModel: 'PLATFORM_DEFAULT_SOUND_MODEL',
 }
 
 function toPlatformModel(input: PlatformModelPreset): StoredModel {
@@ -56,17 +55,20 @@ export function getSelectableLocalVideoModels(): StoredModel[] {
 export function getPlatformDefaultModelCatalog(): StoredModel[] {
   const defaults = getPlatformDefaultModels()
   const modelsByKey = new Map(getPlatformModels().map((model) => [model.modelKey, model]))
-  return [...new Set(Object.values(defaults))].map((modelKey) => {
+  const modelKeys = Object.values(defaults).filter((modelKey): modelKey is string => (
+    typeof modelKey === 'string' && modelKey.length > 0
+  ))
+  return [...new Set(modelKeys)].map((modelKey) => {
     const model = modelsByKey.get(modelKey)
     if (!model) throw new Error(`PLATFORM_DEFAULT_MODEL_NOT_FOUND: ${modelKey}`)
     return model
   })
 }
 
-export function getPlatformDefaultModels(): Required<DefaultModelsPayload> {
+export function getPlatformDefaultModels(): PlatformDefaultModels {
   const models = getPlatformModels()
   const byKey = new Map(models.map((model) => [model.modelKey, model]))
-  const defaults = {} as Required<DefaultModelsPayload>
+  const defaults = {} as Record<PlatformDefaultModelField, string>
 
   for (const field of Object.keys(PLATFORM_DEFAULT_MODEL_TYPES) as PlatformDefaultModelField[]) {
     const modelKey = readEnvModelKey(field) || PLATFORM_DEFAULT_MODEL_KEYS[field]

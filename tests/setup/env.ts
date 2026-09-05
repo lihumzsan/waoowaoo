@@ -53,7 +53,6 @@ export function loadTestEnv() {
   setIfMissing('PLATFORM_DEFAULT_EDIT_MODEL', 'codex::gpt-image-2')
   setIfMissing('PLATFORM_DEFAULT_VIDEO_MODEL', 'comfyui::minimax-h3-dual-stage-2mp')
   setIfMissing('PLATFORM_DEFAULT_MUSIC_MODEL', 'comfyui::ace-step-1.5')
-  setIfMissing('PLATFORM_DEFAULT_SOUND_MODEL', 'comfyui::moss-soundeffect-v2')
 
   if (mutableEnv.TEMPORAL_TEST_BOOTSTRAP === '1') {
     setIfMissing('TEMPORAL_ADDRESS', '127.0.0.1:7233')

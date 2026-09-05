@@ -185,13 +185,13 @@ export async function getProjectModelConfig(
   if (platformDefaults) {
     const projectData = await projectDataPromise
     return {
-      analysisModel: platformDefaults.analysisModel,
+      analysisModel: platformDefaults.analysisModel ?? null,
       characterModel: platformDefaults.characterModel,
       locationModel: platformDefaults.locationModel,
       editModel: platformDefaults.editModel,
       videoModel: platformDefaults.videoModel,
       musicModel: platformDefaults.musicModel,
-      soundModel: platformDefaults.soundModel,
+      soundModel: platformDefaults.soundModel ?? null,
       videoRatio: projectData?.videoRatio ?? null,
       videoVocalPerformanceMode: vocalPerformanceModeSchema.parse(projectData?.videoVocalPerformanceMode ?? 'native_dialogue'),
       capabilityDefaults: getPlatformCapabilityDefaults(),
@@ -231,13 +231,13 @@ export async function getUserModelConfig(userId: string): Promise<UserModelConfi
     const platformDefaults = getPlatformDefaultModels()
 
     return {
-      analysisModel: platformDefaults.analysisModel,
+      analysisModel: platformDefaults.analysisModel ?? null,
       characterModel: platformDefaults.characterModel,
       locationModel: platformDefaults.locationModel,
       editModel: platformDefaults.editModel,
       videoModel: platformDefaults.videoModel,
       musicModel: platformDefaults.musicModel,
-      soundModel: platformDefaults.soundModel,
+      soundModel: platformDefaults.soundModel ?? null,
       capabilityDefaults: getPlatformCapabilityDefaults(),
     }
   }

@@ -17,9 +17,6 @@ import {
   H3_DURATION_MAX_SECONDS,
   H3_DURATION_MIN_SECONDS,
 } from '@/lib/video-generation/h3-duration'
-import { COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_ID } from './models'
-import { executeComfyUiMossSoundGeneration } from './moss'
-import { executeComfyUiMossTtsGeneration } from './tts'
 import { createAiProviderFailureAdapter } from '@/lib/ai-providers/failure'
 
 const H3_ASPECT_RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16', '9:21'] as const
@@ -88,49 +85,5 @@ export const comfyuiAdapter: AiProviderAdapter = {
       }),
     }),
     execute: executeComfyUiH3VideoGeneration,
-  },
-  sound: {
-    describe: (selection) => describeMediaVariantBase({
-      modality: 'sound',
-      selection,
-      executionMode: 'async',
-      optionSchema: buildMediaOptionSchema('sound', {
-        allowedKeys: ['negativePrompt', 'durationSeconds', 'outputFormat'],
-        required: ['durationSeconds', 'outputFormat'],
-        excludedKeys: ['referenceImages', 'referenceAudios', 'referenceVideos'],
-        validators: {
-          durationSeconds: integerRangeValidator({ min: 1, max: 30 }),
-          outputFormat: enumValidator(['mp3']),
-        },
-        objectValidators: [() => selection.modelId === COMFYUI_MOSS_SOUNDEFFECT_V2_MODEL_ID
-          ? { ok: true }
-          : { ok: false, reason: 'unsupported_model' }],
-      }),
-    }),
-    execute: executeComfyUiMossSoundGeneration,
-  },
-  voice: {
-    describe: (selection) => describeMediaVariantBase({
-      modality: 'voice',
-      selection,
-      executionMode: 'async',
-      optionSchema: buildMediaOptionSchema('voice', {
-        allowedKeys: ['language', 'referenceAudio', 'referenceAudioDurationMs', 'outputFormat'],
-        required: ['language', 'referenceAudio', 'referenceAudioDurationMs', 'outputFormat'],
-        excludedKeys: ['referenceImages', 'referenceVideos'],
-        validators: {
-          language: enumValidator(['auto', 'zh', 'en', 'ja', 'ko']),
-          referenceAudio: (value) => typeof value === 'string' && value.trim().length > 0
-            ? { ok: true }
-            : { ok: false, reason: 'reference_audio_required' },
-          referenceAudioDurationMs: integerRangeValidator({ min: 3000, max: 10000 }),
-          outputFormat: enumValidator(['mp3']),
-        },
-        objectValidators: [() => selection.modelKey === 'comfyui::moss-tts-local-1.7b'
-          ? { ok: true }
-          : { ok: false, reason: 'unsupported_model' }],
-      }),
-    }),
-    execute: executeComfyUiMossTtsGeneration,
   },
 }

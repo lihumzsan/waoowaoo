@@ -1,19 +1,19 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import {
   COMFYUI_PLATFORM_DEFAULT_MUSIC_MODEL_KEY,
-  COMFYUI_PLATFORM_DEFAULT_SOUND_MODEL_KEY,
   COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
 } from '@/lib/ai-providers/comfyui/models'
 import {
   CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
 } from '@/lib/ai-providers/codex/models'
-import { resolveProjectModelCapabilityGenerationOptions } from '@/lib/config-service'
+import { getProjectModelConfig, resolveProjectModelCapabilityGenerationOptions } from '@/lib/config-service'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { invokeProjectAgentOperation } from '@/lib/operations/invocation'
 import { planOperation } from '@/lib/operations/planning'
 import { createProjectAgentOperationRegistryForApi } from '@/lib/operations/registry'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import { getPlatformDefaultModels, getPlatformModels } from '@/lib/platform-models/catalog'
+import { resolveProjectProductionCapabilities } from '@/lib/project-production-context'
 import { buildWorkspaceResourceId } from '@/lib/workspace-resource/identity'
 import {
   materializeWorkspaceResourceInTransaction,
@@ -697,7 +697,7 @@ describe('project local video model configuration', () => {
       editModel: CODEX_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
       videoModel: COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
       musicModel: COMFYUI_PLATFORM_DEFAULT_MUSIC_MODEL_KEY,
-      soundModel: COMFYUI_PLATFORM_DEFAULT_SOUND_MODEL_KEY,
+      soundModel: null,
       videoRatio: '9:16',
       videoVocalPerformanceMode: 'native_dialogue',
       capabilityOverrides: JSON.stringify({
@@ -707,6 +707,10 @@ describe('project local video model configuration', () => {
         },
       }),
     })
+    const productionCapabilities = resolveProjectProductionCapabilities(
+      await getProjectModelConfig(result.project.id, user.id),
+    )
+    expect(productionCapabilities.sound).toBeNull()
   })
 
   it('preserves persisted user ratio and Codex Image defaults when creating from an implicit preset', async () => {
@@ -805,7 +809,7 @@ describe('project local video model configuration', () => {
       editModel: platformDefaults.editModel,
       videoModel: platformDefaults.videoModel,
       musicModel: platformDefaults.musicModel,
-      soundModel: platformDefaults.soundModel,
+      soundModel: platformDefaults.soundModel ?? null,
     })
   })
 
