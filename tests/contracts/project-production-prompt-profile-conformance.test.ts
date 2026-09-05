@@ -1,76 +1,55 @@
 import { describe, expect, it } from 'vitest'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
-import { buildAssistantRuntimeTurnContext } from '@/lib/assistant-runtime/runtime-access'
-import { COMFYUI_H3_MODEL_ID } from '@/lib/ai-providers/comfyui/models'
-import {
-  resolveProjectProductionCapabilities,
-  type ProjectProductionContext,
-} from '@/lib/project-production-context'
+import { listBuiltinCapabilityCatalog } from '@/lib/ai-registry/capabilities-catalog'
+import { resolveProjectProductionCapabilities } from '@/lib/project-production-context'
 import type { ProjectModelConfig } from '@/lib/config-service'
 
 describe('project production prompt profile context', () => {
-  it('automatically injects the H3 profile into the Agent Turn context', () => {
+  it('projects a complete timing and continuation contract for every registered video mode', () => {
     ensureAiCatalogsRegistered()
-    const config: ProjectModelConfig = {
-      analysisModel: null,
-      characterModel: null,
-      locationModel: null,
-      editModel: null,
-      videoModel: `comfyui::${COMFYUI_H3_MODEL_ID}`,
-      musicModel: null,
-      soundModel: null,
-      videoRatio: '9:16',
-      videoVocalPerformanceMode: 'native_dialogue',
-      capabilityDefaults: {},
-      capabilityOverrides: {},
-    }
-    const capabilities = resolveProjectProductionCapabilities(config)
-    expect(capabilities.video?.promptProfile).toBe('minimax_h3_multimodal_v3')
-    expect(capabilities.video?.supportedInputModes).toEqual([
-      'reference',
-      'first_frame',
-      'first_last_frame',
-      'continuation',
-    ])
-
-    const context: ProjectProductionContext = {
-      schemaVersion: 9,
-      version: 'contract-version',
-      project: {
-        projectId: 'project-1',
-        name: 'H3 project',
-        description: null,
+    const entries = listBuiltinCapabilityCatalog().filter((entry) => entry.modelType === 'video')
+    expect(entries.length).toBeGreaterThan(0)
+    for (const entry of entries) {
+      const config: ProjectModelConfig = {
+        analysisModel: null,
+        characterModel: null,
+        locationModel: null,
+        editModel: null,
+        videoModel: `${entry.provider}::${entry.modelId}`,
+        musicModel: null,
+        soundModel: null,
         videoRatio: '9:16',
-      videoResolution: '2mp',
-        imageResolution: '1024x1024',
-      },
-      productionCapabilities: capabilities,
-      productionDefaults: {
-        video: { vocalPerformanceMode: 'native_dialogue' },
-      },
+        videoVocalPerformanceMode: 'native_dialogue',
+        capabilityDefaults: {},
+        capabilityOverrides: {},
+      }
+      const capabilities = resolveProjectProductionCapabilities(config)
+      const video = capabilities.video
+      expect(video).not.toBeNull()
+      if (!video) throw new Error('VIDEO_CONTEXT_MISSING')
+      const declared = entry.capabilities?.video
+      expect(video.promptProfile).toBe(declared?.promptProfile)
+      expect(video.supportedInputModes).toEqual(declared?.supportedInputModes)
+      for (const inputMode of declared?.supportedInputModes ?? []) {
+        for (const duration of video.allowedSegmentDurationsSeconds) {
+          const plans = video.segmentDurationPlans.filter((plan) => (
+            plan.inputMode === inputMode && plan.requestedDurationSeconds === duration
+          ))
+          expect(plans).toHaveLength(1)
+          const plan = plans[0]
+          expect(plan.expectedOutputDurationSeconds).toBeGreaterThanOrEqual(duration)
+          expect(plan.promptEndSeconds - plan.promptStartSeconds).toBeCloseTo(plan.expectedOutputDurationSeconds, 2)
+          if (video.promptProfile === 'minimax_h3_multimodal_v3') {
+            // Protocol oracle: 24fps, 17n+5 frames, and 22 leading guide frames.
+            const frames = Math.round(plan.promptEndSeconds * 24)
+            expect(frames % 17).toBe(5)
+            const guideFrames = inputMode === 'continuation' ? 22 : 0
+            expect(plan.promptStartSeconds).toBeCloseTo(guideFrames / 24, 3)
+            expect(plan.expectedOutputDurationSeconds).toBeCloseTo((frames - guideFrames) / 24, 3)
+          }
+        }
+      }
+      expect(video.continuationInput).toEqual(declared?.continuationInput ?? null)
     }
-
-    expect(buildAssistantRuntimeTurnContext('zh', context)).toContain(
-      '"promptProfile": "minimax_h3_multimodal_v3"',
-    )
-    expect(capabilities.video?.minSegmentDurationSeconds).toBe(4)
-    expect(capabilities.video?.maxSegmentDurationSeconds).toBe(13)
-    expect(capabilities.video?.allowedSegmentDurationsSeconds).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
-    expect(capabilities.video?.segmentDurationPlans[0]).toEqual({
-      requestedDurationSeconds: 4,
-      promptEndSeconds: 4.458,
-    })
-    expect(capabilities.video?.segmentDurationPlans.find((plan) => (
-      plan.requestedDurationSeconds === 8
-    ))).toEqual({
-      requestedDurationSeconds: 8,
-      promptEndSeconds: 8,
-    })
-    expect(buildAssistantRuntimeTurnContext('zh', context)).toContain(
-      '"promptEndSeconds": 4.458',
-    )
-    expect(buildAssistantRuntimeTurnContext('zh', context)).toContain(
-      '"vocalPerformanceMode": "native_dialogue"',
-    )
   })
 })

@@ -3,9 +3,10 @@ import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabili
 import { getProjectModelConfig, type ProjectModelConfig } from '@/lib/config-service'
 import { prisma } from '@/lib/prisma'
 import { CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS } from '@/lib/workspace-resource/generation-contract'
-import type { VideoInputMode, VideoPromptProfile } from '@/lib/ai-registry/types'
+import type { VideoContinuationInputCapabilities, VideoInputMode, VideoPromptProfile } from '@/lib/ai-registry/types'
 import type { VocalPerformanceMode } from '@/lib/workspace-resource/vocal-performance-contract'
-import { resolveH3DurationPlan } from '@/lib/video-generation/h3-duration'
+import { resolveH3ContinuationDurationPlan, resolveH3DurationPlan } from '@/lib/video-generation/h3-duration'
+import { H3_CONTINUATION_GUIDE_FRAMES, H3_FRAMES_PER_SECOND } from '@/lib/video-generation/h3-timeline'
 
 export type ProjectProductionCapabilities = {
   readonly video: {
@@ -14,9 +15,13 @@ export type ProjectProductionCapabilities = {
     readonly aspectRatio: string
     readonly allowedSegmentDurationsSeconds: readonly number[]
     readonly segmentDurationPlans: ReadonlyArray<{
+      readonly inputMode: VideoInputMode
       readonly requestedDurationSeconds: number
+      readonly promptStartSeconds: number
       readonly promptEndSeconds: number
+      readonly expectedOutputDurationSeconds: number
     }>
+    readonly continuationInput: VideoContinuationInputCapabilities | null
     readonly minSegmentDurationSeconds: number
     readonly maxSegmentDurationSeconds: number
     readonly maxReferenceImages: number
@@ -68,7 +73,7 @@ export type ProjectProductionCapabilities = {
 }
 
 export type ProjectProductionContext = {
-  readonly schemaVersion: 9
+  readonly schemaVersion: 10
   readonly version: string
   readonly project: {
     readonly projectId: string
@@ -106,16 +111,30 @@ export function resolveProjectProductionCapabilities(config: ProjectModelConfig)
   )).sort((left, right) => left - right)
   const minSegmentDurationSeconds = allowedSegmentDurationsSeconds[0]
   const maxSegmentDurationSeconds = allowedSegmentDurationsSeconds.at(-1)
-  const segmentDurationPlans = allowedSegmentDurationsSeconds.map((requestedDurationSeconds) => {
-    if (video?.promptProfile === 'minimax_h3_multimodal_v3') {
-      const plan = resolveH3DurationPlan(requestedDurationSeconds)
-      return {
-        requestedDurationSeconds,
-        promptEndSeconds: plan.promptEndSeconds,
+  const segmentDurationPlans = (video?.supportedInputModes ?? []).flatMap((inputMode) => (
+    allowedSegmentDurationsSeconds.map((requestedDurationSeconds) => {
+      if (video?.promptProfile === 'minimax_h3_multimodal_v3') {
+        const plan = inputMode === 'continuation'
+          ? resolveH3ContinuationDurationPlan(requestedDurationSeconds)
+          : resolveH3DurationPlan(requestedDurationSeconds)
+        const guideFrames = inputMode === 'continuation' ? H3_CONTINUATION_GUIDE_FRAMES : 0
+        return {
+          inputMode,
+          requestedDurationSeconds,
+          promptStartSeconds: Number((guideFrames / H3_FRAMES_PER_SECOND).toFixed(3)),
+          promptEndSeconds: plan.promptEndSeconds,
+          expectedOutputDurationSeconds: Number(((plan.frameCount - guideFrames) / H3_FRAMES_PER_SECOND).toFixed(3)),
+        }
       }
-    }
-    return { requestedDurationSeconds, promptEndSeconds: requestedDurationSeconds }
-  })
+      return {
+        inputMode,
+        requestedDurationSeconds,
+        promptStartSeconds: 0,
+        promptEndSeconds: requestedDurationSeconds,
+        expectedOutputDurationSeconds: requestedDurationSeconds,
+      }
+    })
+  ))
   const videoCapabilities = config.videoModel
     && config.videoRatio
     && video
@@ -127,6 +146,7 @@ export function resolveProjectProductionCapabilities(config: ProjectModelConfig)
         aspectRatio: config.videoRatio,
         allowedSegmentDurationsSeconds,
         segmentDurationPlans,
+        continuationInput: video.continuationInput ?? null,
         minSegmentDurationSeconds,
         maxSegmentDurationSeconds,
         maxReferenceImages: video.maxReferenceImages ?? 1,
@@ -237,7 +257,7 @@ export async function readProjectProductionContext(input: {
   ])
   if (!project) throw new ProjectProductionContextError()
   const value: Omit<ProjectProductionContext, 'version'> = {
-    schemaVersion: 9,
+    schemaVersion: 10,
     project: {
       projectId: project.id,
       name: project.name,

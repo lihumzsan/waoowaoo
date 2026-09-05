@@ -253,7 +253,7 @@ const testPersistence: RuntimeSessionPersistence = {
 
 function testModel(project: { readonly id: string; readonly name: string }): AssistantRuntimeModelConfiguration {
   const projectProductionContext: ProjectProductionContext = {
-    schemaVersion: 9,
+    schemaVersion: 10,
     version: 'test',
     project: {
       projectId: project.id,

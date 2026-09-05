@@ -10,8 +10,9 @@ description: Use when directing screenplay-based video generation that requires 
 ## 不变规则
 
 - 剧本、用户明确要求、已确认资产、入段状态和已采纳 Creative Direction 是唯一事实；不得新增人物、对白、地点、道具、动作、动机或结局。对白逐字保留。
-- 时长决策先区分用户固定目标与 Agent 自主推导。用户明确固定的合法单段时长优先于自主规划启发式，只要它属于 `allowedSegmentDurationsSeconds` 就原样执行；不得用“常规时长”覆盖用户已经锁定的合法单段。
-- `durationIntent.mode=fixed` 时先联合求解 Segment 边界与时长：每段时长都必须来自 `allowedSegmentDurationsSeconds`，且总和精确等于用户目标；没有这种组合时，在验证内容之前停止构造可执行 items，并明确报告目标时长与能力集合冲突。存在合法组合后，再验证来源内容能否在各段内自然完成；若不新增、重复、延长、截断内容或压缩表演仍无法满足，明确报告时长与内容冲突。两类失败都不得静默改变用户目标或用空镜、停顿和保持画面填满。
+- 时长意图先区分近似目标（target）、明确严格约束（fixed）与未指定时长的自主推导（derive）；这些是规划语义，不在输出 schema 外新增字段。普通“十秒视频”“一分钟”“一分钟左右”属于近似目标，只有用户明确要求精确时长或给出上下限时才属于严格约束。用户已选定的合法单段生成参数仍优先于自主规划启发式，不因“常规时长”偏好改掉它，也不把选定整数参数解释为成片精确时长承诺。
+- 近似目标下先联合设计自然 Segment 边界和合法请求时长，使用各段匹配模式的 `expectedOutputDurationSeconds` 估计总时长，不要求请求参数精确求和。选择能完整承载来源内容且接近目标的组合；模型帧网格造成的小幅偏差正常，明显偏离目标或无法自然承载内容时报告冲突，不借“近似”任意拉长或缩短。生成后以 Resource 实测时长规划后续段起点和合成，不以预计值覆盖实测事实。
+- 严格约束下，生成参数求和或预计输出吻合都不能证明实际成片满足要求。先核对当前生成与合成能力是否能满足约束并验证实际成片；当前 H3 原样交付与合成不提供任意精确裁时保证，无法保证时在提交前报告能力限制，不擅自裁切对白、变速、补静帧或放宽用户约束。内容与时长冲突同样明确报告，不用空镜、停顿或保持画面凑数。
 - `durationIntent.mode=derive` 时只从来源内容计算完整表演节拍：来源要求的最短必要建立、自然对白或动作，以及来源明确要求的后续动作或反应；同时发生的内容仍按 `creative-core` 取最长项。先按来源动作、说话轮次和语义边界组合节拍，再从 `allowedSegmentDurationsSeconds` 选择能完整承载每个节拍的最短值，不以减少 Segment 数或用满时长上限为目标。若剩余来源内容短于合法最小时长且无法与相邻来源节拍合并，或长于合法最大时长且没有合法切点，停止并明确报告能力与内容冲突，不得补写或拉长内容。
 - H3 合法 Segment 时长是 4–13 秒。凡单段时长由 Agent 选择（包括 `fixed` 总时长下的分配与 `derive`），能在 4–6 秒完成的简单节拍直接使用 4–6 秒，常规 Segment 不超过 10 秒；无对白节拍超过 10 秒时按来源真实动作边界拆分，找不到合法边界则按下一条的溢出失败规则处理。每镜仍必须有入口、一个向前变化和可见落点。
 - H3 中只有“完整对白节拍”在 10 秒内放不下时，才逐级使用最短充分的 11–13 秒；判断对象是来源要求的最短必要建立、自然对白和来源已有结尾落点的总时长，不是对白文字单独的说话时间。完整节拍超过 13 秒时只在完整句、说话轮次或真实语义边界拆分，逐字内容和顺序不变；没有合法切点时按下一条的溢出失败规则处理，禁止强拆、加速和截断。
@@ -21,8 +22,8 @@ description: Use when directing screenplay-based video generation that requires 
 - 表演写可见物理事实：呼吸、视线、下颌、肩颈、手部、步态与接触几何；不写内心解释或空泛情绪副词。一镜一种主要运镜，默认硬切。需要切镜时，新镜头必须增加主体、空间、状态、视点或时间信息；只有景别或轻微角度变化时继续当前镜头并使用运镜。
 - 先建立来源已有的正常基线，再显示原因或证据，最后呈现人物反应；反应必须由当前或前一可见事件触发。
 - 从系统注入的 `productionCapabilities.video.supportedInputModes` 和 `promptProfile` 选择输入与表达；未知或不支持时停止，不按 modelKey 猜测、静默降级或换 Provider。
-- H3 内容包含 `<d>...</d>` 且用户没有明确要求首帧或首尾帧控制时，优先使用 `reference_image` 输入进入 Ref2VA；这是提高原生对白表演适配度的导演偏好，不是能力硬限制。用户明确要求从指定首帧开始或收敛到指定尾帧时，该画面控制优先，仍使用 `first_frame` 或 `first_last_frame`，不得因存在对白而拒绝、改写或偷偷换成 Ref2VA。
-- `durationSeconds` 始终填写用户选择的整数 Segment 时长；H3 Prompt 中的精确结束时间必须取同一 `requestedDurationSeconds` 对应的 `productionCapabilities.video.segmentDurationPlans.promptEndSeconds`。例如用户选择 4 秒时仍提交 `durationSeconds: 4`，Prompt 尾帧锚点使用注入值 `4.458 seconds`；不得要求用户计算、提供或确认小数时长。
+- H3 输入模式先满足明确画面控制：要求继承前段退出运动时使用 `continuation`；要求指定首帧或首尾帧时使用 `first_frame` 或 `first_last_frame`。相互不兼容的控制要求按模式冲突处理。只有没有这些控制要求且包含 `<d>...</d>` 时，才优先使用 `reference_image` 进入 Ref2VA；对白适配偏好不能覆盖运动续接或帧控制，也不是其他模式执行对白的硬限制。
+- `durationSeconds` 填写从 `allowedSegmentDurationsSeconds` 选定的整数请求值。H3 精确时间从 `productionCapabilities.video.segmentDurationPlans` 中同时匹配 `inputMode + requestedDurationSeconds` 的唯一条目读取：`promptStartSeconds` 是新内容的内部起点，`promptEndSeconds` 是内部终点，`expectedOutputDurationSeconds` 是去掉引导后的预计交付时长。缺匹配条目时停止，不套用其他模式的条目。用户不需要计算、提供或确认小数时间，预计值也不替代生成后的实测时长。
 - `vocalPerformanceMode` 每个 item 必须显式填写且不放进 `generationOptions`；对白逐字、自然说完，`silent_no_lip` 时在 warnings 说明用户选择导致的对白不执行。
 
 ## 参考素材
@@ -35,12 +36,12 @@ description: Use when directing screenplay-based video generation that requires 
 
 当相邻独立 Segment 必须从前段结束画面连续开始，且前段视频 Resource 已为 `ready` 时，执行顺序固定为：
 
-1. 后段只把前段视频的精确 `resourceId + contentVersion` 作为 `channel=video, role=continuation_video` 提交；不得先派生单张尾帧，也不得用视频 URL、临时截图或普通参考图代替；
-2. continuation 内部使用前段最后 22 帧（24fps，约 0.9167 秒）作为不可改写的运动上下文，后段 Prompt 从该上下文的退出姿态、运动方向和镜头趋势继续，不重演这段上下文；Prompt 内的事件与切镜时间使用内部时钟，统一在用户所见新内容时间上加 0.9167 秒，不得早于 0.9167 秒，且必须严格小于 `用户所见 Segment 时长 + 0.9167 秒`；
+1. 按注入的 `continuationInput` 核对前段精确 ready 版本的实测时长与画幅：时长位于 `minSourceDurationMs` 至 `maxSourceDurationMs`，宽高比匹配 `sourceAspectRatioByTarget` 中项目目标画幅对应的比例（不是要求绝对像素相同）。信息缺失或不满足时停止；后段只把该版本的 `resourceId + contentVersion` 作为 `channel=video, role=continuation_video` 提交，不派生单张尾帧，不使用视频 URL、临时截图或普通参考图代替；
+2. 前段末尾多帧是不可改写的运动上下文，后段 Prompt 从其退出姿态、运动方向和镜头趋势继续，不重演上下文。事件与切镜时间使用匹配 continuation 条目的内部时钟：用户所见新内容时间加 `promptStartSeconds`，时间不得早于该起点，且严格小于 `promptEndSeconds`；不再用请求时长加固定偏移推算终点；
 3. 用户指定独立目标结束图片时，continuation 与 `last_frame` 仍不可混用；应拆成另一个有明确创作边界的 Segment，或报告当前 H3 输入模式冲突；
 4. 前段不是 ready、精确版本不可用、续接输入失败或运行时不支持多帧 guide 时停止后段提交并报告失败，不得降级为 `first_frame`、`reference_image` 或 `reference_video`。
 
-该流程只把前段运动历史作为显式生成条件，不改变来源对白、动作边界、用户所见 Segment 时长或 Prompt writer。
+该流程只把前段运动历史作为显式生成条件，不改变来源对白、动作边界或 Prompt writer。引导帧在交付时移除，剩余视频按实际生成长度保留，不承诺用户所见时长精确等于整数请求值。
 
 ## Prompt profile 选择
 
@@ -85,8 +86,8 @@ non_diegetic_music:
 
 - `reference`：每个 `<Picture N>` 只锁定身份、风格、内容与场景结构，不是首帧或尾帧，不得写成时间锚点。
 - `first_frame`：`detailed_description` 的 `[Shot 1]` 后第一句必须把 `<Picture 1>` 明确对齐 `0.00 seconds`，再描述从该状态连续发展的动作。
-- `first_last_frame`：除首帧规则外，必须在同一句中把 `<Picture 2>` 明确对齐当前 Segment 的 `segmentDurationPlans.promptEndSeconds`，并描述从首帧状态连续收敛到尾帧状态的运动路径。来源明确要求多镜时，`<Picture 2>` 只属于最后一个 `[Shot N]`，在该镜结尾成为 Segment 的最终视觉状态，其后不得再有镜头、动作或状态变化。
-- `continuation`：不写 `<Picture N>` 时间锚点。内部最初 22 帧是前段不可改写的运动上下文，用户所见时长从第一个新帧开始；`detailed_description` 直接延续其退出姿态、速度、方向、接触关系和运镜趋势，不复述或重新表演上下文。需要写事件或切镜时间时，把用户所见时间统一加 0.9167 秒，例如新内容开始后 2 秒写为 `00:02.917`。
+- `first_last_frame`：除首帧规则外，必须在同一句中把 `<Picture 2>` 明确对齐匹配 `first_last_frame + requestedDurationSeconds` 条目的 `promptEndSeconds`，并描述从首帧状态连续收敛到尾帧状态的运动路径。来源明确要求多镜时，`<Picture 2>` 只属于最后一个 `[Shot N]`，在该镜结尾成为 Segment 的最终视觉状态，其后不得再有镜头、动作或状态变化。
+- `continuation`：不写 `<Picture N>` 时间锚点；`detailed_description` 直接延续运动上下文的退出姿态、速度、方向、接触关系和运镜趋势。时间换算与范围完全遵守上方“多帧运动续接”的匹配条目，不复述或重新表演上下文。
 
 不得调用或描述 ComfyUI AI 节点、下游 Prompt 改写或第二套 Prompt；主 Agent 是唯一 Prompt writer。
 
@@ -108,13 +109,13 @@ N/A
 
 ## 输出前检查
 
-- 时长意图是否先正确区分用户固定目标与 Agent 自主推导；固定目标是否能由 `allowedSegmentDurationsSeconds` 中的时长精确组成、每段是否合法且没有填充内容，`derive` 是否按完整来源节拍选择最短充分值，无法满足时是否按目标—能力或时长—内容冲突原地停止？
+- 是否区分近似目标、明确严格约束与自主推导；每段请求是否合法、没有填充内容，近似目标是否使用预计输出而不是请求参数求和，后续时间线是否以实测媒体为准；严格约束是否有真实可执行的满足与验证方式，无法满足时是否提交前报告能力或内容冲突？
 - 对 H3 中所有由 Agent 选择的单段时长（包括 `fixed` 总时长下的分配与 `derive`），简单内容是否真实使用 4–6 秒、常规段是否保持在 10 秒内、11–13 秒是否只用于完整长对白节拍、每段是否都在 4–13 秒硬边界内；溢出失败是否只列出合法纠正条件且没有新增 decision checkpoint，其他 Prompt profile 是否只服从注入的合法时长集合？
 - 每镜是否有景别、机位、主体落位、朝向、世内视线、一个主要运镜、向前变化和可见落点？
 - `detailed_description` 是否直接以 `[Shot 1]` 开始、每次真实切镜都用递增的 `[Shot N] At MM:SS.mmm`、连续动作没有被时间块机械拆镜、单镜要求与 `first_last_frame` 默认单镜是否保留？
 - 运镜是否写成自然英文动词句并在来源要求时明确幅度与速度；除对白原文和画面文字外是否没有中文或混合语言残留？
 - 是否只使用 capability 允许的参考角色与数量，四种模式互斥，且 Picture 时间锚点与当前模式及 Segment 时长一致？
-- H3 有对白且无明确帧控制时是否优先选择 Ref2VA；用户明确要求首帧或首尾帧时是否保留 FL2VA，而没有把偏好变成硬限制？`durationSeconds` 是否仍为用户选择的整数，所有 H3 Prompt 结束锚点是否使用对应的 `segmentDurationPlans.promptEndSeconds`？
+- 是否先满足运动续接或明确帧控制，再应用对白 Ref2VA 偏好？`durationSeconds` 是否仍为合法整数，时间条目是否同时匹配输入模式和请求时长，所有锚点是否使用该条目的内部时钟？
 - 要求前段运动连续续接时，是否把前段精确 ready 视频版本作为后段唯一 `continuation_video`，且失败时没有单尾帧、参考图、reference video 或时间偏移 fallback？
 - H3 是否严格六段、固定 `non_diegetic_music: N/A`、无 AI 节点和无 Prompt 改写？
 - 对白是否逐字、自然说完且没有 `<cutoff>`，并在来源允许时主要位于中段；每个声音源是否有稳定 `(Sx)`，同句齐声是否使用复合 ID、不同台词重叠是否分别保留 ID 与 `<d>`，`<d>` 是否只在 `detailed_description`，跨切 `<scenetrans>` 是否在两个 `<d>` 内，voiceover 是否明确所有可见人物均不做口型？对白后的落点是否只使用来源已有动作或反应，不存在时是否以说话表演自然完成而没有新增内容？声音关系是否清楚，是否固定写入不生成字幕、标题、水印、拼贴、分屏或额外人物？
