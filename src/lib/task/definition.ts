@@ -9,9 +9,6 @@ export type TaskTargetTerminalProjector = 'none'
 export type TaskExecutionHandlerKey =
   | 'workspace_resource_image'
   | 'workspace_resource_audio'
-  | 'workspace_resource_voice'
-  | 'workspace_resource_voiceover'
-  | 'workspace_resource_voiceover_mix'
   | 'workspace_resource_video'
   | 'workspace_resource_video_frame'
   | 'workspace_resource_video_merge'
@@ -102,24 +99,6 @@ export const TASK_DEFINITIONS = {
     'workspace_resource',
     'reference',
     'reference',
-  ),
-  [TASK_TYPE.WORKSPACE_RESOURCE_VOICE]: definition(
-    'workspace_resource_voice',
-    3,
-    'image',
-    'workspace_resources',
-    'none',
-    'none',
-    'none',
-    'workspace_resource',
-    'reference',
-    'reference',
-  ),
-  [TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER]: definition(
-    'workspace_resource_voiceover', 3, 'image', 'workspace_resources', 'none', 'none', 'none', 'workspace_resource', 'reference', 'reference', 'required', 30 * 24 * 60 * 60 * 1000,
-  ),
-  [TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER_MIX]: definition(
-    'workspace_resource_voiceover_mix', 1, 'image', 'workspace_resources', 'none', 'none', 'none', 'workspace_resource', 'reference', 'reference', 'none', 30 * 24 * 60 * 60 * 1000,
   ),
   [TASK_TYPE.WORKSPACE_RESOURCE_VIDEO]: definition(
     'workspace_resource_video',

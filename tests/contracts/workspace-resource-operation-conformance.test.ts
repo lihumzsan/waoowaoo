@@ -7,7 +7,11 @@ import {
   assetGenerationBatchOutputSchema,
   videoGenerationBatchSchema,
 } from '@/lib/workspace-resource/generation-request'
-import { requireWorkspaceResourceSchema } from '@/lib/workspace-resource/schema-registry'
+import {
+  requireWorkspaceResourceSchema,
+  WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA,
+  WORKSPACE_RESOURCE_SCHEMA,
+} from '@/lib/workspace-resource/schema-registry'
 
 describe('WorkspaceResource Operation registry conformance', () => {
   it('aligns every declared producer with the canonical Resource schema registry', () => {
@@ -29,17 +33,13 @@ describe('WorkspaceResource Operation registry conformance', () => {
     }
   })
 
-  it('reserves voiceover audio for the dedicated voiceover production operation', () => {
+  it('keeps retired voiceover audio readable without exposing a production operation', () => {
     const registry = createProjectAgentOperationRegistryForApi()
-    const genericAudio = registry.create_audio
-    const voiceover = registry.produce_voiceover_video
-    if (!genericAudio || !voiceover) throw new Error('Required audio operations missing')
-    if (genericAudio.resourceContract.kind !== 'resource' || voiceover.resourceContract.kind !== 'resource') {
-      throw new Error('Required audio Resource contracts missing')
-    }
-
-    expect(genericAudio.resourceContract.outputSchemaIds).not.toContain('project.voiceover_audio')
-    expect(voiceover.resourceContract.outputSchemaIds).toContain('project.voiceover_audio')
+    expect(registry.produce_voiceover_video).toBeUndefined()
+    expect(WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.audio)
+      .not.toContain(WORKSPACE_RESOURCE_SCHEMA.VOICEOVER_AUDIO)
+    expect(requireWorkspaceResourceSchema(WORKSPACE_RESOURCE_SCHEMA.VOICEOVER_AUDIO))
+      .toMatchObject({ mediaType: 'audio', resourceKind: 'file' })
   })
 
   it('publishes every media generator directly to MCP and exposes no manifest operation', () => {

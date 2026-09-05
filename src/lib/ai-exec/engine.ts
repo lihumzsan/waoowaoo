@@ -623,26 +623,3 @@ export async function generateSound(
     wait,
   );
 }
-
-export async function generateVoice(
-  userId: string,
-  modelKey: string,
-  description: string,
-  text: string,
-  options?: AiVoiceExecutionOptions,
-  invocation?: TaskProviderInvocation,
-  wait?: AsyncProviderWaitCallbacks,
-): Promise<GenerateResult> {
-  return await executeMediaGeneration(
-    {
-      modality: "voice",
-      userId,
-      modelKey,
-      description,
-      text,
-      options,
-    },
-    invocation,
-    wait,
-  );
-}

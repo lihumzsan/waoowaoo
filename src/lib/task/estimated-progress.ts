@@ -39,16 +39,10 @@ const VIDEO_PROGRESS_TASK_TYPES = new Set<string>([
   TASK_TYPE.WORKSPACE_RESOURCE_VIDEO,
   TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_FRAME,
   TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE,
-  TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER_MIX,
 ])
 
 const MUSIC_PROGRESS_TASK_TYPES = new Set<string>([
   TASK_TYPE.WORKSPACE_RESOURCE_AUDIO,
-])
-
-const VOICE_PROGRESS_TASK_TYPES = new Set<string>([
-  TASK_TYPE.WORKSPACE_RESOURCE_VOICE,
-  TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER,
 ])
 
 function normalizePhase(phase: string | null | undefined): EstimatedTaskProgressPhase {
@@ -82,7 +76,6 @@ export function getEstimatedTaskProgressTiming(taskType: string | null | undefin
   if (IMAGE_PROGRESS_TASK_TYPES.has(taskType)) return buildTiming(IMAGE_EXPECTED_SECONDS)
   if (VIDEO_PROGRESS_TASK_TYPES.has(taskType)) return buildTiming(VIDEO_EXPECTED_SECONDS)
   if (MUSIC_PROGRESS_TASK_TYPES.has(taskType)) return buildTiming(AUDIO_EXPECTED_SECONDS)
-  if (VOICE_PROGRESS_TASK_TYPES.has(taskType)) return buildTiming(AUDIO_EXPECTED_SECONDS)
   return null
 }
 

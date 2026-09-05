@@ -159,16 +159,16 @@ const IMPORT_ORIGIN_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new Set
 /**
  * Schemas minted only by their own dedicated operation. The generic create_*
  * generation operations must never offer or mint these identities: a
- * voice references and voiceover output have distinct provenance contracts.
+ * Voice references have a distinct provenance contract.
  */
 const DEDICATED_ORIGIN_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new Set([
   WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
-  WORKSPACE_RESOURCE_SCHEMA.VOICEOVER_AUDIO,
 ])
 
 const RETIRED_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new Set([
   WORKSPACE_RESOURCE_SCHEMA.LEGACY_STYLE,
   WORKSPACE_RESOURCE_SCHEMA.LONG_FORM_PLAN,
+  WORKSPACE_RESOURCE_SCHEMA.VOICEOVER_AUDIO,
 ])
 
 /**

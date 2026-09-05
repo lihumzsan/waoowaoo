@@ -16,7 +16,6 @@ import { createWorkspaceResourceOperations } from './domains/workspace-resource/
 import { createWorkspaceResourceUploadedMediaOperations } from './domains/workspace-resource/uploaded-media-ops'
 import { createWorkspaceResourceVideoMergeOperations } from './domains/workspace-resource/video-merge-ops'
 import { createWorkspaceResourceVideoFrameOperations } from './domains/workspace-resource/video-frame-ops'
-import { createWorkspaceResourceVoiceoverOperations } from './domains/workspace-resource/voiceover-ops'
 import { createWorkspaceResourceReferenceImageOperations } from './domains/workspace-resource/reference-image-ops'
 import { createAssetDeleteOperations } from './domains/asset/delete'
 import { withOperationPack } from './pack'
@@ -129,11 +128,6 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
       confirmation: CONFIRM_NONE,
     }),
     ...withOperationPack(createWorkspaceResourceVideoFrameOperations(), {
-      groupPath: ['resource'],
-      channels: CAPABILITY_API,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createWorkspaceResourceVoiceoverOperations(), {
       groupPath: ['resource'],
       channels: CAPABILITY_API,
       confirmation: CONFIRM_NONE,

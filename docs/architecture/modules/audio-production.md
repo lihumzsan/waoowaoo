@@ -1,6 +1,6 @@
 <!-- architecture-module: audio-production -->
 
-# 独立音乐、音色与确定性混音
+# 独立音乐、音效与视频原生音轨
 
 ## 为什么是这样
 
@@ -41,7 +41,7 @@ JSON 专业结果，并把同一 items 直接提交给 `create_audio`。系统�
 
 - 创作知识：`src/lib/creative-skills/skills/music-direction/SKILL.md`
 - 计划、Placement、冻结与提交：生产 Operation registry + PlanSnapshot
-- 执行：`src/lib/task/execution/handlers/workspace-resource-{audio,voice}.ts` 与 provider adapter
+- 执行：独立音乐/音效使用 workspace-resource-audio handler；H3 参考音色由 workspace-resource-video handler 经唯一 video provider adapter 传入原生音轨。
 - 确定性装配：video merge Operation/handler
 - 终态：Task Terminal Service 与 WorkspaceResource materializer
 

@@ -1,6 +1,5 @@
 import { ApiError } from '@/lib/api-errors'
 import { getProjectModelConfig, getUserModelConfig } from '@/lib/config-service'
-import { PLATFORM_VOICEOVER_MODEL_KEY } from '@/lib/ai-registry/platform-models'
 
 export type SystemModelPurpose =
   | 'analysis'
@@ -10,7 +9,6 @@ export type SystemModelPurpose =
   | 'video'
   | 'music'
   | 'sound'
-  | 'voiceover'
 
 function requireModel(modelKey: string | null | undefined, purpose: SystemModelPurpose): string {
   if (typeof modelKey === 'string' && modelKey.trim()) return modelKey.trim()
@@ -25,8 +23,6 @@ export async function resolveSystemModelKey(input: {
   projectId?: string | null
   purpose: SystemModelPurpose
 }): Promise<string> {
-  if (input.purpose === 'voiceover') return PLATFORM_VOICEOVER_MODEL_KEY
-
   const config = input.projectId
     ? await getProjectModelConfig(input.projectId, input.userId)
     : await getUserModelConfig(input.userId)

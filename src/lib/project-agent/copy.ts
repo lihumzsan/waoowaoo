@@ -18,7 +18,6 @@ const PROJECT_AGENT_OPERATION_TITLE_COPY: Record<string, ProjectAgentOperationTi
   move_resource: { zh: '移动项目资源', en: 'Move project resource' },
   delete_resource: { zh: '删除项目资源', en: 'Delete project resource' },
   restore_resource: { zh: '恢复项目资源', en: 'Restore project resource' },
-  bind_voice: { zh: '绑定角色音色', en: 'Bind voice' },
   web_search: { zh: '联网检索', en: 'Web research' },
   list_projects: { zh: '查看项目', en: 'List projects' },
   create_project: { zh: '创建项目', en: 'Create project' },

@@ -3,9 +3,6 @@ import { isTaskType, TASK_EVENT_TYPE, TASK_TYPE, type TaskType } from './types'
 const TASK_TYPE_LABELS = {
   [TASK_TYPE.WORKSPACE_RESOURCE_IMAGE]: 'progress.taskType.workspaceResourceImage',
   [TASK_TYPE.WORKSPACE_RESOURCE_AUDIO]: 'progress.taskType.workspaceResourceAudio',
-  [TASK_TYPE.WORKSPACE_RESOURCE_VOICE]: 'progress.taskType.workspaceResourceVoice',
-  [TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER]: 'progress.taskType.workspaceResourceVoiceover',
-  [TASK_TYPE.WORKSPACE_RESOURCE_VOICEOVER_MIX]: 'progress.taskType.workspaceResourceVoiceoverMix',
   [TASK_TYPE.WORKSPACE_RESOURCE_VIDEO]: 'progress.taskType.workspaceResourceVideo',
   [TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_FRAME]: 'progress.taskType.workspaceResourceVideoFrame',
   [TASK_TYPE.WORKSPACE_RESOURCE_VIDEO_MERGE]: 'progress.taskType.workspaceResourceVideoMerge',
@@ -16,8 +13,6 @@ const STAGE_LABELS: Record<string, string> = {
   workspace_resource_prepare: 'progress.stage.workspaceResourcePrepare',
   workspace_resource_generate: 'progress.stage.workspaceResourceGenerate',
   workspace_resource_persist: 'progress.stage.workspaceResourcePersist',
-  generate_voice_submit: 'progress.stage.generateVoiceSubmit',
-  persist_voice: 'progress.stage.persistVoice',
   generate_sound_submit: 'progress.stage.generateSoundSubmit',
   persist_sound: 'progress.stage.persistSound',
   generate_music_submit: 'progress.stage.generateMusicSubmit',
