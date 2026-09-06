@@ -68,7 +68,7 @@ export const CREATIVE_RUNTIME_SKILL_REGISTRY: Readonly<
   music: defineRuntimeSkill({
     kind: 'music',
     title: '音乐与配乐设计',
-    description: '从剧情与真实时间线规划配乐窗口并创作 Composition Plan，形成 audio_generation_batch 专业结果。',
+    description: '从剧情与真实时间线规划配乐窗口，并按生产能力创作最终音乐提示词或 Composition Plan，形成 audio_generation_batch 专业结果。',
     skillIds: ['creative-core', 'music-direction'],
     executionFacts: 'Use only the non-null productionCapabilities.music facts for BGM or productionCapabilities.sound facts for environmental sound effects, as selected by each item audioKind. Never guess capability limits.',
   }),
