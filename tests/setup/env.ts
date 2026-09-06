@@ -47,7 +47,6 @@ export function loadTestEnv() {
   setIfMissing('REDIS_PORT', '6380')
   setIfMissing('API_ENCRYPTION_KEY', 'test-only-api-encryption-key')
   setIfMissing('NEXTAUTH_SECRET', 'test-only-nextauth-secret-value')
-  setIfMissing('PLATFORM_DEFAULT_ANALYSIS_MODEL', 'openrouter::openai/gpt-5.6-sol')
   setIfMissing('PLATFORM_DEFAULT_CHARACTER_MODEL', 'codex::gpt-image-2')
   setIfMissing('PLATFORM_DEFAULT_LOCATION_MODEL', 'codex::gpt-image-2')
   setIfMissing('PLATFORM_DEFAULT_EDIT_MODEL', 'codex::gpt-image-2')

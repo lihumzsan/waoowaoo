@@ -16,7 +16,6 @@
         "Dockerfile.codex-runtime",
         "docker/codex-runtime",
         ".env.example",
-        ".env.cloud.example",
         "prisma/migrations/20260802220000_codex_runtime_cutover"
       ]
     },
@@ -184,7 +183,7 @@
         "src/lib/platform-models",
         "src/lib/platform-runtime",
         ".env.example",
-        ".env.cloud.example",
+        "scripts/check-local-provider-boundary.mjs",
         "src/lib/user-api/runtime-config.ts",
         "src/lib/llm-observe",
         "src/lib/image-cache.ts",

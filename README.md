@@ -147,363 +147,42 @@ git pull
 # 不要执行 docker compose down 来替换 Worker。
 ```
 
-### 方式三：本地开发模式（开发者）
+### 方式三：本地开发模式（推荐）
 
 ```bash
 git clone https://github.com/saturndec/waoowaoo.git
 cd waoowaoo
 
-# 复制环境变量配置文件（必须在 npm install 之前完成）
+# 首次安装前复制配置。
 cp .env.example .env
-# ⚠️ 编辑 .env，填写数据库、Redis、Temporal、MinIO、认证与加密配置
-# MYSQL_PASSWORD 必须与两个数据库 URL 中的密码一致
+# 编辑 .env：配置 MySQL、Redis、MinIO、Temporal、认证、Codex Runtime、
+# ComfyUI 端点以及本机 FFMPEG_BINARY_DIR。
 
 npm install
 
-# 初始化数据库表结构（首次必须执行，跳过会导致启动后报错）
+# 只在首次初始化或明确需要同步 schema 时执行。
 npm run db:push
 
-# 启动容器化的数据库、Redis、完整 Temporal Server/namespace、
-# 带热更新的 Next.js/Worker，以及与生产相同的按项目 Codex Docker Runtime。
-# 开发 Worker 仍显式使用 local/unversioned，不会启动生产版 blue/green Worker。
+# Docker 启动 MySQL、Redis、MinIO 和 Temporal 基础设施；
+# Next.js 与 Temporal Worker 在 Windows 宿主机运行。
 npm run dev
 ```
-
-本地调试官方 Cloud 产品能力时，复制完整的 `.env.cloud.example` 为 `.env.cloud.local` 并运行
-`npm run dev:cloud`。Cloud 本地开发只读取 `.env.cloud.local`，不会再读取或覆盖 `.env`；正式服务器
-只读取自己的 `.env.production`。两个开发命令都使用源码挂载和热更新；Docker 层只在依赖、基础镜像
-或 Codex 版本变化时重建。Cloud 模式仍使用同一套本机开源 Temporal，不需要 Temporal Cloud
-账户、TLS 或 API key。`npm run dev:local` 只是显式的宿主机 Runtime 排障入口，不是发布验收路径。
-
-> [!WARNING]
-> 跳过 `npm run db:push` 会导致数据库表结构缺失；请务必在启动应用与 worker 前运行。
->
-> 如果旧库的 `project_assistant_threads` 或 `project_assistant_thread_archives` 仍有
-> `messagesJson`，或者 normalized message 表尚缺非空 `byteLength`，先停止 Web 与
-> Temporal worker、完成备份，并依次执行
-> `npm run db:assistant-messages:preflight`、`npm run db:assistant-messages:apply` 和
-> `npm run db:assistant-messages:verify`。切换入口会拒绝 active Turn、非法或超大的旧消息，
-> 并可从已记录阶段继续执行；`db:push` 在切换完成前会 fail closed，禁止改用
-> `--accept-data-loss`。
->
-> 对象存储由内网 MinIO 唯一提供。`S3_ENDPOINT` 用于对象读取、签名与控制，
-> `S3_UPLOAD_ENDPOINT` 用于同一 bucket 的 PUT；未做单独加速时两者填写同一个 MinIO HTTP 或
-> HTTPS endpoint。启动时会创建缺失的 `S3_BUCKET`；不要配置第二存储系统或本地目录 fallback。
->
-> 从旧 BullMQ/Outbox/Run/Wait 架构升级到 B+ 前，必须先停止旧 Web、Bull worker
-> 和 Outbox dispatcher，完成数据库备份，再运行
-> `npm run db:bplus-cutover-preflight`。该命令只读：任何 active Task、旧 Run/Wait/
-> Activity/Interruption/Handoff、待交付 Outbox、未完成 OperationExecution、
-> 未消费 ApprovalGrant、旧模型 checkpoint 或重复 Thread archive 都会明确阻断。
-> 全部为 0 后，人工审核输出并执行 `npm run db:bplus-cutover-apply`。这是唯一切换入口：
-> 完整旧库依次执行 immutable base 与 additive migration；已经完成 base 的库只执行
-> additive，绝不重跑旧 DDL。不要用 `db:push --accept-data-loss` 代替。MySQL DDL 非事务化；
-> 部分 base 会 fail closed 并要求从备份恢复，只有已验证完整的 base 才允许恢复性重放
-> 幂等 additive。
-
-### B+ 一次性切换：备份、演练与失败恢复
-
-这次切换会删除旧控制面表和字段，必须在维护窗口内执行。下面的逻辑备份和完整恢复
-演练是发布门槛；云数据库快照或时间点恢复可以作为额外保护，但不能代替这次演练。
-所有旧 Web、Bull worker 和 Outbox dispatcher 必须从备份开始前一直保持停止，防止备份
-之后再产生无法进入新库的写入。
-
-如果数据库在此前版本已经完整执行过 base cutover，不要运行只接受完整旧库的 preflight；
-直接运行 `npm run db:bplus-cutover-apply`。入口会验证 base schema，只执行 additive 并完成
-同一套最终验收。任何部分 base 或未知结构都会停止，不会猜测或盲目补表。
-
-先把以下变量替换成目标 MySQL 的真实值。备份目录必须位于受限的持久磁盘，不能放进
-Git 仓库；数据库名只允许字母、数字和下划线。
-
-```bash
-set -euo pipefail
-umask 077
-
-export BPLUS_DB_HOST='127.0.0.1'
-export BPLUS_DB_PORT='3306'
-export BPLUS_DB_USER='waoowaoo'
-export BPLUS_DB_PASSWORD='replace-with-real-password'
-export BPLUS_DB_NAME='waoowaoo'
-export BPLUS_BACKUP_DIR='/absolute/private/backup/path/bplus-cutover-20260731T120000Z'
-
-case "$BPLUS_DB_NAME" in
-  ''|*[!A-Za-z0-9_]*) echo 'BPLUS_DB_NAME must contain only A-Z, a-z, 0-9, _' >&2; exit 1 ;;
-esac
-
-mkdir -p "$BPLUS_BACKUP_DIR"
-MYSQL_PWD="$BPLUS_DB_PASSWORD" mysqldump \
-  --host="$BPLUS_DB_HOST" \
-  --port="$BPLUS_DB_PORT" \
-  --user="$BPLUS_DB_USER" \
-  --single-transaction \
-  --routines \
-  --triggers \
-  --events \
-  --hex-blob \
-  --set-gtid-purged=OFF \
-  --column-statistics=0 \
-  --no-tablespaces \
-  --default-character-set=utf8mb4 \
-  "$BPLUS_DB_NAME" > "$BPLUS_BACKUP_DIR/pre-cutover.sql"
-
-test -s "$BPLUS_BACKUP_DIR/pre-cutover.sql"
-shasum -a 256 "$BPLUS_BACKUP_DIR/pre-cutover.sql" \
-  > "$BPLUS_BACKUP_DIR/pre-cutover.sql.sha256"
-shasum -a 256 -c "$BPLUS_BACKUP_DIR/pre-cutover.sql.sha256"
-```
-
-在同一 MySQL server 上创建一个明确命名的临时演练库，真实恢复备份并在这个临时库上
-完成一次 preflight 与 migration。以下命令会拒绝覆盖已经存在的同名库。演练用
-`DATABASE_URL` 的密码必须进行 URL 编码。
-
-```bash
-set -euo pipefail
-
-export BPLUS_REHEARSAL_DB='waoowaoo_bplus_rehearsal_20260731'
-: "${BPLUS_REHEARSAL_DATABASE_URL:?Set the rehearsal database URL in an ignored local environment file}"
-
-case "$BPLUS_REHEARSAL_DB" in
-  ''|*[!A-Za-z0-9_]*) echo 'BPLUS_REHEARSAL_DB must contain only A-Z, a-z, 0-9, _' >&2; exit 1 ;;
-esac
-
-test "$(
-  MYSQL_PWD="$BPLUS_DB_PASSWORD" mysql \
-    --host="$BPLUS_DB_HOST" \
-    --port="$BPLUS_DB_PORT" \
-    --user="$BPLUS_DB_USER" \
-    --batch \
-    --skip-column-names \
-    --execute="SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = '$BPLUS_REHEARSAL_DB'"
-)" = '0'
-
-MYSQL_PWD="$BPLUS_DB_PASSWORD" mysql \
-  --host="$BPLUS_DB_HOST" \
-  --port="$BPLUS_DB_PORT" \
-  --user="$BPLUS_DB_USER" \
-  --execute="CREATE DATABASE \`$BPLUS_REHEARSAL_DB\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
-
-MYSQL_PWD="$BPLUS_DB_PASSWORD" mysql \
-  --host="$BPLUS_DB_HOST" \
-  --port="$BPLUS_DB_PORT" \
-  --user="$BPLUS_DB_USER" \
-  "$BPLUS_REHEARSAL_DB" < "$BPLUS_BACKUP_DIR/pre-cutover.sql"
-
-DATABASE_URL="$BPLUS_REHEARSAL_DATABASE_URL" npm run db:bplus-cutover-preflight
-DATABASE_URL="$BPLUS_REHEARSAL_DATABASE_URL" npm run db:bplus-cutover-apply
-
-test "$(
-  MYSQL_PWD="$BPLUS_DB_PASSWORD" mysql \
-    --host="$BPLUS_DB_HOST" \
-    --port="$BPLUS_DB_PORT" \
-    --user="$BPLUS_DB_USER" \
-    --database="$BPLUS_REHEARSAL_DB" \
-    --batch \
-    --skip-column-names \
-    --execute="
-      SELECT IF(
-        (SELECT COUNT(*) FROM information_schema.tables
-          WHERE table_schema = DATABASE()
-            AND table_name IN (
-              'project_agent_turns',
-              'agent_tool_effects',
-              'agent_turn_interactions',
-              'follow_up_batches',
-              'follow_up_batch_members'
-            )) = 5
-        AND
-        (SELECT COUNT(*) FROM information_schema.tables
-          WHERE table_schema = DATABASE()
-            AND table_name IN (
-              'project_agent_runs',
-              'project_agent_waits',
-              'project_agent_activities',
-              'project_agent_interruptions',
-              'project_agent_execution_handoffs',
-              'project_agent_continuation_checkpoints',
-              'project_agent_events',
-              'outbox_commands',
-              'project_assistant_tool_selections'
-            )) = 0
-        AND
-        (SELECT COUNT(*) FROM information_schema.columns
-          WHERE table_schema = DATABASE()
-            AND table_name = 'project_assistant_thread_archives'
-            AND column_name IN ('clearRequestId', 'cancelledTurnIds')) = 2
-        AND
-        (SELECT COUNT(*) FROM information_schema.table_constraints
-          WHERE constraint_schema = DATABASE()
-            AND table_name = 'project_assistant_thread_archives'
-            AND constraint_name = 'project_assistant_thread_archives_userId_fkey'
-            AND constraint_type = 'FOREIGN KEY') = 1,
-        'BPLUS_SCHEMA_READY',
-        'BPLUS_SCHEMA_DIVERGED'
-      )
-    "
-)" = 'BPLUS_SCHEMA_READY'
-```
-
-演练成功后，回到仍然冻结写入的真实数据库，重新运行只读 preflight，再执行唯一apply
-入口，并用同一条 schema 查询确认结果。不要对真实数据库执行
-`db:push --accept-data-loss`。
-
-```bash
-set -euo pipefail
-
-npm run db:bplus-cutover-preflight
-npm run db:bplus-cutover-apply
-
-test "$(
-  MYSQL_PWD="$BPLUS_DB_PASSWORD" mysql \
-    --host="$BPLUS_DB_HOST" \
-    --port="$BPLUS_DB_PORT" \
-    --user="$BPLUS_DB_USER" \
-    --database="$BPLUS_DB_NAME" \
-    --batch \
-    --skip-column-names \
-    --execute="
-      SELECT IF(
-        (SELECT COUNT(*) FROM information_schema.tables
-          WHERE table_schema = DATABASE()
-            AND table_name IN (
-              'project_agent_turns',
-              'agent_tool_effects',
-              'agent_turn_interactions',
-              'follow_up_batches',
-              'follow_up_batch_members'
-            )) = 5
-        AND
-        (SELECT COUNT(*) FROM information_schema.tables
-          WHERE table_schema = DATABASE()
-            AND table_name IN (
-              'project_agent_runs',
-              'project_agent_waits',
-              'project_agent_activities',
-              'project_agent_interruptions',
-              'project_agent_execution_handoffs',
-              'project_agent_continuation_checkpoints',
-              'project_agent_events',
-              'outbox_commands',
-              'project_assistant_tool_selections'
-            )) = 0
-        AND
-        (SELECT COUNT(*) FROM information_schema.columns
-          WHERE table_schema = DATABASE()
-            AND table_name = 'project_assistant_thread_archives'
-            AND column_name IN ('clearRequestId', 'cancelledTurnIds')) = 2
-        AND
-        (SELECT COUNT(*) FROM information_schema.table_constraints
-          WHERE constraint_schema = DATABASE()
-            AND table_name = 'project_assistant_thread_archives'
-            AND constraint_name = 'project_assistant_thread_archives_userId_fkey'
-            AND constraint_type = 'FOREIGN KEY') = 1,
-        'BPLUS_SCHEMA_READY',
-        'BPLUS_SCHEMA_DIVERGED'
-      )
-    "
-)" = 'BPLUS_SCHEMA_READY'
-```
-
-如果immutable base在任意 DDL 处失败，立即停止，不得在这个部分切换的库上重跑base，
-也不得人工逐条补表。若日志已明确显示base完整、失败发生在additive阶段，可重新执行同一
-apply入口；它会验证base并只重放幂等additive。其他未知或部分base一律保留失败库作为诊断
-证据，创建一个新的空恢复库，从已验证的备份恢复，然后在恢复库上从preflight开始完成
-一次全新切换：
-
-```bash
-set -euo pipefail
-
-export BPLUS_RECOVERY_DB='waoowaoo_bplus_recovery_20260731'
-: "${BPLUS_RECOVERY_DATABASE_URL:?Set the recovery database URL in an ignored local environment file}"
-
-case "$BPLUS_RECOVERY_DB" in
-  ''|*[!A-Za-z0-9_]*) echo 'BPLUS_RECOVERY_DB must contain only A-Z, a-z, 0-9, _' >&2; exit 1 ;;
-esac
-
-test "$(
-  MYSQL_PWD="$BPLUS_DB_PASSWORD" mysql \
-    --host="$BPLUS_DB_HOST" \
-    --port="$BPLUS_DB_PORT" \
-    --user="$BPLUS_DB_USER" \
-    --batch \
-    --skip-column-names \
-    --execute="SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = '$BPLUS_RECOVERY_DB'"
-)" = '0'
-
-MYSQL_PWD="$BPLUS_DB_PASSWORD" mysql \
-  --host="$BPLUS_DB_HOST" \
-  --port="$BPLUS_DB_PORT" \
-  --user="$BPLUS_DB_USER" \
-  --execute="CREATE DATABASE \`$BPLUS_RECOVERY_DB\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
-
-MYSQL_PWD="$BPLUS_DB_PASSWORD" mysql \
-  --host="$BPLUS_DB_HOST" \
-  --port="$BPLUS_DB_PORT" \
-  --user="$BPLUS_DB_USER" \
-  "$BPLUS_RECOVERY_DB" < "$BPLUS_BACKUP_DIR/pre-cutover.sql"
-
-DATABASE_URL="$BPLUS_RECOVERY_DATABASE_URL" npm run db:bplus-cutover-preflight
-DATABASE_URL="$BPLUS_RECOVERY_DATABASE_URL" npm run db:bplus-cutover-apply
-
-test "$(
-  MYSQL_PWD="$BPLUS_DB_PASSWORD" mysql \
-    --host="$BPLUS_DB_HOST" \
-    --port="$BPLUS_DB_PORT" \
-    --user="$BPLUS_DB_USER" \
-    --database="$BPLUS_RECOVERY_DB" \
-    --batch \
-    --skip-column-names \
-    --execute="
-      SELECT IF(
-        (SELECT COUNT(*) FROM information_schema.tables
-          WHERE table_schema = DATABASE()
-            AND table_name IN (
-              'project_agent_turns',
-              'agent_tool_effects',
-              'agent_turn_interactions',
-              'follow_up_batches',
-              'follow_up_batch_members'
-            )) = 5
-        AND
-        (SELECT COUNT(*) FROM information_schema.tables
-          WHERE table_schema = DATABASE()
-            AND table_name IN (
-              'project_agent_runs',
-              'project_agent_waits',
-              'project_agent_activities',
-              'project_agent_interruptions',
-              'project_agent_execution_handoffs',
-              'project_agent_continuation_checkpoints',
-              'project_agent_events',
-              'outbox_commands',
-              'project_assistant_tool_selections'
-            )) = 0
-        AND
-        (SELECT COUNT(*) FROM information_schema.columns
-          WHERE table_schema = DATABASE()
-            AND table_name = 'project_assistant_thread_archives'
-            AND column_name IN ('clearRequestId', 'cancelledTurnIds')) = 2
-        AND
-        (SELECT COUNT(*) FROM information_schema.table_constraints
-          WHERE constraint_schema = DATABASE()
-            AND table_name = 'project_assistant_thread_archives'
-            AND constraint_name = 'project_assistant_thread_archives_userId_fkey'
-            AND constraint_type = 'FOREIGN KEY') = 1,
-        'BPLUS_SCHEMA_READY',
-        'BPLUS_SCHEMA_DIVERGED'
-      )
-    "
-)" = 'BPLUS_SCHEMA_READY'
-```
-
-恢复库通过 `BPLUS_SCHEMA_READY` 查询后，才允许把部署的 `DATABASE_URL` 指向恢复库并
-启动新 Web 与 Temporal worker。失败库和演练库只能在备份、迁移日志、校验输出都已归档
-且运维人员明确确认后删除；应用代码不会提供自动修复或自动回退状态机。
 
 ---
 
 访问 [http://localhost:13000](http://localhost:13000)（方式一、二）或 [http://localhost:3000](http://localhost:3000)（方式三）开始使用！
 
 > 方式一、二会在容器首次启动时初始化数据库；外部对象存储配置和预建桶仍必须提前准备。
+
+> [!WARNING]
+> 首次本地初始化不要跳过 `npm run db:push`。如果旧库仍有未规范化的 Assistant
+> 消息，先停止 Web 与 Temporal Worker、完成备份，再依次运行
+> `npm run db:assistant-messages:preflight`、`npm run db:assistant-messages:apply` 和
+> `npm run db:assistant-messages:verify`；切勿使用 `--accept-data-loss` 绕过守卫。
+>
+> 本地对象存储只使用基础设施栈启动的 MinIO。`S3_ENDPOINT` 与
+> `S3_UPLOAD_ENDPOINT` 应指向同一个可达的 HTTP 或 HTTPS endpoint；启动时会创建
+> 缺失的 `S3_BUCKET`，不存在第二存储后端或本地目录 fallback。
 
 > [!TIP]
 > **如果遇到网页卡顿**：HTTP 模式下浏览器可能限制并发连接。可安装 [Caddy](https://caddyserver.com/docs/install) 启用 HTTPS：
@@ -516,9 +195,9 @@ test "$(
 
 ## 🔧 API 配置
 
-启动后进入**设置中心**配置 AI 服务的 API Key，内置配置教程。
-
-> 💡 **注意**：目前仅推荐使用各服务商官方 API，第三方兼容格式（OpenAI Compatible）尚不完善，后续版本会持续优化。
+本地运行不需要外部 AI API Key。文字、对话、规划、上下文压缩和搜索由当前 Windows
+用户已登录的 Codex App Server 提供，图片生成与编辑走 Codex 图片 Provider；视频、音乐、
+环境音效、TTS 和配音统一走本机 ComfyUI。设置中心只展示这两个边界内的可用能力。
 
 ---
 

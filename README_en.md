@@ -147,30 +147,26 @@ git pull
 # with docker compose down/up.
 ```
 
-### Method 3: Local Development (For Developers)
+### Method 3: Local Development (Recommended)
 
 ```bash
 git clone https://github.com/saturndec/waoowaoo.git
 cd waoowaoo
 
-# Copy environment config (must be done before npm install)
+# Copy the configuration before the first install.
 cp .env.example .env
-# ⚠️ Configure database, Redis, Temporal, external S3-compatible storage,
-# authentication, and encryption. MYSQL_PASSWORD must match both database URLs.
+# Configure MySQL, Redis, MinIO, Temporal, authentication, the Codex Runtime,
+# ComfyUI endpoints, and the host FFMPEG_BINARY_DIR.
 
 npm install
 
-# Push the Prisma schema
+# Run only for first-time initialization or an intentional schema sync.
 npm run db:push
 
-# Start MySQL, Redis, the Temporal Server/namespace, Web, and a local explicitly
-# unversioned Worker. This does not start the production blue/green Workers.
+# Docker starts MySQL, Redis, MinIO, and Temporal infrastructure.
+# Next.js and the Temporal Worker run on the Windows host.
 npm run dev
 ```
-
-To debug the official Cloud product surface locally, copy `.env.cloud.example` to
-`.env.cloud.local` and run `npm run dev:cloud`. It uses the same local open-source
-Temporal service and does not require a Temporal Cloud account, TLS, or an API key.
 
 ---
 
@@ -189,24 +185,10 @@ Visit [http://localhost:13000](http://localhost:13000) (Method 1 & 2) or [http:/
 > invalid or oversize legacy messages, and resumes from its recorded phase. `db:push` fails
 > closed until the cutover is complete; never replace it with `--accept-data-loss`.
 >
-> Pre-create the object-storage bucket and grant the configured credentials permission to check
-> the bucket and read, write, and delete objects. `S3_ENDPOINT` is the HTTPS endpoint for reads,
-> signing, and control operations and must be reachable by external AI providers.
-> `S3_UPLOAD_ENDPOINT` is the PUT endpoint for the same bucket and may explicitly use a
-> cross-region acceleration endpoint; set it equal to `S3_ENDPOINT` when acceleration is not needed.
-> Local development uses a development bucket too, so no ngrok,
-> cloudflared, local-file storage, or Docker MinIO is required. AWS S3, Cloudflare R2, Tencent COS,
-> and Alibaba OSS share the same `S3_*` configuration. GCS requires its XML API and HMAC credentials.
-> Azure Blob does not implement S3 and is not directly supported.
->
-> Before the one-time B+ cutover, stop the old Web, Bull worker, and Outbox
-> dispatcher, back up the database, and run `npm run db:bplus-cutover-preflight`.
-> Proceed only when every reported blocker is zero, then review and execute
-> `npm run db:bplus-cutover-apply`. This is the only apply entry: it runs the
-> immutable base followed by the additive migration for a legacy database, or
-> only the additive migration when the base is already complete. The DDL is not
-> transactional; never replace it with `db:push --accept-data-loss`. A partial
-> base fails closed and must be restored from backup rather than rerun.
+> Local development uses the single MinIO instance started by the infrastructure stack.
+> Set `S3_ENDPOINT` and `S3_UPLOAD_ENDPOINT` to that same reachable HTTP or HTTPS
+> endpoint. Startup creates a missing `S3_BUCKET`; there is no second storage backend
+> or local-directory fallback.
 
 > [!TIP]
 > **If you experience lag**: HTTP mode may limit browser connections. Install [Caddy](https://caddyserver.com/docs/install) for HTTPS:
@@ -219,9 +201,11 @@ Visit [http://localhost:13000](http://localhost:13000) (Method 1 & 2) or [http:/
 
 ## 🔧 API Configuration
 
-After launching, go to **Settings** to configure your AI service API keys. A built-in guide is provided.
-
-> 💡 **Note**: Currently only official provider APIs are recommended. Third-party compatible formats (OpenAI Compatible) are not yet fully supported and will be improved in future releases.
+No external AI API key is required for local use. Text, conversations, planning,
+context compaction, and search use the Codex App Server signed in by the current
+Windows user. Image generation and editing use the Codex image provider. Video,
+music, sound effects, TTS, and voiceover use the local ComfyUI instance. Settings
+only expose capabilities inside those two provider boundaries.
 
 ---
 
