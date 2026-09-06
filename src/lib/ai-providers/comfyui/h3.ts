@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -6,8 +7,13 @@ import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabili
 import { resolveVideoInputPolicySelection } from '@/lib/ai-registry/video-input-policy'
 import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
 import { createProviderAsyncTaskFailure } from '@/lib/ai-providers/shared/async-task-status'
-import type { AiProviderVideoExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
+import type {
+  AiProviderPreparedMediaExecution,
+  AiProviderVideoExecutionContext,
+  GenerateResult,
+} from '@/lib/ai-providers/runtime-types'
 import type { FailureRecord } from '@/lib/errors/failure'
+import { createScopedLogger } from '@/lib/logging/core'
 import { MAX_VIDEO_BYTES } from '@/lib/http/body-size-constants'
 import { readOwnedImageBytesForGeneration } from '@/lib/media/outbound-image'
 import { readOwnedMediaBytesForGeneration } from '@/lib/media/outbound-owned-media'
@@ -34,6 +40,7 @@ import {
   H3_REFERENCE_DUAL_STAGE_PROFILE_ID,
   buildH3PromptGraph,
   resolveH3Dimensions,
+  type ComfyUiPromptGraph,
   type H3AspectRatio,
   type H3DualStageRuntimeProfile,
 } from './profiles'
@@ -45,13 +52,17 @@ import {
   type H3ReferenceImageFile,
 } from './h3-input-upload'
 import {
+  assertComfyUiPromptGraphRuntimeContract,
+  type ComfyUiGraphOptionMismatch,
+} from './prompt-graph-contract'
+import {
   asComfyUiRecord,
   COMFYUI_ACCEPTED_JOB_STATUSES,
   ComfyUiHttpError,
   downloadComfyUiOutputToTemporaryFile,
   readComfyUiDeclaredNodeVideoOutput,
   readComfyUiHttpError,
-  readComfyUiRequiredOptions,
+  readComfyUiOptions,
   readComfyUiString,
   requestComfyUiJson,
 } from './transport'
@@ -59,11 +70,17 @@ import {
 export const COMFYUI_H3_MODEL_KEY = `comfyui::${COMFYUI_H3_MODEL_ID}`
 export const COMFYUI_H3_RUNTIME_TARGET_ID = 'h3-dual-stage-2mp' as const
 const H3_PREFLIGHT_CACHE_TTL_MS = 30_000
-const preflightReadyAtByTargetProfile = new Map<string, number>()
+type H3RuntimePreflightContract = Readonly<{
+  readyAt: number
+  infoByClassName: ReadonlyMap<string, unknown>
+}>
+const preflightContractByTargetProfile = new Map<string, H3RuntimePreflightContract>()
+const h3Logger = createScopedLogger({ module: 'ai-provider.comfyui.h3' })
 type H3NodeInputSchemaLocation = 'required' | 'optional'
 type H3NodeInputContract = Readonly<{
   location: H3NodeInputSchemaLocation
   type: string | null
+  value?: number
 }>
 const H3_CONTINUATION_NODE_INPUT_TYPES = {
   LoadImage: {
@@ -81,51 +98,11 @@ const H3_CONTINUATION_NODE_INPUT_TYPES = {
     frame_idx: { location: 'required', type: 'INT' },
   },
 } as const satisfies Readonly<Record<string, Readonly<Record<string, H3NodeInputContract>>>>
-const H3_REFERENCE_NODE_INPUT_TYPES = {
-  LoadImage: {
-    image: { location: 'required', type: null },
-  },
-  MiniMaxH3AudioConditioningT8: {
-    clip: { location: 'required', type: 'CLIP' },
-    video_vae: { location: 'required', type: 'VAE' },
-    audio_vae: { location: 'required', type: 'VAE' },
-    prompt: { location: 'required', type: 'STRING' },
-    width: { location: 'required', type: 'INT' },
-    height: { location: 'required', type: 'INT' },
-    length: { location: 'required', type: 'INT' },
-  },
-  MiniMaxH3LearnedLatentUpscaleT8Advanced: {
-    av_latent: { location: 'required', type: 'LATENT' },
-    scale_by: { location: 'required', type: 'FLOAT' },
-    target_megapixels: { location: 'required', type: 'FLOAT' },
-    target_width: { location: 'required', type: 'INT' },
-    target_height: { location: 'required', type: 'INT' },
-    max_anisotropy: { location: 'required', type: 'FLOAT' },
-  },
-  MiniMaxH3AVDecodeT8: {
-    av_latent: { location: 'required', type: 'LATENT' },
-    video_vae: { location: 'required', type: 'VAE' },
-    audio_vae: { location: 'required', type: 'VAE' },
-  },
-  ImageResizeKJv2: {
-    width: { location: 'required', type: 'INT' },
-    height: { location: 'required', type: 'INT' },
-  },
-} as const satisfies Readonly<Record<string, Readonly<Record<string, H3NodeInputContract>>>>
 const H3_REFERENCE_AUDIO_NODE_INPUT_TYPES = {
   LoadAudio: {
     audio: { location: 'required', type: null },
   },
 } as const satisfies Readonly<Record<string, Readonly<Record<string, H3NodeInputContract>>>>
-
-function preAcceptRejected(error: unknown): ProviderSubmissionError {
-  const message = error instanceof Error ? error.message : String(error)
-  return new ProviderSubmissionError('PROVIDER_SUBMISSION_REJECTED', message.slice(0, 512), {
-    disposition: 'pre_accept_rejected', provider: 'comfyui', externalId: null,
-    details: error instanceof ComfyUiHttpError ? { httpStatus: error.status, payload: error.payload } : { diagnostic: message.slice(0, 512) },
-    cause: error,
-  })
-}
 
 function promptRejection(error: ComfyUiHttpError): ProviderSubmissionError {
   return new ProviderSubmissionError('PROVIDER_SUBMISSION_REJECTED', readComfyUiHttpError(error.payload), {
@@ -159,6 +136,7 @@ function assertNodeInputContract(
   for (const [inputName, contract] of Object.entries(inputs)) {
     const schema = asComfyUiRecord(input?.[contract.location])
     const definition = schema?.[inputName]
+    const metadata = Array.isArray(definition) ? asComfyUiRecord(definition[1]) : null
     if (
       !Array.isArray(definition)
       || definition.length === 0
@@ -166,7 +144,38 @@ function assertNodeInputContract(
     ) {
       throw new Error(`COMFYUI_NODE_INPUT_INCOMPATIBLE:${className}:${inputName}:${contract.type ?? contract.location}`)
     }
+    if (
+      contract.value !== undefined
+      && (
+        (typeof metadata?.min === 'number' && contract.value < metadata.min)
+        || (typeof metadata?.max === 'number' && contract.value > metadata.max)
+      )
+    ) {
+      throw new Error(`COMFYUI_NODE_INPUT_VALUE_INCOMPATIBLE:${className}:${inputName}:${String(contract.value)}`)
+    }
   }
+}
+
+function assertReferenceRequestRuntimeContract(input: {
+  readonly profile: H3DualStageRuntimeProfile
+  readonly graph: ComfyUiPromptGraph
+  readonly infoByClassName: ReadonlyMap<string, unknown>
+}): void {
+  if (input.profile.id !== H3_REFERENCE_DUAL_STAGE_PROFILE_ID) return
+  assertComfyUiPromptGraphRuntimeContract({
+    graph: input.graph,
+    infoByClassName: input.infoByClassName,
+    createOptionMismatchError: (option) => missingGraphOptionError(option),
+  })
+}
+
+function missingGraphOptionError(option: ComfyUiGraphOptionMismatch): Error {
+  return missingOptionError({
+    classType: option.className,
+    inputName: option.inputName,
+    location: 'required',
+    value: option.value,
+  })
 }
 
 function assertReferenceAutogrowInputContract(input: {
@@ -295,26 +304,40 @@ function assertReferenceT8GraphContract(profile: H3DualStageRuntimeProfile): voi
 async function preflight(
   baseUrl: string,
   profile: H3DualStageRuntimeProfile,
+  graph: ComfyUiPromptGraph,
   requiresReferenceAudio: boolean,
-): Promise<void> {
+): Promise<H3RuntimePreflightContract> {
   assertContinuationGraphContract(profile)
   assertReferenceT8GraphContract(profile)
   const requirements = deriveComfyUiProfileRequirements({
     profileId: profile.id,
     graph: profile.workflow,
   })
-  const requiredNodeClasses = profile.id === H3_REFERENCE_DUAL_STAGE_PROFILE_ID && !requiresReferenceAudio
-    ? requirements.nodeClasses.filter((className) => className !== 'LoadAudio')
-    : requirements.nodeClasses
-  const cacheKey = `${baseUrl}\u0000${requirements.fingerprint}\u0000reference-audio:${String(requiresReferenceAudio)}`
+  const requiredNodeClasses = Array.from(new Set(
+    Object.values(graph).map((node) => node.class_type),
+  )).sort()
+  const cacheKey = [
+    baseUrl,
+    requirements.fingerprint,
+    `reference-audio:${String(requiresReferenceAudio)}`,
+    requiredNodeClasses.join(','),
+  ].join('\u0000')
   const now = Date.now()
-  if ((preflightReadyAtByTargetProfile.get(cacheKey) ?? 0) + H3_PREFLIGHT_CACHE_TTL_MS > now) return
-  const infoByClassName = new Map<string, Promise<unknown>>()
+  const cached = preflightContractByTargetProfile.get(cacheKey)
+  if (cached && cached.readyAt + H3_PREFLIGHT_CACHE_TTL_MS > now) {
+    assertReferenceRequestRuntimeContract({
+      profile,
+      graph,
+      infoByClassName: cached.infoByClassName,
+    })
+    return cached
+  }
+  const infoPromiseByClassName = new Map<string, Promise<unknown>>()
   const readInfo = (className: string): Promise<unknown> => {
-    const existing = infoByClassName.get(className)
+    const existing = infoPromiseByClassName.get(className)
     if (existing) return existing
     const requested = requestComfyUiJson(baseUrl, `/object_info/${encodeURIComponent(className)}`)
-    infoByClassName.set(className, requested)
+    infoPromiseByClassName.set(className, requested)
     return requested
   }
   const requiredInfos = await Promise.all(requiredNodeClasses.map(async (className) => ({
@@ -324,21 +347,15 @@ async function preflight(
   for (const { className, info } of requiredInfos) {
     if (!asComfyUiRecord(info)?.[className]) throw new Error(`COMFYUI_NODE_MISSING:${className}`)
   }
+  const infoByClassName = new Map(
+    requiredInfos.map(({ className, info }) => [className, info]),
+  )
   if (profile.id === H3_CONTINUATION_DUAL_STAGE_PROFILE_ID) {
-    const infoByClassName = new Map(
-      requiredInfos.map(({ className, info }) => [className, info]),
-    )
     for (const [className, inputs] of Object.entries(H3_CONTINUATION_NODE_INPUT_TYPES)) {
       assertNodeInputContract(infoByClassName.get(className), className, inputs)
     }
   }
   if (profile.id === H3_REFERENCE_DUAL_STAGE_PROFILE_ID) {
-    const infoByClassName = new Map(
-      requiredInfos.map(({ className, info }) => [className, info]),
-    )
-    for (const [className, inputs] of Object.entries(H3_REFERENCE_NODE_INPUT_TYPES)) {
-      assertNodeInputContract(infoByClassName.get(className), className, inputs)
-    }
     const conditioningInfo = infoByClassName.get('MiniMaxH3AudioConditioningT8')
     assertReferenceAutogrowInputContract({
       info: conditioningInfo,
@@ -362,16 +379,26 @@ async function preflight(
       })
     }
   }
-  const optionInfos = await Promise.all(requirements.options.map(async (option) => ({
+  const optionInfos = await Promise.all((
+    profile.id === H3_REFERENCE_DUAL_STAGE_PROFILE_ID ? [] : requirements.options
+  ).map(async (option) => ({
     option,
     info: await readInfo(option.classType),
   })))
   for (const { option, info } of optionInfos) {
-    if (!readComfyUiRequiredOptions(info, option.classType, option.inputName).includes(option.value)) {
+    if (!readComfyUiOptions(
+      info,
+      option.classType,
+      option.inputName,
+      option.location,
+    ).includes(option.value)) {
       throw missingOptionError(option)
     }
   }
-  preflightReadyAtByTargetProfile.set(cacheKey, now)
+  const contract = { readyAt: now, infoByClassName }
+  assertReferenceRequestRuntimeContract({ profile, graph, infoByClassName })
+  preflightContractByTargetProfile.set(cacheKey, contract)
+  return contract
 }
 
 function requireSelection(input: AiProviderVideoExecutionContext): void {
@@ -506,7 +533,14 @@ function buildGraph(
     inputMode,
     requestedDurationSeconds: duration,
   })
-  const seed = Number.parseInt(promptId.replace(/-/gu, '').slice(0, 12), 16)
+  const logicalInvocationIdentity = input.logicalInvocationIdentity.trim()
+  if (!logicalInvocationIdentity) {
+    throw new Error('COMFYUI_H3_LOGICAL_INVOCATION_IDENTITY_REQUIRED')
+  }
+  const seed = Number.parseInt(
+    createHash('sha256').update(logicalInvocationIdentity, 'utf8').digest('hex').slice(0, 12),
+    16,
+  )
   const prompt = options.prompt?.trim() || ''
   assertVideoPromptMatchesProfile({
     profile: 'minimax_h3_multimodal_v3',
@@ -556,6 +590,11 @@ function buildGraph(
       lastFrameUrl,
     }), inputMode }
   }
+  const continuationSourceAspectRatios = capabilities.continuationInput
+    ?.sourceAspectRatiosByTarget[aspectRatio]
+  if (!continuationSourceAspectRatios?.length) {
+    throw new Error(`COMFYUI_H3_CONTINUATION_SOURCE_ASPECT_RATIOS_MISSING:${aspectRatio}`)
+  }
   return {
     ...buildH3PromptGraph({
       ...common,
@@ -564,16 +603,87 @@ function buildGraph(
     }),
     inputMode,
     continuationVideoUrl,
+    continuationSourceAspectRatios,
   }
 }
 
-export async function executeComfyUiH3VideoGeneration(input: AiProviderVideoExecutionContext): Promise<GenerateResult> {
+async function cleanupContinuationWorkspaceAfterPreparationFailure(
+  continuationWorkspaceDir: string | null,
+): Promise<void> {
+  if (!continuationWorkspaceDir) return
+  try {
+    await rm(continuationWorkspaceDir, { recursive: true, force: true })
+  } catch (error) {
+    h3Logger.warn({
+      action: 'comfyui.h3.continuation.cleanup_failed',
+      message: 'H3 continuation workspace cleanup failed after preparation error',
+      error: error instanceof Error
+        ? { name: error.name, message: error.message, stack: error.stack }
+        : { message: String(error) },
+    })
+  }
+}
+
+async function submitPreparedH3Prompt(input: {
+  readonly baseUrl: string
+  readonly graph: Record<string, unknown>
+  readonly promptId: string
+}): Promise<GenerateResult> {
+  try {
+    const raw = await requestComfyUiJson(input.baseUrl, '/prompt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: input.graph, prompt_id: input.promptId }),
+    })
+    if (readComfyUiString(asComfyUiRecord(raw)?.prompt_id) !== input.promptId) {
+      throw new Error('COMFYUI_PROMPT_ID_MISMATCH')
+    }
+    return {
+      success: true,
+      async: true,
+      requestId: input.promptId,
+      externalId: formatComfyUiExternalId({
+        targetId: COMFYUI_H3_RUNTIME_TARGET_ID,
+        type: 'VIDEO',
+        requestId: input.promptId,
+      }),
+      endpoint: COMFYUI_H3_RUNTIME_TARGET_ID,
+    }
+  } catch (error) {
+    if (error instanceof ComfyUiHttpError && error.status === 400) throw promptRejection(error)
+    try {
+      const probe = asComfyUiRecord(await requestComfyUiJson(
+        input.baseUrl,
+        `/api/jobs/${encodeURIComponent(input.promptId)}`,
+      ))
+      if (COMFYUI_ACCEPTED_JOB_STATUSES.has(readComfyUiString(probe?.status))) {
+        return {
+          success: true,
+          async: true,
+          requestId: input.promptId,
+          externalId: formatComfyUiExternalId({
+            targetId: COMFYUI_H3_RUNTIME_TARGET_ID,
+            type: 'VIDEO',
+            requestId: input.promptId,
+          }),
+          endpoint: COMFYUI_H3_RUNTIME_TARGET_ID,
+        }
+      }
+    } catch { /* preserve accepted/unknown boundary */ }
+    throw new Error(
+      `COMFYUI_SUBMIT_OUTCOME_UNKNOWN:${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    )
+  }
+}
+
+export async function prepareComfyUiH3VideoGeneration(
+  input: AiProviderVideoExecutionContext,
+): Promise<AiProviderPreparedMediaExecution> {
   const promptId = crypto.randomUUID()
-  let target: ReturnType<typeof resolveComfyUiRuntimeTarget>
-  let built: ReturnType<typeof buildGraph>
   let continuationWorkspaceDir: string | null = null
   try {
-    target = resolveComfyUiRuntimeTarget(COMFYUI_H3_RUNTIME_TARGET_ID)
+    const target = resolveComfyUiRuntimeTarget(COMFYUI_H3_RUNTIME_TARGET_ID)
     const referenceImageUrls = normalizedMediaUrls(input.options?.referenceImages, 'image')
     const referenceAudioUrls = normalizedMediaUrls(input.options?.referenceAudios, 'audio')
     const initialPreparedInputs: H3PreparedInputs = {
@@ -581,10 +691,11 @@ export async function executeComfyUiH3VideoGeneration(input: AiProviderVideoExec
       referenceImageFilenames: referenceInputPlaceholderFilenames(promptId, referenceImageUrls.length, 'image'),
       referenceAudioFilenames: referenceInputPlaceholderFilenames(promptId, referenceAudioUrls.length, 'audio'),
     }
-    built = buildGraph(input, promptId, initialPreparedInputs)
-    await preflight(
+    let built = buildGraph(input, promptId, initialPreparedInputs)
+    const runtimeContract = await preflight(
       target.baseUrl,
       built.profile,
+      built.graph,
       built.inputMode === 'reference' && built.referenceAudioUrls.length > 0,
     )
     if (built.inputMode === 'reference') {
@@ -635,6 +746,7 @@ export async function executeComfyUiH3VideoGeneration(input: AiProviderVideoExec
         inputPath: sourcePath,
         workspaceDir: path.join(continuationWorkspaceDir, 'guide'),
         ...dimensions,
+        allowedSourceAspectRatios: built.continuationSourceAspectRatios,
       })
       const uploaded = await uploadH3ContinuationFrames({
         baseUrl: target.baseUrl,
@@ -646,23 +758,27 @@ export async function executeComfyUiH3VideoGeneration(input: AiProviderVideoExec
         continuationFrameFilenames: uploaded,
       })
     }
-  } catch (error) { throw preAcceptRejected(error) }
-  finally {
-    if (continuationWorkspaceDir) {
-      await rm(continuationWorkspaceDir, { recursive: true, force: true })
+    assertReferenceRequestRuntimeContract({
+      profile: built.profile,
+      graph: built.graph,
+      infoByClassName: runtimeContract.infoByClassName,
+    })
+    const graph = built.graph
+    return {
+      cleanup: async () => {
+        if (continuationWorkspaceDir) {
+          await rm(continuationWorkspaceDir, { recursive: true, force: true })
+        }
+      },
+      execute: async () => await submitPreparedH3Prompt({
+        baseUrl: target.baseUrl,
+        graph,
+        promptId,
+      }),
     }
-  }
-  try {
-    const raw = await requestComfyUiJson(target.baseUrl, '/prompt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: built.graph, prompt_id: promptId }) })
-    if (readComfyUiString(asComfyUiRecord(raw)?.prompt_id) !== promptId) throw new Error('COMFYUI_PROMPT_ID_MISMATCH')
-    return { success: true, async: true, requestId: promptId, externalId: formatComfyUiExternalId({ targetId: COMFYUI_H3_RUNTIME_TARGET_ID, type: 'VIDEO', requestId: promptId }), endpoint: COMFYUI_H3_RUNTIME_TARGET_ID }
   } catch (error) {
-    if (error instanceof ComfyUiHttpError && error.status === 400) throw promptRejection(error)
-    try {
-      const probe = asComfyUiRecord(await requestComfyUiJson(target.baseUrl, `/api/jobs/${encodeURIComponent(promptId)}`))
-      if (COMFYUI_ACCEPTED_JOB_STATUSES.has(readComfyUiString(probe?.status))) return { success: true, async: true, requestId: promptId, externalId: formatComfyUiExternalId({ targetId: COMFYUI_H3_RUNTIME_TARGET_ID, type: 'VIDEO', requestId: promptId }), endpoint: COMFYUI_H3_RUNTIME_TARGET_ID }
-      } catch { /* preserve accepted/unknown boundary */ }
-      throw new Error(`COMFYUI_SUBMIT_OUTCOME_UNKNOWN:${error instanceof Error ? error.message : String(error)}`, { cause: error })
+    await cleanupContinuationWorkspaceAfterPreparationFailure(continuationWorkspaceDir)
+    throw error
   }
 }
 

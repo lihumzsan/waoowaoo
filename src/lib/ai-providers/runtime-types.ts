@@ -71,6 +71,7 @@ export type AiProviderImageExecutionContext = {
 
 export type AiProviderVideoExecutionContext = {
   userId: string
+  logicalInvocationIdentity: string
   selection: AiResolvedSelection & {
     provider: string
     modelId: string
@@ -166,9 +167,7 @@ type AiProviderPreparedMediaModalityAdapter<M extends 'image' | 'video' | 'music
   }
 
 export type AiProviderMediaModalityAdapter<M extends 'image' | 'video' | 'music' | 'sound'> =
-  M extends 'image'
-    ? AiProviderDirectMediaModalityAdapter<M> | AiProviderPreparedMediaModalityAdapter<M>
-    : AiProviderDirectMediaModalityAdapter<M>
+  AiProviderDirectMediaModalityAdapter<M> | AiProviderPreparedMediaModalityAdapter<M>
 
 export type AiProviderConnectionTestStepName = 'models' | 'textGen' | 'imageGen' | 'musicGen'
 

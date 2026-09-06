@@ -10,7 +10,10 @@ import {
 } from '@/lib/ai-exec/media-preflight'
 import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
 import type { CapabilityValue } from '@/lib/ai-registry/types'
-import { resolveVideoInputPolicySelection } from '@/lib/ai-registry/video-input-policy'
+import {
+  isVideoContinuationSourceAspectRatioSupported,
+  resolveVideoInputPolicySelection,
+} from '@/lib/ai-registry/video-input-policy'
 import { assertVideoPromptMatchesProfile } from '@/lib/video-generation/h3-prompt'
 import { resolveH3DurationPlan } from '@/lib/video-generation/h3-duration'
 import {
@@ -710,10 +713,10 @@ async function validateReferenceMediaCapabilities(input: {
         modelKey: input.modelKey,
       })
     }
-    const expectedAspectRatio = input.aspectRatio
-      ? continuationInput.sourceAspectRatioByTarget[input.aspectRatio]
+    const allowedSourceAspectRatios = input.aspectRatio
+      ? continuationInput.sourceAspectRatiosByTarget[input.aspectRatio]
       : undefined
-    if (!input.aspectRatio || !expectedAspectRatio) {
+    if (!input.aspectRatio || !allowedSourceAspectRatios?.length) {
       throw new ApiError('INVALID_PARAMS', {
         code: 'VIDEO_CONTINUATION_TARGET_ASPECT_RATIO_UNSUPPORTED',
         field: 'references',
@@ -781,10 +784,11 @@ async function validateReferenceMediaCapabilities(input: {
         agentRetryableAfterCorrection: true,
       })
     }
-    if (
-      source.width * expectedAspectRatio.height
-      !== source.height * expectedAspectRatio.width
-    ) {
+    if (!isVideoContinuationSourceAspectRatioSupported({
+      sourceWidth: source.width,
+      sourceHeight: source.height,
+      allowedSourceAspectRatios,
+    })) {
       throw new ApiError('INVALID_PARAMS', {
         code: 'VIDEO_CONTINUATION_SOURCE_DIMENSIONS_MISMATCH',
         field: 'references',
@@ -792,8 +796,7 @@ async function validateReferenceMediaCapabilities(input: {
         contentVersion: source.reference.contentVersion,
         actualWidth: source.width,
         actualHeight: source.height,
-        expectedWidth: expectedAspectRatio.width,
-        expectedHeight: expectedAspectRatio.height,
+        allowedSourceAspectRatios,
         agentRetryableAfterCorrection: true,
       })
     }

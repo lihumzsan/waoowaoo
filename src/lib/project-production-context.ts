@@ -139,7 +139,7 @@ export function resolveProjectProductionCapabilities(config: ProjectModelConfig)
   const videoCapabilities = config.videoModel
     && config.videoRatio
     && video
-    && video.aspectRatioOptions?.includes(config.videoRatio)
+    && video.supportedAspectRatios?.includes(config.videoRatio)
     && minSegmentDurationSeconds !== undefined
     && maxSegmentDurationSeconds !== undefined
     ? {

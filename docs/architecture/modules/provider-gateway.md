@@ -105,6 +105,9 @@ Wao 不为它建立 Responses proxy、OpenRouter provider 或第二套模型重�
 - engine 已把 option normalize 移到 fence 前，Codex adapter 却仍在 `execute` 内下载私有参考图，
   且 catch-all 把本地 SSRF 拒绝改成 `success:false`，再次误记 `outcome_unknown` → 旧防线未覆盖
   adapter 内本地预处理 → adapter 用互斥 `prepare/execute` 契约，owner 校验后经 storage SDK 物化（PG-06/17/18）。
+- 上一次 `prepare/execute` 修复只开放了 image adapter 与 engine image 分支，新接入的 H3 video 又把
+  preflight、owner 读取和上传放进 fence 后的 `execute`，并把全部准备错误包装成提交拒绝 → 防线没有覆盖
+  新媒体实例 → prepared adapter 契约扩展到全部媒体 modality，H3 video 在 fence 前完成准备，fence 后只执行一次 `/prompt`（PG-06）。
 - Codex adapter 已用 `prepare/execute` 在本地物化私有参考图，engine 却保留全局 HTTPS 门禁，MinIO 恢复本地 HTTP 后合法投影在 prepare 前被拒绝 → 上次防线只覆盖 adapter 边界而没覆盖真实执行入口 → Gateway 只校验绝对 HTTP(S) 与无内嵌凭据（PG-17）。
 - 结构化输出的 fence 剥离曾与"JSON 内容修复、正文截取"写在一起，删除修复路径时把安全的外层
   envelope 归一也一并删了，完整合法 JSON 被 ``` 包裹后连续解析失败 → 一次删除跨越了两个语义 →

@@ -11,6 +11,25 @@ describe('explicit video reference transport contract', () => {
     })
   })
 
+  it('preserves duplicate reference images in their explicit order', () => {
+    expect(resolveProviderVideoReferencePayload({
+      referenceImages: [
+        { url: 'https://example.com/same.png', role: 'reference_image', order: 2 },
+        { url: 'https://example.com/same.png', role: 'reference_image', order: 1 },
+        { url: 'https://example.com/other.png', role: 'reference_image', order: 3 },
+      ],
+    })).toEqual({
+      imageUrl: '',
+      options: {
+        referenceImages: [
+          'https://example.com/same.png',
+          'https://example.com/same.png',
+          'https://example.com/other.png',
+        ],
+      },
+    })
+  })
+
   it('maps only explicit frame roles to frame transport fields', () => {
     expect(resolveProviderVideoReferencePayload({
       referenceImages: [{ url: 'https://example.com/start.png', role: 'first_frame' }],

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace only MiniMax H3 `reference` with the validated T8 4+5 graph, preserve all seven ratios, enforce the tested duration/MP table, and retain ordered 8-image/3-audio references.
+**Goal:** Replace only MiniMax H3 `reference` with the validated T8 4+5 graph, preserve all seven ratios, enforce the tested duration/MP table, and retain ordered 9-image/3-audio references.
 
 **Architecture:** The video capability registry owns model ratios and per-mode durations. A pure H3 runtime-plan module joins the `17n+5` frame oracle to the closed MP table; the Ref graph builder derives 32-aligned dimensions from ratio plus MP and injects them into one sanitized API graph. Existing create-video, provider fence, ComfyUI target, external id, poll/cancel, and Task/Resource terminal writers remain unchanged authorities.
 
@@ -12,10 +12,11 @@
 
 ## Global Constraints
 
-- Ref supports integer 5–15 seconds and all existing ratios: `21:9`, `16:9`, `4:3`, `1:1`, `3:4`, `9:16`, `9:21`.
-- `first_frame`, `first_last_frame`, and `continuation` keep their current graphs, ratios, and 4–11 second behavior.
+- All four H3 modes support integer 4–15 seconds and all existing ratios: `21:9`, `16:9`, `4:3`, `1:1`, `3:4`, `9:16`, `9:21`.
+- Ref is the primary mode when a legal reference image is available; every 4–15 second choice is a normal capability, with no soft cap, exception, explicit-choice condition, or cross-mode restriction.
+- `first_frame`, `first_last_frame`, and `continuation` keep their current graphs and ratios while adopting the shared 4–15 second capability.
 - The approved first/second MP values are mandatory runtime facts, not defaults or user options.
-- Preserve 1–8 ordered images and 0–3 ordered audios; audio requires an image.
+- Preserve 1–9 ordered images, including duplicate ordered references, and 0–3 ordered audios; audio requires an image.
 - Output is H.264/yuv420p/CRF10/24fps MP4 at 2MP area with native H3 audio.
 - Delete the old Ref graph and old Ref builder path; add no fallback, compatibility parser, or graph-version switch.
 - Image reads stay inside `outbound-image`; all media reads remain owner/version aware and bounded.
@@ -39,7 +40,7 @@
 - Modify: `tests/contracts/comfyui-h3-profile-conformance.test.ts`
 
 **Interfaces:**
-- Produces `VideoInputModePolicy`, `VideoCapabilities.aspectRatioOptions`, and `VideoCapabilities.inputModePolicies`.
+- Produces `VideoInputModePolicy`, `VideoCapabilities.supportedAspectRatios`, and `VideoCapabilities.inputModePolicies`.
 - Produces `resolveVideoInputPolicySelection`, mode-aware `resolveH3DurationPlan`, `resolveH3ReferenceRuntimePlan`, and `resolveH3ReferenceDimensions`.
 
 - [ ] **Step 1: Write failing policy and runtime-plan tests**
@@ -48,12 +49,12 @@ Add real production-catalog assertions:
 
 ```ts
 expect(resolveVideoInputPolicySelection({ capabilities, inputMode: 'reference', requestedDurationSeconds: 15, aspectRatio: '9:21' })).toMatchObject({ requestedDurationSeconds: 15, aspectRatio: '9:21' })
-expect(() => resolveVideoInputPolicySelection({ capabilities, inputMode: 'first_frame', requestedDurationSeconds: 12, aspectRatio: '16:9' })).toThrow('VIDEO_INPUT_MODE_DURATION_UNSUPPORTED:first_frame:12')
+expect(resolveVideoInputPolicySelection({ capabilities, inputMode: 'first_frame', requestedDurationSeconds: 12, aspectRatio: '16:9' })).toMatchObject({ requestedDurationSeconds: 12, aspectRatio: '16:9' })
 expect(resolveH3ReferenceRuntimePlan(15)).toEqual({ requestedDurationSeconds: 15, frameCount: 362, promptEndSeconds: 15.083, firstPassMegapixels: 0.47, secondPassMegapixels: 0.67 })
 expect(resolveH3ReferenceDimensions({ aspectRatio: '16:9', megapixels: 2 })).toEqual({ width: 1920, height: 1088 })
 ```
 
-Cover all 11 Ref rows, all seven ratios, the three unchanged modes, malformed policy shapes, fractional durations, and continuation's 22 guide frames.
+Cover all 12 Ref rows, all seven ratios, all four shared mode ranges, malformed policy shapes, fractional durations, and continuation's 22 guide frames.
 
 - [ ] **Step 2: Run tests and verify RED**
 
@@ -70,7 +71,7 @@ export interface VideoInputModePolicy { durationOptions: number[] }
 export interface VideoCapabilities {
   promptProfile: VideoPromptProfile
   supportedInputModes?: VideoInputMode[]
-  aspectRatioOptions?: string[]
+  supportedAspectRatios?: string[]
   inputModePolicies?: Partial<Record<VideoInputMode, VideoInputModePolicy>>
 }
 ```
@@ -80,8 +81,7 @@ Remove top-level video `durationOptions`. Validation requires exactly one policy
 - [ ] **Step 4: Implement H3 duration, MP, and dimensions**
 
 ```ts
-export const H3_STANDARD_DURATION_OPTIONS_SECONDS = [4, 5, 6, 7, 8, 9, 10, 11] as const
-export const H3_REFERENCE_DURATION_OPTIONS_SECONDS = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const
+export const H3_DURATION_OPTIONS_SECONDS = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const
 export function resolveH3DurationPlan(input: { inputMode: VideoInputMode; requestedDurationSeconds: number }): H3DurationPlan
 ```
 
@@ -89,7 +89,7 @@ Delete `resolveH3ContinuationDurationPlan`; only `continuation` adds 22 guide fr
 
 ```ts
 const H3_REFERENCE_PASS_MEGAPIXELS = {
-  5: [0.70, 1.00], 6: [0.70, 1.00], 7: [0.70, 1.00], 8: [0.70, 1.00],
+  4: [0.70, 1.00], 5: [0.70, 1.00], 6: [0.70, 1.00], 7: [0.70, 1.00], 8: [0.70, 1.00],
   9: [0.70, 1.00], 10: [0.70, 1.00], 11: [0.61, 0.88], 12: [0.58, 0.83],
   13: [0.52, 0.75], 14: [0.49, 0.71], 15: [0.47, 0.67],
 } as const
@@ -99,7 +99,7 @@ Dimensions use `megapixels * 1024 * 1024`, the canonical ratio, nearest multiple
 
 - [ ] **Step 5: Publish the H3 policy and project context**
 
-H3 capability declares all seven `aspectRatioOptions` plus Ref `[5..15]` and the other three modes `[4..11]`. Project context validates the project ratio, publishes `allowedSegmentDurationsSeconds=[4..15]`, and builds exact per-mode `segmentDurationPlans` with the mode-aware resolver.
+H3 capability declares all seven `supportedAspectRatios` plus `[4..15]` for every supported input mode. Project context validates the project ratio, publishes `allowedSegmentDurationsSeconds=[4..15]` as a cross-mode overview, and builds exact per-mode `segmentDurationPlans` with the mode-aware resolver. Agents select the mode before choosing from matching plans.
 
 - [ ] **Step 6: Run Step 2 tests and verify GREEN**
 
@@ -203,7 +203,7 @@ const first = resolveH3ReferenceDimensions({ aspectRatio, megapixels: runtimePla
 const final = resolveH3ReferenceDimensions({ aspectRatio, megapixels: 2 })
 ```
 
-Write low width/height, both lengths and Prompts, `target_megapixels`, final width/height, seed, and exactly 1–8 image plus 0–3 audio loader connections to both conditioning nodes. Delete the old URL-loader/resize branch.
+Write low width/height, both lengths and Prompts, `target_megapixels`, final width/height, seed, and exactly 1–9 image plus 0–3 audio loader connections to both conditioning nodes. Delete the old URL-loader/resize branch.
 
 - [ ] **Step 5: Run Step 2 tests and verify GREEN, then commit**
 
@@ -228,7 +228,7 @@ git commit -m "feat(video): replace H3 Ref with T8 dual-stage graph"
 
 - [ ] **Step 1: Write failing ownership/upload tests**
 
-Use real storage-backed media to prove only the owner can obtain detected JPEG/PNG/WebP bytes. Use the scenario server to prove ordered names `reference-image-00` through `reference-image-07`, and explicit failure for 0/9 files, empty bytes, MIME-extension mismatch, and invalid upload response identity.
+Use real storage-backed media to prove only the owner can obtain detected JPEG/PNG/WebP bytes. Use the scenario server to prove ordered names `reference-image-00` through `reference-image-08`, and explicit failure for 0/10 files, empty bytes, MIME-extension mismatch, and invalid upload response identity.
 
 - [ ] **Step 2: Run and verify RED**
 
@@ -251,7 +251,7 @@ It reuses `readOwnedMediaBytesForGeneration` with `MAX_IMAGE_BYTES`, current MIM
 export type H3ReferenceImageFile = { readonly bytes: Uint8Array; readonly contentType: 'image/jpeg' | 'image/png' | 'image/webp'; readonly extension: 'jpg' | 'png' | 'webp' }
 ```
 
-Require 1–8 files, exact MIME-extension matching, `type=input`, prompt-scoped subfolder, validated response identity, and preserved order. Do not sort, deduplicate, truncate, or upload concurrently.
+Require 1–9 files, exact MIME-extension matching, `type=input`, prompt-scoped subfolder, validated response identity, and preserved order. Do not sort, deduplicate, truncate, or upload concurrently.
 
 - [ ] **Step 5: Run Step 2 tests and verify GREEN, then commit**
 
@@ -276,7 +276,7 @@ git commit -m "feat(video): upload owned H3 reference images"
 
 - [ ] **Step 1: Write failing submission/preflight tests**
 
-Prove imageCount+audioCount uploads, a 15-second graph with frame 362 and MP 0.47/0.67, final H.264 fields, both conditioning reference collections, and one `/prompt`. Prove preflight happens before upload and rejects a missing T8 node, image/audio autogrow below 8/3, missing LoRA/upscaler model, incompatible dimension port, or invalid audio mux with zero uploads/submits. Prove frame/continuation make no reference-image upload.
+Prove imageCount+audioCount uploads, a 15-second graph with frame 362 and MP 0.47/0.67, final H.264 fields, both conditioning reference collections, and one `/prompt`. Prove preflight happens before upload and rejects a missing T8 node, image/audio autogrow below 9/3, missing LoRA/upscaler model, incompatible dimension port, or invalid audio mux with zero uploads/submits. Prove frame/continuation make no reference-image upload.
 
 - [ ] **Step 2: Run and verify RED**
 
@@ -294,7 +294,7 @@ Resolve mode and exact shared policy before Prompt validation. For Ref, derive o
 
 - [ ] **Step 5: Enforce both T8 conditioning contracts**
 
-Require `LoadImage.image`, optional `LoadAudio.audio`, T8 CLIP/VAE/width/height/length inputs, image autogrow prefix/type/max 8, audio autogrow prefix/type/max 3 when used, learned-upscaler target MP, final resize dimensions, shared Prompt/frame/reference order, native-audio decode/mux, and final H.264 output. Image-only Ref may omit `LoadAudio` support, but never T8/image support.
+Require `LoadImage.image`, optional `LoadAudio.audio`, T8 CLIP/VAE/width/height/length inputs, image autogrow prefix/type/max 9, audio autogrow prefix/type/max 3 when used, learned-upscaler target MP, final resize dimensions, shared Prompt/frame/reference order, native-audio decode/mux, and final H.264 output. Image-only Ref may omit `LoadAudio` support, but never T8/image support.
 
 - [ ] **Step 6: Run Step 2 tests and verify GREEN, then commit**
 

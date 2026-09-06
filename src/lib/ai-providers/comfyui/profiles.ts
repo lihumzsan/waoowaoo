@@ -17,9 +17,9 @@ export type ComfyUiPromptGraph = Record<string, {
 
 const H3_DELIVERY_SCALE_NUMERATOR = 3
 const H3_DELIVERY_SCALE_DENOMINATOR = 2
-export const H3_MAX_REFERENCE_IMAGES = 8
+export const H3_MAX_REFERENCE_IMAGES = 9
 export const H3_MAX_REFERENCE_AUDIOS = 3
-const H3_REFERENCE_IMAGE_NODE_IDS = ['6', '60', '61', '62', '63', '64', '65', '66'] as const
+const H3_REFERENCE_IMAGE_NODE_IDS = ['6', '60', '61', '62', '63', '64', '65', '66', '67'] as const
 const H3_REFERENCE_AUDIO_NODE_IDS = ['18', '70', '71'] as const
 export const H3_AUDIO_VAE_NAME = 'h3\\minimax_h3_audio_vae_fp32.safetensors' as const
 

@@ -33,6 +33,7 @@ describe('H3 continuation guide extraction', () => {
       workspaceDir: guideDirectory,
       width: 320,
       height: 192,
+      allowedSourceAspectRatios: [{ width: 320, height: 192 }],
     })
 
     expect(frames).toHaveLength(22)
@@ -45,6 +46,25 @@ describe('H3 continuation guide extraction', () => {
     expect(last.info).toMatchObject({ width: 320, height: 192 })
     expect(first.data[0]).toBeGreaterThan(first.data[2] ?? 0)
     expect(last.data[2]).toBeGreaterThan(last.data[0] ?? 0)
+  })
+
+  it('accepts a declared Ref delivery ratio even when its canvas differs from the continuation target', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'waoowaoo-h3-continuation-ref-ratio-'))
+    temporaryDirectories.push(directory)
+    const sourcePath = path.join(directory, 'source.mp4')
+    await runFfmpegCommand('ffmpeg', [
+      '-y', '-f', 'lavfi', '-i', 'color=c=black:s=240x136:r=24:d=1',
+      '-c:v', 'libx264', '-pix_fmt', 'yuv420p', sourcePath,
+    ], { stage: 'h3_continuation_ref_ratio_test_source', expectedDurationSeconds: 1 })
+    const request = {
+      inputPath: sourcePath,
+      workspaceDir: path.join(directory, 'guide'),
+      width: 320,
+      height: 192,
+      allowedSourceAspectRatios: [{ width: 1920, height: 1088 }],
+    }
+
+    await expect(extractH3ContinuationGuide(request)).resolves.toHaveLength(22)
   })
 
   it('rejects a source whose aspect ratio differs from the continuation canvas', async () => {
@@ -61,6 +81,7 @@ describe('H3 continuation guide extraction', () => {
       workspaceDir: path.join(directory, 'guide'),
       width: 320,
       height: 192,
+      allowedSourceAspectRatios: [{ width: 320, height: 192 }],
     })).rejects.toThrow('H3_CONTINUATION_SOURCE_DIMENSIONS_MISMATCH')
   })
 
@@ -78,6 +99,7 @@ describe('H3 continuation guide extraction', () => {
       workspaceDir: path.join(directory, 'guide'),
       width: 320,
       height: 192,
+      allowedSourceAspectRatios: [{ width: 320, height: 192 }],
     })).rejects.toThrow('H3_CONTINUATION_SOURCE_TOO_SHORT')
   })
 
@@ -87,15 +109,16 @@ describe('H3 continuation guide extraction', () => {
     const sourcePath = path.join(directory, 'source.mp4')
     const guideDirectory = path.join(directory, 'guide')
     await runFfmpegCommand('ffmpeg', [
-      '-y', '-f', 'lavfi', '-i', 'color=c=black:s=160x96:r=24:d=14',
+      '-y', '-f', 'lavfi', '-i', 'color=c=black:s=160x96:r=24:d=16',
       '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', sourcePath,
-    ], { stage: 'h3_continuation_long_test_source', expectedDurationSeconds: 14 })
+    ], { stage: 'h3_continuation_long_test_source', expectedDurationSeconds: 16 })
 
     await expect(extractH3ContinuationGuide({
       inputPath: sourcePath,
       workspaceDir: guideDirectory,
       width: 320,
       height: 192,
+      allowedSourceAspectRatios: [{ width: 320, height: 192 }],
     })).rejects.toThrow('H3_CONTINUATION_SOURCE_TOO_LONG')
     expect(await readdir(guideDirectory)).toEqual([])
   })
@@ -115,6 +138,7 @@ describe('H3 continuation guide extraction', () => {
       workspaceDir: guideDirectory,
       width: 320,
       height: 192,
+      allowedSourceAspectRatios: [{ width: 320, height: 192 }],
     })
     const decodedFrames = (await readdir(guideDirectory)).filter((filename) => (
       /^decoded-\d{6}\.png$/u.test(filename)
@@ -156,6 +180,7 @@ describe('H3 continuation guide extraction', () => {
       workspaceDir: path.join(directory, 'guide'),
       width,
       height,
+      allowedSourceAspectRatios: [{ width, height }],
     })
     const decoded = await sharp(frames.at(-1)).raw().toBuffer({ resolveWithObject: true })
     const readRgb = (x: number, y: number): readonly [number, number, number] => {

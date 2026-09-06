@@ -13,7 +13,7 @@ import {
   readComfyUiDeclaredNodeAudioOutput,
   readComfyUiHttpError,
   readComfyUiOutputData,
-  readComfyUiRequiredOptions,
+  readComfyUiOptions,
   readComfyUiString,
   requestComfyUiJson,
   type ComfyUiOutput,
@@ -134,7 +134,7 @@ async function preflight(baseUrl: string): Promise<void> {
   ] as const
   for (const [className, field, expected] of checks) {
     const info = await requestComfyUiJson(baseUrl, `/object_info/${encodeURIComponent(className)}`)
-    if (!readComfyUiRequiredOptions(info, className, field).includes(expected)) {
+    if (!readComfyUiOptions(info, className, field, 'required').includes(expected)) {
       throw new Error(`COMFYUI_MODEL_MISSING:${expected}`)
     }
   }

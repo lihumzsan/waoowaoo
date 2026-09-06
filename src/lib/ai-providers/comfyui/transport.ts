@@ -54,11 +54,18 @@ export function readComfyUiHttpError(value: unknown): string {
   ).slice(0, 512)
 }
 
-export function readComfyUiRequiredOptions(info: unknown, className: string, field: string): string[] {
+export type ComfyUiInputSchemaLocation = 'required' | 'optional'
+
+export function readComfyUiOptions(
+  info: unknown,
+  className: string,
+  field: string,
+  location: ComfyUiInputSchemaLocation,
+): string[] {
   const definition = asComfyUiRecord(asComfyUiRecord(info)?.[className])
   const input = asComfyUiRecord(definition?.input)
-  const required = asComfyUiRecord(input?.required)
-  const fieldValue = required?.[field]
+  const schema = asComfyUiRecord(input?.[location])
+  const fieldValue = schema?.[field]
   if (!Array.isArray(fieldValue)) return []
   const directOptions = fieldValue[0]
   if (Array.isArray(directOptions)) {

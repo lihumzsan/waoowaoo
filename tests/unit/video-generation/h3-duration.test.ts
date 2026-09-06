@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  H3_REFERENCE_DURATION_OPTIONS_SECONDS,
-  H3_STANDARD_DURATION_OPTIONS_SECONDS,
+  H3_CONTINUATION_MAX_SOURCE_DURATION_MS,
   resolveH3DurationPlan,
 } from '@/lib/video-generation/h3-duration'
 import {
@@ -10,19 +9,25 @@ import {
 } from '@/lib/video-generation/h3-reference-runtime-plan'
 
 describe('H3 duration plan', () => {
-  it('publishes the unchanged request durations for non-reference modes', () => {
-    expect(H3_STANDARD_DURATION_OPTIONS_SECONDS).toEqual([4, 5, 6, 7, 8, 9, 10, 11])
+  it('publishes the same complete 4-15 second range for every H3 mode', () => {
+    const durations = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    for (const inputMode of ['reference', 'first_frame', 'first_last_frame', 'continuation'] as const) {
+      expect(durations.map((requestedDurationSeconds) => resolveH3DurationPlan({
+        inputMode,
+        requestedDurationSeconds,
+      }).requestedDurationSeconds)).toEqual(durations)
+    }
     expect(resolveH3DurationPlan({ inputMode: 'first_frame', requestedDurationSeconds: 4 })).toEqual({
       requestedDurationSeconds: 4, frameCount: 107, promptEndSeconds: 4.458,
     })
-    expect(resolveH3DurationPlan({ inputMode: 'first_last_frame', requestedDurationSeconds: 11 })).toEqual({
-      requestedDurationSeconds: 11, frameCount: 277, promptEndSeconds: 11.542,
+    expect(resolveH3DurationPlan({ inputMode: 'first_last_frame', requestedDurationSeconds: 15 })).toEqual({
+      requestedDurationSeconds: 15, frameCount: 362, promptEndSeconds: 15.083,
     })
   })
 
-  it('publishes the tested reference frame and MP table without interpolation', () => {
-    expect(H3_REFERENCE_DURATION_OPTIONS_SECONDS).toEqual([5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
-    expect(H3_REFERENCE_DURATION_OPTIONS_SECONDS.map(resolveH3ReferenceRuntimePlan)).toEqual([
+  it('publishes the reference frame and MP table without interpolation', () => {
+    expect([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map(resolveH3ReferenceRuntimePlan)).toEqual([
+      { requestedDurationSeconds: 4, frameCount: 107, promptEndSeconds: 4.458, firstPassMegapixels: 0.70, secondPassMegapixels: 1.00 },
       { requestedDurationSeconds: 5, frameCount: 124, promptEndSeconds: 5.167, firstPassMegapixels: 0.70, secondPassMegapixels: 1.00 },
       { requestedDurationSeconds: 6, frameCount: 158, promptEndSeconds: 6.583, firstPassMegapixels: 0.70, secondPassMegapixels: 1.00 },
       { requestedDurationSeconds: 7, frameCount: 175, promptEndSeconds: 7.292, firstPassMegapixels: 0.70, secondPassMegapixels: 1.00 },
@@ -44,11 +49,15 @@ describe('H3 duration plan', () => {
     expect(resolveH3DurationPlan({ inputMode: 'continuation', requestedDurationSeconds: 11 })).toEqual({
       requestedDurationSeconds: 11, frameCount: 294, promptEndSeconds: 12.25,
     })
+    expect(resolveH3DurationPlan({ inputMode: 'continuation', requestedDurationSeconds: 15 })).toEqual({
+      requestedDurationSeconds: 15, frameCount: 396, promptEndSeconds: 16.5,
+    })
+    expect(H3_CONTINUATION_MAX_SOURCE_DURATION_MS).toBe(15_625)
   })
 
   it.each([
-    ['reference', 4], ['reference', 16], ['first_frame', 12], ['first_last_frame', 15],
-    ['continuation', 12], ['reference', 4.5], ['reference', Number.NaN],
+    ['reference', 3], ['reference', 16], ['first_frame', 3], ['first_last_frame', 16],
+    ['continuation', 3], ['continuation', 16], ['reference', 4.5], ['reference', Number.NaN],
   ] as const)('rejects unsupported %s request duration %s', (inputMode, requestedDurationSeconds) => {
     expect(() => resolveH3DurationPlan({ inputMode, requestedDurationSeconds })).toThrow(
       `H3_REQUESTED_DURATION_INVALID:${inputMode}:${String(requestedDurationSeconds)}`,

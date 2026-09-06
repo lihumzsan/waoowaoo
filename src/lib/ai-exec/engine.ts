@@ -6,6 +6,7 @@ import {
   runRegisteredProviderOperation,
 } from "@/lib/ai-providers";
 import { normalizeMediaOptionsForSelection } from "@/lib/ai-exec/media-preflight";
+import { buildTaskMediaLogicalInvocationIdentity } from "@/lib/ai-exec/media-invocation-identity";
 import { AppError } from "@/lib/errors/app-error";
 import { getLogContext } from "@/lib/logging/context";
 import {
@@ -41,6 +42,7 @@ import {
 } from "@/lib/ai-exec/media-observe";
 import { createScopedLogger } from "@/lib/logging/core";
 import type { MusicCompositionPlan } from "@/lib/music/composition-plan";
+import { hashCanonicalJson } from "@/lib/operation-plan-contract/canonical-json";
 
 const mediaExecutionLogger = createScopedLogger({ module: "ai-exec.media" });
 
@@ -177,6 +179,18 @@ export async function executeMediaGeneration(
     input.modelKey,
     input.modality,
   );
+  const taskId = getLogContext().taskId;
+  if (taskId && !invocation) {
+    throw new Error(
+      `TASK_PROVIDER_INVOCATION_KEY_REQUIRED:${taskId}:${input.modality}`,
+    );
+  }
+  const taskLogicalInvocationIdentity = taskId && invocation
+    ? buildTaskMediaLogicalInvocationIdentity({
+        taskId,
+        invocationKey: invocation.key,
+      })
+    : null;
   logMediaModelSelectionResolved({
     modality: input.modality,
     provider: selection.provider,
@@ -234,8 +248,15 @@ export async function executeMediaGeneration(
           options: input.options,
           prompt: input.options?.prompt,
         }) as AiVideoExecutionOptions | undefined;
+        const request = createMediaProviderRequestIdentity({
+          ...input,
+          modelKey: routeSelection.modelKey,
+        });
         const context = {
           userId: input.userId,
+          logicalInvocationIdentity:
+            taskLogicalInvocationIdentity
+            ?? `direct:${hashCanonicalJson(request)}`,
           selection: routeSelection,
           imageUrl: input.imageUrl,
           options,
@@ -243,11 +264,10 @@ export async function executeMediaGeneration(
         return {
           provider: routeSelection.provider,
           modelKey: routeSelection.modelKey,
-          request: createMediaProviderRequestIdentity({
-            ...input,
-            modelKey: routeSelection.modelKey,
-          }),
-          execute: async () => await modalityAdapter.execute(context),
+          request,
+          ...(modalityAdapter.prepare
+            ? { prepare: async () => await modalityAdapter.prepare(context) }
+            : { execute: async () => await modalityAdapter.execute(context) }),
         };
       }
       case "music": {
@@ -280,7 +300,9 @@ export async function executeMediaGeneration(
             ...input,
             modelKey: routeSelection.modelKey,
           }),
-          execute: async () => await modalityAdapter.execute(context),
+          ...(modalityAdapter.prepare
+            ? { prepare: async () => await modalityAdapter.prepare(context) }
+            : { execute: async () => await modalityAdapter.execute(context) }),
         };
       }
       case "sound": {
@@ -296,6 +318,12 @@ export async function executeMediaGeneration(
           options: input.options,
           prompt: input.prompt,
         }) as AiSoundExecutionOptions | undefined;
+        const context = {
+          userId: input.userId,
+          selection: routeSelection,
+          prompt: input.prompt,
+          options,
+        };
         return {
           provider: routeSelection.provider,
           modelKey: routeSelection.modelKey,
@@ -303,13 +331,9 @@ export async function executeMediaGeneration(
             ...input,
             modelKey: routeSelection.modelKey,
           }),
-          execute: async () =>
-            await modalityAdapter.execute({
-              userId: input.userId,
-              selection: routeSelection,
-              prompt: input.prompt,
-              options,
-            }),
+          ...(modalityAdapter.prepare
+            ? { prepare: async () => await modalityAdapter.prepare(context) }
+            : { execute: async () => await modalityAdapter.execute(context) }),
         };
       }
     }
@@ -370,17 +394,17 @@ export async function executeMediaGeneration(
         ),
     };
   };
-  const taskId = getLogContext().taskId;
   let result: GenerateResult;
   if (!taskId) {
     result = await executeProviderRouteWithoutFence(
       buildObservedRoute(selection),
     );
   } else {
-    if (!invocation)
+    if (!invocation) {
       throw new Error(
         `TASK_PROVIDER_INVOCATION_KEY_REQUIRED:${taskId}:${input.modality}`,
       );
+    }
     const routeSet = resolveProviderRouteSet(
       input.modality,
       selection.modelKey,

@@ -1,12 +1,13 @@
 # H3 Ref T8 4+5 双采 2MP 工作流替换设计
 
 日期：2026-09-06
-状态：设计完成，待用户确认后进入实施计划
+状态：已确认并实施，待目标 ComfyUI runtime 效果验收
 
 ## 1. 决策摘要
 
 本次只替换 MiniMax H3 的 `reference`（Ref）执行图。`first_frame`、`first_last_frame` 和
-`continuation` 的 capability、工作流、帧引导、尺寸和执行行为全部保持现状。
+`continuation` 的生成图、帧引导和效果参数保持现状；四种模式统一开放 4–15 秒。为保证新 Ref 产物可以
+直接续写，continuation 的来源比例契约同时接受 Ref 与 frame-mode 的当前输出画布，但不改变续写目标画布。
 
 采用附件工作流的 T8 双采样主链、4+5 parity 调度、按有效帧数分档的一采/二采 MP，以及最终
 RTX VSR 2MP；将附件 UI 画布离线整理成受版本控制的 canonical ComfyUI API graph。最终输出固定为：
@@ -19,10 +20,10 @@ H.264 + yuv420p + CRF 10 + 24fps + MP4
 Ref 任务，因此这是一次硬切换；切换前仍做一次只读非终态任务检查，结果非空时停止部署并报告，不替
 用户取消或清理数据。
 
-参考输入能力保持不变：1–8 张有序参考图、0–3 段有序参考音频，音频必须与至少一张参考图同时使用。
+参考输入能力为 1–9 张有序参考图、0–3 段有序参考音频，音频必须与至少一张参考图同时使用。
 Ref 继续支持当前 H3 的全部比例：`21:9`、`16:9`、`4:3`、`1:1`、`3:4`、`9:16`、`9:21`；请求传入
 哪个合法比例，两级采样尺寸和最终 2MP 输出就使用哪个比例。`16:9` 只是附件工作流的服务器实测配置，
-不是 capability 限制。Ref 可请求 5–15 秒；其他三个 H3 模式仍使用现有 4–11 秒规则。
+不是 capability 限制。H3 的四种输入模式统一支持 4–15 秒整数档，全部是正常合法能力。
 
 ## 2. 输入材料的权威性
 
@@ -40,9 +41,9 @@ Ref 继续支持当前 H3 的全部比例：`21:9`、`16:9`、`4:3`、`1:1`、`3
 ### 3.1 目标
 
 - 用附件的 T8 4+5 双采链完整替换当前 H3 Ref graph。
-- 在 RTX 5070 Ti 16GB 的 16:9 实测基线上，按“有效帧数 × MP”约束 5–15 秒采样负载，并把同一
+- 在 RTX 5070 Ti 16GB 的 16:9 实测基线上，按“有效帧数 × MP”约束 4–15 秒 Ref 采样负载，并把同一
   恒定面积 MP 档位应用到当前全部合法比例。
-- 继续支持最多 8 张参考图和 3 段参考音频，并保持冻结后的输入顺序。
+- 支持最多 9 张参考图和 3 段参考音频，并保持冻结后的输入顺序，包括有意重复的图片引用。
 - 将每种输入模式可用的时长和模型合法比例放在统一 capability policy 中，由规划、执行前校验和
   Provider 防御共同消费。
 - 保持一个 Wao 视频 Task、一个 Provider submission、一个 ComfyUI prompt id 和一个最终视频结果。
@@ -75,29 +76,33 @@ Ref 继续支持当前 H3 的全部比例：`21:9`、`16:9`、`4:3`、`1:1`、`3
 ### 4.1 采用：同一模型下的穷尽“输入模式策略”
 
 在 `VideoCapabilities` 中建立按 `VideoInputMode` 索引的 `inputModePolicies`。每个已声明的
-`supportedInputModes` 必须且只能有一项时长策略；模型级 `aspectRatioOptions` 是所有模式共同消费的
+`supportedInputModes` 必须且只能有一项时长策略；模型级 `supportedAspectRatios` 是所有模式共同消费的
 唯一合法比例集合。registry 解析时拒绝缺项、额外项、空列表、重复值和非法值。
 
 H3 的单一策略为：
 
 | 输入模式 | 时长 | 比例 |
 | --- | --- | --- |
-| `reference` | 5–15 秒整数档 | 现有 H3 比例集合 |
-| `first_frame` | 现有 4–11 秒整数档 | 现有 H3 比例集合 |
-| `first_last_frame` | 现有 4–11 秒整数档 | 现有 H3 比例集合 |
-| `continuation` | 现有 4–11 秒整数档 | 现有 H3 比例集合 |
+| `reference` | 4–15 秒整数档 | 现有 H3 比例集合 |
+| `first_frame` | 4–15 秒整数档 | 现有 H3 比例集合 |
+| `first_last_frame` | 4–15 秒整数档 | 现有 H3 比例集合 |
+| `continuation` | 4–15 秒整数档 | 现有 H3 比例集合 |
 
 删除 H3 顶层 `durationOptions`，避免全局列表和模式列表同时成为真相。新增模型级
-`aspectRatioOptions`，把目前藏在 ComfyUI adapter/profile 中的七种合法比例提升为 capability 事实。
+`supportedAspectRatios`，把目前藏在 ComfyUI adapter/profile 中的七种合法比例提升为 capability 事实，且不进入通用 `*Options` 用户配置协议。
 共享 resolver 是唯一状态解释者，负责“当前模型 + 输入模式 + 时长 + 比例”组合的解析与拒绝。
 ProjectProductionContext、Planner/operation preflight 和 ComfyUI adapter 防御均调用这一 resolver；
 adapter 的基础 schema 只做类型与有界结构校验，不复制业务集合。
 
-ProjectProductionContext 先验证项目比例属于模型级 `aspectRatioOptions`，随后向 Agent 暴露全部现有 H3
+ProjectProductionContext 先验证项目比例属于模型级 `supportedAspectRatios`，随后向 Agent 暴露全部现有 H3
 模式。`segmentDurationPlans` 按各模式自己的 duration policy 生成，不再对全局 duration 列表做笛卡尔
 积。现有上下文结构已能表达 `inputMode + requestedDurationSeconds` 的精确计划，无需新增第二份模式状态；
 `allowedSegmentDurationsSeconds` 保留为当前可执行模式时长的去重并集，精确选择仍以
 `segmentDurationPlans` 为准。
+
+`reference` 是有合法参考图时的主生成模式。四种模式的 4–15 秒全部是正常合法能力，不对 10、11 或
+13–15 秒设置软上限、例外条件、明确选择条件或额外拆分启发式；其他模式只在用户明确要求对应帧或续写
+控制时选择，其规则不得反向限制 Ref。
 
 ### 4.2 采用：Ref 独立 canonical API profile，模型 identity 不变
 
@@ -119,10 +124,10 @@ Worker 通过 owner-aware 出站模块有界读取字节，再上传到 H3 runti
 图片权威入口。音频继续复用现有 owner-aware 音频读取链路。上传只是 Provider 输入传输，不创建第二个
 Resource、Task 或业务 identity。
 
-### 4.4 拒绝：只把全局 H3 时长改成 5–15 秒
+### 4.4 拒绝：恢复顶层全局时长作为第二份真相
 
-这会错误放宽另外三个模式，并让 Agent 生成 Provider 实际不支持的时长组合；也会迫使调用方根据模式名
-增加散落分支。
+即使四种模式当前共享 4–15 秒范围，顶层 `durationOptions` 与 `inputModePolicies` 并存仍会产生两个权威
+来源。调用方必须先选择模式，再读取该模式的计划；跨模式并集只用于能力概览，不参与当前模式裁决。
 
 ### 4.5 拒绝：在 `h3.ts` 中私有判断 Ref 时长与比例
 
@@ -140,7 +145,7 @@ H.265 + `yuv420p10le` + CRF 22 通常具有更好的压缩率与渐变保真，�
 后续合并链的兼容性更差；现有合并链还可能将它再次转码为 H.264，增加时间和代际损失。
 
 H.264 + `yuv420p` + CRF 10 的代价是文件更大、只有 8-bit 色深、同体积压缩效率低于 H.265；收益是与
-当前 `<video>` 播放和合并链一致，通常无需再次转码。对 5–15 秒、约 2MP 的短视频，预计仍远低于统一
+当前 `<video>` 播放和合并链一致，通常无需再次转码。对 4–15 秒、约 2MP 的短视频，预计仍远低于统一
 512MB 上限。真实验收必须记录成片大小；超限时明确失败，不能静默提高上限或降质。
 
 ## 5. 帧数与两阶段 MP 权威表
@@ -159,6 +164,7 @@ conformance 验证时重新计算帧数，表与公式不一致即失败。MP �
 
 | 请求时长 | 有效帧数 | 预计成片时长 | 一采 MP | 二采 MP | 最终 |
 | ---: | ---: | ---: | ---: | ---: | ---: |
+| 4 秒 | 107 | 4.458 秒 | 0.70 | 1.00 | 2.00 MP |
 | 5 秒 | 124 | 5.167 秒 | 0.70 | 1.00 | 2.00 MP |
 | 6 秒 | 158 | 6.583 秒 | 0.70 | 1.00 | 2.00 MP |
 | 7 秒 | 175 | 7.292 秒 | 0.70 | 1.00 | 2.00 MP |
@@ -201,7 +207,7 @@ continuation 仍在基础请求帧之上加入现有 22 个 guide frames，其�
 - 删除 COS URL、bucket、绝对路径和任何用户/机器专属字段。
 - 删除不在最终输出祖先链上的 9 个断开节点。
 - 删除附件中的时长输入和数学表达式节点；应用把唯一 `frameCount` 同时写入两级 conditioning。
-- 只保留最多 8 个参考图 loader，不把附件第 9 个备用图片节点解释成新 capability。
+- 保留最多 9 个参考图 loader，完整承载附件的第 9 个图片端口。
 - Prompt 只保留一个节点/输入源，两级 conditioning 引用同一冻结 Prompt。
 - 删除附件中两个只承担 UI 尺寸计算的 `ResolutionSelector`。[ComfyUI 核心节点实现](https://github.com/Comfy-Org/ComfyUI/blob/master/comfy_extras/nodes_resolution.py)
   不提供 `9:21` 枚举，不能用它缩窄现有 H3 capability；graph builder 使用与该节点相同的“比例 + 总 MP
@@ -214,10 +220,10 @@ continuation 仍在基础请求帧之上加入现有 22 个 guide frames，其�
 每次 Ref 请求只允许注入：
 
 - 已冻结并通过既有结构验证的最终 Prompt；
-- 5–15 秒中一个合法请求值对应的 `frameCount`；
+- 4–15 秒中一个合法请求值对应的 `frameCount`；
 - 当前 H3 七种合法比例中的一个请求值；
 - 对应关闭表的一采 MP 和二采 MP；
-- 1–8 个按冻结顺序上传后的参考图片文件身份；
+- 1–9 个按冻结顺序上传后的参考图片文件身份；
 - 0–3 个按冻结顺序上传后的参考音频文件身份；
 - 从逻辑 invocation identity 派生的稳定安全整数 seed。
 
@@ -239,15 +245,15 @@ graph builder 删除未使用的动态 `ref_images.ref_image_N` / `ref_audios.re
 ```text
 waoowaoo/<promptId>/reference-image-00.<ext>
 ...
-waoowaoo/<promptId>/reference-image-07.<ext>
+waoowaoo/<promptId>/reference-image-08.<ext>
 waoowaoo/<promptId>/reference-audio-00.<ext>
 ...
 waoowaoo/<promptId>/reference-audio-02.<ext>
 ```
 
-5. 上传响应必须与预期 filename、subfolder 和 `input` 类型一致；任何不一致为 pre-accept 协议失败。
-6. 媒体上传成功不代表视频任务成功，也不创建持久业务事实。`/prompt` 接受前失败时，现有 Task 终态 owner
-   记录失败；不自动删除 ComfyUI 输入目录，也不重提。
+5. 上传响应必须与预期 filename、subfolder 和 `input` 类型一致；任何不一致为 submission fence 前的准备失败。
+6. 媒体上传成功不代表视频任务成功，也不创建持久业务事实。`/prompt` 接受前失败不写入提交 checkpoint，
+   由现有 Task 错误与重试策略处理；不自动删除 ComfyUI 输入目录。
 
 允许的图片 MIME/扩展名和音频 MIME/扩展名由现有媒体契约穷尽映射；未知类型原地失败，不凭 URL 后缀猜测。
 
@@ -257,7 +263,7 @@ H3 Ref preflight 在任何媒体上传和 `/prompt` 前获取目标 runtime `/ob
 
 - canonical graph 使用的每个 `class_type` 均已注册；
 - 两个 `MiniMaxH3AudioConditioningT8` 的固定端口、`ref_images.ref_image_N` 和
-  `ref_audios.ref_audio_N` 自增长端口存在，且至少覆盖 8 图 / 3 音频；
+  `ref_audios.ref_audio_N` 自增长端口存在，且至少覆盖 9 图 / 3 音频；
 - 视频 VAE、音频 VAE、CLIP、UNET、所有 LoRA 和 learned latent upscale 模型精确存在；
 - 固定 sampler/scheduler/attention/backend/detail mixer 选项被当前节点接受；
 - RTX VSR 节点和 `nvidia_rtx_vsr` 选项存在；
@@ -268,7 +274,8 @@ H3 Ref preflight 在任何媒体上传和 `/prompt` 前获取目标 runtime `/ob
 - 最终输出节点唯一且为 `168`。
 
 profile requirements 需要扩展目前未被检查的模型选择字段，包括 LoRA loader 与 learned latent upscale
-model。缺能力时返回带稳定错误码的 pre-accept failure；禁止跳过节点、替换模型、换 attention 或回退旧图。
+model。缺能力时返回带稳定错误码的准备失败，并且不取得 submission fence；禁止跳过节点、替换模型、
+换 attention 或回退旧图。
 
 ## 9. 权威入口与端到端数据流
 
@@ -277,11 +284,11 @@ model。缺能力时返回带稳定错误码的 pre-accept failure；禁止跳�
   -> ProjectProductionContext 投影当前比例可执行模式与逐模式 duration plans
   -> video-direction 选择 Ref、时长与现有 H3 Prompt profile
   -> create_video Planner 校验模式/比例/时长/参考数量并冻结 Resource versions
-  -> provider invocation fence 取得唯一提交权
+  -> H3 adapter prepare：本地图契约校验与 target preflight
   -> outbound-image / outbound-audio 有界读取已授权媒体
-  -> H3 target preflight
   -> H3 input uploader 写入 prompt 专属文件
   -> Ref T8 graph builder 注入帧数、两级 MP、Prompt、seed 和有序媒体
+  -> provider invocation fence 取得唯一提交权
   -> H3 runtime /prompt 接受一个 prompt id
   -> 现有 external id 持久化并用于 poll/cancel/recovery
   -> 只读取 output node 168 的 H.264 MP4
@@ -298,7 +305,7 @@ model。缺能力时返回带稳定错误码的 pre-accept failure；禁止跳�
 | --- | --- | --- |
 | H3 模型 identity | builtin model registry | 配置、catalog、adapter selection |
 | 每种输入模式的时长 | video `inputModePolicies` + shared resolver | context、Planner、adapter |
-| H3 合法比例 | video `aspectRatioOptions` + shared resolver | context、Planner、graph builder |
+| H3 合法比例 | video `supportedAspectRatios` + shared resolver | context、Planner、graph builder |
 | Ref 帧数与两级 MP | H3 duration/runtime plan module | context、Ref graph builder |
 | Prompt 最终文本 | 主 Agent 经现有 `video-direction` profile | Planner validator、graph builder |
 | 参考媒体 identity、version、role、顺序 | create_video 冻结 payload | Worker、graph builder |
@@ -329,16 +336,15 @@ model。缺能力时返回带稳定错误码的 pre-accept failure；禁止跳�
 
 | 场景 | 权威行为 |
 | --- | --- |
-| 正常 | 策略校验、冻结输入、fence、preflight、上传、一次 `/prompt`，最终只物化节点 168 的 MP4 |
+| 正常 | 策略校验、冻结输入、preflight、owner 读取、上传、fence、一次 `/prompt`，最终只物化节点 168 的 MP4 |
 | 七种现有比例中的 Ref | 保留请求比例，并由同一公式计算一采与最终宽高；MP 仍按时长档取值 |
 | 不支持的比例 | Planner 在 Task/Resource/上传前拒绝，不改成近似比例，不换输入模式 |
-| Ref 时长不在 5–15 | Planner 在副作用前拒绝，不截断、不就近选择 |
-| 其他模式 12–15 秒 | 仍按其现有 4–11 policy 拒绝，Ref 扩容不得泄漏 |
+| 任一 H3 模式时长不在 4–15 | Planner 在副作用前拒绝，不截断、不就近选择 |
 | 缺图或引用超限 | 按现有 reference capability 在副作用前拒绝，不丢弃多余输入 |
 | 音频无视觉引用 | 按现有 `referenceAudioRequiresVisual` 拒绝 |
 | owner/version/MIME/大小失败 | outbound media 原地失败，不上传、不提交 |
 | runtime 缺节点/模型/端口/选项 | preflight 明确失败，不降级或回退 |
-| 上传部分成功 | 不是产品成功；停止 `/prompt`，Task 由现有终态 owner 失败，已上传临时文件不成为业务事实 |
+| 上传部分成功 | 不是产品成功；停止 `/prompt` 且不写提交 checkpoint，由现有 Task 错误与重试策略处理；已上传临时文件不成为业务事实，也不自动清理 |
 | `/prompt` 明确拒绝 | 保留原始响应并记录 rejected，不用旧图重提 |
 | `/prompt` 断连/超时 | 复用预生成 prompt id 执行现有接受探测；不能证明未接受时为 outcome unknown，不二次 POST |
 | 排队/生成 | 继续使用同一 external id 和现有队列/生成预算 |
@@ -347,7 +353,7 @@ model。缺能力时返回带稳定错误码的 pre-accept failure；禁止跳�
 | 用户取消 | Wao 本地终态优先，补偿 Activity 按同一 external id 幂等取消 Provider job |
 | 取消晚到 | 已完成、已失败或 404 按现有 cancel contract 处理，不反写本地终态 |
 | poll 网络失败 | 恢复时继续查询同一 external id，不伪造 Provider 最终失败 |
-| retry | 冻结输入、Prompt、mode policy 结果、seed 和 prompt id 遵守现有 invocation fence，不新建并行作业 |
+| retry | fence 前准备失败可由现有 Task 策略使用新 prompt id 安全重试；取得 fence 后同一 attempt 只 POST 一次，冻结输入、Prompt 与 mode policy 不变且不新建并行作业 |
 | 重复/并发 | 由现有 request identity 与 invocation fence 拒绝重复 writer，不依赖队列位置或事件顺序 |
 | 刷新/断线 | UI 从持久 Task/Resource View 恢复，不从 ComfyUI 页面或 timer 推断 |
 | 晚到/replay | 现有任务终态与版本规则拒绝旧覆盖；Provider 状态不是第二份业务终态 |
@@ -380,14 +386,14 @@ Task/invocation。准入条件为集合为空。非空时维持旧 Worker 排空
 - 当前 Ref profile 的旧节点 ID、旧 resize 节点和旧固定质量参数；
 - H3 顶层全局 `durationOptions` 解释；
 - `resolveH3DurationPlan(number)` 旧签名及调用方的模式外推断；
-- 任何把 Ref 当作 4–11 秒能力的 schema/validator 分支；
+- 任何把 H3 某个输入模式限制在 4–15 秒子集内的 schema/validator 或 Agent 软约束；
 - 新图构建后发现的旧 Ref URL-loader、resize 或动态输入旁路。
 
 保留：
 
 - 同一 H3 model key、runtime target 和 external-id 协议；
 - `create_video`、Provider adapter、Task/Resource 终态和持久化入口；
-- 当前最多 8 图 / 3 音频、冻结版本和 Prompt contract；
+- 当前最多 9 图 / 3 音频、冻结版本和 Prompt contract；
 - frame、first/last-frame、continuation profiles 与工作流；
 - 现有完成历史数据和媒体读取能力。
 
@@ -402,15 +408,15 @@ Provider fence、H3 runtime、external id、poll/cancel 和最终 Resource 交�
 | 参照物触点 | 新实现覆盖 / 不适用原因 | 验证 |
 | --- | --- | --- |
 | 模型 identity | 保留现有 model key；只是同一 Ref 实现硬切换 | production catalog 解析 |
-| capability | 新增穷尽 per-mode 时长 policy 与模型级比例集合；Ref 5–15、全部现有比例，其他模式时长不变 | registry conformance + context 投影 |
+| capability | 新增穷尽 per-mode 时长 policy 与模型级比例集合；四种模式均为 4–15 和全部现有比例 | registry conformance + context 投影 |
 | Prompt | 继续使用 `minimax_h3_multimodal_v3`，两级 conditioning 同源 | graph contract + Prompt validator |
-| 图片 identity/顺序 | 冻结 Resource version，owner-aware 读取，0..7 同序上传/连线 | Planner + graph conformance |
+| 图片 identity/顺序 | 冻结 Resource version，owner-aware 读取，0..8 同序上传/连线，重复条目不去重 | Planner + graph conformance |
 | 音频 identity/顺序 | 继续现有冻结和时长限制，0..2 同序上传/连线 | Planner + graph conformance |
 | 执行入口 | 复用唯一 ComfyUI video adapter 和一次 `/prompt` | invocation 观察 |
 | 图效果参数 | 按附件保留 T8 模型链、LoRA、attention、4+5、upscale、VSR | canonical graph 对照清单 + `/object_info` |
 | 时长 | 应用唯一对齐公式，删除图内计算 | 数学 oracle 逐表验证 |
 | 比例传递 | 产品比例计算一采与最终宽高，二采保持来源比例；不依赖缺少 9:21 的 UI selector | 七种比例 graph 构建验证 |
-| 两级 MP | 每种比例都按关闭表精确写入一采/二采 | 11 个档位 graph 构建验证 |
+| 两级 MP | 每种比例都按关闭表精确写入一采/二采 | 12 个档位 graph 构建验证 |
 | 输出 | 节点 168 唯一 H.264/yuv420p/CRF10 MP4 + 原生音轨 | graph contract + ffprobe |
 | 生命周期 | 保留现有 queued/running/terminal owner | async protocol 检查 |
 | 失败 | preflight、上传、拒绝、missing output 均显式失败 | 错误路径检查 |
@@ -421,25 +427,26 @@ Provider fence、H3 runtime、external id、poll/cancel 和最终 Resource 交�
 | i18n | 新用户可见错误只通过稳定 code 和消息键投影 | locale/typecheck |
 | 首帧模式 | 不适用变更；现有 profile 原样保留 | targeted regression |
 | 首尾帧模式 | 不适用变更；现有 profile 原样保留 | targeted regression |
-| 续写模式 | 不适用变更；现有 22 帧来源视频引导链原样保留 | targeted regression |
+| 续写模式 | 现有 22 帧引导图与效果参数原样保留；来源比例契约同时接受 Ref 与 frame-mode 输出画布 | ratio registry conformance + extraction regression |
 
 ## 15. 历史回归矩阵
 
 | 历史症状 | 根因 | 当时修复 | 本次可能复发形式 | 本次防线 / 上一版不足 |
 | --- | --- | --- | --- | --- |
-| H3 capability 只有一个全局时长表 | 当时所有模式共用范围，未出现 Ref 独立上限 | 建立 4–11 秒统一 H3 表 | 直接改成 5–15 导致其他模式误放开 | 用 per-mode policy 替换全局表；上一版无法表达模式差异 |
+| H3 capability 只有一个全局时长表 | 输入模式与时长无法形成精确组合 | 建立 4–11 秒统一 H3 表 | 调用方从跨模式列表选择时绕过当前模式 | 用 per-mode policy 替换全局表；四种模式当前都显式声明 4–15，调用方仍须先选模式 |
 | continuation 时间轴需要额外 guide frames | 续写输出包含 22 个来源引导帧 | 单独 continuation duration 函数 | 重构时长后丢失 guide 或把它加到 Ref | resolver 显式接收 mode；只有 continuation policy 加 guide |
-| H3 Ref 从单图扩到 8 图 | 旧冻结图只接了一个参考端口 | 动态图片节点和有序连接 | 新附件只带一个 active 图而退回单图 | capability 上限不变，新图构建覆盖 1/8 边界；附件备用第 9 图不扩大能力 |
+| H3 Ref 从单图扩到多图 | 旧冻结图只接了一个参考端口 | 动态图片节点和有序连接 | 第 9 张图被能力上限拒绝或有序重复图被静默去重 | capability、上传、graph 与 preflight 统一为 1–9；保留冻结后的每个有序条目 |
 | H3 Ref 新增最多 3 段音频 | 只扩 capability 会让真实图漏接音频 | uploader + LoadAudio + ordered autogrow | 新图只给一级 conditioning 接音频或静默忽略 | 两级 conditioning 同序连线并 preflight 3 个端口 |
 | H3 多模态 Prompt 必须由主 Agent 唯一写入 | 工作流内 Prompt 改写会产生第二 writer | 固定 `minimax_h3_multimodal_v3` | 保留 UI prompt/math helper 重新解释内容 | 只注入一个冻结 Prompt，图不生成或改写文案 |
 | H3 输出统一为 H.264 | 播放/合并链以 H.264 为共同边界 | 当前图使用 H.264 CRF10 | 照抄附件 H.265 触发浏览器问题或二次转码 | canonical graph 固定 H.264/yuv420p/CRF10，真实 ffprobe |
 | 模型能力需在 Provider 接受前证明 | 节点存在不代表模型/选项存在 | profile requirements + `/object_info` | 新 LoRA/upscaler 字段未进入 preflight | 扩展 requirements 到新图所有模型选择与关键固定选项 |
+| Provider 提交 fence 必须位于可安全重试的准备之后 | 上一版 prepared adapter 只覆盖 image | Codex image 在 fence 前物化参考图 | H3 video 把 preflight、owner 读取与上传留在 fence 后并误报提交拒绝 | prepared adapter 契约覆盖所有媒体 modality；H3 fence 后只执行一次 `/prompt` |
 | 附件以 16:9 完成服务器验证 | 测试实例的 selector 默认值被误读为产品限制 | 不适用，本次评审中纠正 | Ref 被错误缩窄为只支持 16:9 | capability 保留七种比例；应用直接计算并注入宽高 |
 | 15 秒需要降低两阶段面积 | 显存负载由有效帧数与采样面积共同决定 | 用户提供实测安全 MP 表 | 只放宽时长而仍使用 0.70/1.00 MP，导致 16GB 显存失败 | 关闭表把时长、帧数和两级 MP 作为不可拆分的 runtime plan |
 
 本次属于“同一模型的一个输入模式执行图和时长/负载约束同时改变”。上一版全局 duration capability
-只能描述所有模式共有事实，无法承载 Ref-only 5–15 秒；因此不能继续在旧全局字段上叠加例外。比例仍是
-H3 各模式共享事实，但必须从隐藏的 adapter 常量提升为显式 capability，并由新图 builder 计算和注入尺寸。
+无法表达“先选模式、再取该模式精确计划”的调用契约；因此不能继续让跨模式并集参与具体时长裁决。
+四种模式当前都显式支持 4–15 秒，比例仍是共享事实，并由新图 builder 计算和注入尺寸。
 
 ## 16. 文件与模块映射
 
@@ -457,24 +464,25 @@ H3 各模式共享事实，但必须从隐藏的 adapter 常量提升为显式 c
 
 `architecture:impact` 已将核心 Provider 文件映射到 Provider Gateway，将生成 Handler/Operation 映射到
 Async Task Lifecycle、Free Product 与 Workspace Resource。此次不新增/删除架构不变量，也不改变
-`create_video`、Provider adapter、Task terminal service 或 WorkspaceResource materializer 的权威归属，
-所以不修改 `docs/architecture/**`。具体秒数、MP、节点和文件名属于实现事实，也不复制进架构文档。
+`create_video`、Provider adapter、Task terminal service 或 WorkspaceResource materializer 的权威归属。
+由于 PG-06 在新 video 实例中换形式复发，只在 Provider Gateway 的“踩过的坑”补充上一版 image-only
+防线为何漏接真实路径；具体秒数、MP、节点和文件名仍不复制进架构文档。
 
 ## 17. 验证设计
 
 ### 17.1 独立 oracle 与静态验证
 
 - capability registry conformance：每个 supported input mode 恰有一个 duration policy，无缺项/额外项/
-  重复值；H3 Ref 支持 5–15，其他三个模式保持当前 4–11；模型比例精确为现有七种。
-- 数学 oracle：按独立 `17n+5` 公式验证 5–15 秒全部 11 个有效帧数和预计时长；继续验证 continuation
+  重复值；H3 四种模式都支持 4–15；模型比例精确为现有七种。
+- 数学 oracle：按独立 `17n+5` 公式验证 4–15 秒全部 12 个有效帧数和预计时长；继续验证 continuation
   22 guide-frame 行为。
 - 关闭表 conformance：每个 Ref duration 唯一映射到用户确认的一采/二采 MP，非法时长无 fallback。
-- graph conformance：从 production profile 构建 1/8 图与 0/1/3 音频，检查两级 conditioning 的节点数、
-  顺序、Prompt、帧数、比例、MP、seed、唯一输出和 H.264 参数；9 图、4 音频在 Planner 被拒绝。
+- graph conformance：从 production profile 构建 1/9 图与 0/1/3 音频，检查两级 conditioning 的节点数、
+  顺序、Prompt、帧数、比例、MP、seed、唯一输出和 H.264 参数；10 图、4 音频在 Planner 被拒绝。
 - 比例 conformance：七种产品比例逐一验证一采和最终尺寸的面积公式、方向与 32 对齐，二采保持来源比例；
   任一未声明比例在 Planner 被拒绝，不构造 graph。
-- ProjectProductionContext：七种项目比例均投影 Ref 5–15 和其他模式 4–11。
-- Planner 副作用边界：Ref 非法比例、4 秒、16 秒、缺图、音频无图均在 Resource/Task 创建前失败。
+- ProjectProductionContext：七种项目比例均为四种模式投影 4–15 秒计划。
+- Planner 副作用边界：Ref 非法比例、3 秒、16 秒、缺图、音频无图均在 Resource/Task 创建前失败。
 - profile preflight：对 production graph 枚举全部 class/model/关键 option；缺一项即明确失败。
 - 运行受影响文件 ESLint、TypeScript typecheck、capability catalog、model config、media normalization 等现有
   检查；不新增只断言 mock 调用次数或复述源码字符串的测试。
@@ -484,11 +492,11 @@ Async Task Lifecycle、Free Product 与 Workspace Resource。此次不新增/删
 
 在用户已验证的 H3 runtime 上，从产品真实路径至少执行：
 
-1. 5 秒、`9:16`、1 张图、0 音频，确认非 16:9 比例真实生效；
+1. 4 秒、`9:16`、1 张图、0 音频，确认新下边界和非 16:9 比例真实生效；
 2. 10 秒、`21:9`、至少 2 张有序图片、1 段音频；
-3. 15 秒、`16:9`、8 张图片、3 段音频（若参考材料具备），验证用户已有的显存安全基线；
+3. 15 秒、`16:9`、9 张图片、3 段音频（若参考材料具备），验证用户已有的显存安全基线；
 4. 条件允许时再执行一个 15 秒非 16:9 样片，验证极端比例经 32 对齐后的显存边界；
-5. 一个现有 `first_frame` 或 `continuation` 小样，确认非 Ref 图未受影响。
+5. 一个 15 秒 `first_frame` 或 `continuation` 小样，确认非 Ref 图与放开的上边界均可执行。
 
 每个 Ref 样片确认只有一个 `/prompt`、图内帧数和两级 MP 与表一致、节点 168 产生 MP4、Task 从同一
 external id 完成。使用 `ffprobe` 验证视频为 H.264、`yuv420p`、24fps，分辨率符合请求比例且面积约
@@ -501,7 +509,7 @@ external id 完成。使用 `ffprobe` 验证视频为 H.264、`yuv420p`、24fps�
   验收完成；用户提供的 MP 表已证明 16:9 基线，其他比例的同面积推导仍需至少一个极端比例样片确认。
 - H.264 CRF10 的最大实际文件大小、峰值显存和生成耗时只能由真实样片测得。
 - ComfyUI 自定义节点升级可能改变端口/选项；preflight 能阻止错误提交，但不能替代升级后的效果复验。
-- 本次不验证非 Ref 模式的画质变化，因为其 graph 不改；仅做最小回归证明调用链仍可执行。
+- 非 Ref 模式 graph 不改，但 12–15 秒是新放开的执行组合；没有目标 runtime 样片前只能由静态契约证明已放开，不能声称真实效果已验收。
 
 ## 18. 完成定义
 
@@ -510,12 +518,12 @@ external id 完成。使用 `ffprobe` 验证视频为 H.264、`yuv420p`、24fps�
 - 生产 registry 只有一个穷尽 per-mode duration policy 和一个模型级比例集合；Ref 与其他模式没有散落
   时长/比例判断。
 - 当前 Ref graph 已删除，新 T8 canonical graph 是唯一 Ref profile，旧任务兼容和 fallback 为 0。
-- 1–8 图、0–3 音频经过冻结、owner-aware 物化和有序双级 conditioning 连线。
-- Ref 5–15 秒的帧数和两级 MP 精确来自唯一关闭表，并适用于全部合法比例；工作流内没有第二时长解释器。
+- 1–9 图、0–3 音频经过冻结、owner-aware 物化和有序双级 conditioning 连线，有序重复图不被静默去重。
+- Ref 4–15 秒的帧数和两级 MP 精确来自唯一关闭表，并适用于全部合法比例；工作流内没有第二时长解释器。
 - 最终输出固定 H.264/yuv420p/CRF10/24fps/2MP 并保留原生音轨。
-- 非 Ref 三种模式的 capability 和 workflow 保持现状。
+- 非 Ref 三种模式的 workflow 保持现状，capability 统一放开为 4–15 秒。
 - 所有修改文件可映射到现有模块和不变量；没有无关文件进入提交。
 - 实际执行的验证命令、结果、未执行的真实 runtime 场景和盲区如实交付。
 
-只有真实 5/10/15 秒边界样片、至少两个非 16:9 比例、至少一个多参考音频组合以及一个非 Ref 回归均
+只有真实 4/10/15 秒边界样片、至少两个非 16:9 比例、至少一个 9 图多参考音频组合以及一个 15 秒非 Ref 回归均
 通过，才能称本次 Ref 工作流替换达到本地效果验收；在此之前最多称“实现完成”或“阶段完成”。

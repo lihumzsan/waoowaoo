@@ -17,7 +17,7 @@
       "width": 1152,
       "height": 640,
       "length": 124,
-      "task_type": "Ref2VA — 参考生音视频",
+      "task_type": "Ref2VA",
       "audio_mode": "native",
       "audio_denoise_strength": 1.0,
       "add_source_as_reference": false,
@@ -61,7 +61,7 @@
       "width": ["13", 1],
       "height": ["13", 2],
       "length": 124,
-      "task_type": "Ref2VA — 参考生音视频",
+      "task_type": "Ref2VA",
       "audio_mode": "native",
       "audio_denoise_strength": 1.0,
       "add_source_as_reference": false,
@@ -119,5 +119,5 @@
   "52": { "class_type": "LoraLoaderModelOnly", "inputs": { "model": ["34", 0], "lora_name": "h3\\H3_Combat_V2.safetensors", "strength_model": 0.7 } },
   "53": { "class_type": "LoraLoaderModelOnly", "inputs": { "model": ["34", 0], "lora_name": "h3\\H3_Combat_V2.safetensors", "strength_model": 0.49 } },
   "55": { "class_type": "ImageResizeKJv2", "inputs": { "image": ["20", 0], "width": 1920, "height": 1088, "upscale_method": "nvidia_rtx_vsr", "keep_proportion": "crop", "pad_color": "0, 0, 0", "crop_position": "center", "divisible_by": 32, "device": "cpu" } },
-  "168": { "class_type": "VHS_VideoCombine", "inputs": { "images": ["55", 0], "audio": ["20", 1], "frame_rate": 24, "loop_count": 0, "filename_prefix": "waoowaoo/h3-reference-t8-dual-stage-2mp", "format": "video/h264-mp4", "pix_fmt": "yuv420p", "crf": 10, "save_metadata": true, "pingpong": false, "save_output": true, "no_preview": false } }
+  "168": { "class_type": "VHS_VideoCombine", "inputs": { "images": ["55", 0], "audio": ["20", 1], "frame_rate": 24, "loop_count": 0, "filename_prefix": "waoowaoo/h3-reference-t8-dual-stage-2mp", "format": "video/h264-mp4", "pix_fmt": "yuv420p", "crf": 10, "save_metadata": true, "pingpong": false, "save_output": true } }
 }

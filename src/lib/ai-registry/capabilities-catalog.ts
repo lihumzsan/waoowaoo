@@ -451,7 +451,6 @@ function pickSelectionForModel(
 
   const normalized: Record<string, CapabilityValue> = {}
   for (const [field, rawValue] of Object.entries(selected)) {
-    if (field === 'aspectRatio') continue
     if (!isCapabilityValue(rawValue)) continue
     normalized[field] = rawValue
   }
@@ -469,13 +468,18 @@ export function resolveGenerationOptionsForModel(input: {
 }): { options: Record<string, CapabilityValue>; issues: CapabilitySelectionValidationIssue[] } {
   const defaults = pickSelectionForModel(input.capabilityDefaults, input.modelKey)
   const overrides = pickSelectionForModel(input.capabilityOverrides, input.modelKey)
-  const runtime = input.runtimeSelections
-
-  const selection = mergeSelectionRecords(defaults, overrides, runtime)
 
   if (input.capabilities === undefined) {
-    return { options: { ...selection }, issues: [] }
+    return {
+      options: mergeSelectionRecords(defaults, overrides, input.runtimeSelections),
+      issues: [],
+    }
   }
+
+  const runtime = { ...input.runtimeSelections }
+  const runtimeAspectRatio = input.modelType === 'video' ? runtime.aspectRatio : undefined
+  if (input.modelType === 'video') delete runtime.aspectRatio
+  const selection = mergeSelectionRecords(defaults, overrides, runtime)
 
   const normalizedSelection = { ...selection }
 
@@ -509,6 +513,7 @@ export function resolveGenerationOptionsForModel(input: {
       }
     }
   }
+  if (runtimeAspectRatio !== undefined) options.aspectRatio = runtimeAspectRatio
 
   return { options, issues: [] }
 }

@@ -5,6 +5,10 @@ import {
   H3_FRAMES_PER_SECOND,
 } from '@/lib/video-generation/h3-timeline'
 import { H3_CONTINUATION_MAX_SOURCE_DURATION_MS } from '@/lib/video-generation/h3-duration'
+import {
+  isVideoContinuationSourceAspectRatioSupported,
+  type VideoSourceAspectRatio,
+} from '@/lib/ai-registry/video-input-policy'
 import { probeMediaDurationSeconds, runFfmpegCommand } from './ffmpeg-command'
 import { probeVideoDimensions } from './video-merge-ffmpeg'
 
@@ -28,6 +32,7 @@ export async function extractH3ContinuationGuide(input: {
   readonly workspaceDir: string
   readonly width: number
   readonly height: number
+  readonly allowedSourceAspectRatios: readonly VideoSourceAspectRatio[]
 }): Promise<readonly string[]> {
   const inputPath = input.inputPath.trim()
   const workspaceDir = input.workspaceDir.trim()
@@ -40,9 +45,13 @@ export async function extractH3ContinuationGuide(input: {
     probeMediaDurationSeconds(inputPath, 'h3_continuation_probe_duration'),
     probeVideoDimensions(inputPath),
   ])
-  if (sourceDimensions.width * height !== sourceDimensions.height * width) {
+  if (!isVideoContinuationSourceAspectRatioSupported({
+    sourceWidth: sourceDimensions.width,
+    sourceHeight: sourceDimensions.height,
+    allowedSourceAspectRatios: input.allowedSourceAspectRatios,
+  })) {
     throw new Error(
-      `H3_CONTINUATION_SOURCE_DIMENSIONS_MISMATCH:${String(sourceDimensions.width)}x${String(sourceDimensions.height)}:${String(width)}x${String(height)}`,
+      `H3_CONTINUATION_SOURCE_DIMENSIONS_MISMATCH:${String(sourceDimensions.width)}x${String(sourceDimensions.height)}`,
     )
   }
   const minimumSourceDurationSeconds = H3_CONTINUATION_GUIDE_FRAMES / H3_FRAMES_PER_SECOND

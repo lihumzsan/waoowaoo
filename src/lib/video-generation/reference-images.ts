@@ -34,17 +34,11 @@ export function normalizeVideoReferenceImages(
   images: readonly VideoReferenceImageInput[],
 ): readonly VideoReferenceImage[] {
   const result: VideoReferenceImage[] = []
-  const seenReferenceUrls = new Set<string>()
 
   images.forEach((image, index) => {
     const url = typeof image.url === 'string' ? image.url.trim() : ''
     if (!url) throw new Error('VIDEO_REFERENCE_IMAGE_URL_REQUIRED')
     const role = image.role
-
-    if (role === 'reference_image') {
-      if (seenReferenceUrls.has(url)) return
-      seenReferenceUrls.add(url)
-    }
 
     result.push({
       url,

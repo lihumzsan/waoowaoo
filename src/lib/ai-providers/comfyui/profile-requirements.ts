@@ -1,7 +1,8 @@
 import { hashCanonicalJson } from '@/lib/operation-plan-contract/canonical-json'
 import type { ComfyUiPromptGraph } from './profiles'
+import type { ComfyUiInputSchemaLocation } from './transport'
 
-const OPTION_INPUT_NAMES_BY_CLASS = {
+const REQUIRED_OPTION_INPUT_NAMES_BY_CLASS = {
   UNETLoader: ['unet_name'],
   CLIPLoader: ['clip_name'],
   VAELoader: ['vae_name'],
@@ -18,9 +19,25 @@ const OPTION_INPUT_NAMES_BY_CLASS = {
   ModelAttentionBackend: ['attention'],
 } as const satisfies Readonly<Record<string, readonly string[]>>
 
+type ComfyUiProfileRequirementInput = {
+  readonly inputName: string
+  readonly location: ComfyUiInputSchemaLocation
+}
+
+function readOptionInputs(classType: string): readonly ComfyUiProfileRequirementInput[] {
+  const commonRequired = REQUIRED_OPTION_INPUT_NAMES_BY_CLASS[
+    classType as keyof typeof REQUIRED_OPTION_INPUT_NAMES_BY_CLASS
+  ] ?? []
+  return commonRequired.map((inputName) => ({
+    inputName,
+    location: 'required' as const,
+  }))
+}
+
 export type ComfyUiProfileRequirementOption = {
   readonly classType: string
   readonly inputName: string
+  readonly location: ComfyUiInputSchemaLocation
   readonly value: string
 }
 
@@ -40,20 +57,18 @@ export function deriveComfyUiProfileRequirements(input: {
   const optionByIdentity = new Map<string, ComfyUiProfileRequirementOption>()
 
   for (const node of Object.values(input.graph)) {
-    const inputNames = OPTION_INPUT_NAMES_BY_CLASS[
-      node.class_type as keyof typeof OPTION_INPUT_NAMES_BY_CLASS
-    ]
-    if (!inputNames) continue
-    for (const inputName of inputNames) {
+    const optionInputs = readOptionInputs(node.class_type)
+    for (const { inputName, location } of optionInputs) {
       const value = node.inputs[inputName]
       if (typeof value !== 'string' || !value.trim()) continue
       const option = {
         classType: node.class_type,
         inputName,
+        location,
         value,
       }
       optionByIdentity.set(
-        [option.classType, option.inputName, option.value].join('\u0000'),
+        [option.classType, option.inputName, option.location, option.value].join('\u0000'),
         option,
       )
     }

@@ -40,7 +40,7 @@ describe('video prompt profile validator conformance', () => {
       video: {
         promptProfile: 'minimax_h3_multimodal_v3',
         supportedInputModes: ['continuation'],
-        aspectRatioOptions: ['16:9'],
+        supportedAspectRatios: ['16:9'],
         inputModePolicies: { continuation: { durationOptions: [4] } },
       },
     })).toContainEqual(expect.objectContaining({
@@ -52,17 +52,36 @@ describe('video prompt profile validator conformance', () => {
       video: {
         promptProfile: 'minimax_h3_multimodal_v3',
         supportedInputModes: ['continuation'],
-        aspectRatioOptions: ['16:9'],
+        supportedAspectRatios: ['16:9'],
         inputModePolicies: { continuation: { durationOptions: [4, 5] } },
         continuationInput: {
           minSourceDurationMs: 917,
           maxSourceDurationMs: 13_041,
-          sourceAspectRatioByTarget: {
-            '9:16': { width: 1152, height: 2064 },
+          sourceAspectRatiosByTarget: {
+            '16:9': [{ width: 2064, height: 1152 }],
           },
         },
       },
     })).toEqual([])
+
+    expect(validateModelCapabilities('video', {
+      video: {
+        promptProfile: 'minimax_h3_multimodal_v3',
+        supportedInputModes: ['continuation'],
+        supportedAspectRatios: ['16:9'],
+        inputModePolicies: { continuation: { durationOptions: [4, 5] } },
+        continuationInput: {
+          minSourceDurationMs: 917,
+          maxSourceDurationMs: 13_041,
+          sourceAspectRatiosByTarget: {
+            '9:16': [{ width: 1152, height: 2064 }],
+          },
+        },
+      },
+    })).toContainEqual(expect.objectContaining({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.video.continuationInput.sourceAspectRatiosByTarget.16:9',
+    }))
   })
 
   it('requires one duration policy per supported mode and an explicit ratio set', () => {
@@ -74,14 +93,14 @@ describe('video prompt profile validator conformance', () => {
       },
     })).toContainEqual(expect.objectContaining({
       code: 'CAPABILITY_FIELD_INVALID',
-      field: 'capabilities.video.aspectRatioOptions',
+      field: 'capabilities.video.supportedAspectRatios',
     }))
 
     expect(validateModelCapabilities('video', {
       video: {
         promptProfile: 'generic_v1',
         supportedInputModes: ['reference', 'first_frame'],
-        aspectRatioOptions: ['16:9'],
+        supportedAspectRatios: ['16:9'],
         inputModePolicies: { reference: { durationOptions: [5] } },
       },
     })).toContainEqual(expect.objectContaining({
@@ -93,11 +112,11 @@ describe('video prompt profile validator conformance', () => {
       video: {
         promptProfile: 'generic_v1',
         supportedInputModes: ['reference'],
-        aspectRatioOptions: [],
+        supportedAspectRatios: [],
         inputModePolicies: { reference: { durationOptions: [] } },
       },
     })).toEqual(expect.arrayContaining([
-      expect.objectContaining({ field: 'capabilities.video.aspectRatioOptions' }),
+      expect.objectContaining({ field: 'capabilities.video.supportedAspectRatios' }),
       expect.objectContaining({ field: 'capabilities.video.inputModePolicies.reference.durationOptions' }),
     ]))
   })

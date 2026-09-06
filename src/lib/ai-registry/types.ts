@@ -141,10 +141,10 @@ export type VideoPromptProfile = (typeof VIDEO_PROMPT_PROFILES)[number]
 export interface VideoContinuationInputCapabilities {
   minSourceDurationMs: number
   maxSourceDurationMs: number
-  sourceAspectRatioByTarget: Record<string, {
+  sourceAspectRatiosByTarget: Record<string, readonly {
     width: number
     height: number
-  }>
+  }[]>
 }
 
 export interface VideoInputModePolicy {
@@ -157,7 +157,7 @@ export interface VideoCapabilities {
   supportsTextToVideo?: boolean
   generationModeOptions?: string[]
   generateAudioOptions?: boolean[]
-  aspectRatioOptions?: string[]
+  supportedAspectRatios?: string[]
   inputModePolicies?: Partial<Record<VideoInputMode, VideoInputModePolicy>>
   resolutionOptions?: string[]
   firstlastframe?: boolean
@@ -274,7 +274,7 @@ const VIDEO_ALLOWED_FIELDS = new Set<keyof VideoCapabilities>([
   'supportsTextToVideo',
   'generationModeOptions',
   'generateAudioOptions',
-  'aspectRatioOptions',
+  'supportedAspectRatios',
   'inputModePolicies',
   'resolutionOptions',
   'firstlastframe',
@@ -607,20 +607,20 @@ function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unk
     })
   }
 
-  const aspectRatioOptions = raw.aspectRatioOptions
+  const supportedAspectRatios = raw.supportedAspectRatios
   if (
-    (isStringArray(supportedInputModes) && supportedInputModes.length > 0 && !isStringArray(aspectRatioOptions))
-    || (aspectRatioOptions !== undefined && (
-      !isStringArray(aspectRatioOptions)
-      || aspectRatioOptions.length === 0
-      || new Set(aspectRatioOptions).size !== aspectRatioOptions.length
-      || aspectRatioOptions.some((value) => !/^[1-9]\d*:[1-9]\d*$/u.test(value))
+    (isStringArray(supportedInputModes) && supportedInputModes.length > 0 && !isStringArray(supportedAspectRatios))
+    || (supportedAspectRatios !== undefined && (
+      !isStringArray(supportedAspectRatios)
+      || supportedAspectRatios.length === 0
+      || new Set(supportedAspectRatios).size !== supportedAspectRatios.length
+      || supportedAspectRatios.some((value) => !/^[1-9]\d*:[1-9]\d*$/u.test(value))
     ))
   ) {
     issues.push({
       code: 'CAPABILITY_FIELD_INVALID',
-      field: 'capabilities.video.aspectRatioOptions',
-      message: 'aspectRatioOptions must contain unique canonical W:H values',
+      field: 'capabilities.video.supportedAspectRatios',
+      message: 'supportedAspectRatios must contain unique canonical W:H values',
     })
   }
 
@@ -709,7 +709,7 @@ function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unk
     const allowedFields = new Set([
       'minSourceDurationMs',
       'maxSourceDurationMs',
-      'sourceAspectRatioByTarget',
+      'sourceAspectRatiosByTarget',
     ])
     for (const field of Object.keys(continuationInput)) {
       if (allowedFields.has(field)) continue
@@ -746,29 +746,61 @@ function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unk
         message: 'maxSourceDurationMs must be at least minSourceDurationMs',
       })
     }
-    const dimensionsByAspectRatio = continuationInput.sourceAspectRatioByTarget
+    const dimensionsByAspectRatio = continuationInput.sourceAspectRatiosByTarget
     if (!isRecord(dimensionsByAspectRatio) || Object.keys(dimensionsByAspectRatio).length === 0) {
       issues.push({
         code: 'CAPABILITY_FIELD_INVALID',
-        field: 'capabilities.video.continuationInput.sourceAspectRatioByTarget',
-        message: 'sourceAspectRatioByTarget must be a non-empty object',
+        field: 'capabilities.video.continuationInput.sourceAspectRatiosByTarget',
+        message: 'sourceAspectRatiosByTarget must be a non-empty object',
       })
     } else {
-      for (const [aspectRatio, dimensions] of Object.entries(dimensionsByAspectRatio)) {
+      const expectedAspectRatios = new Set(
+        isStringArray(supportedAspectRatios) ? supportedAspectRatios : [],
+      )
+      for (const aspectRatio of expectedAspectRatios) {
+        if (!Object.hasOwn(dimensionsByAspectRatio, aspectRatio)) {
+          issues.push({
+            code: 'CAPABILITY_FIELD_INVALID',
+            field: `capabilities.video.continuationInput.sourceAspectRatiosByTarget.${aspectRatio}`,
+            message: `Missing continuation source aspect ratios for target: ${aspectRatio}`,
+          })
+        }
+      }
+      for (const [aspectRatio, dimensionsList] of Object.entries(dimensionsByAspectRatio)) {
+        if (expectedAspectRatios.size > 0 && !expectedAspectRatios.has(aspectRatio)) {
+          issues.push({
+            code: 'CAPABILITY_FIELD_INVALID',
+            field: `capabilities.video.continuationInput.sourceAspectRatiosByTarget.${aspectRatio}`,
+            message: `Unknown continuation target aspect ratio: ${aspectRatio}`,
+          })
+        }
         if (
           !aspectRatio.trim()
-          || !isRecord(dimensions)
-          || Object.keys(dimensions).some((field) => field !== 'width' && field !== 'height')
-          || !Number.isSafeInteger(dimensions.width)
-          || (dimensions.width as number) <= 0
-          || !Number.isSafeInteger(dimensions.height)
-          || (dimensions.height as number) <= 0
+          || !Array.isArray(dimensionsList)
+          || dimensionsList.length === 0
         ) {
           issues.push({
             code: 'CAPABILITY_FIELD_INVALID',
-            field: `capabilities.video.continuationInput.sourceAspectRatioByTarget.${aspectRatio}`,
-            message: 'Continuation source aspect ratio must contain positive integer width and height',
+            field: `capabilities.video.continuationInput.sourceAspectRatiosByTarget.${aspectRatio}`,
+            message: 'Continuation source aspect ratios must be a non-empty array',
           })
+          continue
+        }
+        for (const [index, dimensions] of dimensionsList.entries()) {
+          if (
+            !isRecord(dimensions)
+            || Object.keys(dimensions).some((field) => field !== 'width' && field !== 'height')
+            || !Number.isSafeInteger(dimensions.width)
+            || (dimensions.width as number) <= 0
+            || !Number.isSafeInteger(dimensions.height)
+            || (dimensions.height as number) <= 0
+          ) {
+            issues.push({
+              code: 'CAPABILITY_FIELD_INVALID',
+              field: `capabilities.video.continuationInput.sourceAspectRatiosByTarget.${aspectRatio}.${String(index)}`,
+              message: 'Continuation source aspect ratio must contain positive integer width and height',
+            })
+          }
         }
       }
     }

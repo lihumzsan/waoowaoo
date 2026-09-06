@@ -596,7 +596,7 @@ describe('project local video model configuration', () => {
     })
   })
 
-  it('enforces the H3 mode-duration and ratio policy before creating Tasks or Resources', async () => {
+  it('accepts the shared H3 4-15 second range and rejects values below it before writes', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)
     const image = await seedReadyImage({ userId: user.id, projectId: project.id, label: 'policy-image' })
@@ -652,43 +652,47 @@ describe('project local video model configuration', () => {
       references: imageReference,
     })).resolves.toBeDefined()
 
-    const invalid = [
+    const additionalValid = [
       {
         itemId: 'first-frame-12',
         durationSeconds: 12,
         prompt: h3Prompt('first_frame', 12.25),
         references: [{ ...image, role: 'first_frame' as const, channel: 'image' as const }],
-        reason: 'VIDEO_INPUT_MODE_DURATION_UNSUPPORTED:first_frame:12',
       },
       {
         itemId: 'continuation-15',
         durationSeconds: 15,
         prompt: h3ContinuationPrompt(),
         references: [{ ...video, role: 'continuation_video' as const, channel: 'video' as const }],
-        reason: 'VIDEO_INPUT_MODE_DURATION_UNSUPPORTED:continuation:15',
       },
       {
         itemId: 'ref-4',
         durationSeconds: 4,
         prompt: h3Prompt('reference', 4.458),
         references: imageReference,
-        reason: 'VIDEO_INPUT_MODE_DURATION_UNSUPPORTED:reference:4',
       },
     ] as const
-    for (const input of invalid) {
-      const before = {
-        tasks: await prisma.task.count({ where: { projectId: project.id } }),
-        resources: await prisma.workspaceResource.count({ where: { projectId: project.id } }),
-      }
-      await expect(plan(input)).rejects.toMatchObject({
-        details: expect.objectContaining({
-          code: 'MEDIA_GENERATION_CAPABILITY_INVALID',
-          reason: input.reason,
-        }),
-      })
-      await expect(prisma.task.count({ where: { projectId: project.id } })).resolves.toBe(before.tasks)
-      await expect(prisma.workspaceResource.count({ where: { projectId: project.id } })).resolves.toBe(before.resources)
+    for (const input of additionalValid) {
+      await expect(plan(input)).resolves.toBeDefined()
     }
+
+    const before = {
+      tasks: await prisma.task.count({ where: { projectId: project.id } }),
+      resources: await prisma.workspaceResource.count({ where: { projectId: project.id } }),
+    }
+    await expect(plan({
+      itemId: 'first-frame-3',
+      durationSeconds: 3,
+      prompt: h3Prompt('first_frame', 3.75),
+      references: [{ ...image, role: 'first_frame' as const, channel: 'image' as const }],
+    })).rejects.toMatchObject({
+      details: expect.objectContaining({
+        code: 'MEDIA_GENERATION_CAPABILITY_INVALID',
+        reason: 'VIDEO_INPUT_MODE_DURATION_UNSUPPORTED:first_frame:3',
+      }),
+    })
+    await expect(prisma.task.count({ where: { projectId: project.id } })).resolves.toBe(before.tasks)
+    await expect(prisma.workspaceResource.count({ where: { projectId: project.id } })).resolves.toBe(before.resources)
 
     await prisma.project.update({ where: { id: project.id }, data: { videoRatio: '2:3' } })
     const beforeRatioFailure = {

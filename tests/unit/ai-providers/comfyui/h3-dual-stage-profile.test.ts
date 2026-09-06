@@ -36,6 +36,13 @@ describe('MiniMax H3 Ref T8 dual-stage profile', () => {
 
   it.each([
     {
+      duration: 4,
+      aspectRatio: '16:9' as const,
+      first: { width: 1152, height: 640 },
+      secondMegapixels: 1,
+      final: { width: 1920, height: 1088 },
+    },
+    {
       duration: 5,
       aspectRatio: '9:16' as const,
       first: { width: 640, height: 1152 },
@@ -73,7 +80,7 @@ describe('MiniMax H3 Ref T8 dual-stage profile', () => {
       seed: 7,
     })
     const [coarseId, refineId] = built.profile.conditioningNodeIds
-    const frameCount = duration === 5 ? 124 : duration === 10 ? 243 : 362
+    const frameCount = duration === 4 ? 107 : duration === 5 ? 124 : duration === 10 ? 243 : 362
     expect(built.graph[coarseId]?.inputs).toMatchObject({
       prompt: [built.profile.promptNodeId, 0],
       width: first.width,
@@ -92,10 +99,10 @@ describe('MiniMax H3 Ref T8 dual-stage profile', () => {
   })
 
   it('binds ordered image and audio loaders to both conditioning passes without mutating the template', () => {
-    const imageFilenames = [
-      'waoowaoo/prompt/reference-image-00.png',
-      'waoowaoo/prompt/reference-image-01.webp',
-    ]
+    const imageFilenames = Array.from(
+      { length: 9 },
+      (_, index) => `waoowaoo/prompt/reference-image-${String(index).padStart(2, '0')}.png`,
+    )
     const audioFilenames = [
       'waoowaoo/prompt/reference-audio-00.mp3',
       'waoowaoo/prompt/reference-audio-01.wav',
@@ -140,16 +147,16 @@ describe('MiniMax H3 Ref T8 dual-stage profile', () => {
       ...common,
       referenceImageFilenames: [],
       requestedDurationSeconds: 5,
-    })).toThrow('COMFYUI_H3_REFERENCE_IMAGES_COUNT_INVALID:8')
+    })).toThrow('COMFYUI_H3_REFERENCE_IMAGES_COUNT_INVALID:9')
     expect(() => buildH3PromptGraph({
       ...common,
-      referenceImageFilenames: Array.from({ length: 9 }, (_, index) => `${String(index)}.png`),
+      referenceImageFilenames: Array.from({ length: 10 }, (_, index) => `${String(index)}.png`),
       requestedDurationSeconds: 5,
-    })).toThrow('COMFYUI_H3_REFERENCE_IMAGES_COUNT_INVALID:8')
+    })).toThrow('COMFYUI_H3_REFERENCE_IMAGES_COUNT_INVALID:9')
     expect(() => buildH3PromptGraph({
       ...common,
       referenceImageFilenames: ['one.png'],
-      requestedDurationSeconds: 4,
-    })).toThrow('H3_REQUESTED_DURATION_INVALID:reference:4')
+      requestedDurationSeconds: 3,
+    })).toThrow('H3_REQUESTED_DURATION_INVALID:reference:3')
   })
 })

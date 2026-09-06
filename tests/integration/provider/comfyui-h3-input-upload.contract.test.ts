@@ -131,9 +131,9 @@ describe('ComfyUI H3 continuation input upload', () => {
     expect(requests[1]?.bodyText).toContain('audio/wav')
   })
 
-  it('uploads eight ordered reference images into the prompt-scoped input directory', async () => {
+  it('uploads nine ordered reference images into the prompt-scoped input directory', async () => {
     server = await startScenarioServer()
-    const extensions = ['jpg', 'png', 'webp', 'jpg', 'png', 'webp', 'jpg', 'png'] as const
+    const extensions = ['jpg', 'png', 'webp', 'jpg', 'png', 'webp', 'jpg', 'png', 'webp'] as const
     const contentTypes = {
       jpg: 'image/jpeg',
       png: 'image/png',
@@ -165,7 +165,7 @@ describe('ComfyUI H3 continuation input upload', () => {
       `waoowaoo/prompt-id/reference-image-${String(index).padStart(2, '0')}.${extension}`
     )))
     const requests = server.getRequests('POST', '/upload/image')
-    expect(requests).toHaveLength(8)
+    expect(requests).toHaveLength(9)
     for (const [index, request] of requests.entries()) {
       expect(request.bodyText).toContain(`reference-image-${String(index).padStart(2, '0')}.${extensions[index]}`)
       expect(request.bodyText).toContain(contentTypes[extensions[index]!])
@@ -186,13 +186,13 @@ describe('ComfyUI H3 continuation input upload', () => {
     })
     const upload = requireReferenceImageUploader()
     const base = { baseUrl: server.baseUrl, promptId: 'prompt-id' }
-    await expect(upload({ ...base, files: [] })).rejects.toThrow('COMFYUI_H3_REFERENCE_IMAGES_COUNT_INVALID:8')
+    await expect(upload({ ...base, files: [] })).rejects.toThrow('COMFYUI_H3_REFERENCE_IMAGES_COUNT_INVALID:9')
     await expect(upload({
       ...base,
-      files: Array.from({ length: 9 }, () => ({
+      files: Array.from({ length: 10 }, () => ({
         bytes: new Uint8Array([1]), contentType: 'image/png' as const, extension: 'png' as const,
       })),
-    })).rejects.toThrow('COMFYUI_H3_REFERENCE_IMAGES_COUNT_INVALID:8')
+    })).rejects.toThrow('COMFYUI_H3_REFERENCE_IMAGES_COUNT_INVALID:9')
     await expect(upload({
       ...base,
       files: [{ bytes: new Uint8Array(), contentType: 'image/png', extension: 'png' }],
