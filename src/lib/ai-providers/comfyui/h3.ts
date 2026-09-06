@@ -2,6 +2,8 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { AppError } from '@/lib/errors/app-error'
+import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
+import { resolveVideoInputPolicySelection } from '@/lib/ai-registry/video-input-policy'
 import { ProviderSubmissionError } from '@/lib/ai-exec/submission-error'
 import { createProviderAsyncTaskFailure } from '@/lib/ai-providers/shared/async-task-status'
 import type { AiProviderVideoExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
@@ -385,6 +387,14 @@ function buildGraph(
   const duration = options.duration
   const aspectRatio = options.aspectRatio
   if (typeof duration !== 'number' || !Number.isInteger(duration) || typeof aspectRatio !== 'string') throw new AppError('INVALID_PARAMS', 'ComfyUI H3 requires duration and aspectRatio', { provider: 'comfyui' })
+  const capabilities = resolveBuiltinCapabilitiesByModelKey('video', COMFYUI_H3_MODEL_ID)?.video
+  if (!capabilities) throw new Error(`CAPABILITY_MODEL_UNSUPPORTED:${COMFYUI_H3_MODEL_ID}`)
+  resolveVideoInputPolicySelection({
+    capabilities,
+    inputMode,
+    requestedDurationSeconds: duration,
+    aspectRatio,
+  })
   const durationPlan = resolveH3DurationPlan({
     inputMode,
     requestedDurationSeconds: duration,

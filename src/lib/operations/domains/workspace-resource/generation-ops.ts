@@ -10,6 +10,7 @@ import {
 } from '@/lib/ai-exec/media-preflight'
 import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
 import type { CapabilityValue } from '@/lib/ai-registry/types'
+import { resolveVideoInputPolicySelection } from '@/lib/ai-registry/video-input-policy'
 import { assertVideoPromptMatchesProfile } from '@/lib/video-generation/h3-prompt'
 import { resolveH3DurationPlan } from '@/lib/video-generation/h3-duration'
 import {
@@ -125,6 +126,9 @@ const CAPABILITY_SELECTION_FAILURE_PREFIXES = [
   'CAPABILITY_VALUE_NOT_ALLOWED:',
   'CAPABILITY_REQUIRED:',
   'CAPABILITY_MODEL_UNSUPPORTED:',
+  'VIDEO_INPUT_MODE_UNSUPPORTED:',
+  'VIDEO_INPUT_MODE_POLICY_MISSING:',
+  'VIDEO_INPUT_MODE_DURATION_UNSUPPORTED:',
 ] as const
 
 const workspaceResourceJsonValueSchema: z.ZodType<WorkspaceResourceJsonValue> = z.lazy(() => z.union([
@@ -397,6 +401,25 @@ function throwMediaPreflightError(
     }, { cause: error })
   }
   const reason = error instanceof Error ? error.message : String(error)
+  if (
+    reason.startsWith('VIDEO_ASPECT_RATIO_UNSUPPORTED:')
+    && input.aspectRatio
+    && input.modelKey
+    && input.ratioOwner === 'project'
+  ) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'PROJECT_VIDEO_RATIO_UNSUPPORTED_BY_MODEL',
+      field: 'videoRatio',
+      value: input.aspectRatio,
+      modelKey: input.modelKey,
+      correction: {
+        interaction: 'codex_request_user_input',
+        commitmentOperationId: 'update_project_config',
+        commitmentInputField: 'videoRatio',
+      },
+      agentRetryableAfterCorrection: true,
+    }, { cause: error })
+  }
   if (CAPABILITY_SELECTION_FAILURE_PREFIXES.some((prefix) => reason.startsWith(prefix))) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'MEDIA_GENERATION_CAPABILITY_INVALID',
@@ -872,14 +895,28 @@ async function compileMediaExecution(input: {
         ...(aspectRatio ? { aspectRatio } : {}),
       }
     } else if (item.mediaType === 'video') {
+      const capabilities = resolveBuiltinCapabilitiesByModelKey('video', modelKey)?.video
+      if (!capabilities) throw new Error(`CAPABILITY_MODEL_UNSUPPORTED:${modelKey}`)
+      const resolvedInputMode = resolveOperationVideoInputMode(input.references)
+      if (!aspectRatio) throw new Error('PROJECT_VIDEO_RATIO_SNAPSHOT_REQUIRED')
+      resolveVideoInputPolicySelection({
+        capabilities,
+        inputMode: resolvedInputMode.mode,
+        requestedDurationSeconds: item.durationSeconds,
+        aspectRatio,
+      })
+      validateVideoPromptProfile({
+        modelKey,
+        prompt: item.prompt,
+        references: input.references,
+        durationSeconds: item.durationSeconds,
+      })
       const configured = await resolveProjectModelCapabilityGenerationOptions({
         projectId: input.ctx.projectId,
         userId: input.ctx.userId,
         modelType: 'video',
         modelKey,
-        runtimeSelections: {
-          duration: item.durationSeconds,
-        },
+        runtimeSelections: { aspectRatio },
       })
       const providerConfigured = { ...configured }
       delete providerConfigured.generationMode
@@ -1267,14 +1304,6 @@ async function buildPlannedItem(input: {
     ? []
     : ('references' in item ? item.references ?? [] : [])
   validateReferenceCapabilities({ mediaType, audioKind, modelKey, references: publicReferences })
-  if (mediaType === 'video' && item.mediaType === 'video') {
-    validateVideoPromptProfile({
-      modelKey,
-      prompt: item.prompt,
-      references: publicReferences,
-      durationSeconds: item.durationSeconds,
-    })
-  }
   const references = await freezeReferences(input.ctx, publicReferences)
   await validateReferenceMediaCapabilities({
     ctx: input.ctx,

@@ -199,6 +199,60 @@ async function seedReadyAudio(input: {
   })
 }
 
+async function seedReadyVideo(input: {
+  userId: string
+  projectId: string
+  durationMs: number
+  label: string
+}): Promise<{ resourceId: string; contentVersion: number }> {
+  const resourceId = buildWorkspaceResourceId({
+    operationId: 'project_video_model_config_video_source',
+    requestId: `${input.projectId}:${input.label}`,
+    memberIndex: 0,
+  })
+  const media = await ensureMediaObjectFromStorageKey(
+    `tests/project-video-model-config/${input.projectId}-${input.label}.mp4`,
+    {
+      mimeType: 'video/mp4',
+      sizeBytes: 4,
+      width: 1008,
+      height: 2352,
+      durationMs: input.durationMs,
+    },
+  )
+  return await prisma.$transaction(async (tx) => {
+    await reserveWorkspaceResourceInTransaction(tx, {
+      resourceId,
+      userId: input.userId,
+      projectId: input.projectId,
+      outputPath: `${resourceId}.mp4`,
+      mediaType: 'video',
+      schemaId: WORKSPACE_RESOURCE_SCHEMA.VIDEO_SEGMENT,
+      sourceType: 'integration_test_fixture',
+      sourceId: resourceId,
+    })
+    return await materializeWorkspaceResourceInTransaction(tx, {
+      resourceId,
+      userId: input.userId,
+      projectId: input.projectId,
+      mediaType: 'video',
+      schemaId: WORKSPACE_RESOURCE_SCHEMA.VIDEO_SEGMENT,
+      content: { kind: 'media', mediaId: media.id },
+      inputs: [],
+      provenance: {
+        operationId: null,
+        inputHash: null,
+        taskId: null,
+        operationExecutionId: null,
+        toolCallId: null,
+        prompt: null,
+        modelKey: null,
+        generationOptions: null,
+      },
+    })
+  })
+}
+
 function h3ReferenceAudioPrompt(audioCount: number): string {
   const definitions = Array.from({ length: audioCount }, (_, index) => (
     `<Audio ${String(index + 1)}> is the voice-timbre reference for <Subject 1> (S1).`
@@ -250,6 +304,18 @@ Soft room tone and fabric movement.
 
 non_diegetic_music:
 N/A`
+}
+
+function h3ContinuationPrompt(): string {
+  return h3Prompt('reference', 0)
+    .replace(
+      '<Subject 1> is the woman represented by the supplied picture inputs.',
+      '<Subject 1> is the established woman from the preceding motion guide.',
+    )
+    .replace(
+      'Preserve her identity, clothing, and room layout.',
+      'Continue the inherited identity, pose, motion direction, and room layout from the preceding motion guide.',
+    )
 }
 
 function videoOptions(value: unknown): Array<{ value: string }> {
@@ -344,7 +410,7 @@ describe('project local video model configuration', () => {
     })).resolves.toEqual({ videoModel: null })
   })
 
-  it('resolves H3 built-in capability defaults for local generation without persisted selections', async () => {
+  it('resolves H3 persisted fields without treating mode-owned duration as a global capability', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)
     await prisma.project.update({
@@ -357,12 +423,10 @@ describe('project local video model configuration', () => {
       userId: user.id,
       modelType: 'video',
       modelKey: COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
-      runtimeSelections: {
-        duration: 5,
-      },
+      runtimeSelections: { aspectRatio: '9:16' },
     })).resolves.toEqual({
       generateAudio: true,
-      duration: 5,
+      aspectRatio: '9:16',
     })
   })
 
@@ -386,12 +450,10 @@ describe('project local video model configuration', () => {
       userId: user.id,
       modelType: 'video',
       modelKey: COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
-      runtimeSelections: {
-        duration: 5,
-      },
+      runtimeSelections: { aspectRatio: '9:16' },
     })).resolves.toEqual({
       generateAudio: true,
-      duration: 5,
+      aspectRatio: '9:16',
     })
   })
 
@@ -479,9 +541,9 @@ describe('project local video model configuration', () => {
             name: `H3 ${input.inputMode}`,
             mediaType: 'video',
             schemaId: WORKSPACE_RESOURCE_SCHEMA.VIDEO_SEGMENT,
-            prompt: h3Prompt(input.inputMode, 4.458),
+            prompt: h3Prompt(input.inputMode, input.inputMode === 'reference' ? 5.167 : 4.458),
             references: input.references,
-            durationSeconds: 4,
+            durationSeconds: input.inputMode === 'reference' ? 5 : 4,
             vocalPerformanceMode: 'silent_no_lip',
             count: 1,
           }],
@@ -534,6 +596,117 @@ describe('project local video model configuration', () => {
     })
   })
 
+  it('enforces the H3 mode-duration and ratio policy before creating Tasks or Resources', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const image = await seedReadyImage({ userId: user.id, projectId: project.id, label: 'policy-image' })
+    const video = await seedReadyVideo({ userId: user.id, projectId: project.id, label: 'policy-video', durationMs: 4_000 })
+    await prisma.project.update({
+      where: { id: project.id },
+      data: {
+        videoModel: COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
+        videoRatio: '9:21',
+      },
+    })
+    const operation = createProjectAgentOperationRegistryForApi().create_video
+    const plan = async (input: {
+      readonly itemId: string
+      readonly durationSeconds: number
+      readonly prompt: string
+      readonly references: readonly {
+        readonly resourceId: string
+        readonly contentVersion: number
+        readonly role: 'reference_image' | 'first_frame' | 'continuation_video'
+        readonly channel: 'image' | 'video'
+      }[]
+    }) => {
+      const parsed = operation.inputSchema.safeParse({
+        request: {
+          kind: 'new',
+          items: [{
+            itemId: input.itemId,
+            name: input.itemId,
+            mediaType: 'video',
+            schemaId: WORKSPACE_RESOURCE_SCHEMA.VIDEO_SEGMENT,
+            prompt: input.prompt,
+            references: input.references,
+            durationSeconds: input.durationSeconds,
+            vocalPerformanceMode: 'silent_no_lip',
+            count: 1,
+          }],
+        },
+      })
+      expect(parsed.success).toBe(true)
+      if (!parsed.success) throw new Error('H3 policy integration input must be valid')
+      return await planOperation({
+        operation,
+        ctx: operationContext(user.id, project.id),
+        input: parsed.data,
+      })
+    }
+    const imageReference = [{ ...image, role: 'reference_image' as const, channel: 'image' as const }]
+    await expect(plan({
+      itemId: 'ref-15-9-21',
+      durationSeconds: 15,
+      prompt: h3Prompt('reference', 15.083),
+      references: imageReference,
+    })).resolves.toBeDefined()
+
+    const invalid = [
+      {
+        itemId: 'first-frame-12',
+        durationSeconds: 12,
+        prompt: h3Prompt('first_frame', 12.25),
+        references: [{ ...image, role: 'first_frame' as const, channel: 'image' as const }],
+        reason: 'VIDEO_INPUT_MODE_DURATION_UNSUPPORTED:first_frame:12',
+      },
+      {
+        itemId: 'continuation-15',
+        durationSeconds: 15,
+        prompt: h3ContinuationPrompt(),
+        references: [{ ...video, role: 'continuation_video' as const, channel: 'video' as const }],
+        reason: 'VIDEO_INPUT_MODE_DURATION_UNSUPPORTED:continuation:15',
+      },
+      {
+        itemId: 'ref-4',
+        durationSeconds: 4,
+        prompt: h3Prompt('reference', 4.458),
+        references: imageReference,
+        reason: 'VIDEO_INPUT_MODE_DURATION_UNSUPPORTED:reference:4',
+      },
+    ] as const
+    for (const input of invalid) {
+      const before = {
+        tasks: await prisma.task.count({ where: { projectId: project.id } }),
+        resources: await prisma.workspaceResource.count({ where: { projectId: project.id } }),
+      }
+      await expect(plan(input)).rejects.toMatchObject({
+        details: expect.objectContaining({
+          code: 'MEDIA_GENERATION_CAPABILITY_INVALID',
+          reason: input.reason,
+        }),
+      })
+      await expect(prisma.task.count({ where: { projectId: project.id } })).resolves.toBe(before.tasks)
+      await expect(prisma.workspaceResource.count({ where: { projectId: project.id } })).resolves.toBe(before.resources)
+    }
+
+    await prisma.project.update({ where: { id: project.id }, data: { videoRatio: '2:3' } })
+    const beforeRatioFailure = {
+      tasks: await prisma.task.count({ where: { projectId: project.id } }),
+      resources: await prisma.workspaceResource.count({ where: { projectId: project.id } }),
+    }
+    await expect(plan({
+      itemId: 'ref-unsupported-ratio',
+      durationSeconds: 5,
+      prompt: h3Prompt('reference', 5.167),
+      references: imageReference,
+    })).rejects.toMatchObject({
+      details: expect.objectContaining({ code: 'PROJECT_VIDEO_RATIO_UNSUPPORTED_BY_MODEL' }),
+    })
+    await expect(prisma.task.count({ where: { projectId: project.id } })).resolves.toBe(beforeRatioFailure.tasks)
+    await expect(prisma.workspaceResource.count({ where: { projectId: project.id } })).resolves.toBe(beforeRatioFailure.resources)
+  })
+
   it('enforces H3 reference-audio count, visual, duration, and mode boundaries before writes', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)
@@ -575,7 +748,7 @@ describe('project local video model configuration', () => {
             schemaId: WORKSPACE_RESOURCE_SCHEMA.VIDEO_SEGMENT,
             prompt: h3ReferenceAudioPrompt(audioCount),
             references,
-            durationSeconds: 4,
+            durationSeconds: 5,
             vocalPerformanceMode: 'native_dialogue',
             count: 1,
           }],
