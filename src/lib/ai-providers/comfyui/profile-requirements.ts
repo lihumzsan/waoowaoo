@@ -7,7 +7,13 @@ const OPTION_INPUT_NAMES_BY_CLASS = {
   VAELoader: ['vae_name'],
   LoraLoaderModelOnly: ['lora_name'],
   LoraLoaderBypassModelOnly: ['lora_name'],
-  MiniMaxH3LearnedLatentUpscaleT8Advanced: ['model_name'],
+  MiniMaxH3LearnedLatentUpscaleT8Advanced: [
+    'model_name',
+    'size_mode',
+    'aspect_policy',
+    'precision',
+    'release_policy',
+  ],
   ImageResizeKJv2: ['upscale_method'],
   ModelAttentionBackend: ['attention'],
 } as const satisfies Readonly<Record<string, readonly string[]>>

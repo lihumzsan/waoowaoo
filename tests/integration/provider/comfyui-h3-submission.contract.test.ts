@@ -20,6 +20,9 @@ vi.mock('@/lib/media/outbound-owned-media', async (importOriginal) => {
       userId: string,
       options: Parameters<typeof actual.readOwnedMediaBytesForGeneration>[2],
     ) => {
+      if (input === 'https://media.example.com/unowned-reference.mp3') {
+        throw new Error('OWNED_MEDIA_NOT_FOUND')
+      }
       if (input === 'https://media.example.com/reference.mp3') {
         return {
           bytes: Buffer.from([0x49, 0x44, 0x33, 0x04]),
@@ -161,7 +164,15 @@ function objectInfo(className: string): Record<string, unknown> {
   if (className === 'MiniMaxH3LearnedLatentUpscaleT8Advanced') {
     required.model_name = [['minimax_h3_latent_upscaler_3d_fp16.safetensors']]
     required.av_latent = ['LATENT']
+    required.size_mode = [['target_megapixels', 'scale_by', 'target_dimensions']]
+    required.scale_by = ['FLOAT']
     required.target_megapixels = ['FLOAT']
+    required.target_width = ['INT']
+    required.target_height = ['INT']
+    required.aspect_policy = [['preserve_source', 'stretch']]
+    required.max_anisotropy = ['FLOAT']
+    required.precision = [['fp16', 'bf16']]
+    required.release_policy = [['offload_after', 'keep_loaded']]
   }
   if (className === 'MiniMaxH3AVDecodeT8') {
     required.av_latent = ['LATENT']
@@ -486,6 +497,26 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
     expect(body.prompt['14']?.inputs['ref_audios.ref_audio_0']).toEqual(['18', 0])
   })
 
+  it('reads every owned reference before starting any ComfyUI upload', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+
+    await expect(executeComfyUiH3VideoGeneration({
+      ...referenceAudioInput,
+      options: {
+        ...referenceAudioInput.options,
+        referenceAudios: ['https://media.example.com/unowned-reference.mp3'],
+      },
+    })).rejects.toMatchObject({
+      name: 'ProviderSubmissionError',
+      disposition: 'pre_accept_rejected',
+      externalId: null,
+      message: expect.stringContaining('OWNED_MEDIA_NOT_FOUND'),
+    })
+    expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
+    expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
+  })
+
   it('submits an image-only reference graph when optional reference-audio nodes are unavailable', async () => {
     vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
     defineValidPreflight(server!)
@@ -677,6 +708,64 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
       externalId: null,
       message: expect.stringContaining(
         'COMFYUI_MODEL_MISSING:minimax_h3_latent_upscaler_3d_fp16.safetensors',
+      ),
+    })
+    expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
+    expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
+  })
+
+  it('rejects an incompatible learned-upscaler dimension port before uploading bytes', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    const incompatible = objectInfo('MiniMaxH3LearnedLatentUpscaleT8Advanced')
+    const required = (
+      incompatible.MiniMaxH3LearnedLatentUpscaleT8Advanced as {
+        input: { required: Record<string, unknown> }
+      }
+    ).input.required
+    required.target_width = ['STRING']
+    server!.defineScenario({
+      method: 'GET',
+      path: '/object_info/MiniMaxH3LearnedLatentUpscaleT8Advanced',
+      mode: 'success',
+      submitResponse: { status: 200, body: incompatible },
+    })
+
+    await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
+      name: 'ProviderSubmissionError',
+      disposition: 'pre_accept_rejected',
+      externalId: null,
+      message: expect.stringContaining(
+        'COMFYUI_NODE_INPUT_INCOMPATIBLE:MiniMaxH3LearnedLatentUpscaleT8Advanced:target_width:INT',
+      ),
+    })
+    expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
+    expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
+  })
+
+  it('rejects a missing learned-upscaler mode before uploading bytes', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    const incompatible = objectInfo('MiniMaxH3LearnedLatentUpscaleT8Advanced')
+    const required = (
+      incompatible.MiniMaxH3LearnedLatentUpscaleT8Advanced as {
+        input: { required: Record<string, unknown> }
+      }
+    ).input.required
+    required.size_mode = [['scale_by', 'target_dimensions']]
+    server!.defineScenario({
+      method: 'GET',
+      path: '/object_info/MiniMaxH3LearnedLatentUpscaleT8Advanced',
+      mode: 'success',
+      submitResponse: { status: 200, body: incompatible },
+    })
+
+    await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
+      name: 'ProviderSubmissionError',
+      disposition: 'pre_accept_rejected',
+      externalId: null,
+      message: expect.stringContaining(
+        'COMFYUI_OPTION_MISSING:MiniMaxH3LearnedLatentUpscaleT8Advanced:size_mode:target_megapixels',
       ),
     })
     expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)

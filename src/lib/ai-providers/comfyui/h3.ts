@@ -96,7 +96,11 @@ const H3_REFERENCE_NODE_INPUT_TYPES = {
   },
   MiniMaxH3LearnedLatentUpscaleT8Advanced: {
     av_latent: { location: 'required', type: 'LATENT' },
+    scale_by: { location: 'required', type: 'FLOAT' },
     target_megapixels: { location: 'required', type: 'FLOAT' },
+    target_width: { location: 'required', type: 'INT' },
+    target_height: { location: 'required', type: 'INT' },
+    max_anisotropy: { location: 'required', type: 'FLOAT' },
   },
   MiniMaxH3AVDecodeT8: {
     av_latent: { location: 'required', type: 'LATENT' },
@@ -131,14 +135,15 @@ function promptRejection(error: ComfyUiHttpError): ProviderSubmissionError {
 }
 
 function missingOptionError(option: ComfyUiProfileRequirementOption): Error {
-  if ([
-    'UNETLoader',
-    'CLIPLoader',
-    'VAELoader',
-    'LoraLoaderModelOnly',
-    'LoraLoaderBypassModelOnly',
-    'MiniMaxH3LearnedLatentUpscaleT8Advanced',
-  ].includes(option.classType)) {
+  const modelOption = new Set([
+    'UNETLoader:unet_name',
+    'CLIPLoader:clip_name',
+    'VAELoader:vae_name',
+    'LoraLoaderModelOnly:lora_name',
+    'LoraLoaderBypassModelOnly:lora_name',
+    'MiniMaxH3LearnedLatentUpscaleT8Advanced:model_name',
+  ]).has(`${option.classType}:${option.inputName}`)
+  if (modelOption) {
     return new Error(`COMFYUI_MODEL_MISSING:${option.value}`)
   }
   return new Error(`COMFYUI_OPTION_MISSING:${option.classType}:${option.inputName}:${option.value}`)
@@ -587,14 +592,14 @@ export async function executeComfyUiH3VideoGeneration(input: AiProviderVideoExec
         urls: referenceImageUrls,
         userId: input.userId,
       })
+      const audioFiles = await readH3ReferenceAudioFiles({
+        urls: built.referenceAudioUrls,
+        userId: input.userId,
+      })
       const uploadedImages = await uploadH3ReferenceImages({
         baseUrl: target.baseUrl,
         promptId,
         files: imageFiles,
-      })
-      const audioFiles = await readH3ReferenceAudioFiles({
-        urls: built.referenceAudioUrls,
-        userId: input.userId,
       })
       const uploadedAudios = await uploadH3ReferenceAudios({
         baseUrl: target.baseUrl,

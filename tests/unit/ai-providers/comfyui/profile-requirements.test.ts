@@ -40,6 +40,10 @@ describe('deriveComfyUiProfileRequirements', () => {
         inputs: {
           av_latent: ['4', 0],
           model_name: 'minimax_h3_latent_upscaler_3d_fp16.safetensors',
+          size_mode: 'target_megapixels',
+          aspect_policy: 'preserve_source',
+          precision: 'fp16',
+          release_policy: 'offload_after',
         },
       },
     }
@@ -67,8 +71,28 @@ describe('deriveComfyUiProfileRequirements', () => {
         },
         {
           classType: 'MiniMaxH3LearnedLatentUpscaleT8Advanced',
+          inputName: 'aspect_policy',
+          value: 'preserve_source',
+        },
+        {
+          classType: 'MiniMaxH3LearnedLatentUpscaleT8Advanced',
           inputName: 'model_name',
           value: 'minimax_h3_latent_upscaler_3d_fp16.safetensors',
+        },
+        {
+          classType: 'MiniMaxH3LearnedLatentUpscaleT8Advanced',
+          inputName: 'precision',
+          value: 'fp16',
+        },
+        {
+          classType: 'MiniMaxH3LearnedLatentUpscaleT8Advanced',
+          inputName: 'release_policy',
+          value: 'offload_after',
+        },
+        {
+          classType: 'MiniMaxH3LearnedLatentUpscaleT8Advanced',
+          inputName: 'size_mode',
+          value: 'target_megapixels',
         },
         {
           classType: 'UNETLoader',
