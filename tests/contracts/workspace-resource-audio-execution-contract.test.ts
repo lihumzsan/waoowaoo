@@ -12,6 +12,61 @@ import {
 } from '@/lib/workspace-resource/generation-request'
 
 describe('frozen workspace audio execution contract', () => {
+  const promptMusicBase = {
+    itemId: 'voice',
+    name: 'Voice',
+    mediaType: 'audio' as const,
+    audioKind: 'music' as const,
+    schemaId: 'project.bgm_audio' as const,
+    prompt: 'A restrained vocal performance.',
+    durationSeconds: 26,
+    count: 1,
+  }
+
+  it('requires non-whitespace lyrics for vocal prompt music', () => {
+    expect(promptMusicGenerationItemSchema.safeParse({
+      ...promptMusicBase,
+      vocalMode: 'vocal',
+    }).success).toBe(false)
+    expect(promptMusicGenerationItemSchema.safeParse({
+      ...promptMusicBase,
+      vocalMode: 'vocal',
+      lyrics: '   \n\t',
+    }).success).toBe(false)
+  })
+
+  it('preserves the exact vocal lyrics string in the frozen generation options', () => {
+    const lyrics = ' [Verse]\n  Keep these spaces. \n'
+    const item = promptMusicGenerationItemSchema.parse({
+      ...promptMusicBase,
+      vocalMode: 'vocal',
+      lyrics,
+    })
+
+    expect(item.lyrics).toBe(lyrics)
+    if (item.lyrics === undefined) throw new Error('Expected parsed vocal lyrics.')
+    const frozen = freezeAudioExecution({
+      item,
+      generationOptions: {
+        durationSeconds: 26,
+        vocalMode: 'vocal',
+        lyrics: item.lyrics,
+        outputFormat: 'mp3',
+      },
+    })
+    expect(frozen.mode).toBe('prompt_music')
+    if (frozen.mode !== 'prompt_music') throw new Error('Expected frozen prompt music.')
+    expect(frozen.generationOptions.lyrics).toBe(lyrics)
+  })
+
+  it('forbids caller-supplied lyrics for instrumental prompt music', () => {
+    expect(promptMusicGenerationItemSchema.safeParse({
+      ...promptMusicBase,
+      vocalMode: 'instrumental',
+      lyrics: '[Instrumental]',
+    }).success).toBe(false)
+  })
+
   it('freezes sound prompt, duration, and negative prompt without music score fields', () => {
     const item = soundGenerationItemSchema.parse({
       itemId: 'rain',

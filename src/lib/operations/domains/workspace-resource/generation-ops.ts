@@ -941,6 +941,7 @@ async function compileMediaExecution(input: {
         ...(config.capabilityOverrides[modelKey] ?? {}),
         durationSeconds: item.durationSeconds,
         vocalMode: item.vocalMode,
+        ...(item.lyrics !== undefined ? { lyrics: item.lyrics } : {}),
         ...(item.genre ? { genre: item.genre } : {}),
         ...(item.mood ? { mood: item.mood } : {}),
         ...(item.bpm ? { bpm: item.bpm } : {}),

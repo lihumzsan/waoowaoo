@@ -84,6 +84,7 @@ export type AiMusicExecutionOptions = {
   durationSeconds?: number;
   providerDurationSeconds?: number;
   vocalMode?: "instrumental" | "vocal";
+  lyrics?: string;
   genre?: string;
   mood?: string;
   bpm?: number;

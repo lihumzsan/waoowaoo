@@ -2,6 +2,10 @@ import { z } from 'zod'
 import { MUSIC_KEY_SCALE_VALUES, MUSIC_TIME_SIGNATURE_VALUES } from './music-parameter-contract'
 import { OPERATION_EXECUTION_MAX_TASKS } from '@/lib/temporal/operation-execution/contracts'
 import { musicScoreCueRequestSchema } from '@/lib/music/score-specification'
+import {
+  musicLyricsSchema,
+  validateMusicLyricsContract,
+} from './audio-execution-contract'
 import { CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS } from './generation-contract'
 import {
   WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA,
@@ -108,6 +112,7 @@ export const promptMusicGenerationItemSchema = z.object({
   }).strict()).max(16).optional(),
   durationSeconds: z.number().int().min(1).max(600),
   vocalMode: z.enum(['instrumental', 'vocal']).default('instrumental'),
+  lyrics: musicLyricsSchema.optional(),
   genre: z.string().trim().min(1).max(200).optional(),
   mood: z.string().trim().min(1).max(200).optional(),
   bpm: z.number().int().min(20).max(300).optional(),
@@ -117,7 +122,7 @@ export const promptMusicGenerationItemSchema = z.object({
   purpose: z.string().trim().min(1).max(4_000).optional(),
   musicalDirection: z.string().trim().min(1).max(8_000).optional(),
   dialogueSafety: z.string().trim().min(1).max(2_000).nullable().optional(),
-}).strict()
+}).strict().superRefine(validateMusicLyricsContract)
 
 export const compositionPlanMusicGenerationItemSchema = musicScoreCueRequestSchema.safeExtend({
   ...commonItemShape,

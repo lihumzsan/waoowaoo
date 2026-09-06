@@ -24,6 +24,22 @@ const providerPromptSchema = z.string().min(1).max(100_000)
 const negativePromptSchema = z.string().max(100_000)
   .refine((value) => value.trim().length > 0, 'negativePrompt must contain non-whitespace content.')
 
+export const musicLyricsSchema = z.string().min(1).max(100_000)
+  .refine((value) => value.trim().length > 0, 'lyrics must contain non-whitespace content.')
+  .describe('Exact provider-ready vocal lyrics. The server validates and freezes them verbatim.')
+
+export function validateMusicLyricsContract(
+  item: { readonly vocalMode?: 'instrumental' | 'vocal'; readonly lyrics?: string },
+  context: z.RefinementCtx,
+): void {
+  if (item.vocalMode === 'vocal' && !item.lyrics) {
+    context.addIssue({ code: 'custom', path: ['lyrics'], message: 'lyrics are required for vocal music.' })
+  }
+  if (item.vocalMode === 'instrumental' && item.lyrics !== undefined) {
+    context.addIssue({ code: 'custom', path: ['lyrics'], message: 'lyrics are forbidden for instrumental music.' })
+  }
+}
+
 export const soundGenerationOptionsSchema = z.object({
   durationSeconds: z.number().int().min(1).max(30),
   negativePrompt: negativePromptSchema.optional(),
@@ -35,13 +51,14 @@ export const promptMusicGenerationOptionsSchema = z.object({
   providerDurationSeconds: z.number().int().min(1).max(600).optional(),
   negativePrompt: negativePromptSchema.optional(),
   vocalMode: z.enum(['instrumental', 'vocal']).optional(),
+  lyrics: musicLyricsSchema.optional(),
   genre: z.string().trim().min(1).max(200).optional(),
   mood: z.string().trim().min(1).max(200).optional(),
   bpm: z.number().int().min(20).max(300).optional(),
   keyScale: z.enum(MUSIC_KEY_SCALE_VALUES).optional(),
   timeSignature: z.enum(MUSIC_TIME_SIGNATURE_VALUES).optional(),
   outputFormat: z.enum(['mp3', 'wav']),
-}).strict()
+}).strict().superRefine(validateMusicLyricsContract)
 
 export type SoundGenerationOptions = z.infer<typeof soundGenerationOptionsSchema>
 export type PromptMusicGenerationOptions = z.infer<typeof promptMusicGenerationOptionsSchema>

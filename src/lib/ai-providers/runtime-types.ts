@@ -108,6 +108,7 @@ export type AiProviderMusicExecutionContext = {
     durationSeconds?: number
     providerDurationSeconds?: number
     vocalMode?: 'instrumental' | 'vocal'
+    lyrics?: string
     genre?: string
     mood?: string
     bpm?: number
