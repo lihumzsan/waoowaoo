@@ -3,6 +3,49 @@ import { asComfyUiRecord } from './transport'
 
 type ComfyUiInputDefinition = readonly unknown[]
 
+type ComfyUiDynamicComboOption = {
+  readonly key: string
+  readonly required: Record<string, unknown>
+  readonly optional: Record<string, unknown> | null
+}
+
+function readDynamicComboOptions(definition: ComfyUiInputDefinition): readonly ComfyUiDynamicComboOption[] {
+  const metadata = asComfyUiRecord(definition[1])
+  if (!Array.isArray(metadata?.options) || metadata.options.length === 0) {
+    throw new Error('COMFYUI_DYNAMIC_COMBO_SCHEMA_INVALID')
+  }
+  const keys = new Set<string>()
+  return metadata.options.map((candidate: unknown) => {
+    const option = asComfyUiRecord(candidate)
+    const inputs = asComfyUiRecord(option?.inputs)
+    const required = asComfyUiRecord(inputs?.required)
+    const optional = asComfyUiRecord(inputs?.optional)
+    if (typeof option?.key !== 'string' || !option.key || keys.has(option.key) || !required
+      || (inputs?.optional !== undefined && !optional)) {
+      throw new Error('COMFYUI_DYNAMIC_COMBO_SCHEMA_INVALID')
+    }
+    keys.add(option.key)
+    return { key: option.key, required, optional }
+  })
+}
+
+function expandDynamicComboInputs(input: {
+  readonly required: Record<string, unknown> | null
+  readonly optional: Record<string, unknown> | null
+  readonly graphInputs: Readonly<Record<string, unknown>>
+}): { required: Record<string, unknown>; optional: Record<string, unknown> } {
+  const required = { ...input.required }
+  const optional = { ...input.optional }
+  for (const [selectorName, definition] of Object.entries({ ...required, ...optional })) {
+    if (!Array.isArray(definition) || definition[0] !== 'COMFY_DYNAMICCOMBO_V3') continue
+    const selected = readDynamicComboOptions(definition).find((option) => option.key === input.graphInputs[selectorName])
+    if (!selected) continue // A supplied invalid selector is rejected by scalar validation.
+    for (const [name, dependent] of Object.entries(selected.required)) required[`${selectorName}.${name}`] = dependent
+    for (const [name, dependent] of Object.entries(selected.optional ?? {})) optional[`${selectorName}.${name}`] = dependent
+  }
+  return { required, optional }
+}
+
 export type ComfyUiGraphOptionMismatch = Readonly<{
   className: string
   inputName: string
@@ -119,7 +162,7 @@ function isGraphLink(
 }
 
 function readInputType(definition: ComfyUiInputDefinition): string | null {
-  if (Array.isArray(definition[0])) return 'COMBO'
+  if (Array.isArray(definition[0]) || definition[0] === 'COMFY_DYNAMICCOMBO_V3') return 'COMBO'
   return typeof definition[0] === 'string' ? definition[0] : null
 }
 
@@ -139,7 +182,10 @@ function assertScalarInput(input: {
   const metadataOptions = typeOrOptions === 'COMBO' && Array.isArray(metadata?.options)
     ? metadata.options
     : null
-  const options = directOptions ?? metadataOptions
+  const dynamicOptions = typeOrOptions === 'COMFY_DYNAMICCOMBO_V3'
+    ? readDynamicComboOptions(input.definition).map((option) => option.key)
+    : null
+  const options = directOptions ?? metadataOptions ?? dynamicOptions
   if (options && !uploadInput && !options.some((candidate) => Object.is(candidate, input.value))) {
     if (typeof input.value === 'string') {
       throw input.createOptionMismatchError({
@@ -262,8 +308,11 @@ export function assertComfyUiPromptGraphRuntimeContract(input: {
       graphNode.class_type,
     )
     const nodeInput = asComfyUiRecord(nodeInfo.input)
-    const required = asComfyUiRecord(nodeInput?.required)
-    const optional = asComfyUiRecord(nodeInput?.optional)
+    const { required, optional } = expandDynamicComboInputs({
+      required: asComfyUiRecord(nodeInput?.required),
+      optional: asComfyUiRecord(nodeInput?.optional),
+      graphInputs: graphNode.inputs,
+    })
     assertRequiredInputsPresent({
       nodeId,
       className: graphNode.class_type,
