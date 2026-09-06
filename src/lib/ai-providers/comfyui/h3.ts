@@ -16,10 +16,7 @@ import {
 import { extractH3ContinuationGuide } from '@/lib/video-compose/h3-continuation'
 import { H3_CONTINUATION_GUIDE_FRAMES } from '@/lib/video-generation/h3-timeline'
 import { assertVideoPromptMatchesProfile } from '@/lib/video-generation/h3-prompt'
-import {
-  resolveH3ContinuationDurationPlan,
-  resolveH3DurationPlan,
-} from '@/lib/video-generation/h3-duration'
+import { resolveH3DurationPlan } from '@/lib/video-generation/h3-duration'
 import { resolveVideoInputMode, type VideoInputReference } from '@/lib/video-generation/input-mode'
 import { resolveComfyUiRuntimeTarget } from './config'
 import { formatComfyUiExternalId } from './external-id'
@@ -388,9 +385,10 @@ function buildGraph(
   const duration = options.duration
   const aspectRatio = options.aspectRatio
   if (typeof duration !== 'number' || !Number.isInteger(duration) || typeof aspectRatio !== 'string') throw new AppError('INVALID_PARAMS', 'ComfyUI H3 requires duration and aspectRatio', { provider: 'comfyui' })
-  const durationPlan = inputMode === 'continuation'
-    ? resolveH3ContinuationDurationPlan(duration)
-    : resolveH3DurationPlan(duration)
+  const durationPlan = resolveH3DurationPlan({
+    inputMode,
+    requestedDurationSeconds: duration,
+  })
   const seed = Number.parseInt(promptId.replace(/-/gu, '').slice(0, 12), 16)
   const prompt = options.prompt?.trim() || ''
   assertVideoPromptMatchesProfile({

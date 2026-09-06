@@ -11,10 +11,7 @@ import {
 import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
 import type { CapabilityValue } from '@/lib/ai-registry/types'
 import { assertVideoPromptMatchesProfile } from '@/lib/video-generation/h3-prompt'
-import {
-  resolveH3ContinuationDurationPlan,
-  resolveH3DurationPlan,
-} from '@/lib/video-generation/h3-duration'
+import { resolveH3DurationPlan } from '@/lib/video-generation/h3-duration'
 import {
   resolveVideoInputMode,
   VideoInputModeError,
@@ -562,9 +559,10 @@ function validateVideoPromptProfile(input: {
     const resolvedInputMode = resolveOperationVideoInputMode(input.references)
     const inputMode = resolvedInputMode.mode
     const timelineDurationSeconds = profile === 'minimax_h3_multimodal_v3'
-      ? (inputMode === 'continuation'
-          ? resolveH3ContinuationDurationPlan(input.durationSeconds)
-          : resolveH3DurationPlan(input.durationSeconds)).promptEndSeconds
+      ? resolveH3DurationPlan({
+          inputMode,
+          requestedDurationSeconds: input.durationSeconds,
+        }).promptEndSeconds
       : input.durationSeconds
     assertVideoPromptMatchesProfile({
       profile,

@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS } from '@/lib/workspace-resource/generation-contract'
 import type { VideoContinuationInputCapabilities, VideoInputMode, VideoPromptProfile } from '@/lib/ai-registry/types'
 import type { VocalPerformanceMode } from '@/lib/workspace-resource/vocal-performance-contract'
-import { resolveH3ContinuationDurationPlan, resolveH3DurationPlan } from '@/lib/video-generation/h3-duration'
+import { resolveH3DurationPlan } from '@/lib/video-generation/h3-duration'
 import { H3_CONTINUATION_GUIDE_FRAMES, H3_FRAMES_PER_SECOND } from '@/lib/video-generation/h3-timeline'
 
 export type ProjectProductionCapabilities = {
@@ -102,8 +102,11 @@ export function resolveProjectProductionCapabilities(config: ProjectModelConfig)
   const video = config.videoModel
     ? resolveBuiltinCapabilitiesByModelKey('video', config.videoModel)?.video
     : undefined
+  const supportedInputModes = video?.supportedInputModes ?? []
   const allowedSegmentDurationsSeconds = Array.from(new Set(
-    (video?.durationOptions ?? []).filter((duration): duration is number => (
+    supportedInputModes.flatMap((inputMode) => (
+      video?.inputModePolicies?.[inputMode]?.durationOptions ?? []
+    )).filter((duration): duration is number => (
       Number.isInteger(duration)
       && duration > 0
       && duration <= CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS
@@ -111,12 +114,10 @@ export function resolveProjectProductionCapabilities(config: ProjectModelConfig)
   )).sort((left, right) => left - right)
   const minSegmentDurationSeconds = allowedSegmentDurationsSeconds[0]
   const maxSegmentDurationSeconds = allowedSegmentDurationsSeconds.at(-1)
-  const segmentDurationPlans = (video?.supportedInputModes ?? []).flatMap((inputMode) => (
-    allowedSegmentDurationsSeconds.map((requestedDurationSeconds) => {
+  const segmentDurationPlans = supportedInputModes.flatMap((inputMode) => (
+    (video?.inputModePolicies?.[inputMode]?.durationOptions ?? []).map((requestedDurationSeconds) => {
       if (video?.promptProfile === 'minimax_h3_multimodal_v3') {
-        const plan = inputMode === 'continuation'
-          ? resolveH3ContinuationDurationPlan(requestedDurationSeconds)
-          : resolveH3DurationPlan(requestedDurationSeconds)
+        const plan = resolveH3DurationPlan({ inputMode, requestedDurationSeconds })
         const guideFrames = inputMode === 'continuation' ? H3_CONTINUATION_GUIDE_FRAMES : 0
         return {
           inputMode,
@@ -138,6 +139,7 @@ export function resolveProjectProductionCapabilities(config: ProjectModelConfig)
   const videoCapabilities = config.videoModel
     && config.videoRatio
     && video
+    && video.aspectRatioOptions?.includes(config.videoRatio)
     && minSegmentDurationSeconds !== undefined
     && maxSegmentDurationSeconds !== undefined
     ? {
@@ -156,7 +158,7 @@ export function resolveProjectProductionCapabilities(config: ProjectModelConfig)
         referenceAudioRequiresVisual: video.referenceAudioRequiresVisual === true,
         minReferenceAudioDurationMs: video.minReferenceAudioDurationMs ?? null,
         maxTotalReferenceAudioDurationMs: video.maxTotalReferenceAudioDurationMs ?? null,
-        supportedInputModes: video.supportedInputModes ?? [],
+        supportedInputModes,
       }
     : null
 

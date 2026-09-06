@@ -14,12 +14,16 @@ import {
   H3_MAX_REFERENCE_IMAGES,
 } from './profiles'
 import {
-  H3_DURATION_MAX_SECONDS,
-  H3_DURATION_MIN_SECONDS,
+  H3_REFERENCE_DURATION_OPTIONS_SECONDS,
+  H3_STANDARD_DURATION_OPTIONS_SECONDS,
 } from '@/lib/video-generation/h3-duration'
+import { H3_ASPECT_RATIOS } from '@/lib/video-generation/h3-reference-runtime-plan'
 import { createAiProviderFailureAdapter } from '@/lib/ai-providers/failure'
 
-const H3_ASPECT_RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16', '9:21'] as const
+const H3_STRUCTURAL_DURATION_OPTIONS = [
+  ...H3_STANDARD_DURATION_OPTIONS_SECONDS,
+  ...H3_REFERENCE_DURATION_OPTIONS_SECONDS,
+]
 
 export const comfyuiAdapter: AiProviderAdapter = {
   providerKey: 'comfyui',
@@ -66,8 +70,8 @@ export const comfyuiAdapter: AiProviderAdapter = {
         excludedKeys: ['resolution', 'referenceVideos', 'size', 'promptExtend', 'serviceTier', 'executionExpiresAfter', 'returnLastFrame', 'draft', 'seed', 'cameraFixed', 'watermark'],
         validators: {
           duration: integerRangeValidator({
-            min: H3_DURATION_MIN_SECONDS,
-            max: H3_DURATION_MAX_SECONDS,
+            min: Math.min(...H3_STRUCTURAL_DURATION_OPTIONS),
+            max: Math.max(...H3_STRUCTURAL_DURATION_OPTIONS),
           }),
           aspectRatio: enumValidator(H3_ASPECT_RATIOS),
           generateAudio: booleanValidator(),

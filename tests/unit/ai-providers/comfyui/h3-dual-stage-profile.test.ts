@@ -9,10 +9,10 @@ import { resolveH3DurationPlan } from '@/lib/video-generation/h3-duration'
 
 describe('MiniMax H3 dual-stage profile', () => {
   it('keeps the provider frame grid and derives the delivery canvas from one aspect ratio', () => {
-    expect(resolveH3DurationPlan(4).frameCount).toBe(107)
-    expect(resolveH3DurationPlan(5).frameCount).toBe(124)
-    expect(resolveH3DurationPlan(10).frameCount).toBe(243)
-    expect(resolveH3DurationPlan(11).frameCount).toBe(277)
+    expect(resolveH3DurationPlan({ inputMode: 'first_frame', requestedDurationSeconds: 4 }).frameCount).toBe(107)
+    expect(resolveH3DurationPlan({ inputMode: 'reference', requestedDurationSeconds: 5 }).frameCount).toBe(124)
+    expect(resolveH3DurationPlan({ inputMode: 'reference', requestedDurationSeconds: 10 }).frameCount).toBe(243)
+    expect(resolveH3DurationPlan({ inputMode: 'reference', requestedDurationSeconds: 11 }).frameCount).toBe(277)
     expect(resolveH3Dimensions({ megapixels: 1, aspectRatio: '16:9' })).toEqual({ width: 1376, height: 768 })
     expect(resolveH3Dimensions({ megapixels: 2, aspectRatio: '16:9' })).toEqual({ width: 2064, height: 1152 })
   })
@@ -43,12 +43,12 @@ describe('MiniMax H3 dual-stage profile', () => {
   })
 
   it('rounds a nine-second request up to the next valid H3 frame grid value', () => {
-    expect(resolveH3DurationPlan(9).frameCount).toBe(226)
+    expect(resolveH3DurationPlan({ inputMode: 'reference', requestedDurationSeconds: 9 }).frameCount).toBe(226)
   })
 
   it('rejects H3 graph durations above eleven seconds', () => {
-    expect(() => resolveH3DurationPlan(12)).toThrow('H3_REQUESTED_DURATION_INVALID:12')
-    expect(() => resolveH3DurationPlan(13)).toThrow('H3_REQUESTED_DURATION_INVALID:13')
+    expect(() => resolveH3DurationPlan({ inputMode: 'first_frame', requestedDurationSeconds: 12 })).toThrow('H3_REQUESTED_DURATION_INVALID:first_frame:12')
+    expect(() => resolveH3DurationPlan({ inputMode: 'first_frame', requestedDurationSeconds: 13 })).toThrow('H3_REQUESTED_DURATION_INVALID:first_frame:13')
   })
 
   it('contains both VSR stages, both cache clears, and no Codex or LoadImage node', () => {
@@ -66,7 +66,7 @@ describe('MiniMax H3 dual-stage profile', () => {
       prompt: 'subject_definitions:\nSubject 1 is in Picture 1.',
       referenceImageUrls: ['https://example.test/reference-1.png', 'https://example.test/reference-2.png'],
       referenceAudioFilenames: [],
-      frameCount: resolveH3DurationPlan(4).frameCount,
+      frameCount: resolveH3DurationPlan({ inputMode: 'reference', requestedDurationSeconds: 5 }).frameCount,
       aspectRatio: '16:9',
       seed: 7,
     })
@@ -75,7 +75,7 @@ describe('MiniMax H3 dual-stage profile', () => {
       prompt: 'subject_definitions:\nSubject 1 is in Picture 1.',
       referenceImageUrls: ['https://example.test/reference-3.png'],
       referenceAudioFilenames: [],
-      frameCount: resolveH3DurationPlan(11).frameCount,
+      frameCount: resolveH3DurationPlan({ inputMode: 'reference', requestedDurationSeconds: 11 }).frameCount,
       aspectRatio: '9:16',
       seed: 8,
     })
@@ -86,7 +86,7 @@ describe('MiniMax H3 dual-stage profile', () => {
     expect(first.graph[first.profile.h3NodeId]?.inputs['ref_images.ref_image_1']).toEqual([first.profile.referenceResizeNodeIds[1], 0])
     expect(first.graph[first.profile.h3NodeId]?.inputs['ref_images.ref_image_2']).toBeUndefined()
     expect(first.graph[first.profile.promptNodeId]?.inputs.value).toContain('subject_definitions')
-    expect(first.graph[first.profile.h3NodeId]?.inputs.length).toBe(107)
+    expect(first.graph[first.profile.h3NodeId]?.inputs.length).toBe(124)
     expect(first.graph[first.profile.firstUpscaleNodeId]?.inputs.width).toBe(1376)
     expect(first.graph[first.profile.finalUpscaleNodeId]?.inputs.height).toBe(1152)
     expect(second.graph[second.profile.h3NodeId]?.inputs.length).toBe(277)

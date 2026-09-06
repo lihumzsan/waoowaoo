@@ -147,13 +147,18 @@ export interface VideoContinuationInputCapabilities {
   }>
 }
 
+export interface VideoInputModePolicy {
+  durationOptions: number[]
+}
+
 export interface VideoCapabilities {
   promptProfile: VideoPromptProfile
   supportedInputModes?: VideoInputMode[]
   supportsTextToVideo?: boolean
   generationModeOptions?: string[]
   generateAudioOptions?: boolean[]
-  durationOptions?: number[]
+  aspectRatioOptions?: string[]
+  inputModePolicies?: Partial<Record<VideoInputMode, VideoInputModePolicy>>
   resolutionOptions?: string[]
   firstlastframe?: boolean
   supportGenerateAudio?: boolean
@@ -269,7 +274,8 @@ const VIDEO_ALLOWED_FIELDS = new Set<keyof VideoCapabilities>([
   'supportsTextToVideo',
   'generationModeOptions',
   'generateAudioOptions',
-  'durationOptions',
+  'aspectRatioOptions',
+  'inputModePolicies',
   'resolutionOptions',
   'firstlastframe',
   'supportGenerateAudio',
@@ -601,6 +607,88 @@ function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unk
     })
   }
 
+  const aspectRatioOptions = raw.aspectRatioOptions
+  if (
+    (isStringArray(supportedInputModes) && supportedInputModes.length > 0 && !isStringArray(aspectRatioOptions))
+    || (aspectRatioOptions !== undefined && (
+      !isStringArray(aspectRatioOptions)
+      || aspectRatioOptions.length === 0
+      || new Set(aspectRatioOptions).size !== aspectRatioOptions.length
+      || aspectRatioOptions.some((value) => !/^[1-9]\d*:[1-9]\d*$/u.test(value))
+    ))
+  ) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.video.aspectRatioOptions',
+      message: 'aspectRatioOptions must contain unique canonical W:H values',
+    })
+  }
+
+  const inputModePolicies = raw.inputModePolicies
+  const canonicalSupportedInputModes = isStringArray(supportedInputModes)
+    && supportedInputModes.every((mode) => validInputModes.has(mode as VideoInputMode))
+    ? supportedInputModes
+    : []
+  if (canonicalSupportedInputModes.length > 0 && !isRecord(inputModePolicies)) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.video.inputModePolicies',
+      message: 'inputModePolicies must declare every supported input mode',
+    })
+  } else if (inputModePolicies !== undefined && !isRecord(inputModePolicies)) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.video.inputModePolicies',
+      message: 'inputModePolicies must be an object',
+    })
+  }
+  const durationOptionsForI18n: number[] = []
+  if (isRecord(inputModePolicies)) {
+    const expectedModes = new Set(canonicalSupportedInputModes)
+    for (const mode of canonicalSupportedInputModes) {
+      if (!Object.hasOwn(inputModePolicies, mode)) {
+        issues.push({
+          code: 'CAPABILITY_FIELD_INVALID',
+          field: `capabilities.video.inputModePolicies.${mode}`,
+          message: `Missing input mode policy: ${mode}`,
+        })
+      }
+    }
+    for (const [mode, value] of Object.entries(inputModePolicies)) {
+      if (!expectedModes.has(mode)) {
+        issues.push({
+          code: 'CAPABILITY_FIELD_INVALID',
+          field: `capabilities.video.inputModePolicies.${mode}`,
+          message: `Unknown or unsupported input mode policy: ${mode}`,
+        })
+        continue
+      }
+      if (!isRecord(value) || Object.keys(value).some((field) => field !== 'durationOptions')) {
+        issues.push({
+          code: 'CAPABILITY_FIELD_INVALID',
+          field: `capabilities.video.inputModePolicies.${mode}`,
+          message: 'Input mode policy must contain only durationOptions',
+        })
+        continue
+      }
+      const options = value.durationOptions
+      if (
+        !isNumberArray(options)
+        || options.length === 0
+        || options.some((duration) => !Number.isSafeInteger(duration) || duration <= 0)
+        || new Set(options).size !== options.length
+      ) {
+        issues.push({
+          code: 'CAPABILITY_FIELD_INVALID',
+          field: `capabilities.video.inputModePolicies.${mode}.durationOptions`,
+          message: 'durationOptions must contain unique positive integers',
+        })
+        continue
+      }
+      durationOptionsForI18n.push(...options)
+    }
+  }
+
   const supportsContinuation = isStringArray(supportedInputModes)
     && supportedInputModes.includes('continuation')
   const continuationInput = raw.continuationInput
@@ -709,15 +797,6 @@ function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unk
       code: 'CAPABILITY_FIELD_INVALID',
       field: 'capabilities.video.generateAudioOptions',
       message: 'generateAudioOptions must be a boolean array',
-    })
-  }
-
-  const durationOptions = raw.durationOptions
-  if (durationOptions !== undefined && !isNumberArray(durationOptions)) {
-    issues.push({
-      code: 'CAPABILITY_FIELD_INVALID',
-      field: 'capabilities.video.durationOptions',
-      message: 'durationOptions must be a finite number array',
     })
   }
 
@@ -835,7 +914,9 @@ function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unk
   validateFieldI18nMap(issues, 'video', raw.fieldI18n, {
     generationMode: isStringArray(generationModeOptions) ? generationModeOptions : undefined,
     generateAudio: isBooleanArray(generateAudioOptions) ? generateAudioOptions : undefined,
-    duration: isNumberArray(durationOptions) ? durationOptions : undefined,
+    duration: durationOptionsForI18n.length > 0
+      ? Array.from(new Set(durationOptionsForI18n))
+      : undefined,
     resolution: isStringArray(resolutionOptions) ? resolutionOptions : undefined,
   })
 }

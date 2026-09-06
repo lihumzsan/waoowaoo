@@ -1,14 +1,8 @@
-import {
-  H3_CONTINUATION_GUIDE_FRAMES,
-  H3_FRAMES_PER_SECOND,
-  H3_MAX_SEGMENT_DURATION_SECONDS,
-} from './h3-timeline'
+import type { VideoInputMode } from '@/lib/ai-registry/types'
+import { H3_CONTINUATION_GUIDE_FRAMES, H3_FRAMES_PER_SECOND, H3_MAX_SEGMENT_DURATION_SECONDS } from './h3-timeline'
 
-export const H3_DURATION_OPTIONS_SECONDS = [
-  4, 5, 6, 7, 8, 9, 10, H3_MAX_SEGMENT_DURATION_SECONDS,
-] as const
-export const H3_DURATION_MIN_SECONDS = H3_DURATION_OPTIONS_SECONDS[0]
-export const H3_DURATION_MAX_SECONDS = H3_MAX_SEGMENT_DURATION_SECONDS
+export const H3_STANDARD_DURATION_OPTIONS_SECONDS = [4, 5, 6, 7, 8, 9, 10, H3_MAX_SEGMENT_DURATION_SECONDS] as const
+export const H3_REFERENCE_DURATION_OPTIONS_SECONDS = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const
 
 const H3_FRAME_GRID = 17
 const H3_FRAME_REMAINDER = 5
@@ -20,26 +14,20 @@ export type H3DurationPlan = {
   readonly promptEndSeconds: number
 }
 
-function resolveH3DurationPlanWithGuide(
-  requestedDurationSeconds: number,
-  leadingGuideFrames: number,
-): H3DurationPlan {
-  if (
-    !Number.isInteger(requestedDurationSeconds)
-    || requestedDurationSeconds < H3_DURATION_MIN_SECONDS
-    || requestedDurationSeconds > H3_DURATION_MAX_SECONDS
-  ) {
-    throw new Error(`H3_REQUESTED_DURATION_INVALID:${String(requestedDurationSeconds)}`)
+function durationOptionsForMode(inputMode: VideoInputMode): readonly number[] {
+  if (inputMode === 'reference') return H3_REFERENCE_DURATION_OPTIONS_SECONDS
+  if (inputMode === 'first_frame' || inputMode === 'first_last_frame' || inputMode === 'continuation') {
+    return H3_STANDARD_DURATION_OPTIONS_SECONDS
   }
+  throw new Error(`H3_INPUT_MODE_UNSUPPORTED:${inputMode}`)
+}
+
+function resolveAlignedPlan(requestedDurationSeconds: number, leadingGuideFrames: number): H3DurationPlan {
   const minimumFrames = Math.max(
     H3_MIN_FRAMES,
     Math.round(requestedDurationSeconds * H3_FRAMES_PER_SECOND) + leadingGuideFrames,
   )
-  const framesUntilNextGrid = (
-    H3_FRAME_REMAINDER
-    - (minimumFrames % H3_FRAME_GRID)
-    + H3_FRAME_GRID
-  ) % H3_FRAME_GRID
+  const framesUntilNextGrid = (H3_FRAME_REMAINDER - (minimumFrames % H3_FRAME_GRID) + H3_FRAME_GRID) % H3_FRAME_GRID
   const frameCount = minimumFrames + framesUntilNextGrid
   return {
     requestedDurationSeconds,
@@ -48,21 +36,19 @@ function resolveH3DurationPlanWithGuide(
   }
 }
 
-export function resolveH3DurationPlan(requestedDurationSeconds: number): H3DurationPlan {
-  return resolveH3DurationPlanWithGuide(requestedDurationSeconds, 0)
-}
-
-export function resolveH3ContinuationDurationPlan(
-  requestedDurationSeconds: number,
-): H3DurationPlan {
-  return resolveH3DurationPlanWithGuide(
-    requestedDurationSeconds,
-    H3_CONTINUATION_GUIDE_FRAMES,
+export function resolveH3DurationPlan(input: {
+  readonly inputMode: VideoInputMode
+  readonly requestedDurationSeconds: number
+}): H3DurationPlan {
+  if (!Number.isInteger(input.requestedDurationSeconds) || !durationOptionsForMode(input.inputMode).includes(input.requestedDurationSeconds)) {
+    throw new Error(`H3_REQUESTED_DURATION_INVALID:${input.inputMode}:${String(input.requestedDurationSeconds)}`)
+  }
+  return resolveAlignedPlan(
+    input.requestedDurationSeconds,
+    input.inputMode === 'continuation' ? H3_CONTINUATION_GUIDE_FRAMES : 0,
   )
 }
 
 export const H3_CONTINUATION_MAX_SOURCE_DURATION_MS = Math.floor(
-  (
-    resolveH3DurationPlan(H3_DURATION_MAX_SECONDS).frameCount + 1
-  ) / H3_FRAMES_PER_SECOND * 1_000,
+  (resolveAlignedPlan(H3_MAX_SEGMENT_DURATION_SECONDS, 0).frameCount + 1) / H3_FRAMES_PER_SECOND * 1_000,
 )

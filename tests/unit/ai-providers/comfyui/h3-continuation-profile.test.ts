@@ -3,7 +3,7 @@ import {
   buildH3PromptGraph,
 } from '@/lib/ai-providers/comfyui/profiles'
 import { H3_CONTINUATION_GUIDE_FRAMES } from '@/lib/video-generation/h3-timeline'
-import { resolveH3ContinuationDurationPlan } from '@/lib/video-generation/h3-duration'
+import { resolveH3DurationPlan } from '@/lib/video-generation/h3-duration'
 
 const continuationFrameFilenames = Array.from(
   { length: 22 },
@@ -13,7 +13,7 @@ const continuationFrameFilenames = Array.from(
 describe('MiniMax H3 continuation profile', () => {
   it('adds a 22-frame guide before the first novel frame', () => {
     expect(H3_CONTINUATION_GUIDE_FRAMES).toBe(22)
-    const durationPlan = resolveH3ContinuationDurationPlan(4)
+    const durationPlan = resolveH3DurationPlan({ inputMode: 'continuation', requestedDurationSeconds: 4 })
     expect(durationPlan.frameCount).toBe(124)
     expect(durationPlan.promptEndSeconds).toBe(5.167)
 
@@ -53,7 +53,7 @@ describe('MiniMax H3 continuation profile', () => {
     expect(() => buildH3PromptGraph({
       mode: 'continuation',
       prompt: 'subject_definitions:\nContinue the established subject.',
-      frameCount: resolveH3ContinuationDurationPlan(4).frameCount,
+      frameCount: resolveH3DurationPlan({ inputMode: 'continuation', requestedDurationSeconds: 4 }).frameCount,
       aspectRatio: '16:9',
       seed: 17,
       continuationFrameFilenames: continuationFrameFilenames.slice(0, 21),
@@ -62,7 +62,7 @@ describe('MiniMax H3 continuation profile', () => {
     expect(() => buildH3PromptGraph({
       mode: 'continuation',
       prompt: 'subject_definitions:\nContinue the established subject.',
-      frameCount: resolveH3ContinuationDurationPlan(4).frameCount,
+      frameCount: resolveH3DurationPlan({ inputMode: 'continuation', requestedDurationSeconds: 4 }).frameCount,
       aspectRatio: '16:9',
       seed: 17,
       continuationFrameFilenames: continuationFrameFilenames.map((name, index) => (

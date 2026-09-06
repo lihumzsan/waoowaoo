@@ -4,18 +4,18 @@ import { MUSIC_KEY_SCALE_VALUES, MUSIC_TIME_SIGNATURE_VALUES } from '@/lib/works
 
 import type { ComfyUiRuntimeTargetId } from './config'
 import {
-  H3_ASPECT_RATIOS,
   H3_MAX_REFERENCE_AUDIOS,
   H3_MAX_REFERENCE_IMAGES,
   resolveH3Dimensions,
-  type H3AspectRatio,
 } from './profiles'
+import { H3_ASPECT_RATIOS, type H3AspectRatio } from '@/lib/video-generation/h3-reference-runtime-plan'
 import {
   H3_CONTINUATION_MIN_SOURCE_DURATION_MS,
 } from '@/lib/video-generation/h3-timeline'
 import {
   H3_CONTINUATION_MAX_SOURCE_DURATION_MS,
-  H3_DURATION_OPTIONS_SECONDS,
+  H3_REFERENCE_DURATION_OPTIONS_SECONDS,
+  H3_STANDARD_DURATION_OPTIONS_SECONDS,
 } from '@/lib/video-generation/h3-duration'
 
 export const COMFYUI_H3_MODEL_ID = 'minimax-h3-dual-stage-2mp'
@@ -61,7 +61,13 @@ export const COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
       video: {
         promptProfile: 'minimax_h3_multimodal_v3',
         supportedInputModes: ['reference', 'first_frame', 'first_last_frame', 'continuation'], supportsTextToVideo: false,
-        durationOptions: [...H3_DURATION_OPTIONS_SECONDS],
+        aspectRatioOptions: [...H3_ASPECT_RATIOS],
+        inputModePolicies: {
+          reference: { durationOptions: [...H3_REFERENCE_DURATION_OPTIONS_SECONDS] },
+          first_frame: { durationOptions: [...H3_STANDARD_DURATION_OPTIONS_SECONDS] },
+          first_last_frame: { durationOptions: [...H3_STANDARD_DURATION_OPTIONS_SECONDS] },
+          continuation: { durationOptions: [...H3_STANDARD_DURATION_OPTIONS_SECONDS] },
+        },
         generateAudioOptions: [true], supportGenerateAudio: true,
         assetReferenceMultiReference: true, firstlastframe: true,
         maxReferenceImages: H3_MAX_REFERENCE_IMAGES,

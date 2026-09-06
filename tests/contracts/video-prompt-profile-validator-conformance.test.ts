@@ -40,6 +40,8 @@ describe('video prompt profile validator conformance', () => {
       video: {
         promptProfile: 'minimax_h3_multimodal_v3',
         supportedInputModes: ['continuation'],
+        aspectRatioOptions: ['16:9'],
+        inputModePolicies: { continuation: { durationOptions: [4] } },
       },
     })).toContainEqual(expect.objectContaining({
       code: 'CAPABILITY_FIELD_INVALID',
@@ -50,6 +52,8 @@ describe('video prompt profile validator conformance', () => {
       video: {
         promptProfile: 'minimax_h3_multimodal_v3',
         supportedInputModes: ['continuation'],
+        aspectRatioOptions: ['16:9'],
+        inputModePolicies: { continuation: { durationOptions: [4, 5] } },
         continuationInput: {
           minSourceDurationMs: 917,
           maxSourceDurationMs: 13_041,
@@ -59,5 +63,42 @@ describe('video prompt profile validator conformance', () => {
         },
       },
     })).toEqual([])
+  })
+
+  it('requires one duration policy per supported mode and an explicit ratio set', () => {
+    expect(validateModelCapabilities('video', {
+      video: {
+        promptProfile: 'generic_v1',
+        supportedInputModes: ['reference'],
+        inputModePolicies: { reference: { durationOptions: [5] } },
+      },
+    })).toContainEqual(expect.objectContaining({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.video.aspectRatioOptions',
+    }))
+
+    expect(validateModelCapabilities('video', {
+      video: {
+        promptProfile: 'generic_v1',
+        supportedInputModes: ['reference', 'first_frame'],
+        aspectRatioOptions: ['16:9'],
+        inputModePolicies: { reference: { durationOptions: [5] } },
+      },
+    })).toContainEqual(expect.objectContaining({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.video.inputModePolicies.first_frame',
+    }))
+
+    expect(validateModelCapabilities('video', {
+      video: {
+        promptProfile: 'generic_v1',
+        supportedInputModes: ['reference'],
+        aspectRatioOptions: [],
+        inputModePolicies: { reference: { durationOptions: [] } },
+      },
+    })).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: 'capabilities.video.aspectRatioOptions' }),
+      expect.objectContaining({ field: 'capabilities.video.inputModePolicies.reference.durationOptions' }),
+    ]))
   })
 })

@@ -1,9 +1,12 @@
 import dualStageWorkflow from './workflows/h3-dual-stage-2mp.json'
 import frameDualStageWorkflow from './workflows/h3-frame-dual-stage-2mp.json'
 import { H3_CONTINUATION_GUIDE_FRAMES } from '@/lib/video-generation/h3-timeline'
+import {
+  H3_ASPECT_RATIOS,
+  type H3AspectRatio,
+} from '@/lib/video-generation/h3-reference-runtime-plan'
 
-export const H3_ASPECT_RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16', '9:21'] as const
-export type H3AspectRatio = (typeof H3_ASPECT_RATIOS)[number]
+export { H3_ASPECT_RATIOS, type H3AspectRatio }
 
 export type ComfyUiPromptGraph = Record<string, {
   readonly class_type: string

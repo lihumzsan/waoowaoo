@@ -30,8 +30,11 @@ describe('project production prompt profile context', () => {
       const declared = entry.capabilities?.video
       expect(video.promptProfile).toBe(declared?.promptProfile)
       expect(video.supportedInputModes).toEqual(declared?.supportedInputModes)
+      const allDeclaredDurations = new Set<number>()
       for (const inputMode of declared?.supportedInputModes ?? []) {
-        for (const duration of video.allowedSegmentDurationsSeconds) {
+        const durations = declared?.inputModePolicies?.[inputMode]?.durationOptions ?? []
+        for (const duration of durations) {
+          allDeclaredDurations.add(duration)
           const plans = video.segmentDurationPlans.filter((plan) => (
             plan.inputMode === inputMode && plan.requestedDurationSeconds === duration
           ))
@@ -49,6 +52,15 @@ describe('project production prompt profile context', () => {
           }
         }
       }
+      expect(video.allowedSegmentDurationsSeconds).toEqual(
+        Array.from(allDeclaredDurations).sort((left, right) => left - right),
+      )
+      expect(video.segmentDurationPlans).toHaveLength(
+        Array.from(declared?.supportedInputModes ?? []).reduce(
+          (total, inputMode) => total + (declared?.inputModePolicies?.[inputMode]?.durationOptions.length ?? 0),
+          0,
+        ),
+      )
       expect(video.continuationInput).toEqual(declared?.continuationInput ?? null)
     }
   })
