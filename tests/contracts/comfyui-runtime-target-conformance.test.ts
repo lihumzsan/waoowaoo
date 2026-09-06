@@ -62,16 +62,21 @@ describe('ComfyUI runtime target registry', () => {
     const registeredMusicKeys = COMFYUI_REGISTERED_MODEL_KEYS
       .filter((modelKey) => profileKeys.includes(modelKey))
       .sort()
-    const capabilityDefaults = getPlatformCapabilityDefaults()
-
     expect(capabilityKeys).toEqual(profileKeys)
     expect(apiConfigKeys).toEqual(profileKeys)
     expect(presetKeys).toEqual(profileKeys)
     expect(registeredMusicKeys).toEqual(profileKeys)
 
-    for (const profile of COMFYUI_MUSIC_PROFILES) {
-      expect(resolveComfyUiRuntimeTargetIdForModelKey(profile.modelKey)).toBe(profile.runtimeTargetId)
-      expect(capabilityDefaults[profile.modelKey]).toMatchObject(profile.defaultGenerationOptions)
+    vi.stubEnv('PLATFORM_MUSIC_DURATION_SECONDS', '')
+    vi.stubEnv('PLATFORM_MUSIC_OUTPUT_FORMAT', '')
+    try {
+      const capabilityDefaults = getPlatformCapabilityDefaults()
+      for (const profile of COMFYUI_MUSIC_PROFILES) {
+        expect(resolveComfyUiRuntimeTargetIdForModelKey(profile.modelKey)).toBe(profile.runtimeTargetId)
+        expect(capabilityDefaults[profile.modelKey]).toMatchObject(profile.defaultGenerationOptions)
+      }
+    } finally {
+      vi.unstubAllEnvs()
     }
   })
 

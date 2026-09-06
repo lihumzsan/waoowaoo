@@ -113,10 +113,7 @@ export const COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelType: 'music' as const,
     provider: 'comfyui' as const,
     modelId: profile.modelId,
-    capabilities: { music: profile.capabilities } as {
-      readonly music: typeof profile.capabilities
-      readonly video: never
-    },
+    capabilities: { music: profile.capabilities },
   })),
 ] as const
 

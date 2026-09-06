@@ -83,7 +83,7 @@ describe('ComfyUI H3 dual-stage profile', () => {
 
   it.each(H3_ASPECT_RATIOS)('accepts both Ref and frame-mode %s delivery ratios as continuation sources', (aspectRatio) => {
     const h3 = COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES.find((entry) => (
-      entry.modelId === COMFYUI_H3_MODEL_ID
+      entry.modelType === 'video' && entry.modelId === COMFYUI_H3_MODEL_ID
     ))
     const declaredSourceRatios = h3?.capabilities.video.continuationInput
       ?.sourceAspectRatiosByTarget[aspectRatio] ?? []
@@ -119,7 +119,9 @@ describe('ComfyUI H3 dual-stage profile', () => {
   })
 
   it('declares all four explicit H3 input modes and fixed duration', () => {
-    const h3 = COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES.find((entry) => entry.modelId === COMFYUI_H3_MODEL_ID)
+    const h3 = COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES.find((entry) => (
+      entry.modelType === 'video' && entry.modelId === COMFYUI_H3_MODEL_ID
+    ))
     expect(h3?.capabilities.video.promptProfile).toBe('minimax_h3_multimodal_v3')
     expect(h3?.capabilities.video.supportedInputModes).toEqual([
       'reference',
