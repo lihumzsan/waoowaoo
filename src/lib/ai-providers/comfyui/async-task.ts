@@ -1,7 +1,7 @@
 import type { AsyncTaskProviderRegistration } from '@/lib/ai-providers/async-task-types'
 import { normalizeAsyncPollResult } from '@/lib/ai-providers/async-task-types'
 import { formatComfyUiExternalId, parseComfyUiExternalId } from './external-id'
-import { cancelComfyUiAceStepMusic, pollComfyUiAceStepMusic } from './ace-step'
+import { cancelComfyUiMusic, pollComfyUiMusic } from './music-runtime'
 import { cancelComfyUiH3Video, pollComfyUiH3Video } from './h3'
 
 export const comfyuiAsyncTaskProvider: AsyncTaskProviderRegistration = {
@@ -16,7 +16,7 @@ export const comfyuiAsyncTaskProvider: AsyncTaskProviderRegistration = {
   }),
   poll: async ({ parsed }) => {
     const result = parsed.type === 'MUSIC'
-      ? await pollComfyUiAceStepMusic(parsed.requestId, parsed.endpoint)
+      ? await pollComfyUiMusic(parsed.requestId, parsed.endpoint)
       : await pollComfyUiH3Video(parsed.requestId, parsed.endpoint)
     if (result.status === 'pending') return normalizeAsyncPollResult(result)
     if (result.status === 'completed') {
@@ -30,6 +30,6 @@ export const comfyuiAsyncTaskProvider: AsyncTaskProviderRegistration = {
     return normalizeAsyncPollResult(result)
   },
   cancel: async ({ parsed }) => parsed.type === 'MUSIC'
-      ? await cancelComfyUiAceStepMusic(parsed.requestId, parsed.endpoint)
+      ? await cancelComfyUiMusic(parsed.requestId, parsed.endpoint)
       : await cancelComfyUiH3Video(parsed.requestId, parsed.endpoint),
 }

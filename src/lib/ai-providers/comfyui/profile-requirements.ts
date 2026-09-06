@@ -5,6 +5,7 @@ import type { ComfyUiInputSchemaLocation } from './transport'
 const REQUIRED_OPTION_INPUT_NAMES_BY_CLASS = {
   UNETLoader: ['unet_name'],
   CLIPLoader: ['clip_name'],
+  DualCLIPLoader: ['clip_name1', 'clip_name2'],
   VAELoader: ['vae_name'],
   LoraLoaderModelOnly: ['lora_name'],
   LoraLoaderBypassModelOnly: ['lora_name'],

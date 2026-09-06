@@ -3,6 +3,18 @@ import { deriveComfyUiProfileRequirements } from '@/lib/ai-providers/comfyui/pro
 import type { ComfyUiPromptGraph } from '@/lib/ai-providers/comfyui/profiles'
 
 describe('deriveComfyUiProfileRequirements', () => {
+  it('requires both independent text encoder files of DualCLIPLoader', () => {
+    const requirements = deriveComfyUiProfileRequirements({
+      profileId: 'dual-encoder',
+      graph: { '1': { class_type: 'DualCLIPLoader', inputs: {
+        clip_name1: 'qwen_0.6b_ace15.safetensors', clip_name2: 'qwen_1.7b_ace15.safetensors', type: 'ace',
+      } } },
+    })
+    expect(requirements.options).toEqual([
+      { classType: 'DualCLIPLoader', inputName: 'clip_name1', location: 'required', value: 'qwen_0.6b_ace15.safetensors' },
+      { classType: 'DualCLIPLoader', inputName: 'clip_name2', location: 'required', value: 'qwen_1.7b_ace15.safetensors' },
+    ])
+  })
   it('derives unique node classes and exact option values from the selected graph', () => {
     const graph: ComfyUiPromptGraph = {
       '2': {

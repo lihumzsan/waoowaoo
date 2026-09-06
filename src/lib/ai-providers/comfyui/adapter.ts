@@ -1,11 +1,9 @@
 import type { AiProviderAdapter } from '@/lib/ai-providers/runtime-types'
 import { describeMediaVariantBase } from '@/lib/ai-providers/shared/media-adapter'
 import { buildMediaOptionSchema, booleanValidator, enumValidator, integerRangeValidator, nonEmptyStringValidator, stringArrayValidator } from '@/lib/ai-providers/shared/option-schema'
-import { ACE_STEP_MIN_PROVIDER_DURATION_SECONDS, executeComfyUiAceStepMusicGeneration } from './ace-step'
+import { describeComfyUiMusic } from './music-profiles'
+import { prepareComfyUiMusicGeneration } from './music-runtime'
 import {
-  COMFYUI_ACE_STEP_1_5_MODEL_ID,
-  COMFYUI_ACE_STEP_KEY_SCALE_OPTIONS,
-  COMFYUI_ACE_STEP_TIME_SIGNATURE_OPTIONS,
   COMFYUI_H3_MODEL_ID,
 } from './models'
 import { prepareComfyUiH3VideoGeneration } from './h3'
@@ -23,35 +21,8 @@ export const comfyuiAdapter: AiProviderAdapter = {
   providerKey: 'comfyui',
   failure: createAiProviderFailureAdapter('comfyui'),
   music: {
-    describe: (selection) => describeMediaVariantBase({
-      modality: 'music',
-      selection,
-      executionMode: 'async',
-      optionSchema: buildMediaOptionSchema('music', {
-        allowedKeys: ['keyScale', 'timeSignature', 'providerDurationSeconds'],
-        required: ['durationSeconds', 'vocalMode', 'bpm', 'keyScale', 'timeSignature', 'outputFormat'],
-        excludedKeys: ['negativePrompt', 'genre', 'mood', 'referenceVideos'],
-        validators: {
-          durationSeconds: integerRangeValidator({ min: 4, max: 600 }),
-          vocalMode: enumValidator(['instrumental']),
-          bpm: integerRangeValidator({ min: 20, max: 300 }),
-          keyScale: enumValidator(COMFYUI_ACE_STEP_KEY_SCALE_OPTIONS),
-          timeSignature: enumValidator(COMFYUI_ACE_STEP_TIME_SIGNATURE_OPTIONS),
-          outputFormat: enumValidator(['mp3']),
-        },
-        objectValidators: [() => selection.modelId === COMFYUI_ACE_STEP_1_5_MODEL_ID
-          ? { ok: true }
-          : { ok: false, reason: 'unsupported_model' }],
-        normalize: (options) => ({
-          ...options,
-          providerDurationSeconds: Math.max(
-            options.durationSeconds as number,
-            ACE_STEP_MIN_PROVIDER_DURATION_SECONDS,
-          ),
-        }),
-      }),
-    }),
-    execute: executeComfyUiAceStepMusicGeneration,
+    describe: describeComfyUiMusic,
+    prepare: prepareComfyUiMusicGeneration,
   },
   video: {
     describe: (selection) => describeMediaVariantBase({

@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   ACE_STEP_1_5_PROFILE,
   buildAceStepMusicPromptGraph,
+  buildMiniMaxMusic3PromptGraph,
+  COMFYUI_MUSIC_PROFILES,
+  resolveComfyUiMusicProfile,
   resolveAceStepDurationPlan,
-} from '@/lib/ai-providers/comfyui/ace-step'
+} from '@/lib/ai-providers/comfyui/music-profiles'
+import { normalizeAiOptions } from '@/lib/ai-exec/normalize'
 import {
   COMFYUI_ACE_STEP_1_5_MODEL_ID,
   COMFYUI_ACE_STEP_1_5_MODEL_KEY,
@@ -16,6 +20,69 @@ import { promptMusicGenerationItemSchema } from '@/lib/workspace-resource/genera
 import { workspaceResourceGenerationTaskPayloadSchema } from '@/lib/workspace-resource/generation-contract'
 import { WORKSPACE_RESOURCE_SCHEMA } from '@/lib/workspace-resource/schema-registry'
 import { resolveMusicArtifactPlan } from '@/lib/task/execution/artifacts/music'
+
+describe('ComfyUI music profile wire contract', () => {
+  it('maps the verified MiniMax workflow to the active nine-node audio path', () => {
+    const prompt = '  Global Metadata: restrained cinematic ambient.\nVocal Details: soft.  '
+    const lyrics = '  [Verse]\nA quiet line\n  '
+    const graph = buildMiniMaxMusic3PromptGraph({ prompt, lyrics, durationSeconds: 60, seed: 4242 })
+    expect(Object.keys(graph).sort()).toEqual(['107', '41', '42', '43', '44', '45', '46', '47', '48'])
+    expect(graph['41']).toEqual({ class_type: 'UNETLoader', inputs: {
+      unet_name: 'MiniMax-Music-3\\minimax_music3_dit_fp16.safetensors', weight_dtype: 'default',
+    } })
+    expect(graph['43']).toEqual({ class_type: 'CLIPLoader', inputs: {
+      clip_name: 'Minimax-music-3\\minimax_music3_text_encoder_bf16.safetensors', type: 'minimax', device: 'default',
+    } })
+    expect(graph['44']).toEqual({ class_type: 'VAELoader', inputs: {
+      vae_name: 'MiniMax-Music-3\\minimax_music3_dav.safetensors',
+    } })
+    expect(graph['42']).toEqual({ class_type: 'MiniMaxMusic3TextEncode', inputs: {
+      clip: ['43', 0], caption: prompt, lyrics, max_duration: 60, seed: 4242, cfg_scale: 1.7, top_k: 50,
+    } })
+    expect(graph['45']).toEqual({ class_type: 'ConditioningZeroOut', inputs: { conditioning: ['42', 0] } })
+    expect(graph['46']).toEqual({ class_type: 'EmptyMiniMaxMusic3LatentAudio', inputs: {
+      seconds: ['42', 1], batch_size: 1,
+    } })
+    expect(graph['47']).toEqual({ class_type: 'KSampler', inputs: {
+      model: ['41', 0], positive: ['42', 0], negative: ['45', 0], latent_image: ['46', 0],
+      seed: 4242, steps: 30, cfg: 1.7, sampler_name: 'euler', scheduler: 'simple', denoise: 1,
+    } })
+    expect(graph['48']).toEqual({ class_type: 'VAEDecodeAudio', inputs: { samples: ['47', 0], vae: ['44', 0] } })
+    expect(graph['107']).toMatchObject({ class_type: 'SaveAudioAdvanced', inputs: {
+      audio: ['48', 0], format: 'mp3', 'format.quality': 'V0',
+    } })
+  })
+
+  it('rejects inconsistent selection identities for every production music profile', () => {
+    for (const profile of COMFYUI_MUSIC_PROFILES) {
+      const selection = { provider: 'comfyui', modelId: profile.modelId, modelKey: profile.modelKey, variantSubKind: 'official' as const }
+      expect(resolveComfyUiMusicProfile(selection)).toBe(profile)
+      for (const mutation of [{ provider: 'other' }, { modelId: 'unknown' }, { modelKey: 'comfyui::unknown' }]) {
+        expect(() => resolveComfyUiMusicProfile({ ...selection, ...mutation })).toThrow()
+      }
+    }
+  })
+
+  it('validates MiniMax vocals before mapping exact lyrics and instrumental control text', () => {
+    const profile = resolveComfyUiMusicProfile({ provider: 'comfyui', modelId: 'minimax-music-3', modelKey: 'comfyui::minimax-music-3', variantSubKind: 'official' })
+    const options = { durationSeconds: 60, vocalMode: 'vocal', outputFormat: 'mp3', lyrics: '  [Verse]\nA quiet line  ' }
+    const normalize = (candidate: Record<string, unknown>) => normalizeAiOptions({ schema: profile.optionSchema, options: candidate, context: profile.modelKey })
+    expect(normalize(options)?.lyrics).toBe(options.lyrics)
+    const built = profile.buildGraph({ prompt: 'Caption', options, seed: 42 })
+    expect(built.graph['42']?.inputs.lyrics).toBe(options.lyrics)
+    expect(profile.buildGraph({ prompt: 'Caption', options: { durationSeconds: 1, vocalMode: 'instrumental', outputFormat: 'mp3' }, seed: 42 }).graph['42']?.inputs.lyrics).toBe('[Instrumental]')
+    for (const invalid of [
+      { ...options, lyrics: undefined }, { ...options, lyrics: '  ' },
+      { ...options, vocalMode: 'instrumental' }, { ...options, durationSeconds: 0 },
+      { ...options, durationSeconds: 361 }, { ...options, durationSeconds: 1.5 },
+      { ...options, outputFormat: 'wav' },
+    ]) expect(() => normalize(invalid)).toThrow()
+    for (const unsupported of ['negativePrompt', 'genre', 'mood', 'bpm', 'keyScale', 'timeSignature', 'referenceVideos', 'seed']) {
+      expect(() => normalize({ ...options, [unsupported]: 'unsupported' })).toThrow()
+    }
+    expect(normalize({ ...options, durationSeconds: 360 })).toBeDefined()
+  })
+})
 
 describe('ComfyUI ACE-Step 1.5 music contract', () => {
   it('maps one frozen instrumental cue to the verified API graph without rewriting it', () => {

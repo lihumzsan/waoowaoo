@@ -1,0 +1,11 @@
+{
+  "41": { "class_type": "UNETLoader", "inputs": { "unet_name": "MiniMax-Music-3\\minimax_music3_dit_fp16.safetensors", "weight_dtype": "default" } },
+  "42": { "class_type": "MiniMaxMusic3TextEncode", "inputs": { "clip": ["43", 0], "caption": "", "lyrics": "[Instrumental]", "seed": 0, "max_duration": 60, "cfg_scale": 1.7, "top_k": 50 } },
+  "43": { "class_type": "CLIPLoader", "inputs": { "clip_name": "Minimax-music-3\\minimax_music3_text_encoder_bf16.safetensors", "type": "minimax", "device": "default" } },
+  "44": { "class_type": "VAELoader", "inputs": { "vae_name": "MiniMax-Music-3\\minimax_music3_dav.safetensors" } },
+  "45": { "class_type": "ConditioningZeroOut", "inputs": { "conditioning": ["42", 0] } },
+  "46": { "class_type": "EmptyMiniMaxMusic3LatentAudio", "inputs": { "seconds": ["42", 1], "batch_size": 1 } },
+  "47": { "class_type": "KSampler", "inputs": { "model": ["41", 0], "positive": ["42", 0], "negative": ["45", 0], "latent_image": ["46", 0], "seed": 0, "steps": 30, "cfg": 1.7, "sampler_name": "euler", "scheduler": "simple", "denoise": 1 } },
+  "48": { "class_type": "VAEDecodeAudio", "inputs": { "samples": ["47", 0], "vae": ["44", 0] } },
+  "107": { "class_type": "SaveAudioAdvanced", "inputs": { "filename_prefix": "waoowaoo/minimax-music-3", "format": "mp3", "format.quality": "V0", "audio": ["48", 0] } }
+}
