@@ -601,6 +601,59 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
     expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
   })
 
+  it('rejects an audio autogrow capacity below three before uploading bytes', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    const incompatible = objectInfo('MiniMaxH3AudioConditioningT8')
+    const optional = (
+      incompatible.MiniMaxH3AudioConditioningT8 as { input: { optional: Record<string, unknown> } }
+    ).input.optional
+    const refAudios = optional.ref_audios as [string, { template: { max: number } }]
+    refAudios[1].template.max = 2
+    server!.defineScenario({
+      method: 'GET',
+      path: '/object_info/MiniMaxH3AudioConditioningT8',
+      mode: 'success',
+      submitResponse: { status: 200, body: incompatible },
+    })
+
+    await expect(executeComfyUiH3VideoGeneration(referenceAudioInput)).rejects.toMatchObject({
+      name: 'ProviderSubmissionError',
+      disposition: 'pre_accept_rejected',
+      externalId: null,
+      message: expect.stringContaining(
+        'COMFYUI_NODE_INPUT_INCOMPATIBLE:MiniMaxH3AudioConditioningT8:ref_audios:AUDIO',
+      ),
+    })
+    expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
+    expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
+  })
+
+  it('rejects a missing bypass LoRA before uploading bytes', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    const incompatible = objectInfo('LoraLoaderBypassModelOnly')
+    const required = (
+      incompatible.LoraLoaderBypassModelOnly as { input: { required: Record<string, unknown> } }
+    ).input.required
+    required.lora_name = [['another-lora.safetensors']]
+    server!.defineScenario({
+      method: 'GET',
+      path: '/object_info/LoraLoaderBypassModelOnly',
+      mode: 'success',
+      submitResponse: { status: 200, body: incompatible },
+    })
+
+    await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
+      name: 'ProviderSubmissionError',
+      disposition: 'pre_accept_rejected',
+      externalId: null,
+      message: expect.stringContaining('COMFYUI_MODEL_MISSING:h3\\'),
+    })
+    expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
+    expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
+  })
+
   it('rejects a missing learned latent upscaler model before uploading bytes', async () => {
     vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
     defineValidPreflight(server!)
@@ -708,6 +761,7 @@ describe('provider contract - ComfyUI H3 submission disposition', () => {
     expect(firstLastGraph['309']?.class_type).toBe('MiniMaxH3ImageToVideo')
     expect(firstLastGraph['326']?.inputs.url).toBe('https://media.example.com/last.png')
     expect(firstLastGraph['309']?.inputs.last_frame).toEqual(['327', 0])
+    expect(server!.getRequests('POST', '/upload/image')).toHaveLength(1)
   })
 
   it('keys the preflight cache by the selected frozen profile fingerprint', async () => {
