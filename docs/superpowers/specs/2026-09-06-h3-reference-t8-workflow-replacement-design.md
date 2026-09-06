@@ -21,7 +21,7 @@ Ref 任务，因此这是一次硬切换；切换前仍做一次只读非终态�
 
 参考输入能力保持不变：1–8 张有序参考图、0–3 段有序参考音频，音频必须与至少一张参考图同时使用。
 Ref 继续支持当前 H3 的全部比例：`21:9`、`16:9`、`4:3`、`1:1`、`3:4`、`9:16`、`9:21`；请求传入
-哪个合法比例，两级分辨率选择和最终 2MP 输出就使用哪个比例。`16:9` 只是附件工作流的服务器实测配置，
+哪个合法比例，两级采样尺寸和最终 2MP 输出就使用哪个比例。`16:9` 只是附件工作流的服务器实测配置，
 不是 capability 限制。Ref 可请求 5–15 秒；其他三个 H3 模式仍使用现有 4–11 秒规则。
 
 ## 2. 输入材料的权威性
@@ -189,7 +189,7 @@ continuation 仍在基础请求帧之上加入现有 22 个 guide frames，其�
   参考音频顺序。
 - `DualClockSigmas`、`ParityFEC_Schedule` 的 4+5 调度、noise、guiders、第一阶段 sampler。
 - learned latent upscale、latent reconcile、detail mixer 和第二阶段 sampler。
-- AV decode、固定 2MP selector、NVIDIA RTX VSR。
+- AV decode、应用注入的固定 2MP 最终尺寸、NVIDIA RTX VSR。
 - 唯一 `VHS_VideoCombine`，24fps，并连接 H3 原生音轨。
 
 所有固定采样器、scheduler、attention、LoRA、denoise、VAE 和 RTX VSR 值按服务器已验证附件逐项冻结；
@@ -203,8 +203,9 @@ continuation 仍在基础请求帧之上加入现有 22 个 guide frames，其�
 - 删除附件中的时长输入和数学表达式节点；应用把唯一 `frameCount` 同时写入两级 conditioning。
 - 只保留最多 8 个参考图 loader，不把附件第 9 个备用图片节点解释成新 capability。
 - Prompt 只保留一个节点/输入源，两级 conditioning 引用同一冻结 Prompt。
-- 把附件固定的 `16:9 (Widescreen)` 改为由 graph builder 从产品比例进行穷尽映射，并同时写入一采和
-  最终两个 `ResolutionSelector`。
+- 删除附件中两个只承担 UI 尺寸计算的 `ResolutionSelector`。[ComfyUI 核心节点实现](https://github.com/Comfy-Org/ComfyUI/blob/master/comfy_extras/nodes_resolution.py)
+  不提供 `9:21` 枚举，不能用它缩窄现有 H3 capability；graph builder 使用与该节点相同的“比例 + 总 MP
+  + 32 对齐”公式，把一采和最终阶段的宽高整数直接写入消费节点。
 - 将最终编码从 H.265 10-bit CRF 22 改为 H.264、yuv420p、CRF 10。
 - 将最终输出节点规范为 profile 声明的 `168`；删除备用输出和中间预览输出。
 
@@ -220,11 +221,11 @@ continuation 仍在基础请求帧之上加入现有 22 个 guide frames，其�
 - 0–3 个按冻结顺序上传后的参考音频文件身份；
 - 从逻辑 invocation identity 派生的稳定安全整数 seed。
 
-graph builder 将产品比例通过穷尽映射转换为 ComfyUI `ResolutionSelector` 的枚举值：一采 selector
-同时接收该比例和时长档的一采 MP；learned latent upscaler 使用同档二采 MP 并保持来源比例；最终
-selector 接收同一比例和固定 2MP。三个节点的宽高均按 32 对齐。graph builder 删除未使用的动态
-`ref_images.ref_image_N` / `ref_audios.ref_audio_N` 输入，并把实际 loader 同序连接到两级 conditioning；
-不以空字符串、重复第一张图或静默截断填满端口。
+graph builder 从产品比例和时长档的一采 MP 计算一采宽高，直接写入第一级 conditioning；learned latent
+upscaler 使用同档二采 MP 并保持来源比例；最终宽高从同一产品比例和固定 2MP 计算，直接写入 RTX VSR
+resize。宽高计算严格复制 ComfyUI `ResolutionSelector` 的面积公式并按 32 对齐，但不依赖其不完整枚举。
+graph builder 删除未使用的动态 `ref_images.ref_image_N` / `ref_audios.ref_audio_N` 输入，并把实际 loader
+同序连接到两级 conditioning；不以空字符串、重复第一张图或静默截断填满端口。
 
 ## 7. 参考媒体所有权与传输
 
@@ -260,8 +261,8 @@ H3 Ref preflight 在任何媒体上传和 `/prompt` 前获取目标 runtime `/ob
 - 视频 VAE、音频 VAE、CLIP、UNET、所有 LoRA 和 learned latent upscale 模型精确存在；
 - 固定 sampler/scheduler/attention/backend/detail mixer 选项被当前节点接受；
 - RTX VSR 节点和 `nvidia_rtx_vsr` 选项存在；
-- 两个 `ResolutionSelector` 接受七种产品比例对应的精确 runtime 枚举，且 MP 与 multiple 输入可写；
 - learned latent upscaler 接受 `target_megapixels` 和保持来源比例的固定策略；
+- 两级 conditioning 与最终 RTX VSR resize 接受 graph builder 写入的宽高整数；
 - `VHS_VideoCombine` 支持 H.264、yuv420p、CRF 与音轨输入；
 - 两级 conditioning 的图连线、同一 Prompt、同一帧数与参考顺序满足 profile contract；
 - 最终输出节点唯一且为 `168`。
@@ -329,7 +330,7 @@ model。缺能力时返回带稳定错误码的 pre-accept failure；禁止跳�
 | 场景 | 权威行为 |
 | --- | --- |
 | 正常 | 策略校验、冻结输入、fence、preflight、上传、一次 `/prompt`，最终只物化节点 168 的 MP4 |
-| 七种现有比例中的 Ref | 保留请求比例，并把同一比例写入一采与最终 selector；MP 仍按时长档取值 |
+| 七种现有比例中的 Ref | 保留请求比例，并由同一公式计算一采与最终宽高；MP 仍按时长档取值 |
 | 不支持的比例 | Planner 在 Task/Resource/上传前拒绝，不改成近似比例，不换输入模式 |
 | Ref 时长不在 5–15 | Planner 在副作用前拒绝，不截断、不就近选择 |
 | 其他模式 12–15 秒 | 仍按其现有 4–11 policy 拒绝，Ref 扩容不得泄漏 |
@@ -408,7 +409,7 @@ Provider fence、H3 runtime、external id、poll/cancel 和最终 Resource 交�
 | 执行入口 | 复用唯一 ComfyUI video adapter 和一次 `/prompt` | invocation 观察 |
 | 图效果参数 | 按附件保留 T8 模型链、LoRA、attention、4+5、upscale、VSR | canonical graph 对照清单 + `/object_info` |
 | 时长 | 应用唯一对齐公式，删除图内计算 | 数学 oracle 逐表验证 |
-| 比例传递 | 产品比例穷尽映射并写入一采与最终 selector，二采保持来源比例 | 七种比例 graph 构建验证 |
+| 比例传递 | 产品比例计算一采与最终宽高，二采保持来源比例；不依赖缺少 9:21 的 UI selector | 七种比例 graph 构建验证 |
 | 两级 MP | 每种比例都按关闭表精确写入一采/二采 | 11 个档位 graph 构建验证 |
 | 输出 | 节点 168 唯一 H.264/yuv420p/CRF10 MP4 + 原生音轨 | graph contract + ffprobe |
 | 生命周期 | 保留现有 queued/running/terminal owner | async protocol 检查 |
@@ -433,12 +434,12 @@ Provider fence、H3 runtime、external id、poll/cancel 和最终 Resource 交�
 | H3 多模态 Prompt 必须由主 Agent 唯一写入 | 工作流内 Prompt 改写会产生第二 writer | 固定 `minimax_h3_multimodal_v3` | 保留 UI prompt/math helper 重新解释内容 | 只注入一个冻结 Prompt，图不生成或改写文案 |
 | H3 输出统一为 H.264 | 播放/合并链以 H.264 为共同边界 | 当前图使用 H.264 CRF10 | 照抄附件 H.265 触发浏览器问题或二次转码 | canonical graph 固定 H.264/yuv420p/CRF10，真实 ffprobe |
 | 模型能力需在 Provider 接受前证明 | 节点存在不代表模型/选项存在 | profile requirements + `/object_info` | 新 LoRA/upscaler 字段未进入 preflight | 扩展 requirements 到新图所有模型选择与关键固定选项 |
-| 附件以 16:9 完成服务器验证 | 测试实例的 selector 默认值被误读为产品限制 | 不适用，本次评审中纠正 | Ref 被错误缩窄为只支持 16:9 | capability 保留七种比例；两个 selector 由请求比例动态注入 |
+| 附件以 16:9 完成服务器验证 | 测试实例的 selector 默认值被误读为产品限制 | 不适用，本次评审中纠正 | Ref 被错误缩窄为只支持 16:9 | capability 保留七种比例；应用直接计算并注入宽高 |
 | 15 秒需要降低两阶段面积 | 显存负载由有效帧数与采样面积共同决定 | 用户提供实测安全 MP 表 | 只放宽时长而仍使用 0.70/1.00 MP，导致 16GB 显存失败 | 关闭表把时长、帧数和两级 MP 作为不可拆分的 runtime plan |
 
 本次属于“同一模型的一个输入模式执行图和时长/负载约束同时改变”。上一版全局 duration capability
 只能描述所有模式共有事实，无法承载 Ref-only 5–15 秒；因此不能继续在旧全局字段上叠加例外。比例仍是
-H3 各模式共享事实，但必须从隐藏的 adapter 常量提升为显式 capability，并在新图的两个 selector 中贯穿。
+H3 各模式共享事实，但必须从隐藏的 adapter 常量提升为显式 capability，并由新图 builder 计算和注入尺寸。
 
 ## 16. 文件与模块映射
 
@@ -470,8 +471,8 @@ Async Task Lifecycle、Free Product 与 Workspace Resource。此次不新增/删
 - 关闭表 conformance：每个 Ref duration 唯一映射到用户确认的一采/二采 MP，非法时长无 fallback。
 - graph conformance：从 production profile 构建 1/8 图与 0/1/3 音频，检查两级 conditioning 的节点数、
   顺序、Prompt、帧数、比例、MP、seed、唯一输出和 H.264 参数；9 图、4 音频在 Planner 被拒绝。
-- 比例 conformance：七种产品比例逐一映射到两个 `ResolutionSelector`，二采保持来源比例；任一未声明比例
-  在 Planner 被拒绝，不构造 runtime enum。
+- 比例 conformance：七种产品比例逐一验证一采和最终尺寸的面积公式、方向与 32 对齐，二采保持来源比例；
+  任一未声明比例在 Planner 被拒绝，不构造 graph。
 - ProjectProductionContext：七种项目比例均投影 Ref 5–15 和其他模式 4–11。
 - Planner 副作用边界：Ref 非法比例、4 秒、16 秒、缺图、音频无图均在 Resource/Task 创建前失败。
 - profile preflight：对 production graph 枚举全部 class/model/关键 option；缺一项即明确失败。
