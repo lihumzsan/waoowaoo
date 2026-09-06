@@ -52,7 +52,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
     id: 'music-direction',
     version: '3.0.0',
     title: '音乐与配乐设计',
-    summary: '从剧情与真实成片时间线决定配乐窗口，并直接创作 Eleven Music v2 Composition Plan 与精确 cue 合成参数。',
+    summary: '从剧情与真实成片时间线决定配乐窗口，并按生产能力直接创作最终音乐提示词（人声模式含显式歌词）或 Composition Plan 与精确 cue 合成参数。',
     tags: ['music', 'bgm', 'score', 'audio', 'composition-plan', 'timeline'],
   }),
 }
