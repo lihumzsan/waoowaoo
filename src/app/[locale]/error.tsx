@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { writeClipboardText } from '@/lib/browser/clipboard'
 import { reportClientError } from '@/lib/errors/client-reporter'
 
 interface LocaleErrorPageProps {
@@ -42,8 +43,7 @@ export default function LocaleErrorPage({ error, reset }: LocaleErrorPageProps) 
 
   const handleCopy = useCallback(() => {
     if (!incidentId) return
-    void navigator.clipboard
-      .writeText(incidentId)
+    void writeClipboardText(incidentId)
       .then(() => {
         setCopied(true)
         window.setTimeout(() => setCopied(false), 2000)

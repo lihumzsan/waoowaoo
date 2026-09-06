@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { AppIcon, type AppIconName } from '@/components/ui/icons'
 import { useToast } from '@/contexts/ToastContext'
 import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
+import { writeClipboardText } from '@/lib/browser/clipboard'
 import { useWorkspaceResourceView } from '@/lib/query/hooks'
 import {
   workspaceResourceContentText,
@@ -338,7 +339,7 @@ export function WorkspaceNodeDetailsPanel({
   const copyPrompt = async () => {
     if (!prompt) return
     try {
-      await navigator.clipboard.writeText(prompt)
+      await writeClipboardText(prompt)
       showToast(actionLabels('copyPromptSuccess'), 'success')
     } catch (error) {
       showError(error, actionLabels('copyPromptFailed'))

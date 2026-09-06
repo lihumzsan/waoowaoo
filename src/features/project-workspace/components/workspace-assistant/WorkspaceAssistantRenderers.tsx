@@ -6,6 +6,7 @@ import type { ComponentProps } from 'react'
 import { useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
+import { writeClipboardText } from '@/lib/browser/clipboard'
 import type { OperationPlanView } from '@/lib/operations/plan-contract'
 import { MarkdownTextPart } from './MarkdownTextPart'
 import { readProjectAssistantTextAttachmentsFromMetadata } from '@/lib/project-agent/text-attachments'
@@ -288,10 +289,12 @@ function WorkspaceAssistantAssistantMessageFooter() {
   if (running || !text) return null
 
   const copyAnswer = (): void => {
-    void navigator.clipboard.writeText(text).then(() => {
-      setCopied(true)
-      window.setTimeout(() => setCopied(false), 1500)
-    })
+    void writeClipboardText(text)
+      .then(() => {
+        setCopied(true)
+        window.setTimeout(() => setCopied(false), 1500)
+      })
+      .catch(() => undefined)
   }
 
   return (
