@@ -8,7 +8,13 @@ import {
   readComfyUiString,
 } from './transport'
 import { H3_CONTINUATION_GUIDE_FRAMES } from '@/lib/video-generation/h3-timeline'
-import { H3_MAX_REFERENCE_AUDIOS } from './profiles'
+import { H3_MAX_REFERENCE_AUDIOS, H3_MAX_REFERENCE_IMAGES } from './profiles'
+
+export type H3ReferenceImageFile = {
+  readonly bytes: Uint8Array
+  readonly contentType: 'image/jpeg' | 'image/png' | 'image/webp'
+  readonly extension: 'jpg' | 'png' | 'webp'
+}
 
 export type H3ReferenceAudioFile = {
   readonly bytes: Uint8Array
@@ -112,6 +118,44 @@ export async function uploadH3ReferenceAudios(input: {
       promptId: input.promptId,
       type: 'input',
       responseErrorCode: `COMFYUI_H3_REFERENCE_AUDIO_UPLOAD_RESPONSE_INVALID:${String(index)}`,
+    }))
+  }
+  return uploaded
+}
+
+export async function uploadH3ReferenceImages(input: {
+  readonly baseUrl: string
+  readonly promptId: string
+  readonly files: readonly H3ReferenceImageFile[]
+}): Promise<readonly string[]> {
+  if (input.files.length < 1 || input.files.length > H3_MAX_REFERENCE_IMAGES) {
+    throw new Error(`COMFYUI_H3_REFERENCE_IMAGES_COUNT_INVALID:${String(H3_MAX_REFERENCE_IMAGES)}`)
+  }
+  const uploaded: string[] = []
+  for (const [index, file] of input.files.entries()) {
+    if (file.bytes.length === 0) {
+      throw new Error(`COMFYUI_H3_REFERENCE_IMAGE_EMPTY:${String(index)}`)
+    }
+    if (file.bytes.length > MAX_IMAGE_BYTES) {
+      throw new Error(`COMFYUI_H3_REFERENCE_IMAGE_SIZE_INVALID:${String(index)}`)
+    }
+    const expectedContentType = file.extension === 'jpg'
+      ? 'image/jpeg'
+      : file.extension === 'png'
+        ? 'image/png'
+        : 'image/webp'
+    if (file.contentType !== expectedContentType) {
+      throw new Error(`COMFYUI_H3_REFERENCE_IMAGE_FORMAT_MISMATCH:${String(index)}`)
+    }
+    const expectedName = `reference-image-${String(index).padStart(2, '0')}.${file.extension}`
+    uploaded.push(await uploadH3Input({
+      baseUrl: input.baseUrl,
+      bytes: file.bytes,
+      contentType: file.contentType,
+      expectedName,
+      promptId: input.promptId,
+      type: 'input',
+      responseErrorCode: `COMFYUI_H3_REFERENCE_IMAGE_UPLOAD_RESPONSE_INVALID:${String(index)}`,
     }))
   }
   return uploaded

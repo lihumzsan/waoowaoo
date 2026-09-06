@@ -16,11 +16,28 @@ type ReferenceAudioUploader = (input: {
   }[]
 }) => Promise<readonly string[]>
 
+type ReferenceImageUploader = (input: {
+  readonly baseUrl: string
+  readonly promptId: string
+  readonly files: readonly {
+    readonly bytes: Uint8Array
+    readonly contentType: 'image/jpeg' | 'image/png' | 'image/webp'
+    readonly extension: 'jpg' | 'png' | 'webp'
+  }[]
+}) => Promise<readonly string[]>
+
 function requireReferenceAudioUploader(): ReferenceAudioUploader {
   const candidate: unknown = Reflect.get(h3InputUpload, 'uploadH3ReferenceAudios')
   expect(candidate, 'uploadH3ReferenceAudios export').toBeTypeOf('function')
   if (typeof candidate !== 'function') throw new Error('uploadH3ReferenceAudios export missing')
   return candidate as ReferenceAudioUploader
+}
+
+function requireReferenceImageUploader(): ReferenceImageUploader {
+  const candidate: unknown = Reflect.get(h3InputUpload, 'uploadH3ReferenceImages')
+  expect(candidate, 'uploadH3ReferenceImages export').toBeTypeOf('function')
+  if (typeof candidate !== 'function') throw new Error('uploadH3ReferenceImages export missing')
+  return candidate as ReferenceImageUploader
 }
 
 describe('ComfyUI H3 continuation input upload', () => {
@@ -112,6 +129,82 @@ describe('ComfyUI H3 continuation input upload', () => {
     expect(requests[0]?.bodyText).toContain('input')
     expect(requests[1]?.bodyText).toContain('reference-audio-01.wav')
     expect(requests[1]?.bodyText).toContain('audio/wav')
+  })
+
+  it('uploads eight ordered reference images into the prompt-scoped input directory', async () => {
+    server = await startScenarioServer()
+    const extensions = ['jpg', 'png', 'webp', 'jpg', 'png', 'webp', 'jpg', 'png'] as const
+    const contentTypes = {
+      jpg: 'image/jpeg',
+      png: 'image/png',
+      webp: 'image/webp',
+    } as const
+    server.defineScenario({
+      method: 'POST',
+      path: '/upload/image',
+      mode: 'success',
+      pollSequence: extensions.map((extension, index) => ({
+        status: 200,
+        body: {
+          name: `reference-image-${String(index).padStart(2, '0')}.${extension}`,
+          subfolder: 'waoowaoo/prompt-id',
+          type: 'input',
+        },
+      })),
+    })
+    const uploaded = await requireReferenceImageUploader()({
+      baseUrl: server.baseUrl,
+      promptId: 'prompt-id',
+      files: extensions.map((extension, index) => ({
+        bytes: new Uint8Array([index + 1]),
+        contentType: contentTypes[extension],
+        extension,
+      })),
+    })
+    expect(uploaded).toEqual(extensions.map((extension, index) => (
+      `waoowaoo/prompt-id/reference-image-${String(index).padStart(2, '0')}.${extension}`
+    )))
+    const requests = server.getRequests('POST', '/upload/image')
+    expect(requests).toHaveLength(8)
+    for (const [index, request] of requests.entries()) {
+      expect(request.bodyText).toContain(`reference-image-${String(index).padStart(2, '0')}.${extensions[index]}`)
+      expect(request.bodyText).toContain(contentTypes[extensions[index]!])
+      expect(request.bodyText).toContain('input')
+    }
+  })
+
+  it('rejects invalid reference-image counts, bytes, formats, and response identity', async () => {
+    server = await startScenarioServer()
+    server.defineScenario({
+      method: 'POST',
+      path: '/upload/image',
+      mode: 'success',
+      pollSequence: [{
+        status: 200,
+        body: { name: 'renamed.png', subfolder: 'waoowaoo/prompt-id', type: 'input' },
+      }],
+    })
+    const upload = requireReferenceImageUploader()
+    const base = { baseUrl: server.baseUrl, promptId: 'prompt-id' }
+    await expect(upload({ ...base, files: [] })).rejects.toThrow('COMFYUI_H3_REFERENCE_IMAGES_COUNT_INVALID:8')
+    await expect(upload({
+      ...base,
+      files: Array.from({ length: 9 }, () => ({
+        bytes: new Uint8Array([1]), contentType: 'image/png' as const, extension: 'png' as const,
+      })),
+    })).rejects.toThrow('COMFYUI_H3_REFERENCE_IMAGES_COUNT_INVALID:8')
+    await expect(upload({
+      ...base,
+      files: [{ bytes: new Uint8Array(), contentType: 'image/png', extension: 'png' }],
+    })).rejects.toThrow('COMFYUI_H3_REFERENCE_IMAGE_EMPTY:0')
+    await expect(upload({
+      ...base,
+      files: [{ bytes: new Uint8Array([1]), contentType: 'image/jpeg', extension: 'png' }],
+    })).rejects.toThrow('COMFYUI_H3_REFERENCE_IMAGE_FORMAT_MISMATCH:0')
+    await expect(upload({
+      ...base,
+      files: [{ bytes: new Uint8Array([1]), contentType: 'image/png', extension: 'png' }],
+    })).rejects.toThrow('COMFYUI_H3_REFERENCE_IMAGE_UPLOAD_RESPONSE_INVALID:0')
   })
 
   it('rejects a renamed reference-audio upload response', async () => {

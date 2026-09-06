@@ -408,15 +408,15 @@ export async function resolveOwnedImageUrlForGeneration(
   }
 }
 
-/**
- * Materializes an authorized storage-backed image for a local provider runtime.
- * Unlike normalizeToBase64ForGeneration, this never fetches a signed URL and
- * therefore does not weaken the outbound private-network policy.
- */
-export async function resolveOwnedImageDataUrlForGeneration(
+export type OwnedOutboundImageBytes = {
+  readonly bytes: Uint8Array
+  readonly contentType: 'image/jpeg' | 'image/png' | 'image/webp'
+}
+
+export async function readOwnedImageBytesForGeneration(
   input: string,
   userId: string,
-): Promise<string> {
+): Promise<OwnedOutboundImageBytes> {
   const normalizedInput = normalizeInput(input)
   try {
     const media = await readOwnedMediaBytesForGeneration(normalizedInput, userId, {
@@ -425,7 +425,17 @@ export async function resolveOwnedImageDataUrlForGeneration(
       supportedMimeTypes: SUPPORTED_PROVIDER_IMAGE_MIME_TYPES,
       requireDetectedMimeType: true,
     })
-    return `data:${media.contentType};base64,${media.bytes.toString('base64')}`
+    if (
+      media.contentType !== 'image/jpeg'
+      && media.contentType !== 'image/png'
+      && media.contentType !== 'image/webp'
+    ) {
+      throw new Error(`OUTBOUND_IMAGE_CONTENT_TYPE_INVALID:${media.contentType}`)
+    }
+    return {
+      bytes: new Uint8Array(media.bytes),
+      contentType: media.contentType,
+    }
   } catch (error) {
     if (error instanceof OwnedMediaOutboundError) {
       throw new OutboundImageNormalizeError({
@@ -440,6 +450,19 @@ export async function resolveOwnedImageDataUrlForGeneration(
     }
     throw error
   }
+}
+
+/**
+ * Materializes an authorized storage-backed image for a local provider runtime.
+ * Unlike normalizeToBase64ForGeneration, this never fetches a signed URL and
+ * therefore does not weaken the outbound private-network policy.
+ */
+export async function resolveOwnedImageDataUrlForGeneration(
+  input: string,
+  userId: string,
+): Promise<string> {
+  const media = await readOwnedImageBytesForGeneration(input, userId)
+  return `data:${media.contentType};base64,${Buffer.from(media.bytes).toString('base64')}`
 }
 
 function isOwnedStorageInputCandidate(input: string): boolean {
