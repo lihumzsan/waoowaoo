@@ -9,6 +9,7 @@ import { createProviderAsyncTaskFailure } from '@/lib/ai-providers/shared/async-
 import type { AiProviderVideoExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 import type { FailureRecord } from '@/lib/errors/failure'
 import { MAX_VIDEO_BYTES } from '@/lib/http/body-size-constants'
+import { readOwnedImageBytesForGeneration } from '@/lib/media/outbound-image'
 import { readOwnedMediaBytesForGeneration } from '@/lib/media/outbound-owned-media'
 import {
   MAX_VIDEO_REFERENCE_AUDIO_BYTES,
@@ -29,6 +30,7 @@ import {
   H3_AUDIO_VAE_NAME,
   H3_DUAL_STAGE_RUNTIME_PROFILE,
   H3_MAX_REFERENCE_AUDIOS,
+  H3_MAX_REFERENCE_IMAGES,
   H3_REFERENCE_DUAL_STAGE_PROFILE_ID,
   buildH3PromptGraph,
   resolveH3Dimensions,
@@ -38,7 +40,9 @@ import {
 import {
   uploadH3ContinuationFrames,
   uploadH3ReferenceAudios,
+  uploadH3ReferenceImages,
   type H3ReferenceAudioFile,
+  type H3ReferenceImageFile,
 } from './h3-input-upload'
 import {
   asComfyUiRecord,
@@ -78,8 +82,30 @@ const H3_CONTINUATION_NODE_INPUT_TYPES = {
   },
 } as const satisfies Readonly<Record<string, Readonly<Record<string, H3NodeInputContract>>>>
 const H3_REFERENCE_NODE_INPUT_TYPES = {
-  MiniMaxH3ReferenceToVideo: {
+  LoadImage: {
+    image: { location: 'required', type: null },
+  },
+  MiniMaxH3AudioConditioningT8: {
+    clip: { location: 'required', type: 'CLIP' },
+    video_vae: { location: 'required', type: 'VAE' },
     audio_vae: { location: 'required', type: 'VAE' },
+    prompt: { location: 'required', type: 'STRING' },
+    width: { location: 'required', type: 'INT' },
+    height: { location: 'required', type: 'INT' },
+    length: { location: 'required', type: 'INT' },
+  },
+  MiniMaxH3LearnedLatentUpscaleT8Advanced: {
+    av_latent: { location: 'required', type: 'LATENT' },
+    target_megapixels: { location: 'required', type: 'FLOAT' },
+  },
+  MiniMaxH3AVDecodeT8: {
+    av_latent: { location: 'required', type: 'LATENT' },
+    video_vae: { location: 'required', type: 'VAE' },
+    audio_vae: { location: 'required', type: 'VAE' },
+  },
+  ImageResizeKJv2: {
+    width: { location: 'required', type: 'INT' },
+    height: { location: 'required', type: 'INT' },
   },
 } as const satisfies Readonly<Record<string, Readonly<Record<string, H3NodeInputContract>>>>
 const H3_REFERENCE_AUDIO_NODE_INPUT_TYPES = {
@@ -105,7 +131,14 @@ function promptRejection(error: ComfyUiHttpError): ProviderSubmissionError {
 }
 
 function missingOptionError(option: ComfyUiProfileRequirementOption): Error {
-  if (['UNETLoader', 'CLIPLoader', 'VAELoader', 'LoraLoaderModelOnly'].includes(option.classType)) {
+  if ([
+    'UNETLoader',
+    'CLIPLoader',
+    'VAELoader',
+    'LoraLoaderModelOnly',
+    'LoraLoaderBypassModelOnly',
+    'MiniMaxH3LearnedLatentUpscaleT8Advanced',
+  ].includes(option.classType)) {
     return new Error(`COMFYUI_MODEL_MISSING:${option.value}`)
   }
   return new Error(`COMFYUI_OPTION_MISSING:${option.classType}:${option.inputName}:${option.value}`)
@@ -131,28 +164,34 @@ function assertNodeInputContract(
   }
 }
 
-function assertReferenceAudioInputContract(info: unknown): void {
-  const className = 'MiniMaxH3ReferenceToVideo'
-  const node = asComfyUiRecord(asComfyUiRecord(info)?.[className])
-  const input = asComfyUiRecord(node?.input)
-  const optional = asComfyUiRecord(input?.optional)
-  const definition = optional?.ref_audios
+function assertReferenceAutogrowInputContract(input: {
+  readonly info: unknown
+  readonly inputName: 'ref_images' | 'ref_audios'
+  readonly itemName: 'ref_image' | 'ref_audio'
+  readonly itemType: 'IMAGE' | 'AUDIO'
+  readonly prefix: 'ref_image_' | 'ref_audio_'
+  readonly minimumMaximum: number
+}): void {
+  const className = 'MiniMaxH3AudioConditioningT8'
+  const node = asComfyUiRecord(asComfyUiRecord(input.info)?.[className])
+  const nodeInput = asComfyUiRecord(node?.input)
+  const optional = asComfyUiRecord(nodeInput?.optional)
+  const definition = optional?.[input.inputName]
   const options = Array.isArray(definition) ? asComfyUiRecord(definition[1]) : null
   const template = asComfyUiRecord(options?.template)
   const templateInput = asComfyUiRecord(template?.input)
   const templateRequired = asComfyUiRecord(templateInput?.required)
-  const refAudioDefinition = templateRequired?.ref_audio
+  const itemDefinition = templateRequired?.[input.itemName]
   if (
     !Array.isArray(definition)
     || definition[0] !== 'COMFY_AUTOGROW_V3'
-    || !Array.isArray(refAudioDefinition)
-    || refAudioDefinition[0] !== 'AUDIO'
-    || template?.prefix !== 'ref_audio_'
-    || template?.min !== 0
+    || !Array.isArray(itemDefinition)
+    || itemDefinition[0] !== input.itemType
+    || template?.prefix !== input.prefix
     || typeof template.max !== 'number'
-    || template.max < H3_MAX_REFERENCE_AUDIOS
+    || template.max < input.minimumMaximum
   ) {
-    throw new Error(`COMFYUI_NODE_INPUT_INCOMPATIBLE:${className}:ref_audios:AUDIO`)
+    throw new Error(`COMFYUI_NODE_INPUT_INCOMPATIBLE:${className}:${input.inputName}:${input.itemType}`)
   }
 }
 
@@ -178,51 +217,73 @@ function assertContinuationGraphContract(profile: H3DualStageRuntimeProfile): vo
   }
 }
 
-function assertReferenceAudioGraphContract(profile: H3DualStageRuntimeProfile): void {
+function assertReferenceT8GraphContract(profile: H3DualStageRuntimeProfile): void {
   if (profile.id !== H3_REFERENCE_DUAL_STAGE_PROFILE_ID) return
+  const imageNodeId = profile.referenceImageNodeIds[0]
   const audioNodeId = profile.referenceAudioNodeIds[0]
+  const imageNode = imageNodeId ? profile.workflow[imageNodeId] : undefined
   const audioNode = audioNodeId ? profile.workflow[audioNodeId] : undefined
-  const h3Node = profile.workflow[profile.h3NodeId]
   const audioVaeNode = profile.workflow[profile.audioVaeNodeId]
   const audioDecodeNode = profile.workflow[profile.audioDecodeNodeId]
-  const audioSamplerNode = profile.workflow[profile.audioSamplerNodeId]
+  const learnedUpscaleNode = profile.workflow[profile.learnedUpscaleNodeId]
+  const finalUpscaleNode = profile.workflow[profile.finalUpscaleNodeId]
   const outputNode = profile.workflow[profile.outputNodeId]
+  const conditioningNodes = profile.conditioningNodeIds.map((nodeId) => profile.workflow[nodeId])
+  if (!imageNode || imageNode.class_type !== 'LoadImage' || typeof imageNode.inputs.image !== 'string') {
+    throw new Error('COMFYUI_H3_REFERENCE_T8_GRAPH_INCOMPATIBLE:LoadImage')
+  }
   if (!audioNode || audioNode.class_type !== 'LoadAudio' || typeof audioNode.inputs.audio !== 'string') {
-    throw new Error('COMFYUI_H3_REFERENCE_AUDIO_GRAPH_INCOMPATIBLE:LoadAudio')
+    throw new Error('COMFYUI_H3_REFERENCE_T8_GRAPH_INCOMPATIBLE:LoadAudio')
   }
-  const audioVae = h3Node?.inputs.audio_vae
+  if (audioVaeNode?.class_type !== 'VAELoader' || audioVaeNode.inputs.vae_name !== H3_AUDIO_VAE_NAME) {
+    throw new Error('COMFYUI_H3_REFERENCE_T8_GRAPH_INCOMPATIBLE:audio_vae')
+  }
+  if (conditioningNodes.some((node) => node?.class_type !== 'MiniMaxH3AudioConditioningT8')) {
+    throw new Error('COMFYUI_H3_REFERENCE_T8_GRAPH_INCOMPATIBLE:conditioning')
+  }
+  for (const node of conditioningNodes) {
+    const audioVae = node?.inputs.audio_vae
+    const prompt = node?.inputs.prompt
+    const referenceImage = node?.inputs['ref_images.ref_image_0']
+    const referenceAudio = node?.inputs['ref_audios.ref_audio_0']
+    if (!Array.isArray(audioVae) || audioVae[0] !== profile.audioVaeNodeId || audioVae[1] !== 0) {
+      throw new Error('COMFYUI_H3_REFERENCE_T8_GRAPH_INCOMPATIBLE:conditioning_audio_vae')
+    }
+    if (!Array.isArray(prompt) || prompt[0] !== profile.promptNodeId || prompt[1] !== 0) {
+      throw new Error('COMFYUI_H3_REFERENCE_T8_GRAPH_INCOMPATIBLE:conditioning_prompt')
+    }
+    if (!Array.isArray(referenceImage) || referenceImage[0] !== imageNodeId || referenceImage[1] !== 0) {
+      throw new Error('COMFYUI_H3_REFERENCE_T8_GRAPH_INCOMPATIBLE:ref_images')
+    }
+    if (!Array.isArray(referenceAudio) || referenceAudio[0] !== audioNodeId || referenceAudio[1] !== 0) {
+      throw new Error('COMFYUI_H3_REFERENCE_T8_GRAPH_INCOMPATIBLE:ref_audios')
+    }
+  }
   if (
-    !Array.isArray(audioVae)
-    || audioVae[0] !== profile.audioVaeNodeId
-    || audioVae[1] !== 0
-    || audioVaeNode?.class_type !== 'VAELoader'
-    || audioVaeNode.inputs.vae_name !== H3_AUDIO_VAE_NAME
+    conditioningNodes[0]?.inputs.length !== conditioningNodes[1]?.inputs.length
+    || learnedUpscaleNode?.class_type !== 'MiniMaxH3LearnedLatentUpscaleT8Advanced'
+    || learnedUpscaleNode.inputs.size_mode !== 'target_megapixels'
+    || learnedUpscaleNode.inputs.aspect_policy !== 'preserve_source'
   ) {
-    throw new Error('COMFYUI_H3_REFERENCE_AUDIO_GRAPH_INCOMPATIBLE:audio_vae')
+    throw new Error('COMFYUI_H3_REFERENCE_T8_GRAPH_INCOMPATIBLE:two_pass')
   }
   if (
-    audioSamplerNode?.class_type !== 'SamplerCustomAdvanced'
-    || audioDecodeNode?.class_type !== 'VAEDecodeAudio'
-    || !Array.isArray(audioDecodeNode.inputs.samples)
-    || audioDecodeNode.inputs.samples[0] !== profile.audioSamplerNodeId
-    || audioDecodeNode.inputs.samples[1] !== 1
-    || !Array.isArray(audioDecodeNode.inputs.vae)
-    || audioDecodeNode.inputs.vae[0] !== profile.audioVaeNodeId
-    || audioDecodeNode.inputs.vae[1] !== 0
-  ) {
-    throw new Error('COMFYUI_H3_REFERENCE_AUDIO_GRAPH_INCOMPATIBLE:audio_decode')
-  }
-  if (
-    outputNode?.class_type !== 'VHS_VideoCombine'
+    audioDecodeNode?.class_type !== 'MiniMaxH3AVDecodeT8'
+    || finalUpscaleNode?.class_type !== 'ImageResizeKJv2'
+    || finalUpscaleNode.inputs.upscale_method !== 'nvidia_rtx_vsr'
+    || outputNode?.class_type !== 'VHS_VideoCombine'
+    || !Array.isArray(outputNode.inputs.images)
+    || outputNode.inputs.images[0] !== profile.finalUpscaleNodeId
+    || outputNode.inputs.images[1] !== 0
     || !Array.isArray(outputNode.inputs.audio)
     || outputNode.inputs.audio[0] !== profile.audioDecodeNodeId
-    || outputNode.inputs.audio[1] !== 0
+    || outputNode.inputs.audio[1] !== 1
+    || outputNode.inputs.format !== 'video/h264-mp4'
+    || outputNode.inputs.pix_fmt !== 'yuv420p'
+    || outputNode.inputs.crf !== 10
+    || outputNode.inputs.frame_rate !== 24
   ) {
-    throw new Error('COMFYUI_H3_REFERENCE_AUDIO_GRAPH_INCOMPATIBLE:output_audio')
-  }
-  const referenceAudio = h3Node?.inputs['ref_audios.ref_audio_0']
-  if (!Array.isArray(referenceAudio) || referenceAudio[0] !== audioNodeId || referenceAudio[1] !== 0) {
-    throw new Error('COMFYUI_H3_REFERENCE_AUDIO_GRAPH_INCOMPATIBLE:ref_audios')
+    throw new Error('COMFYUI_H3_REFERENCE_T8_GRAPH_INCOMPATIBLE:output')
   }
 }
 
@@ -232,7 +293,7 @@ async function preflight(
   requiresReferenceAudio: boolean,
 ): Promise<void> {
   assertContinuationGraphContract(profile)
-  assertReferenceAudioGraphContract(profile)
+  assertReferenceT8GraphContract(profile)
   const requirements = deriveComfyUiProfileRequirements({
     profileId: profile.id,
     graph: profile.workflow,
@@ -273,11 +334,27 @@ async function preflight(
     for (const [className, inputs] of Object.entries(H3_REFERENCE_NODE_INPUT_TYPES)) {
       assertNodeInputContract(infoByClassName.get(className), className, inputs)
     }
+    const conditioningInfo = infoByClassName.get('MiniMaxH3AudioConditioningT8')
+    assertReferenceAutogrowInputContract({
+      info: conditioningInfo,
+      inputName: 'ref_images',
+      itemName: 'ref_image',
+      itemType: 'IMAGE',
+      prefix: 'ref_image_',
+      minimumMaximum: H3_MAX_REFERENCE_IMAGES,
+    })
     if (requiresReferenceAudio) {
       for (const [className, inputs] of Object.entries(H3_REFERENCE_AUDIO_NODE_INPUT_TYPES)) {
         assertNodeInputContract(infoByClassName.get(className), className, inputs)
       }
-      assertReferenceAudioInputContract(infoByClassName.get('MiniMaxH3ReferenceToVideo'))
+      assertReferenceAutogrowInputContract({
+        info: conditioningInfo,
+        inputName: 'ref_audios',
+        itemName: 'ref_audio',
+        itemType: 'AUDIO',
+        prefix: 'ref_audio_',
+        minimumMaximum: H3_MAX_REFERENCE_AUDIOS,
+      })
     }
   }
   const optionInfos = await Promise.all(requirements.options.map(async (option) => ({
@@ -314,15 +391,40 @@ function continuationPlaceholderFilenames(promptId: string): readonly string[] {
   ))
 }
 
-function referenceAudioPlaceholderFilenames(promptId: string, count: number): readonly string[] {
+function referenceInputPlaceholderFilenames(
+  promptId: string,
+  count: number,
+  mediaType: 'image' | 'audio',
+): readonly string[] {
   return Array.from({ length: count }, (_, index) => (
-    `waoowaoo/${promptId}/reference-audio-${String(index).padStart(2, '0')}.mp3`
+    `waoowaoo/${promptId}/reference-${mediaType}-${String(index).padStart(2, '0')}.${mediaType === 'image' ? 'png' : 'mp3'}`
   ))
 }
 
 type H3PreparedInputs = {
   readonly continuationFrameFilenames: readonly string[]
+  readonly referenceImageFilenames: readonly string[]
   readonly referenceAudioFilenames: readonly string[]
+}
+
+async function readH3ReferenceImageFiles(input: {
+  readonly urls: readonly string[]
+  readonly userId: string
+}): Promise<readonly H3ReferenceImageFile[]> {
+  const files: H3ReferenceImageFile[] = []
+  for (const url of input.urls) {
+    const media = await readOwnedImageBytesForGeneration(url, input.userId)
+    files.push({
+      bytes: media.bytes,
+      contentType: media.contentType,
+      extension: media.contentType === 'image/jpeg'
+        ? 'jpg'
+        : media.contentType === 'image/png'
+          ? 'png'
+          : 'webp',
+    })
+  }
+  return files
 }
 
 async function readH3ReferenceAudioFiles(input: {
@@ -387,8 +489,8 @@ function buildGraph(
   const duration = options.duration
   const aspectRatio = options.aspectRatio
   if (typeof duration !== 'number' || !Number.isInteger(duration) || typeof aspectRatio !== 'string') throw new AppError('INVALID_PARAMS', 'ComfyUI H3 requires duration and aspectRatio', { provider: 'comfyui' })
-  const capabilities = resolveBuiltinCapabilitiesByModelKey('video', COMFYUI_H3_MODEL_ID)?.video
-  if (!capabilities) throw new Error(`CAPABILITY_MODEL_UNSUPPORTED:${COMFYUI_H3_MODEL_ID}`)
+  const capabilities = resolveBuiltinCapabilitiesByModelKey('video', COMFYUI_H3_MODEL_KEY)?.video
+  if (!capabilities) throw new Error(`CAPABILITY_MODEL_UNSUPPORTED:${COMFYUI_H3_MODEL_KEY}`)
   resolveVideoInputPolicySelection({
     capabilities,
     inputMode,
@@ -430,7 +532,7 @@ function buildGraph(
       requestedDurationSeconds: duration,
       aspectRatio: aspectRatio as H3AspectRatio,
       seed,
-      referenceImageFilenames: referenceImageUrls,
+      referenceImageFilenames: prepared.referenceImageFilenames,
       referenceAudioFilenames: prepared.referenceAudioFilenames,
     }), inputMode, referenceAudioUrls }
   }
@@ -467,10 +569,12 @@ export async function executeComfyUiH3VideoGeneration(input: AiProviderVideoExec
   let continuationWorkspaceDir: string | null = null
   try {
     target = resolveComfyUiRuntimeTarget(COMFYUI_H3_RUNTIME_TARGET_ID)
+    const referenceImageUrls = normalizedMediaUrls(input.options?.referenceImages, 'image')
     const referenceAudioUrls = normalizedMediaUrls(input.options?.referenceAudios, 'audio')
     const initialPreparedInputs: H3PreparedInputs = {
       continuationFrameFilenames: continuationPlaceholderFilenames(promptId),
-      referenceAudioFilenames: referenceAudioPlaceholderFilenames(promptId, referenceAudioUrls.length),
+      referenceImageFilenames: referenceInputPlaceholderFilenames(promptId, referenceImageUrls.length, 'image'),
+      referenceAudioFilenames: referenceInputPlaceholderFilenames(promptId, referenceAudioUrls.length, 'audio'),
     }
     built = buildGraph(input, promptId, initialPreparedInputs)
     await preflight(
@@ -478,19 +582,29 @@ export async function executeComfyUiH3VideoGeneration(input: AiProviderVideoExec
       built.profile,
       built.inputMode === 'reference' && built.referenceAudioUrls.length > 0,
     )
-    if (built.inputMode === 'reference' && built.referenceAudioUrls.length > 0) {
-      const files = await readH3ReferenceAudioFiles({
+    if (built.inputMode === 'reference') {
+      const imageFiles = await readH3ReferenceImageFiles({
+        urls: referenceImageUrls,
+        userId: input.userId,
+      })
+      const uploadedImages = await uploadH3ReferenceImages({
+        baseUrl: target.baseUrl,
+        promptId,
+        files: imageFiles,
+      })
+      const audioFiles = await readH3ReferenceAudioFiles({
         urls: built.referenceAudioUrls,
         userId: input.userId,
       })
-      const uploaded = await uploadH3ReferenceAudios({
+      const uploadedAudios = await uploadH3ReferenceAudios({
         baseUrl: target.baseUrl,
         promptId,
-        files,
+        files: audioFiles,
       })
       built = buildGraph(input, promptId, {
         ...initialPreparedInputs,
-        referenceAudioFilenames: uploaded,
+        referenceImageFilenames: uploadedImages,
+        referenceAudioFilenames: uploadedAudios,
       })
     }
     if (built.inputMode === 'continuation') {

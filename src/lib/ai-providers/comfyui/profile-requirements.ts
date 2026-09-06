@@ -6,6 +6,8 @@ const OPTION_INPUT_NAMES_BY_CLASS = {
   CLIPLoader: ['clip_name'],
   VAELoader: ['vae_name'],
   LoraLoaderModelOnly: ['lora_name'],
+  LoraLoaderBypassModelOnly: ['lora_name'],
+  MiniMaxH3LearnedLatentUpscaleT8Advanced: ['model_name'],
   ImageResizeKJv2: ['upscale_method'],
   ModelAttentionBackend: ['attention'],
 } as const satisfies Readonly<Record<string, readonly string[]>>

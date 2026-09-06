@@ -27,18 +27,48 @@ describe('deriveComfyUiProfileRequirements', () => {
           weight_dtype: 'default',
         },
       },
+      '4': {
+        class_type: 'LoraLoaderBypassModelOnly',
+        inputs: {
+          model: ['3', 0],
+          lora_name: 'h3\\bypass.safetensors',
+          strength_model: 0.9,
+        },
+      },
+      '5': {
+        class_type: 'MiniMaxH3LearnedLatentUpscaleT8Advanced',
+        inputs: {
+          av_latent: ['4', 0],
+          model_name: 'minimax_h3_latent_upscaler_3d_fp16.safetensors',
+        },
+      },
     }
 
     expect(deriveComfyUiProfileRequirements({
       profileId: 'frame-profile',
       graph,
     })).toMatchObject({
-      nodeClasses: ['ImageResizeKJv2', 'UNETLoader'],
+      nodeClasses: [
+        'ImageResizeKJv2',
+        'LoraLoaderBypassModelOnly',
+        'MiniMaxH3LearnedLatentUpscaleT8Advanced',
+        'UNETLoader',
+      ],
       options: [
         {
           classType: 'ImageResizeKJv2',
           inputName: 'upscale_method',
           value: 'nvidia_rtx_vsr',
+        },
+        {
+          classType: 'LoraLoaderBypassModelOnly',
+          inputName: 'lora_name',
+          value: 'h3\\bypass.safetensors',
+        },
+        {
+          classType: 'MiniMaxH3LearnedLatentUpscaleT8Advanced',
+          inputName: 'model_name',
+          value: 'minimax_h3_latent_upscaler_3d_fp16.safetensors',
         },
         {
           classType: 'UNETLoader',
