@@ -1,8 +1,10 @@
-import dualStageWorkflow from './workflows/h3-dual-stage-2mp.json'
+import referenceT8DualStageWorkflow from './workflows/h3-reference-t8-dual-stage-2mp.json'
 import frameDualStageWorkflow from './workflows/h3-frame-dual-stage-2mp.json'
 import { H3_CONTINUATION_GUIDE_FRAMES } from '@/lib/video-generation/h3-timeline'
 import {
   H3_ASPECT_RATIOS,
+  resolveH3ReferenceDimensions,
+  resolveH3ReferenceRuntimePlan,
   type H3AspectRatio,
 } from '@/lib/video-generation/h3-reference-runtime-plan'
 
@@ -17,9 +19,8 @@ const H3_DELIVERY_SCALE_NUMERATOR = 3
 const H3_DELIVERY_SCALE_DENOMINATOR = 2
 export const H3_MAX_REFERENCE_IMAGES = 8
 export const H3_MAX_REFERENCE_AUDIOS = 3
-const H3_REFERENCE_IMAGE_NODE_IDS = ['137', '326', '327', '328', '329', '330', '331', '332'] as const
-const H3_REFERENCE_RESIZE_NODE_IDS = ['198', '333', '334', '335', '336', '337', '338', '339'] as const
-const H3_REFERENCE_AUDIO_NODE_IDS = ['340', '341', '342'] as const
+const H3_REFERENCE_IMAGE_NODE_IDS = ['6', '60', '61', '62', '63', '64', '65', '66'] as const
+const H3_REFERENCE_AUDIO_NODE_IDS = ['18', '70', '71'] as const
 export const H3_AUDIO_VAE_NAME = 'h3\\minimax_h3_audio_vae_fp32.safetensors' as const
 
 function unsupportedOption(name: string, value: unknown): never {
@@ -86,8 +87,9 @@ type H3RuntimeProfileBase = {
 
 export type H3ReferenceDualStageRuntimeProfile = H3RuntimeProfileBase & {
   readonly id: typeof H3_REFERENCE_DUAL_STAGE_PROFILE_ID
+  readonly conditioningNodeIds: readonly [string, string]
+  readonly learnedUpscaleNodeId: string
   readonly referenceImageNodeIds: readonly string[]
-  readonly referenceResizeNodeIds: readonly string[]
   readonly referenceAudioNodeIds: readonly string[]
   readonly audioVaeNodeId: string
   readonly audioDecodeNodeId: string
@@ -116,18 +118,19 @@ export type H3DualStageRuntimeProfile =
 
 export const H3_DUAL_STAGE_RUNTIME_PROFILE: H3ReferenceDualStageRuntimeProfile = {
   id: H3_REFERENCE_DUAL_STAGE_PROFILE_ID,
-  workflow: dualStageWorkflow as ComfyUiPromptGraph,
+  workflow: referenceT8DualStageWorkflow as ComfyUiPromptGraph,
+  conditioningNodeIds: ['7', '14'],
+  learnedUpscaleNodeId: '13',
   referenceImageNodeIds: H3_REFERENCE_IMAGE_NODE_IDS,
-  referenceResizeNodeIds: H3_REFERENCE_RESIZE_NODE_IDS,
   referenceAudioNodeIds: H3_REFERENCE_AUDIO_NODE_IDS,
-  audioVaeNodeId: '120',
-  audioDecodeNodeId: '121',
-  audioSamplerNodeId: '125',
-  promptNodeId: '138',
-  h3NodeId: '309',
-  noiseNodeId: '129',
-  firstUpscaleNodeId: '213',
-  finalUpscaleNodeId: '323',
+  audioVaeNodeId: '2',
+  audioDecodeNodeId: '20',
+  audioSamplerNodeId: '19',
+  promptNodeId: '28',
+  h3NodeId: '7',
+  noiseNodeId: '11',
+  firstUpscaleNodeId: '13',
+  finalUpscaleNodeId: '55',
   outputNodeId: '168',
 }
 
@@ -216,16 +219,20 @@ export const H3_CONTINUATION_DUAL_STAGE_RUNTIME_PROFILE: H3ContinuationDualStage
   outputNodeId: '168',
 }
 
-type H3PromptGraphCommonInput = {
+type H3PromptGraphBaseInput = {
   readonly prompt: string
-  readonly frameCount: number
   readonly aspectRatio: H3AspectRatio
   readonly seed: number
 }
 
-export type H3ReferencePromptGraphInput = H3PromptGraphCommonInput & {
+type H3PromptGraphCommonInput = H3PromptGraphBaseInput & {
+  readonly frameCount: number
+}
+
+export type H3ReferencePromptGraphInput = H3PromptGraphBaseInput & {
   readonly mode: 'reference'
-  readonly referenceImageUrls: readonly string[]
+  readonly requestedDurationSeconds: number
+  readonly referenceImageFilenames: readonly string[]
   readonly referenceAudioFilenames: readonly string[]
 }
 
@@ -258,9 +265,9 @@ function copyGraph(graph: ComfyUiPromptGraph): ComfyUiPromptGraph {
   ]))
 }
 
-function validateCommonInput(input: H3PromptGraphCommonInput): void {
+function validateCommonInput(input: H3PromptGraphInput): void {
   if (!input.prompt.trim()) throw new Error('COMFYUI_H3_PROMPT_REQUIRED')
-  if (!Number.isSafeInteger(input.frameCount) || input.frameCount <= 0) {
+  if (input.mode !== 'reference' && (!Number.isSafeInteger(input.frameCount) || input.frameCount <= 0)) {
     throw new Error(`COMFYUI_H3_FRAME_COUNT_INVALID:${String(input.frameCount)}`)
   }
   if (!Number.isSafeInteger(input.seed) || input.seed < 0) {
@@ -320,15 +327,15 @@ function buildReferencePromptGraph(
   input: H3ReferencePromptGraphInput,
 ): { readonly profile: H3ReferenceDualStageRuntimeProfile; readonly graph: ComfyUiPromptGraph } {
   if (
-    input.referenceImageUrls.length < 1
-    || input.referenceImageUrls.length > H3_MAX_REFERENCE_IMAGES
+    input.referenceImageFilenames.length < 1
+    || input.referenceImageFilenames.length > H3_MAX_REFERENCE_IMAGES
   ) {
     throw new Error(
       'COMFYUI_H3_REFERENCE_IMAGES_COUNT_INVALID:' + String(H3_MAX_REFERENCE_IMAGES),
     )
   }
-  const referenceImageUrls = input.referenceImageUrls.map((url) => url.trim())
-  if (referenceImageUrls.some((url) => !url)) {
+  const referenceImageFilenames = input.referenceImageFilenames.map((filename) => filename.trim())
+  if (referenceImageFilenames.some((filename) => !filename)) {
     throw new Error('COMFYUI_H3_REFERENCE_IMAGE_REQUIRED')
   }
   if (input.referenceAudioFilenames.length > H3_MAX_REFERENCE_AUDIOS) {
@@ -343,29 +350,55 @@ function buildReferencePromptGraph(
   const profile = H3_DUAL_STAGE_RUNTIME_PROFILE
   const graph = copyGraph(profile.workflow)
   const baseLoadNode = graph[profile.referenceImageNodeIds[0]!]
-  const baseResizeNode = graph[profile.referenceResizeNodeIds[0]!]
   const baseAudioNode = graph[profile.referenceAudioNodeIds[0]!]
-  const h3Node = graph[profile.h3NodeId]
-  if (!baseLoadNode || !baseResizeNode || !baseAudioNode || !h3Node) {
+  const promptNode = graph[profile.promptNodeId]
+  const noiseNode = graph[profile.noiseNodeId]
+  const learnedUpscaleNode = graph[profile.learnedUpscaleNodeId]
+  const finalUpscaleNode = graph[profile.finalUpscaleNodeId]
+  const conditioningNodes = profile.conditioningNodeIds.map((nodeId) => graph[nodeId])
+  if (
+    !baseLoadNode
+    || !baseAudioNode
+    || !promptNode
+    || !noiseNode
+    || !learnedUpscaleNode
+    || !finalUpscaleNode
+    || conditioningNodes.some((node) => !node)
+  ) {
     throw new Error('COMFYUI_H3_PROFILE_NODE_MISSING:' + profile.id)
   }
+  const runtimePlan = resolveH3ReferenceRuntimePlan(input.requestedDurationSeconds)
+  const firstDimensions = resolveH3ReferenceDimensions({
+    aspectRatio: input.aspectRatio,
+    megapixels: runtimePlan.firstPassMegapixels,
+  })
+  const secondDimensions = resolveH3ReferenceDimensions({
+    aspectRatio: input.aspectRatio,
+    megapixels: runtimePlan.secondPassMegapixels,
+  })
+  const finalDimensions = resolveH3ReferenceDimensions({
+    aspectRatio: input.aspectRatio,
+    megapixels: 2,
+  })
+  for (const nodeId of profile.referenceImageNodeIds) delete graph[nodeId]
   for (const nodeId of profile.referenceAudioNodeIds) delete graph[nodeId]
-  for (const key of Object.keys(h3Node.inputs)) {
-    if (key.startsWith('ref_images.ref_image_')) delete h3Node.inputs[key]
-    if (key.startsWith('ref_audios.ref_audio_')) delete h3Node.inputs[key]
+  for (const conditioningNode of conditioningNodes) {
+    if (!conditioningNode) continue
+    for (const key of Object.keys(conditioningNode.inputs)) {
+      if (key.startsWith('ref_images.ref_image_')) delete conditioningNode.inputs[key]
+      if (key.startsWith('ref_audios.ref_audio_')) delete conditioningNode.inputs[key]
+    }
   }
-  referenceImageUrls.forEach((url, index) => {
+  referenceImageFilenames.forEach((filename, index) => {
     const loadNodeId = profile.referenceImageNodeIds[index]!
-    const resizeNodeId = profile.referenceResizeNodeIds[index]!
     graph[loadNodeId] = {
       class_type: baseLoadNode.class_type,
-      inputs: { ...baseLoadNode.inputs, url },
+      inputs: { ...baseLoadNode.inputs, image: filename },
     }
-    graph[resizeNodeId] = {
-      class_type: baseResizeNode.class_type,
-      inputs: { ...baseResizeNode.inputs, image: [loadNodeId, 0] },
+    for (const conditioningNode of conditioningNodes) {
+      if (!conditioningNode) continue
+      conditioningNode.inputs['ref_images.ref_image_' + String(index)] = [loadNodeId, 0]
     }
-    h3Node.inputs['ref_images.ref_image_' + String(index)] = [resizeNodeId, 0]
   })
   referenceAudioFilenames.forEach((filename, index) => {
     const loadNodeId = profile.referenceAudioNodeIds[index]!
@@ -373,9 +406,24 @@ function buildReferencePromptGraph(
       class_type: baseAudioNode.class_type,
       inputs: { ...baseAudioNode.inputs, audio: filename },
     }
-    h3Node.inputs['ref_audios.ref_audio_' + String(index)] = [loadNodeId, 0]
+    for (const conditioningNode of conditioningNodes) {
+      if (!conditioningNode) continue
+      conditioningNode.inputs['ref_audios.ref_audio_' + String(index)] = [loadNodeId, 0]
+    }
   })
-  applyCommonInputs(profile, graph, input)
+  const [coarseNode, refineNode] = conditioningNodes
+  if (!coarseNode || !refineNode) throw new Error('COMFYUI_H3_PROFILE_NODE_MISSING:' + profile.id)
+  promptNode.inputs.prompt = input.prompt
+  coarseNode.inputs.width = firstDimensions.width
+  coarseNode.inputs.height = firstDimensions.height
+  coarseNode.inputs.length = runtimePlan.frameCount
+  refineNode.inputs.length = runtimePlan.frameCount
+  learnedUpscaleNode.inputs.target_megapixels = runtimePlan.secondPassMegapixels
+  learnedUpscaleNode.inputs.target_width = secondDimensions.width
+  learnedUpscaleNode.inputs.target_height = secondDimensions.height
+  finalUpscaleNode.inputs.width = finalDimensions.width
+  finalUpscaleNode.inputs.height = finalDimensions.height
+  noiseNode.inputs.noise_seed = input.seed
   return { profile, graph }
 }
 

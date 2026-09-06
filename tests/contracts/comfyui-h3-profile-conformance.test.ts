@@ -32,13 +32,6 @@ describe('ComfyUI H3 dual-stage profile', () => {
     const builds = [
       buildH3PromptGraph({
         ...common,
-        frameCount: resolveH3DurationPlan({ inputMode: 'reference', requestedDurationSeconds: 5 }).frameCount,
-        mode: 'reference',
-        referenceImageUrls: ['https://example.test/reference.png'],
-        referenceAudioFilenames: [],
-      }),
-      buildH3PromptGraph({
-        ...common,
         frameCount: resolveH3DurationPlan({ inputMode: 'first_frame', requestedDurationSeconds: 4 }).frameCount,
         mode: 'first_frame',
         firstFrameUrl: 'https://example.test/first.png',
@@ -151,33 +144,27 @@ describe('ComfyUI H3 dual-stage profile', () => {
 
   it('keeps the canonical graph wired to the final output node', () => {
     const nodes = Object.values(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow)
-    expect(nodes.filter((node) => node.class_type === 'easy clearCacheAll')).toHaveLength(2)
-    expect(nodes.filter((node) => node.class_type === 'ImageResizeKJv2' && node.inputs.upscale_method === 'nvidia_rtx_vsr')).toHaveLength(2)
-    expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow[H3_DUAL_STAGE_RUNTIME_PROFILE.h3NodeId]?.class_type).toBe('MiniMaxH3ReferenceToVideo')
+    expect(nodes.filter((node) => node.class_type === 'MiniMaxH3AudioConditioningT8')).toHaveLength(2)
+    expect(nodes.filter((node) => node.class_type === 'ImageResizeKJv2' && node.inputs.upscale_method === 'nvidia_rtx_vsr')).toHaveLength(1)
     expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow[H3_DUAL_STAGE_RUNTIME_PROFILE.outputNodeId]?.class_type).toBe('VHS_VideoCombine')
-    expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['120']).toEqual({
+    expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['2']).toEqual({
       class_type: 'VAELoader',
       inputs: { vae_name: 'h3\\minimax_h3_audio_vae_fp32.safetensors' },
     })
-    expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['309']?.inputs.audio_vae).toEqual(['120', 0])
-    expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['121']).toEqual({
-      class_type: 'VAEDecodeAudio',
-      inputs: {
-        samples: ['125', 1],
-        vae: ['120', 0],
-      },
-    })
-    expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['168']?.inputs.audio).toEqual(['121', 0])
+    expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['7']?.inputs.audio_vae).toEqual(['2', 0])
+    expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['14']?.inputs.audio_vae).toEqual(['2', 0])
+    expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['20']?.inputs.audio_vae).toEqual(['2', 0])
+    expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['168']?.inputs.audio).toEqual(['20', 1])
   })
 
   it('builds zero, one, and three ordered H3 reference-audio inputs and rejects a fourth', () => {
     const referenceInput = {
       prompt: 'subject_definitions:\n<Subject 1> is the person in <Picture 1>.',
-      frameCount: 107,
+      requestedDurationSeconds: 5,
       aspectRatio: '9:16',
       seed: 17,
       mode: 'reference',
-      referenceImageUrls: ['https://example.test/reference.png'],
+      referenceImageFilenames: ['waoowaoo/prompt/reference-image-00.png'],
     } as const
     const zeroAudio = buildH3PromptGraph({
       ...referenceInput,
@@ -196,14 +183,16 @@ describe('ComfyUI H3 dual-stage profile', () => {
       ],
     })
 
-    expect(zeroAudio.graph['340']).toBeUndefined()
-    expect(zeroAudio.graph['309']?.inputs['ref_audios.ref_audio_0']).toBeUndefined()
-    expect(oneAudio.graph['340']).toEqual({
+    expect(zeroAudio.graph['18']).toBeUndefined()
+    expect(zeroAudio.graph['7']?.inputs['ref_audios.ref_audio_0']).toBeUndefined()
+    expect(oneAudio.graph['18']).toEqual({
       class_type: 'LoadAudio',
       inputs: { audio: 'waoowaoo/prompt/reference-audio-00.mp3' },
     })
-    expect(oneAudio.graph['309']?.inputs['ref_audios.ref_audio_0']).toEqual(['340', 0])
-    expect(threeAudio.graph['309']?.inputs['ref_audios.ref_audio_2']).toEqual(['342', 0])
+    expect(oneAudio.graph['7']?.inputs['ref_audios.ref_audio_0']).toEqual(['18', 0])
+    expect(oneAudio.graph['14']?.inputs['ref_audios.ref_audio_0']).toEqual(['18', 0])
+    expect(threeAudio.graph['7']?.inputs['ref_audios.ref_audio_2']).toEqual(['71', 0])
+    expect(threeAudio.graph['14']?.inputs['ref_audios.ref_audio_2']).toEqual(['71', 0])
     expect(() => buildH3PromptGraph({
       ...referenceInput,
       referenceAudioFilenames: ['1.wav', '2.wav', '3.wav', '4.wav'],

@@ -425,9 +425,12 @@ function buildGraph(
   }
   if (inputMode === 'reference') {
     return { ...buildH3PromptGraph({
-      ...common,
       mode: 'reference',
-      referenceImageUrls,
+      prompt,
+      requestedDurationSeconds: duration,
+      aspectRatio: aspectRatio as H3AspectRatio,
+      seed,
+      referenceImageFilenames: referenceImageUrls,
       referenceAudioFilenames: prepared.referenceAudioFilenames,
     }), inputMode, referenceAudioUrls }
   }

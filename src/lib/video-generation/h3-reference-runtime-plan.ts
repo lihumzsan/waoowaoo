@@ -18,10 +18,11 @@ export type H3ReferenceRuntimePlan = {
 }
 
 export function resolveH3ReferenceRuntimePlan(requestedDurationSeconds: number): H3ReferenceRuntimePlan {
+  const durationPlan = resolveH3DurationPlan({ inputMode: 'reference', requestedDurationSeconds })
   const passMegapixels = H3_REFERENCE_PASS_MEGAPIXELS[requestedDurationSeconds as keyof typeof H3_REFERENCE_PASS_MEGAPIXELS]
   if (!passMegapixels) throw new Error(`H3_REFERENCE_DURATION_INVALID:${String(requestedDurationSeconds)}`)
   return {
-    ...resolveH3DurationPlan({ inputMode: 'reference', requestedDurationSeconds }),
+    ...durationPlan,
     firstPassMegapixels: passMegapixels[0],
     secondPassMegapixels: passMegapixels[1],
   }
