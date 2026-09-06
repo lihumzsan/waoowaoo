@@ -20,29 +20,37 @@ import {
   H3_CONTINUATION_MAX_SOURCE_DURATION_MS,
   H3_DURATION_OPTIONS_SECONDS,
 } from '@/lib/video-generation/h3-duration'
+import {
+  ACE_STEP_1_5_PROFILE,
+  COMFYUI_MUSIC_PROFILES,
+  MINIMAX_MUSIC_3_PROFILE,
+} from './music-profiles'
 
 export const COMFYUI_H3_MODEL_ID = 'minimax-h3-dual-stage-2mp'
 export const COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY = `comfyui::${COMFYUI_H3_MODEL_ID}`
 export const COMFYUI_H3_DEFAULT_GENERATION_OPTIONS = {
   generateAudio: true,
 } as const satisfies Record<string, CapabilityValue>
-export const COMFYUI_ACE_STEP_1_5_MODEL_ID = 'ace-step-1.5'
-export const COMFYUI_ACE_STEP_1_5_MODEL_KEY = `comfyui::${COMFYUI_ACE_STEP_1_5_MODEL_ID}`
-export const COMFYUI_PLATFORM_DEFAULT_MUSIC_MODEL_KEY = COMFYUI_ACE_STEP_1_5_MODEL_KEY
-export const COMFYUI_ACE_STEP_DEFAULT_GENERATION_OPTIONS = {
-  outputFormat: 'mp3',
-} as const satisfies Record<string, CapabilityValue>
+export const COMFYUI_ACE_STEP_1_5_MODEL_ID = ACE_STEP_1_5_PROFILE.modelId
+export const COMFYUI_ACE_STEP_1_5_MODEL_KEY = ACE_STEP_1_5_PROFILE.modelKey
+export const COMFYUI_PLATFORM_DEFAULT_MUSIC_MODEL_KEY = MINIMAX_MUSIC_3_PROFILE.modelKey
+export const COMFYUI_ACE_STEP_DEFAULT_GENERATION_OPTIONS = ACE_STEP_1_5_PROFILE.defaultGenerationOptions
 export const COMFYUI_ACE_STEP_KEY_SCALE_OPTIONS = MUSIC_KEY_SCALE_VALUES
 export const COMFYUI_ACE_STEP_TIME_SIGNATURE_OPTIONS = MUSIC_TIME_SIGNATURE_VALUES
+export const COMFYUI_MUSIC_DEFAULT_GENERATION_OPTIONS_BY_MODEL_KEY: Readonly<
+  Record<string, Readonly<Record<string, CapabilityValue>>>
+> = Object.freeze(Object.fromEntries(
+  COMFYUI_MUSIC_PROFILES.map((profile) => [profile.modelKey, profile.defaultGenerationOptions]),
+))
 export const COMFYUI_REGISTERED_MODEL_KEYS = [
   COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
-  COMFYUI_ACE_STEP_1_5_MODEL_KEY,
+  ...COMFYUI_MUSIC_PROFILES.map((profile) => profile.modelKey),
 ] as const
 
-const COMFYUI_RUNTIME_TARGET_BY_MODEL_KEY: Record<string, ComfyUiRuntimeTargetId> = {
+const COMFYUI_RUNTIME_TARGET_BY_MODEL_KEY: Readonly<Record<string, ComfyUiRuntimeTargetId>> = Object.freeze({
   [COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY]: 'h3-dual-stage-2mp',
-  [COMFYUI_ACE_STEP_1_5_MODEL_KEY]: 'shared',
-}
+  ...Object.fromEntries(COMFYUI_MUSIC_PROFILES.map((profile) => [profile.modelKey, profile.runtimeTargetId])),
+})
 
 function resolveH3ContinuationSourceAspectRatios(
   aspectRatio: H3AspectRatio,
@@ -101,25 +109,33 @@ export const COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
       },
     },
   },
-  {
-    modelType: 'music', provider: 'comfyui', modelId: COMFYUI_ACE_STEP_1_5_MODEL_ID,
-    capabilities: {
-      music: {
-        generationModes: ['prompt'],
-        durationSecondsRange: { min: 4, max: 600 }, vocalModeOptions: ['instrumental'], outputFormatOptions: ['mp3'],
-        bpmRange: { min: 20, max: 300 }, keyScaleOptions: COMFYUI_ACE_STEP_KEY_SCALE_OPTIONS,
-        timeSignatureOptions: COMFYUI_ACE_STEP_TIME_SIGNATURE_OPTIONS,
-      },
+  ...COMFYUI_MUSIC_PROFILES.map((profile) => ({
+    modelType: 'music' as const,
+    provider: 'comfyui' as const,
+    modelId: profile.modelId,
+    capabilities: { music: profile.capabilities } as {
+      readonly music: typeof profile.capabilities
+      readonly video: never
     },
-  },
+  })),
 ] as const
 
 export const COMFYUI_API_CONFIG_CATALOG_MODELS = [
   { modelId: COMFYUI_H3_MODEL_ID, name: 'MiniMax H3 Dual-Stage 2MP', type: 'video', provider: 'comfyui' },
-  { modelId: COMFYUI_ACE_STEP_1_5_MODEL_ID, name: 'ACE-Step 1.5', type: 'music', provider: 'comfyui' },
+  ...COMFYUI_MUSIC_PROFILES.map((profile) => ({
+    modelId: profile.modelId,
+    name: profile.name,
+    type: 'music' as const,
+    provider: 'comfyui' as const,
+  })),
 ] as const
 
 export const COMFYUI_PLATFORM_MODEL_PRESETS: readonly PlatformModelPreset[] = [
   { provider: 'comfyui', modelId: COMFYUI_H3_MODEL_ID, name: 'MiniMax H3 Dual-Stage 2MP', type: 'video' },
-  { provider: 'comfyui', modelId: COMFYUI_ACE_STEP_1_5_MODEL_ID, name: 'ACE-Step 1.5', type: 'music' },
+  ...COMFYUI_MUSIC_PROFILES.map((profile) => ({
+    provider: 'comfyui',
+    modelId: profile.modelId,
+    name: profile.name,
+    type: 'music' as const,
+  })),
 ]

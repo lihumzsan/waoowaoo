@@ -7,8 +7,7 @@ import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
 import {
   COMFYUI_H3_DEFAULT_GENERATION_OPTIONS,
   COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
-  COMFYUI_ACE_STEP_DEFAULT_GENERATION_OPTIONS,
-  COMFYUI_PLATFORM_DEFAULT_MUSIC_MODEL_KEY,
+  COMFYUI_MUSIC_DEFAULT_GENERATION_OPTIONS_BY_MODEL_KEY,
 } from '@/lib/ai-providers/comfyui/models'
 
 export type PlatformRuntimePurpose = SystemModelPurpose
@@ -166,11 +165,11 @@ export function getPlatformCapabilityDefaults(): CapabilitySelections {
     COMFYUI_H3_DEFAULT_GENERATION_OPTIONS,
   )
   assignCapabilityDefault(defaults, getPlatformRuntimePlan('video').modelKey, videoOptions)
+  for (const [modelKey, defaultOptions] of Object.entries(
+    COMFYUI_MUSIC_DEFAULT_GENERATION_OPTIONS_BY_MODEL_KEY,
+  )) {
+    assignCapabilityDefault(defaults, modelKey, defaultOptions)
+  }
   assignCapabilityDefault(defaults, getPlatformRuntimePlan('music').modelKey, musicOptions)
-  assignCapabilityDefault(
-    defaults,
-    COMFYUI_PLATFORM_DEFAULT_MUSIC_MODEL_KEY,
-    COMFYUI_ACE_STEP_DEFAULT_GENERATION_OPTIONS,
-  )
   return defaults
 }
