@@ -142,3 +142,6 @@ View、刷新恢复、破坏性确认和跨进程唤醒。Session Manager 只做
   且结算屏障直到后续 `startProjection` 才建立 → 失败事实统一了但早期 writer 失败路径仍未纳入生命周期 →
   屏障前移到 prepare 之前，先完成或拒绝持久结算再清理 fresh placement，持久化失败同时保留原始失败并
   阻断 placement 释放（ARL-07/17、FG-01/04）。
+- 遗留 Turn 的首次恢复只挂在新 placement 准入前；Web 进程重启后若用户只刷新页面，原生 Turn 已中断但
+  产品 View 会无限保留 running → 防线没有覆盖真实的被动读取入口 → 活跃 View 读取统一经 Session Manager
+  获取 ownership，确认没有 live projector 后复用同一恢复 writer，ownership 未收敛时明确失败（ARL-07）。

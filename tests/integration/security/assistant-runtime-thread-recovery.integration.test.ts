@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto'
+import path from 'node:path'
 import type { UIMessage } from 'ai'
 import { Prisma } from '@prisma/client'
 import mysql from 'mysql2/promise'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ASSISTANT_RUNTIME_ASSISTANT_ID } from '@/lib/assistant-runtime/contracts'
 import { RedisAssistantRuntimeOwnership } from '@/lib/assistant-runtime/runtime-ownership'
+import { AssistantRuntimePersistence } from '@/lib/assistant-runtime/runtime-persistence'
 import { AssistantRuntimeService } from '@/lib/assistant-runtime/service'
 import { parseFailureRecord } from '@/lib/errors/failure'
 import { findCarriedFailureRecord } from '@/lib/errors/normalize'
@@ -282,6 +284,151 @@ function testModel(project: { readonly id: string; readonly name: string }): Ass
 describe('Assistant Runtime native Thread recovery', () => {
   beforeEach(async () => {
     await resetBillingState()
+  })
+
+  it('reconciles an orphaned Turn before returning a session View', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const scope = {
+      projectId: project.id,
+      userId: user.id,
+      assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
+    }
+    const thread = await prisma.projectAssistantThread.create({
+      data: {
+        projectId: project.id,
+        userId: user.id,
+        assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
+        runtimeThreadId: 'orphaned-native-thread',
+      },
+    })
+    const turnId = 'orphaned-session-view-turn'
+    await prisma.projectAgentTurn.create({
+      data: {
+        id: turnId,
+        threadId: thread.id,
+        projectId: project.id,
+        userId: user.id,
+        sourceKind: 'user',
+        sourceId: 'orphaned-session-view-source',
+        payloadHash: 'a'.repeat(64),
+        requestId: 'orphaned-session-view-request',
+        status: 'running',
+        attempt: 1,
+        executionOwnerId: 'orphaned-runtime-owner',
+        contextJson: { locale: 'zh' },
+        runtimeTurnId: 'orphaned-native-turn',
+        startedAt: new Date(),
+      },
+    })
+    const manager = new RuntimeSessionManager({
+      container: new DeterministicRuntimeContainer(),
+      persistence: new AssistantRuntimePersistence({
+        hostRoot: path.join(process.cwd(), '.runtime', 'assistant-runtime-recovery-test'),
+        scopedCodexHome: false,
+      }),
+      ownership: new RedisAssistantRuntimeOwnership(),
+      idleTimeoutMs: 60_000,
+      closePlacementTransportSessions: async () => undefined,
+      waitForTurnSettlement: async () => undefined,
+      onError: () => undefined,
+    })
+    const access: AssistantRuntimeAccess = {
+      environment: { WAO_MCP_TEST_TOKEN: 'test-token' },
+      bearerToken: 'test-token',
+      ownerToken: `owner_${randomUUID()}`,
+    }
+    const service = new AssistantRuntimeService({
+      manager,
+      access: { get: async () => access, invalidate: () => undefined },
+      models: { resolve: async () => testModel(project) },
+    })
+
+    try {
+      const view = await service.readSessionView(scope)
+
+      expect(view.currentTurn).toMatchObject({
+        turnId,
+        status: 'interrupted',
+        stopReason: 'runtime_reconciled_before_start',
+      })
+      expect(view.recentTurns).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          turnId,
+          status: 'interrupted',
+          stopReason: 'runtime_reconciled_before_start',
+        }),
+      ]))
+      await expect(prisma.projectAgentTurn.findUniqueOrThrow({
+        where: { id: turnId },
+        select: { status: true, stopReason: true, finishedAt: true },
+      })).resolves.toMatchObject({
+        status: 'interrupted',
+        stopReason: 'runtime_reconciled_before_start',
+        finishedAt: expect.any(Date),
+      })
+    } finally {
+      await manager.shutdownAll()
+    }
+  })
+
+  it('keeps a live projected Turn running during a session View read', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const container = new DeterministicRuntimeContainer()
+    const manager = new RuntimeSessionManager({
+      container,
+      persistence: new AssistantRuntimePersistence({
+        hostRoot: path.join(process.cwd(), '.runtime', 'assistant-runtime-recovery-test'),
+        scopedCodexHome: false,
+      }),
+      ownership: new RedisAssistantRuntimeOwnership(),
+      idleTimeoutMs: 60_000,
+      closePlacementTransportSessions: async () => undefined,
+      waitForTurnSettlement: async () => undefined,
+      onError: () => undefined,
+    })
+    const access: AssistantRuntimeAccess = {
+      environment: { WAO_MCP_TEST_TOKEN: 'test-token' },
+      bearerToken: 'test-token',
+      ownerToken: `owner_${randomUUID()}`,
+    }
+    const service = new AssistantRuntimeService({
+      manager,
+      access: { get: async () => access, invalidate: () => undefined },
+      models: { resolve: async () => testModel(project) },
+    })
+    const message: UIMessage = {
+      id: 'live-session-view-message',
+      role: 'user',
+      parts: [{ type: 'text', text: 'keep this native Turn running' }],
+    }
+
+    try {
+      const receipt = await service.send({
+        projectId: project.id,
+        userId: user.id,
+        assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
+        requestId: randomUUID(),
+        sourceId: message.id,
+        message,
+        context: { locale: 'zh', selectedScopeRef: null, selectedAssetId: null },
+      })
+
+      await expect(service.readSessionView({
+        projectId: project.id,
+        userId: user.id,
+        assistantId: ASSISTANT_RUNTIME_ASSISTANT_ID,
+      })).resolves.toMatchObject({
+        currentTurn: { turnId: receipt.turnId, status: 'running' },
+      })
+      await expect(prisma.projectAgentTurn.findUniqueOrThrow({
+        where: { id: receipt.turnId },
+        select: { status: true, finishedAt: true },
+      })).resolves.toEqual({ status: 'running', finishedAt: null })
+    } finally {
+      await manager.shutdownAll()
+    }
   })
 
   it('fails closed when the bound native Thread cannot resume', async () => {

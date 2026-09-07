@@ -3,10 +3,7 @@ import { safeValidateUIMessages, type UIMessage } from 'ai'
 import { apiHandler } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuth } from '@/lib/api-auth'
 import { createScopedLogger, type ScopedLogger } from '@/lib/logging/core'
-import {
-  getAssistantRuntimeService,
-  getAssistantRuntimeSessionView,
-} from '@/lib/assistant-runtime'
+import { getAssistantRuntimeService } from '@/lib/assistant-runtime'
 import { ensureUniqueUIMessages } from '@/lib/project-agent/ui-message-validation'
 import {
   mapProjectAgentCommandError,
@@ -166,7 +163,7 @@ export const GET = apiHandler(async (
   }
 
   try {
-    const view = await getAssistantRuntimeSessionView(scope)
+    const view = await getAssistantRuntimeService().readSessionView(scope)
     return NextResponse.json(view)
   } catch (error) {
     throw mapProjectAgentCommandError(error)

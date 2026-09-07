@@ -71,6 +71,11 @@ import {
   type AssistantRuntimeAccess,
   type AssistantRuntimeModelConfiguration,
 } from './runtime-access'
+import { getAssistantRuntimeSessionView } from './session-view'
+import type {
+  AssistantRuntimeSessionView,
+  AssistantRuntimeSessionViewScope,
+} from './view-contract'
 
 const logger = createScopedLogger({ module: 'assistant-runtime.service' })
 
@@ -276,6 +281,24 @@ export class AssistantRuntimeService {
       release()
       if (this.projectTransitions.get(key) === current) this.projectTransitions.delete(key)
     }
+  }
+
+  async readSessionView(
+    input: AssistantRuntimeSessionViewScope,
+  ): Promise<AssistantRuntimeSessionView> {
+    const scope = runtimeScope(input)
+    return await this.runProjectTransition(scope, async () => {
+      const view = await getAssistantRuntimeSessionView(input)
+      if (
+        view.currentTurn?.status !== 'running'
+        && view.currentTurn?.status !== 'waiting_approval'
+      ) return view
+      const access = await this.access.get(scope)
+      const outcome = await this.manager.reconcileOrphanedTurns(scope, access.ownerToken)
+      return outcome === 'live'
+        ? view
+        : await getAssistantRuntimeSessionView(input)
+    })
   }
 
   async send(command: AssistantRuntimeSubmitCommand): Promise<AssistantRuntimeMessageReceipt> {

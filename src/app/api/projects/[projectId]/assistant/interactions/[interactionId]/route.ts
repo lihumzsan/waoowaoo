@@ -4,7 +4,6 @@ import { isErrorResponse, requireProjectAuth } from '@/lib/api-auth'
 import {
   buildAssistantRuntimeServerResponse,
   getAssistantRuntimeService,
-  getAssistantRuntimeSessionView,
 } from '@/lib/assistant-runtime'
 import {
   assertProjectAgentCommandKeys,
@@ -51,7 +50,8 @@ export const POST = apiHandler(async (
       userId: authResult.session.user.id,
       assistantId: 'workspace-command' as const,
     }
-    const view = await getAssistantRuntimeSessionView(scope)
+    const service = getAssistantRuntimeService()
+    const view = await service.readSessionView(scope)
     const interaction = view.pendingInteraction
     if (
       !interaction
@@ -60,7 +60,7 @@ export const POST = apiHandler(async (
     ) {
       throw new Error('ASSISTANT_RUNTIME_INTERACTION_NOT_PENDING')
     }
-    await getAssistantRuntimeService().respondToServerRequest({
+    await service.respondToServerRequest({
       ...scope,
       threadId,
       turnId: interaction.turnId,

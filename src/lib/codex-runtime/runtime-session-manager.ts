@@ -94,6 +94,8 @@ export type RuntimeSessionView = {
   readonly contractRevision: string
 }
 
+export type RuntimeOrphanedTurnReconciliation = 'live' | 'reconciled'
+
 export type RuntimeThreadSessionView = {
   readonly productThreadId: string
   readonly runtimeThreadId: string
@@ -215,6 +217,79 @@ export class RuntimeSessionManager {
       await this.options.persistence.readContractRevision(),
     )
     return await this.startOrResumeAtRevision(scopeValue, launchOptions, contractRevision)
+  }
+
+  async reconcileOrphanedTurns(
+    scopeValue: RuntimeSessionScope,
+    ownerTokenValue: string,
+  ): Promise<RuntimeOrphanedTurnReconciliation> {
+    if (this.shuttingDown) throw new Error('CODEX_RUNTIME_SESSION_MANAGER_SHUTTING_DOWN')
+    const scope = normalizeScope(scopeValue)
+    const scopeId = buildRuntimeSessionScopeId(scope)
+    const ownerToken = requireIdentity(
+      ownerTokenValue,
+      'CODEX_RUNTIME_SESSION_OWNER_TOKEN_INVALID',
+    )
+    const slot = this.slots.get(scopeId)
+    if (slot) {
+      const entry = await slot.entry
+      if (this.slots.get(scopeId) !== slot) {
+        return await this.reconcileOrphanedTurns(scope, ownerToken)
+      }
+      if (entry.ownership.ownerToken !== ownerToken) {
+        throw new Error('CODEX_RUNTIME_SESSION_OWNER_TOKEN_DIVERGED')
+      }
+      if (entry.transition) {
+        await entry.transition
+        return await this.reconcileOrphanedTurns(scope, ownerToken)
+      }
+      await entry.ownership.assertCurrent()
+      if (entry.status !== 'ready') {
+        throw new Error(`CODEX_RUNTIME_SESSION_NOT_READY:${entry.status}`)
+      }
+      if (entry.activeTurn) return 'live'
+      await this.options.waitForTurnSettlement(scope)
+      await entry.ownership.assertCurrent()
+      if (entry.transition) {
+        await entry.transition
+        return await this.reconcileOrphanedTurns(scope, ownerToken)
+      }
+      if (entry.activeTurn) return 'live'
+      await this.options.persistence.reconcileBeforeStart(scope)
+      return 'reconciled'
+    }
+
+    const ownership = await this.options.ownership.acquire(scope, ownerToken)
+    requireIdentity(ownership.ownerToken, 'CODEX_RUNTIME_SESSION_OWNER_TOKEN_INVALID')
+    const errors: unknown[] = []
+    try {
+      await ownership.assertCurrent()
+      await this.options.container.reconcile(scopeId)
+      await this.options.persistence.reconcileBeforeStart(scope)
+    } catch (error) {
+      errors.push(error)
+    }
+    try {
+      await this.options.closePlacementTransportSessions({
+        scope,
+        ownerToken: ownership.ownerToken,
+      })
+    } catch (error) {
+      errors.push(error)
+    }
+    try {
+      await ownership.release()
+    } catch (error) {
+      errors.push(error)
+    }
+    if (errors.length === 1) throw errors[0]
+    if (errors.length > 1) {
+      throw new AggregateError(
+        errors,
+        'CODEX_RUNTIME_ORPHANED_TURN_RECONCILE_CLEANUP_FAILED',
+      )
+    }
+    return 'reconciled'
   }
 
   private async startOrResumeAtRevision(
