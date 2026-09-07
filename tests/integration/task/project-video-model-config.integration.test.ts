@@ -258,20 +258,21 @@ function h3ReferenceAudioPrompt(audioCount: number): string {
     `<Audio ${String(index + 1)}> is the voice-timbre reference for <Subject 1> (S1).`
   )).join('\n')
   const retention = Array.from({ length: audioCount }, (_, index) => (
-    `<Audio ${String(index + 1)}>: reference - <Subject 1> (S1) follows its vocal timbre without copying the original signal.`
+    `<Audio ${String(index + 1)}>: reference - The target speaker follows its vocal timbre without copying the original signal.`
   )).join('\n')
   return `subject_definitions:
 <Subject 1> (S1) is the person shown in <Picture 1>.
 ${definitions}
 
 summary:
-<Subject 1> speaks one new line.
+[reference generation + audio reference] <Subject 1> speaks one new line using the supplied audio as a voice-timbre reference.
 
 retention_analysis:
-<Picture 1>: reference - preserve <Subject 1>.
+<Subject 1> (appears in [Shot 1]): fully_preserved - The person's identity and appearance from <Picture 1> are retained.
 ${retention}
 
 detailed_description:
+The target video uses a realistic cinematic portrait style with natural indoor lighting.
 [Shot 1] <Subject 1> (S1) faces camera and says <d>[Chinese]这是新台词。</d>
 
 overall_soundscape:
@@ -283,18 +284,24 @@ N/A`
 
 function h3Prompt(inputMode: 'reference' | 'first_frame' | 'first_last_frame', promptEndSeconds: number): string {
   const detailedDescription = inputMode === 'reference'
-    ? '[Shot 1] She turns toward the doorway and settles facing it.'
+    ? 'The target video uses a realistic cinematic style with natural indoor lighting.\n[Shot 1] She turns toward the doorway and settles facing it.'
     : inputMode === 'first_frame'
       ? '[Shot 1] <Picture 1> aligns with 0.00 seconds and shows her turning toward the doorway.'
       : `[Shot 1] <Picture 1> aligns with 0.00 seconds and shows her turning toward the doorway; at ${String(promptEndSeconds)} seconds she settles exactly into <Picture 2>.`
+  const summary = inputMode === 'reference'
+    ? '[reference generation] She turns toward the doorway while preserving <Subject 1> from <Picture 1>.'
+    : 'She turns toward the doorway.'
+  const retention = inputMode === 'reference'
+    ? '<Subject 1> (appears in [Shot 1]): fully_preserved - Her identity, clothing, and room layout from <Picture 1> are retained.'
+    : 'Preserve her identity, clothing, and room layout.'
   return `subject_definitions:
-<Subject 1> is the woman represented by the supplied picture inputs.
+<Subject 1> is the woman represented by <Picture 1>.
 
 summary:
-She turns toward the doorway.
+${summary}
 
 retention_analysis:
-Preserve her identity, clothing, and room layout.
+${retention}
 
 detailed_description:
 ${detailedDescription}
@@ -307,15 +314,23 @@ N/A`
 }
 
 function h3ContinuationPrompt(): string {
-  return h3Prompt('reference', 0)
-    .replace(
-      '<Subject 1> is the woman represented by the supplied picture inputs.',
-      '<Subject 1> is the established woman from the preceding motion guide.',
-    )
-    .replace(
-      'Preserve her identity, clothing, and room layout.',
-      'Continue the inherited identity, pose, motion direction, and room layout from the preceding motion guide.',
-    )
+  return `subject_definitions:
+<Subject 1> is the established woman from the preceding motion guide.
+
+summary:
+She continues turning toward the doorway.
+
+retention_analysis:
+Continue the inherited identity, pose, motion direction, and room layout from the preceding motion guide.
+
+detailed_description:
+[Shot 1] She continues turning toward the doorway and settles facing it.
+
+overall_soundscape:
+Soft room tone and fabric movement.
+
+non_diegetic_music:
+N/A`
 }
 
 function videoOptions(value: unknown): Array<{ value: string }> {

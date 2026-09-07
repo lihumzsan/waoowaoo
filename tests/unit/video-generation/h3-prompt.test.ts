@@ -1,16 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { assertVideoPromptMatchesProfile } from '@/lib/video-generation/h3-prompt'
 
+const REFERENCE_STYLE_OPENING = 'The target video uses a realistic cinematic style with natural indoor lighting.'
+
 const referencePrompt = `subject_definitions:
 <Subject 1> is the woman in <Picture 1>.
 
 summary:
-She turns toward the doorway.
+[reference generation] She turns toward the doorway while preserving <Subject 1> from <Picture 1>.
 
 retention_analysis:
-Preserve her identity, clothing, and the room layout from <Picture 1>.
+<Subject 1> (appears in [Shot 1]): fully_preserved - Her identity, clothing, and the room layout from <Picture 1> are retained.
 
 detailed_description:
+${REFERENCE_STYLE_OPENING}
 [Shot 1] She notices the doorway, turns, and settles facing it.
 
 overall_soundscape:
@@ -24,13 +27,14 @@ const referenceAudioPrompt = `subject_definitions:
 <Audio 1> is the voice-timbre reference for <Subject 1> (S1).
 
 summary:
-<Subject 1> speaks one new line.
+[reference generation + audio reference] <Subject 1> speaks one new line using <Audio 1> as a voice-timbre reference.
 
 retention_analysis:
-<Picture 1>: reference - preserve <Subject 1>.
-<Audio 1>: reference - <Subject 1> (S1) follows its vocal timbre and measured delivery without copying the original signal.
+<Subject 1> (appears in [Shot 1]): fully_preserved - The person's identity and appearance from <Picture 1> are retained.
+<Audio 1>: reference - The target speaker follows its vocal timbre and measured delivery without copying the original signal.
 
 detailed_description:
+The target video uses a realistic cinematic portrait style with natural indoor lighting.
 [Shot 1] <Subject 1> (S1) faces camera and says <d>[Chinese]这是新台词。</d>
 
 overall_soundscape:
@@ -39,7 +43,11 @@ Clean speech with quiet room tone.
 non_diegetic_music:
 N/A`
 
-const firstFramePrompt = referencePrompt.replace(
+const nonReferencePrompt = referencePrompt
+  .replace('[reference generation] ', '')
+  .replace(`${REFERENCE_STYLE_OPENING}\n`, '')
+
+const firstFramePrompt = nonReferencePrompt.replace(
   '[Shot 1] She notices the doorway',
   '[Shot 1] <Picture 1> aligns with 0.00 seconds and shows her noticing the doorway',
 )
@@ -49,13 +57,17 @@ const firstLastFramePrompt = firstFramePrompt.replace(
   'turns, and at 4.458 seconds settles exactly into <Picture 2>.',
 )
 
-const continuationPrompt = referencePrompt
+const continuationPrompt = nonReferencePrompt
   .replace(
     '<Subject 1> is the woman in <Picture 1>.',
     '<Subject 1> is the established woman from the preceding motion guide.',
   )
   .replace(
-    'Preserve her identity, clothing, and the room layout from <Picture 1>.',
+    'She turns toward the doorway while preserving <Subject 1> from <Picture 1>.',
+    'She continues the inherited motion toward the doorway.',
+  )
+  .replace(
+    '<Subject 1> (appears in [Shot 1]): fully_preserved - Her identity, clothing, and the room layout from <Picture 1> are retained.',
     'Continue the inherited identity, pose, motion direction, and room layout from the preceding motion guide.',
   )
 
@@ -101,6 +113,195 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
     })).not.toThrow()
   })
 
+  it('requires the official reference-generation summary prefix', () => {
+    const prompt = referencePrompt.replace('[reference generation] ', '')
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:REFERENCE_SUMMARY_PREFIX_REQUIRED')
+  })
+
+  it.each([
+    {
+      name: 'omits the audio-reference task type when frozen audio is present',
+      prompt: referenceAudioPrompt.replace(
+        '[reference generation + audio reference]',
+        '[reference generation]',
+      ),
+      references: { pictureCount: 1, audioCount: 1 },
+    },
+    {
+      name: 'claims audio-reference conditioning without frozen audio',
+      prompt: referencePrompt.replace(
+        '[reference generation]',
+        '[reference generation + audio reference]',
+      ),
+      references: { pictureCount: 1, audioCount: 0 },
+    },
+    {
+      name: 'adds an unsupported task type',
+      prompt: referencePrompt.replace(
+        '[reference generation]',
+        '[foo + reference generation]',
+      ),
+      references: { pictureCount: 1, audioCount: 0 },
+    },
+  ])('rejects a Ref summary that $name', ({ prompt, references }) => {
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+      references,
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:REFERENCE_SUMMARY_PREFIX_REQUIRED')
+  })
+
+  it('requires the official style opening before the first reference shot', () => {
+    const prompt = referencePrompt.replace(`${REFERENCE_STYLE_OPENING}\n`, '')
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:REFERENCE_STYLE_OPENING_REQUIRED')
+  })
+
+  it('rejects legacy reference relationship prose in retention analysis', () => {
+    const prompt = referencePrompt.replace(
+      '<Subject 1> (appears in [Shot 1]): fully_preserved - Her identity, clothing, and the room layout from <Picture 1> are retained.',
+      '<Picture 1>: reference - preserve <Subject 1>.',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:REFERENCE_RETENTION_RELATION_INVALID:Picture:1')
+  })
+
+  it('rejects speaker IDs from official reference retention analysis', () => {
+    const prompt = referenceAudioPrompt.replace(
+      '<Audio 1>: reference - The target speaker follows its vocal timbre and measured delivery without copying the original signal.',
+      '<Audio 1>: reference - <Subject 1> (S1) follows its vocal timbre and measured delivery without copying the original signal.',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+      references: { pictureCount: 1, audioCount: 1 },
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:REFERENCE_RETENTION_SPEAKER_FORBIDDEN')
+  })
+
+  it('rejects negative subtitle exclusions from the positive reference prompt', () => {
+    const prompt = referencePrompt.replace(
+      'are retained.',
+      'are retained. No modern overlays, captions, subtitles, titles, or watermarks are shown.',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:REFERENCE_POSITIVE_PROMPT_TEXT_EXCLUSION')
+  })
+
+  it('keeps dialogue and explicitly requested visible text outside the subtitle-exclusion check', () => {
+    const prompt = referencePrompt.replace(
+      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] A subtitle reading "欢迎" appears as she says <d>[English]No subtitles, please.</d> and turns toward the doorway.',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+    })).not.toThrow()
+  })
+
+  it('does not mistake an unrelated without-clause for a visible-text exclusion', () => {
+    const prompt = referencePrompt.replace(
+      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] Without hesitation, she points to a subtitle reading "Welcome" and turns toward the doorway.',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+    })).not.toThrow()
+  })
+
+  it('does not let an unrelated no-predicate negate explicitly requested visible text', () => {
+    const prompt = referencePrompt.replace(
+      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] No one moves, subtitles reading "Welcome" remain visible.',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+    })).not.toThrow()
+  })
+
+  it.each([
+    'Zero subtitles appear.',
+    'The scene is subtitle-free.',
+    'Omit subtitles.',
+    'No bright, modern subtitles appear.',
+  ])('rejects the visible-text exclusion %s', (exclusion) => {
+    const prompt = referencePrompt.replace(
+      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      `[Shot 1] ${exclusion} She notices the doorway, turns, and settles facing it.`,
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:REFERENCE_POSITIVE_PROMPT_TEXT_EXCLUSION')
+  })
+
+  it('rejects exact dialogue repeated outside its detailed-description dialogue tag', () => {
+    const prompt = referenceAudioPrompt.replace(
+      '<Subject 1> speaks one new line using <Audio 1> as a voice-timbre reference.',
+      '<Subject 1> says 这是新台词。 using <Audio 1> as a voice-timbre reference.',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+      references: { pictureCount: 1, audioCount: 1 },
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:REFERENCE_DIALOGUE_OUTSIDE_TAG')
+  })
+
+  it.each(['A', 'audio'])('does not mistake Ref protocol metadata for short dialogue %s', (dialogue) => {
+    const prompt = referenceAudioPrompt.replace(
+      '<d>[Chinese]这是新台词。</d>',
+      `<d>[English]${dialogue}</d>`,
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+      references: { pictureCount: 1, audioCount: 1 },
+    })).not.toThrow()
+  })
+
+  it('allows the official cutoff tag inside reference dialogue', () => {
+    const prompt = referencePrompt.replace(
+      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] She turns toward the doorway and says <d>[Chinese]我终于找到<cutoff></d>',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+    })).not.toThrow()
+  })
+
+  it.each([
+    {
+      name: 'outside detailed_description',
+      prompt: referencePrompt.replace(
+        '[reference generation] She turns toward the doorway while preserving <Subject 1> from <Picture 1>.',
+        '[reference generation] She turns toward the doorway<cutoff> while preserving <Subject 1> from <Picture 1>.',
+      ),
+    },
+    {
+      name: 'outside a dialogue block',
+      prompt: referencePrompt.replace(
+        '[Shot 1] She notices the doorway, turns, and settles facing it.',
+        '[Shot 1] She notices the doorway<cutoff>, turns, and settles facing it.',
+      ),
+    },
+  ])('rejects a reference cutoff tag $name', ({ prompt }) => {
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:DIALOGUE_CUTOFF_SECTION_INVALID')
+  })
+
   it('rejects media reference indexes above the frozen manifest', () => {
     expect(() => assertH3Prompt({
       inputMode: 'reference',
@@ -110,9 +311,13 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
   })
 
   it('rejects a frozen audio omitted from the prompt', () => {
+    const prompt = referencePrompt.replace(
+      '[reference generation]',
+      '[reference generation + audio reference]',
+    )
     expect(() => assertH3Prompt({
       inputMode: 'reference',
-      prompt: referencePrompt,
+      prompt,
       references: { pictureCount: 1, audioCount: 1 },
     })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:AUDIO_REFERENCE_MISSING:1')
   })
@@ -153,16 +358,16 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
     })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:AUDIO_SPEAKER_BINDING_INVALID:1')
   })
 
-  it('requires the audio-bound speaker in retention and dialogue', () => {
+  it('requires each audio reference in retention and keeps dialogue owned by its bound speaker', () => {
     const withoutRetention = referenceAudioPrompt.replace(
-      '<Audio 1>: reference - <Subject 1> (S1) follows its vocal timbre and measured delivery without copying the original signal.',
-      '<Audio 1>: reference - preserve the vocal timbre.',
+      '<Audio 1>: reference - The target speaker follows its vocal timbre and measured delivery without copying the original signal.\n',
+      '',
     )
     expect(() => assertH3Prompt({
       inputMode: 'reference',
       prompt: withoutRetention,
       references: { pictureCount: 1, audioCount: 1 },
-    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:AUDIO_SPEAKER_RETENTION_MISSING:1')
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:AUDIO_REFERENCE_RETENTION_MISSING:1')
 
     const withoutDialogueSpeaker = referenceAudioPrompt.replace(
       '[Shot 1] <Subject 1> (S1) faces camera and says',
@@ -173,6 +378,39 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
       prompt: withoutDialogueSpeaker,
       references: { pictureCount: 1, audioCount: 1 },
     })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:AUDIO_SPEAKER_DIALOGUE_MISSING:1')
+  })
+
+  it('rejects an audio token repeated inside its retention entry', () => {
+    const prompt = referenceAudioPrompt.replace(
+      '<Audio 1>: reference - The target speaker follows its vocal timbre and measured delivery without copying the original signal.',
+      '<Audio 1>: reference - The target speaker follows the timbre from <Audio 1>.',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+      references: { pictureCount: 1, audioCount: 1 },
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:AUDIO_REFERENCE_RETENTION_INVALID:1')
+  })
+
+  it('requires each audio reference to own a separate retention entry', () => {
+    const prompt = referenceAudioPrompt
+      .replace(
+        '<Audio 1> is the voice-timbre reference for <Subject 1> (S1).',
+        '<Audio 1> is the voice-timbre reference for <Subject 1> (S1).\n<Audio 2> is the voice-timbre reference for <Subject 2> (S2).',
+      )
+      .replace(
+        '<Audio 1>: reference - The target speaker follows its vocal timbre and measured delivery without copying the original signal.',
+        '<Audio 1>: reference - The speakers follow the timbres from the supplied sources, including <Audio 2>.',
+      )
+      .replace(
+        '[Shot 1] <Subject 1> (S1) faces camera and says <d>[Chinese]这是新台词。</d>',
+        '[Shot 1] <Subject 1> (S1) faces camera and says <d>[Chinese]这是新台词。</d> Then <Subject 2> (S2) says <d>[Chinese]我也来了。</d>',
+      )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+      references: { pictureCount: 1, audioCount: 2 },
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:AUDIO_REFERENCE_RETENTION_INVALID')
   })
 
   it('rejects dialogue owned only by a different subject and speaker', () => {
@@ -195,7 +433,7 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
 
     expect(() => assertH3Prompt({
       inputMode: 'first_frame',
-      prompt: referencePrompt,
+      prompt: nonReferencePrompt,
     })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:FIRST_FRAME_ANCHOR_REQUIRED')
   })
 
@@ -346,7 +584,10 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
 
   it.each([
     referencePrompt.replace('retention_analysis:', 'retention_notes:'),
-    referencePrompt.replace('summary:\nShe turns toward the doorway.\n\n', 'summary:\n\n'),
+    referencePrompt.replace(
+      'summary:\n[reference generation] She turns toward the doorway while preserving <Subject 1> from <Picture 1>.\n\n',
+      'summary:\n\n',
+    ),
     referencePrompt.replace('N/A', 'Use a dramatic orchestral score.'),
     referencePrompt + '\nunknown_heading:\nextra',
   ])('rejects an invalid six-section H3 Prompt', (prompt) => {
@@ -376,24 +617,27 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
     {
       name: 'a dialogue tag outside detailed_description',
       prompt: referencePrompt.replace(
-        'She turns toward the doorway.',
-        'She speaks the provided line. <d>[Chinese]不要走。</d>',
+        '[reference generation] She turns toward the doorway while preserving <Subject 1> from <Picture 1>.',
+        '[reference generation] She speaks the provided line. <d>[Chinese]不要走。</d>',
       ),
       reason: 'DIALOGUE_TAG_SECTION_INVALID:summary',
-    },
-    {
-      name: 'the unsupported dialogue cutoff tag',
-      prompt: referencePrompt.replace(
-        'turns, and settles',
-        'says: <d>[Chinese]不要<cutoff></d>, turns, and settles',
-      ),
-      reason: 'DIALOGUE_CUTOFF_UNSUPPORTED',
     },
   ])('rejects $name', ({ prompt, reason }) => {
     expect(() => assertH3Prompt({
       inputMode: 'reference',
       prompt,
     })).toThrow(`VIDEO_PROMPT_PROFILE_INVALID:${reason}`)
+  })
+
+  it('keeps cutoff unsupported outside the Ref mode contract', () => {
+    const prompt = firstFramePrompt.replace(
+      'turns, and settles',
+      'says <d>[Chinese]不要<cutoff></d>, turns, and settles',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'first_frame',
+      prompt,
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:DIALOGUE_CUTOFF_UNSUPPORTED')
   })
 
   it('treats verbatim dialogue as opaque to shot syntax validation', () => {

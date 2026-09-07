@@ -64,6 +64,29 @@ async function executeComfyUiH3VideoGeneration(
   }
 }
 
+const referencePrompt = `subject_definitions:
+<Subject 1> is the person shown in <Picture 1>.
+
+summary:
+[reference generation] <Subject 1> moves and settles while preserving the identity shown in <Picture 1>.
+
+retention_analysis:
+<Subject 1> (appears in [Shot 1]): fully_preserved - The person's identity and appearance from <Picture 1> are retained.
+
+detailed_description:
+The target video uses a realistic cinematic portrait style with natural indoor lighting.
+[Shot 1] The subject moves and settles.
+
+overall_soundscape:
+Room tone and movement.
+
+non_diegetic_music:
+N/A`
+
+const nonReferencePrompt = referencePrompt
+  .replace('[reference generation] ', '')
+  .replace('The target video uses a realistic cinematic portrait style with natural indoor lighting.\n', '')
+
 const videoInput: AiProviderVideoExecutionContext = {
   userId: 'user-h3-contract',
   logicalInvocationIdentity: 'test:h3:logical-invocation',
@@ -75,7 +98,7 @@ const videoInput: AiProviderVideoExecutionContext = {
   },
   imageUrl: '',
   options: {
-    prompt: 'subject_definitions:\nSubject 1 is in Picture 1.\n\nsummary:\nA test video.\n\nretention_analysis:\nPreserve identity.\n\ndetailed_description:\n[Shot 1] The subject moves and settles.\n\noverall_soundscape:\nRoom tone and movement.\n\nnon_diegetic_music:\nN/A',
+    prompt: referencePrompt,
     duration: 10,
     aspectRatio: '16:9',
     generateAudio: true,
@@ -92,13 +115,14 @@ const referenceAudioInput: AiProviderVideoExecutionContext = {
 <Audio 1> is the voice-timbre reference for <Subject 1> (S1).
 
 summary:
-<Subject 1> speaks one new line.
+[reference generation + audio reference] <Subject 1> speaks one new line using <Audio 1> as a voice-timbre reference.
 
 retention_analysis:
-<Picture 1>: reference - preserve <Subject 1>.
-<Audio 1>: reference - <Subject 1> (S1) follows its vocal timbre and measured delivery without copying the original signal.
+<Subject 1> (appears in [Shot 1]): fully_preserved - The person's identity and appearance from <Picture 1> are retained.
+<Audio 1>: reference - The target speaker follows its vocal timbre and measured delivery without copying the original signal.
 
 detailed_description:
+The target video uses a realistic cinematic portrait style with natural indoor lighting.
 [Shot 1] <Subject 1> (S1) faces camera and says <d>[Chinese]这是新台词。</d>
 
 overall_soundscape:
@@ -116,7 +140,7 @@ const firstFrameInput: AiProviderVideoExecutionContext = {
   imageUrl: 'https://media.example.com/first.png',
   options: {
     ...videoInput.options,
-    prompt: videoInput.options!.prompt!.replace(
+    prompt: nonReferencePrompt.replace(
       '[Shot 1] The subject moves and settles.',
       '[Shot 1] <Picture 1> aligns with 0.00 seconds and shows the subject moving and settling.',
     ),
@@ -140,10 +164,19 @@ const continuationInput: AiProviderVideoExecutionContext = {
   ...videoInput,
   options: {
     ...videoInput.options,
-    prompt: videoInput.options!.prompt!.replace(
-      'Preserve identity.',
-      'Continue the inherited identity, pose, camera motion, and action direction.',
-    ),
+    prompt: nonReferencePrompt
+      .replace(
+        '<Subject 1> is the person shown in <Picture 1>.',
+        '<Subject 1> is the established person from the preceding motion guide.',
+      )
+      .replace(
+        '<Subject 1> moves and settles while preserving the identity shown in <Picture 1>.',
+        '<Subject 1> continues the inherited motion and settles.',
+      )
+      .replace(
+        '<Subject 1> (appears in [Shot 1]): fully_preserved - The person\'s identity and appearance from <Picture 1> are retained.',
+        'Continue the inherited identity, pose, camera motion, and action direction.',
+      ),
     referenceImages: undefined,
     continuationVideoUrl: 'https://media.example.com/previous.mp4',
   },
