@@ -77,6 +77,7 @@ subject_definitions:
 
 summary:
 [reference generation + audio reference] <Subject 1> speaks one new line using <Audio 1> as a voice-timbre reference.
+Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.
 
 retention_analysis:
 <Subject 1> (appears in [Shot 1]): fully_preserved - The person's identity and appearance from <Picture 1> are retained.
@@ -101,7 +102,7 @@ N/A
 - 时间阶段不是镜头边界：同一连续物理动作或同一主要运镜能够承载的内容只使用一个 `[Shot 1]`，可在镜内用 `At MM:SS.mmm` 描述动作阶段。用户明确要求单镜头时不得切镜；`first_last_frame` 默认用单镜连续插值，只有来源明确规定多镜时才增加镜头。
 - 运镜作为当前镜头中的自然英文动词句，不堆标签。H3 类型为 `Zoom In/Out`、`Push In/Pull Out`、`Pan Left/Right`、`Truck Left/Right`、`Tilt Up/Down`、`Pedestal Up/Down`、`Arc Shot`、`Tracking Shot`、`Static Shot`、`POV`、`Roll Clockwise/Counterclockwise` 或 `Shake Slightly/Strongly`，但正文统一使用 `The camera + 小写动词`：`zooms`、`pushes`、`pulls`、`pans`、`trucks`、`tilts`、`pedestals`、`arcs`、`tracks`、`holds a static shot`、`uses a POV shot`、`rolls` 或 `shakes`。默认中等幅度和正常速度不写；来源要求小幅、大幅、慢速或快速时分别写 `with small/large amplitude` 与 `at slow/fast speed`。例如 `The camera pulls out with small amplitude at slow speed.`；默认值时直接写 `The camera tracks the woman.`，不写 `natural/normal speed`、`medium amplitude`、`performs a Pull Out` 或 `a slow Push In`。
 - 实际说话或歌唱的声音源按首次发声顺序获得稳定 `(S1)`、`(S2)`；跨镜复用同一 ID，从不发声的角色不分配 ID。把身份、ID、动作与发声写成一个句子。多人同声说同一句来源原文时，使用一个复合 ID 和一个 `<d>`；多人同时说不同来源原文时，每条台词分别保留自己的稳定 ID 与独立 `<d>`，并在块外说明二者重叠。首次发声时只用来源已有的身份与声音事实建立说话人，身份短语、ID、动作和语气放在 `<d>` 外；不在同一事件里重复声明说话人或添加 `says exactly:`、`the first speaker is`。
-- `<d>` 内只放 `[Language]` 与用户或来源逐字提供的对白、歌词，不加反引号、说话人说明、voiceover 字样或翻译。每个完整陈述、问句或感叹句的 `.?!`（中文可用 `。！？`）必须放在 `</d>` 前；只有以 `<cutoff>` 结束的明确截断话语，或以成对 `<scenetrans>` 连接到下一镜的未完成前半句，不要求在当前块补句末标点。可见文字是条件槽：只有用户或来源明确要求画面中出现逐字文字时，才用 ASCII 英文双引号保留。官方列出的 banner、sign、label、subtitle、neon text 等明确文字载体在句首或镜头子句起始处可直接写成 `{明确载体} reading "逐字文字"`；其他任意载体及嵌入人物动作的载体统一写成 `{实际载体} bears visible text reading "逐字文字"`，不靠名词清单猜测其是否可见。`reading` 必须修饰载体或 `visible text`，不得描述人物朗读。逐字文字自身含 ASCII 双引号时，用反斜线转义内层引号，例如 `A sign reading "He said \"Hello\"."`；转义符只承担边界语法，不改变文字内容。`detailed_description` 中其他内容不得使用双引号代替 `<d>`。没有这类明确要求时，最终 Prompt 只描述场景、动作、声音和对白，不输出任何关于字幕、标题、水印、播放器文字或界面 overlay 是否存在的元描述，也不把本规则改写成否定提示。
+- `<d>` 内只放 `[Language]` 与用户或来源逐字提供的对白、歌词，不加反引号、说话人说明、voiceover 字样或翻译。每个完整陈述、问句或感叹句的 `.?!`（中文可用 `。！？`）必须放在 `</d>` 前；只有以 `<cutoff>` 结束的明确截断话语，或以成对 `<scenetrans>` 连接到下一镜的未完成前半句，不要求在当前块补句末标点。可见文字是条件槽：只有用户或来源明确要求画面中出现逐字文字时，才用 ASCII 英文双引号保留。官方列出的 banner、sign、label、subtitle、neon text 等明确文字载体在句首或镜头子句起始处可直接写成 `{明确载体} reading "逐字文字"`；其他任意载体及嵌入人物动作的载体统一写成 `{实际载体} bears visible text reading "逐字文字"`，不靠名词清单猜测其是否可见。`reading` 必须修饰载体或 `visible text`，不得描述人物朗读。逐字文字自身含 ASCII 双引号时，用反斜线转义内层引号，例如 `A sign reading "He said \"Hello\"."`；转义符只承担边界语法，不改变文字内容。`detailed_description` 中其他内容不得使用双引号代替 `<d>`。每个最终 H3 Prompt 的 `summary` 都必须原样写入 `Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.`。这条约束禁止模型把对白自动渲染成字幕，也禁止凭空添加标题、水印和界面文字；只有用户或来源明确要求某段逐字文字以可见载体出现时，才保留该项明确要求，不得由对白存在推导字幕。
 - `voiceover` 必须在同一句中把来源人物、稳定 ID、`<d>` 和“所有可见人物均不做口型”绑定；不能只约束发声者本人。对白跨切镜时，把 `<scenetrans>` 放在前后两个 `<d>` 内的连接点并明确声音连续跨切。`reference` 只有在来源或用户明确要求话语被视频结尾截断时，才在最后一个 `<d>` 内使用一次 `<cutoff>`，将它放在对白末尾、紧邻 `</d>`，并让该 `</d>` 成为 `detailed_description` 的最后实质内容（其后只可有终止标点）；其余情况及其他输入模式仍按时长—内容冲突停止构造可执行 item。下列代码块只展示结构，花括号占位符必须由来源事实替换且不得原样输出；不得复制其中的主体、场景、动作或时间：
 
 ```text
@@ -146,7 +147,7 @@ N/A
 - 是否在存在合法参考图且没有明确运动续接或帧控制时使用主模式 Ref2VA，并只在来源明确要求相应控制时选择其他模式？`durationSeconds` 是否仍为该模式的合法整数，时间条目是否同时匹配输入模式和请求时长，所有锚点是否使用该条目的内部时钟？
 - 要求前段运动连续续接时，是否把前段精确 ready 视频版本作为后段唯一 `continuation_video`，且失败时没有单尾帧、参考图、reference video 或时间偏移 fallback？
 - H3 是否严格六段、固定 `non_diegetic_music: N/A`、无 AI 节点和无 Prompt 改写？
-- 对白是否逐字、自然说完，且 `<cutoff>` 只用于 `reference` 中明确要求被结尾截断的最后一段话语，并让对应 `</d>` 成为详细描述最后实质内容；每个声音源是否有稳定 `(Sx)`，同句齐声是否使用复合 ID、不同台词重叠是否分别保留 ID 与 `<d>`，`<d>` 是否只在 `detailed_description`，跨切 `<scenetrans>` 是否在两个 `<d>` 内，voiceover 是否明确所有可见人物均不做口型？对白后的落点是否只使用来源已有动作或反应，不存在时是否以说话表演自然完成而没有新增内容？可见文字是否只在用户或来源明确要求时按句首官方载体 `{载体} reading "原文"` 或嵌入式 `{载体} bears visible text reading "原文"` 写入双引号，内层 ASCII 双引号是否用 `\"` 保持边界，无要求时是否完全省略文字层元描述而没有补写否定句？
+- 对白是否逐字、自然说完，且 `<cutoff>` 只用于 `reference` 中明确要求被结尾截断的最后一段话语，并让对应 `</d>` 成为详细描述最后实质内容；每个声音源是否有稳定 `(Sx)`，同句齐声是否使用复合 ID、不同台词重叠是否分别保留 ID 与 `<d>`，`<d>` 是否只在 `detailed_description`，跨切 `<scenetrans>` 是否在两个 `<d>` 内，voiceover 是否明确所有可见人物均不做口型？对白后的落点是否只使用来源已有动作或反应，不存在时是否以说话表演自然完成而没有新增内容？可见文字是否只在用户或来源明确要求时按句首官方载体 `{载体} reading "原文"` 或嵌入式 `{载体} bears visible text reading "原文"` 写入双引号，内层 ASCII 双引号是否用 `\"` 保持边界；`summary` 是否原样包含固定的无字幕、标题、水印和界面 overlay 约束，且对白存在没有被误判为需要字幕？
 
 ## 边界
 

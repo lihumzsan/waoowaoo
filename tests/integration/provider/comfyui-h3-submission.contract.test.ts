@@ -69,6 +69,7 @@ const referencePrompt = `subject_definitions:
 
 summary:
 [reference generation] <Subject 1> moves and settles while preserving the identity shown in <Picture 1>.
+Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.
 
 retention_analysis:
 <Subject 1> (appears in [Shot 1]): fully_preserved - The person's identity and appearance from <Picture 1> are retained.
@@ -116,6 +117,7 @@ const referenceAudioInput: AiProviderVideoExecutionContext = {
 
 summary:
 [reference generation + audio reference] <Subject 1> speaks one new line using <Audio 1> as a voice-timbre reference.
+Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.
 
 retention_analysis:
 <Subject 1> (appears in [Shot 1]): fully_preserved - The person's identity and appearance from <Picture 1> are retained.

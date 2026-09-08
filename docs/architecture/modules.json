@@ -215,6 +215,7 @@
         "src/lib/codex-runtime/runtime-adapter.ts",
         "src/lib/codex-runtime/app-server-client.ts",
         "src/lib/creative-skills",
+        "src/lib/video-generation",
         "src/lib/project-production-context.ts",
         "src/lib/wao-mcp/contracts.ts",
         "src/lib/operations/project-agent.ts",

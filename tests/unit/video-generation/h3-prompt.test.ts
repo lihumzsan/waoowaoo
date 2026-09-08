@@ -8,6 +8,7 @@ const referencePrompt = `subject_definitions:
 
 summary:
 [reference generation] She turns toward the doorway while preserving <Subject 1> from <Picture 1>.
+Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.
 
 retention_analysis:
 <Subject 1> (appears in [Shot 1]): fully_preserved - Her identity, clothing, and the room layout from <Picture 1> are retained.
@@ -28,6 +29,7 @@ const referenceAudioPrompt = `subject_definitions:
 
 summary:
 [reference generation + audio reference] <Subject 1> speaks one new line using <Audio 1> as a voice-timbre reference.
+Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.
 
 retention_analysis:
 <Subject 1> (appears in [Shot 1]): fully_preserved - The person's identity and appearance from <Picture 1> are retained.
@@ -98,6 +100,21 @@ function assertH3Prompt(input: {
 }
 
 describe('MiniMax H3 multimodal Prompt contract', () => {
+  it.each([
+    ['reference', referencePrompt],
+    ['first_frame', firstFramePrompt],
+    ['first_last_frame', firstLastFramePrompt],
+    ['continuation', continuationPrompt],
+  ] as const)('rejects a %s prompt without the required no-overlay policy', (inputMode, prompt) => {
+    expect(() => assertH3Prompt({
+      inputMode,
+      prompt: prompt.replace(
+        'Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.',
+        '',
+      ),
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:VISIBLE_TEXT_POLICY_REQUIRED')
+  })
+
   it('keeps the exact six-section reference dialect without treating a reference as a frame', () => {
     expect(() => assertH3Prompt({
       inputMode: 'reference',
@@ -238,6 +255,7 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
 
 summary:
 [reference generation] Elle se tourne vers la porte en conservant <Subject 1> de <Picture 1>.
+Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.
 
 retention_analysis:
 <Subject 1> (dans [Shot 1]): fully_preserved - Son identité, ses vêtements et la pièce de <Picture 1> sont conservés.
@@ -263,6 +281,7 @@ N/A`
 
 summary:
 [reference generation] Zij draait naar de deur en behoudt <Subject 1> uit <Picture 1>.
+Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.
 
 retention_analysis:
 <Subject 1> (in [Shot 1]): fully_preserved - Haar identiteit, kleding en kamer uit <Picture 1> blijven behouden.
@@ -288,6 +307,7 @@ N/A`
 
 summary:
 [reference generation] Kobieta obraca się w stronę drzwi i zachowuje wygląd z <Picture 1>.
+Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.
 
 retention_analysis:
 <Subject 1> (w [Shot 1]): fully_preserved - Tożsamość, ubranie i pokój z <Picture 1> pozostają zachowane.
@@ -313,6 +333,7 @@ N/A`
 
 summary:
 [reference generation] Woman turns.
+Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.
 
 retention_analysis:
 <Subject 1>: fully_preserved - Identity retained.
@@ -338,6 +359,7 @@ N/A`
 
 summary:
 [reference generation] Femme fatale waits.
+Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.
 
 retention_analysis:
 <Subject 1>: fully_preserved - Identity retained.
@@ -363,6 +385,7 @@ N/A`
 
 summary:
 [reference generation] Agnieszka walks through Łódź while preserving her identity from <Picture 1>.
+Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.
 
 retention_analysis:
 <Subject 1>: fully_preserved - Her identity and clothing from <Picture 1> remain unchanged.
@@ -2506,7 +2529,7 @@ N/A`
   it.each([
     referencePrompt.replace('retention_analysis:', 'retention_notes:'),
     referencePrompt.replace(
-      'summary:\n[reference generation] She turns toward the doorway while preserving <Subject 1> from <Picture 1>.\n\n',
+      'summary:\n[reference generation] She turns toward the doorway while preserving <Subject 1> from <Picture 1>.\nDo not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.\n\n',
       'summary:\n\n',
     ),
     referencePrompt.replace('N/A', 'Use a dramatic orchestral score.'),

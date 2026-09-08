@@ -37,9 +37,11 @@ export type MinimaxH3PromptSection = (typeof MINIMAX_H3_PROMPT_SECTIONS)[number]
 const SECTION_HEADING = /^([a-z][a-z0-9_]*)\s*:\s*$/u
 const TIME_EXPRESSION = /(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?)\b/giu
 const FIXED_NON_DIEGETIC_MUSIC = 'N/A'
+const REQUIRED_VISIBLE_TEXT_POLICY = 'Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.'
 const DIALOGUE_TAG = /<\/?d>/u
 const DIALOGUE_CUTOFF_TAG = /<cutoff>/u
 const DIALOGUE_BLOCK = /<d>[\s\S]*?<\/d>/gu
+const QUOTED_TEXT_LITERAL = /"(?:\\.|[^"\\\r\n])*"/gu
 const REFERENCE_ENTITY_TOKEN = /<(?:Subject|Picture|Video|Audio)\s+\d+>/gu
 const REFERENCE_SUBJECT_TOKEN = /<Subject\s+\d+>/gu
 const REFERENCE_SUBJECT_LINE_START = /^<Subject\s+(\d+)>/u
@@ -146,6 +148,16 @@ function parseSections(prompt: string): Record<MinimaxH3PromptSection, string> {
     throw invalid('NON_DIEGETIC_MUSIC_CONTRACT_INVALID')
   }
   return result
+}
+
+function assertVisibleTextPolicy(
+  sections: Readonly<Record<MinimaxH3PromptSection, string>>,
+): void {
+  const enforceableSummary = sections.summary
+    .replace(QUOTED_TEXT_LITERAL, (literal) => ' '.repeat(literal.length))
+  if (!enforceableSummary.includes(REQUIRED_VISIBLE_TEXT_POLICY)) {
+    throw invalid('VISIBLE_TEXT_POLICY_REQUIRED')
+  }
 }
 
 function hasPictureTimeAnchor(input: {
@@ -362,7 +374,7 @@ function assertH3ReferencePrompt(
       : sections[section]
     const prose = maskReferenceProtocolMetadata(
       maskReferenceVisibleTextLiterals(bodyWithoutDialogue),
-    )
+    ).replaceAll(REQUIRED_VISIBLE_TEXT_POLICY, ' ')
     if (containsNonLatinScriptLetter(prose)) {
       throw invalid('REFERENCE_NON_ENGLISH_TEXT_INVALID')
     }
@@ -807,6 +819,7 @@ export function assertVideoPromptMatchesProfile(input: {
   }
   const sections = parseSections(input.prompt)
   if (input.profile !== 'minimax_h3_multimodal_v3') throw invalid('PROFILE_UNKNOWN')
+  assertVisibleTextPolicy(sections)
   const timelineOriginSeconds = input.inputMode === 'continuation'
     ? H3_CONTINUATION_GUIDE_SECONDS
     : 0
