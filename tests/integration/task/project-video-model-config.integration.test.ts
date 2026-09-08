@@ -258,8 +258,11 @@ function h3ReferenceAudioPrompt(audioCount: number): string {
     `<Audio ${String(index + 1)}> is the voice-timbre reference for <Subject 1> (S1).`
   )).join('\n')
   const retention = Array.from({ length: audioCount }, (_, index) => (
-    `<Audio ${String(index + 1)}>: reference - The target speaker follows its vocal timbre without copying the original signal.`
+    `<Audio ${String(index + 1)}>: reference - The target speaker follows <Audio ${String(index + 1)}>'s vocal timbre without copying the original signal.`
   )).join('\n')
+  const detailedAudioReferences = Array.from({ length: audioCount }, (_, index) => (
+    `<Audio ${String(index + 1)}>`
+  )).join(' and ')
   return `subject_definitions:
 <Subject 1> (S1) is the person shown in <Picture 1>.
 ${definitions}
@@ -273,7 +276,7 @@ ${retention}
 
 detailed_description:
 The target video uses a realistic cinematic portrait style with natural indoor lighting.
-[Shot 1] <Subject 1> (S1) faces camera and says <d>[Chinese]这是新台词。</d>
+[Shot 1] <Subject 1> (S1), using the voice timbre referenced from ${detailedAudioReferences}, faces camera and says <d>[Chinese]这是新台词。</d>
 
 overall_soundscape:
 Clean speech with quiet room tone.

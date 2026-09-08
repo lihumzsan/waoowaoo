@@ -64,7 +64,9 @@ overall_soundscape:
 non_diegetic_music:
 ```
 
-除对白原文和画面内文字外正文使用英文。除 `continuation` 外，`subject_definitions` 必须把每个实际使用的主体、服装、场景或道具绑定到对应的 `<Picture 1>` 至 `<Picture N>`，不得引用不存在的编号；使用参考音频时，每个 `<Audio N>` 必须恰好定义一次并绑定一个明确的 `<Subject M> (Sx)`，编号顺序与同模态冻结顺序一致。`continuation` 不使用不存在的 Picture 或 Audio 标签，而是用已冻结的前段事实定义继续出现的主体与场景。`reference` 的 `summary` 在没有参考音频时必须以且只能以 `[reference generation]` 开始，使用任一参考音频时必须以且只能以 `[reference generation + audio reference]` 开始；后文只概括动作与参考关系，发声事件写成 `speaks the provided line`，不引用原句、不放 `<d>`。`reference` 的 `retention_analysis` 每个引用项一行：可见项只使用 `fully_preserved`、`partially_preserved`、`attribute_transfer` 或 `weak_reference`，音频只使用 `fully_copy`、`partially_copy`、`reference` 或 `weak_reference`；每个 `<Audio N>` 只在自己的音频保留项中出现一次，该行不混入其他 Picture 或 Audio 标签；这里可引用 `<Subject M>`，但不写 `(Sx)`。其他模式仍按各自注入契约描述保留关系，`continuation` 还必须写明继承进入点的姿态、运动方向、接触关系和镜头运动。`detailed_description` 按播放顺序写连续可见动作、机位、落位、视线、对白与逐镜同步声音，使用音色参考时必须出现相同的 `<Subject M> (Sx)` 和 `<d>`，对白原文只能出现在这里的 `<d>` 内；`overall_soundscape` 用一个连续英文段落归纳全片环境声、动作声和非语言人声，不复述对白、歌唱或逐镜时间线。
+除对白原文和画面内文字外正文使用英文。`reference` 的定义身份只使用 `<Subject N>`，冻结来源只使用 `<Picture N>` 或 `<Audio N>`；当前能力不接受 `reference_video`，因此不得写 `<Video N>`；场景、道具和服装仍可完整定义为 Subject 或写入对应 Subject 描述，但不得自创 `<Scene N>`、`<Prop N>` 等标签。除 `continuation` 外，`subject_definitions` 必须把每个实际使用的主体、服装、场景或道具绑定到对应的 `<Picture 1>` 至 `<Picture N>`，不得引用不存在的编号；每个 `<Audio N>` 必须恰好定义一次且编号顺序与冻结顺序一致。音频对应可见 Subject 的说话人时，定义使用 `<Subject M> (Sx)`；说话人不对应已定义 Subject 时，使用稳定声音描述后跟 `(Sx)`；不与独立目标说话人绑定的同步音效、环境声或独立复用的话语/歌词片段不虚构 Subject 或 Speaker 绑定。一条 Audio 定义不得声明多个说话人。`continuation` 不使用不存在的 Picture 或 Audio 标签，而是用已冻结的前段事实定义继续出现的主体与场景。`reference` 的 `summary` 必须包含 `[reference generation]`；若音频保留关系为 `fully_copy` 或 `partially_copy`，再组合 `audio reuse`；若为 `reference` 或 `weak_reference`，再组合 `audio reference`；同时存在时两者都写且不重复。后文只概括动作与参考关系，不引用原句、不放 `<d>`。`reference` 的 `retention_analysis` 每个引用项一行：可见项只使用 `fully_preserved`、`partially_preserved`、`attribute_transfer` 或 `weak_reference`，音频只使用 `fully_copy`、`partially_copy`、`reference` 或 `weak_reference`；每个 `<Audio N>` 必须有自己的音频保留项，允许在该项说明中按官方写法再次引用同一个 `<Audio N>`，但不得混入另一个 `<Audio M>`；这里可引用 `<Subject M>`，但不写 `(Sx)`。其他模式仍按各自注入契约描述保留关系，`continuation` 还必须写明继承进入点的姿态、运动方向、接触关系和镜头运动。`detailed_description` 按播放顺序写连续可见动作、机位、落位、视线、对白与逐镜同步声音；只有实际使用某个说话人绑定参考音频的发声事件才引用对应 `<Audio N>`。说话人可以是 `<Subject M> (Sx)`，也可以是稳定声音描述加 `(Sx)`；多人同声使用复合 ID，并为复合 ID 内每个使用参考音频的 Speaker 分别明确 `Sx` 与其 `<Audio N>` 的对应关系。引用音色时，在同一镜头或语义阶段内明确对应 Speaker、`<Audio N>` 与 `<d>`，不从另一发声事件、分镜或时间阶段借用标记。不绑定独立说话人的 `<Audio N>` 仍必须在实际生效的声音层引用：逐镜同步的话语、歌词或音效写入 `detailed_description`，环境声与物理音效归入 `overall_soundscape`；使用明确的正向句式，例如 `When <Audio N> reaches the phrase <d>[Language]...</d>, ...` 或 `wind ambience from <Audio N> fills the room`，不得用否定句、纯视觉波形或标签出现本身冒充声音应用。观众侧配乐不通过 H3 Ref Prompt 注入，`non_diegetic_music` 固定写 `N/A`，配乐只走项目独立音乐工作流。只使用音色、节奏、情绪或表达方式时，不把参考音频原台词带入目标视频。对白原文只能出现在这里的 `<d>` 内；`overall_soundscape` 用一个连续英文段落归纳全片环境声、动作声和非语言人声，不复述对白、歌唱或逐镜时间线。
+
+`reference` 的音色引用要在对应发声的镜头或语义阶段内明确对应 Speaker、`<Audio N>` 与 `<d>`。复合 Speaker 优先写成 `S1 using <Audio 1> and S2 using <Audio 2>`；同一 Speaker 使用多个音频时，可在该 Speaker 的同一对应短语中列出多个 `<Audio N>`。前置 Audio 修饰语后必须立即出现对应的 `<Subject N> (Sx)` 或 `(Sx)`，中间不得插入另一个主体、物体或动作；稳定声音描述的 Speaker 优先把 Audio 对应短语写在 `(Sx)` 后。不得用否定关系或仅靠标签相邻暗示对应。英文缩写、小数和自然句子标点本身不打断已有的明确对应；若跨完整句子，必须用 `uses that timbre` 等无歧义回指继续该对应。分镜、新的 `At MM:SS.mmm` 时间阶段、分号或另一个发声事件始终构成边界。
 
 参考音色的标准结构如下，实际主体、编号和台词必须来自当前冻结输入与来源事实：
 
@@ -78,11 +80,11 @@ summary:
 
 retention_analysis:
 <Subject 1> (appears in [Shot 1]): fully_preserved - The person's identity and appearance from <Picture 1> are retained.
-<Audio 1>: reference - The target speaker follows its vocal timbre and measured delivery without copying the original signal.
+<Audio 1>: reference - The target speaker follows <Audio 1>'s vocal timbre and measured delivery without copying the original signal.
 
 detailed_description:
 The target video uses a realistic cinematic portrait style with natural indoor lighting.
-[Shot 1] <Subject 1> (S1) faces camera and says <d>[Chinese]这是新台词。</d>
+[Shot 1] <Subject 1> (S1) faces camera and, using the voice timbre referenced from <Audio 1>, says <d>[Chinese]这是新台词。</d>
 
 overall_soundscape:
 Clean speech with quiet room tone.
@@ -91,14 +93,16 @@ non_diegetic_music:
 N/A
 ```
 
+任何画面内实体实际播放的参考音乐都是世内同步声音，写入 `detailed_description`。播放实体先独占一行定义为 `<Subject M> is a source-backed in-scene playback entity ... <Picture N> ...`；若它是目标视频新增、并非参考图内容，则定义为 `<Subject M> is a target-visible in-scene playback entity: {target description}.`，不得伪称来自 Picture。随后用 `The visible in-scene <Subject M> plays <Audio N> audibly through its physical output` 明确复用这个可见实体身份。实体种类与具体输出部件不受名词清单限制，可在 Subject 定义和镜头描述中自然说明；不得把任意未定义的自然语言名词冒充实体，不得用自由文本目标替换物理输出槽，也不得把播放写成 `for ... audience/viewer/listener` 的观众侧用途。这类声音不属于观众侧配乐，不得因 `non_diegetic_music: N/A` 或独立配乐工作流而删除、降级或拒绝。
+
 ### H3 镜头、运镜与声音语法
 
-- `reference` 的 `detailed_description` 先用一至两句英文建立整体画面风格，再开始 `[Shot 1]`；其他输入模式直接以 `[Shot 1]` 开始。首镜标记永远不带时间戳，帧模式形如 `[Shot 1] <Picture 1> aligns with 0.00 seconds and shows ...`。每次真实切镜都在切点处直接开始新标记 `[Shot N] At MM:SS.mmm, the camera cuts to ...`，切镜结构只写成 `[Shot 1] ... [Shot 2] At 00:04.000, the camera cuts to ...`；上一镜结尾不预告 cut，也不得写 cut 而不递增镜号。错误形态 `[Shot 1] ... At 00:04.000, the camera cuts ... [Shot 2] ...` 必须改写为 `[Shot 1] ... [Shot 2] At 00:04.000, the camera cuts ...`。切点必须在 Segment 时长内严格递增；只有来源明确要求时才把 `cuts` 换成 dissolve、fade 或 wipe。
+- `reference` 的 `detailed_description` 先用一至两句英文建立整体画面风格，再开始 `[Shot 1]`；这两句可在同一行或分行。其他输入模式直接以 `[Shot 1]` 开始。首镜标记永远不带时间戳，帧模式形如 `[Shot 1] <Picture 1> aligns with 0.00 seconds and shows ...`。每次真实切镜都在切点处直接开始新标记 `[Shot N] At MM:SS.mmm, the camera cuts to ...`，切镜结构只写成 `[Shot 1] ... [Shot 2] At 00:04.000, the camera cuts to ...`；上一镜结尾不预告 cut，也不得写 cut 而不递增镜号。错误形态 `[Shot 1] ... At 00:04.000, the camera cuts ... [Shot 2] ...` 必须改写为 `[Shot 1] ... [Shot 2] At 00:04.000, the camera cuts ...`。切点必须在 Segment 时长内严格递增；只有来源明确要求时才把 `cuts` 换成 dissolve、fade 或 wipe。
 - 时间阶段不是镜头边界：同一连续物理动作或同一主要运镜能够承载的内容只使用一个 `[Shot 1]`，可在镜内用 `At MM:SS.mmm` 描述动作阶段。用户明确要求单镜头时不得切镜；`first_last_frame` 默认用单镜连续插值，只有来源明确规定多镜时才增加镜头。
 - 运镜作为当前镜头中的自然英文动词句，不堆标签。H3 类型为 `Zoom In/Out`、`Push In/Pull Out`、`Pan Left/Right`、`Truck Left/Right`、`Tilt Up/Down`、`Pedestal Up/Down`、`Arc Shot`、`Tracking Shot`、`Static Shot`、`POV`、`Roll Clockwise/Counterclockwise` 或 `Shake Slightly/Strongly`，但正文统一使用 `The camera + 小写动词`：`zooms`、`pushes`、`pulls`、`pans`、`trucks`、`tilts`、`pedestals`、`arcs`、`tracks`、`holds a static shot`、`uses a POV shot`、`rolls` 或 `shakes`。默认中等幅度和正常速度不写；来源要求小幅、大幅、慢速或快速时分别写 `with small/large amplitude` 与 `at slow/fast speed`。例如 `The camera pulls out with small amplitude at slow speed.`；默认值时直接写 `The camera tracks the woman.`，不写 `natural/normal speed`、`medium amplitude`、`performs a Pull Out` 或 `a slow Push In`。
 - 实际说话或歌唱的声音源按首次发声顺序获得稳定 `(S1)`、`(S2)`；跨镜复用同一 ID，从不发声的角色不分配 ID。把身份、ID、动作与发声写成一个句子。多人同声说同一句来源原文时，使用一个复合 ID 和一个 `<d>`；多人同时说不同来源原文时，每条台词分别保留自己的稳定 ID 与独立 `<d>`，并在块外说明二者重叠。首次发声时只用来源已有的身份与声音事实建立说话人，身份短语、ID、动作和语气放在 `<d>` 外；不在同一事件里重复声明说话人或添加 `says exactly:`、`the first speaker is`。
-- `<d>` 内只放 `[Language]` 与用户或来源逐字提供的对白、歌词，不加反引号、说话人说明、voiceover 字样或翻译。可见文字是条件槽：只有用户或来源明确要求画面中出现招牌、便签、标签或字幕等文字时，才使用 ASCII 英文双引号逐字保留，例如 `a sign reading "营业中"`；没有这类明确要求时，最终 Prompt 只描述场景、动作、声音和对白，不输出任何关于字幕、标题、水印、播放器文字或界面 overlay 是否存在的元描述，也不把本规则改写成否定提示。
-- `voiceover` 必须在同一句中把来源人物、稳定 ID、`<d>` 和“所有可见人物均不做口型”绑定；不能只约束发声者本人。对白跨切镜时，把 `<scenetrans>` 放在前后两个 `<d>` 内的连接点并明确声音连续跨切。`reference` 只有在来源或用户明确要求话语被视频结尾截断时，才把 `<cutoff>` 放在对应 `<d>` 内；其余情况及其他输入模式仍按时长—内容冲突停止构造可执行 item。下列代码块只展示结构，花括号占位符必须由来源事实替换且不得原样输出；不得复制其中的主体、场景、动作或时间：
+- `<d>` 内只放 `[Language]` 与用户或来源逐字提供的对白、歌词，不加反引号、说话人说明、voiceover 字样或翻译。每个完整陈述、问句或感叹句的 `.?!`（中文可用 `。！？`）必须放在 `</d>` 前；只有以 `<cutoff>` 结束的明确截断话语，或以成对 `<scenetrans>` 连接到下一镜的未完成前半句，不要求在当前块补句末标点。可见文字是条件槽：只有用户或来源明确要求画面中出现逐字文字时，才用 ASCII 英文双引号保留。官方列出的 banner、sign、label、subtitle、neon text 等明确文字载体在句首或镜头子句起始处可直接写成 `{明确载体} reading "逐字文字"`；其他任意载体及嵌入人物动作的载体统一写成 `{实际载体} bears visible text reading "逐字文字"`，不靠名词清单猜测其是否可见。`reading` 必须修饰载体或 `visible text`，不得描述人物朗读。逐字文字自身含 ASCII 双引号时，用反斜线转义内层引号，例如 `A sign reading "He said \"Hello\"."`；转义符只承担边界语法，不改变文字内容。`detailed_description` 中其他内容不得使用双引号代替 `<d>`。没有这类明确要求时，最终 Prompt 只描述场景、动作、声音和对白，不输出任何关于字幕、标题、水印、播放器文字或界面 overlay 是否存在的元描述，也不把本规则改写成否定提示。
+- `voiceover` 必须在同一句中把来源人物、稳定 ID、`<d>` 和“所有可见人物均不做口型”绑定；不能只约束发声者本人。对白跨切镜时，把 `<scenetrans>` 放在前后两个 `<d>` 内的连接点并明确声音连续跨切。`reference` 只有在来源或用户明确要求话语被视频结尾截断时，才在最后一个 `<d>` 内使用一次 `<cutoff>`，将它放在对白末尾、紧邻 `</d>`，并让该 `</d>` 成为 `detailed_description` 的最后实质内容（其后只可有终止标点）；其余情况及其他输入模式仍按时长—内容冲突停止构造可执行 item。下列代码块只展示结构，花括号占位符必须由来源事实替换且不得原样输出；不得复制其中的主体、场景、动作或时间：
 
 ```text
 [Shot 1] {source-backed framing and action}. {source-backed speaker} (S1) says: <d>[Language]{verbatim source line before the cut}<scenetrans></d> The same voice continues seamlessly across the cut.
@@ -108,7 +112,7 @@ N/A
 
 图片时序语义只由当前显式输入模式决定：
 
-- `reference`：每个 `<Picture N>` 只锁定身份、风格、内容与场景结构，不是首帧或尾帧，不得写成时间锚点。每个 `<Audio N>` 只提供绑定人物的音色、节奏和表达参考，不复制原始音频信号；普通音色参考仍使用当前任务的新台词。
+- `reference`：每个 `<Picture N>` 只锁定身份、风格、内容与场景结构，不是首帧或尾帧，不得写成时间锚点。每个 `<Audio N>` 按当前冻结音频的实际角色写明复制、局部复制、参考或弱参考关系。只参考音色、节奏、情绪或表达方式时，不复制原台词，仍使用当前任务的新台词；只有直接复用或用户明确要求重演时才保留来源原文。
 - `first_frame`：`detailed_description` 的 `[Shot 1]` 后第一句必须把 `<Picture 1>` 明确对齐 `0.00 seconds`，再描述从该状态连续发展的动作。
 - `first_last_frame`：除首帧规则外，必须在同一句中把 `<Picture 2>` 明确对齐匹配 `first_last_frame + requestedDurationSeconds` 条目的 `promptEndSeconds`，并描述从首帧状态连续收敛到尾帧状态的运动路径。来源明确要求多镜时，`<Picture 2>` 只属于最后一个 `[Shot N]`，在该镜结尾成为 Segment 的最终视觉状态，其后不得再有镜头、动作或状态变化。
 - `continuation`：不写 `<Picture N>` 时间锚点；`detailed_description` 直接延续运动上下文的退出姿态、速度、方向、接触关系和运镜趋势。时间换算与范围完全遵守上方“多帧运动续接”的匹配条目，不复述或重新表演上下文。
@@ -136,13 +140,13 @@ N/A
 - 是否区分近似目标、明确严格约束与自主推导；每段请求是否合法、没有填充内容，近似目标是否使用预计输出而不是请求参数求和，后续时间线是否以实测媒体为准；严格约束是否有真实可执行的满足与验证方式，无法满足时是否提交前报告能力或内容冲突？
 - 对 H3 中所有由 Agent 选择的单段时长（包括 `fixed` 总时长下的分配与 `derive`），是否先确定模式并只使用该模式的 `segmentDurationPlans`；四种模式是否都把 4–15 秒作为正常合法能力并按用户目标与内容节奏选择，且没有对 10、11 或 13–15 秒添加软上限、例外、明确选择条件或额外拆分启发式；其他 Prompt profile 是否只服从注入的合法时长集合？
 - 每镜是否有景别、机位、主体落位、朝向、世内视线、一个主要运镜、向前变化和可见落点？
-- `reference` 的 `detailed_description` 是否先用一至两句英文建立整体画面风格再开始 `[Shot 1]`，其他模式是否直接以 `[Shot 1]` 开始；每次真实切镜是否都用递增的 `[Shot N] At MM:SS.mmm`、连续动作没有被时间块机械拆镜、单镜要求与 `first_last_frame` 默认单镜是否保留？
+- `reference` 的 `detailed_description` 是否先用一至两句英文建立整体画面风格再开始 `[Shot 1]`，且没有把换行当成句数要求；其他模式是否直接以 `[Shot 1]` 开始；每次真实切镜是否都用递增的 `[Shot N] At MM:SS.mmm`、连续动作没有被时间块机械拆镜、单镜要求与 `first_last_frame` 默认单镜是否保留？
 - 运镜是否写成自然英文动词句并在来源要求时明确幅度与速度；除对白原文和画面文字外是否没有中文或混合语言残留？
-- 是否只使用 capability 允许的参考角色与数量，四种模式互斥，且 Picture 时间锚点与当前模式及 Segment 时长一致；每个 Audio 是否在 `subject_definitions` 绑定唯一 Subject/Speaker、在 `retention_analysis` 使用官方音频关系且不写 `(Sx)`、在对白中复用同一说话人？
+- `reference` 是否只使用当前 capability 冻结的 `<Subject N>`、`<Picture N>`、`<Audio N>` 标签且没有 `<Video N>`；是否只使用 capability 允许的参考角色与数量，四种模式互斥，且 Picture 时间锚点与当前模式及 Segment 时长一致；每个 Audio 是否在 `subject_definitions` 恰好定义一次，并按实际角色选择一个 Subject/Speaker、稳定声音描述加 Speaker，或不绑定独立说话人；是否在自己的 `retention_analysis` 项中使用官方音频关系且不写 `(Sx)`；每个音色生效的 `detailed_description` 发声事件是否在同一分镜或时间阶段内明确对应 Speaker、Audio 与 `<d>`，同时允许前置 Audio 引用、复合 Speaker、英文缩写、小数和有无歧义回指的自然句子标点，且没有跨分镜、新 `At MM:SS.mmm` 阶段、分号或另一发声事件借用标记？
 - 是否在存在合法参考图且没有明确运动续接或帧控制时使用主模式 Ref2VA，并只在来源明确要求相应控制时选择其他模式？`durationSeconds` 是否仍为该模式的合法整数，时间条目是否同时匹配输入模式和请求时长，所有锚点是否使用该条目的内部时钟？
 - 要求前段运动连续续接时，是否把前段精确 ready 视频版本作为后段唯一 `continuation_video`，且失败时没有单尾帧、参考图、reference video 或时间偏移 fallback？
 - H3 是否严格六段、固定 `non_diegetic_music: N/A`、无 AI 节点和无 Prompt 改写？
-- 对白是否逐字、自然说完，且 `<cutoff>` 只用于 `reference` 中明确要求被结尾截断的话语；每个声音源是否有稳定 `(Sx)`，同句齐声是否使用复合 ID、不同台词重叠是否分别保留 ID 与 `<d>`，`<d>` 是否只在 `detailed_description`，跨切 `<scenetrans>` 是否在两个 `<d>` 内，voiceover 是否明确所有可见人物均不做口型？对白后的落点是否只使用来源已有动作或反应，不存在时是否以说话表演自然完成而没有新增内容？可见文字是否只在用户或来源明确要求时按原文写入双引号，无要求时是否完全省略文字层元描述而没有补写否定句？
+- 对白是否逐字、自然说完，且 `<cutoff>` 只用于 `reference` 中明确要求被结尾截断的最后一段话语，并让对应 `</d>` 成为详细描述最后实质内容；每个声音源是否有稳定 `(Sx)`，同句齐声是否使用复合 ID、不同台词重叠是否分别保留 ID 与 `<d>`，`<d>` 是否只在 `detailed_description`，跨切 `<scenetrans>` 是否在两个 `<d>` 内，voiceover 是否明确所有可见人物均不做口型？对白后的落点是否只使用来源已有动作或反应，不存在时是否以说话表演自然完成而没有新增内容？可见文字是否只在用户或来源明确要求时按句首官方载体 `{载体} reading "原文"` 或嵌入式 `{载体} bears visible text reading "原文"` 写入双引号，内层 ASCII 双引号是否用 `\"` 保持边界，无要求时是否完全省略文字层元描述而没有补写否定句？
 
 ## 边界
 

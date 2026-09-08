@@ -1,7 +1,26 @@
+import { detectAll } from 'tinyld'
 import type {
   VideoInputMode,
   VideoPromptProfile,
 } from '@/lib/ai-registry/types'
+import {
+  countReferenceSentences,
+  findLastReferenceSentenceBoundary,
+  hasReferenceAudioAnaphoricBridge,
+  hasReferenceCompoundAudioPair,
+  hasReferenceSingleAudioPair,
+  hasReferenceUnboundAudioApplication,
+  parseReferenceSpeakerNumbers,
+  type H3ReferenceAudioBinding,
+} from './h3-reference-audio'
+import {
+  assertReferenceDialogueTransitions,
+  maskReferenceDialogueBlocks,
+  maskReferenceVisibleTextLiterals,
+  normalizeReferenceDialoguePayload,
+  parseReferenceDialogueBlocks,
+  parseReferenceDialogueEvents,
+} from './h3-reference-dialogue'
 import { H3_CONTINUATION_GUIDE_SECONDS } from './h3-timeline'
 
 export const MINIMAX_H3_PROMPT_SECTIONS = [
@@ -21,10 +40,16 @@ const FIXED_NON_DIEGETIC_MUSIC = 'N/A'
 const DIALOGUE_TAG = /<\/?d>/u
 const DIALOGUE_CUTOFF_TAG = /<cutoff>/u
 const DIALOGUE_BLOCK = /<d>[\s\S]*?<\/d>/gu
-const VISIBLE_TEXT_BLOCK = /"[^"\r\n]*"/gu
 const REFERENCE_ENTITY_TOKEN = /<(?:Subject|Picture|Video|Audio)\s+\d+>/gu
+const REFERENCE_SUBJECT_TOKEN = /<Subject\s+\d+>/gu
+const REFERENCE_SUBJECT_LINE_START = /^<Subject\s+(\d+)>/u
+const REFERENCE_SUBJECT_DEFINITION_CLAIM = /<Subject\s+(\d+)>(?:\s+\(S\d+(?:\s*,\s*S\d+)*\))?(?=\s+is\b|\s*:)/gu
+const REFERENCE_PLAYBACK_SUBJECT_DEFINITION_PREFIX = /^<Subject\s+(\d+)>\s+is\s+a\s+(source-backed|target-visible)\s+in-scene\s+playback\s+entity\b/iu
+const REFERENCE_SOURCE_BACKED_PLAYBACK_SUBJECT_DEFINITION = /^<Subject\s+(\d+)>\s+is\s+a\s+source-backed\s+in-scene\s+playback\s+entity\s+from\s+<Picture\s+\d+>:\s+\S/iu
+const REFERENCE_TARGET_VISIBLE_PLAYBACK_SUBJECT_DEFINITION = /^<Subject\s+(\d+)>\s+is\s+a\s+target-visible\s+in-scene\s+playback\s+entity:\s+\S/iu
+const REFERENCE_PLAYBACK_SUBJECT_AUDIENCE_CONFLICT = /\b(?:audience-only|non-diegetic)\b|\b(?:background|audience)\s+(?:music|score|soundtrack)\b|\b(?:music|score|soundtrack)\b[^.!?\n]{0,32}\bfor\s+(?:[\p{L}'-]+\s+){0,3}(?:audiences?|listeners?|viewers?)\b/iu
 const REFERENCE_SPEAKER_TOKEN = /\(S\d+(?:\s*,\s*S\d+)*\)/gu
-const REFERENCE_TASK_PREFIX = /\[(?:reference generation(?: \+ audio reference)?)\]/gu
+const REFERENCE_TASK_PREFIX = /\[(?:reference generation|audio reference|audio reuse)(?: \+ (?:reference generation|audio reference|audio reuse))*\]/gu
 const SHOT_MARKER = /\[Shot (\d+)\]/gu
 const SHOT_TRANSITION = /^\[Shot (\d+)\] At (\d{2}):(\d{2}\.\d{3}), the camera (?:cuts|dissolves|fades|wipes)\b/u
 const CAMERA_TRANSITION = /\bthe camera (?:cuts|dissolves|fades|wipes)\b/gu
@@ -34,11 +59,12 @@ const CANONICAL_CLOCK_TIMED_EVENT = /^At \d{2}:\d{2}\.\d{3}$/u
 const UNIT_TIMED_EVENT = /(?:\b\d+(?:\.\d*)?|\.\d+)\s*(?:milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|hours?|hrs?)\b/iu
 const PICTURE_ANCHOR = /<Picture\s+\d+>/u
 const MEDIA_REFERENCE = /<(Picture|Audio)\s+(\d+)>/gu
+const VIDEO_REFERENCE = /<Video\s+(\d+)>/gu
 const SUBJECT_SPEAKER = /<Subject\s+(\d+)>\s*\(S(\d+)\)/gu
+const REFERENCE_SINGLE_SPEAKER_TOKEN = /\(S(\d+)\)/gu
 const REFERENCE_SUMMARY_PREFIX = /^\[([^\]\r\n]+)\]\s+\S/u
 const REFERENCE_RETENTION_ENTRY = /^<(Subject|Picture|Video|Audio)\s+([1-9]\d*)>[^:\n]*:\s*([a-z_]+)\s+-\s+\S/u
 const REFERENCE_RETENTION_SPEAKER = /\(S\d+(?:\s*,\s*S\d+)*\)/u
-const DIALOGUE_LANGUAGE_PREFIX = /^\[[^\]\r\n]+\]\s*/u
 const REFERENCE_VISUAL_RELATIONSHIPS = new Set([
   'fully_preserved',
   'partially_preserved',
@@ -51,20 +77,14 @@ const REFERENCE_AUDIO_RELATIONSHIPS = new Set([
   'reference',
   'weak_reference',
 ])
-const REFERENCE_VISIBLE_TEXT_TERM = String.raw`(?:subtitles?|captions?|titles?|title\s+cards?|watermarks?|overlays?|interface\s+(?:overlays?|text)|player\s+text|on-screen\s+text)`
-const REFERENCE_VISIBLE_TEXT_SPACE_GAP = String.raw`(?:\s+[\p{L}\p{N}_-]+){0,3}\s+`
-const REFERENCE_VISIBLE_TEXT_COMMA_MODIFIERS = String.raw`(?:\s+[\p{L}\p{N}_-]+\s*,){1,3}(?:\s*[\p{L}\p{N}_-]+){0,3}\s+`
-const ENGLISH_POSITIVE_PROMPT_TEXT_EXCLUSIONS = [
-  new RegExp(String.raw`\b(?:no|zero)\b${REFERENCE_VISIBLE_TEXT_SPACE_GAP}${REFERENCE_VISIBLE_TEXT_TERM}\b`, 'iu'),
-  new RegExp(String.raw`\b(?:no|zero)\b${REFERENCE_VISIBLE_TEXT_COMMA_MODIFIERS}${REFERENCE_VISIBLE_TEXT_TERM}\b`, 'iu'),
-  new RegExp(String.raw`\bwithout\b${REFERENCE_VISIBLE_TEXT_SPACE_GAP}${REFERENCE_VISIBLE_TEXT_TERM}\b`, 'iu'),
-  new RegExp(String.raw`\b(?:avoid(?:ing)?|omit(?:ting)?|exclude(?:s|d|ing)?|forbid(?:s|den|ding)?|remove|removing|suppress(?:ing)?|disable(?:d|s|ing)?)\b${REFERENCE_VISIBLE_TEXT_SPACE_GAP}${REFERENCE_VISIBLE_TEXT_TERM}\b`, 'iu'),
-  new RegExp(String.raw`\b(?:do\s+not|don't|never)\s+(?:show|include|generate|add|display|render|create|insert|use|place)${REFERENCE_VISIBLE_TEXT_SPACE_GAP}${REFERENCE_VISIBLE_TEXT_TERM}\b`, 'iu'),
-  new RegExp(String.raw`\b${REFERENCE_VISIBLE_TEXT_TERM}\s*-\s*free\b`, 'iu'),
-  new RegExp(String.raw`\bfree\s+of(?:\s+[\p{L}\p{N}_-]+){0,3}\s+${REFERENCE_VISIBLE_TEXT_TERM}\b`, 'iu'),
-] as const
-const CHINESE_POSITIVE_PROMPT_TEXT_EXCLUSION = /(?:不要|不得|禁止|不生成|不添加|不显示|省略|去除|移除|无|零)[^，。；：\n]{0,24}(?:字幕|标题|水印|界面文字|播放器文字)/u
-
+const REFERENCE_ENGLISH_FUNCTION_WORDS = new Set([
+  'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from', 'he', 'her',
+  'his', 'in', 'is', 'it', 'its', 'of', 'on', 'or', 'she', 'that', 'the',
+  'their', 'this', 'to', 'was', 'while', 'who', 'whose', 'with',
+])
+const REFERENCE_STRONG_ENGLISH_SYNTAX_WORDS = new Set([
+  'and', 'from', 'shown', 'that', 'the', 'this', 'through', 'uses', 'while', 'whose', 'with',
+])
 export type H3PromptReferenceManifest = {
   readonly pictureCount: number
   readonly audioCount: number
@@ -73,6 +93,35 @@ export type H3PromptReferenceManifest = {
 function invalid(reason: string): Error {
   return new Error('VIDEO_PROMPT_PROFILE_INVALID:' + reason)
 }
+
+function containsNonLatinScriptLetter(input: string): boolean {
+  return Array.from(input).some((character) => (
+    /\p{L}/u.test(character) && !/\p{Script=Latin}/u.test(character)
+  ))
+}
+
+function containsClearlyNonEnglishLatinProse(input: string): boolean {
+  const letterCount = Array.from(input).filter((character) => /\p{L}/u.test(character)).length
+  if (letterCount < 24) return false
+  const candidates = detectAll(input)
+  const strongest = candidates[0]
+  const english = candidates.find((candidate) => candidate.lang === 'en')
+  const englishSignalCount = Array.from(
+    new Set(Array.from(input.toLowerCase().matchAll(/\b[a-z]+\b/gu)).map((match) => match[0])),
+  ).filter((word) => REFERENCE_ENGLISH_FUNCTION_WORDS.has(word)).length
+  const strongEnglishSyntaxCount = Array.from(
+    new Set(Array.from(input.toLowerCase().matchAll(/\b[a-z]+\b/gu)).map((match) => match[0])),
+  ).filter((word) => REFERENCE_STRONG_ENGLISH_SYNTAX_WORDS.has(word)).length
+  if (strongEnglishSyntaxCount >= 2) return false
+  return strongest !== undefined
+    && strongest.lang !== 'en'
+    && strongest.accuracy > (english?.accuracy ?? 0) * 3
+    && (
+      strongest.accuracy >= 0.6
+      || (strongest.accuracy >= 0.4 && englishSignalCount === 0)
+    )
+}
+
 function parseSections(prompt: string): Record<MinimaxH3PromptSection, string> {
   const lines = prompt.replace(/\r\n?/gu, '\n').split('\n')
   const headings: Array<{ name: string; index: number }> = []
@@ -159,14 +208,33 @@ function assertH3PromptStructure(
   }
   if (inputMode === 'reference') {
     if (firstShotIndex === 0) throw invalid('REFERENCE_STYLE_OPENING_REQUIRED')
+    const styleOpening = detailedDescription.slice(0, firstShotIndex).trim()
+    const styleSentenceCount = countReferenceSentences(styleOpening)
+    if (
+      styleSentenceCount < 1
+      || styleSentenceCount > 2
+      || !/[A-Za-z]/u.test(styleOpening)
+      || !/[.!?]$/u.test(styleOpening)
+      || DIALOGUE_TAG.test(styleOpening)
+      || containsNonLatinScriptLetter(styleOpening)
+    ) {
+      throw invalid('REFERENCE_STYLE_OPENING_INVALID')
+    }
   } else if (firstShotIndex !== 0) {
     throw invalid('DETAILED_DESCRIPTION_SHOT_1_REQUIRED')
   }
 
-  const structuralDescription = detailedDescription.replace(
-    DIALOGUE_BLOCK,
-    (dialogue) => ' '.repeat(dialogue.length),
-  )
+  const structuralDescription = inputMode === 'reference'
+    ? maskReferenceVisibleTextLiterals(
+        maskReferenceDialogueBlocks(
+          detailedDescription,
+          parseReferenceDialogueBlocks(detailedDescription),
+        ),
+      )
+    : detailedDescription.replace(
+        DIALOGUE_BLOCK,
+        (dialogue) => ' '.repeat(dialogue.length),
+      )
   if (DIALOGUE_CUTOFF_TAG.test(structuralDescription)) {
     throw invalid('DIALOGUE_CUTOFF_SECTION_INVALID')
   }
@@ -230,21 +298,6 @@ function assertH3PromptStructure(
   }
 }
 
-function maskReferenceLiteralText(input: string): string {
-  return input
-    .replace(DIALOGUE_BLOCK, (dialogue) => ' '.repeat(dialogue.length))
-    .replace(VISIBLE_TEXT_BLOCK, (visibleText) => ' '.repeat(visibleText.length))
-}
-
-function hasReferenceVisibleTextExclusion(input: string): boolean {
-  return input
-    .split(/[\n;:.!?。；：！？]+/u)
-    .some((clause) => (
-      ENGLISH_POSITIVE_PROMPT_TEXT_EXCLUSIONS.some((pattern) => pattern.test(clause))
-      || CHINESE_POSITIVE_PROMPT_TEXT_EXCLUSION.test(clause)
-    ))
-}
-
 function maskReferenceProtocolMetadata(input: string): string {
   return input
     .replace(REFERENCE_ENTITY_TOKEN, (token) => ' '.repeat(token.length))
@@ -257,7 +310,10 @@ function escapeRegExp(input: string): string {
 }
 
 function containsBoundaryAwareText(input: string, text: string): boolean {
-  if (Array.from(text).length === 1 && /[\p{L}\p{N}]/u.test(text)) return false
+  if (Array.from(text).length === 1 && /[\p{L}\p{N}]/u.test(text)) {
+    const literal = escapeRegExp(text)
+    return new RegExp(`(?:"\\s*${literal}\\s*"|“\\s*${literal}\\s*”)`, 'u').test(input)
+  }
   const leftBoundary = /^[\p{L}\p{N}]/u.test(text) ? String.raw`(?<![\p{L}\p{N}])` : ''
   const rightBoundary = /[\p{L}\p{N}]$/u.test(text) ? String.raw`(?![\p{L}\p{N}])` : ''
   return new RegExp(leftBoundary + escapeRegExp(text) + rightBoundary, 'u').test(input)
@@ -266,22 +322,23 @@ function containsBoundaryAwareText(input: string, text: string): boolean {
 function assertReferenceDialoguePlacement(
   sections: Readonly<Record<MinimaxH3PromptSection, string>>,
 ): void {
-  const dialoguePayloads = Array.from(sections.detailed_description.matchAll(DIALOGUE_BLOCK))
-    .map((match) => match[0]
-      .slice('<d>'.length, -'</d>'.length)
-      .replace(DIALOGUE_LANGUAGE_PREFIX, '')
-      .replaceAll('<cutoff>', '')
-      .trim()
-      .normalize('NFC'))
+  const dialogueBlocks = parseReferenceDialogueBlocks(sections.detailed_description)
+  const dialoguePayloads = dialogueBlocks
+    .map((block) => normalizeReferenceDialoguePayload(block.content).normalize('NFC'))
     .filter((payload) => payload.length > 0)
+  const detailedOutsideDialogue = maskReferenceVisibleTextLiterals(
+    maskReferenceDialogueBlocks(
+      sections.detailed_description,
+      dialogueBlocks,
+    ),
+  )
   if (dialoguePayloads.length === 0) return
-
-  const textOutsideLiteralBlocks = maskReferenceProtocolMetadata(maskReferenceLiteralText(
-    MINIMAX_H3_PROMPT_SECTIONS
-      .filter((section) => section !== 'non_diegetic_music')
-      .map((section) => sections[section])
-      .join('\n'),
-  )).normalize('NFC')
+  const textOutsideLiteralBlocks = maskReferenceProtocolMetadata([
+    ...MINIMAX_H3_PROMPT_SECTIONS
+      .filter((section) => section !== 'detailed_description' && section !== 'non_diegetic_music')
+      .map((section) => sections[section]),
+    detailedOutsideDialogue,
+  ].join('\n')).normalize('NFC')
   if (dialoguePayloads.some((payload) => containsBoundaryAwareText(
     textOutsideLiteralBlocks,
     payload,
@@ -294,14 +351,31 @@ function assertH3ReferencePrompt(
   sections: Readonly<Record<MinimaxH3PromptSection, string>>,
   references: H3PromptReferenceManifest,
 ): void {
-  const summaryPrefix = REFERENCE_SUMMARY_PREFIX.exec(sections.summary)
-  const expectedTaskType = references.audioCount > 0
-    ? 'reference generation + audio reference'
-    : 'reference generation'
-  if (summaryPrefix?.[1] !== expectedTaskType) {
-    throw invalid('REFERENCE_SUMMARY_PREFIX_REQUIRED')
+  assertReferenceDialoguePlacement(sections)
+  const proseSections: string[] = []
+  for (const section of MINIMAX_H3_PROMPT_SECTIONS) {
+    const bodyWithoutDialogue = section === 'detailed_description'
+      ? maskReferenceDialogueBlocks(
+          sections[section],
+          parseReferenceDialogueBlocks(sections[section]),
+        )
+      : sections[section]
+    const prose = maskReferenceProtocolMetadata(
+      maskReferenceVisibleTextLiterals(bodyWithoutDialogue),
+    )
+    if (containsNonLatinScriptLetter(prose)) {
+      throw invalid('REFERENCE_NON_ENGLISH_TEXT_INVALID')
+    }
+    if (section !== 'non_diegetic_music') proseSections.push(prose)
   }
-
+  if (containsClearlyNonEnglishLatinProse(proseSections.join('\n'))) {
+    throw invalid('REFERENCE_NON_ENGLISH_TEXT_INVALID')
+  }
+  assertReferenceDialogueTransitions(
+    sections.detailed_description,
+    parseReferenceDialogueBlocks(sections.detailed_description),
+  )
+  const requiredTaskTypes = new Set(['reference generation'])
   for (const line of sections.retention_analysis.split('\n')) {
     const trimmed = line.trim()
     if (!trimmed) continue
@@ -319,15 +393,25 @@ function assertH3ReferencePrompt(
     if (!legalRelationships.has(relationship)) {
       throw invalid(`REFERENCE_RETENTION_RELATION_INVALID:${modality}:${number}`)
     }
+    if (modality === 'Audio') {
+      requiredTaskTypes.add(
+        relationship === 'fully_copy' || relationship === 'partially_copy'
+          ? 'audio reuse'
+          : 'audio reference',
+      )
+    }
   }
 
-  const positivePrompt = maskReferenceLiteralText(
-    MINIMAX_H3_PROMPT_SECTIONS.map((section) => sections[section]).join('\n'),
-  )
-  if (hasReferenceVisibleTextExclusion(positivePrompt)) {
-    throw invalid('REFERENCE_POSITIVE_PROMPT_TEXT_EXCLUSION')
+  const summaryPrefix = REFERENCE_SUMMARY_PREFIX.exec(sections.summary)
+  const declaredTaskTypes = summaryPrefix?.[1].split(' + ') ?? []
+  const summaryTaskTypesAreCheckable = references.audioCount === 0 || requiredTaskTypes.size > 1
+  if (summaryTaskTypesAreCheckable && (
+    declaredTaskTypes.length !== requiredTaskTypes.size
+    || new Set(declaredTaskTypes).size !== declaredTaskTypes.length
+    || declaredTaskTypes.some((taskType) => !requiredTaskTypes.has(taskType))
+  )) {
+    throw invalid('REFERENCE_SUMMARY_PREFIX_REQUIRED')
   }
-  assertReferenceDialoguePlacement(sections)
 }
 
 function assertH3InputMode(
@@ -367,9 +451,63 @@ function assertH3InputMode(
   }
 }
 
+function assertReferenceSubjectClosure(
+  sections: Readonly<Record<MinimaxH3PromptSection, string>>,
+): ReadonlySet<number> {
+  const definedSubjectNumbers = new Set<number>()
+  const playbackSubjectNumbers = new Set<number>()
+  for (const line of sections.subject_definitions.split('\n').map((entry) => entry.trim())) {
+    const lineSubjectNumber = Number(REFERENCE_SUBJECT_LINE_START.exec(line)?.[1])
+    if (!Number.isSafeInteger(lineSubjectNumber) || lineSubjectNumber < 1) continue
+    const definitionClaims = Array.from(line.matchAll(REFERENCE_SUBJECT_DEFINITION_CLAIM))
+    if (
+      definitionClaims.length !== 1
+      || Number(definitionClaims[0]?.[1]) !== lineSubjectNumber
+    ) {
+      throw invalid(`REFERENCE_SUBJECT_DEFINITION_INVALID:${String(lineSubjectNumber)}`)
+    }
+    if (definedSubjectNumbers.has(lineSubjectNumber)) {
+      throw invalid(`REFERENCE_SUBJECT_DEFINITION_DUPLICATE:${String(lineSubjectNumber)}`)
+    }
+    definedSubjectNumbers.add(lineSubjectNumber)
+
+    const playbackDefinition = REFERENCE_PLAYBACK_SUBJECT_DEFINITION_PREFIX.exec(line)
+    if (!playbackDefinition) continue
+    const exactDefinition = playbackDefinition[2] === 'source-backed'
+      ? REFERENCE_SOURCE_BACKED_PLAYBACK_SUBJECT_DEFINITION.exec(line)
+      : REFERENCE_TARGET_VISIBLE_PLAYBACK_SUBJECT_DEFINITION.exec(line)
+    const targetVisibleHasPicture = playbackDefinition[2] === 'target-visible'
+      && Array.from(line.matchAll(MEDIA_REFERENCE)).some((reference) => reference[1] === 'Picture')
+    if (Number(exactDefinition?.[1]) !== lineSubjectNumber || targetVisibleHasPicture) {
+      throw invalid(`REFERENCE_PLAYBACK_SUBJECT_DEFINITION_INVALID:${String(lineSubjectNumber)}`)
+    }
+    if (REFERENCE_PLAYBACK_SUBJECT_AUDIENCE_CONFLICT.test(line)) {
+      throw invalid(`REFERENCE_PLAYBACK_SUBJECT_AUDIENCE_CONFLICT:${String(lineSubjectNumber)}`)
+    }
+    playbackSubjectNumbers.add(lineSubjectNumber)
+  }
+
+  for (const section of MINIMAX_H3_PROMPT_SECTIONS) {
+    const protocolBody = section === 'detailed_description'
+      ? maskReferenceVisibleTextLiterals(maskReferenceDialogueBlocks(
+          sections[section],
+          parseReferenceDialogueBlocks(sections[section]),
+        ))
+      : sections[section]
+    for (const match of protocolBody.matchAll(REFERENCE_SUBJECT_TOKEN)) {
+      const subjectNumber = Number(match[0].match(/\d+/u)?.[0])
+      if (!Number.isSafeInteger(subjectNumber) || !definedSubjectNumbers.has(subjectNumber)) {
+        throw invalid(`REFERENCE_SUBJECT_UNDEFINED:${String(subjectNumber)}`)
+      }
+    }
+  }
+  return playbackSubjectNumbers
+}
+
 function assertH3ReferenceManifest(
   sections: Readonly<Record<MinimaxH3PromptSection, string>>,
   references: H3PromptReferenceManifest,
+  inputMode: VideoInputMode,
 ): void {
   if (
     !Number.isSafeInteger(references.pictureCount)
@@ -380,7 +518,21 @@ function assertH3ReferenceManifest(
     throw invalid('REFERENCE_MANIFEST_INVALID')
   }
   for (const section of MINIMAX_H3_PROMPT_SECTIONS) {
-    for (const match of sections[section].matchAll(MEDIA_REFERENCE)) {
+    const sectionProtocol = inputMode === 'reference' && section === 'detailed_description'
+      ? maskReferenceVisibleTextLiterals(
+          maskReferenceDialogueBlocks(
+            sections[section],
+            parseReferenceDialogueBlocks(sections[section]),
+          ),
+        )
+      : sections[section]
+    if (inputMode === 'reference') {
+      const videoReference = Array.from(sectionProtocol.matchAll(VIDEO_REFERENCE))[0]
+      if (videoReference?.[1]) {
+        throw invalid(`VIDEO_REFERENCE_UNSUPPORTED:${videoReference[1]}`)
+      }
+    }
+    for (const match of sectionProtocol.matchAll(MEDIA_REFERENCE)) {
       const modality = match[1]!
       const number = Number(match[2])
       const limit = modality === 'Picture' ? references.pictureCount : references.audioCount
@@ -389,31 +541,77 @@ function assertH3ReferenceManifest(
       }
     }
   }
+  const playbackSubjectNumbers = inputMode === 'reference'
+    ? assertReferenceSubjectClosure(sections)
+    : new Set<number>()
+  const audioBindings: H3ReferenceAudioBinding[] = []
+  const unboundAudioNumbers: number[] = []
   for (let audioNumber = 1; audioNumber <= references.audioCount; audioNumber += 1) {
     const audioToken = `<Audio ${String(audioNumber)}>`
-    const definitionLines = sections.subject_definitions
+    const allDefinitionLines = sections.subject_definitions
       .split('\n')
-      .filter((line) => line.includes(audioToken))
-    if (definitionLines.length === 0) {
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+    const linesReferencingAudio = allDefinitionLines.filter((line) => line.includes(audioToken))
+    if (linesReferencingAudio.length === 0) {
       throw invalid(`AUDIO_REFERENCE_MISSING:${String(audioNumber)}`)
     }
-    const audioTokenCount = sections.subject_definitions.split(audioToken).length - 1
-    if (definitionLines.length !== 1 || audioTokenCount !== 1) {
-      throw invalid(`AUDIO_SPEAKER_BINDING_INVALID:${String(audioNumber)}`)
-    }
-    const bindings = Array.from(definitionLines[0]!.matchAll(SUBJECT_SPEAKER))
-    if (bindings.length !== 1) {
-      throw invalid(`AUDIO_SPEAKER_BINDING_INVALID:${String(audioNumber)}`)
-    }
-    const subjectNumber = Number(bindings[0]![1])
-    const speakerNumber = Number(bindings[0]![2])
+    const definitionLines = allDefinitionLines.filter((line) => line.startsWith(audioToken))
+    const definitionAudioTokens = definitionLines.length === 1
+      ? Array.from(definitionLines[0]!.matchAll(MEDIA_REFERENCE))
+        .filter((reference) => reference[1] === 'Audio')
+      : []
     if (
-      !Number.isSafeInteger(subjectNumber)
-      || subjectNumber < 1
-      || !Number.isSafeInteger(speakerNumber)
-      || speakerNumber < 1
+      definitionLines.length !== 1
+      || definitionAudioTokens.length !== 1
+      || Number(definitionAudioTokens[0]?.[2]) !== audioNumber
     ) {
       throw invalid(`AUDIO_SPEAKER_BINDING_INVALID:${String(audioNumber)}`)
+    }
+    const definitionLine = definitionLines[0]!
+    const bindings = Array.from(definitionLine.matchAll(SUBJECT_SPEAKER))
+    const definitionSpeakers = Array.from(definitionLine.matchAll(REFERENCE_SPEAKER_TOKEN))
+    const definitionSubjects = Array.from(definitionLine.matchAll(REFERENCE_SUBJECT_TOKEN))
+    const allAudioSpeakerBindings = linesReferencingAudio.flatMap((line) => (
+      Array.from(line.matchAll(SUBJECT_SPEAKER))
+    ))
+    const allAudioSubjects = linesReferencingAudio.flatMap((line) => (
+      Array.from(line.matchAll(REFERENCE_SUBJECT_TOKEN))
+    ))
+    const allAudioSpeakers = linesReferencingAudio.flatMap((line) => (
+      Array.from(line.matchAll(REFERENCE_SPEAKER_TOKEN))
+    ))
+    if (
+      definitionSpeakers.length > 1
+      || definitionSubjects.length > 1
+      || allAudioSpeakerBindings.length !== bindings.length
+      || allAudioSubjects.length !== definitionSubjects.length
+      || allAudioSpeakers.length !== definitionSpeakers.length
+      || (definitionSubjects.length === 1 && bindings.length !== 1)
+    ) {
+      throw invalid(`AUDIO_SPEAKER_BINDING_INVALID:${String(audioNumber)}`)
+    }
+    if (definitionSpeakers.length === 1) {
+      const simpleSpeaker = Array.from(
+        definitionSpeakers[0]![0].matchAll(REFERENCE_SINGLE_SPEAKER_TOKEN),
+      )
+      const subjectNumber = bindings.length === 1 ? Number(bindings[0]![1]) : null
+      const speakerNumber = Number(simpleSpeaker[0]?.[1])
+      if (
+        simpleSpeaker.length !== 1
+        || (subjectNumber !== null && (!Number.isSafeInteger(subjectNumber) || subjectNumber < 1))
+        || !Number.isSafeInteger(speakerNumber)
+        || speakerNumber < 1
+      ) {
+        throw invalid(`AUDIO_SPEAKER_BINDING_INVALID:${String(audioNumber)}`)
+      }
+      audioBindings.push({
+        audioNumber,
+        subjectNumber,
+        speakerNumber,
+      })
+    } else {
+      unboundAudioNumbers.push(audioNumber)
     }
     const retentionLines = sections.retention_analysis
       .split('\n')
@@ -423,33 +621,174 @@ function assertH3ReferenceManifest(
       const entry = REFERENCE_RETENTION_ENTRY.exec(line)
       return entry?.[1] === 'Audio' && Number(entry[2]) === audioNumber
     })
-    const audioTokenCountInRetention = sections.retention_analysis.split(audioToken).length - 1
-    if (retained.length === 0 && audioTokenCountInRetention === 0) {
+    const audioTokenAppearsInRetention = sections.retention_analysis.includes(audioToken)
+    if (retained.length === 0 && !audioTokenAppearsInRetention) {
       throw invalid(`AUDIO_REFERENCE_RETENTION_MISSING:${String(audioNumber)}`)
     }
-    const retainedMedia = retained.length === 1
+    const retainedAudioReferences = retained.length === 1
       ? Array.from(retained[0]!.matchAll(MEDIA_REFERENCE))
+        .filter((reference) => reference[1] === 'Audio')
       : []
     if (
       retained.length !== 1
-      || audioTokenCountInRetention !== 1
-      || retainedMedia.length !== 1
-      || retainedMedia[0]?.[1] !== 'Audio'
-      || Number(retainedMedia[0]?.[2]) !== audioNumber
+      || retainedAudioReferences.length === 0
+      || retainedAudioReferences.some((reference) => Number(reference[2]) !== audioNumber)
     ) {
       throw invalid(`AUDIO_REFERENCE_RETENTION_INVALID:${String(audioNumber)}`)
     }
-    const boundSpeakerOwnsDialogue = sections.detailed_description
-      .split('\n')
-      .some((line) => Array.from(line.matchAll(DIALOGUE_BLOCK)).some((dialogue) => {
-        const speakerBindingsBeforeDialogue = Array.from(
-          line.slice(0, dialogue.index).matchAll(SUBJECT_SPEAKER),
+  }
+  if (unboundAudioNumbers.length > 0) {
+    const detailedAudioApplication = maskReferenceVisibleTextLiterals(
+      maskReferenceDialogueBlocks(
+        sections.detailed_description,
+        parseReferenceDialogueBlocks(sections.detailed_description),
+      ),
+    )
+    const audibleApplicationSections = [
+      { content: detailedAudioApplication, allowDiegeticPlayback: true },
+      { content: sections.overall_soundscape, allowDiegeticPlayback: false },
+      { content: sections.non_diegetic_music, allowDiegeticPlayback: false },
+    ]
+    for (const audioNumber of unboundAudioNumbers) {
+      const audioToken = `<Audio ${String(audioNumber)}>`
+      if (!audibleApplicationSections.some((section) => (
+        hasReferenceUnboundAudioApplication(
+          section.content,
+          audioToken,
+          section.allowDiegeticPlayback,
+          playbackSubjectNumbers,
         )
-        const owner = speakerBindingsBeforeDialogue.at(-1)
-        return Number(owner?.[1]) === subjectNumber && Number(owner?.[2]) === speakerNumber
-      }))
-    if (!boundSpeakerOwnsDialogue) {
-      throw invalid(`AUDIO_SPEAKER_DIALOGUE_MISSING:${String(audioNumber)}`)
+      ))) {
+        throw invalid(`AUDIO_REFERENCE_APPLICATION_MISSING:${String(audioNumber)}`)
+      }
+    }
+  }
+  if (audioBindings.length === 0) return
+
+  const dialogueEvents = parseReferenceDialogueEvents(sections.detailed_description)
+  const appliedAudioNumbers = new Set<number>()
+  const speakersWithDialogue = new Set<number>()
+  for (const event of dialogueEvents) {
+    const owner = Array.from(event.speakerContext.matchAll(REFERENCE_SPEAKER_TOKEN)).at(-1)
+    if (owner?.index === undefined) {
+      continue
+    }
+    const ownerStart = owner.index
+    const speakerNumbers = parseReferenceSpeakerNumbers(owner[0])
+    const compoundSpeaker = speakerNumbers.length > 1
+    for (const speakerNumber of speakerNumbers) speakersWithDialogue.add(speakerNumber)
+    const ownerEnd = ownerStart + owner[0].length
+    const subjectOwner = Array.from(event.speakerContext.matchAll(SUBJECT_SPEAKER))
+      .filter((match) => match.index !== undefined && match.index + match[0].length === ownerEnd)
+      .at(-1)
+    const subjectNumber = subjectOwner ? Number(subjectOwner[1]) : null
+    const ownerAudioBindings = audioBindings.filter((binding) => (
+      speakerNumbers.includes(binding.speakerNumber)
+      && (
+        subjectNumber === null
+        || binding.subjectNumber === null
+        || binding.subjectNumber === subjectNumber
+      )
+    ))
+    const eventSpeakers = Array.from(event.speakerContext.matchAll(REFERENCE_SPEAKER_TOKEN))
+    const candidateAudioReferences = Array.from(event.speakerContext.matchAll(MEDIA_REFERENCE))
+      .filter((reference) => reference[1] === 'Audio')
+      .filter((reference) => {
+        const referenceIndex = reference.index
+        if (referenceIndex === undefined) return false
+        const referenceEnd = referenceIndex + reference[0].length
+        const afterReference = event.speakerContext.slice(referenceEnd)
+        const lastSentenceBoundary = findLastReferenceSentenceBoundary(afterReference)
+        const hasClearContinuation = lastSentenceBoundary < 0
+          || hasReferenceAudioAnaphoricBridge(
+            afterReference.slice(lastSentenceBoundary + 1),
+          )
+        if (!hasClearContinuation) return false
+        if (referenceIndex >= ownerEnd) return true
+        const speakerBeforeReference = eventSpeakers
+          .filter((speaker) => speaker.index !== undefined && speaker.index < referenceIndex)
+          .at(-1)
+        const speakersBetweenReferenceAndOwner = eventSpeakers.filter((speaker) => (
+          speaker.index !== undefined
+          && speaker.index > referenceIndex
+          && speaker.index <= ownerStart
+        ))
+        const belongsToOwner = (speaker: RegExpMatchArray): boolean => (
+          parseReferenceSpeakerNumbers(speaker[0])
+            .some((speakerNumber) => speakerNumbers.includes(speakerNumber))
+        )
+        return (
+          (!speakerBeforeReference || belongsToOwner(speakerBeforeReference))
+          && speakersBetweenReferenceAndOwner.every(belongsToOwner)
+        )
+      })
+    const citedAudioNumbers: number[] = []
+    for (const reference of candidateAudioReferences) {
+      if (reference.index === undefined) continue
+      const citedAudioNumber = Number(reference[2])
+      const citedBinding = audioBindings.find((binding) => (
+        binding.audioNumber === citedAudioNumber
+      ))
+      if (!citedBinding) continue
+      const subjectMatches = subjectNumber === null
+        || citedBinding.subjectNumber === null
+        || citedBinding.subjectNumber === subjectNumber
+      if (compoundSpeaker) {
+        const appliesToBoundSpeaker = hasReferenceCompoundAudioPair({
+          context: event.speakerContext,
+          ownerStart,
+          ownerEnd,
+          binding: citedBinding,
+        })
+        const appliesToAnotherOwnerSpeaker = speakerNumbers.some((speakerNumber) => (
+          speakerNumber !== citedBinding.speakerNumber
+          && hasReferenceCompoundAudioPair({
+              context: event.speakerContext,
+              ownerStart,
+              ownerEnd,
+              binding: {
+                ...citedBinding,
+                speakerNumber,
+              },
+            })
+        ))
+        if (appliesToAnotherOwnerSpeaker || (appliesToBoundSpeaker && !subjectMatches)) {
+          throw invalid(
+            `AUDIO_REFERENCE_APPLICATION_INVALID:${String(citedAudioNumber)}`,
+          )
+        }
+        if (appliesToBoundSpeaker && subjectMatches) {
+          citedAudioNumbers.push(citedAudioNumber)
+        }
+        continue
+      }
+      const appliesToSingleSpeaker = hasReferenceSingleAudioPair({
+        context: event.speakerContext,
+        ownerStart,
+        ownerEnd,
+        referenceStart: reference.index,
+        referenceEnd: reference.index + reference[0].length,
+      })
+      if (!appliesToSingleSpeaker) continue
+      if (!speakerNumbers.includes(citedBinding.speakerNumber) || !subjectMatches) {
+        throw invalid(
+          `AUDIO_REFERENCE_APPLICATION_INVALID:${String(citedAudioNumber)}`,
+        )
+      }
+      citedAudioNumbers.push(citedAudioNumber)
+    }
+    if (ownerAudioBindings.length === 0) continue
+    const citedBindings = ownerAudioBindings.filter((binding) => (
+      citedAudioNumbers.includes(binding.audioNumber)
+    ))
+    for (const binding of citedBindings) appliedAudioNumbers.add(binding.audioNumber)
+  }
+  for (const binding of audioBindings) {
+    if (!speakersWithDialogue.has(binding.speakerNumber)) {
+      throw invalid(`AUDIO_SPEAKER_DIALOGUE_MISSING:${String(binding.audioNumber)}`)
+    }
+    if (!appliedAudioNumbers.has(binding.audioNumber)) {
+      throw invalid(`AUDIO_REFERENCE_APPLICATION_MISSING:${String(binding.audioNumber)}`)
     }
   }
 }
@@ -479,7 +818,7 @@ export function assertVideoPromptMatchesProfile(input: {
   )
   assertH3InputMode(input.inputMode, input.timelineDurationSeconds, sections)
   if (input.inputMode === 'reference') assertH3ReferencePrompt(sections, input.references)
-  assertH3ReferenceManifest(sections, input.references)
+  assertH3ReferenceManifest(sections, input.references, input.inputMode)
 }
 
 export function parseMinimaxH3Prompt(

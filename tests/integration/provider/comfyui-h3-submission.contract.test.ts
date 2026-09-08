@@ -119,11 +119,11 @@ summary:
 
 retention_analysis:
 <Subject 1> (appears in [Shot 1]): fully_preserved - The person's identity and appearance from <Picture 1> are retained.
-<Audio 1>: reference - The target speaker follows its vocal timbre and measured delivery without copying the original signal.
+<Audio 1>: reference - The target speaker follows <Audio 1>'s vocal timbre and measured delivery without copying the original signal.
 
 detailed_description:
 The target video uses a realistic cinematic portrait style with natural indoor lighting.
-[Shot 1] <Subject 1> (S1) faces camera and says <d>[Chinese]这是新台词。</d>
+[Shot 1] <Subject 1> (S1), using the voice timbre referenced from <Audio 1>, faces camera and says <d>[Chinese]这是新台词。</d>
 
 overall_soundscape:
 Clean speech with quiet room tone.
