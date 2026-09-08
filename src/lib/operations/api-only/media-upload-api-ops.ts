@@ -16,6 +16,7 @@ import {
   readFormDataWithLimit,
 } from '@/lib/http/body-limits'
 import { detectMimeFromBuffer } from '@/lib/media/outbound-image'
+import { InvalidAudioMediaError, probeAudioBufferDurationMs } from '@/lib/media/probe-duration'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { readStoredImageFacts } from '@/lib/media/stored-image-facts'
 import { defineOperation } from '@/lib/operations/define-operation'
@@ -49,6 +50,7 @@ const preparedUserUploadSchema = z.object({
   sizeBytes: z.number().int().positive(),
   width: z.number().int().positive().nullable(),
   height: z.number().int().positive().nullable(),
+  durationMs: z.number().int().positive().nullable(),
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
   fileName: z.string().min(1).max(200),
   name: z.string().min(1).max(200),
@@ -95,6 +97,22 @@ async function normalizeUploadImage(
   }
 }
 
+async function probeUploadedAudioDurationMs(
+  buffer: Buffer,
+  extension: string,
+): Promise<number> {
+  try {
+    return await probeAudioBufferDurationMs({
+      buffer,
+      extension,
+      stage: 'project_media_upload_probe_audio_duration',
+    })
+  } catch (error) {
+    if (!(error instanceof InvalidAudioMediaError)) throw error
+    throw new ApiError('UPLOAD_AUDIO_DURATION_INVALID', { field: 'file' }, { cause: error })
+  }
+}
+
 async function prepareUserMediaUpload(request: Request): Promise<PreparedUserUpload> {
   const formData = await readFormDataWithLimit(
     request,
@@ -135,6 +153,9 @@ async function prepareUserMediaUpload(request: Request): Promise<PreparedUserUpl
       message: `project media upload exceeds the ${maxBytes} byte limit`,
     })
   }
+  const durationMs = accepted.mediaType === 'audio'
+    ? await probeUploadedAudioDurationMs(normalized.stored, accepted.extension)
+    : null
 
   const sha256 = createHash('sha256').update(normalized.stored).digest('hex')
   const storageKey = buildUserUploadStorageKey({ sha256, extension: accepted.extension })
@@ -147,6 +168,7 @@ async function prepareUserMediaUpload(request: Request): Promise<PreparedUserUpl
     sizeBytes: normalized.stored.byteLength,
     width: normalized.width,
     height: normalized.height,
+    durationMs,
     sha256,
     fileName,
     name: normalizeUploadName(formData.get('name'), fileName, accepted.mediaType),
@@ -306,6 +328,7 @@ export function createMediaUploadApiOperations(): ProjectAgentOperationRegistryD
           sizeBytes: prepared.sizeBytes,
           width: prepared.width,
           height: prepared.height,
+          durationMs: prepared.durationMs,
         }, transaction)
         const resourceId = buildUserUploadResourceId({
           projectId: ctx.projectId,

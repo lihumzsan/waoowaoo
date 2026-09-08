@@ -14,6 +14,13 @@ export type FfmpegCommandContext = {
   readonly expectedDurationSeconds?: number
 }
 
+export class MediaDurationInvalidError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'MediaDurationInvalidError'
+  }
+}
+
 const execFileAsync = promisify(execFile)
 const FFMPEG_MAX_BUFFER_BYTES = 32 * 1024 * 1024
 const FFPROBE_TIMEOUT_MS = 30_000
@@ -22,6 +29,10 @@ const FFMPEG_TIMEOUT_MS_PER_MEDIA_SECOND = 2_000
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+export function isFfmpegCommandProcessExitError(error: unknown): boolean {
+  return isRecord(error) && typeof error.code === 'number' && Number.isInteger(error.code)
 }
 
 function normalizeStage(stage: string): string {
@@ -86,7 +97,29 @@ export async function probeMediaDurationSeconds(
     filePath,
   ], { stage })
   const duration = Number.parseFloat(result.stdout.trim())
-  if (!Number.isFinite(duration) || duration <= 0) throw new Error('MEDIA_DURATION_INVALID')
+  if (!Number.isFinite(duration) || duration <= 0) throw new MediaDurationInvalidError('MEDIA_DURATION_INVALID')
+  return duration
+}
+
+export async function probeAudioStreamDurationSeconds(
+  filePath: string,
+  stage = 'audio_stream_probe_duration',
+): Promise<number> {
+  const result = await runFfmpegCommand('ffprobe', [
+    '-v',
+    'error',
+    '-select_streams',
+    'a:0',
+    '-show_entries',
+    'stream=duration',
+    '-of',
+    'default=noprint_wrappers=1:nokey=1',
+    filePath,
+  ], { stage })
+  const duration = Number.parseFloat(result.stdout.trim())
+  if (!Number.isFinite(duration) || duration <= 0) {
+    throw new MediaDurationInvalidError('MEDIA_AUDIO_STREAM_DURATION_INVALID')
+  }
   return duration
 }
 

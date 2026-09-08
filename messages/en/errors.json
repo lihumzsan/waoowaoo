@@ -23,6 +23,7 @@
   "PAYLOAD_TOO_LARGE": "The upload is too large. Choose a smaller file and try again.",
   "UPLOAD_FILE_EMPTY": "The selected file is empty. Choose another file.",
   "UPLOAD_MEDIA_TYPE_UNSUPPORTED": "This media type is not supported. Use PNG, JPEG, WebP, MP3, WAV, or OGG.",
+  "UPLOAD_AUDIO_DURATION_INVALID": "The audio duration could not be read. Choose a valid MP3, WAV, or OGG file.",
   "PROJECT_ASSISTANT_TEXT_ATTACHMENT_FILE_NAME_EMPTY": "The file needs a valid name.",
   "PROJECT_ASSISTANT_TEXT_ATTACHMENT_UNSUPPORTED_TYPE": "This text file type is not supported. Use TXT, Markdown, or DOCX.",
   "PROJECT_ASSISTANT_TEXT_ATTACHMENT_EMPTY": "The text file is empty.",
