@@ -151,16 +151,26 @@ function parseSections(prompt: string): Record<MinimaxH3PromptSection, string> {
   return result
 }
 
+function maskRequiredVisibleTextPolicy(input: string): string {
+  return input.replaceAll(
+    REQUIRED_VISIBLE_TEXT_POLICY,
+    (policy) => ' '.repeat(policy.length),
+  )
+}
+
 function assertVisibleTextPolicy(
   sections: Readonly<Record<MinimaxH3PromptSection, string>>,
 ): void {
   if (!sections.summary.split('\n').includes(REQUIRED_VISIBLE_TEXT_POLICY)) {
     throw invalid('VISIBLE_TEXT_POLICY_REQUIRED')
   }
-  const detailedDescriptionProse = sections.detailed_description
+  const promptProse = MINIMAX_H3_PROMPT_SECTIONS
+    .map((section) => sections[section])
+    .join('\n')
+  const promptProseWithoutPolicy = maskRequiredVisibleTextPolicy(promptProse)
     .replace(DIALOGUE_BLOCK, (dialogue) => ' '.repeat(dialogue.length))
     .replace(QUOTED_TEXT_LITERAL, (literal) => ' '.repeat(literal.length))
-  if (SUBTITLE_VISIBLE_TEXT.test(detailedDescriptionProse)) {
+  if (SUBTITLE_VISIBLE_TEXT.test(promptProseWithoutPolicy)) {
     throw invalid('SUBTITLE_VISIBLE_TEXT_FORBIDDEN')
   }
 }
@@ -350,12 +360,12 @@ function assertReferenceDialoguePlacement(
     ),
   )
   if (dialoguePayloads.length === 0) return
-  const textOutsideLiteralBlocks = maskReferenceProtocolMetadata([
+  const textOutsideLiteralBlocks = maskRequiredVisibleTextPolicy(maskReferenceProtocolMetadata([
     ...MINIMAX_H3_PROMPT_SECTIONS
       .filter((section) => section !== 'detailed_description' && section !== 'non_diegetic_music')
       .map((section) => sections[section]),
     detailedOutsideDialogue,
-  ].join('\n')).normalize('NFC')
+  ].join('\n'))).normalize('NFC')
   if (dialoguePayloads.some((payload) => containsBoundaryAwareText(
     textOutsideLiteralBlocks,
     payload,
@@ -377,9 +387,9 @@ function assertH3ReferencePrompt(
           parseReferenceDialogueBlocks(sections[section]),
         )
       : sections[section]
-    const prose = maskReferenceProtocolMetadata(
+    const prose = maskRequiredVisibleTextPolicy(maskReferenceProtocolMetadata(
       maskReferenceVisibleTextLiterals(bodyWithoutDialogue),
-    ).replaceAll(REQUIRED_VISIBLE_TEXT_POLICY, ' ')
+    ))
     if (containsNonLatinScriptLetter(prose)) {
       throw invalid('REFERENCE_NON_ENGLISH_TEXT_INVALID')
     }
@@ -824,7 +834,7 @@ export function assertVideoPromptMatchesProfile(input: {
   }
   const sections = parseSections(input.prompt)
   if (input.profile !== 'minimax_h3_multimodal_v3') throw invalid('PROFILE_UNKNOWN')
-  assertVisibleTextPolicy(sections)
+  if (input.inputMode === 'reference') assertVisibleTextPolicy(sections)
   const timelineOriginSeconds = input.inputMode === 'continuation'
     ? H3_CONTINUATION_GUIDE_SECONDS
     : 0

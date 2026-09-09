@@ -136,19 +136,45 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
     })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:SUBTITLE_VISIBLE_TEXT_FORBIDDEN')
   })
 
+  it('rejects an explicit subtitle instruction outside detailed_description', () => {
+    const prompt = referencePrompt.replace(
+      '[reference generation] She turns toward the doorway while preserving <Subject 1> from <Picture 1>.',
+      '[reference generation] She turns toward the doorway. Add burned-in subtitles at the bottom.',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:SUBTITLE_VISIBLE_TEXT_FORBIDDEN')
+  })
+
+  it('keeps policy wording inside dialogue opaque to outside-dialogue validation', () => {
+    const prompt = referenceAudioPrompt.replace(
+      '<d>[Chinese]这是新台词。</d>',
+      '<d>[English]Do not add subtitles or captions under any circumstances.</d>',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+      references: { pictureCount: 1, audioCount: 1 },
+    })).not.toThrow()
+  })
+
+  it('rejects a reference prompt without the required no-overlay policy', () => {
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt: referencePrompt.replace(HARD_NO_SUBTITLE_POLICY, ''),
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:VISIBLE_TEXT_POLICY_REQUIRED')
+  })
+
   it.each([
-    ['reference', referencePrompt],
     ['first_frame', firstFramePrompt],
     ['first_last_frame', firstLastFramePrompt],
     ['continuation', continuationPrompt],
-  ] as const)('rejects a %s prompt without the required no-overlay policy', (inputMode, prompt) => {
+  ] as const)('does not make the Ref-only no-subtitle policy a %s compatibility gate', (inputMode, prompt) => {
     expect(() => assertH3Prompt({
       inputMode,
-      prompt: prompt.replace(
-        'Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.',
-        '',
-      ),
-    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:VISIBLE_TEXT_POLICY_REQUIRED')
+      prompt: prompt.replace(HARD_NO_SUBTITLE_POLICY, ''),
+    })).not.toThrow()
   })
 
   it('keeps the exact six-section reference dialect without treating a reference as a frame', () => {

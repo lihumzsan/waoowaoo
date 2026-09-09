@@ -29,6 +29,7 @@ const ORIGINAL_DEPLOYMENT_EDITION = process.env.DEPLOYMENT_EDITION
 const ORIGINAL_PROVIDER_CREDENTIAL_MODE = process.env.PROVIDER_CREDENTIAL_MODE
 const ORIGINAL_PLATFORM_DEFAULT_VIDEO_MODEL = process.env.PLATFORM_DEFAULT_VIDEO_MODEL
 const ORIGINAL_PLATFORM_VIDEO_RESOLUTION = process.env.PLATFORM_VIDEO_RESOLUTION
+const H3_REF_NO_SUBTITLE_POLICY = 'Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.'
 
 function restoreEnvironment(
   name:
@@ -269,7 +270,7 @@ ${definitions}
 
 summary:
 [reference generation + audio reference] <Subject 1> speaks one new line using the supplied audio as a voice-timbre reference.
-Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.
+${H3_REF_NO_SUBTITLE_POLICY}
 
 retention_analysis:
 <Subject 1> (appears in [Shot 1]): fully_preserved - The person's identity and appearance from <Picture 1> are retained.
@@ -293,7 +294,7 @@ function h3Prompt(inputMode: 'reference' | 'first_frame' | 'first_last_frame', p
       ? '[Shot 1] <Picture 1> aligns with 0.00 seconds and shows her turning toward the doorway.'
       : `[Shot 1] <Picture 1> aligns with 0.00 seconds and shows her turning toward the doorway; at ${String(promptEndSeconds)} seconds she settles exactly into <Picture 2>.`
   const summary = inputMode === 'reference'
-    ? '[reference generation] She turns toward the doorway while preserving <Subject 1> from <Picture 1>.'
+    ? `[reference generation] She turns toward the doorway while preserving <Subject 1> from <Picture 1>.\n${H3_REF_NO_SUBTITLE_POLICY}`
     : 'She turns toward the doorway.'
   const retention = inputMode === 'reference'
     ? '<Subject 1> (appears in [Shot 1]): fully_preserved - Her identity, clothing, and room layout from <Picture 1> are retained.'
@@ -303,7 +304,6 @@ function h3Prompt(inputMode: 'reference' | 'first_frame' | 'first_last_frame', p
 
 summary:
 ${summary}
-Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.
 
 retention_analysis:
 ${retention}
@@ -324,7 +324,6 @@ function h3ContinuationPrompt(): string {
 
 summary:
 She continues turning toward the doorway.
-Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.
 
 retention_analysis:
 Continue the inherited identity, pose, motion direction, and room layout from the preceding motion guide.
@@ -617,7 +616,7 @@ describe('project local video model configuration', () => {
     })
   })
 
-  it('enforces the 4-11 second reference range while preserving 4-15 seconds for other H3 modes', async () => {
+  it('accepts the shared H3 4-15 second range and rejects values below it before writes', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)
     const image = await seedReadyImage({ userId: user.id, projectId: project.id, label: 'policy-image' })
@@ -667,9 +666,9 @@ describe('project local video model configuration', () => {
     }
     const imageReference = [{ ...image, role: 'reference_image' as const, channel: 'image' as const }]
     await expect(plan({
-      itemId: 'ref-11-9-21',
-      durationSeconds: 11,
-      prompt: h3Prompt('reference', 11.542),
+      itemId: 'ref-15-9-21',
+      durationSeconds: 15,
+      prompt: h3Prompt('reference', 15.083),
       references: imageReference,
     })).resolves.toBeDefined()
 
@@ -701,17 +700,6 @@ describe('project local video model configuration', () => {
       tasks: await prisma.task.count({ where: { projectId: project.id } }),
       resources: await prisma.workspaceResource.count({ where: { projectId: project.id } }),
     }
-    await expect(plan({
-      itemId: 'ref-12',
-      durationSeconds: 12,
-      prompt: h3Prompt('reference', 12.25),
-      references: imageReference,
-    })).rejects.toMatchObject({
-      details: expect.objectContaining({
-        code: 'MEDIA_GENERATION_CAPABILITY_INVALID',
-        reason: 'VIDEO_INPUT_MODE_DURATION_UNSUPPORTED:reference:12',
-      }),
-    })
     await expect(plan({
       itemId: 'first-frame-3',
       durationSeconds: 3,

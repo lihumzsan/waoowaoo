@@ -211,9 +211,19 @@ function objectInfo(className: string): Record<string, unknown> {
     required.model = ['MODEL']
     required.lora_name = [[
       'h3\\minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors',
+      'h3\\minimax_h3_turbo_4step_10ErosMax_test4_pruned_curveproj1025_exp_v001-T8.safetensors',
       'h3\\Motion_Repair.safetensors',
       'h3\\Minimax H3真实电影质感.safetensors',
       'h3\\H3_Combat_V2.safetensors',
+    ]]
+    required.strength_model = ['FLOAT', { min: -10, max: 10 }]
+    output = ['MODEL']
+  }
+  if (className === 'LoraLoaderBypassModelOnly') {
+    required.model = ['MODEL']
+    required.lora_name = [[
+      'h3\\minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors',
+      'h3\\minimax_h3_turbo_v4_step600_ema_DasiwaREF2VAHybridV1_0_curveproj1025_compat_v001.safetensors',
     ]]
     required.strength_model = ['FLOAT', { min: -10, max: 10 }]
     output = ['MODEL']
@@ -226,25 +236,25 @@ function objectInfo(className: string): Record<string, unknown> {
     ]]
     output = ['VAE']
   }
-  if (className === 'VAEDecodeAudio') {
-    required.samples = ['LATENT']
-    required.vae = ['VAE']
-    output = ['AUDIO']
+  if (className === 'MiniMaxH3LearnedLatentUpscaleT8Advanced') {
+    required.model_name = [['minimax_h3_latent_upscaler_3d_fp16.safetensors']]
+    required.av_latent = ['LATENT']
+    required.size_mode = [['target_megapixels', 'scale_by', 'target_dimensions']]
+    required.scale_by = ['FLOAT']
+    required.target_megapixels = ['FLOAT', { min: 0.01, max: 8, step: 0.01 }]
+    required.target_width = ['INT', { min: 32, max: 4096, step: 32 }]
+    required.target_height = ['INT', { min: 32, max: 4096, step: 32 }]
+    required.aspect_policy = [['preserve_source', 'stretch']]
+    required.max_anisotropy = ['FLOAT']
+    required.precision = [['fp16', 'bf16']]
+    required.release_policy = [['offload_after', 'keep_loaded']]
+    output = ['LATENT', 'INT', 'INT', 'STRING']
   }
-  if (className === 'VAEDecode') {
-    required.samples = ['LATENT']
-    required.vae = ['VAE']
-    output = ['IMAGE']
-  }
-  if (className === 'VAEEncode') {
-    required.pixels = ['IMAGE']
-    required.vae = ['VAE']
-    output = ['LATENT']
-  }
-  if (className === 'VAEEncodeAudio') {
-    required.audio = ['AUDIO']
-    required.vae = ['VAE']
-    output = ['LATENT']
+  if (className === 'MiniMaxH3AVDecodeT8') {
+    required.av_latent = ['LATENT']
+    required.video_vae = ['VAE']
+    required.audio_vae = ['VAE']
+    output = ['IMAGE', 'AUDIO', 'LATENT', 'LATENT']
   }
   if (className === 'ImageResizeKJv2') {
     required.image = ['IMAGE']
@@ -259,17 +269,6 @@ function objectInfo(className: string): Record<string, unknown> {
     optional.device = [['cpu', 'gpu']]
     output = ['IMAGE', 'INT', 'INT', 'MASK']
   }
-  if (className === 'KSamplerSelect') {
-    required.sampler_name = [['euler', 'res_multistep']]
-    output = ['SAMPLER']
-  }
-  if (className === 'BasicScheduler') {
-    required.model = ['MODEL']
-    required.scheduler = [['beta']]
-    required.steps = ['INT', { min: 1, max: 100 }]
-    required.denoise = ['FLOAT', { min: 0, max: 1 }]
-    output = ['SIGMAS']
-  }
   if (className === 'ModelAttentionBackend') {
     required.model = ['MODEL']
     required.attention = [['comfy kitchen attention', 'pytorch attention']]
@@ -283,12 +282,6 @@ function objectInfo(className: string): Record<string, unknown> {
     required.audio = ['COMBO', { options: ['example.mp3'], audio_upload: true }]
     output = ['AUDIO']
   }
-  if (className === 'ResizeShortestToNode') {
-    required.image = ['IMAGE']
-    required.size = ['INT', { min: 64, max: 16384 }]
-    required.method = [['LANCZOS']]
-    output = ['IMAGE']
-  }
   if (className === 'ImageBatch') {
     required.image1 = ['IMAGE']
     required.image2 = ['IMAGE']
@@ -300,15 +293,26 @@ function objectInfo(className: string): Record<string, unknown> {
     optional.vae = ['VAE']
     optional.image = ['IMAGE']
   }
-  if (className === 'MiniMaxH3ReferenceToVideo') {
+  if (className === 'MiniMaxH3AudioConditioningT8') {
     required.clip = ['CLIP']
-    required.vae = ['VAE']
+    required.video_vae = ['VAE']
     required.audio_vae = ['VAE']
     required.prompt = ['STRING']
     required.width = ['INT', { min: 32, max: 16384, step: 32 }]
     required.height = ['INT', { min: 32, max: 16384, step: 32 }]
     required.length = ['INT', { min: 5, max: 3600, step: 17 }]
-    required.ref_image_size = [['max']]
+    required.task_type = ['COMBO', {
+      default: 'auto',
+      multiselect: false,
+      options: ['auto', 'T2VA', 'I2VA', 'FL2VA', 'L2VA', 'Ref2VA', 'Hybrid'],
+    }]
+    required.audio_mode = [['native']]
+    required.ref_image_size = [['match']]
+    required.reference_video_policy = [['official_2_to_15s']]
+    required.audio_denoise_strength = ['FLOAT', { min: 0, max: 1 }]
+    required.add_source_as_reference = ['BOOLEAN']
+    required.prompt_primary_audio_ordinal = ['INT', { min: 0, max: 9 }]
+    required.strict_prompt_tags = ['BOOLEAN']
     optional.ref_images = [
       'COMFY_AUTOGROW_V3',
       {
@@ -320,7 +324,7 @@ function objectInfo(className: string): Record<string, unknown> {
           },
           prefix: 'ref_image_',
           min: 1,
-          max: 8,
+          max: 9,
         },
       },
     ]
@@ -339,7 +343,25 @@ function objectInfo(className: string): Record<string, unknown> {
         },
       },
     ]
-    output = ['CONDITIONING', 'LATENT']
+    optional.allow_above_reference_area = ['BOOLEAN']
+    output = ['CONDITIONING', 'LATENT', 'AUDIO', 'STRING', 'STRING', 'STRING']
+  }
+  if (className === 'MiniMaxH3DualClockSamplerT8') {
+    required.model = ['MODEL']
+    required.av_latent = ['LATENT']
+    required.steps = ['INT', { min: 1, max: 100 }]
+    required.shift_video = ['FLOAT']
+    required.shift_audio = ['FLOAT']
+    optional.sampler_name = [['dual_clock_euler']]
+    optional.scheduler = [['native_flow']]
+    output = ['MODEL', 'SAMPLER', 'SIGMAS']
+  }
+  if (className === 'MiniMaxH3LearnedTwoPassParityPlanT8Advanced') {
+    required.model = ['MODEL']
+    required.base_steps = ['INT', { min: 1, max: 20 }]
+    required.coarse_steps = ['INT', { min: 1, max: 20 }]
+    required.refine_steps = ['INT', { min: 1, max: 20 }]
+    output = ['SIGMAS', 'SIGMAS', 'STRING']
   }
   if (className === 'BasicGuider') {
     required.model = ['MODEL']
@@ -350,19 +372,6 @@ function objectInfo(className: string): Record<string, unknown> {
     required.noise_seed = ['INT', { min: 0, max: 281_474_976_710_655 }]
     output = ['NOISE']
   }
-  if (className === 'PrimitiveStringMultiline') {
-    required.value = ['STRING']
-    output = ['STRING']
-  }
-  if (className === 'easy clearCacheAll') {
-    required.anything = ['*', {}]
-    output = ['*']
-  }
-  if (className === 'PT_H3ConcatAVLatent') {
-    required.video_latent = ['LATENT']
-    required.audio_latent = ['LATENT']
-    output = ['LATENT']
-  }
   if (className === 'SamplerCustomAdvanced') {
     required.noise = ['NOISE']
     required.guider = ['GUIDER']
@@ -370,6 +379,40 @@ function objectInfo(className: string): Record<string, unknown> {
     required.sigmas = ['SIGMAS']
     required.latent_image = ['LATENT']
     output = ['LATENT', 'LATENT']
+  }
+  if (className === 'MiniMaxH3TwoPassLatentReconcileT8Advanced') {
+    required.learned_latent = ['LATENT']
+    required.highres_template = ['LATENT']
+    required.positive = ['CONDITIONING']
+    required.audio_policy = [['auto']]
+    optional.second_pass_audio_source = [['legacy_policy']]
+    optional.second_pass_audio_strength = ['FLOAT', { min: 0, max: 1 }]
+    output = ['LATENT', 'CONDITIONING', 'STRING']
+  }
+  if (className === 'MiniMaxH3TwoPassDetailMixerT8Advanced') {
+    required.model = ['MODEL']
+    required.av_latent = ['LATENT']
+    required.refine_sigmas = ['SIGMAS']
+    required.shift_video = ['FLOAT']
+    required.shift_audio = ['FLOAT']
+    required.enable_tail = ['BOOLEAN']
+    required.extra_tail_steps = ['INT']
+    required.tail_spacing = [['video_sigma_linear']]
+    required.enable_model_time_bias = ['BOOLEAN']
+    required.bias = ['FLOAT']
+    required.bias_start_progress = ['FLOAT']
+    required.bias_end_progress = ['FLOAT']
+    required.bias_domain = [['video_sigma']]
+    required.enable_stg = ['BOOLEAN']
+    required.stg_scale = ['FLOAT']
+    required.stg_double_blocks = ['STRING']
+    required.stg_start_progress = ['FLOAT']
+    required.stg_end_progress = ['FLOAT']
+    required.enable_restart = ['BOOLEAN']
+    required.restart_video_sigma = ['FLOAT']
+    required.restart_steps = ['INT']
+    required.restart_seed = ['INT', { min: 0, max: 9_007_199_254_740_991 }]
+    output = ['MODEL', 'SAMPLER', 'SIGMAS', 'INT', 'INT', 'STRING']
   }
   if (className === 'SolAttnMiniMax') {
     required.model = ['MODEL']
@@ -406,7 +449,6 @@ function objectInfo(className: string): Record<string, unknown> {
         ['pix_fmt', ['yuv420p', 'yuv420p10le']],
         ['crf', 'INT', { min: 0, max: 100 }],
         ['save_metadata', 'BOOLEAN', { default: true }],
-        ['trim_to_audio', 'BOOLEAN', { default: false }],
       ] } },
     ]
     required.pingpong = ['BOOLEAN']
@@ -604,16 +646,16 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
   it('revalidates request-specific values when the runtime schema cache is warm', async () => {
     vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
     defineValidPreflight(server!)
-    const constrained = objectInfo('MiniMaxH3ReferenceToVideo')
+    const constrained = objectInfo('MiniMaxH3AudioConditioningT8')
     const required = (
-      constrained.MiniMaxH3ReferenceToVideo as {
+      constrained.MiniMaxH3AudioConditioningT8 as {
         input: { required: Record<string, unknown[]> }
       }
     ).input.required
     required.length = ['INT', { min: 5, max: 200, step: 17 }]
     server!.defineScenario({
       method: 'GET',
-      path: '/object_info/MiniMaxH3ReferenceToVideo',
+      path: '/object_info/MiniMaxH3AudioConditioningT8',
       mode: 'success',
       submitResponse: { status: 200, body: constrained },
     })
@@ -628,10 +670,10 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
     })
     await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
       message: expect.stringContaining(
-        'COMFYUI_NODE_INPUT_VALUE_INCOMPATIBLE:MiniMaxH3ReferenceToVideo:length:243',
+        'COMFYUI_NODE_INPUT_VALUE_INCOMPATIBLE:MiniMaxH3AudioConditioningT8:length:243',
       ),
     })
-    expect(server!.getRequests('GET', '/object_info/MiniMaxH3ReferenceToVideo')).toHaveLength(1)
+    expect(server!.getRequests('GET', '/object_info/MiniMaxH3AudioConditioningT8')).toHaveLength(1)
     expect(server!.getRequests('POST', '/upload/image')).toHaveLength(1)
     expect(server!.getRequests('POST', '/prompt')).toHaveLength(1)
   })
@@ -709,12 +751,12 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
     await executeComfyUiH3VideoGeneration(stableInput)
 
     const seeds = server!.getRequests('POST', '/prompt').map((request) => (
-      JSON.parse(request.bodyText).prompt['129'].inputs.noise_seed
+      JSON.parse(request.bodyText).prompt['11'].inputs.noise_seed
     ))
     expect(seeds).toEqual([150520457746125, 150520457746125])
   })
 
-  it('uploads ordered reference images and submits the 11-second reference plan once', async () => {
+  it('uploads ordered reference images and submits the 15-second T8 MP plan once', async () => {
     vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
     defineValidPreflight(server!)
     server!.defineScenario({
@@ -739,7 +781,7 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
       ...videoInput,
       options: {
         ...videoInput.options,
-        duration: 11,
+        duration: 15,
         aspectRatio: '9:21',
         referenceImages: [
           'https://media.example.com/reference-1.png',
@@ -750,13 +792,16 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
     expect(server!.getRequests('POST', '/upload/image')).toHaveLength(2)
     const request = server!.getRequests('POST', '/prompt')[0]
     const body = JSON.parse(request!.bodyText) as { prompt: Record<string, { inputs?: Record<string, unknown> }> }
-    expect(body.prompt['137']?.inputs?.image).toBe(`waoowaoo/${PROMPT_ID}/reference-image-00.png`)
-    expect(body.prompt['326']?.inputs?.image).toBe(`waoowaoo/${PROMPT_ID}/reference-image-01.png`)
-    expect(body.prompt['309']?.inputs?.['ref_images.ref_image_0']).toEqual(['198', 0])
-    expect(body.prompt['309']?.inputs?.['ref_images.ref_image_1']).toEqual(['333', 0])
-    expect(body.prompt['309']?.inputs?.length).toBe(277)
-    expect(body.prompt['309']?.inputs).toMatchObject({ width: 672, height: 1568 })
-    expect(body.prompt['323']?.inputs).toMatchObject({ width: 1008, height: 2352 })
+    expect(body.prompt['6']?.inputs?.image).toBe(`waoowaoo/${PROMPT_ID}/reference-image-00.png`)
+    expect(body.prompt['60']?.inputs?.image).toBe(`waoowaoo/${PROMPT_ID}/reference-image-01.png`)
+    for (const conditioningId of ['7', '14']) {
+      expect(body.prompt[conditioningId]?.inputs?.['ref_images.ref_image_0']).toEqual(['6', 0])
+      expect(body.prompt[conditioningId]?.inputs?.['ref_images.ref_image_1']).toEqual(['60', 0])
+      expect(body.prompt[conditioningId]?.inputs?.length).toBe(362)
+    }
+    expect(body.prompt['7']?.inputs).toMatchObject({ width: 448, height: 1088 })
+    expect(body.prompt['13']?.inputs).toMatchObject({ target_megapixels: 0.67 })
+    expect(body.prompt['55']?.inputs).toMatchObject({ width: 960, height: 2208 })
     expect(body.prompt['168']?.inputs).toMatchObject({
       format: 'video/h264-mp4', pix_fmt: 'yuv420p', crf: 10, frame_rate: 24,
     })
@@ -805,11 +850,12 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
     const body = JSON.parse(promptRequests[0]!.bodyText) as {
       prompt: Record<string, { class_type: string; inputs: Record<string, unknown> }>
     }
-    expect(body.prompt['340']).toEqual({
+    expect(body.prompt['18']).toEqual({
       class_type: 'LoadAudio',
       inputs: { audio: `waoowaoo/${PROMPT_ID}/reference-audio-00.mp3` },
     })
-    expect(body.prompt['309']?.inputs['ref_audios.ref_audio_0']).toEqual(['340', 0])
+    expect(body.prompt['7']?.inputs['ref_audios.ref_audio_0']).toEqual(['18', 0])
+    expect(body.prompt['14']?.inputs['ref_audios.ref_audio_0']).toEqual(['18', 0])
   })
 
   it('reads every owned reference before starting any ComfyUI upload', async () => {
@@ -834,14 +880,14 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
   it('submits an image-only reference graph when optional reference-audio nodes are unavailable', async () => {
     vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
     defineValidPreflight(server!)
-    const withoutReferenceAudio = objectInfo('MiniMaxH3ReferenceToVideo')
+    const withoutReferenceAudio = objectInfo('MiniMaxH3AudioConditioningT8')
     const optional = (
-      withoutReferenceAudio.MiniMaxH3ReferenceToVideo as { input: { optional: Record<string, unknown> } }
+      withoutReferenceAudio.MiniMaxH3AudioConditioningT8 as { input: { optional: Record<string, unknown> } }
     ).input.optional
     delete optional.ref_audios
     server!.defineScenario({
       method: 'GET',
-      path: '/object_info/MiniMaxH3ReferenceToVideo',
+      path: '/object_info/MiniMaxH3AudioConditioningT8',
       mode: 'success',
       submitResponse: { status: 200, body: withoutReferenceAudio },
     })
@@ -864,15 +910,16 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
     const body = JSON.parse(server!.getRequests('POST', '/prompt')[0]!.bodyText) as {
       prompt: Record<string, { inputs: Record<string, unknown> }>
     }
-    expect(body.prompt['309']?.inputs['ref_audios.ref_audio_0']).toBeUndefined()
+    expect(body.prompt['7']?.inputs['ref_audios.ref_audio_0']).toBeUndefined()
+    expect(body.prompt['14']?.inputs['ref_audios.ref_audio_0']).toBeUndefined()
   })
 
   it('rejects an incompatible H3 reference-audio port before uploading bytes', async () => {
     vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
     defineValidPreflight(server!)
-    const incompatible = objectInfo('MiniMaxH3ReferenceToVideo')
+    const incompatible = objectInfo('MiniMaxH3AudioConditioningT8')
     const optional = (
-      incompatible.MiniMaxH3ReferenceToVideo as { input: { optional: Record<string, unknown> } }
+      incompatible.MiniMaxH3AudioConditioningT8 as { input: { optional: Record<string, unknown> } }
     ).input.optional
     const refAudios = optional.ref_audios as [string, {
       template: { input: { required: Record<string, unknown> } }
@@ -880,32 +927,80 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
     refAudios[1].template.input.required.ref_audio = ['MASK', {}]
     server!.defineScenario({
       method: 'GET',
-      path: '/object_info/MiniMaxH3ReferenceToVideo',
+      path: '/object_info/MiniMaxH3AudioConditioningT8',
       mode: 'success',
       submitResponse: { status: 200, body: incompatible },
     })
 
     await expect(executeComfyUiH3VideoGeneration(referenceAudioInput)).rejects.toMatchObject({
       message: expect.stringContaining(
-        'COMFYUI_NODE_INPUT_INCOMPATIBLE:MiniMaxH3ReferenceToVideo:ref_audios:AUDIO',
+        'COMFYUI_NODE_INPUT_INCOMPATIBLE:MiniMaxH3AudioConditioningT8:ref_audios:AUDIO',
       ),
     })
     expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
     expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
   })
 
-  it('rejects a missing reference-conditioning node before uploading reference images', async () => {
+  it('rejects a missing T8 conditioning node before uploading reference images', async () => {
     vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
     defineValidPreflight(server!)
     server!.defineScenario({
       method: 'GET',
-      path: '/object_info/MiniMaxH3ReferenceToVideo',
+      path: '/object_info/MiniMaxH3AudioConditioningT8',
       mode: 'success',
       submitResponse: { status: 200, body: {} },
     })
 
     await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
-      message: expect.stringContaining('COMFYUI_NODE_MISSING:MiniMaxH3ReferenceToVideo'),
+      message: expect.stringContaining('COMFYUI_NODE_MISSING:MiniMaxH3AudioConditioningT8'),
+    })
+    expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
+    expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
+  })
+
+  it('rejects an unavailable T8 scheduler before uploading reference images', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    const incompatible = objectInfo('MiniMaxH3DualClockSamplerT8')
+    const optional = (
+      incompatible.MiniMaxH3DualClockSamplerT8 as { input: { optional: Record<string, unknown> } }
+    ).input.optional
+    optional.scheduler = [['another_scheduler']]
+    server!.defineScenario({
+      method: 'GET',
+      path: '/object_info/MiniMaxH3DualClockSamplerT8',
+      mode: 'success',
+      submitResponse: { status: 200, body: incompatible },
+    })
+
+    await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
+      message: expect.stringContaining(
+        'COMFYUI_OPTION_MISSING:MiniMaxH3DualClockSamplerT8:scheduler:native_flow',
+      ),
+    })
+    expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
+    expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
+  })
+
+  it('rejects an unavailable T8 conditioning audio mode before uploading reference images', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    const incompatible = objectInfo('MiniMaxH3AudioConditioningT8')
+    const required = (
+      incompatible.MiniMaxH3AudioConditioningT8 as { input: { required: Record<string, unknown> } }
+    ).input.required
+    required.audio_mode = [['legacy']]
+    server!.defineScenario({
+      method: 'GET',
+      path: '/object_info/MiniMaxH3AudioConditioningT8',
+      mode: 'success',
+      submitResponse: { status: 200, body: incompatible },
+    })
+
+    await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
+      message: expect.stringContaining(
+        'COMFYUI_OPTION_MISSING:MiniMaxH3AudioConditioningT8:audio_mode:native',
+      ),
     })
     expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
     expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
@@ -928,7 +1023,7 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
 
     await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
       message: expect.stringContaining(
-        'COMFYUI_NODE_OUTPUT_INCOMPATIBLE:MiniMaxH3ReferenceToVideo:0:MASK',
+        'COMFYUI_NODE_OUTPUT_INCOMPATIBLE:MiniMaxH3AudioConditioningT8:0:MASK',
       ),
     })
     expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
@@ -956,6 +1051,32 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
     expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
   })
 
+  it('rejects an unavailable T8 detail-mixer bias domain before uploading reference images', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    const incompatible = objectInfo('MiniMaxH3TwoPassDetailMixerT8Advanced')
+    const required = (
+      incompatible.MiniMaxH3TwoPassDetailMixerT8Advanced as {
+        input: { required: Record<string, unknown> }
+      }
+    ).input.required
+    required.bias_domain = [['legacy_sigma']]
+    server!.defineScenario({
+      method: 'GET',
+      path: '/object_info/MiniMaxH3TwoPassDetailMixerT8Advanced',
+      mode: 'success',
+      submitResponse: { status: 200, body: incompatible },
+    })
+
+    await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
+      message: expect.stringContaining(
+        'COMFYUI_OPTION_MISSING:MiniMaxH3TwoPassDetailMixerT8Advanced:bias_domain:video_sigma',
+      ),
+    })
+    expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
+    expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
+  })
+
   it('rejects an incompatible VHS audio input before uploading reference images', async () => {
     vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
     defineValidPreflight(server!)
@@ -972,7 +1093,7 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
     })
 
     await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
-      message: expect.stringContaining('COMFYUI_NODE_OUTPUT_INCOMPATIBLE:VAEDecodeAudio:0:MASK'),
+      message: expect.stringContaining('COMFYUI_NODE_OUTPUT_INCOMPATIBLE:MiniMaxH3AVDecodeT8:1:MASK'),
     })
     expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
     expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
@@ -1042,25 +1163,93 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
     expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
   })
 
-  it('rejects an image autogrow capacity below eight before uploading bytes', async () => {
+  it('rejects an AV decoder without a native audio output before uploading reference images', async () => {
     vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
     defineValidPreflight(server!)
-    const incompatible = objectInfo('MiniMaxH3ReferenceToVideo')
-    const optional = (
-      incompatible.MiniMaxH3ReferenceToVideo as { input: { optional: Record<string, unknown> } }
-    ).input.optional
-    const refImages = optional.ref_images as [string, { template: { max: number } }]
-    refImages[1].template.max = 7
+    const incompatible = objectInfo('MiniMaxH3AVDecodeT8')
+    ;(incompatible.MiniMaxH3AVDecodeT8 as { output: string[] }).output = ['IMAGE', 'MASK']
     server!.defineScenario({
       method: 'GET',
-      path: '/object_info/MiniMaxH3ReferenceToVideo',
+      path: '/object_info/MiniMaxH3AVDecodeT8',
+      mode: 'success',
+      submitResponse: { status: 200, body: incompatible },
+    })
+
+    await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
+      message: expect.stringContaining('COMFYUI_NODE_OUTPUT_INCOMPATIBLE:MiniMaxH3AVDecodeT8:1:AUDIO'),
+    })
+    expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
+    expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
+  })
+
+  it('rejects a learned upscaler without integer dimension outputs before uploads', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    const incompatible = objectInfo('MiniMaxH3LearnedLatentUpscaleT8Advanced')
+    ;(
+      incompatible.MiniMaxH3LearnedLatentUpscaleT8Advanced as { output: string[] }
+    ).output = ['LATENT', 'FLOAT', 'FLOAT', 'STRING']
+    server!.defineScenario({
+      method: 'GET',
+      path: '/object_info/MiniMaxH3LearnedLatentUpscaleT8Advanced',
       mode: 'success',
       submitResponse: { status: 200, body: incompatible },
     })
 
     await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
       message: expect.stringContaining(
-        'COMFYUI_NODE_INPUT_INCOMPATIBLE:MiniMaxH3ReferenceToVideo:ref_images:IMAGE',
+        'COMFYUI_NODE_OUTPUT_INCOMPATIBLE:MiniMaxH3LearnedLatentUpscaleT8Advanced:1:INT',
+      ),
+    })
+    expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
+    expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
+  })
+
+  it('rejects a parity-plan range that cannot express the frozen 4+5 split before uploads', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    const incompatible = objectInfo('MiniMaxH3LearnedTwoPassParityPlanT8Advanced')
+    const required = (
+      incompatible.MiniMaxH3LearnedTwoPassParityPlanT8Advanced as {
+        input: { required: Record<string, unknown> }
+      }
+    ).input.required
+    required.coarse_steps = ['INT', { min: 1, max: 3 }]
+    server!.defineScenario({
+      method: 'GET',
+      path: '/object_info/MiniMaxH3LearnedTwoPassParityPlanT8Advanced',
+      mode: 'success',
+      submitResponse: { status: 200, body: incompatible },
+    })
+
+    await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
+      message: expect.stringContaining(
+        'COMFYUI_NODE_INPUT_VALUE_INCOMPATIBLE:MiniMaxH3LearnedTwoPassParityPlanT8Advanced:coarse_steps:4',
+      ),
+    })
+    expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
+    expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
+  })
+
+  it('rejects an image autogrow capacity below nine before uploading bytes', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    const incompatible = objectInfo('MiniMaxH3AudioConditioningT8')
+    const optional = (
+      incompatible.MiniMaxH3AudioConditioningT8 as { input: { optional: Record<string, unknown> } }
+    ).input.optional
+    const refImages = optional.ref_images as [string, { template: { max: number } }]
+    refImages[1].template.max = 8
+    server!.defineScenario({
+      method: 'GET',
+      path: '/object_info/MiniMaxH3AudioConditioningT8',
+      mode: 'success',
+      submitResponse: { status: 200, body: incompatible },
+    })
+
+    await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
+      message: expect.stringContaining(
+        'COMFYUI_NODE_INPUT_INCOMPATIBLE:MiniMaxH3AudioConditioningT8:ref_images:IMAGE',
       ),
     })
     expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
@@ -1070,22 +1259,122 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
   it('rejects an audio autogrow capacity below three before uploading bytes', async () => {
     vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
     defineValidPreflight(server!)
-    const incompatible = objectInfo('MiniMaxH3ReferenceToVideo')
+    const incompatible = objectInfo('MiniMaxH3AudioConditioningT8')
     const optional = (
-      incompatible.MiniMaxH3ReferenceToVideo as { input: { optional: Record<string, unknown> } }
+      incompatible.MiniMaxH3AudioConditioningT8 as { input: { optional: Record<string, unknown> } }
     ).input.optional
     const refAudios = optional.ref_audios as [string, { template: { max: number } }]
     refAudios[1].template.max = 2
     server!.defineScenario({
       method: 'GET',
-      path: '/object_info/MiniMaxH3ReferenceToVideo',
+      path: '/object_info/MiniMaxH3AudioConditioningT8',
       mode: 'success',
       submitResponse: { status: 200, body: incompatible },
     })
 
     await expect(executeComfyUiH3VideoGeneration(referenceAudioInput)).rejects.toMatchObject({
       message: expect.stringContaining(
-        'COMFYUI_NODE_INPUT_INCOMPATIBLE:MiniMaxH3ReferenceToVideo:ref_audios:AUDIO',
+        'COMFYUI_NODE_INPUT_INCOMPATIBLE:MiniMaxH3AudioConditioningT8:ref_audios:AUDIO',
+      ),
+    })
+    expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
+    expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
+  })
+
+  it('rejects a missing bypass LoRA before uploading bytes', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    const incompatible = objectInfo('LoraLoaderBypassModelOnly')
+    const required = (
+      incompatible.LoraLoaderBypassModelOnly as { input: { required: Record<string, unknown> } }
+    ).input.required
+    required.lora_name = [['another-lora.safetensors']]
+    server!.defineScenario({
+      method: 'GET',
+      path: '/object_info/LoraLoaderBypassModelOnly',
+      mode: 'success',
+      submitResponse: { status: 200, body: incompatible },
+    })
+
+    await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
+      message: expect.stringContaining('COMFYUI_MODEL_MISSING:h3\\'),
+    })
+    expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
+    expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
+  })
+
+  it('rejects a missing learned latent upscaler model before uploading bytes', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    const incompatible = objectInfo('MiniMaxH3LearnedLatentUpscaleT8Advanced')
+    const required = (
+      incompatible.MiniMaxH3LearnedLatentUpscaleT8Advanced as {
+        input: { required: Record<string, unknown> }
+      }
+    ).input.required
+    required.model_name = [['another-upscaler.safetensors']]
+    server!.defineScenario({
+      method: 'GET',
+      path: '/object_info/MiniMaxH3LearnedLatentUpscaleT8Advanced',
+      mode: 'success',
+      submitResponse: { status: 200, body: incompatible },
+    })
+
+    await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
+      message: expect.stringContaining(
+        'COMFYUI_MODEL_MISSING:minimax_h3_latent_upscaler_3d_fp16.safetensors',
+      ),
+    })
+    expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
+    expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
+  })
+
+  it('rejects an incompatible learned-upscaler dimension port before uploading bytes', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    const incompatible = objectInfo('MiniMaxH3LearnedLatentUpscaleT8Advanced')
+    const required = (
+      incompatible.MiniMaxH3LearnedLatentUpscaleT8Advanced as {
+        input: { required: Record<string, unknown> }
+      }
+    ).input.required
+    required.target_width = ['STRING']
+    server!.defineScenario({
+      method: 'GET',
+      path: '/object_info/MiniMaxH3LearnedLatentUpscaleT8Advanced',
+      mode: 'success',
+      submitResponse: { status: 200, body: incompatible },
+    })
+
+    await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
+      message: expect.stringContaining(
+        'COMFYUI_NODE_INPUT_INCOMPATIBLE:MiniMaxH3LearnedLatentUpscaleT8Advanced:target_width:STRING',
+      ),
+    })
+    expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
+    expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
+  })
+
+  it('rejects a missing learned-upscaler mode before uploading bytes', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    const incompatible = objectInfo('MiniMaxH3LearnedLatentUpscaleT8Advanced')
+    const required = (
+      incompatible.MiniMaxH3LearnedLatentUpscaleT8Advanced as {
+        input: { required: Record<string, unknown> }
+      }
+    ).input.required
+    required.size_mode = [['scale_by', 'target_dimensions']]
+    server!.defineScenario({
+      method: 'GET',
+      path: '/object_info/MiniMaxH3LearnedLatentUpscaleT8Advanced',
+      mode: 'success',
+      submitResponse: { status: 200, body: incompatible },
+    })
+
+    await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
+      message: expect.stringContaining(
+        'COMFYUI_OPTION_MISSING:MiniMaxH3LearnedLatentUpscaleT8Advanced:size_mode:target_megapixels',
       ),
     })
     expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
@@ -1117,24 +1406,31 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
   it.each([
     {
       label: 'first-pass width',
-      className: 'MiniMaxH3ReferenceToVideo',
+      className: 'MiniMaxH3AudioConditioningT8',
       field: 'width',
-      maximum: 1375,
-      value: 1376,
+      maximum: 1151,
+      value: 1152,
     },
     {
       label: 'effective frame count',
-      className: 'MiniMaxH3ReferenceToVideo',
+      className: 'MiniMaxH3AudioConditioningT8',
       field: 'length',
       maximum: 242,
       value: 243,
     },
     {
+      label: 'second-pass megapixels',
+      className: 'MiniMaxH3LearnedLatentUpscaleT8Advanced',
+      field: 'target_megapixels',
+      maximum: 0.99,
+      value: 1,
+    },
+    {
       label: 'final delivery width',
       className: 'ImageResizeKJv2',
       field: 'width',
-      maximum: 2063,
-      value: 2064,
+      maximum: 1919,
+      value: 1920,
     },
   ])('rejects request-specific $label outside the runtime range before uploads', async ({
     className,
@@ -1182,7 +1478,7 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
     try {
       await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
         message: expect.stringContaining(
-          'COMFYUI_H3_REFERENCE_GRAPH_INCOMPATIBLE:output',
+          'COMFYUI_H3_REFERENCE_T8_GRAPH_INCOMPATIBLE:output',
         ),
       })
     } finally {
@@ -1211,7 +1507,8 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
     const referenceGraph = JSON.parse(requests[0]!.bodyText).prompt as Record<string, { class_type: string; inputs: Record<string, unknown> }>
     const firstGraph = JSON.parse(requests[1]!.bodyText).prompt as Record<string, { class_type: string; inputs: Record<string, unknown> }>
     const firstLastGraph = JSON.parse(requests[2]!.bodyText).prompt as Record<string, { class_type: string; inputs: Record<string, unknown> }>
-    expect(referenceGraph['309']?.class_type).toBe('MiniMaxH3ReferenceToVideo')
+    expect(referenceGraph['7']?.class_type).toBe('MiniMaxH3AudioConditioningT8')
+    expect(referenceGraph['14']?.class_type).toBe('MiniMaxH3AudioConditioningT8')
     expect(firstGraph['309']?.class_type).toBe('MiniMaxH3ImageToVideo')
     expect(firstGraph['137']?.inputs.url).toBe('https://media.example.com/first.png')
     expect(firstGraph['309']?.inputs.first_frame).toEqual(['198', 0])
@@ -1236,7 +1533,7 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
     await executeComfyUiH3VideoGeneration(firstFrameInput)
 
     expect(server!.getRequests('GET', '/object_info/UNETLoader')).toHaveLength(2)
-    expect(server!.getRequests('GET', '/object_info/MiniMaxH3ReferenceToVideo')).toHaveLength(1)
+    expect(server!.getRequests('GET', '/object_info/MiniMaxH3AudioConditioningT8')).toHaveLength(1)
     expect(server!.getRequests('GET', '/object_info/MiniMaxH3ImageToVideo')).toHaveLength(1)
   })
 

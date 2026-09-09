@@ -40,11 +40,22 @@ describe('deriveComfyUiProfileRequirements', () => {
         },
       },
       '4': {
-        class_type: 'LoraLoaderModelOnly',
+        class_type: 'LoraLoaderBypassModelOnly',
         inputs: {
           model: ['3', 0],
-          lora_name: 'h3\\turbo.safetensors',
+          lora_name: 'h3\\bypass.safetensors',
           strength_model: 0.9,
+        },
+      },
+      '5': {
+        class_type: 'MiniMaxH3LearnedLatentUpscaleT8Advanced',
+        inputs: {
+          av_latent: ['4', 0],
+          model_name: 'minimax_h3_latent_upscaler_3d_fp16.safetensors',
+          size_mode: 'target_megapixels',
+          aspect_policy: 'preserve_source',
+          precision: 'fp16',
+          release_policy: 'offload_after',
         },
       },
     }
@@ -55,7 +66,8 @@ describe('deriveComfyUiProfileRequirements', () => {
     })).toMatchObject({
       nodeClasses: [
         'ImageResizeKJv2',
-        'LoraLoaderModelOnly',
+        'LoraLoaderBypassModelOnly',
+        'MiniMaxH3LearnedLatentUpscaleT8Advanced',
         'UNETLoader',
       ],
       options: [
@@ -65,9 +77,34 @@ describe('deriveComfyUiProfileRequirements', () => {
           value: 'nvidia_rtx_vsr',
         },
         {
-          classType: 'LoraLoaderModelOnly',
+          classType: 'LoraLoaderBypassModelOnly',
           inputName: 'lora_name',
-          value: 'h3\\turbo.safetensors',
+          value: 'h3\\bypass.safetensors',
+        },
+        {
+          classType: 'MiniMaxH3LearnedLatentUpscaleT8Advanced',
+          inputName: 'aspect_policy',
+          value: 'preserve_source',
+        },
+        {
+          classType: 'MiniMaxH3LearnedLatentUpscaleT8Advanced',
+          inputName: 'model_name',
+          value: 'minimax_h3_latent_upscaler_3d_fp16.safetensors',
+        },
+        {
+          classType: 'MiniMaxH3LearnedLatentUpscaleT8Advanced',
+          inputName: 'precision',
+          value: 'fp16',
+        },
+        {
+          classType: 'MiniMaxH3LearnedLatentUpscaleT8Advanced',
+          inputName: 'release_policy',
+          value: 'offload_after',
+        },
+        {
+          classType: 'MiniMaxH3LearnedLatentUpscaleT8Advanced',
+          inputName: 'size_mode',
+          value: 'target_megapixels',
         },
         {
           classType: 'UNETLoader',

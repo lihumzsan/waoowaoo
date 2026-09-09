@@ -8,13 +8,13 @@ import {
 } from './models'
 import { prepareComfyUiH3VideoGeneration } from './h3'
 import {
-  H3_ASPECT_RATIOS,
   H3_MAX_REFERENCE_AUDIOS,
   H3_MAX_REFERENCE_IMAGES,
 } from './profiles'
 import {
   H3_DURATION_OPTIONS_SECONDS,
 } from '@/lib/video-generation/h3-duration'
+import { H3_ASPECT_RATIOS } from '@/lib/video-generation/h3-reference-runtime-plan'
 import { createAiProviderFailureAdapter } from '@/lib/ai-providers/failure'
 
 export const comfyuiAdapter: AiProviderAdapter = {
