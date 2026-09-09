@@ -47,3 +47,29 @@ describe('ComfyUI dynamic combo wire contract', () => {
     expect(() => assertOutputInputs({ format: 'mp3', 'format.quality': 'V0', 'format.bitrate': 128 })).toThrow('COMFYUI_GRAPH_INPUT_UNDECLARED:107:SaveAudioAdvanced:format.bitrate')
   })
 })
+
+describe('ComfyUI wildcard wire contract', () => {
+  it('accepts a wildcard passthrough between concrete linked ports', () => {
+    const graph: ComfyUiPromptGraph = {
+      '1': { class_type: 'ImageSource', inputs: {} },
+      '2': { class_type: 'WildcardPassthrough', inputs: { anything: ['1', 0] } },
+      '3': { class_type: 'ImageSink', inputs: { image: ['2', 0] } },
+    }
+    const wildcardInfo = new Map<string, unknown>([
+      ['ImageSource', { ImageSource: { input: { required: {} }, output: ['IMAGE'] } }],
+      ['WildcardPassthrough', { WildcardPassthrough: {
+        input: { required: { anything: ['*', {}] } },
+        output: ['*'],
+      } }],
+      ['ImageSink', { ImageSink: { input: { required: { image: ['IMAGE'] } }, output: [] } }],
+    ])
+
+    expect(() => assertComfyUiPromptGraphRuntimeContract({
+      graph,
+      infoByClassName: wildcardInfo,
+      createOptionMismatchError: ({ className, inputName, value }) => (
+        new Error(`OPTION_MISMATCH:${className}:${inputName}:${value}`)
+      ),
+    })).not.toThrow()
+  })
+})

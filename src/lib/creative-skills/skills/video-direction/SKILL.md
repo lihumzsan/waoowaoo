@@ -14,8 +14,8 @@ description: Use when directing screenplay-based video generation that requires 
 - 近似目标下先联合设计自然 Segment 边界和合法请求时长，使用各段匹配模式的 `expectedOutputDurationSeconds` 估计总时长，不要求请求参数精确求和。选择能完整承载来源内容且接近目标的组合；模型帧网格造成的小幅偏差正常，明显偏离目标或无法自然承载内容时报告冲突，不借“近似”任意拉长或缩短。生成后以 Resource 实测时长规划后续段起点和合成，不以预计值覆盖实测事实。
 - 严格约束下，生成参数求和或预计输出吻合都不能证明实际成片满足要求。先核对当前生成与合成能力是否能满足约束并验证实际成片；当前 H3 原样交付与合成不提供任意精确裁时保证，无法保证时在提交前报告能力限制，不擅自裁切对白、变速、补静帧或放宽用户约束。内容与时长冲突同样明确报告，不用空镜、停顿或保持画面凑数。
 - `durationIntent.mode=derive` 时只从来源内容计算完整表演节拍：来源要求的最短必要建立、自然对白或动作，以及来源明确要求的后续动作或反应；同时发生的内容仍按 `creative-core` 取最长项。先按输入控制规则确定 `inputMode`，再按来源动作、说话轮次和语义边界组合节拍，并只从 `segmentDurationPlans` 中与该 `inputMode` 匹配的条目选择能完整承载每个节拍的最短请求值，不以减少 Segment 数或用满时长上限为目标。若剩余来源内容短于该模式合法最小时长且无法与相邻来源节拍合并，或长于该模式合法最大时长且没有合法切点，停止并明确报告能力与内容冲突，不得补写或拉长内容。
-- H3 的 `reference`、`first_frame`、`first_last_frame` 与 `continuation` 四种模式统一支持 4–15 秒整数档，全部是同等正常的合法能力。Agent 按用户指定时长、整体目标、来源内容和自然节奏直接选择；不得为 10、11 或 13–15 秒设置软上限、例外条件、明确选择条件或额外拆分启发式，也不得让任一模式的规则限制主生成模式 `reference` 的能力。每镜仍必须有入口、一个向前变化和可见落点。
-- 完整节拍超过 H3 的 15 秒最大合法时长且没有合法切点时，停止构造可执行 items 并报告输入内容与能力策略冲突。合法纠正只能是修改来源内容或形成真实语义切点。这里只报告失败事实和合法纠正条件，不调用 `wao.request_user_decision`、不创建新的 alignment checkpoint，也不替用户选择或提交超长 Segment。
+- H3 的 `reference` 支持 4–11 秒整数档；`first_frame`、`first_last_frame` 与 `continuation` 支持 4–15 秒整数档，四种模式都是正常合法能力。Agent 按用户指定时长、整体目标、来源内容和自然节奏直接选择；超出所选模式的时长范围时停止，不得静默改时长或换模式。每镜仍必须有入口、一个向前变化和可见落点。
+- 完整节拍超过所选 H3 模式的最大合法时长且没有合法切点时，停止构造可执行 items 并报告输入内容与能力策略冲突。合法纠正只能是修改来源内容或形成真实语义切点。这里只报告失败事实和合法纠正条件，不调用 `wao.request_user_decision`、不创建新的 alignment checkpoint，也不替用户选择或提交超长 Segment。
 - 单段包含对白且来源顺序与完整节拍允许时，以对白的主要表演位于视频中段为正向布局目标：开头只使用来源已有或理解当前动作所必需的最短建立；对白后存在来源明确的动作或反应时用它形成结尾落点。来源没有后续动作或反应时，以最后音节和同步口型在当前姿态中的自然完成作为落点，不新增事件、反应、动作或额外停顿；若来源事实迫使对白抵达片尾，保留来源顺序与完整性，不为形式上的居中编造内容。
 - 相邻 Segment 承接已完成状态，不重演转身、拿取、到达、对白或上一段落点。默认跨段只保证身份、服装、道具、空间、光线与声音相容；当相邻独立 Segment 明确要求从前段结束画面连续开始时，按“多帧运动续接”规则锁定后段的精确起点，但仍不得宣称模型生成的整条接缝天然无缝。
 - 表演写可见物理事实：呼吸、视线、下颌、肩颈、手部、步态与接触几何；不写内心解释或空泛情绪副词。一镜一种主要运镜，默认硬切。需要切镜时，新镜头必须增加主体、空间、状态、视点或时间信息；只有景别或轻微角度变化时继续当前镜头并使用运镜。
@@ -29,7 +29,7 @@ description: Use when directing screenplay-based video generation that requires 
 
 - `reference` 的素材角色和数量必须完全遵守能力声明。普通参考图不是首帧；只有 capability 明确支持且剧情要求从该画面开始时才使用 `first_frame`。
 - 每个 item 只列实际使用的 ready Resource，精确复制 `resourceId`、`contentVersion`、`role`、`channel`，顺序与 Prompt 中的媒体编号一致；不得从文件名或近似描述猜身份。
-- H3 multimodal v3 同时支持四个互斥模式：`reference` 接受 1–9 张有序 `channel=image, role=reference_image`，并可搭配 1–3 段有序 `channel=audio, role=reference_audio`；图片与音频合计最多 12 个文件。每段参考音频至少 2,000 ms，全部参考音频合计最多 15,000 ms，且音频必须搭配至少一张参考图。`first_frame` 精确接受一张 `role=first_frame`；`first_last_frame` 精确接受一张首帧和一张尾帧；`continuation` 精确接受一个 `channel=video, role=continuation_video` 的前段 ready 视频。`reference_video` 仍不支持，参考音频不得与帧或 continuation 模式混合。缺首帧、仅尾帧、重复帧、重复 continuation、空引用、超过上限或错误角色时停止。
+- H3 multimodal v3 同时支持四个互斥模式：`reference` 接受 1–8 张有序 `channel=image, role=reference_image`，并可搭配 1–3 段有序 `channel=audio, role=reference_audio`；图片与音频合计最多 11 个文件。每段参考音频至少 2,000 ms，全部参考音频合计最多 15,000 ms，且音频必须搭配至少一张参考图。`first_frame` 精确接受一张 `role=first_frame`；`first_last_frame` 精确接受一张首帧和一张尾帧；`continuation` 精确接受一个 `channel=video, role=continuation_video` 的前段 ready 视频。`reference_video` 仍不支持，参考音频不得与帧或 continuation 模式混合。缺首帧、仅尾帧、重复帧、重复 continuation、空引用、超过上限或错误角色时停止。
 
 ### 多帧运动续接
 
@@ -77,7 +77,7 @@ subject_definitions:
 
 summary:
 [reference generation + audio reference] <Subject 1> speaks one new line using <Audio 1> as a voice-timbre reference.
-Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.
+Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.
 
 retention_analysis:
 <Subject 1> (appears in [Shot 1]): fully_preserved - The person's identity and appearance from <Picture 1> are retained.
@@ -102,7 +102,7 @@ N/A
 - 时间阶段不是镜头边界：同一连续物理动作或同一主要运镜能够承载的内容只使用一个 `[Shot 1]`，可在镜内用 `At MM:SS.mmm` 描述动作阶段。用户明确要求单镜头时不得切镜；`first_last_frame` 默认用单镜连续插值，只有来源明确规定多镜时才增加镜头。
 - 运镜作为当前镜头中的自然英文动词句，不堆标签。H3 类型为 `Zoom In/Out`、`Push In/Pull Out`、`Pan Left/Right`、`Truck Left/Right`、`Tilt Up/Down`、`Pedestal Up/Down`、`Arc Shot`、`Tracking Shot`、`Static Shot`、`POV`、`Roll Clockwise/Counterclockwise` 或 `Shake Slightly/Strongly`，但正文统一使用 `The camera + 小写动词`：`zooms`、`pushes`、`pulls`、`pans`、`trucks`、`tilts`、`pedestals`、`arcs`、`tracks`、`holds a static shot`、`uses a POV shot`、`rolls` 或 `shakes`。默认中等幅度和正常速度不写；来源要求小幅、大幅、慢速或快速时分别写 `with small/large amplitude` 与 `at slow/fast speed`。例如 `The camera pulls out with small amplitude at slow speed.`；默认值时直接写 `The camera tracks the woman.`，不写 `natural/normal speed`、`medium amplitude`、`performs a Pull Out` 或 `a slow Push In`。
 - 实际说话或歌唱的声音源按首次发声顺序获得稳定 `(S1)`、`(S2)`；跨镜复用同一 ID，从不发声的角色不分配 ID。把身份、ID、动作与发声写成一个句子。多人同声说同一句来源原文时，使用一个复合 ID 和一个 `<d>`；多人同时说不同来源原文时，每条台词分别保留自己的稳定 ID 与独立 `<d>`，并在块外说明二者重叠。首次发声时只用来源已有的身份与声音事实建立说话人，身份短语、ID、动作和语气放在 `<d>` 外；不在同一事件里重复声明说话人或添加 `says exactly:`、`the first speaker is`。
-- `<d>` 内只放 `[Language]` 与用户或来源逐字提供的对白、歌词，不加反引号、说话人说明、voiceover 字样或翻译。每个完整陈述、问句或感叹句的 `.?!`（中文可用 `。！？`）必须放在 `</d>` 前；只有以 `<cutoff>` 结束的明确截断话语，或以成对 `<scenetrans>` 连接到下一镜的未完成前半句，不要求在当前块补句末标点。可见文字是条件槽：只有用户或来源明确要求画面中出现逐字文字时，才用 ASCII 英文双引号保留。官方列出的 banner、sign、label、subtitle、neon text 等明确文字载体在句首或镜头子句起始处可直接写成 `{明确载体} reading "逐字文字"`；其他任意载体及嵌入人物动作的载体统一写成 `{实际载体} bears visible text reading "逐字文字"`，不靠名词清单猜测其是否可见。`reading` 必须修饰载体或 `visible text`，不得描述人物朗读。逐字文字自身含 ASCII 双引号时，用反斜线转义内层引号，例如 `A sign reading "He said \"Hello\"."`；转义符只承担边界语法，不改变文字内容。`detailed_description` 中其他内容不得使用双引号代替 `<d>`。每个最终 H3 Prompt 的 `summary` 都必须原样写入 `Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.`。这条约束禁止模型把对白自动渲染成字幕，也禁止凭空添加标题、水印和界面文字；只有用户或来源明确要求某段逐字文字以可见载体出现时，才保留该项明确要求，不得由对白存在推导字幕。
+- `<d>` 内只放 `[Language]` 与用户或来源逐字提供的对白、歌词，不加反引号、说话人说明、voiceover 字样或翻译。每个完整陈述、问句或感叹句的 `.?!`（中文可用 `。！？`）必须放在 `</d>` 前；只有以 `<cutoff>` 结束的明确截断话语，或以成对 `<scenetrans>` 连接到下一镜的未完成前半句，不要求在当前块补句末标点。可见文字是条件槽：字幕与 caption 永远不得作为可见文字；其他文字只有用户或来源明确要求画面中出现逐字内容时，才用 ASCII 英文双引号保留。官方列出的 banner、sign、label、neon text 等明确文字载体在句首或镜头子句起始处可直接写成 `{明确载体} reading "逐字文字"`；其他任意载体及嵌入人物动作的载体统一写成 `{实际载体} bears visible text reading "逐字文字"`，不靠名词清单猜测其是否可见。`reading` 必须修饰载体或 `visible text`，不得描述人物朗读。逐字文字自身含 ASCII 双引号时，用反斜线转义内层双引号，例如 `A sign reading "He said \"Hello\"."`；转义符只承担边界语法，不改变文字内容。`detailed_description` 中其他内容不得使用双引号代替 `<d>`。每个最终 H3 Prompt 的 `summary` 都必须把 `Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.` 原样写成独立一行，不得拼接在剧情摘要后。对白只是音轨内容，绝不能因为来源提供了逐字台词而被解释为需要显示的文字。
 - `voiceover` 必须在同一句中把来源人物、稳定 ID、`<d>` 和“所有可见人物均不做口型”绑定；不能只约束发声者本人。对白跨切镜时，把 `<scenetrans>` 放在前后两个 `<d>` 内的连接点并明确声音连续跨切。`reference` 只有在来源或用户明确要求话语被视频结尾截断时，才在最后一个 `<d>` 内使用一次 `<cutoff>`，将它放在对白末尾、紧邻 `</d>`，并让该 `</d>` 成为 `detailed_description` 的最后实质内容（其后只可有终止标点）；其余情况及其他输入模式仍按时长—内容冲突停止构造可执行 item。下列代码块只展示结构，花括号占位符必须由来源事实替换且不得原样输出；不得复制其中的主体、场景、动作或时间：
 
 ```text
@@ -139,7 +139,7 @@ N/A
 ## 输出前检查
 
 - 是否区分近似目标、明确严格约束与自主推导；每段请求是否合法、没有填充内容，近似目标是否使用预计输出而不是请求参数求和，后续时间线是否以实测媒体为准；严格约束是否有真实可执行的满足与验证方式，无法满足时是否提交前报告能力或内容冲突？
-- 对 H3 中所有由 Agent 选择的单段时长（包括 `fixed` 总时长下的分配与 `derive`），是否先确定模式并只使用该模式的 `segmentDurationPlans`；四种模式是否都把 4–15 秒作为正常合法能力并按用户目标与内容节奏选择，且没有对 10、11 或 13–15 秒添加软上限、例外、明确选择条件或额外拆分启发式；其他 Prompt profile 是否只服从注入的合法时长集合？
+- 对 H3 中所有由 Agent 选择的单段时长（包括 `fixed` 总时长下的分配与 `derive`），是否先确定模式并只使用该模式的 `segmentDurationPlans`；`reference` 是否只使用 4–11 秒、其他三种模式是否只使用 4–15 秒，并按用户目标与内容节奏选择且不静默改时长或换模式；其他 Prompt profile 是否只服从注入的合法时长集合？
 - 每镜是否有景别、机位、主体落位、朝向、世内视线、一个主要运镜、向前变化和可见落点？
 - `reference` 的 `detailed_description` 是否先用一至两句英文建立整体画面风格再开始 `[Shot 1]`，且没有把换行当成句数要求；其他模式是否直接以 `[Shot 1]` 开始；每次真实切镜是否都用递增的 `[Shot N] At MM:SS.mmm`、连续动作没有被时间块机械拆镜、单镜要求与 `first_last_frame` 默认单镜是否保留？
 - 运镜是否写成自然英文动词句并在来源要求时明确幅度与速度；除对白原文和画面文字外是否没有中文或混合语言残留？

@@ -269,7 +269,7 @@ ${definitions}
 
 summary:
 [reference generation + audio reference] <Subject 1> speaks one new line using the supplied audio as a voice-timbre reference.
-Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.
+Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.
 
 retention_analysis:
 <Subject 1> (appears in [Shot 1]): fully_preserved - The person's identity and appearance from <Picture 1> are retained.
@@ -303,7 +303,7 @@ function h3Prompt(inputMode: 'reference' | 'first_frame' | 'first_last_frame', p
 
 summary:
 ${summary}
-Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.
+Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.
 
 retention_analysis:
 ${retention}
@@ -324,7 +324,7 @@ function h3ContinuationPrompt(): string {
 
 summary:
 She continues turning toward the doorway.
-Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.
+Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.
 
 retention_analysis:
 Continue the inherited identity, pose, motion direction, and room layout from the preceding motion guide.
@@ -617,7 +617,7 @@ describe('project local video model configuration', () => {
     })
   })
 
-  it('accepts the shared H3 4-15 second range and rejects values below it before writes', async () => {
+  it('enforces the 4-11 second reference range while preserving 4-15 seconds for other H3 modes', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)
     const image = await seedReadyImage({ userId: user.id, projectId: project.id, label: 'policy-image' })
@@ -667,9 +667,9 @@ describe('project local video model configuration', () => {
     }
     const imageReference = [{ ...image, role: 'reference_image' as const, channel: 'image' as const }]
     await expect(plan({
-      itemId: 'ref-15-9-21',
-      durationSeconds: 15,
-      prompt: h3Prompt('reference', 15.083),
+      itemId: 'ref-11-9-21',
+      durationSeconds: 11,
+      prompt: h3Prompt('reference', 11.542),
       references: imageReference,
     })).resolves.toBeDefined()
 
@@ -701,6 +701,17 @@ describe('project local video model configuration', () => {
       tasks: await prisma.task.count({ where: { projectId: project.id } }),
       resources: await prisma.workspaceResource.count({ where: { projectId: project.id } }),
     }
+    await expect(plan({
+      itemId: 'ref-12',
+      durationSeconds: 12,
+      prompt: h3Prompt('reference', 12.25),
+      references: imageReference,
+    })).rejects.toMatchObject({
+      details: expect.objectContaining({
+        code: 'MEDIA_GENERATION_CAPABILITY_INVALID',
+        reason: 'VIDEO_INPUT_MODE_DURATION_UNSUPPORTED:reference:12',
+      }),
+    })
     await expect(plan({
       itemId: 'first-frame-3',
       durationSeconds: 3,

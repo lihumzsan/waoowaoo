@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { assertVideoPromptMatchesProfile } from '@/lib/video-generation/h3-prompt'
 
 const REFERENCE_STYLE_OPENING = 'The target video uses a realistic cinematic style with natural indoor lighting.'
+const HARD_NO_SUBTITLE_POLICY = 'Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.'
 
 const referencePrompt = `subject_definitions:
 <Subject 1> is the woman in <Picture 1>.
 
 summary:
 [reference generation] She turns toward the doorway while preserving <Subject 1> from <Picture 1>.
-Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.
+Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.
 
 retention_analysis:
 <Subject 1> (appears in [Shot 1]): fully_preserved - Her identity, clothing, and the room layout from <Picture 1> are retained.
@@ -29,7 +30,7 @@ const referenceAudioPrompt = `subject_definitions:
 
 summary:
 [reference generation + audio reference] <Subject 1> speaks one new line using <Audio 1> as a voice-timbre reference.
-Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.
+Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.
 
 retention_analysis:
 <Subject 1> (appears in [Shot 1]): fully_preserved - The person's identity and appearance from <Picture 1> are retained.
@@ -100,6 +101,41 @@ function assertH3Prompt(input: {
 }
 
 describe('MiniMax H3 multimodal Prompt contract', () => {
+  it('rejects the old policy that let dialogue be interpreted as a visible-text exception', () => {
+    const prompt = referenceAudioPrompt.replace(
+      HARD_NO_SUBTITLE_POLICY,
+      'Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+      references: { pictureCount: 1, audioCount: 1 },
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:VISIBLE_TEXT_POLICY_REQUIRED')
+  })
+
+  it('requires the hard no-subtitle policy on its own summary line', () => {
+    const prompt = referenceAudioPrompt.replace(
+      `voice-timbre reference.\n${HARD_NO_SUBTITLE_POLICY}`,
+      `voice-timbre reference. ${HARD_NO_SUBTITLE_POLICY}`,
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+      references: { pictureCount: 1, audioCount: 1 },
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:VISIBLE_TEXT_POLICY_REQUIRED')
+  })
+
+  it('rejects an explicitly requested subtitle carrier outside dialogue', () => {
+    const prompt = referencePrompt.replace(
+      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] Subtitles reading "Welcome" appear as she turns toward the doorway.',
+    )
+    expect(() => assertH3Prompt({
+      inputMode: 'reference',
+      prompt,
+    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:SUBTITLE_VISIBLE_TEXT_FORBIDDEN')
+  })
+
   it.each([
     ['reference', referencePrompt],
     ['first_frame', firstFramePrompt],
@@ -109,7 +145,7 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
     expect(() => assertH3Prompt({
       inputMode,
       prompt: prompt.replace(
-        'Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.',
+        'Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.',
         '',
       ),
     })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:VISIBLE_TEXT_POLICY_REQUIRED')
@@ -255,7 +291,7 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
 
 summary:
 [reference generation] Elle se tourne vers la porte en conservant <Subject 1> de <Picture 1>.
-Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.
+Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.
 
 retention_analysis:
 <Subject 1> (dans [Shot 1]): fully_preserved - Son identité, ses vêtements et la pièce de <Picture 1> sont conservés.
@@ -281,7 +317,7 @@ N/A`
 
 summary:
 [reference generation] Zij draait naar de deur en behoudt <Subject 1> uit <Picture 1>.
-Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.
+Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.
 
 retention_analysis:
 <Subject 1> (in [Shot 1]): fully_preserved - Haar identiteit, kleding en kamer uit <Picture 1> blijven behouden.
@@ -307,7 +343,7 @@ N/A`
 
 summary:
 [reference generation] Kobieta obraca się w stronę drzwi i zachowuje wygląd z <Picture 1>.
-Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.
+Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.
 
 retention_analysis:
 <Subject 1> (w [Shot 1]): fully_preserved - Tożsamość, ubranie i pokój z <Picture 1> pozostają zachowane.
@@ -333,7 +369,7 @@ N/A`
 
 summary:
 [reference generation] Woman turns.
-Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.
+Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.
 
 retention_analysis:
 <Subject 1>: fully_preserved - Identity retained.
@@ -359,7 +395,7 @@ N/A`
 
 summary:
 [reference generation] Femme fatale waits.
-Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.
+Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.
 
 retention_analysis:
 <Subject 1>: fully_preserved - Identity retained.
@@ -385,7 +421,7 @@ N/A`
 
 summary:
 [reference generation] Agnieszka walks through Łódź while preserving her identity from <Picture 1>.
-Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.
+Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.
 
 retention_analysis:
 <Subject 1>: fully_preserved - Her identity and clothing from <Picture 1> remain unchanged.
@@ -464,10 +500,10 @@ N/A`
     })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:REFERENCE_RETENTION_SPEAKER_FORBIDDEN')
   })
 
-  it('allows explicitly requested visible text in the detailed description', () => {
+  it('allows explicitly requested non-subtitle visible text in the detailed description', () => {
     const prompt = referencePrompt.replace(
       '[Shot 1] She notices the doorway, turns, and settles facing it.',
-      '[Shot 1] A subtitle reading "欢迎" appears as she says <d>[English]No subtitles, please.</d> and turns toward the doorway.',
+      '[Shot 1] A sign reading "欢迎" appears as she says <d>[English]No subtitles, please.</d> and turns toward the doorway.',
     )
     expect(() => assertH3Prompt({
       inputMode: 'reference',
@@ -476,7 +512,6 @@ N/A`
   })
 
   it.each([
-    'Subtitles reading "Welcome" appear at the bottom of the frame.',
     'A shirt bears visible text reading "Welcome" as she turns.',
     'Text reading "Welcome" appears at the bottom of the frame.',
     'Neon text reading "OPEN" glows above the doorway.',
@@ -2529,7 +2564,7 @@ N/A`
   it.each([
     referencePrompt.replace('retention_analysis:', 'retention_notes:'),
     referencePrompt.replace(
-      'summary:\n[reference generation] She turns toward the doorway while preserving <Subject 1> from <Picture 1>.\nDo not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.\n\n',
+      'summary:\n[reference generation] She turns toward the doorway while preserving <Subject 1> from <Picture 1>.\nSpoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.\n\n',
       'summary:\n\n',
     ),
     referencePrompt.replace('N/A', 'Use a dramatic orchestral score.'),

@@ -98,6 +98,11 @@ const H3_CONTINUATION_NODE_INPUT_TYPES = {
     frame_idx: { location: 'required', type: 'INT' },
   },
 } as const satisfies Readonly<Record<string, Readonly<Record<string, H3NodeInputContract>>>>
+const H3_REFERENCE_NODE_INPUT_TYPES = {
+  MiniMaxH3ReferenceToVideo: {
+    audio_vae: { location: 'required', type: 'VAE' },
+  },
+} as const satisfies Readonly<Record<string, Readonly<Record<string, H3NodeInputContract>>>>
 const H3_REFERENCE_AUDIO_NODE_INPUT_TYPES = {
   LoadAudio: {
     audio: { location: 'required', type: null },
@@ -117,8 +122,6 @@ function missingOptionError(option: ComfyUiProfileRequirementOption): Error {
     'CLIPLoader:clip_name',
     'VAELoader:vae_name',
     'LoraLoaderModelOnly:lora_name',
-    'LoraLoaderBypassModelOnly:lora_name',
-    'MiniMaxH3LearnedLatentUpscaleT8Advanced:model_name',
   ]).has(`${option.classType}:${option.inputName}`)
   if (modelOption) {
     return new Error(`COMFYUI_MODEL_MISSING:${option.value}`)
@@ -180,14 +183,14 @@ function missingGraphOptionError(option: ComfyUiGraphOptionMismatch): Error {
 
 function assertReferenceAutogrowInputContract(input: {
   readonly info: unknown
+  readonly className: 'MiniMaxH3ReferenceToVideo'
   readonly inputName: 'ref_images' | 'ref_audios'
   readonly itemName: 'ref_image' | 'ref_audio'
   readonly itemType: 'IMAGE' | 'AUDIO'
   readonly prefix: 'ref_image_' | 'ref_audio_'
   readonly minimumMaximum: number
 }): void {
-  const className = 'MiniMaxH3AudioConditioningT8'
-  const node = asComfyUiRecord(asComfyUiRecord(input.info)?.[className])
+  const node = asComfyUiRecord(asComfyUiRecord(input.info)?.[input.className])
   const nodeInput = asComfyUiRecord(node?.input)
   const optional = asComfyUiRecord(nodeInput?.optional)
   const definition = optional?.[input.inputName]
@@ -205,7 +208,7 @@ function assertReferenceAutogrowInputContract(input: {
     || typeof template.max !== 'number'
     || template.max < input.minimumMaximum
   ) {
-    throw new Error(`COMFYUI_NODE_INPUT_INCOMPATIBLE:${className}:${input.inputName}:${input.itemType}`)
+    throw new Error(`COMFYUI_NODE_INPUT_INCOMPATIBLE:${input.className}:${input.inputName}:${input.itemType}`)
   }
 }
 
@@ -231,58 +234,64 @@ function assertContinuationGraphContract(profile: H3DualStageRuntimeProfile): vo
   }
 }
 
-function assertReferenceT8GraphContract(profile: H3DualStageRuntimeProfile): void {
+function assertReferenceGraphContract(profile: H3DualStageRuntimeProfile): void {
   if (profile.id !== H3_REFERENCE_DUAL_STAGE_PROFILE_ID) return
   const imageNodeId = profile.referenceImageNodeIds[0]
+  const resizeNodeId = profile.referenceResizeNodeIds[0]
   const audioNodeId = profile.referenceAudioNodeIds[0]
   const imageNode = imageNodeId ? profile.workflow[imageNodeId] : undefined
+  const resizeNode = resizeNodeId ? profile.workflow[resizeNodeId] : undefined
   const audioNode = audioNodeId ? profile.workflow[audioNodeId] : undefined
+  const h3Node = profile.workflow[profile.h3NodeId]
   const audioVaeNode = profile.workflow[profile.audioVaeNodeId]
   const audioDecodeNode = profile.workflow[profile.audioDecodeNodeId]
-  const learnedUpscaleNode = profile.workflow[profile.learnedUpscaleNodeId]
+  const audioSamplerNode = profile.workflow[profile.audioSamplerNodeId]
   const finalUpscaleNode = profile.workflow[profile.finalUpscaleNodeId]
   const outputNode = profile.workflow[profile.outputNodeId]
-  const conditioningNodes = profile.conditioningNodeIds.map((nodeId) => profile.workflow[nodeId])
   if (!imageNode || imageNode.class_type !== 'LoadImage' || typeof imageNode.inputs.image !== 'string') {
-    throw new Error('COMFYUI_H3_REFERENCE_T8_GRAPH_INCOMPATIBLE:LoadImage')
+    throw new Error('COMFYUI_H3_REFERENCE_GRAPH_INCOMPATIBLE:LoadImage')
+  }
+  if (
+    !resizeNode
+    || resizeNode.class_type !== 'ResizeShortestToNode'
+    || !Array.isArray(resizeNode.inputs.image)
+    || resizeNode.inputs.image[0] !== imageNodeId
+    || resizeNode.inputs.image[1] !== 0
+  ) {
+    throw new Error('COMFYUI_H3_REFERENCE_GRAPH_INCOMPATIBLE:resize')
   }
   if (!audioNode || audioNode.class_type !== 'LoadAudio' || typeof audioNode.inputs.audio !== 'string') {
-    throw new Error('COMFYUI_H3_REFERENCE_T8_GRAPH_INCOMPATIBLE:LoadAudio')
+    throw new Error('COMFYUI_H3_REFERENCE_GRAPH_INCOMPATIBLE:LoadAudio')
   }
-  if (audioVaeNode?.class_type !== 'VAELoader' || audioVaeNode.inputs.vae_name !== H3_AUDIO_VAE_NAME) {
-    throw new Error('COMFYUI_H3_REFERENCE_T8_GRAPH_INCOMPATIBLE:audio_vae')
-  }
-  if (conditioningNodes.some((node) => node?.class_type !== 'MiniMaxH3AudioConditioningT8')) {
-    throw new Error('COMFYUI_H3_REFERENCE_T8_GRAPH_INCOMPATIBLE:conditioning')
-  }
-  for (const node of conditioningNodes) {
-    const audioVae = node?.inputs.audio_vae
-    const prompt = node?.inputs.prompt
-    const referenceImage = node?.inputs['ref_images.ref_image_0']
-    const referenceAudio = node?.inputs['ref_audios.ref_audio_0']
-    if (!Array.isArray(audioVae) || audioVae[0] !== profile.audioVaeNodeId || audioVae[1] !== 0) {
-      throw new Error('COMFYUI_H3_REFERENCE_T8_GRAPH_INCOMPATIBLE:conditioning_audio_vae')
-    }
-    if (!Array.isArray(prompt) || prompt[0] !== profile.promptNodeId || prompt[1] !== 0) {
-      throw new Error('COMFYUI_H3_REFERENCE_T8_GRAPH_INCOMPATIBLE:conditioning_prompt')
-    }
-    if (!Array.isArray(referenceImage) || referenceImage[0] !== imageNodeId || referenceImage[1] !== 0) {
-      throw new Error('COMFYUI_H3_REFERENCE_T8_GRAPH_INCOMPATIBLE:ref_images')
-    }
-    if (!Array.isArray(referenceAudio) || referenceAudio[0] !== audioNodeId || referenceAudio[1] !== 0) {
-      throw new Error('COMFYUI_H3_REFERENCE_T8_GRAPH_INCOMPATIBLE:ref_audios')
-    }
-  }
+  const audioVae = h3Node?.inputs.audio_vae
+  const prompt = h3Node?.inputs.prompt
+  const referenceImage = h3Node?.inputs['ref_images.ref_image_0']
+  const referenceAudio = h3Node?.inputs['ref_audios.ref_audio_0']
   if (
-    conditioningNodes[0]?.inputs.length !== conditioningNodes[1]?.inputs.length
-    || learnedUpscaleNode?.class_type !== 'MiniMaxH3LearnedLatentUpscaleT8Advanced'
-    || learnedUpscaleNode.inputs.size_mode !== 'target_megapixels'
-    || learnedUpscaleNode.inputs.aspect_policy !== 'preserve_source'
+    h3Node?.class_type !== 'MiniMaxH3ReferenceToVideo'
+    || !Array.isArray(audioVae)
+    || audioVae[0] !== profile.audioVaeNodeId
+    || audioVae[1] !== 0
+    || audioVaeNode?.class_type !== 'VAELoader'
+    || audioVaeNode.inputs.vae_name !== H3_AUDIO_VAE_NAME
   ) {
-    throw new Error('COMFYUI_H3_REFERENCE_T8_GRAPH_INCOMPATIBLE:two_pass')
+    throw new Error('COMFYUI_H3_REFERENCE_GRAPH_INCOMPATIBLE:conditioning')
+  }
+  if (!Array.isArray(prompt) || prompt[0] !== profile.promptNodeId || prompt[1] !== 0) {
+    throw new Error('COMFYUI_H3_REFERENCE_GRAPH_INCOMPATIBLE:prompt')
+  }
+  if (!Array.isArray(referenceImage) || referenceImage[0] !== resizeNodeId || referenceImage[1] !== 0) {
+    throw new Error('COMFYUI_H3_REFERENCE_GRAPH_INCOMPATIBLE:ref_images')
+  }
+  if (!Array.isArray(referenceAudio) || referenceAudio[0] !== audioNodeId || referenceAudio[1] !== 0) {
+    throw new Error('COMFYUI_H3_REFERENCE_GRAPH_INCOMPATIBLE:ref_audios')
   }
   if (
-    audioDecodeNode?.class_type !== 'MiniMaxH3AVDecodeT8'
+    audioSamplerNode?.class_type !== 'SamplerCustomAdvanced'
+    || audioDecodeNode?.class_type !== 'VAEDecodeAudio'
+    || !Array.isArray(audioDecodeNode.inputs.samples)
+    || audioDecodeNode.inputs.samples[0] !== profile.audioSamplerNodeId
+    || audioDecodeNode.inputs.samples[1] !== 1
     || finalUpscaleNode?.class_type !== 'ImageResizeKJv2'
     || finalUpscaleNode.inputs.upscale_method !== 'nvidia_rtx_vsr'
     || outputNode?.class_type !== 'VHS_VideoCombine'
@@ -291,13 +300,13 @@ function assertReferenceT8GraphContract(profile: H3DualStageRuntimeProfile): voi
     || outputNode.inputs.images[1] !== 0
     || !Array.isArray(outputNode.inputs.audio)
     || outputNode.inputs.audio[0] !== profile.audioDecodeNodeId
-    || outputNode.inputs.audio[1] !== 1
+    || outputNode.inputs.audio[1] !== 0
     || outputNode.inputs.format !== 'video/h264-mp4'
     || outputNode.inputs.pix_fmt !== 'yuv420p'
     || outputNode.inputs.crf !== 10
     || outputNode.inputs.frame_rate !== 24
   ) {
-    throw new Error('COMFYUI_H3_REFERENCE_T8_GRAPH_INCOMPATIBLE:output')
+    throw new Error('COMFYUI_H3_REFERENCE_GRAPH_INCOMPATIBLE:output')
   }
 }
 
@@ -308,7 +317,7 @@ async function preflight(
   requiresReferenceAudio: boolean,
 ): Promise<H3RuntimePreflightContract> {
   assertContinuationGraphContract(profile)
-  assertReferenceT8GraphContract(profile)
+  assertReferenceGraphContract(profile)
   const requirements = deriveComfyUiProfileRequirements({
     profileId: profile.id,
     graph: profile.workflow,
@@ -356,9 +365,13 @@ async function preflight(
     }
   }
   if (profile.id === H3_REFERENCE_DUAL_STAGE_PROFILE_ID) {
-    const conditioningInfo = infoByClassName.get('MiniMaxH3AudioConditioningT8')
+    const referenceInfo = infoByClassName.get('MiniMaxH3ReferenceToVideo')
+    for (const [className, inputs] of Object.entries(H3_REFERENCE_NODE_INPUT_TYPES)) {
+      assertNodeInputContract(infoByClassName.get(className), className, inputs)
+    }
     assertReferenceAutogrowInputContract({
-      info: conditioningInfo,
+      info: referenceInfo,
+      className: 'MiniMaxH3ReferenceToVideo',
       inputName: 'ref_images',
       itemName: 'ref_image',
       itemType: 'IMAGE',
@@ -370,7 +383,8 @@ async function preflight(
         assertNodeInputContract(infoByClassName.get(className), className, inputs)
       }
       assertReferenceAutogrowInputContract({
-        info: conditioningInfo,
+        info: referenceInfo,
+        className: 'MiniMaxH3ReferenceToVideo',
         inputName: 'ref_audios',
         itemName: 'ref_audio',
         itemType: 'AUDIO',
@@ -379,9 +393,7 @@ async function preflight(
       })
     }
   }
-  const optionInfos = await Promise.all((
-    profile.id === H3_REFERENCE_DUAL_STAGE_PROFILE_ID ? [] : requirements.options
-  ).map(async (option) => ({
+  const optionInfos = await Promise.all(requirements.options.map(async (option) => ({
     option,
     info: await readInfo(option.classType),
   })))

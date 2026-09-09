@@ -4,6 +4,9 @@ import { H3_CONTINUATION_GUIDE_FRAMES, H3_FRAMES_PER_SECOND, H3_MAX_SEGMENT_DURA
 export const H3_DURATION_OPTIONS_SECONDS = [
   4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, H3_MAX_SEGMENT_DURATION_SECONDS,
 ] as const
+export const H3_REFERENCE_DURATION_OPTIONS_SECONDS = [
+  4, 5, 6, 7, 8, 9, 10, 11,
+] as const
 
 const H3_FRAME_GRID = 17
 const H3_FRAME_REMAINDER = 5
@@ -33,8 +36,11 @@ export function resolveH3DurationPlan(input: {
   readonly inputMode: VideoInputMode
   readonly requestedDurationSeconds: number
 }): H3DurationPlan {
-  if (!Number.isInteger(input.requestedDurationSeconds) || !H3_DURATION_OPTIONS_SECONDS.includes(
-    input.requestedDurationSeconds as typeof H3_DURATION_OPTIONS_SECONDS[number],
+  const durationOptions: readonly number[] = input.inputMode === 'reference'
+    ? H3_REFERENCE_DURATION_OPTIONS_SECONDS
+    : H3_DURATION_OPTIONS_SECONDS
+  if (!Number.isInteger(input.requestedDurationSeconds) || !durationOptions.includes(
+    input.requestedDurationSeconds,
   )) {
     throw new Error(`H3_REQUESTED_DURATION_INVALID:${input.inputMode}:${String(input.requestedDurationSeconds)}`)
   }

@@ -244,7 +244,12 @@ function assertLinkedInput(input: {
     sourceNode.class_type,
   )
   const output = sourceInfo.output
-  if (!Array.isArray(output) || output[input.sourceOutputIndex] !== targetType) {
+  const sourceType = Array.isArray(output) ? output[input.sourceOutputIndex] : undefined
+  if (typeof sourceType !== 'string' || (
+    sourceType !== '*'
+    && targetType !== '*'
+    && sourceType !== targetType
+  )) {
     throw new Error(
       `COMFYUI_NODE_OUTPUT_INCOMPATIBLE:${sourceNode.class_type}:${String(input.sourceOutputIndex)}:${targetType}`,
     )

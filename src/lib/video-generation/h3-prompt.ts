@@ -37,11 +37,12 @@ export type MinimaxH3PromptSection = (typeof MINIMAX_H3_PROMPT_SECTIONS)[number]
 const SECTION_HEADING = /^([a-z][a-z0-9_]*)\s*:\s*$/u
 const TIME_EXPRESSION = /(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?)\b/giu
 const FIXED_NON_DIEGETIC_MUSIC = 'N/A'
-const REQUIRED_VISIBLE_TEXT_POLICY = 'Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.'
+const REQUIRED_VISIBLE_TEXT_POLICY = 'Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.'
 const DIALOGUE_TAG = /<\/?d>/u
 const DIALOGUE_CUTOFF_TAG = /<cutoff>/u
 const DIALOGUE_BLOCK = /<d>[\s\S]*?<\/d>/gu
 const QUOTED_TEXT_LITERAL = /"(?:\\.|[^"\\\r\n])*"/gu
+const SUBTITLE_VISIBLE_TEXT = /\b(?:subtitles?|captions?)\b/iu
 const REFERENCE_ENTITY_TOKEN = /<(?:Subject|Picture|Video|Audio)\s+\d+>/gu
 const REFERENCE_SUBJECT_TOKEN = /<Subject\s+\d+>/gu
 const REFERENCE_SUBJECT_LINE_START = /^<Subject\s+(\d+)>/u
@@ -153,10 +154,14 @@ function parseSections(prompt: string): Record<MinimaxH3PromptSection, string> {
 function assertVisibleTextPolicy(
   sections: Readonly<Record<MinimaxH3PromptSection, string>>,
 ): void {
-  const enforceableSummary = sections.summary
-    .replace(QUOTED_TEXT_LITERAL, (literal) => ' '.repeat(literal.length))
-  if (!enforceableSummary.includes(REQUIRED_VISIBLE_TEXT_POLICY)) {
+  if (!sections.summary.split('\n').includes(REQUIRED_VISIBLE_TEXT_POLICY)) {
     throw invalid('VISIBLE_TEXT_POLICY_REQUIRED')
+  }
+  const detailedDescriptionProse = sections.detailed_description
+    .replace(DIALOGUE_BLOCK, (dialogue) => ' '.repeat(dialogue.length))
+    .replace(QUOTED_TEXT_LITERAL, (literal) => ' '.repeat(literal.length))
+  if (SUBTITLE_VISIBLE_TEXT.test(detailedDescriptionProse)) {
+    throw invalid('SUBTITLE_VISIBLE_TEXT_FORBIDDEN')
   }
 }
 

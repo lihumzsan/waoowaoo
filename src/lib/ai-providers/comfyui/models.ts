@@ -4,21 +4,19 @@ import { MUSIC_KEY_SCALE_VALUES, MUSIC_TIME_SIGNATURE_VALUES } from '@/lib/works
 
 import type { ComfyUiRuntimeTargetId } from './config'
 import {
+  H3_ASPECT_RATIOS,
   H3_MAX_REFERENCE_AUDIOS,
   H3_MAX_REFERENCE_IMAGES,
   resolveH3Dimensions,
-} from './profiles'
-import {
-  H3_ASPECT_RATIOS,
-  resolveH3ReferenceDimensions,
   type H3AspectRatio,
-} from '@/lib/video-generation/h3-reference-runtime-plan'
+} from './profiles'
 import {
   H3_CONTINUATION_MIN_SOURCE_DURATION_MS,
 } from '@/lib/video-generation/h3-timeline'
 import {
   H3_CONTINUATION_MAX_SOURCE_DURATION_MS,
   H3_DURATION_OPTIONS_SECONDS,
+  H3_REFERENCE_DURATION_OPTIONS_SECONDS,
 } from '@/lib/video-generation/h3-duration'
 import {
   ACE_STEP_1_5_PROFILE,
@@ -55,11 +53,7 @@ const COMFYUI_RUNTIME_TARGET_BY_MODEL_KEY: Readonly<Record<string, ComfyUiRuntim
 function resolveH3ContinuationSourceAspectRatios(
   aspectRatio: H3AspectRatio,
 ): readonly { readonly width: number; readonly height: number }[] {
-  const frameMode = resolveH3Dimensions({ megapixels: 2, aspectRatio })
-  const referenceMode = resolveH3ReferenceDimensions({ megapixels: 2, aspectRatio })
-  return frameMode.width === referenceMode.width && frameMode.height === referenceMode.height
-    ? [frameMode]
-    : [frameMode, referenceMode]
+  return [resolveH3Dimensions({ megapixels: 2, aspectRatio })]
 }
 
 const H3_CONTINUATION_SOURCE_ASPECT_RATIOS_BY_TARGET = {
@@ -87,7 +81,7 @@ export const COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         supportedInputModes: ['reference', 'first_frame', 'first_last_frame', 'continuation'], supportsTextToVideo: false,
         supportedAspectRatios: [...H3_ASPECT_RATIOS],
         inputModePolicies: {
-          reference: { durationOptions: [...H3_DURATION_OPTIONS_SECONDS] },
+          reference: { durationOptions: [...H3_REFERENCE_DURATION_OPTIONS_SECONDS] },
           first_frame: { durationOptions: [...H3_DURATION_OPTIONS_SECONDS] },
           first_last_frame: { durationOptions: [...H3_DURATION_OPTIONS_SECONDS] },
           continuation: { durationOptions: [...H3_DURATION_OPTIONS_SECONDS] },

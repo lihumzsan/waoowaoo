@@ -17,6 +17,7 @@ import {
 import {
   resolveH3DurationPlan,
 } from '@/lib/video-generation/h3-duration'
+import { resolveVideoInputPolicySelection } from '@/lib/ai-registry/video-input-policy'
 
 describe('ComfyUI H3 dual-stage profile', () => {
   it('uses the prepared-only adapter path so local work finishes before the submission fence', () => {
@@ -29,7 +30,9 @@ describe('ComfyUI H3 dual-stage profile', () => {
     expect(resolveH3DurationPlan({ inputMode: 'reference', requestedDurationSeconds: 4 }).frameCount).toBe(107)
     expect(resolveH3DurationPlan({ inputMode: 'reference', requestedDurationSeconds: 5 }).frameCount).toBe(124)
     expect(resolveH3DurationPlan({ inputMode: 'reference', requestedDurationSeconds: 10 }).frameCount).toBe(243)
-    expect(resolveH3DurationPlan({ inputMode: 'reference', requestedDurationSeconds: 15 }).frameCount).toBe(362)
+    expect(() => resolveH3DurationPlan({ inputMode: 'reference', requestedDurationSeconds: 12 })).toThrow(
+      'H3_REQUESTED_DURATION_INVALID:reference:12',
+    )
     expect(resolveH3Dimensions({ megapixels: 1, aspectRatio: '16:9' })).toEqual({ width: 1376, height: 768 })
     expect(resolveH3Dimensions({ megapixels: 2, aspectRatio: '16:9' })).toEqual({ width: 2064, height: 1152 })
   })
@@ -132,10 +135,10 @@ describe('ComfyUI H3 dual-stage profile', () => {
     expect(h3?.capabilities.video.firstlastframe).toBe(true)
     expect(h3?.capabilities.video.assetReferenceMultiReference).toBe(true)
     expect(h3?.capabilities.video).toMatchObject({
-      maxReferenceImages: 9,
+      maxReferenceImages: 8,
       maxReferenceAudios: 3,
       maxReferenceVideos: 0,
-      maxReferenceFiles: 12,
+      maxReferenceFiles: 11,
       referenceAudioRequiresVisual: true,
       minReferenceAudioDurationMs: 2_000,
       maxTotalReferenceAudioDurationMs: 15_000,
@@ -145,7 +148,7 @@ describe('ComfyUI H3 dual-stage profile', () => {
     const registeredCapabilities = findBuiltinCapabilities('video', 'comfyui', COMFYUI_H3_MODEL_ID)
     expect(getCapabilityOptionFields('video', registeredCapabilities)).not.toHaveProperty('aspectRatio')
     expect(h3?.capabilities.video.inputModePolicies).toEqual({
-      reference: { durationOptions: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] },
+      reference: { durationOptions: [4, 5, 6, 7, 8, 9, 10, 11] },
       first_frame: { durationOptions: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] },
       first_last_frame: { durationOptions: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] },
       continuation: { durationOptions: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] },
@@ -156,7 +159,6 @@ describe('ComfyUI H3 dual-stage profile', () => {
       sourceAspectRatiosByTarget: {
         '9:16': [
           { width: 1152, height: 2064 },
-          { width: 1088, height: 1920 },
         ],
       },
     })
@@ -197,42 +199,52 @@ describe('ComfyUI H3 dual-stage profile', () => {
     ])
   })
 
-  it('accepts frame transport and up to nine ordered references at the real ComfyUI option boundary', () => {
+  it('accepts frame transport and up to eight ordered references at the real ComfyUI option boundary', () => {
     const selection = { provider: 'comfyui' as const, modelId: COMFYUI_H3_MODEL_ID, modelKey: `comfyui::${COMFYUI_H3_MODEL_ID}`, variantSubKind: 'official' as const }
-    const references = Array.from({ length: 9 }, (_, index) => `https://example.com/reference-${index + 1}.png`)
+    const references = Array.from({ length: 8 }, (_, index) => `https://example.com/reference-${index + 1}.png`)
     const referenceAudios = Array.from({ length: 3 }, (_, index) => `https://example.com/reference-${index + 1}.mp3`)
     expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, referenceImages: references } })).toMatchObject({ duration: 4, referenceImages: references })
     expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, referenceImages: references.slice(0, 1), referenceAudios } })).toMatchObject({ referenceAudios })
     expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true } })).toMatchObject({ duration: 4, generateAudio: true })
     expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, lastFrameImageUrl: 'https://example.com/last.png' } })).toMatchObject({ lastFrameImageUrl: 'https://example.com/last.png' })
     expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, continuationVideoUrl: 'https://example.com/previous.mp4' } })).toMatchObject({ continuationVideoUrl: 'https://example.com/previous.mp4' })
-    expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, referenceImages: Array.from({ length: 10 }, () => 'a') } })).toThrow()
+    expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, referenceImages: Array.from({ length: 9 }, () => 'a') } })).toThrow()
     expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, referenceImages: references.slice(0, 1), referenceAudios: Array.from({ length: 4 }, () => 'a') } })).toThrow()
     expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: true, referenceImages: references.slice(0, 1), referenceVideos: ['https://example.com/reference.mp4'] } })).toThrow()
     expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: false } })).toThrow()
   })
 
-  it('accepts the full structural H3 duration envelope at provider preflight', () => {
-    ensureAiCatalogsRegistered()
-    const selection = { provider: 'comfyui' as const, modelId: COMFYUI_H3_MODEL_ID, modelKey: `comfyui::${COMFYUI_H3_MODEL_ID}`, variantSubKind: 'official' as const }
-    const referenceImages = ['https://example.com/reference.png']
-    expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 15, aspectRatio: '9:16', generateAudio: true, referenceImages } })).toMatchObject({ duration: 15 })
-    expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 16, aspectRatio: '9:16', generateAudio: true, referenceImages } })).toThrow()
+  it('rejects reference segments above its declared duration envelope while preserving other modes', () => {
+    const capabilities = COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES.find((entry) => (
+      entry.modelType === 'video' && entry.modelId === COMFYUI_H3_MODEL_ID
+    ))?.capabilities.video
+    if (!capabilities) throw new Error('COMFYUI_H3_CAPABILITIES_MISSING')
+    expect(() => resolveVideoInputPolicySelection({
+      capabilities,
+      inputMode: 'reference',
+      requestedDurationSeconds: 12,
+      aspectRatio: '9:16',
+    })).toThrow('VIDEO_INPUT_MODE_DURATION_UNSUPPORTED:reference:12')
+    expect(resolveVideoInputPolicySelection({
+      capabilities,
+      inputMode: 'first_frame',
+      requestedDurationSeconds: 12,
+      aspectRatio: '9:16',
+    })).toMatchObject({ inputMode: 'first_frame', requestedDurationSeconds: 12 })
   })
 
   it('keeps the canonical graph wired to the final output node', () => {
     const nodes = Object.values(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow)
-    expect(nodes.filter((node) => node.class_type === 'MiniMaxH3AudioConditioningT8')).toHaveLength(2)
-    expect(nodes.filter((node) => node.class_type === 'ImageResizeKJv2' && node.inputs.upscale_method === 'nvidia_rtx_vsr')).toHaveLength(1)
+    expect(nodes.filter((node) => node.class_type === 'MiniMaxH3ReferenceToVideo')).toHaveLength(1)
+    expect(nodes.filter((node) => node.class_type === 'ImageResizeKJv2' && node.inputs.upscale_method === 'nvidia_rtx_vsr')).toHaveLength(2)
     expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow[H3_DUAL_STAGE_RUNTIME_PROFILE.outputNodeId]?.class_type).toBe('VHS_VideoCombine')
-    expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['2']).toEqual({
+    expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['120']).toEqual({
       class_type: 'VAELoader',
       inputs: { vae_name: 'h3\\minimax_h3_audio_vae_fp32.safetensors' },
     })
-    expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['7']?.inputs.audio_vae).toEqual(['2', 0])
-    expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['14']?.inputs.audio_vae).toEqual(['2', 0])
-    expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['20']?.inputs.audio_vae).toEqual(['2', 0])
-    expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['168']?.inputs.audio).toEqual(['20', 1])
+    expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['309']?.inputs.audio_vae).toEqual(['120', 0])
+    expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['121']?.inputs.vae).toEqual(['120', 0])
+    expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['168']?.inputs.audio).toEqual(['121', 0])
   })
 
   it('builds zero, one, and three ordered H3 reference-audio inputs and rejects a fourth', () => {
@@ -261,16 +273,14 @@ describe('ComfyUI H3 dual-stage profile', () => {
       ],
     })
 
-    expect(zeroAudio.graph['18']).toBeUndefined()
-    expect(zeroAudio.graph['7']?.inputs['ref_audios.ref_audio_0']).toBeUndefined()
-    expect(oneAudio.graph['18']).toEqual({
+    expect(zeroAudio.graph['340']).toBeUndefined()
+    expect(zeroAudio.graph['309']?.inputs['ref_audios.ref_audio_0']).toBeUndefined()
+    expect(oneAudio.graph['340']).toEqual({
       class_type: 'LoadAudio',
       inputs: { audio: 'waoowaoo/prompt/reference-audio-00.mp3' },
     })
-    expect(oneAudio.graph['7']?.inputs['ref_audios.ref_audio_0']).toEqual(['18', 0])
-    expect(oneAudio.graph['14']?.inputs['ref_audios.ref_audio_0']).toEqual(['18', 0])
-    expect(threeAudio.graph['7']?.inputs['ref_audios.ref_audio_2']).toEqual(['71', 0])
-    expect(threeAudio.graph['14']?.inputs['ref_audios.ref_audio_2']).toEqual(['71', 0])
+    expect(oneAudio.graph['309']?.inputs['ref_audios.ref_audio_0']).toEqual(['340', 0])
+    expect(threeAudio.graph['309']?.inputs['ref_audios.ref_audio_2']).toEqual(['342', 0])
     expect(() => buildH3PromptGraph({
       ...referenceInput,
       referenceAudioFilenames: ['1.wav', '2.wav', '3.wav', '4.wav'],

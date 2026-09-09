@@ -29,8 +29,18 @@ describe('video input policy', () => {
     })).toBe(false)
   })
 
+  it('accepts the complete 4-11 second H3 reference boundary', () => {
+    const inputMode = 'reference'
+    expect(resolveVideoInputPolicySelection({
+      capabilities: h3Capabilities(), inputMode, requestedDurationSeconds: 4, aspectRatio: '21:9',
+    })).toEqual({ inputMode, requestedDurationSeconds: 4, aspectRatio: '21:9' })
+    expect(resolveVideoInputPolicySelection({
+      capabilities: h3Capabilities(), inputMode, requestedDurationSeconds: 11, aspectRatio: '9:21',
+    })).toEqual({ inputMode, requestedDurationSeconds: 11, aspectRatio: '9:21' })
+  })
+
   it.each([
-    'reference', 'first_frame', 'first_last_frame', 'continuation',
+    'first_frame', 'first_last_frame', 'continuation',
   ] as const)('accepts the complete 4-15 second H3 boundary for %s', (inputMode) => {
     expect(resolveVideoInputPolicySelection({
       capabilities: h3Capabilities(), inputMode, requestedDurationSeconds: 4, aspectRatio: '21:9',
@@ -41,8 +51,8 @@ describe('video input policy', () => {
   })
 
   it.each([
-    ['reference', 3], ['first_frame', 16], ['first_last_frame', 3], ['continuation', 16],
-  ] as const)('rejects %s duration outside the shared H3 boundary', (inputMode, requestedDurationSeconds) => {
+    ['reference', 3], ['reference', 12], ['first_frame', 16], ['first_last_frame', 3], ['continuation', 16],
+  ] as const)('rejects %s duration outside its H3 boundary', (inputMode, requestedDurationSeconds) => {
     expect(() => resolveVideoInputPolicySelection({
       capabilities: h3Capabilities(), inputMode, requestedDurationSeconds, aspectRatio: '16:9',
     })).toThrow(`VIDEO_INPUT_MODE_DURATION_UNSUPPORTED:${inputMode}:${String(requestedDurationSeconds)}`)
