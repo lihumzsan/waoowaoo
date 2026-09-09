@@ -69,7 +69,7 @@ const referencePrompt = `subject_definitions:
 
 summary:
 [reference generation] <Subject 1> moves and settles while preserving the identity shown in <Picture 1>.
-Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.
+Spoken dialogue and lyrics are audio only and must never appear as visible text, including translations. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless the user or source explicitly requires that exact non-subtitle visible text.
 
 retention_analysis:
 <Subject 1> (appears in [Shot 1]): fully_preserved - The person's identity and appearance from <Picture 1> are retained.
@@ -117,7 +117,7 @@ const referenceAudioInput: AiProviderVideoExecutionContext = {
 
 summary:
 [reference generation + audio reference] <Subject 1> speaks one new line using <Audio 1> as a voice-timbre reference.
-Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.
+Spoken dialogue and lyrics are audio only and must never appear as visible text, including translations. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless the user or source explicitly requires that exact non-subtitle visible text.
 
 retention_analysis:
 <Subject 1> (appears in [Shot 1]): fully_preserved - The person's identity and appearance from <Picture 1> are retained.
@@ -533,6 +533,31 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
     )
   })
 
+  it.each([
+    {
+      label: 'a supplied picture with no source binding',
+      prompt: referencePrompt,
+      pictures: ['https://media.example.com/reference-1.png', 'https://media.example.com/reference-2.png'],
+      error: 'REFERENCE_PICTURE_UNUSED:2',
+    },
+    {
+      label: 'synchronized spoken text without a subtitle keyword',
+      prompt: referencePrompt.replace('<Subject 1> moves and settles.',
+        '<Subject 1> says <d>[English]Welcome.</d> Text reading "Welcome" appears in sync with the spoken dialogue.'),
+      pictures: ['https://media.example.com/reference-1.png'],
+      error: 'SUBTITLE_VISIBLE_TEXT_FORBIDDEN',
+    },
+  ])('rejects $label before uploading or queuing any work', async ({ prompt, pictures, error }) => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    await expect(executeComfyUiH3VideoGeneration({
+      ...videoInput,
+      options: { ...videoInput.options, prompt, referenceImages: pictures },
+    })).rejects.toThrow(`VIDEO_PROMPT_PROFILE_INVALID:${error}`)
+    expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
+    expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
+  })
+
   it('finishes H3 preparation without crossing the prompt submission boundary', async () => {
     vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
     defineValidPreflight(server!)
@@ -777,13 +802,14 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
       submitResponse: { status: 200, body: { prompt_id: PROMPT_ID } },
     })
 
+    const prompt = referencePrompt.replace('the person shown in <Picture 1>.', 'the person shown from the front in <Picture 1> and from the side in <Picture 2>.')
     await executeComfyUiH3VideoGeneration({
       ...videoInput,
       options: {
         ...videoInput.options,
         duration: 15,
         aspectRatio: '9:21',
-        prompt: referencePrompt.replace('the person shown in <Picture 1>.', 'the person shown from the front in <Picture 1> and from the side in <Picture 2>.'),
+        prompt,
         referenceImages: [
           'https://media.example.com/reference-1.png',
           'https://media.example.com/reference-2.png',
@@ -795,7 +821,9 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
     const body = JSON.parse(request!.bodyText) as { prompt: Record<string, { inputs?: Record<string, unknown> }> }
     expect(body.prompt['6']?.inputs?.image).toBe(`waoowaoo/${PROMPT_ID}/reference-image-00.png`)
     expect(body.prompt['60']?.inputs?.image).toBe(`waoowaoo/${PROMPT_ID}/reference-image-01.png`)
+    expect(body.prompt['28']?.inputs?.prompt).toBe(prompt)
     for (const conditioningId of ['7', '14']) {
+      expect(body.prompt[conditioningId]?.inputs?.prompt).toEqual(['28', 0])
       expect(body.prompt[conditioningId]?.inputs?.['ref_images.ref_image_0']).toEqual(['6', 0])
       expect(body.prompt[conditioningId]?.inputs?.['ref_images.ref_image_1']).toEqual(['60', 0])
       expect(body.prompt[conditioningId]?.inputs?.length).toBe(362)

@@ -1,4 +1,4 @@
-import { findLastReferenceSentenceBoundary } from './h3-reference-audio'
+import { findLastReferenceSentenceBoundary, isReferenceSentenceBoundary } from './h3-reference-audio'
 
 const REFERENCE_DIALOGUE_TAG = /<\/?d>/gu
 const REFERENCE_DIALOGUE_CUTOFF_TAG = /<cutoff>/gu
@@ -17,7 +17,7 @@ const SHOT_TRANSITION = /^\[Shot (\d+)\] At (\d{2}):(\d{2}\.\d{3}), the camera (
 const REFERENCE_VISIBLE_TEXT_DIRECT_CARRIER = /^(?:(?:a|an|the|this|that|these|those|his|her|its|their|our|your)\s+)?((?:[\p{L}\p{N}][\p{L}\p{N}'’-]*\s+){0,4})(?:banners?|labels?|signs?|subtitles?|texts?)\s*$/iu
 const REFERENCE_VISIBLE_TEXT_NON_MODIFIER = /\b(?:a|an|and|are|as|at|beside|by|carries|carry|displays?|for|from|has|have|he|her|his|holds?|i|in|is|it|its|looks?|moves?|near|of|on|or|our|over|points?|reads?|she|sits?|stands?|that|the|their|these|they|this|those|to|under|walks?|was|we|wears?|were|which|while|who|whose|with|without|you|your)\b/iu
 const REFERENCE_VISIBLE_TEXT_EXPLICIT_CARRIER = /\b(?:bears?|bearing|contains?|containing|displays?|displaying|has|shows?|showing|with)\s+(?:clearly\s+)?(?:visible|on-screen)\s+text\s*$/iu
-const REFERENCE_LEADING_SHOT_METADATA = /^\s*\[Shot\s+\d+\](?:\s+At\s+\d{2}:\d{2}\.\d{3},?)?\s*/iu
+export const REFERENCE_LEADING_SHOT_METADATA = /^\s*\[Shot\s+\d+\](?:\s+At\s+\d{2}:\d{2}\.\d{3},?)?\s*/iu
 const REFERENCE_LEADING_STYLE_TRANSITION = /^\s*(?:(?:then|next),?\s+|(?:the\s+)?(?:camera|shot)\s+(?:cuts?|transitions?|changes?|switches?)\s+to\s+)/iu
 
 export type H3ReferenceDialogueBlock = {
@@ -28,6 +28,12 @@ export type H3ReferenceDialogueBlock = {
 
 export type H3ReferenceDialogueEvent = {
   readonly speakerContext: string
+}
+
+export type H3ReferenceVisibleTextBlock = {
+  readonly start: number
+  readonly end: number
+  readonly followingClause: string
 }
 
 function invalid(reason: string): Error {
@@ -129,13 +135,30 @@ export function maskReferenceDialogueBlocks(
 
 function maskReferenceVisibleTextSyntax(input: string): string {
   let masked = input
-  for (const literal of input.matchAll(REFERENCE_VISIBLE_TEXT_LITERAL)) {
-    if (literal.index === undefined || !hasReferenceVisibleTextCarrier(input, literal.index)) continue
-    masked = masked.slice(0, literal.index)
-      + ' '.repeat(literal[0].length)
-      + masked.slice(literal.index + literal[0].length)
+  for (const block of parseReferenceVisibleTextBlocks(input)) {
+    masked = masked.slice(0, block.start)
+      + ' '.repeat(block.end - block.start)
+      + masked.slice(block.end)
   }
   return masked
+}
+
+// Keep the literal opaque, but retain its immediate text role for policy checks.
+// Do not borrow a relationship from another sentence, shot or quoted payload.
+export function parseReferenceVisibleTextBlocks(input: string): readonly H3ReferenceVisibleTextBlock[] {
+  const protocolInput = maskReferenceProtocolQuotedLiterals(input)
+  const blocks: H3ReferenceVisibleTextBlock[] = []
+  for (const literal of input.matchAll(REFERENCE_VISIBLE_TEXT_LITERAL)) {
+    if (literal.index === undefined || !hasReferenceVisibleTextCarrier(protocolInput, literal.index)) continue
+    const end = literal.index + literal[0].length
+    let clauseEnd = end
+    while (clauseEnd < protocolInput.length
+      && !isReferenceSentenceBoundary(protocolInput, clauseEnd)
+      && protocolInput[clauseEnd] !== '\n'
+      && !protocolInput.startsWith('[Shot ', clauseEnd)) clauseEnd += 1
+    blocks.push({ start: literal.index, end, followingClause: protocolInput.slice(end, clauseEnd).trim() })
+  }
+  return blocks
 }
 
 function hasReferenceVisibleTextCarrier(input: string, readingIndex: number): boolean {

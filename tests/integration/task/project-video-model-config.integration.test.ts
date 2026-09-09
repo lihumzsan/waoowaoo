@@ -29,7 +29,7 @@ const ORIGINAL_DEPLOYMENT_EDITION = process.env.DEPLOYMENT_EDITION
 const ORIGINAL_PROVIDER_CREDENTIAL_MODE = process.env.PROVIDER_CREDENTIAL_MODE
 const ORIGINAL_PLATFORM_DEFAULT_VIDEO_MODEL = process.env.PLATFORM_DEFAULT_VIDEO_MODEL
 const ORIGINAL_PLATFORM_VIDEO_RESOLUTION = process.env.PLATFORM_VIDEO_RESOLUTION
-const H3_REF_NO_SUBTITLE_POLICY = 'Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.'
+const H3_REF_NO_SUBTITLE_POLICY = 'Spoken dialogue and lyrics are audio only and must never appear as visible text, including translations. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless the user or source explicitly requires that exact non-subtitle visible text.'
 
 function restoreEnvironment(
   name:
@@ -289,7 +289,7 @@ N/A`
 
 function h3Prompt(inputMode: 'reference' | 'first_frame' | 'first_last_frame', promptEndSeconds: number): string {
   const detailedDescription = inputMode === 'reference'
-    ? 'The target video uses a realistic cinematic style with natural indoor lighting.\n[Shot 1] She turns toward the doorway and settles facing it.'
+    ? 'The target video uses a realistic cinematic style with natural indoor lighting.\n[Shot 1] <Subject 1> turns toward the doorway and settles facing it.'
     : inputMode === 'first_frame'
       ? '[Shot 1] <Picture 1> aligns with 0.00 seconds and shows her turning toward the doorway.'
       : `[Shot 1] <Picture 1> aligns with 0.00 seconds and shows her turning toward the doorway; at ${String(promptEndSeconds)} seconds she settles exactly into <Picture 2>.`

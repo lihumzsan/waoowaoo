@@ -65,13 +65,13 @@ export function findLastReferenceSentenceBoundary(
   return lastBoundaryIndex
 }
 
-function isReferenceSentenceBoundary(
+export function isReferenceSentenceBoundary(
   input: string,
   index: number,
   semicolonIsBoundary = true,
 ): boolean {
   const character = input[index]
-  if (character === '?' || character === '!' || (semicolonIsBoundary && character === ';')) {
+  if (/[!?。！？]/u.test(character ?? '') || (semicolonIsBoundary && character === ';')) {
     return true
   }
   if (character !== '.') return false
