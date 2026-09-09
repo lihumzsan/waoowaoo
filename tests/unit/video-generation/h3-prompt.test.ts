@@ -16,7 +16,7 @@ retention_analysis:
 
 detailed_description:
 ${REFERENCE_STYLE_OPENING}
-[Shot 1] She notices the doorway, turns, and settles facing it.
+[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.
 
 overall_soundscape:
 Soft room tone, fabric movement, and her quiet breath.
@@ -51,7 +51,7 @@ const nonReferencePrompt = referencePrompt
   .replace(`${REFERENCE_STYLE_OPENING}\n`, '')
 
 const firstFramePrompt = nonReferencePrompt.replace(
-  '[Shot 1] She notices the doorway',
+  '[Shot 1] <Subject 1> notices the doorway',
   '[Shot 1] <Picture 1> aligns with 0.00 seconds and shows her noticing the doorway',
 )
 
@@ -101,6 +101,109 @@ function assertH3Prompt(input: {
 }
 
 describe('MiniMax H3 multimodal Prompt contract', () => {
+  // Oracle: MiniMaxAI/MiniMax-H3 docs/VIDEO_PROMPT_WRITING_GUIDE_ref_en.md,
+  // sections 2, 4 and 5, plus the project's no-unused-conditioning-input rule.
+  describe('visual reference closure', () => {
+    const prompt = referencePrompt.replace('[Shot 1] She', '[Shot 1] <Subject 1>')
+    const definition = '<Subject 1> is the woman in <Picture 1>.'
+    const retention = '<Subject 1> (appears in [Shot 1]): fully_preserved - Her identity, clothing, and the room layout from <Picture 1> are retained.'
+
+    it('rejects supplied pictures without a declared reference role', () => {
+      expect(() => assertH3Prompt({
+        inputMode: 'reference', prompt, references: { pictureCount: 9, audioCount: 0 },
+      })).toThrow('REFERENCE_PICTURE_UNUSED:2')
+    })
+
+    it('requires the source picture in a referenced Subject definition', () => {
+      expect(() => assertH3Prompt({
+        inputMode: 'reference', prompt: prompt.replace(definition, '<Subject 1> is the woman in the room.'),
+      })).toThrow('REFERENCE_SUBJECT_SOURCE_MISSING:1')
+    })
+
+    it('does not count a visible-text literal as a source picture binding', () => {
+      expect(() => assertH3Prompt({
+        inputMode: 'reference',
+        prompt: prompt.replace(definition, '<Subject 1> is a woman holding a sign bearing visible text reading "<Picture 1>".'),
+      })).toThrow('REFERENCE_SUBJECT_SOURCE_MISSING:1')
+    })
+
+    it('requires a retention entry owned by the defined Subject', () => {
+      expect(() => assertH3Prompt({
+        inputMode: 'reference',
+        prompt: prompt.replace(retention, '<Picture 1>: weak_reference - The composition guides the shot.'),
+      })).toThrow('REFERENCE_VISUAL_RETENTION_MISSING:Subject:1')
+    })
+
+    it('rejects two retention relationships for the same Subject', () => {
+      expect(() => assertH3Prompt({
+        inputMode: 'reference', prompt: prompt.replace(retention, `${retention}\n${retention}`),
+      })).toThrow('REFERENCE_VISUAL_RETENTION_DUPLICATE:Subject:1')
+    })
+
+    it('requires the referenced Subject to apply in the description, not only the summary', () => {
+      expect(() => assertH3Prompt({
+        inputMode: 'reference', prompt: referencePrompt.replace('[Shot 1] <Subject 1>', '[Shot 1] She'),
+      }))
+        .toThrow('REFERENCE_VISUAL_APPLICATION_MISSING:Subject:1')
+    })
+
+    it('does not count a displayed Subject token as an application', () => {
+      expect(() => assertH3Prompt({
+        inputMode: 'reference',
+        prompt: prompt.replace('[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.', '[Shot 1] A sign reading "<Subject 1>" hangs above the doorway.'),
+      })).toThrow('REFERENCE_VISUAL_APPLICATION_MISSING:Subject:1')
+    })
+
+    it('rejects a retention scope naming a nonexistent shot', () => {
+      expect(() => assertH3Prompt({
+        inputMode: 'reference', prompt: prompt.replace('(appears in [Shot 1])', '(appears in [Shot 3])'),
+      })).toThrow('REFERENCE_VISUAL_RETENTION_SHOT_INVALID:Subject:1:3')
+    })
+
+    it('allows multiple pictures to define one Subject without standalone Picture entries', () => {
+      expect(() => assertH3Prompt({
+        inputMode: 'reference',
+        prompt: prompt.replace(definition, '<Subject 1> is the woman seen from the front in <Picture 1> and from the side in <Picture 2>.'),
+        references: { pictureCount: 2, audioCount: 0 },
+      })).not.toThrow()
+    })
+
+    it('allows one picture to supply multiple independently retained Subjects', () => {
+      expect(() => assertH3Prompt({
+        inputMode: 'reference',
+        prompt: prompt.replace(definition, `${definition}\n<Subject 2> is the doorway in <Picture 1>.`)
+          .replace(retention, `${retention}\n<Subject 2>: fully_preserved - The doorway keeps its wooden frame.`)
+          .replace('[Shot 1] <Subject 1> notices the doorway', '[Shot 1] <Subject 1> notices <Subject 2>'),
+      })).not.toThrow()
+    })
+
+    it('allows a standalone composition anchor without inventing a Subject', () => {
+      expect(() => assertH3Prompt({
+        inputMode: 'reference',
+        prompt: prompt.replace(definition, '<Picture 1> is the composition reference for [Shot 1].')
+          .replaceAll('<Subject 1>', '<Picture 1>')
+          .replace('[Shot 1] <Picture 1> notices the doorway, turns, and settles facing it.', '[Shot 1] The composition follows <Picture 1> as the woman turns toward the doorway.'),
+      })).not.toThrow()
+    })
+
+    it.each(['partially_preserved', 'attribute_transfer', 'weak_reference'])(
+      'does not force a legal %s relationship into full preservation', (relationship) => {
+        expect(() => assertH3Prompt({
+          inputMode: 'reference', prompt: prompt.replace('fully_preserved', relationship),
+        })).not.toThrow()
+      },
+    )
+
+    it('allows a style Subject to apply in the global style opening', () => {
+      expect(() => assertH3Prompt({
+        inputMode: 'reference',
+        prompt: prompt.replace(definition, `${definition}\n<Subject 2> is the soft lighting style in <Picture 1>.`)
+          .replace(retention, `${retention}\n<Subject 2>: weak_reference - The lighting guides the whole video.`)
+          .replace(REFERENCE_STYLE_OPENING, 'The target video uses the realistic cinematic style of <Subject 2>.'),
+      })).not.toThrow()
+    })
+  })
+
   it('rejects the old policy that let dialogue be interpreted as a visible-text exception', () => {
     const prompt = referenceAudioPrompt.replace(
       HARD_NO_SUBTITLE_POLICY,
@@ -127,7 +230,7 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
 
   it('rejects an explicitly requested subtitle carrier outside dialogue', () => {
     const prompt = referencePrompt.replace(
-      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
       '[Shot 1] Subtitles reading "Welcome" appear as she turns toward the doorway.',
     )
     expect(() => assertH3Prompt({
@@ -290,7 +393,7 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
     ['subject_definitions', '<Subject 1> is the woman in <Picture 1>.', '<Subject 1> 是 <Picture 1> 中的女人。'],
     ['summary', '[reference generation] She turns toward the doorway while preserving <Subject 1> from <Picture 1>.', '[reference generation] 她转向门口并保留 <Picture 1> 中的 <Subject 1>。'],
     ['retention_analysis', 'Her identity, clothing, and the room layout from <Picture 1> are retained.', '保留 <Picture 1> 中的人物身份、服装和房间布局。'],
-    ['detailed_description', '[Shot 1] She notices the doorway, turns, and settles facing it.', '[Shot 1] 她转向门口。'],
+    ['detailed_description', '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.', '[Shot 1] 她转向门口。'],
     ['overall_soundscape', 'Soft room tone, fabric movement, and her quiet breath.', '轻柔的室内底噪、布料摩擦和呼吸声。'],
   ])('requires English Ref prose in %s', (_section, source, replacement) => {
     const prompt = referencePrompt.replace(source, replacement)
@@ -302,8 +405,8 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
 
   it('allows non-Latin Ref text only inside official dialogue and visible-text literals', () => {
     const prompt = referencePrompt.replace(
-      '[Shot 1] She notices the doorway, turns, and settles facing it.',
-      '[Shot 1] A sign with visible text reading "出口" hangs by the door while she says <d>[Chinese]请从这里出去。</d>',
+      '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
+      '[Shot 1] A sign with visible text reading "出口" hangs by the door while <Subject 1> says <d>[Chinese]请从这里出去。</d>',
     )
     expect(() => assertH3Prompt({
       inputMode: 'reference',
@@ -402,7 +505,7 @@ retention_analysis:
 
 detailed_description:
 Realistic cinematic portrait style.
-[Shot 1] Woman turns, settles.
+[Shot 1] <Subject 1> turns, settles.
 
 overall_soundscape:
 Room tone.
@@ -428,7 +531,7 @@ retention_analysis:
 
 detailed_description:
 Noir chiaroscuro.
-[Shot 1] Femme fatale waits.
+[Shot 1] <Subject 1>, the femme fatale, waits.
 
 overall_soundscape:
 Jazz club ambience.
@@ -454,7 +557,7 @@ retention_analysis:
 
 detailed_description:
 The clip uses a Łódź Film School documentary style.
-[Shot 1] Agnieszka walks through Łódź and pauses beside a doorway.
+[Shot 1] <Subject 1>, Agnieszka, walks through Łódź and pauses beside a doorway.
 
 overall_soundscape:
 Łódź street ambience with footsteps and quiet traffic.
@@ -480,7 +583,7 @@ N/A`
 
   it('rejects a Subject token that has no independent definition', () => {
     const prompt = referencePrompt.replace(
-      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
       '[Shot 1] <Subject 2> notices the doorway, turns, and settles facing it.',
     )
     expect(() => assertH3Prompt({
@@ -494,7 +597,7 @@ N/A`
     'A sign reading "<Subject 2>" hangs beside <Subject 1>.',
   ])('does not parse a verbatim Subject token as protocol: %s', (description) => {
     const prompt = referencePrompt.replace(
-      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
       `[Shot 1] ${description}`,
     )
     expect(() => assertH3Prompt({
@@ -528,8 +631,8 @@ N/A`
 
   it('allows explicitly requested non-subtitle visible text in the detailed description', () => {
     const prompt = referencePrompt.replace(
-      '[Shot 1] She notices the doorway, turns, and settles facing it.',
-      '[Shot 1] A sign reading "欢迎" appears as she says <d>[English]No subtitles, please.</d> and turns toward the doorway.',
+      '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
+      '[Shot 1] A sign reading "欢迎" appears as <Subject 1> says <d>[English]No subtitles, please.</d> and turns toward the doorway.',
     )
     expect(() => assertH3Prompt({
       inputMode: 'reference',
@@ -547,8 +650,8 @@ N/A`
     'A sign reading "He said \\"Hello\\"." hangs above the doorway.',
   ])('allows official quoted visible text through an official or explicit carrier: %s', (description) => {
     const prompt = referencePrompt.replace(
-      '[Shot 1] She notices the doorway, turns, and settles facing it.',
-      `[Shot 1] ${description}`,
+      '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
+      `[Shot 1] <Subject 1> stands in the doorway. ${description}`,
     )
     expect(() => assertH3Prompt({
       inputMode: 'reference',
@@ -558,8 +661,8 @@ N/A`
 
   it('allows an official visible-text carrier at the start of a later sentence', () => {
     const prompt = referencePrompt.replace(
-      '[Shot 1] She notices the doorway, turns, and settles facing it.',
-      '[Shot 1] The camera holds steady. A sign reading "Welcome" hangs above the doorway.',
+      '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
+      '[Shot 1] The camera holds steady on <Subject 1>. A sign reading "Welcome" hangs above the doorway.',
     )
     expect(() => assertH3Prompt({
       inputMode: 'reference',
@@ -613,7 +716,7 @@ N/A`
 
   it('rejects quoted Ref dialogue when no d block exists', () => {
     const prompt = referencePrompt.replace(
-      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
       '[Shot 1] She faces camera and says "这是新台词。"',
     )
     expect(() => assertH3Prompt({
@@ -640,7 +743,7 @@ N/A`
     'She reads a sign reading "Welcome".',
   ])('rejects non-canonical quoted text outside d: %s', (description) => {
     const prompt = referencePrompt.replace(
-      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
       `[Shot 1] ${description}`,
     )
     expect(() => assertH3Prompt({
@@ -761,8 +864,8 @@ N/A`
 
   it('allows the official cutoff tag inside reference dialogue', () => {
     const prompt = referencePrompt.replace(
-      '[Shot 1] She notices the doorway, turns, and settles facing it.',
-      '[Shot 1] She turns toward the doorway and says <d>[Chinese]我终于找到<cutoff></d>',
+      '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
+      '[Shot 1] <Subject 1> turns toward the doorway and says <d>[Chinese]我终于找到<cutoff></d>',
     )
     expect(() => assertH3Prompt({
       inputMode: 'reference',
@@ -785,7 +888,7 @@ N/A`
     },
   ])('rejects $name in a Ref detailed description', ({ value }) => {
     const prompt = referencePrompt.replace(
-      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
       `[Shot 1] She turns toward the doorway and says ${value}`,
     )
     expect(() => assertH3Prompt({
@@ -799,7 +902,7 @@ N/A`
     '<d>[Chinese]我终于找到<cutoff><cutoff></d>',
   ])('rejects malformed Ref cutoff placement %s', (dialogue) => {
     const prompt = referencePrompt.replace(
-      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
       `[Shot 1] She turns toward the doorway and says ${dialogue}`,
     )
     expect(() => assertH3Prompt({
@@ -810,7 +913,7 @@ N/A`
 
   it('rejects more than one cutoff across separate Ref dialogue blocks', () => {
     const prompt = referencePrompt.replace(
-      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
       '[Shot 1] She says <d>[Chinese]第一句<cutoff></d>. Then she says <d>[Chinese]第二句<cutoff></d>.',
     )
     expect(() => assertH3Prompt({
@@ -821,7 +924,7 @@ N/A`
 
   it('requires cutoff to be in the final Ref dialogue block at the video end', () => {
     const prompt = referencePrompt.replace(
-      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
       '[Shot 1] She says <d>[Chinese]第一句<cutoff></d>. Then she says <d>[Chinese]第二句。</d>',
     )
     expect(() => assertH3Prompt({
@@ -832,7 +935,7 @@ N/A`
 
   it('rejects post-cutoff action after the final Ref dialogue', () => {
     const prompt = referencePrompt.replace(
-      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
       '[Shot 1] She says <d>[Chinese]第一句<cutoff></d>. She then turns away.',
     )
     expect(() => assertH3Prompt({
@@ -852,8 +955,8 @@ N/A`
     {
       name: 'outside a dialogue block',
       prompt: referencePrompt.replace(
-        '[Shot 1] She notices the doorway, turns, and settles facing it.',
-        '[Shot 1] She notices the doorway<cutoff>, turns, and settles facing it.',
+        '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
+        '[Shot 1] <Subject 1> notices the doorway<cutoff>, turns, and settles facing it.',
       ),
     },
   ])('rejects a reference cutoff tag $name', ({ prompt }) => {
@@ -987,7 +1090,7 @@ N/A`
       )
       .replace(
         '<Subject 1> (S1), using the voice timbre referenced from <Audio 1>, faces camera and says',
-        'The calm off-screen narrator (S1), using the voice timbre referenced from <Audio 1>, says in an off-screen voiceover:',
+        '<Subject 1> stands in silence. The calm off-screen narrator (S1), using the voice timbre referenced from <Audio 1>, says in an off-screen voiceover:',
       )
     expect(() => assertH3Prompt({
       inputMode: 'reference',
@@ -1643,7 +1746,7 @@ N/A`
   it('allows a compound speaker event when its reference-audio participant is cited', () => {
     const prompt = referenceAudioPrompt.replace(
       '<Subject 1> (S1), using the voice timbre referenced from <Audio 1>, faces camera and says',
-      'The two speakers (S1,S2), with S1 using the voice timbre referenced from <Audio 1>, shout together,',
+      '<Subject 1> and another speaker (S1,S2), with S1 using the voice timbre referenced from <Audio 1>, shout together,',
     )
     expect(() => assertH3Prompt({
       inputMode: 'reference',
@@ -1653,7 +1756,7 @@ N/A`
 
     const naturalAssociationPrompt = referenceAudioPrompt.replace(
       '<Subject 1> (S1), using the voice timbre referenced from <Audio 1>, faces camera and says',
-      'The two speakers (S1,S2), with S1 drawing vocal timbre from <Audio 1>, shout together,',
+      '<Subject 1> and another speaker (S1,S2), with S1 drawing vocal timbre from <Audio 1>, shout together,',
     )
     expect(() => assertH3Prompt({
       inputMode: 'reference',
@@ -1663,7 +1766,7 @@ N/A`
 
     const negatedAssociationPrompt = referenceAudioPrompt.replace(
       '<Subject 1> (S1), using the voice timbre referenced from <Audio 1>, faces camera and says',
-      'The two speakers (S1,S2), with S1 not using <Audio 1>, shout together,',
+      '<Subject 1> and another speaker (S1,S2), with S1 not using <Audio 1>, shout together,',
     )
     expect(() => assertH3Prompt({
       inputMode: 'reference',
@@ -1673,7 +1776,7 @@ N/A`
 
     const contractedNegationPrompt = referenceAudioPrompt.replace(
       '<Subject 1> (S1), using the voice timbre referenced from <Audio 1>, faces camera and says',
-      'The two speakers (S1,S2), with S1 doesn\'t use <Audio 1>, shout together,',
+      '<Subject 1> and another speaker (S1,S2), with S1 doesn\'t use <Audio 1>, shout together,',
     )
     expect(() => assertH3Prompt({
       inputMode: 'reference',
@@ -1683,7 +1786,7 @@ N/A`
 
     const postCueNegationPrompt = referenceAudioPrompt.replace(
       '<Subject 1> (S1), using the voice timbre referenced from <Audio 1>, faces camera and says',
-      'The two speakers (S1,S2), with S1 using no timbre from <Audio 1>, shout together,',
+      '<Subject 1> and another speaker (S1,S2), with S1 using no timbre from <Audio 1>, shout together,',
     )
     expect(() => assertH3Prompt({
       inputMode: 'reference',
@@ -1693,9 +1796,9 @@ N/A`
   })
 
   it.each([
-    'The two speakers (S1,S2), with S1 watching a radio, which plays music and uses <Audio 1>, shout together,',
-    'The two speakers (S1,S2), with S1 watching a machine, whose voice comes from <Audio 1>, shout together,',
-    'The two speakers (S1,S2), with S1 watching a radio that softly crackles and uses <Audio 1>, shout together,',
+    '<Subject 1> and another speaker (S1,S2), with S1 watching a radio, which plays music and uses <Audio 1>, shout together,',
+    '<Subject 1> and another speaker (S1,S2), with S1 watching a machine, whose voice comes from <Audio 1>, shout together,',
+    '<Subject 1> and another speaker (S1,S2), with S1 watching a radio that softly crackles and uses <Audio 1>, shout together,',
     '<Audio 1> is visual input for a machine that guides S1, and the pair (S1,S2) says',
   ])('does not borrow a compound-Speaker Audio cue from an unrelated object: %s', (speakerLead) => {
     const prompt = referenceAudioPrompt.replace(
@@ -1850,7 +1953,7 @@ N/A`
       )
       .replace(
         '<Subject 1> (S1), using the voice timbre referenced from <Audio 1>, faces camera and says <d>[Chinese]这是新台词。</d>',
-        'The two speakers (S1,S2), with S1 using <Audio 1>, say together <d>[Chinese]这是第一句。</d> Then <Subject 2> (S2), using <Audio 2>, says <d>[Chinese]这是第二句。</d>',
+        '<Subject 1> and <Subject 2> (S1,S2), with S1 using <Audio 1>, say together <d>[Chinese]这是第一句。</d> Then <Subject 2> (S2), using <Audio 2>, says <d>[Chinese]这是第二句。</d>',
       )
     expect(() => assertH3Prompt({
       inputMode: 'reference',
@@ -2311,8 +2414,8 @@ N/A`
     '<Audio 1>',
   ])('keeps a visible-text protocol lookalike opaque to Ref structure parsing: %s', (literal) => {
     const prompt = referencePrompt.replace(
-      '[Shot 1] She notices the doorway, turns, and settles facing it.',
-      `[Shot 1] She stands beside a display bearing visible text reading "${literal}" and then turns toward the doorway.`,
+      '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
+      `[Shot 1] <Subject 1> stands beside a display bearing visible text reading "${literal}" and then turns toward the doorway.`,
     )
     expect(() => assertH3Prompt({
       inputMode: 'reference',
@@ -2454,7 +2557,7 @@ N/A`
 
   it('validates continuation shot times against the internal guide plus novel duration', () => {
     const promptWithTransition = continuationPrompt.replace(
-      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
       '[Shot 1] Her inherited motion continues. [Shot 2] At 00:04.500, the camera cuts to the doorway.',
     )
     expect(() => assertH3Prompt({
@@ -2472,7 +2575,7 @@ N/A`
 
   it('rejects a continuation shot transition inside the inherited guide interval', () => {
     const prompt = continuationPrompt.replace(
-      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
       '[Shot 1] Her inherited motion continues. [Shot 2] At 00:00.500, the camera cuts to the doorway.',
     )
     expect(() => assertH3Prompt({
@@ -2484,7 +2587,7 @@ N/A`
 
   it('rejects a same-shot timed event inside the inherited guide interval', () => {
     const prompt = continuationPrompt.replace(
-      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
       '[Shot 1] Her inherited motion continues. At 00:00.500, she turns toward the doorway.',
     )
     expect(() => assertH3Prompt({
@@ -2507,7 +2610,7 @@ N/A`
     'At 0:00.500',
   ])('rejects non-canonical continuation time %s instead of bypassing the guide interval', (timeExpression) => {
     const prompt = continuationPrompt.replace(
-      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
       `[Shot 1] Her inherited motion continues. ${timeExpression}, she turns toward the doorway.`,
     )
     expect(() => assertH3Prompt({
@@ -2519,7 +2622,7 @@ N/A`
 
   it('keeps time-like text inside dialogue opaque to continuation timing validation', () => {
     const prompt = continuationPrompt.replace(
-      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
       '[Shot 1] She says <d>[English]Meet me at 0.500 seconds.</d> and turns toward the doorway.',
     )
     expect(() => assertH3Prompt({
@@ -2546,7 +2649,7 @@ N/A`
 
   it('accepts a continuation timed event at the first millisecond after the guide interval', () => {
     const prompt = continuationPrompt.replace(
-      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
       '[Shot 1] Her inherited motion continues. At 00:00.917, she turns toward the doorway.',
     )
     expect(() => assertH3Prompt({
@@ -2558,7 +2661,7 @@ N/A`
 
   it('does not apply Ref-only quoted-text parsing to continuation mode', () => {
     const prompt = continuationPrompt.replace(
-      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
       '[Shot 1] A sign says "Welcome" as she continues the inherited motion toward the doorway.',
     )
     expect(() => assertH3Prompt({
@@ -2679,7 +2782,7 @@ N/A`
     },
   ])('rejects $name', ({ detail, reason }) => {
     const prompt = referencePrompt.replace(
-      '[Shot 1] She notices the doorway, turns, and settles facing it.',
+      '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
       detail,
     )
     expect(() => assertH3Prompt({

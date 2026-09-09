@@ -76,7 +76,7 @@ retention_analysis:
 
 detailed_description:
 The target video uses a realistic cinematic portrait style with natural indoor lighting.
-[Shot 1] The subject moves and settles.
+[Shot 1] <Subject 1> moves and settles.
 
 overall_soundscape:
 Room tone and movement.
@@ -143,7 +143,7 @@ const firstFrameInput: AiProviderVideoExecutionContext = {
   options: {
     ...videoInput.options,
     prompt: nonReferencePrompt.replace(
-      '[Shot 1] The subject moves and settles.',
+      '[Shot 1] <Subject 1> moves and settles.',
       '[Shot 1] <Picture 1> aligns with 0.00 seconds and shows the subject moving and settling.',
     ),
     referenceImages: undefined,
@@ -783,6 +783,7 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
         ...videoInput.options,
         duration: 15,
         aspectRatio: '9:21',
+        prompt: referencePrompt.replace('the person shown in <Picture 1>.', 'the person shown from the front in <Picture 1> and from the side in <Picture 2>.'),
         referenceImages: [
           'https://media.example.com/reference-1.png',
           'https://media.example.com/reference-2.png',

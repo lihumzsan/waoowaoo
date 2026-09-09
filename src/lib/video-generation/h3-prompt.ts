@@ -47,6 +47,8 @@ const REFERENCE_ENTITY_TOKEN = /<(?:Subject|Picture|Video|Audio)\s+\d+>/gu
 const REFERENCE_SUBJECT_TOKEN = /<Subject\s+\d+>/gu
 const REFERENCE_SUBJECT_LINE_START = /^<Subject\s+(\d+)>/u
 const REFERENCE_SUBJECT_DEFINITION_CLAIM = /<Subject\s+(\d+)>(?:\s+\(S\d+(?:\s*,\s*S\d+)*\))?(?=\s+is\b|\s*:)/gu
+const REFERENCE_PICTURE_DEFINITION = /^<Picture\s+([1-9]\d*)>\s*(?:is\b|:)\s*\S/u
+const REFERENCE_VISUAL_TOKEN = /<(Subject|Picture)\s+([1-9]\d*)>/gu
 const REFERENCE_PLAYBACK_SUBJECT_DEFINITION_PREFIX = /^<Subject\s+(\d+)>\s+is\s+a\s+(source-backed|target-visible)\s+in-scene\s+playback\s+entity\b/iu
 const REFERENCE_SOURCE_BACKED_PLAYBACK_SUBJECT_DEFINITION = /^<Subject\s+(\d+)>\s+is\s+a\s+source-backed\s+in-scene\s+playback\s+entity\s+from\s+<Picture\s+\d+>:\s+\S/iu
 const REFERENCE_TARGET_VISIBLE_PLAYBACK_SUBJECT_DEFINITION = /^<Subject\s+(\d+)>\s+is\s+a\s+target-visible\s+in-scene\s+playback\s+entity:\s+\S/iu
@@ -478,12 +480,37 @@ function assertH3InputMode(
   }
 }
 
-function assertReferenceSubjectClosure(
+type H3ReferenceVisualManifest = {
+  readonly playbackSubjectNumbers: ReadonlySet<number>
+  readonly definitions: ReadonlyMap<string, { readonly pictureNumbers: readonly number[]; readonly targetVisible: boolean }>
+  readonly boundPictures: ReadonlySet<number>
+  readonly protocolSections: Readonly<Record<MinimaxH3PromptSection, string>>
+}
+
+function parseReferenceVisualManifest(
   sections: Readonly<Record<MinimaxH3PromptSection, string>>,
-): ReadonlySet<number> {
+): H3ReferenceVisualManifest {
   const definedSubjectNumbers = new Set<number>()
   const playbackSubjectNumbers = new Set<number>()
-  for (const line of sections.subject_definitions.split('\n').map((entry) => entry.trim())) {
+  const visualDefinitions = new Map<string, { readonly pictureNumbers: readonly number[]; readonly targetVisible: boolean }>()
+  const boundPictures = new Set<number>()
+  // Literal text is content, never a source binding, definition or application.
+  const protocolSections = Object.fromEntries(MINIMAX_H3_PROMPT_SECTIONS.map((section) => [
+    section,
+    maskReferenceVisibleTextLiterals(section === 'detailed_description'
+      ? maskReferenceDialogueBlocks(sections[section], parseReferenceDialogueBlocks(sections[section]))
+      : sections[section]),
+  ])) as Record<MinimaxH3PromptSection, string>
+  for (const line of protocolSections.subject_definitions.split('\n').map((entry) => entry.trim())) {
+    const pictureDefinition = REFERENCE_PICTURE_DEFINITION.exec(line)
+    if (pictureDefinition) {
+      const pictureNumber = Number(pictureDefinition[1])
+      const key = `Picture:${String(pictureNumber)}`
+      if (visualDefinitions.has(key)) throw invalid(`REFERENCE_VISUAL_DEFINITION_DUPLICATE:${key}`)
+      visualDefinitions.set(key, { pictureNumbers: [pictureNumber], targetVisible: false })
+      boundPictures.add(pictureNumber)
+      continue
+    }
     const lineSubjectNumber = Number(REFERENCE_SUBJECT_LINE_START.exec(line)?.[1])
     if (!Number.isSafeInteger(lineSubjectNumber) || lineSubjectNumber < 1) continue
     const definitionClaims = Array.from(line.matchAll(REFERENCE_SUBJECT_DEFINITION_CLAIM))
@@ -499,6 +526,14 @@ function assertReferenceSubjectClosure(
     definedSubjectNumbers.add(lineSubjectNumber)
 
     const playbackDefinition = REFERENCE_PLAYBACK_SUBJECT_DEFINITION_PREFIX.exec(line)
+    const pictureNumbers = Array.from(line.matchAll(MEDIA_REFERENCE))
+      .filter((reference) => reference[1] === 'Picture')
+      .map((reference) => Number(reference[2]))
+    visualDefinitions.set(`Subject:${String(lineSubjectNumber)}`, {
+      pictureNumbers,
+      targetVisible: playbackDefinition?.[2] === 'target-visible',
+    })
+    for (const pictureNumber of pictureNumbers) boundPictures.add(pictureNumber)
     if (!playbackDefinition) continue
     const exactDefinition = playbackDefinition[2] === 'source-backed'
       ? REFERENCE_SOURCE_BACKED_PLAYBACK_SUBJECT_DEFINITION.exec(line)
@@ -515,12 +550,7 @@ function assertReferenceSubjectClosure(
   }
 
   for (const section of MINIMAX_H3_PROMPT_SECTIONS) {
-    const protocolBody = section === 'detailed_description'
-      ? maskReferenceVisibleTextLiterals(maskReferenceDialogueBlocks(
-          sections[section],
-          parseReferenceDialogueBlocks(sections[section]),
-        ))
-      : sections[section]
+    const protocolBody = protocolSections[section]
     for (const match of protocolBody.matchAll(REFERENCE_SUBJECT_TOKEN)) {
       const subjectNumber = Number(match[0].match(/\d+/u)?.[0])
       if (!Number.isSafeInteger(subjectNumber) || !definedSubjectNumbers.has(subjectNumber)) {
@@ -528,14 +558,60 @@ function assertReferenceSubjectClosure(
       }
     }
   }
-  return playbackSubjectNumbers
+
+  return { playbackSubjectNumbers, definitions: visualDefinitions, boundPictures, protocolSections }
+}
+
+function assertReferenceVisualClosure(manifest: H3ReferenceVisualManifest, pictureCount: number): void {
+  const { definitions, boundPictures, protocolSections } = manifest
+  const retentionByVisual = new Map<string, string[]>()
+  for (const line of protocolSections.retention_analysis.split('\n')) {
+    const entry = REFERENCE_RETENTION_ENTRY.exec(line.trim())
+    if (!entry || (entry[1] !== 'Subject' && entry[1] !== 'Picture')) continue
+    const key = `${entry[1]}:${entry[2]}`
+    const entries = retentionByVisual.get(key) ?? []
+    entries.push(line)
+    retentionByVisual.set(key, entries)
+  }
+  const appliedVisuals = new Set(Array.from(
+    protocolSections.detailed_description.matchAll(REFERENCE_VISUAL_TOKEN),
+    (match) => `${match[1]}:${match[2]}`,
+  ))
+  const shotNumbers = new Set(Array.from(
+    protocolSections.detailed_description.matchAll(SHOT_MARKER),
+    (match) => Number(match[1]),
+  ))
+  for (const [key, definition] of definitions) {
+    if (!definition.targetVisible && definition.pictureNumbers.length === 0) {
+      throw invalid(`REFERENCE_SUBJECT_SOURCE_MISSING:${key.split(':')[1]}`)
+    }
+    const retention = retentionByVisual.get(key) ?? []
+    if (!definition.targetVisible && retention.length === 0) throw invalid(`REFERENCE_VISUAL_RETENTION_MISSING:${key}`)
+    if (retention.length > 1) throw invalid(`REFERENCE_VISUAL_RETENTION_DUPLICATE:${key}`)
+    for (const shot of (retention[0] ?? '').matchAll(SHOT_MARKER)) {
+      if (!shotNumbers.has(Number(shot[1]))) {
+        throw invalid(`REFERENCE_VISUAL_RETENTION_SHOT_INVALID:${key}:${shot[1]}`)
+      }
+    }
+    if (!appliedVisuals.has(key)) throw invalid(`REFERENCE_VISUAL_APPLICATION_MISSING:${key}`)
+  }
+  for (const key of retentionByVisual.keys()) {
+    if (!definitions.has(key)) throw invalid(`REFERENCE_VISUAL_UNDEFINED:${key}`)
+  }
+  // Source-only Pictures are covered through their Subjects, not duplicate
+  // standalone definitions/retention entries (official Ref guide §2.1–2.2).
+  for (let pictureNumber = 1; pictureNumber <= pictureCount; pictureNumber += 1) {
+    if (!boundPictures.has(pictureNumber)) {
+      throw invalid(`REFERENCE_PICTURE_UNUSED:${String(pictureNumber)}`)
+    }
+  }
 }
 
 function assertH3ReferenceManifest(
   sections: Readonly<Record<MinimaxH3PromptSection, string>>,
   references: H3PromptReferenceManifest,
   inputMode: VideoInputMode,
-): void {
+): H3ReferenceVisualManifest | null {
   if (
     !Number.isSafeInteger(references.pictureCount)
     || references.pictureCount < 0
@@ -545,13 +621,10 @@ function assertH3ReferenceManifest(
     throw invalid('REFERENCE_MANIFEST_INVALID')
   }
   for (const section of MINIMAX_H3_PROMPT_SECTIONS) {
-    const sectionProtocol = inputMode === 'reference' && section === 'detailed_description'
-      ? maskReferenceVisibleTextLiterals(
-          maskReferenceDialogueBlocks(
-            sections[section],
-            parseReferenceDialogueBlocks(sections[section]),
-          ),
-        )
+    const sectionProtocol = inputMode === 'reference'
+      ? maskReferenceVisibleTextLiterals(section === 'detailed_description'
+          ? maskReferenceDialogueBlocks(sections[section], parseReferenceDialogueBlocks(sections[section]))
+          : sections[section])
       : sections[section]
     if (inputMode === 'reference') {
       const videoReference = Array.from(sectionProtocol.matchAll(VIDEO_REFERENCE))[0]
@@ -568,9 +641,8 @@ function assertH3ReferenceManifest(
       }
     }
   }
-  const playbackSubjectNumbers = inputMode === 'reference'
-    ? assertReferenceSubjectClosure(sections)
-    : new Set<number>()
+  const visualManifest = inputMode === 'reference' ? parseReferenceVisualManifest(sections) : null
+  const playbackSubjectNumbers = visualManifest?.playbackSubjectNumbers ?? new Set<number>()
   const audioBindings: H3ReferenceAudioBinding[] = []
   const unboundAudioNumbers: number[] = []
   for (let audioNumber = 1; audioNumber <= references.audioCount; audioNumber += 1) {
@@ -690,7 +762,7 @@ function assertH3ReferenceManifest(
       }
     }
   }
-  if (audioBindings.length === 0) return
+  if (audioBindings.length === 0) return visualManifest
 
   const dialogueEvents = parseReferenceDialogueEvents(sections.detailed_description)
   const appliedAudioNumbers = new Set<number>()
@@ -818,6 +890,7 @@ function assertH3ReferenceManifest(
       throw invalid(`AUDIO_REFERENCE_APPLICATION_MISSING:${String(binding.audioNumber)}`)
     }
   }
+  return visualManifest
 }
 
 export function assertVideoPromptMatchesProfile(input: {
@@ -846,7 +919,8 @@ export function assertVideoPromptMatchesProfile(input: {
   )
   assertH3InputMode(input.inputMode, input.timelineDurationSeconds, sections)
   if (input.inputMode === 'reference') assertH3ReferencePrompt(sections, input.references)
-  assertH3ReferenceManifest(sections, input.references, input.inputMode)
+  const visualManifest = assertH3ReferenceManifest(sections, input.references, input.inputMode)
+  if (visualManifest) assertReferenceVisualClosure(visualManifest, input.references.pictureCount)
 }
 
 export function parseMinimaxH3Prompt(
