@@ -20,6 +20,7 @@ import type {
   AssistantRuntimeTerminalProjection,
   AssistantRuntimeTurnIdentity,
 } from './contracts'
+import { MAX_DURABLE_TOOL_OUTPUT_BYTES } from './contracts'
 import { isAssistantRuntimeSupportedRequestMethod } from './view-contract'
 import {
   assistantRuntimeFailureForStopReason,
@@ -30,7 +31,6 @@ import {
 type UIMessagePart = UIMessage['parts'][number]
 
 const logger = createScopedLogger({ module: 'assistant-runtime.event-projector' })
-const MAX_DURABLE_TOOL_OUTPUT_BYTES = 16 * 1024
 const MAX_TOOL_OUTPUT_PREVIEW_ITEMS = 24
 const MAX_TOOL_OUTPUT_PREVIEW_KEYS = 32
 

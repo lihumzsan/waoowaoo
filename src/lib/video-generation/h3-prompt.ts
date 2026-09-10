@@ -1,3 +1,4 @@
+import { H3PromptValidationError } from './h3-prompt-error'
 import { detectAll } from 'tinyld'
 import type {
   VideoInputMode,
@@ -98,10 +99,6 @@ export type H3PromptReferenceManifest = {
   readonly audioCount: number
 }
 
-function invalid(reason: string): Error {
-  return new Error('VIDEO_PROMPT_PROFILE_INVALID:' + reason)
-}
-
 function containsNonLatinScriptLetter(input: string): boolean {
   return Array.from(input).some((character) => (
     /\p{L}/u.test(character) && !/\p{Script=Latin}/u.test(character)
@@ -137,21 +134,21 @@ function parseSections(prompt: string): Record<MinimaxH3PromptSection, string> {
     const match = SECTION_HEADING.exec(line)
     if (match?.[1]) headings.push({ name: match[1], index })
   })
-  if (headings.length !== MINIMAX_H3_PROMPT_SECTIONS.length) throw invalid('SECTION_COUNT')
+  if (headings.length !== MINIMAX_H3_PROMPT_SECTIONS.length) throw new H3PromptValidationError('SECTION_COUNT')
   for (let index = 0; index < headings.length; index += 1) {
     const expected = MINIMAX_H3_PROMPT_SECTIONS[index]
-    if (headings[index]?.name !== expected) throw invalid('SECTION_ORDER:' + String(expected))
+    if (headings[index]?.name !== expected) throw new H3PromptValidationError('SECTION_ORDER', expected, expected)
   }
   const result = {} as Record<MinimaxH3PromptSection, string>
   for (let index = 0; index < headings.length; index += 1) {
     const heading = headings[index]!
     const end = headings[index + 1]?.index ?? lines.length
     const body = lines.slice(heading.index + 1, end).join('\n').trim()
-    if (!body) throw invalid('SECTION_EMPTY:' + heading.name)
+    if (!body) throw new H3PromptValidationError('SECTION_EMPTY', heading.name, heading.name as MinimaxH3PromptSection)
     result[heading.name as MinimaxH3PromptSection] = body
   }
   if (result.non_diegetic_music !== FIXED_NON_DIEGETIC_MUSIC) {
-    throw invalid('NON_DIEGETIC_MUSIC_CONTRACT_INVALID')
+    throw new H3PromptValidationError('NON_DIEGETIC_MUSIC_CONTRACT_INVALID')
   }
   return result
 }
@@ -170,10 +167,10 @@ function assertVisibleTextPolicy(
   const promptDirections = promptProse
     .replace(QUOTED_TEXT_LITERAL, (literal) => ' '.repeat(literal.length))
   if (SUBTITLE_VISIBLE_TEXT.test(promptDirections)) {
-    throw invalid('SUBTITLE_VISIBLE_TEXT_FORBIDDEN')
+    throw new H3PromptValidationError('SUBTITLE_VISIBLE_TEXT_FORBIDDEN')
   }
   for (const block of parseReferenceVisibleTextBlocks(promptProse)) {
-    if (SPOKEN_TEXT_DISPLAY.test(block.followingClause)) throw invalid('SUBTITLE_VISIBLE_TEXT_FORBIDDEN')
+    if (SPOKEN_TEXT_DISPLAY.test(block.followingClause)) throw new H3PromptValidationError('SUBTITLE_VISIBLE_TEXT_FORBIDDEN')
   }
 }
 
@@ -222,21 +219,21 @@ function assertH3PromptStructure(
   for (const section of MINIMAX_H3_PROMPT_SECTIONS) {
     const body = sections[section]
     if (DIALOGUE_CUTOFF_TAG.test(body)) {
-      if (inputMode !== 'reference') throw invalid('DIALOGUE_CUTOFF_UNSUPPORTED')
-      if (section !== 'detailed_description') throw invalid('DIALOGUE_CUTOFF_SECTION_INVALID')
+      if (inputMode !== 'reference') throw new H3PromptValidationError('DIALOGUE_CUTOFF_UNSUPPORTED')
+      if (section !== 'detailed_description') throw new H3PromptValidationError('DIALOGUE_CUTOFF_SECTION_INVALID', undefined, section)
     }
     if (section !== 'detailed_description' && DIALOGUE_TAG.test(body)) {
-      throw invalid('DIALOGUE_TAG_SECTION_INVALID:' + section)
+      throw new H3PromptValidationError('DIALOGUE_TAG_SECTION_INVALID', section, section)
     }
   }
 
   const detailedDescription = sections.detailed_description
   const firstShotIndex = detailedDescription.indexOf('[Shot 1]')
   if (firstShotIndex < 0) {
-    throw invalid('DETAILED_DESCRIPTION_SHOT_1_REQUIRED')
+    throw new H3PromptValidationError('DETAILED_DESCRIPTION_SHOT_1_REQUIRED')
   }
   if (inputMode === 'reference') {
-    if (firstShotIndex === 0) throw invalid('REFERENCE_STYLE_OPENING_REQUIRED')
+    if (firstShotIndex === 0) throw new H3PromptValidationError('REFERENCE_STYLE_OPENING_REQUIRED')
     const styleOpening = detailedDescription.slice(0, firstShotIndex).trim()
     const styleSentenceCount = countReferenceSentences(styleOpening)
     if (
@@ -247,10 +244,10 @@ function assertH3PromptStructure(
       || DIALOGUE_TAG.test(styleOpening)
       || containsNonLatinScriptLetter(styleOpening)
     ) {
-      throw invalid('REFERENCE_STYLE_OPENING_INVALID')
+      throw new H3PromptValidationError('REFERENCE_STYLE_OPENING_INVALID')
     }
   } else if (firstShotIndex !== 0) {
-    throw invalid('DETAILED_DESCRIPTION_SHOT_1_REQUIRED')
+    throw new H3PromptValidationError('DETAILED_DESCRIPTION_SHOT_1_REQUIRED')
   }
 
   const structuralDescription = inputMode === 'reference'
@@ -259,20 +256,21 @@ function assertH3PromptStructure(
           detailedDescription,
           parseReferenceDialogueBlocks(detailedDescription),
         ),
+        'detailed_description',
       )
     : detailedDescription.replace(
         DIALOGUE_BLOCK,
         (dialogue) => ' '.repeat(dialogue.length),
       )
   if (DIALOGUE_CUTOFF_TAG.test(structuralDescription)) {
-    throw invalid('DIALOGUE_CUTOFF_SECTION_INVALID')
+    throw new H3PromptValidationError('DIALOGUE_CUTOFF_SECTION_INVALID')
   }
   if (timelineOriginSeconds > 0) {
     for (const section of MINIMAX_H3_PROMPT_SECTIONS) {
       if (section === 'detailed_description') continue
       const body = sections[section]
       if (UNIT_TIMED_EVENT.test(body) || Array.from(body.matchAll(CLOCK_LIKE_TIME)).length > 0) {
-        throw invalid(`CONTINUATION_TIME_SECTION_INVALID:${section}`)
+        throw new H3PromptValidationError('CONTINUATION_TIME_SECTION_INVALID', section, section)
       }
     }
   }
@@ -285,7 +283,7 @@ function assertH3PromptStructure(
       ))
     )
   ) {
-    throw invalid('CONTINUATION_TIME_FORMAT_INVALID')
+    throw new H3PromptValidationError('CONTINUATION_TIME_FORMAT_INVALID')
   }
   const shots = Array.from(structuralDescription.matchAll(SHOT_MARKER))
   let previousShotTime = timelineOriginSeconds
@@ -293,13 +291,13 @@ function assertH3PromptStructure(
     const shot = shots[index]!
     const expectedShotNumber = index + 1
     if (Number(shot[1]) !== expectedShotNumber) {
-      throw invalid('SHOT_SEQUENCE_INVALID:' + String(expectedShotNumber))
+      throw new H3PromptValidationError('SHOT_SEQUENCE_INVALID', String(expectedShotNumber))
     }
     if (index === 0) continue
 
     const transition = SHOT_TRANSITION.exec(structuralDescription.slice(shot.index))
     if (!transition || Number(transition[1]) !== expectedShotNumber) {
-      throw invalid('SHOT_TRANSITION_INVALID:' + String(expectedShotNumber))
+      throw new H3PromptValidationError('SHOT_TRANSITION_INVALID', String(expectedShotNumber))
     }
     const shotTime = parseShotTime(transition[2]!, transition[3]!)
     if (
@@ -307,13 +305,13 @@ function assertH3PromptStructure(
       || shotTime <= previousShotTime
       || shotTime >= timelineEndSeconds
     ) {
-      throw invalid('SHOT_TIME_OUT_OF_RANGE:' + String(expectedShotNumber))
+      throw new H3PromptValidationError('SHOT_TIME_OUT_OF_RANGE', String(expectedShotNumber))
     }
     previousShotTime = shotTime
   }
 
   const transitionCount = Array.from(structuralDescription.matchAll(CAMERA_TRANSITION)).length
-  if (transitionCount !== shots.length - 1) throw invalid('SHOT_TRANSITION_ORPHANED')
+  if (transitionCount !== shots.length - 1) throw new H3PromptValidationError('SHOT_TRANSITION_ORPHANED')
 
   for (const match of structuralDescription.matchAll(TIMED_EVENT)) {
     const eventTime = parseShotTime(match[1]!, match[2]!)
@@ -322,7 +320,7 @@ function assertH3PromptStructure(
       || eventTime < timelineOriginSeconds
       || eventTime >= timelineEndSeconds
     ) {
-      throw invalid(`TIMED_EVENT_OUT_OF_RANGE:${match[1]}:${match[2]}`)
+      throw new H3PromptValidationError('TIMED_EVENT_OUT_OF_RANGE', `${match[1]}:${match[2]}`)
     }
   }
 }
@@ -360,6 +358,7 @@ function assertReferenceDialoguePlacement(
       sections.detailed_description,
       dialogueBlocks,
     ),
+    'detailed_description',
   )
   if (dialoguePayloads.length === 0) return
   const textOutsideLiteralBlocks = maskReferenceProtocolMetadata([
@@ -372,7 +371,7 @@ function assertReferenceDialoguePlacement(
     textOutsideLiteralBlocks,
     payload,
   ))) {
-    throw invalid('REFERENCE_DIALOGUE_OUTSIDE_TAG')
+    throw new H3PromptValidationError('REFERENCE_DIALOGUE_OUTSIDE_TAG')
   }
 }
 
@@ -390,15 +389,15 @@ function assertH3ReferencePrompt(
         )
       : sections[section]
     const prose = maskReferenceProtocolMetadata(
-      maskReferenceVisibleTextLiterals(bodyWithoutDialogue),
+      maskReferenceVisibleTextLiterals(bodyWithoutDialogue, section),
     )
     if (containsNonLatinScriptLetter(prose)) {
-      throw invalid('REFERENCE_NON_ENGLISH_TEXT_INVALID')
+      throw new H3PromptValidationError('REFERENCE_NON_ENGLISH_TEXT_INVALID', undefined, section)
     }
     if (section !== 'non_diegetic_music') proseSections.push(prose)
   }
   if (containsClearlyNonEnglishLatinProse(proseSections.join('\n'))) {
-    throw invalid('REFERENCE_NON_ENGLISH_TEXT_INVALID')
+    throw new H3PromptValidationError('REFERENCE_NON_ENGLISH_TEXT_INVALID')
   }
   assertReferenceDialogueTransitions(
     sections.detailed_description,
@@ -409,10 +408,10 @@ function assertH3ReferencePrompt(
     const trimmed = line.trim()
     if (!trimmed) continue
     if (REFERENCE_RETENTION_SPEAKER.test(trimmed)) {
-      throw invalid('REFERENCE_RETENTION_SPEAKER_FORBIDDEN')
+      throw new H3PromptValidationError('REFERENCE_RETENTION_SPEAKER_FORBIDDEN')
     }
     const entry = REFERENCE_RETENTION_ENTRY.exec(trimmed)
-    if (!entry) throw invalid('REFERENCE_RETENTION_ENTRY_INVALID')
+    if (!entry) throw new H3PromptValidationError('REFERENCE_RETENTION_ENTRY_INVALID')
     const modality = entry[1]!
     const number = entry[2]!
     const relationship = entry[3]!
@@ -420,7 +419,7 @@ function assertH3ReferencePrompt(
       ? REFERENCE_AUDIO_RELATIONSHIPS
       : REFERENCE_VISUAL_RELATIONSHIPS
     if (!legalRelationships.has(relationship)) {
-      throw invalid(`REFERENCE_RETENTION_RELATION_INVALID:${modality}:${number}`)
+      throw new H3PromptValidationError('REFERENCE_RETENTION_RELATION_INVALID', `${modality}:${number}`)
     }
     if (modality === 'Audio') {
       requiredTaskTypes.add(
@@ -439,7 +438,7 @@ function assertH3ReferencePrompt(
     || new Set(declaredTaskTypes).size !== declaredTaskTypes.length
     || declaredTaskTypes.some((taskType) => !requiredTaskTypes.has(taskType))
   )) {
-    throw invalid('REFERENCE_SUMMARY_PREFIX_REQUIRED')
+    throw new H3PromptValidationError('REFERENCE_SUMMARY_PREFIX_REQUIRED')
   }
 }
 
@@ -450,23 +449,23 @@ function assertH3InputMode(
 ): void {
   if (inputMode === 'continuation') {
     if (Object.values(sections).some((section) => PICTURE_ANCHOR.test(section))) {
-      throw invalid('CONTINUATION_PICTURE_ANCHOR_FORBIDDEN')
+      throw new H3PromptValidationError('CONTINUATION_PICTURE_ANCHOR_FORBIDDEN')
     }
     return
   }
   if (inputMode === 'reference') return
   if (inputMode !== 'first_frame' && inputMode !== 'first_last_frame') {
-    throw invalid('INPUT_MODE_UNSUPPORTED')
+    throw new H3PromptValidationError('INPUT_MODE_UNSUPPORTED')
   }
   if (!Number.isFinite(timelineDurationSeconds) || timelineDurationSeconds <= 0) {
-    throw invalid('DURATION_INVALID')
+    throw new H3PromptValidationError('DURATION_INVALID')
   }
   if (!hasPictureTimeAnchor({
     detailedDescription: sections.detailed_description,
     pictureNumber: 1,
     seconds: 0,
   })) {
-    throw invalid('FIRST_FRAME_ANCHOR_REQUIRED')
+    throw new H3PromptValidationError('FIRST_FRAME_ANCHOR_REQUIRED')
   }
   if (
     inputMode === 'first_last_frame'
@@ -476,7 +475,7 @@ function assertH3InputMode(
       seconds: timelineDurationSeconds,
     })
   ) {
-    throw invalid('LAST_FRAME_ANCHOR_REQUIRED')
+    throw new H3PromptValidationError('LAST_FRAME_ANCHOR_REQUIRED')
   }
 }
 
@@ -499,14 +498,14 @@ function parseReferenceVisualManifest(
     section,
     maskReferenceVisibleTextLiterals(section === 'detailed_description'
       ? maskReferenceDialogueBlocks(sections[section], parseReferenceDialogueBlocks(sections[section]))
-      : sections[section]),
+      : sections[section], section),
   ])) as Record<MinimaxH3PromptSection, string>
   for (const line of protocolSections.subject_definitions.split('\n').map((entry) => entry.trim())) {
     const pictureDefinition = REFERENCE_PICTURE_DEFINITION.exec(line)
     if (pictureDefinition) {
       const pictureNumber = Number(pictureDefinition[1])
       const key = `Picture:${String(pictureNumber)}`
-      if (visualDefinitions.has(key)) throw invalid(`REFERENCE_VISUAL_DEFINITION_DUPLICATE:${key}`)
+      if (visualDefinitions.has(key)) throw new H3PromptValidationError('REFERENCE_VISUAL_DEFINITION_DUPLICATE', `${key}`)
       visualDefinitions.set(key, { pictureNumbers: [pictureNumber], targetVisible: false })
       boundPictures.add(pictureNumber)
       continue
@@ -518,10 +517,10 @@ function parseReferenceVisualManifest(
       definitionClaims.length !== 1
       || Number(definitionClaims[0]?.[1]) !== lineSubjectNumber
     ) {
-      throw invalid(`REFERENCE_SUBJECT_DEFINITION_INVALID:${String(lineSubjectNumber)}`)
+      throw new H3PromptValidationError('REFERENCE_SUBJECT_DEFINITION_INVALID', `${String(lineSubjectNumber)}`)
     }
     if (definedSubjectNumbers.has(lineSubjectNumber)) {
-      throw invalid(`REFERENCE_SUBJECT_DEFINITION_DUPLICATE:${String(lineSubjectNumber)}`)
+      throw new H3PromptValidationError('REFERENCE_SUBJECT_DEFINITION_DUPLICATE', `${String(lineSubjectNumber)}`)
     }
     definedSubjectNumbers.add(lineSubjectNumber)
 
@@ -541,10 +540,10 @@ function parseReferenceVisualManifest(
     const targetVisibleHasPicture = playbackDefinition[2] === 'target-visible'
       && Array.from(line.matchAll(MEDIA_REFERENCE)).some((reference) => reference[1] === 'Picture')
     if (Number(exactDefinition?.[1]) !== lineSubjectNumber || targetVisibleHasPicture) {
-      throw invalid(`REFERENCE_PLAYBACK_SUBJECT_DEFINITION_INVALID:${String(lineSubjectNumber)}`)
+      throw new H3PromptValidationError('REFERENCE_PLAYBACK_SUBJECT_DEFINITION_INVALID', `${String(lineSubjectNumber)}`)
     }
     if (REFERENCE_PLAYBACK_SUBJECT_AUDIENCE_CONFLICT.test(line)) {
-      throw invalid(`REFERENCE_PLAYBACK_SUBJECT_AUDIENCE_CONFLICT:${String(lineSubjectNumber)}`)
+      throw new H3PromptValidationError('REFERENCE_PLAYBACK_SUBJECT_AUDIENCE_CONFLICT', `${String(lineSubjectNumber)}`)
     }
     playbackSubjectNumbers.add(lineSubjectNumber)
   }
@@ -554,7 +553,7 @@ function parseReferenceVisualManifest(
     for (const match of protocolBody.matchAll(REFERENCE_SUBJECT_TOKEN)) {
       const subjectNumber = Number(match[0].match(/\d+/u)?.[0])
       if (!Number.isSafeInteger(subjectNumber) || !definedSubjectNumbers.has(subjectNumber)) {
-        throw invalid(`REFERENCE_SUBJECT_UNDEFINED:${String(subjectNumber)}`)
+        throw new H3PromptValidationError('REFERENCE_SUBJECT_UNDEFINED', `${String(subjectNumber)}`)
       }
     }
   }
@@ -583,26 +582,26 @@ function assertReferenceVisualClosure(manifest: H3ReferenceVisualManifest, pictu
   ))
   for (const [key, definition] of definitions) {
     if (!definition.targetVisible && definition.pictureNumbers.length === 0) {
-      throw invalid(`REFERENCE_SUBJECT_SOURCE_MISSING:${key.split(':')[1]}`)
+      throw new H3PromptValidationError('REFERENCE_SUBJECT_SOURCE_MISSING', `${key.split(':')[1]}`)
     }
     const retention = retentionByVisual.get(key) ?? []
-    if (!definition.targetVisible && retention.length === 0) throw invalid(`REFERENCE_VISUAL_RETENTION_MISSING:${key}`)
-    if (retention.length > 1) throw invalid(`REFERENCE_VISUAL_RETENTION_DUPLICATE:${key}`)
+    if (!definition.targetVisible && retention.length === 0) throw new H3PromptValidationError('REFERENCE_VISUAL_RETENTION_MISSING', `${key}`)
+    if (retention.length > 1) throw new H3PromptValidationError('REFERENCE_VISUAL_RETENTION_DUPLICATE', `${key}`)
     for (const shot of (retention[0] ?? '').matchAll(SHOT_MARKER)) {
       if (!shotNumbers.has(Number(shot[1]))) {
-        throw invalid(`REFERENCE_VISUAL_RETENTION_SHOT_INVALID:${key}:${shot[1]}`)
+        throw new H3PromptValidationError('REFERENCE_VISUAL_RETENTION_SHOT_INVALID', `${key}:${shot[1]}`)
       }
     }
-    if (!appliedVisuals.has(key)) throw invalid(`REFERENCE_VISUAL_APPLICATION_MISSING:${key}`)
+    if (!appliedVisuals.has(key)) throw new H3PromptValidationError('REFERENCE_VISUAL_APPLICATION_MISSING', `${key}`)
   }
   for (const key of retentionByVisual.keys()) {
-    if (!definitions.has(key)) throw invalid(`REFERENCE_VISUAL_UNDEFINED:${key}`)
+    if (!definitions.has(key)) throw new H3PromptValidationError('REFERENCE_VISUAL_UNDEFINED', `${key}`)
   }
   // Source-only Pictures are covered through their Subjects, not duplicate
   // standalone definitions/retention entries (official Ref guide §2.1–2.2).
   for (let pictureNumber = 1; pictureNumber <= pictureCount; pictureNumber += 1) {
     if (!boundPictures.has(pictureNumber)) {
-      throw invalid(`REFERENCE_PICTURE_UNUSED:${String(pictureNumber)}`)
+      throw new H3PromptValidationError('REFERENCE_PICTURE_UNUSED', `${String(pictureNumber)}`)
     }
   }
 }
@@ -618,18 +617,18 @@ function assertH3ReferenceManifest(
     || !Number.isSafeInteger(references.audioCount)
     || references.audioCount < 0
   ) {
-    throw invalid('REFERENCE_MANIFEST_INVALID')
+    throw new H3PromptValidationError('REFERENCE_MANIFEST_INVALID')
   }
   for (const section of MINIMAX_H3_PROMPT_SECTIONS) {
     const sectionProtocol = inputMode === 'reference'
       ? maskReferenceVisibleTextLiterals(section === 'detailed_description'
           ? maskReferenceDialogueBlocks(sections[section], parseReferenceDialogueBlocks(sections[section]))
-          : sections[section])
+          : sections[section], section)
       : sections[section]
     if (inputMode === 'reference') {
       const videoReference = Array.from(sectionProtocol.matchAll(VIDEO_REFERENCE))[0]
       if (videoReference?.[1]) {
-        throw invalid(`VIDEO_REFERENCE_UNSUPPORTED:${videoReference[1]}`)
+        throw new H3PromptValidationError('VIDEO_REFERENCE_UNSUPPORTED', `${videoReference[1]}`, section)
       }
     }
     for (const match of sectionProtocol.matchAll(MEDIA_REFERENCE)) {
@@ -637,7 +636,7 @@ function assertH3ReferenceManifest(
       const number = Number(match[2])
       const limit = modality === 'Picture' ? references.pictureCount : references.audioCount
       if (!Number.isSafeInteger(number) || number < 1 || number > limit) {
-        throw invalid(`MEDIA_REFERENCE_INDEX_OUT_OF_RANGE:${modality}:${String(number)}`)
+        throw new H3PromptValidationError('MEDIA_REFERENCE_INDEX_OUT_OF_RANGE', `${modality}:${String(number)}`, section)
       }
     }
   }
@@ -653,7 +652,7 @@ function assertH3ReferenceManifest(
       .filter((line) => line.length > 0)
     const linesReferencingAudio = allDefinitionLines.filter((line) => line.includes(audioToken))
     if (linesReferencingAudio.length === 0) {
-      throw invalid(`AUDIO_REFERENCE_MISSING:${String(audioNumber)}`)
+      throw new H3PromptValidationError('AUDIO_REFERENCE_MISSING', `${String(audioNumber)}`)
     }
     const definitionLines = allDefinitionLines.filter((line) => line.startsWith(audioToken))
     const definitionAudioTokens = definitionLines.length === 1
@@ -665,7 +664,7 @@ function assertH3ReferenceManifest(
       || definitionAudioTokens.length !== 1
       || Number(definitionAudioTokens[0]?.[2]) !== audioNumber
     ) {
-      throw invalid(`AUDIO_SPEAKER_BINDING_INVALID:${String(audioNumber)}`)
+      throw new H3PromptValidationError('AUDIO_SPEAKER_BINDING_INVALID', `${String(audioNumber)}`)
     }
     const definitionLine = definitionLines[0]!
     const bindings = Array.from(definitionLine.matchAll(SUBJECT_SPEAKER))
@@ -688,7 +687,7 @@ function assertH3ReferenceManifest(
       || allAudioSpeakers.length !== definitionSpeakers.length
       || (definitionSubjects.length === 1 && bindings.length !== 1)
     ) {
-      throw invalid(`AUDIO_SPEAKER_BINDING_INVALID:${String(audioNumber)}`)
+      throw new H3PromptValidationError('AUDIO_SPEAKER_BINDING_INVALID', `${String(audioNumber)}`)
     }
     if (definitionSpeakers.length === 1) {
       const simpleSpeaker = Array.from(
@@ -702,7 +701,7 @@ function assertH3ReferenceManifest(
         || !Number.isSafeInteger(speakerNumber)
         || speakerNumber < 1
       ) {
-        throw invalid(`AUDIO_SPEAKER_BINDING_INVALID:${String(audioNumber)}`)
+        throw new H3PromptValidationError('AUDIO_SPEAKER_BINDING_INVALID', `${String(audioNumber)}`)
       }
       audioBindings.push({
         audioNumber,
@@ -722,7 +721,7 @@ function assertH3ReferenceManifest(
     })
     const audioTokenAppearsInRetention = sections.retention_analysis.includes(audioToken)
     if (retained.length === 0 && !audioTokenAppearsInRetention) {
-      throw invalid(`AUDIO_REFERENCE_RETENTION_MISSING:${String(audioNumber)}`)
+      throw new H3PromptValidationError('AUDIO_REFERENCE_RETENTION_MISSING', `${String(audioNumber)}`)
     }
     const retainedAudioReferences = retained.length === 1
       ? Array.from(retained[0]!.matchAll(MEDIA_REFERENCE))
@@ -733,7 +732,7 @@ function assertH3ReferenceManifest(
       || retainedAudioReferences.length === 0
       || retainedAudioReferences.some((reference) => Number(reference[2]) !== audioNumber)
     ) {
-      throw invalid(`AUDIO_REFERENCE_RETENTION_INVALID:${String(audioNumber)}`)
+      throw new H3PromptValidationError('AUDIO_REFERENCE_RETENTION_INVALID', `${String(audioNumber)}`)
     }
   }
   if (unboundAudioNumbers.length > 0) {
@@ -742,6 +741,7 @@ function assertH3ReferenceManifest(
         sections.detailed_description,
         parseReferenceDialogueBlocks(sections.detailed_description),
       ),
+      'detailed_description',
     )
     const audibleApplicationSections = [
       { content: detailedAudioApplication, allowDiegeticPlayback: true },
@@ -758,7 +758,7 @@ function assertH3ReferenceManifest(
           playbackSubjectNumbers,
         )
       ))) {
-        throw invalid(`AUDIO_REFERENCE_APPLICATION_MISSING:${String(audioNumber)}`)
+        throw new H3PromptValidationError('AUDIO_REFERENCE_APPLICATION_MISSING', `${String(audioNumber)}`)
       }
     }
   }
@@ -852,8 +852,7 @@ function assertH3ReferenceManifest(
             })
         ))
         if (appliesToAnotherOwnerSpeaker || (appliesToBoundSpeaker && !subjectMatches)) {
-          throw invalid(
-            `AUDIO_REFERENCE_APPLICATION_INVALID:${String(citedAudioNumber)}`,
+          throw new H3PromptValidationError('AUDIO_REFERENCE_APPLICATION_INVALID', `${String(citedAudioNumber)}`,
           )
         }
         if (appliesToBoundSpeaker && subjectMatches) {
@@ -870,8 +869,7 @@ function assertH3ReferenceManifest(
       })
       if (!appliesToSingleSpeaker) continue
       if (!speakerNumbers.includes(citedBinding.speakerNumber) || !subjectMatches) {
-        throw invalid(
-          `AUDIO_REFERENCE_APPLICATION_INVALID:${String(citedAudioNumber)}`,
+        throw new H3PromptValidationError('AUDIO_REFERENCE_APPLICATION_INVALID', `${String(citedAudioNumber)}`,
         )
       }
       citedAudioNumbers.push(citedAudioNumber)
@@ -884,10 +882,10 @@ function assertH3ReferenceManifest(
   }
   for (const binding of audioBindings) {
     if (!speakersWithDialogue.has(binding.speakerNumber)) {
-      throw invalid(`AUDIO_SPEAKER_DIALOGUE_MISSING:${String(binding.audioNumber)}`)
+      throw new H3PromptValidationError('AUDIO_SPEAKER_DIALOGUE_MISSING', `${String(binding.audioNumber)}`)
     }
     if (!appliedAudioNumbers.has(binding.audioNumber)) {
-      throw invalid(`AUDIO_REFERENCE_APPLICATION_MISSING:${String(binding.audioNumber)}`)
+      throw new H3PromptValidationError('AUDIO_REFERENCE_APPLICATION_MISSING', `${String(binding.audioNumber)}`, 'detailed_description')
     }
   }
   return visualManifest
@@ -901,12 +899,12 @@ export function assertVideoPromptMatchesProfile(input: {
   readonly references: H3PromptReferenceManifest
 }): void {
   if (input.profile === 'generic_v1') return
-  if (!input.prompt.trim()) throw invalid('PROMPT_EMPTY')
+  if (!input.prompt.trim()) throw new H3PromptValidationError('PROMPT_EMPTY')
   if (!Number.isFinite(input.timelineDurationSeconds) || input.timelineDurationSeconds <= 0) {
-    throw invalid('DURATION_INVALID')
+    throw new H3PromptValidationError('DURATION_INVALID')
   }
   const sections = parseSections(input.prompt)
-  if (input.profile !== 'minimax_h3_multimodal_v3') throw invalid('PROFILE_UNKNOWN')
+  if (input.profile !== 'minimax_h3_multimodal_v3') throw new H3PromptValidationError('PROFILE_UNKNOWN')
   if (input.inputMode === 'reference') assertVisibleTextPolicy(sections)
   const timelineOriginSeconds = input.inputMode === 'continuation'
     ? H3_CONTINUATION_GUIDE_SECONDS

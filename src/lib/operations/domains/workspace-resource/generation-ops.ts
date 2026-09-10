@@ -120,6 +120,7 @@ import {
   musicScoreGenerationOptionsSchema,
   type MusicScoreGenerationOptions,
 } from '@/lib/music/score-specification'
+import { collectGenerationPlans } from './generation-plan-validation'
 
 const MAX_BATCH_ITEMS = OPERATION_EXECUTION_MAX_TASKS
 const MEDIA_GENERATION_PLAN_CONTRACT_REVISION = 'workspace-resource-generation-batch/v8'
@@ -581,39 +582,30 @@ function validateVideoPromptProfile(input: {
       field: 'items.prompt',
     })
   }
-  try {
-    const resolvedInputMode = resolveOperationVideoInputMode(input.references)
-    const inputMode = resolvedInputMode.mode
-    const timelineDurationSeconds = profile === 'minimax_h3_multimodal_v3'
-      ? resolveH3DurationPlan({
-          inputMode,
-          requestedDurationSeconds: input.durationSeconds,
-        }).promptEndSeconds
-      : input.durationSeconds
-    assertVideoPromptMatchesProfile({
-      profile,
-      prompt: input.prompt,
-      inputMode,
-      timelineDurationSeconds,
-      references: {
-        pictureCount: inputMode === 'reference'
-          ? resolvedInputMode.referenceImageCount
-          : inputMode === 'first_last_frame'
-            ? 2
-            : inputMode === 'first_frame'
-              ? 1
-              : 0,
-        audioCount: resolvedInputMode.referenceAudioCount,
-      },
-    })
-  } catch (error) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'VIDEO_PROMPT_PROFILE_INVALID',
-      field: 'items.prompt',
-      reason: error instanceof Error ? error.message : String(error),
-      agentRetryableAfterCorrection: true,
-    })
-  }
+  const resolvedInputMode = resolveOperationVideoInputMode(input.references)
+  const inputMode = resolvedInputMode.mode
+  const timelineDurationSeconds = profile === 'minimax_h3_multimodal_v3'
+    ? resolveH3DurationPlan({
+        inputMode,
+        requestedDurationSeconds: input.durationSeconds,
+      }).promptEndSeconds
+    : input.durationSeconds
+  assertVideoPromptMatchesProfile({
+    profile,
+    prompt: input.prompt,
+    inputMode,
+    timelineDurationSeconds,
+    references: {
+      pictureCount: inputMode === 'reference'
+        ? resolvedInputMode.referenceImageCount
+        : inputMode === 'first_last_frame'
+          ? 2
+          : inputMode === 'first_frame'
+            ? 1
+            : 0,
+      audioCount: resolvedInputMode.referenceAudioCount,
+    },
+  })
 }
 
 function validateMusicCompositionCapability(input: {
@@ -1474,16 +1466,19 @@ async function planNewMedia(
   const projectVideoRatio = usesProjectVideoRatio
     ? await readProjectVideoRatioSnapshot({ projectId: ctx.projectId, userId: ctx.userId })
     : null
-  const built = await Promise.all(items.flatMap((item) => (
-    Array.from({ length: item.count }, (_, memberIndex) => buildPlannedItem({
-      ctx,
-      operationId,
-      requestId,
-      item,
-      memberIndex,
-      alternatives: item.count > 1,
-      projectVideoRatio,
-      ...(projectModelConfig ? { projectVocalPerformanceMode: projectModelConfig.videoVocalPerformanceMode } : {}),
+  const built = await collectGenerationPlans(items.flatMap((item, inputIndex) => (
+    Array.from({ length: item.count }, (_, memberIndex) => ({
+      input: { inputIndex, itemId: item.itemId },
+      plan: () => buildPlannedItem({
+        ctx,
+        operationId,
+        requestId,
+        item,
+        memberIndex,
+        alternatives: item.count > 1,
+        projectVideoRatio,
+        ...(projectModelConfig ? { projectVocalPerformanceMode: projectModelConfig.videoVocalPerformanceMode } : {}),
+      }),
     }))
   )))
   assertUniqueWorkspaceResourcePaths(built.map((entry) => entry.resource.workspacePath))
@@ -1522,55 +1517,58 @@ async function planReviseFailedVideo(
   })
   const projectModelConfig = await getProjectModelConfig(ctx.projectId, ctx.userId)
   const requestId = requestIdentity(ctx, 'create_video', request)
-  const built = await Promise.all(request.items.map(async (replacement, index) => {
-    const resource = byId.get(replacement.resourceId)
-    if (!resource) {
-      throw new ApiError('WORKSPACE_RESOURCE_RETRY_TARGET_NOT_FOUND', {
-        resourceId: replacement.resourceId,
-      })
-    }
-    if (!resource.task || resource.task.type !== TASK_TYPE.WORKSPACE_RESOURCE_VIDEO) {
-      throw new ApiError('WORKSPACE_RESOURCE_RETRY_TARGET_INVALID', {
-        resourceId: replacement.resourceId,
-      })
-    }
-    const schemaId = schemaForMedia('video', resource.schemaId)
-    const item = videoGenerationItemSchema.parse({
-      itemId: resource.id,
-      name: workspaceResourceDisplayName({
-        workspacePath: resource.workspacePath,
-        resourceId: resource.id,
-      }),
-      folderPath: null,
-      mediaType: 'video',
-      schemaId,
-      prompt: replacement.prompt,
-      references: replacement.references,
-      durationSeconds: replacement.durationSeconds,
-      vocalPerformanceMode: replacement.vocalPerformanceMode
-        ?? resource.vocalPerformanceMode
-        ?? projectModelConfig.videoVocalPerformanceMode,
-      count: 1,
-    })
-    return await buildPlannedItem({
-      ctx,
-      operationId: 'create_video',
-      requestId,
-      item,
-      memberIndex: resource.memberIndex ?? index,
-      alternatives: false,
-      projectVideoRatio,
-      projectVocalPerformanceMode: projectModelConfig.videoVocalPerformanceMode,
-      existingTarget: {
-        resourceId: resource.id,
-        workspacePath: resource.workspacePath,
+  const built = await collectGenerationPlans(request.items.map((replacement, index) => ({
+    input: { inputIndex: index, resourceId: replacement.resourceId },
+    plan: async () => {
+      const resource = byId.get(replacement.resourceId)
+      if (!resource) {
+        throw new ApiError('WORKSPACE_RESOURCE_RETRY_TARGET_NOT_FOUND', {
+          resourceId: replacement.resourceId,
+        })
+      }
+      if (!resource.task || resource.task.type !== TASK_TYPE.WORKSPACE_RESOURCE_VIDEO) {
+        throw new ApiError('WORKSPACE_RESOURCE_RETRY_TARGET_INVALID', {
+          resourceId: replacement.resourceId,
+        })
+      }
+      const schemaId = schemaForMedia('video', resource.schemaId)
+      const item = videoGenerationItemSchema.parse({
+        itemId: resource.id,
+        name: workspaceResourceDisplayName({
+          workspacePath: resource.workspacePath,
+          resourceId: resource.id,
+        }),
+        folderPath: null,
+        mediaType: 'video',
         schemaId,
+        prompt: replacement.prompt,
+        references: replacement.references,
+        durationSeconds: replacement.durationSeconds,
+        vocalPerformanceMode: replacement.vocalPerformanceMode
+          ?? resource.vocalPerformanceMode
+          ?? projectModelConfig.videoVocalPerformanceMode,
+        count: 1,
+      })
+      return await buildPlannedItem({
+        ctx,
+        operationId: 'create_video',
+        requestId,
+        item,
         memberIndex: resource.memberIndex ?? index,
-        alternatives: Boolean(resource.alternativeGroupExecutionId),
-        sourceTaskId: resource.task.id,
-      },
-    })
-  }))
+        alternatives: false,
+        projectVideoRatio,
+        projectVocalPerformanceMode: projectModelConfig.videoVocalPerformanceMode,
+        existingTarget: {
+          resourceId: resource.id,
+          workspacePath: resource.workspacePath,
+          schemaId,
+          memberIndex: resource.memberIndex ?? index,
+          alternatives: Boolean(resource.alternativeGroupExecutionId),
+          sourceTaskId: resource.task.id,
+        },
+      })
+    },
+  })))
   return buildPlan({
     ctx,
     operationId: 'create_video',

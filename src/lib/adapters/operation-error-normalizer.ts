@@ -4,6 +4,7 @@ import type { ProjectAgentToolError, ProjectAgentToolErrorCode } from '@/lib/ope
 import { getErrorSpec } from '@/lib/errors/codes'
 import { normalizeAnyError } from '@/lib/errors/normalize'
 import { projectErrorForModel, projectModelErrorDetails } from '@/lib/errors/projection'
+import { MAX_DURABLE_TOOL_OUTPUT_BYTES } from '@/lib/assistant-runtime/contracts'
 
 const logger = createScopedLogger({ module: 'assistant.tool' })
 
@@ -86,7 +87,7 @@ function buildOperationExecutionToolError(params: {
   const reasonCode = readSafeReasonCode(normalized.interpretation.details)
     ?? readSafeReasonCode(safeDetails)
   const failure = projectErrorForModel(normalized)
-  return buildToolError({
+  const toolError = buildToolError({
     code: 'OPERATION_EXECUTION_FAILED',
     message: getErrorSpec(failure.code).defaultMessage,
     operationId: params.operationId,
@@ -96,4 +97,27 @@ function buildOperationExecutionToolError(params: {
       ...(reasonCode ? { reasonCode } : {}),
     },
   })
+  const corrections = safeDetails.corrections
+  if (!Array.isArray(corrections) || corrections.length === 0) return toolError
+  const correctionCount = typeof safeDetails.correctionCount === 'number'
+    ? safeDetails.correctionCount
+    : corrections.length
+  // Budget the actual MCP envelope, including both existing projections and
+  // UTF-8 identities. Otherwise the durable projector can omit all details.
+  for (let count = corrections.length; count > 0; count -= 1) {
+    const bounded = { corrections: corrections.slice(0, count), correctionCount }
+    const candidate = {
+      ...toolError,
+      details: {
+        ...toolError.details,
+        ...bounded,
+        failure: { ...failure, details: { ...failure.details, ...bounded } },
+      },
+    }
+    if (
+      Buffer.byteLength(JSON.stringify({ ok: false, error: candidate }), 'utf8') <= MAX_DURABLE_TOOL_OUTPUT_BYTES
+      || count === 1
+    ) return candidate
+  }
+  return toolError
 }

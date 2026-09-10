@@ -132,6 +132,12 @@ function projectModelCorrection(value: unknown): Record<string, unknown> | null 
   if (typeof source.reason === 'string' && source.reason.length <= 512) {
     projected.reason = source.reason
   }
+  for (const [key, maxLength] of [['itemId', 191], ['resourceId', 32], ['section', 64]] as const) {
+    const value = source[key]
+    if (typeof value === 'string' && value.length > 0 && value.length <= maxLength) {
+      projected[key] = value
+    }
+  }
   if (
     Array.isArray(source.allowedKeys)
     && source.allowedKeys.length <= 50
@@ -163,7 +169,15 @@ export function projectModelErrorDetails(
     .slice(0, 20)
     .map(projectModelCorrection)
     .filter((value): value is Record<string, unknown> => value !== null)
-  return corrections.length > 0 ? { ...projected, corrections } : projected
+  if (corrections.length === 0) return projected
+  const count = details.correctionCount
+  return {
+    ...projected,
+    corrections,
+    ...(typeof count === 'number' && Number.isSafeInteger(count) && count >= corrections.length
+      ? { correctionCount: count }
+      : {}),
+  }
 }
 
 function resolveUserAction(code: UnifiedErrorCode): UserErrorAction {

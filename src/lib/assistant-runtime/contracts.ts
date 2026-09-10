@@ -7,6 +7,9 @@ import type {
 } from '@/lib/codex-runtime/runtime-adapter'
 import type { FailureRecord } from '@/lib/errors/failure'
 
+/** Shared by tool producers and the durable View projection. */
+export const MAX_DURABLE_TOOL_OUTPUT_BYTES = 16 * 1024
+
 export const ASSISTANT_RUNTIME_ASSISTANT_ID = 'workspace-command' as const
 
 export interface AssistantRuntimeUsageFact {

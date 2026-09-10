@@ -318,6 +318,9 @@ export interface ProjectAgentToolInputCorrection {
   action: ProjectAgentToolInputCorrectionAction
   fieldPath: string
   message: string
+  itemId?: string
+  resourceId?: string
+  section?: string
   targetPath?: string
   allowedKeys?: string[]
   allowedValues?: Array<string | number | boolean | null>

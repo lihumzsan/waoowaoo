@@ -1,3 +1,5 @@
+import { H3PromptValidationError } from './h3-prompt-error'
+import type { MinimaxH3PromptSection } from './h3-prompt'
 import { findLastReferenceSentenceBoundary, isReferenceSentenceBoundary } from './h3-reference-audio'
 
 const REFERENCE_DIALOGUE_TAG = /<\/?d>/gu
@@ -36,10 +38,6 @@ export type H3ReferenceVisibleTextBlock = {
   readonly followingClause: string
 }
 
-function invalid(reason: string): Error {
-  return new Error('VIDEO_PROMPT_PROFILE_INVALID:' + reason)
-}
-
 function maskReferenceProtocolQuotedLiterals(input: string): string {
   return input.replace(
     REFERENCE_PROTOCOL_QUOTED_LITERAL,
@@ -56,13 +54,13 @@ export function parseReferenceDialogueBlocks(
   let cutoffBlockIndex: number | null = null
   let opening: { readonly index: number; readonly length: number } | null = null
   for (const tag of protocolInput.matchAll(REFERENCE_DIALOGUE_TAG)) {
-    if (tag.index === undefined) throw invalid('REFERENCE_DIALOGUE_TAG_INVALID')
+    if (tag.index === undefined) throw new H3PromptValidationError('REFERENCE_DIALOGUE_TAG_INVALID')
     if (tag[0] === '<d>') {
-      if (opening !== null) throw invalid('REFERENCE_DIALOGUE_TAG_INVALID')
+      if (opening !== null) throw new H3PromptValidationError('REFERENCE_DIALOGUE_TAG_INVALID')
       opening = { index: tag.index, length: tag[0].length }
       continue
     }
-    if (opening === null) throw invalid('REFERENCE_DIALOGUE_TAG_INVALID')
+    if (opening === null) throw new H3PromptValidationError('REFERENCE_DIALOGUE_TAG_INVALID')
     const contentStart = opening.index + opening.length
     const content = input.slice(contentStart, tag.index)
     const protocolContent = protocolInput.slice(contentStart, tag.index)
@@ -76,7 +74,7 @@ export function parseReferenceDialogueBlocks(
         && !/<scenetrans>\s*$/u.test(content)
         && !REFERENCE_DIALOGUE_TERMINAL_PUNCTUATION.test(content)
       )
-    ) throw invalid('REFERENCE_DIALOGUE_CONTENT_INVALID')
+    ) throw new H3PromptValidationError('REFERENCE_DIALOGUE_CONTENT_INVALID')
     const cutoffTrailingContent = cutoffTags.length === 1 && cutoffTags[0]?.index !== undefined
       ? content.slice(cutoffTags[0].index + cutoffTags[0][0].length).trim()
       : ''
@@ -85,7 +83,7 @@ export function parseReferenceDialogueBlocks(
       cutoffTags.length > 1
       || totalCutoffCount > 1
       || (cutoffTags.length === 1 && cutoffTrailingContent.length > 0)
-    ) throw invalid('REFERENCE_DIALOGUE_CUTOFF_INVALID')
+    ) throw new H3PromptValidationError('REFERENCE_DIALOGUE_CUTOFF_INVALID')
     if (cutoffTags.length === 1) cutoffBlockIndex = blocks.length
     blocks.push({
       start: opening.index,
@@ -94,7 +92,7 @@ export function parseReferenceDialogueBlocks(
     })
     opening = null
   }
-  if (opening !== null) throw invalid('REFERENCE_DIALOGUE_TAG_INVALID')
+  if (opening !== null) throw new H3PromptValidationError('REFERENCE_DIALOGUE_TAG_INVALID')
   if (totalCutoffCount === 1) {
     const cutoffBlock = cutoffBlockIndex === null ? undefined : blocks[cutoffBlockIndex]
     const trailingContent = cutoffBlock ? input.slice(cutoffBlock.end).trim() : ''
@@ -102,7 +100,7 @@ export function parseReferenceDialogueBlocks(
       cutoffBlockIndex === null
       || cutoffBlockIndex !== blocks.length - 1
       || !/^[.!?。！？]*$/u.test(trailingContent)
-    ) throw invalid('REFERENCE_DIALOGUE_CUTOFF_INVALID')
+    ) throw new H3PromptValidationError('REFERENCE_DIALOGUE_CUTOFF_INVALID')
   }
   return blocks
 }
@@ -175,11 +173,11 @@ function hasReferenceVisibleTextCarrier(input: string, readingIndex: number): bo
     && !REFERENCE_VISIBLE_TEXT_NON_MODIFIER.test(directCarrier[1] ?? '')
 }
 
-export function maskReferenceVisibleTextLiterals(input: string): string {
-  if (REFERENCE_READING_ALOUD.test(input)) throw invalid('REFERENCE_QUOTED_TEXT_CONTEXT_INVALID')
+export function maskReferenceVisibleTextLiterals(input: string, section: MinimaxH3PromptSection): string {
+  if (REFERENCE_READING_ALOUD.test(input)) throw new H3PromptValidationError('REFERENCE_QUOTED_TEXT_CONTEXT_INVALID', undefined, section)
   const masked = maskReferenceVisibleTextSyntax(input)
   if (REFERENCE_UNSUPPORTED_QUOTE.test(masked)) {
-    throw invalid('REFERENCE_QUOTED_TEXT_CONTEXT_INVALID')
+    throw new H3PromptValidationError('REFERENCE_QUOTED_TEXT_CONTEXT_INVALID', undefined, section)
   }
   return masked
 }
@@ -194,7 +192,7 @@ export function assertReferenceDialogueTransitions(
     const leading = /^<scenetrans>/u.test(dialogueText)
     const trailing = /<scenetrans>$/u.test(dialogueText)
     if (markerCount !== Number(leading) + Number(trailing)) {
-      throw invalid('REFERENCE_SCENETRANS_INVALID')
+      throw new H3PromptValidationError('REFERENCE_SCENETRANS_INVALID')
     }
     return { leading, trailing }
   })
@@ -202,13 +200,13 @@ export function assertReferenceDialogueTransitions(
     const current = transitions[index]!
     const previous = transitions[index - 1]
     const next = transitions[index + 1]
-    if (current.leading !== (previous?.trailing ?? false)) throw invalid('REFERENCE_SCENETRANS_INVALID')
-    if (current.trailing !== (next?.leading ?? false)) throw invalid('REFERENCE_SCENETRANS_INVALID')
+    if (current.leading !== (previous?.trailing ?? false)) throw new H3PromptValidationError('REFERENCE_SCENETRANS_INVALID')
+    if (current.trailing !== (next?.leading ?? false)) throw new H3PromptValidationError('REFERENCE_SCENETRANS_INVALID')
     if (!current.trailing) continue
     const nextBlock = blocks[index + 1]
-    if (!nextBlock) throw invalid('REFERENCE_SCENETRANS_INVALID')
+    if (!nextBlock) throw new H3PromptValidationError('REFERENCE_SCENETRANS_INVALID')
     const transitionText = input.slice(blocks[index]!.end, nextBlock.start)
-    const audibleTransitionText = maskReferenceVisibleTextLiterals(transitionText)
+    const audibleTransitionText = maskReferenceVisibleTextLiterals(transitionText, 'detailed_description')
     const shotMarkers = Array.from(transitionText.matchAll(SHOT_MARKER))
     const shotMarker = shotMarkers[0]
     const shotTransition = shotMarker?.index === undefined
@@ -218,7 +216,7 @@ export function assertReferenceDialogueTransitions(
       shotMarkers.length !== 1
       || shotTransition === null
       || !REFERENCE_DIALOGUE_CONTINUITY.test(audibleTransitionText)
-    ) throw invalid('REFERENCE_SCENETRANS_INVALID')
+    ) throw new H3PromptValidationError('REFERENCE_SCENETRANS_INVALID')
   }
 }
 
@@ -229,6 +227,7 @@ export function parseReferenceDialogueEvents(
   return dialogues.map((dialogue, index) => {
     const context = maskReferenceVisibleTextLiterals(
       input.slice(dialogues[index - 1]?.end ?? 0, dialogue.start),
+      'detailed_description',
     )
     const eventBoundaries = Array.from(context.matchAll(REFERENCE_VOCAL_EVENT_BOUNDARY))
     const lastBoundary = eventBoundaries.at(-1)
