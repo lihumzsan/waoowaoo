@@ -7,7 +7,7 @@ import {
 const prompt = 'subject_definitions:\n<Subject 1> is represented by <Picture 1>.'
 
 describe('MiniMax H3 Ref T8 dual-stage profile', () => {
-  it('contains the sanitized validated T8 4+5 graph and H.264 delivery contract', () => {
+  it('contains the sanitized validated T8 4+3 graph and H.264 delivery contract', () => {
     const nodes = Object.values(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow)
     expect(nodes.filter((node) => node.class_type === 'MiniMaxH3AudioConditioningT8')).toHaveLength(2)
     expect(nodes.some((node) => node.class_type === 'MiniMaxH3DualClockSamplerT8')).toBe(true)
@@ -20,9 +20,9 @@ describe('MiniMax H3 Ref T8 dual-stage profile', () => {
     expect(nodes.some((node) => node.class_type === 'ComfyMathExpression')).toBe(false)
     expect(nodes.some((node) => node.class_type === 'MiniMaxH3ReferenceToVideo')).toBe(false)
     expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['9']?.inputs).toMatchObject({
-      base_steps: 9,
+      base_steps: 7,
       coarse_steps: 4,
-      refine_steps: 5,
+      refine_steps: 3,
     })
     expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['168']?.inputs).toMatchObject({
       format: 'video/h264-mp4',

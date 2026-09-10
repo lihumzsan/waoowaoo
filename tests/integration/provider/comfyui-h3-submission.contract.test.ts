@@ -219,15 +219,6 @@ function objectInfo(className: string): Record<string, unknown> {
     required.strength_model = ['FLOAT', { min: -10, max: 10 }]
     output = ['MODEL']
   }
-  if (className === 'LoraLoaderBypassModelOnly') {
-    required.model = ['MODEL']
-    required.lora_name = [[
-      'h3\\minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors',
-      'h3\\minimax_h3_turbo_v4_step600_ema_DasiwaREF2VAHybridV1_0_curveproj1025_compat_v001.safetensors',
-    ]]
-    required.strength_model = ['FLOAT', { min: -10, max: 10 }]
-    output = ['MODEL']
-  }
   if (className === 'VAELoader') {
     required.vae_name = [[
       'h3\\minimax_h3_video_vae_fp16.safetensors',
@@ -1310,17 +1301,17 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
     expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
   })
 
-  it('rejects a missing bypass LoRA before uploading bytes', async () => {
+  it('rejects a missing model LoRA before uploading bytes', async () => {
     vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
     defineValidPreflight(server!)
-    const incompatible = objectInfo('LoraLoaderBypassModelOnly')
+    const incompatible = objectInfo('LoraLoaderModelOnly')
     const required = (
-      incompatible.LoraLoaderBypassModelOnly as { input: { required: Record<string, unknown> } }
+      incompatible.LoraLoaderModelOnly as { input: { required: Record<string, unknown> } }
     ).input.required
     required.lora_name = [['another-lora.safetensors']]
     server!.defineScenario({
       method: 'GET',
-      path: '/object_info/LoraLoaderBypassModelOnly',
+      path: '/object_info/LoraLoaderModelOnly',
       mode: 'success',
       submitResponse: { status: 200, body: incompatible },
     })
