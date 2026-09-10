@@ -29,7 +29,6 @@ const ORIGINAL_DEPLOYMENT_EDITION = process.env.DEPLOYMENT_EDITION
 const ORIGINAL_PROVIDER_CREDENTIAL_MODE = process.env.PROVIDER_CREDENTIAL_MODE
 const ORIGINAL_PLATFORM_DEFAULT_VIDEO_MODEL = process.env.PLATFORM_DEFAULT_VIDEO_MODEL
 const ORIGINAL_PLATFORM_VIDEO_RESOLUTION = process.env.PLATFORM_VIDEO_RESOLUTION
-const H3_REF_NO_SUBTITLE_POLICY = 'Spoken dialogue and lyrics are audio only and must never appear as visible text, including translations. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless the user or source explicitly requires that exact non-subtitle visible text.'
 
 function restoreEnvironment(
   name:
@@ -270,7 +269,6 @@ ${definitions}
 
 summary:
 [reference generation + audio reference] <Subject 1> speaks one new line using the supplied audio as a voice-timbre reference.
-${H3_REF_NO_SUBTITLE_POLICY}
 
 retention_analysis:
 <Subject 1> (appears in [Shot 1]): fully_preserved - The person's identity and appearance from <Picture 1> are retained.
@@ -294,7 +292,7 @@ function h3Prompt(inputMode: 'reference' | 'first_frame' | 'first_last_frame', p
       ? '[Shot 1] <Picture 1> aligns with 0.00 seconds and shows her turning toward the doorway.'
       : `[Shot 1] <Picture 1> aligns with 0.00 seconds and shows her turning toward the doorway; at ${String(promptEndSeconds)} seconds she settles exactly into <Picture 2>.`
   const summary = inputMode === 'reference'
-    ? `[reference generation] She turns toward the doorway while preserving <Subject 1> from <Picture 1>.\n${H3_REF_NO_SUBTITLE_POLICY}`
+    ? `[reference generation] She turns toward the doorway while preserving <Subject 1> from <Picture 1>.`
     : 'She turns toward the doorway.'
   const retention = inputMode === 'reference'
     ? '<Subject 1> (appears in [Shot 1]): fully_preserved - Her identity, clothing, and room layout from <Picture 1> are retained.'

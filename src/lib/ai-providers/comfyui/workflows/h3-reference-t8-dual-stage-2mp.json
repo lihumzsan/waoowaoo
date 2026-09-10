@@ -28,7 +28,7 @@
       "allow_above_reference_area": false
     }
   },
-  "8": { "class_type": "MiniMaxH3DualClockSamplerT8", "inputs": { "model": ["48", 0], "av_latent": ["7", 1], "steps": 8, "shift_video": 12, "shift_audio": 3, "sampler_name": "dual_clock_euler", "scheduler": "native_flow" } },
+  "8": { "class_type": "MiniMaxH3DualClockSamplerT8", "inputs": { "model": ["45", 0], "av_latent": ["7", 1], "steps": 8, "shift_video": 12, "shift_audio": 3, "sampler_name": "dual_clock_euler", "scheduler": "native_flow" } },
   "9": { "class_type": "MiniMaxH3LearnedTwoPassParityPlanT8Advanced", "inputs": { "model": ["8", 0], "base_steps": 9, "coarse_steps": 4, "refine_steps": 5 } },
   "10": { "class_type": "BasicGuider", "inputs": { "model": ["8", 0], "conditioning": ["7", 0] } },
   "11": { "class_type": "RandomNoise", "inputs": { "noise_seed": 0 } },
@@ -76,7 +76,7 @@
   "16": {
     "class_type": "MiniMaxH3TwoPassDetailMixerT8Advanced",
     "inputs": {
-      "model": ["49", 0],
+      "model": ["46", 0],
       "av_latent": ["15", 0],
       "refine_sigmas": ["9", 1],
       "shift_video": 12,
@@ -112,8 +112,6 @@
   "45": { "class_type": "LoraLoaderModelOnly", "inputs": { "model": ["50", 0], "lora_name": "h3\\Motion_Repair.safetensors", "strength_model": 0.7 } },
   "46": { "class_type": "LoraLoaderModelOnly", "inputs": { "model": ["44", 0], "lora_name": "h3\\Motion_Repair.safetensors", "strength_model": 0.2 } },
   "47": { "class_type": "LoraLoaderBypassModelOnly", "inputs": { "model": ["53", 0], "lora_name": "h3\\minimax_h3_turbo_v4_step600_ema_DasiwaREF2VAHybridV1_0_curveproj1025_compat_v001.safetensors", "strength_model": 0.5 } },
-  "48": { "class_type": "LoraLoaderModelOnly", "inputs": { "model": ["45", 0], "lora_name": "h3\\Minimax H3真实电影质感.safetensors", "strength_model": 0.5 } },
-  "49": { "class_type": "LoraLoaderModelOnly", "inputs": { "model": ["46", 0], "lora_name": "h3\\Minimax H3真实电影质感.safetensors", "strength_model": 0.2 } },
   "50": { "class_type": "LoraLoaderModelOnly", "inputs": { "model": ["51", 0], "lora_name": "h3\\minimax_h3_turbo_4step_10ErosMax_test4_pruned_curveproj1025_exp_v001-T8.safetensors", "strength_model": 0.5 } },
   "51": { "class_type": "LoraLoaderBypassModelOnly", "inputs": { "model": ["52", 0], "lora_name": "h3\\minimax_h3_turbo_v4_step600_ema_DasiwaREF2VAHybridV1_0_curveproj1025_compat_v001.safetensors", "strength_model": 0.9 } },
   "52": { "class_type": "LoraLoaderModelOnly", "inputs": { "model": ["34", 0], "lora_name": "h3\\H3_Combat_V2.safetensors", "strength_model": 0.7 } },

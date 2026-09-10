@@ -14,7 +14,6 @@ import {
   type H3ReferenceAudioBinding,
 } from './h3-reference-audio'
 import {
-  REFERENCE_LEADING_SHOT_METADATA,
   assertReferenceDialogueTransitions,
   maskReferenceDialogueBlocks,
   maskReferenceVisibleTextLiterals,
@@ -39,15 +38,11 @@ export type MinimaxH3PromptSection = (typeof MINIMAX_H3_PROMPT_SECTIONS)[number]
 const SECTION_HEADING = /^([a-z][a-z0-9_]*)\s*:\s*$/u
 const TIME_EXPRESSION = /(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?)\b/giu
 const FIXED_NON_DIEGETIC_MUSIC = 'N/A'
-const REQUIRED_VISIBLE_TEXT_POLICY = 'Spoken dialogue and lyrics are audio only and must never appear as visible text, including translations. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless the user or source explicitly requires that exact non-subtitle visible text.'
 const DIALOGUE_TAG = /<\/?d>/u
 const DIALOGUE_CUTOFF_TAG = /<cutoff>/u
 const DIALOGUE_BLOCK = /<d>[\s\S]*?<\/d>/gu
 const QUOTED_TEXT_LITERAL = /"(?:\\.|[^"\\\r\n])*"/gu
 const SUBTITLE_VISIBLE_TEXT = /\b(?:subtitles?|captions?)\b/iu
-// Only complete, unambiguous negative directives are exempt from the keyword
-// guard. A negation elsewhere in a sentence never authorizes a positive request.
-const NEGATIVE_SUBTITLE_DIRECTIVE = /^(?:no (?:subtitles?|captions?)(?: (?:or|and) (?:subtitles?|captions?))?(?: (?:are|is) (?:displayed|shown|added))?|(?:do not|never) (?:add|show|display|render) (?:subtitles?|captions?)(?: (?:or|and) (?:subtitles?|captions?))?|(?:subtitles?|captions?)(?: (?:or|and) (?:subtitles?|captions?))? must never be (?:displayed|shown|added))(?: under any circumstances)?[.!?;]?$/iu
 // Bounded text-role checks, not a semantic classifier: only the immediate
 // continuation of a recognized visible-text carrier can establish this role.
 const SPOKEN_TEXT_DISPLAY = /^(?:,\s*)?(?:(?:is|are)\s+)?(?:(?:displayed|shown|appears?|appearing)\s+)?(?:(?:synchroni[sz]ed|in sync)\s+with\s+(?:(?:the|her|his|their|spoken)\s+)*(?:speech|dialogue|words|lyrics)\b|(?:a\s+)?(?:translation|transcription)\s+of\s+(?:(?:the|her|his|their|spoken)\s+)*(?:speech|dialogue|words|lyrics)\b|(?:transcribes?|translates?|matches?)\s+(?:(?:the|her|his|their|spoken)\s+)*(?:speech|dialogue|words|lyrics)\b|highlighted\s+word\s+by\s+word\s+as\s+(?:she|he|they)\s+sings?\b)/iu
@@ -161,29 +156,20 @@ function parseSections(prompt: string): Record<MinimaxH3PromptSection, string> {
   return result
 }
 
-function maskRequiredVisibleTextPolicy(input: string): string {
-  return input.replaceAll(
-    REQUIRED_VISIBLE_TEXT_POLICY,
-    (policy) => ' '.repeat(policy.length),
-  )
-}
-
 function assertVisibleTextPolicy(
   sections: Readonly<Record<MinimaxH3PromptSection, string>>,
 ): void {
-  if (!sections.summary.split('\n').includes(REQUIRED_VISIBLE_TEXT_POLICY)) {
-    throw invalid('VISIBLE_TEXT_POLICY_REQUIRED')
-  }
   const promptProse = MINIMAX_H3_PROMPT_SECTIONS
     .map((section) => section === 'detailed_description'
       ? maskReferenceDialogueBlocks(sections[section], parseReferenceDialogueBlocks(sections[section]))
       : sections[section])
     .join('\n')
-  const promptProseWithoutPolicy = maskRequiredVisibleTextPolicy(promptProse)
+  // Keep subtitle policy in the director's instructions, not the video model's
+  // scene description: even negative directives introduce the unwanted concept.
+  // Literal source dialogue and source-required signs stay opaque.
+  const promptDirections = promptProse
     .replace(QUOTED_TEXT_LITERAL, (literal) => ' '.repeat(literal.length))
-  const clauses = promptProseWithoutPolicy.split(/(?<=[.!?。！？;])\s+|\n/u)
-  if (clauses.some((clause) => SUBTITLE_VISIBLE_TEXT.test(clause)
-    && !NEGATIVE_SUBTITLE_DIRECTIVE.test(clause.replace(REFERENCE_LEADING_SHOT_METADATA, '').trim()))) {
+  if (SUBTITLE_VISIBLE_TEXT.test(promptDirections)) {
     throw invalid('SUBTITLE_VISIBLE_TEXT_FORBIDDEN')
   }
   for (const block of parseReferenceVisibleTextBlocks(promptProse)) {
@@ -376,12 +362,12 @@ function assertReferenceDialoguePlacement(
     ),
   )
   if (dialoguePayloads.length === 0) return
-  const textOutsideLiteralBlocks = maskRequiredVisibleTextPolicy(maskReferenceProtocolMetadata([
+  const textOutsideLiteralBlocks = maskReferenceProtocolMetadata([
     ...MINIMAX_H3_PROMPT_SECTIONS
       .filter((section) => section !== 'detailed_description' && section !== 'non_diegetic_music')
       .map((section) => sections[section]),
     detailedOutsideDialogue,
-  ].join('\n'))).normalize('NFC')
+  ].join('\n')).normalize('NFC')
   if (dialoguePayloads.some((payload) => containsBoundaryAwareText(
     textOutsideLiteralBlocks,
     payload,
@@ -403,9 +389,9 @@ function assertH3ReferencePrompt(
           parseReferenceDialogueBlocks(sections[section]),
         )
       : sections[section]
-    const prose = maskRequiredVisibleTextPolicy(maskReferenceProtocolMetadata(
+    const prose = maskReferenceProtocolMetadata(
       maskReferenceVisibleTextLiterals(bodyWithoutDialogue),
-    ))
+    )
     if (containsNonLatinScriptLetter(prose)) {
       throw invalid('REFERENCE_NON_ENGLISH_TEXT_INVALID')
     }

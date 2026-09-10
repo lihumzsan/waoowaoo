@@ -2,14 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { assertVideoPromptMatchesProfile } from '@/lib/video-generation/h3-prompt'
 
 const REFERENCE_STYLE_OPENING = 'The target video uses a realistic cinematic style with natural indoor lighting.'
-const HARD_NO_SUBTITLE_POLICY = 'Spoken dialogue and lyrics are audio only and must never appear as visible text, including translations. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless the user or source explicitly requires that exact non-subtitle visible text.'
 
 const referencePrompt = `subject_definitions:
 <Subject 1> is the woman in <Picture 1>.
 
 summary:
 [reference generation] She turns toward the doorway while preserving <Subject 1> from <Picture 1>.
-Spoken dialogue and lyrics are audio only and must never appear as visible text, including translations. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless the user or source explicitly requires that exact non-subtitle visible text.
+
 
 retention_analysis:
 <Subject 1> (appears in [Shot 1]): fully_preserved - Her identity, clothing, and the room layout from <Picture 1> are retained.
@@ -30,7 +29,7 @@ const referenceAudioPrompt = `subject_definitions:
 
 summary:
 [reference generation + audio reference] <Subject 1> speaks one new line using <Audio 1> as a voice-timbre reference.
-Spoken dialogue and lyrics are audio only and must never appear as visible text, including translations. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless the user or source explicitly requires that exact non-subtitle visible text.
+
 
 retention_analysis:
 <Subject 1> (appears in [Shot 1]): fully_preserved - The person's identity and appearance from <Picture 1> are retained.
@@ -205,34 +204,14 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
   })
 
   describe('no-subtitle intent and literal boundaries', () => {
-    // Oracle: the product forbids displaying speech/lyrics, not negative
-    // instructions or source-required physical signage (Ref guide §5).
+    // Oracle: literal source content is opaque to direction parsing (Ref guide §5).
+    // Product policy forbids rendering speech/lyrics, not physical signage.
     function withDirection(direction: string): string {
       return referenceAudioPrompt.replace(
         '<d>[Chinese]这是新台词。</d>',
         `<d>[Chinese]这是新台词。</d> ${direction}`,
       )
     }
-
-    it.each([
-      'No captions are displayed.',
-      'Do not add subtitles.',
-      'Never display subtitles or captions.',
-      'Subtitles and captions must never be shown.',
-      'No captions are displayed;',
-    ])('accepts a complete negative directive: %s', (direction) => {
-      expect(() => assertH3Prompt({
-        inputMode: 'reference', prompt: withDirection(direction),
-        references: { pictureCount: 1, audioCount: 1 },
-      })).not.toThrow()
-    })
-
-    it('accepts a complete negative directive at the start of a shot', () => {
-      expect(() => assertH3Prompt({
-        inputMode: 'reference',
-        prompt: referencePrompt.replace('[Shot 1] <Subject 1> notices', '[Shot 1] No captions are displayed. <Subject 1> notices'),
-      })).not.toThrow()
-    })
 
     it.each([
       'No captions are displayed, but add subtitles below.',
@@ -268,38 +247,6 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
     })
   })
 
-  it('rejects the old policy that let dialogue be interpreted as a visible-text exception', () => {
-    const prompt = referenceAudioPrompt.replace(
-      HARD_NO_SUBTITLE_POLICY,
-      'Do not add subtitles, captions, title cards, watermarks, or interface overlays unless the source explicitly requires that exact visible text.',
-    )
-    expect(() => assertH3Prompt({
-      inputMode: 'reference',
-      prompt,
-      references: { pictureCount: 1, audioCount: 1 },
-    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:VISIBLE_TEXT_POLICY_REQUIRED')
-  })
-
-  it('requires the hard no-subtitle policy on its own summary line', () => {
-    const prompt = referenceAudioPrompt.replace(
-      `voice-timbre reference.\n${HARD_NO_SUBTITLE_POLICY}`,
-      `voice-timbre reference. ${HARD_NO_SUBTITLE_POLICY}`,
-    )
-    expect(() => assertH3Prompt({
-      inputMode: 'reference',
-      prompt,
-      references: { pictureCount: 1, audioCount: 1 },
-    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:VISIBLE_TEXT_POLICY_REQUIRED')
-  })
-
-  it('rejects a policy that lets generated detailed_description authorize overlays', () => {
-    expect(() => assertH3Prompt({
-      inputMode: 'reference',
-      prompt: referencePrompt.replace(HARD_NO_SUBTITLE_POLICY,
-        'Spoken dialogue is audio only and must never appear as visible text. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless detailed_description explicitly requests that exact visible text.'),
-    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:VISIBLE_TEXT_POLICY_REQUIRED')
-  })
-
   it('rejects an explicitly requested subtitle carrier outside dialogue', () => {
     const prompt = referencePrompt.replace(
       '[Shot 1] <Subject 1> notices the doorway, turns, and settles facing it.',
@@ -331,24 +278,6 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
       inputMode: 'reference',
       prompt,
       references: { pictureCount: 1, audioCount: 1 },
-    })).not.toThrow()
-  })
-
-  it('rejects a reference prompt without the required no-overlay policy', () => {
-    expect(() => assertH3Prompt({
-      inputMode: 'reference',
-      prompt: referencePrompt.replace(HARD_NO_SUBTITLE_POLICY, ''),
-    })).toThrow('VIDEO_PROMPT_PROFILE_INVALID:VISIBLE_TEXT_POLICY_REQUIRED')
-  })
-
-  it.each([
-    ['first_frame', firstFramePrompt],
-    ['first_last_frame', firstLastFramePrompt],
-    ['continuation', continuationPrompt],
-  ] as const)('does not make the Ref-only no-subtitle policy a %s compatibility gate', (inputMode, prompt) => {
-    expect(() => assertH3Prompt({
-      inputMode,
-      prompt: prompt.replace(HARD_NO_SUBTITLE_POLICY, ''),
     })).not.toThrow()
   })
 
@@ -492,7 +421,7 @@ describe('MiniMax H3 multimodal Prompt contract', () => {
 
 summary:
 [reference generation] Elle se tourne vers la porte en conservant <Subject 1> de <Picture 1>.
-Spoken dialogue and lyrics are audio only and must never appear as visible text, including translations. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless the user or source explicitly requires that exact non-subtitle visible text.
+
 
 retention_analysis:
 <Subject 1> (dans [Shot 1]): fully_preserved - Son identité, ses vêtements et la pièce de <Picture 1> sont conservés.
@@ -518,7 +447,7 @@ N/A`
 
 summary:
 [reference generation] Zij draait naar de deur en behoudt <Subject 1> uit <Picture 1>.
-Spoken dialogue and lyrics are audio only and must never appear as visible text, including translations. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless the user or source explicitly requires that exact non-subtitle visible text.
+
 
 retention_analysis:
 <Subject 1> (in [Shot 1]): fully_preserved - Haar identiteit, kleding en kamer uit <Picture 1> blijven behouden.
@@ -544,7 +473,7 @@ N/A`
 
 summary:
 [reference generation] Kobieta obraca się w stronę drzwi i zachowuje wygląd z <Picture 1>.
-Spoken dialogue and lyrics are audio only and must never appear as visible text, including translations. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless the user or source explicitly requires that exact non-subtitle visible text.
+
 
 retention_analysis:
 <Subject 1> (w [Shot 1]): fully_preserved - Tożsamość, ubranie i pokój z <Picture 1> pozostają zachowane.
@@ -570,7 +499,7 @@ N/A`
 
 summary:
 [reference generation] Woman turns.
-Spoken dialogue and lyrics are audio only and must never appear as visible text, including translations. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless the user or source explicitly requires that exact non-subtitle visible text.
+
 
 retention_analysis:
 <Subject 1>: fully_preserved - Identity retained.
@@ -596,7 +525,7 @@ N/A`
 
 summary:
 [reference generation] Femme fatale waits.
-Spoken dialogue and lyrics are audio only and must never appear as visible text, including translations. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless the user or source explicitly requires that exact non-subtitle visible text.
+
 
 retention_analysis:
 <Subject 1>: fully_preserved - Identity retained.
@@ -622,7 +551,7 @@ N/A`
 
 summary:
 [reference generation] Agnieszka walks through Łódź while preserving her identity from <Picture 1>.
-Spoken dialogue and lyrics are audio only and must never appear as visible text, including translations. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless the user or source explicitly requires that exact non-subtitle visible text.
+
 
 retention_analysis:
 <Subject 1>: fully_preserved - Her identity and clothing from <Picture 1> remain unchanged.
@@ -2765,7 +2694,7 @@ N/A`
   it.each([
     referencePrompt.replace('retention_analysis:', 'retention_notes:'),
     referencePrompt.replace(
-      'summary:\n[reference generation] She turns toward the doorway while preserving <Subject 1> from <Picture 1>.\nSpoken dialogue and lyrics are audio only and must never appear as visible text, including translations. Do not add subtitles or captions under any circumstances. Do not add title cards, watermarks, or interface overlays unless the user or source explicitly requires that exact non-subtitle visible text.\n\n',
+      'summary:\n[reference generation] She turns toward the doorway while preserving <Subject 1> from <Picture 1>.\n\n\n',
       'summary:\n\n',
     ),
     referencePrompt.replace('N/A', 'Use a dramatic orchestral score.'),
