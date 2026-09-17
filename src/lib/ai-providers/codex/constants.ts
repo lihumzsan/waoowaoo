@@ -1,6 +1,6 @@
 export const CODEX_PROVIDER_KEY = 'codex'
-export const CODEX_DEFAULT_MODEL_ID = 'gpt-5.5'
-export const CODEX_DEFAULT_MODEL_KEY = 'codex::gpt-5.5'
+export const CODEX_DEFAULT_MODEL_ID = 'gpt-6-astra'
+export const CODEX_DEFAULT_MODEL_KEY = 'codex::gpt-6-astra'
 export const CODEX_DEFAULT_IMAGE_MODEL_ID = 'gpt-image-2'
 export const CODEX_DEFAULT_IMAGE_MODEL_KEY = 'codex::gpt-image-2'
 export const CODEX_DEFAULT_EXECUTABLE_PATH = '%LOCALAPPDATA%\\OpenAI\\Codex\\bin\\codex.exe'
