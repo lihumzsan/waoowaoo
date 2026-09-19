@@ -31,6 +31,18 @@ description: Use when directing screenplay-based video generation that requires 
 - 每个 item 只列实际使用的 ready Resource，精确复制 `resourceId`、`contentVersion`、`role`、`channel`，顺序与 Prompt 中的媒体编号一致；不得从文件名或近似描述猜身份。
 - H3 multimodal v3 同时支持四个互斥模式：`reference` 接受 1–9 张有序 `channel=image, role=reference_image`，并可搭配 1–3 段有序 `channel=audio, role=reference_audio`；图片与音频合计最多 12 个文件。每段参考音频至少 2,000 ms，全部参考音频合计最多 15,000 ms，且音频必须搭配至少一张参考图。`first_frame` 精确接受一张 `role=first_frame`；`first_last_frame` 精确接受一张首帧和一张尾帧；`continuation` 精确接受一个 `channel=video, role=continuation_video` 的前段 ready 视频。`reference_video` 仍不支持，参考音频不得与帧或 continuation 模式混合。缺首帧、仅尾帧、重复帧、重复 continuation、空引用、超过上限或错误角色时停止。
 
+### 按片段选择人物参考音频
+
+在写每个 `reference` item 的最终 Prompt 前，先完成该 item 的人物声音素材选择；引入人物图片不会自动携带其参考音频。
+
+1. 从本段来源台词和实际 `vocalPerformanceMode` 确定本段需要生成话语的说话人，包括出镜对白、画外音和来源要求的演唱；人物出镜、在别段说话或项目默认 `native_dialogue` 都不等于本段有台词。`silent_no_lip` 不选择人物音色参考。
+2. 对每个本段说话人，检查用户明确提供的对应关系与已确认的项目来源，并通过 `list_resources` / `get_resource` 读取对应音频的实际状态、精确版本和时长。只使用已明确属于该说话人的音频；文件名、目录、列表顺序或人物与音频在画布上相邻不能证明对应关系。已有音频但归属或所选版本不明确时，先消除该歧义，不猜配、不静默省略。
+3. 本段说话人已有明确对应的可用音频时，必须把它作为 `channel=audio, role=reference_audio` 写入本段 `references`，填写真实 `resourceId + contentVersion`，并按下方 H3 规则把其 `<Audio N>` 绑定到对应 Speaker 和本段实际 `<d>` 发声事件。只写音色描述、只在 Prompt 提到音频或只传 `channel=context` 都没有传入参考音频。相同说话人在本段多次发声只引用同一音频版本一次；同一声音跨段复用相同已确认版本，但每段独立选择和编号，不能沿用前段的 Audio 编号。
+4. 只出镜、没有台词的人物保留本段需要的图片，不附带其人物音频；多人同框只带本段实际说话者的音频。独立环境声、物理音效和原音复用仍按各自实际用途选择，不受“可见人物有台词”这一人物音色条件限制。
+5. 没有对应参考音频时，沿用来源支持的声音描述，不虚构音频、不为补齐人物素材擅自生成音频，也不声称音色已锁定。已指定音频未 ready、版本不可用、时长不合规或本段必需音频超过能力上限时，明确报告阻塞，不静默丢弃、替换、裁切音频或改换输入模式。
+
+例如甲、乙同框且各有已确认音频：第一段仅甲说话，引用两人的图片和甲的音频；第二段仅乙说话，引用本段需要的图片和乙的音频；两人都无台词的片段不带这两份人物音频。选定素材后一次性形成完整 Prompt 与 `references`，提交 `create_video` 时原样使用同一 item。
+
 ### 多帧运动续接
 
 当相邻独立 Segment 必须从前段结束画面连续开始，且前段视频 Resource 已为 `ready` 时，执行顺序固定为：
@@ -149,6 +161,7 @@ N/A
 
 ## 输出前检查
 
+- 仅对 `reference` item，是否按“按片段选择人物参考音频”核对本段实际发声需求：实际执行台词且有可用对应音频的没有漏传，只出镜无台词或 `silent_no_lip` 时没有夹带人物音色参考；所选音频是否以精确 ready 版本进入 `channel=audio, role=reference_audio`，并与本段 Prompt 的 Speaker/Audio 编号一致？`first_frame`、`first_last_frame` 和 `continuation` 不适用此音频补齐检查，仍遵守各自输入模式的互斥约束。
 - 是否区分近似目标、明确严格约束与自主推导；每段请求是否合法、没有填充内容，近似目标是否使用预计输出而不是请求参数求和，后续时间线是否以实测媒体为准；严格约束是否有真实可执行的满足与验证方式，无法满足时是否提交前报告能力或内容冲突？
 - 对 H3 中所有由 Agent 选择的单段时长（包括 `fixed` 总时长下的分配与 `derive`），是否先确定模式并只使用该模式的 `segmentDurationPlans`；四种模式是否都只使用 4–15 秒，并按用户目标与内容节奏选择且不静默改时长或换模式；其他 Prompt profile 是否只服从注入的合法时长集合？
 - 每镜是否有景别、机位、主体落位、朝向、世内视线、一个主要运镜、向前变化和可见落点？
