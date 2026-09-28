@@ -8,8 +8,6 @@ import {
   frozenAudioExecutionSchema,
 } from './audio-execution-contract'
 
-export const CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS = 15
-
 export const workspaceResourceInputRefSchema = z.object({
   resourceId: z.string().trim().min(1).max(32),
   contentVersion: z.number().int().positive(),

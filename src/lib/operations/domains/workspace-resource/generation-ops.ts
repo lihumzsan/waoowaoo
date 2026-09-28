@@ -106,7 +106,6 @@ import { stableArgsFingerprint, stableArgsHash } from '@/lib/project-agent/stabl
 import { TASK_TYPE, type TaskType } from '@/lib/task/types'
 import { OPERATION_EXECUTION_MAX_TASKS } from '@/lib/temporal/operation-execution/contracts'
 import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
-import { CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS } from '@/lib/workspace-resource/generation-contract'
 import { resolveWorkspaceResourceInputMedia } from '@/lib/workspace-resource/input-media'
 import { AppError } from '@/lib/errors/app-error'
 import { augmentFailureRecord } from '@/lib/errors/failure'
@@ -1844,7 +1843,6 @@ function mediaOperationBase(input: {
   readonly operationId: 'create_image' | 'create_audio' | 'create_video'
   readonly mediaType: PlannedResource['mediaType']
   readonly schemaIds: readonly string[]
-  readonly durationSeconds?: { readonly min: number; readonly max: number }
 }) {
   return {
     id: input.operationId,
@@ -2014,7 +2012,6 @@ export function createWorkspaceResourceGenerationOperations(): ProjectAgentOpera
         operationId: 'create_audio',
         mediaType: 'audio',
         schemaIds: WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.audio,
-        durationSeconds: { min: 1, max: 600 },
       }),
       inputSchema: audioMediaRequestSchema,
       plan: async (ctx, value) => value.request.kind === 'retry'
@@ -2027,7 +2024,6 @@ export function createWorkspaceResourceGenerationOperations(): ProjectAgentOpera
         operationId: 'create_video',
         mediaType: 'video',
         schemaIds: WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.video,
-        durationSeconds: { min: 1, max: CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS },
       }),
       inputSchema: videoMediaRequestSchema,
       plan: async (ctx, value) => value.request.kind === 'retry'

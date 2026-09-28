@@ -18,6 +18,16 @@ export function enumValidator(values: readonly string[]): AiOptionValidator {
   }
 }
 
+export function integerOptionsValidator(values: readonly number[]): AiOptionValidator {
+  return (value) => {
+    if (value === undefined) return { ok: true }
+    if (typeof value !== 'number' || !Number.isInteger(value)) return { ok: false, reason: 'expected_integer' }
+    return values.includes(value)
+      ? { ok: true }
+      : { ok: false, reason: `unsupported_value=${value}` }
+  }
+}
+
 export function integerRangeValidator(input: { min?: number; max?: number }): AiOptionValidator {
   return (value) => {
     if (value === undefined) return { ok: true }

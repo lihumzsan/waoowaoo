@@ -14,6 +14,7 @@ import {
   buildH3PromptGraph,
   resolveH3Dimensions,
 } from '@/lib/ai-providers/comfyui/profiles'
+import { resolveH3ReferenceRuntimePlan } from '@/lib/video-generation/h3-reference-runtime-plan'
 import {
   resolveH3DurationPlan,
 } from '@/lib/video-generation/h3-duration'
@@ -118,7 +119,7 @@ describe('ComfyUI H3 dual-stage profile', () => {
     }
   })
 
-  it('declares all four explicit H3 input modes and fixed duration', () => {
+  it('declares all four explicit H3 input modes and their reference limits', () => {
     const h3 = COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES.find((entry) => (
       entry.modelType === 'video' && entry.modelId === COMFYUI_H3_MODEL_ID
     ))
@@ -144,12 +145,6 @@ describe('ComfyUI H3 dual-stage profile', () => {
     ensureAiCatalogsRegistered()
     const registeredCapabilities = findBuiltinCapabilities('video', 'comfyui', COMFYUI_H3_MODEL_ID)
     expect(getCapabilityOptionFields('video', registeredCapabilities)).not.toHaveProperty('aspectRatio')
-    expect(h3?.capabilities.video.inputModePolicies).toEqual({
-      reference: { durationOptions: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] },
-      first_frame: { durationOptions: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] },
-      first_last_frame: { durationOptions: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] },
-      continuation: { durationOptions: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] },
-    })
     expect(h3?.capabilities.video.continuationInput).toMatchObject({
       minSourceDurationMs: 917,
       maxSourceDurationMs: 15_625,
@@ -212,12 +207,31 @@ describe('ComfyUI H3 dual-stage profile', () => {
     expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: false } })).toThrow()
   })
 
-  it('accepts the full structural H3 duration envelope at provider preflight', () => {
+  it('accepts every registry-advertised mode duration through provider preflight and the runtime resolver', () => {
     ensureAiCatalogsRegistered()
     const selection = { provider: 'comfyui' as const, modelId: COMFYUI_H3_MODEL_ID, modelKey: `comfyui::${COMFYUI_H3_MODEL_ID}`, variantSubKind: 'official' as const }
-    const referenceImages = ['https://example.com/reference.png']
-    expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 15, aspectRatio: '9:16', generateAudio: true, referenceImages } })).toMatchObject({ duration: 15 })
-    expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 16, aspectRatio: '9:16', generateAudio: true, referenceImages } })).toThrow()
+    const capabilities = findBuiltinCapabilities('video', 'comfyui', COMFYUI_H3_MODEL_ID)
+    if (!capabilities?.video) throw new Error('COMFYUI_H3_CAPABILITIES_MISSING')
+    for (const inputMode of capabilities.video.supportedInputModes ?? []) {
+      const durations = capabilities.video.inputModePolicies?.[inputMode]?.durationOptions
+      if (!durations) throw new Error(`H3_MODE_POLICY_MISSING:${inputMode}`)
+      for (const duration of durations) {
+        expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration, aspectRatio: '9:16', generateAudio: true } })?.duration).toBe(duration)
+        expect(resolveH3DurationPlan({ inputMode, requestedDurationSeconds: duration }).requestedDurationSeconds).toBe(duration)
+      }
+    }
+    for (const duration of [20, 24, 30]) {
+      expect(capabilities.video.inputModePolicies?.reference?.durationOptions).toContain(duration)
+      expect(resolveH3ReferenceRuntimePlan(duration).frameCount).toBeGreaterThanOrEqual(duration * 24)
+      for (const inputMode of ['first_frame', 'first_last_frame', 'continuation'] as const) {
+        expect(capabilities.video.inputModePolicies?.[inputMode]?.durationOptions).not.toContain(duration)
+        expect(() => resolveH3DurationPlan({ inputMode, requestedDurationSeconds: duration })).toThrow('H3_REQUESTED_DURATION_INVALID')
+      }
+    }
+    for (const duration of [3, 16, 19, 21, 23, 25, 29, 31, 24.5]) {
+      expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration, aspectRatio: '9:16', generateAudio: true } })).toThrow()
+      expect(() => resolveH3DurationPlan({ inputMode: 'reference', requestedDurationSeconds: duration })).toThrow('H3_REQUESTED_DURATION_INVALID')
+    }
   })
 
   it('keeps the canonical graph wired to the final output node', () => {

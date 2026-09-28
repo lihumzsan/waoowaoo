@@ -237,7 +237,7 @@ function objectInfo(className: string): Record<string, unknown> {
     output = ['VAE']
   }
   if (className === 'MiniMaxH3LearnedLatentUpscaleT8Advanced') {
-    required.model_name = [['minimax_h3_latent_upscaler_3d_fp16.safetensors']]
+    required.model_name = [['h3_upscaler_lms_v0.1.safetensors']]
     required.av_latent = ['LATENT']
     required.size_mode = [['target_megapixels', 'scale_by', 'target_dimensions']]
     required.scale_by = ['FLOAT']
@@ -434,6 +434,13 @@ function objectInfo(className: string): Record<string, unknown> {
     required.model = ['MODEL']
     output = ['MODEL']
   }
+  if (className === 'MiniMaxH3ChunkFeedForwardT8Advanced') {
+    // T8 nodes_h3_memory_advanced.py defines these public input/output bounds.
+    required.model = ['MODEL']
+    required.chunks = ['INT', { min: 1, max: 64, step: 1 }]
+    required.seq_threshold = ['INT', { min: 256, max: 262144, step: 256 }]
+    output = ['MODEL', 'STRING']
+  }
   if (className === 'CR Prompt Text') {
     required.prompt = ['STRING']
     output = ['STRING', 'STRING']
@@ -558,7 +565,7 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
     expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
   })
 
-  it('finishes H3 preparation without crossing the prompt submission boundary', async () => {
+  it.each([10, 30])('prepares a %s-second Ref without crossing the prompt submission boundary', async (duration) => {
     vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
     defineValidPreflight(server!)
     server!.defineScenario({
@@ -568,7 +575,10 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
       submitResponse: { status: 200, body: { prompt_id: PROMPT_ID } },
     })
 
-    const prepared = await prepareComfyUiH3VideoGeneration(videoInput)
+    const prepared = await prepareComfyUiH3VideoGeneration({
+      ...videoInput,
+      options: { ...videoInput.options, duration },
+    })
     try {
       expect(server!.getRequests('POST', '/upload/image')).toHaveLength(1)
       expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
@@ -677,7 +687,7 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
         input: { required: Record<string, unknown[]> }
       }
     ).input.required
-    required.length = ['INT', { min: 5, max: 200, step: 17 }]
+    required.length = ['INT', { min: 5, max: 481, step: 17 }]
     server!.defineScenario({
       method: 'GET',
       path: '/object_info/MiniMaxH3AudioConditioningT8',
@@ -691,11 +701,14 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
 
     await executeComfyUiH3VideoGeneration({
       ...videoInput,
-      options: { ...videoInput.options, duration: 5 },
+      options: { ...videoInput.options, duration: 20 },
     })
-    await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
+    await expect(executeComfyUiH3VideoGeneration({
+      ...videoInput,
+      options: { ...videoInput.options, duration: 30 },
+    })).rejects.toMatchObject({
       message: expect.stringContaining(
-        'COMFYUI_NODE_INPUT_VALUE_INCOMPATIBLE:MiniMaxH3AudioConditioningT8:length:243',
+        'COMFYUI_NODE_INPUT_VALUE_INCOMPATIBLE:MiniMaxH3AudioConditioningT8:length:736',
       ),
     })
     expect(server!.getRequests('GET', '/object_info/MiniMaxH3AudioConditioningT8')).toHaveLength(1)
@@ -970,18 +983,21 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
     expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
   })
 
-  it('rejects a missing T8 conditioning node before uploading reference images', async () => {
+  it.each([
+    'MiniMaxH3AudioConditioningT8',
+    'MiniMaxH3ChunkFeedForwardT8Advanced',
+  ])('rejects missing %s before uploading reference images', async (className) => {
     vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
     defineValidPreflight(server!)
     server!.defineScenario({
       method: 'GET',
-      path: '/object_info/MiniMaxH3AudioConditioningT8',
+      path: `/object_info/${className}`,
       mode: 'success',
       submitResponse: { status: 200, body: {} },
     })
 
     await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
-      message: expect.stringContaining('COMFYUI_NODE_MISSING:MiniMaxH3AudioConditioningT8'),
+      message: expect.stringContaining(`COMFYUI_NODE_MISSING:${className}`),
     })
     expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)
     expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
@@ -1351,7 +1367,7 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
 
     await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
       message: expect.stringContaining(
-        'COMFYUI_MODEL_MISSING:minimax_h3_latent_upscaler_3d_fp16.safetensors',
+        'COMFYUI_MODEL_MISSING:h3_upscaler_lms_v0.1.safetensors',
       ),
     })
     expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)

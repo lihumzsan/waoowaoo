@@ -18,8 +18,8 @@ import {
 } from '@/lib/video-generation/h3-timeline'
 import {
   H3_CONTINUATION_MAX_SOURCE_DURATION_MS,
-  H3_DURATION_OPTIONS_SECONDS,
 } from '@/lib/video-generation/h3-duration'
+import { listH3DurationOptions } from '@/lib/video-generation/h3-runtime-policy'
 import {
   ACE_STEP_1_5_PROFILE,
   COMFYUI_MUSIC_PROFILES,
@@ -87,10 +87,10 @@ export const COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         supportedInputModes: ['reference', 'first_frame', 'first_last_frame', 'continuation'], supportsTextToVideo: false,
         supportedAspectRatios: [...H3_ASPECT_RATIOS],
         inputModePolicies: {
-          reference: { durationOptions: [...H3_DURATION_OPTIONS_SECONDS] },
-          first_frame: { durationOptions: [...H3_DURATION_OPTIONS_SECONDS] },
-          first_last_frame: { durationOptions: [...H3_DURATION_OPTIONS_SECONDS] },
-          continuation: { durationOptions: [...H3_DURATION_OPTIONS_SECONDS] },
+          reference: { durationOptions: [...listH3DurationOptions('reference')] },
+          first_frame: { durationOptions: [...listH3DurationOptions('first_frame')] },
+          first_last_frame: { durationOptions: [...listH3DurationOptions('first_last_frame')] },
+          continuation: { durationOptions: [...listH3DurationOptions('continuation')] },
         },
         generateAudioOptions: [true], supportGenerateAudio: true,
         assetReferenceMultiReference: true, firstlastframe: true,

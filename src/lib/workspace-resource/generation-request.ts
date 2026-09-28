@@ -6,7 +6,6 @@ import {
   musicLyricsSchema,
   validateMusicLyricsContract,
 } from './audio-execution-contract'
-import { CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS } from './generation-contract'
 import {
   WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA,
   WORKSPACE_RESOURCE_SCHEMA,
@@ -167,7 +166,7 @@ export const videoGenerationItemSchema = z.object({
   prompt: finalPromptSchema,
   schemaId: z.enum(WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.video),
   references: z.array(videoGenerationReferenceSchema).max(16).optional(),
-  durationSeconds: z.number().int().min(1).max(CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS),
+  durationSeconds: z.number().int().positive(),
   vocalPerformanceMode: vocalPerformanceModeSchema.optional(),
 }).strict()
 
@@ -176,7 +175,7 @@ export const videoGenerationRevisionItemSchema = z.object({
     .describe('Exact failed or canceled video Resource to regenerate in place. Its canonical identity, name, path, and schema are preserved.'),
   prompt: finalPromptSchema,
   references: z.array(videoGenerationReferenceSchema).max(16).optional(),
-  durationSeconds: z.number().int().min(1).max(CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS),
+  durationSeconds: z.number().int().positive(),
   vocalPerformanceMode: vocalPerformanceModeSchema.optional(),
 }).strict()
 

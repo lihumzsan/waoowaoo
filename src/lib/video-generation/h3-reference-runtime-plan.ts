@@ -1,30 +1,19 @@
-import { resolveH3DurationPlan } from './h3-duration'
+import { resolveH3ReferencePreset } from './h3-runtime-policy'
+import { resolveH3DurationPlan, type H3DurationPlan } from './h3-duration'
 
 export const H3_ASPECT_RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16', '9:21'] as const
 export type H3AspectRatio = (typeof H3_ASPECT_RATIOS)[number]
 
-const H3_REFERENCE_PASS_MEGAPIXELS = {
-  4: [0.70, 1.00], 5: [0.70, 1.00], 6: [0.70, 1.00], 7: [0.70, 1.00], 8: [0.70, 1.00],
-  9: [0.70, 1.00], 10: [0.70, 1.00], 11: [0.61, 0.88], 12: [0.58, 0.83],
-  13: [0.52, 0.75], 14: [0.49, 0.71], 15: [0.47, 0.67],
-} as const
-
-export type H3ReferenceRuntimePlan = {
-  readonly requestedDurationSeconds: number
-  readonly frameCount: number
-  readonly promptEndSeconds: number
+export type H3ReferenceRuntimePlan = H3DurationPlan & {
   readonly firstPassMegapixels: number
   readonly secondPassMegapixels: number
 }
 
 export function resolveH3ReferenceRuntimePlan(requestedDurationSeconds: number): H3ReferenceRuntimePlan {
   const durationPlan = resolveH3DurationPlan({ inputMode: 'reference', requestedDurationSeconds })
-  const passMegapixels = H3_REFERENCE_PASS_MEGAPIXELS[requestedDurationSeconds as keyof typeof H3_REFERENCE_PASS_MEGAPIXELS]
-  if (!passMegapixels) throw new Error(`H3_REFERENCE_DURATION_INVALID:${String(requestedDurationSeconds)}`)
   return {
     ...durationPlan,
-    firstPassMegapixels: passMegapixels[0],
-    secondPassMegapixels: passMegapixels[1],
+    ...resolveH3ReferencePreset(requestedDurationSeconds),
   }
 }
 

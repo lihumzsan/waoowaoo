@@ -2,11 +2,9 @@ import { createHash } from 'node:crypto'
 import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
 import { getProjectModelConfig, type ProjectModelConfig } from '@/lib/config-service'
 import { prisma } from '@/lib/prisma'
-import { CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS } from '@/lib/workspace-resource/generation-contract'
 import type { VideoContinuationInputCapabilities, VideoInputMode, VideoPromptProfile } from '@/lib/ai-registry/types'
 import type { VocalPerformanceMode } from '@/lib/workspace-resource/vocal-performance-contract'
 import { resolveH3DurationPlan } from '@/lib/video-generation/h3-duration'
-import { H3_CONTINUATION_GUIDE_FRAMES, H3_FRAMES_PER_SECOND } from '@/lib/video-generation/h3-timeline'
 
 export type ProjectProductionCapabilities = {
   readonly video: {
@@ -103,28 +101,16 @@ export function resolveProjectProductionCapabilities(config: ProjectModelConfig)
     ? resolveBuiltinCapabilitiesByModelKey('video', config.videoModel)?.video
     : undefined
   const supportedInputModes = video?.supportedInputModes ?? []
-  const allowedSegmentDurationsSeconds = Array.from(new Set(
-    supportedInputModes.flatMap((inputMode) => (
-      video?.inputModePolicies?.[inputMode]?.durationOptions ?? []
-    )).filter((duration): duration is number => (
-      Number.isInteger(duration)
-      && duration > 0
-      && duration <= CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS
-    )),
-  )).sort((left, right) => left - right)
-  const minSegmentDurationSeconds = allowedSegmentDurationsSeconds[0]
-  const maxSegmentDurationSeconds = allowedSegmentDurationsSeconds.at(-1)
   const segmentDurationPlans = supportedInputModes.flatMap((inputMode) => (
     (video?.inputModePolicies?.[inputMode]?.durationOptions ?? []).map((requestedDurationSeconds) => {
       if (video?.promptProfile === 'minimax_h3_multimodal_v3') {
         const plan = resolveH3DurationPlan({ inputMode, requestedDurationSeconds })
-        const guideFrames = inputMode === 'continuation' ? H3_CONTINUATION_GUIDE_FRAMES : 0
         return {
           inputMode,
           requestedDurationSeconds,
-          promptStartSeconds: Number((guideFrames / H3_FRAMES_PER_SECOND).toFixed(3)),
+          promptStartSeconds: plan.promptStartSeconds,
           promptEndSeconds: plan.promptEndSeconds,
-          expectedOutputDurationSeconds: Number(((plan.frameCount - guideFrames) / H3_FRAMES_PER_SECOND).toFixed(3)),
+          expectedOutputDurationSeconds: plan.expectedOutputDurationSeconds,
         }
       }
       return {
@@ -136,6 +122,11 @@ export function resolveProjectProductionCapabilities(config: ProjectModelConfig)
       }
     })
   ))
+  const allowedSegmentDurationsSeconds = Array.from(new Set(
+    segmentDurationPlans.map((plan) => plan.requestedDurationSeconds),
+  )).sort((left, right) => left - right)
+  const minSegmentDurationSeconds = allowedSegmentDurationsSeconds[0]
+  const maxSegmentDurationSeconds = allowedSegmentDurationsSeconds.at(-1)
   const videoCapabilities = config.videoModel
     && config.videoRatio
     && video

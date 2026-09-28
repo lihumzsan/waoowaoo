@@ -1,19 +1,18 @@
 import type { AiProviderAdapter } from '@/lib/ai-providers/runtime-types'
 import { describeMediaVariantBase } from '@/lib/ai-providers/shared/media-adapter'
-import { buildMediaOptionSchema, booleanValidator, enumValidator, integerRangeValidator, nonEmptyStringValidator, stringArrayValidator } from '@/lib/ai-providers/shared/option-schema'
+import { buildMediaOptionSchema, booleanValidator, enumValidator, integerOptionsValidator, nonEmptyStringValidator, stringArrayValidator } from '@/lib/ai-providers/shared/option-schema'
 import { describeComfyUiMusic } from './music-profiles'
 import { prepareComfyUiMusicGeneration } from './music-runtime'
 import {
   COMFYUI_H3_MODEL_ID,
+  COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES,
 } from './models'
 import { prepareComfyUiH3VideoGeneration } from './h3'
 import {
   H3_MAX_REFERENCE_AUDIOS,
   H3_MAX_REFERENCE_IMAGES,
 } from './profiles'
-import {
-  H3_DURATION_OPTIONS_SECONDS,
-} from '@/lib/video-generation/h3-duration'
+import { listH3DurationOptions } from '@/lib/video-generation/h3-runtime-policy'
 import { H3_ASPECT_RATIOS } from '@/lib/video-generation/h3-reference-runtime-plan'
 import { createAiProviderFailureAdapter } from '@/lib/ai-providers/failure'
 
@@ -34,10 +33,10 @@ export const comfyuiAdapter: AiProviderAdapter = {
         required: ['duration', 'aspectRatio', 'generateAudio'],
         excludedKeys: ['resolution', 'referenceVideos', 'size', 'promptExtend', 'serviceTier', 'executionExpiresAfter', 'returnLastFrame', 'draft', 'seed', 'cameraFixed', 'watermark'],
         validators: {
-          duration: integerRangeValidator({
-            min: Math.min(...H3_DURATION_OPTIONS_SECONDS),
-            max: Math.max(...H3_DURATION_OPTIONS_SECONDS),
-          }),
+          duration: integerOptionsValidator(COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES
+            .filter((entry) => entry.modelType === 'video' && entry.modelId === COMFYUI_H3_MODEL_ID)
+            .flatMap((entry) => entry.capabilities.video.supportedInputModes ?? [])
+            .flatMap((mode) => listH3DurationOptions(mode))),
           aspectRatio: enumValidator(H3_ASPECT_RATIOS),
           generateAudio: booleanValidator(),
           referenceImages: stringArrayValidator({ maxLength: H3_MAX_REFERENCE_IMAGES }),
