@@ -1,4 +1,5 @@
 import { H3PromptValidationError } from './h3-prompt-error'
+import { createH3SyntaxMatcher, matchH3SyntaxForm, MINIMAX_H3_PROMPT_SECTIONS, type MinimaxH3PromptSection } from './h3-prompt-grammar'
 import { detectAll } from 'tinyld'
 import type {
   VideoInputMode,
@@ -25,17 +26,6 @@ import {
 } from './h3-reference-dialogue'
 import { H3_CONTINUATION_GUIDE_SECONDS } from './h3-timeline'
 
-export const MINIMAX_H3_PROMPT_SECTIONS = [
-  'subject_definitions',
-  'summary',
-  'retention_analysis',
-  'detailed_description',
-  'overall_soundscape',
-  'non_diegetic_music',
-] as const
-
-export type MinimaxH3PromptSection = (typeof MINIMAX_H3_PROMPT_SECTIONS)[number]
-
 const SECTION_HEADING = /^([a-z][a-z0-9_]*)\s*:\s*$/u
 const TIME_EXPRESSION = /(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?)\b/giu
 const FIXED_NON_DIEGETIC_MUSIC = 'N/A'
@@ -54,26 +44,24 @@ const REFERENCE_SUBJECT_DEFINITION_CLAIM = /<Subject\s+(\d+)>(?:\s+\(S\d+(?:\s*,
 const REFERENCE_PICTURE_DEFINITION = /^<Picture\s+([1-9]\d*)>\s*(?:is\b|:)\s*\S/u
 const REFERENCE_VISUAL_TOKEN = /<(Subject|Picture)\s+([1-9]\d*)>/gu
 const REFERENCE_PLAYBACK_SUBJECT_DEFINITION_PREFIX = /^<Subject\s+(\d+)>\s+is\s+a\s+(source-backed|target-visible)\s+in-scene\s+playback\s+entity\b/iu
-const REFERENCE_SOURCE_BACKED_PLAYBACK_SUBJECT_DEFINITION = /^<Subject\s+(\d+)>\s+is\s+a\s+source-backed\s+in-scene\s+playback\s+entity\s+from\s+<Picture\s+\d+>:\s+\S/iu
-const REFERENCE_TARGET_VISIBLE_PLAYBACK_SUBJECT_DEFINITION = /^<Subject\s+(\d+)>\s+is\s+a\s+target-visible\s+in-scene\s+playback\s+entity:\s+\S/iu
 const REFERENCE_PLAYBACK_SUBJECT_AUDIENCE_CONFLICT = /\b(?:audience-only|non-diegetic)\b|\b(?:background|audience)\s+(?:music|score|soundtrack)\b|\b(?:music|score|soundtrack)\b[^.!?\n]{0,32}\bfor\s+(?:[\p{L}'-]+\s+){0,3}(?:audiences?|listeners?|viewers?)\b/iu
-const REFERENCE_SPEAKER_TOKEN = /\(S\d+(?:\s*,\s*S\d+)*\)/gu
+const REFERENCE_SPEAKER_TOKEN = createH3SyntaxMatcher('speakerToken', 'scan')
 const REFERENCE_TASK_PREFIX = /\[(?:reference generation|audio reference|audio reuse)(?: \+ (?:reference generation|audio reference|audio reuse))*\]/gu
 const SHOT_MARKER = /\[Shot (\d+)\]/gu
-const SHOT_TRANSITION = /^\[Shot (\d+)\] At (\d{2}):(\d{2}\.\d{3}), the camera (?:cuts|dissolves|fades|wipes)\b/u
+const SHOT_TRANSITION = createH3SyntaxMatcher('shotTransition')
 const CAMERA_TRANSITION = /\bthe camera (?:cuts|dissolves|fades|wipes)\b/gu
-const TIMED_EVENT = /\bAt (\d{2}):(\d{2}\.\d{3})\b/gu
+const TIMED_EVENT = createH3SyntaxMatcher('time', 'scan')
 const CLOCK_LIKE_TIME = /\b\d+\s*:\s*\d+(?:\s*[.,]\s*\d+)*\b/gu
-const CANONICAL_CLOCK_TIMED_EVENT = /^At \d{2}:\d{2}\.\d{3}$/u
+const CANONICAL_CLOCK_TIMED_EVENT = createH3SyntaxMatcher('time')
 const UNIT_TIMED_EVENT = /(?:\b\d+(?:\.\d*)?|\.\d+)\s*(?:milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|hours?|hrs?)\b/iu
 const PICTURE_ANCHOR = /<Picture\s+\d+>/u
-const MEDIA_REFERENCE = /<(Picture|Audio)\s+(\d+)>/gu
+const MEDIA_REFERENCE = createH3SyntaxMatcher('mediaReference', 'scan')
 const VIDEO_REFERENCE = /<Video\s+(\d+)>/gu
 const SUBJECT_SPEAKER = /<Subject\s+(\d+)>\s*\(S(\d+)\)/gu
 const REFERENCE_SINGLE_SPEAKER_TOKEN = /\(S(\d+)\)/gu
 const REFERENCE_SUMMARY_PREFIX = /^\[([^\]\r\n]+)\]\s+\S/u
 const REFERENCE_RETENTION_ENTRY = /^<(Subject|Picture|Video|Audio)\s+([1-9]\d*)>[^:\n]*:\s*([a-z_]+)\s+-\s+\S/u
-const REFERENCE_RETENTION_SPEAKER = /\(S\d+(?:\s*,\s*S\d+)*\)/u
+const REFERENCE_RETENTION_SPEAKER = createH3SyntaxMatcher('speakerToken')
 const REFERENCE_VISUAL_RELATIONSHIPS = new Set([
   'fully_preserved',
   'partially_preserved',
@@ -535,12 +523,13 @@ function parseReferenceVisualManifest(
     for (const pictureNumber of pictureNumbers) boundPictures.add(pictureNumber)
     if (!playbackDefinition) continue
     const exactDefinition = playbackDefinition[2] === 'source-backed'
-      ? REFERENCE_SOURCE_BACKED_PLAYBACK_SUBJECT_DEFINITION.exec(line)
-      : REFERENCE_TARGET_VISIBLE_PLAYBACK_SUBJECT_DEFINITION.exec(line)
+      ? matchH3SyntaxForm('sourceBackedPlayback', line)
+      : matchH3SyntaxForm('targetVisiblePlayback', line)
     const targetVisibleHasPicture = playbackDefinition[2] === 'target-visible'
       && Array.from(line.matchAll(MEDIA_REFERENCE)).some((reference) => reference[1] === 'Picture')
-    if (Number(exactDefinition?.[1]) !== lineSubjectNumber || targetVisibleHasPicture) {
-      throw new H3PromptValidationError('REFERENCE_PLAYBACK_SUBJECT_DEFINITION_INVALID', `${String(lineSubjectNumber)}`)
+    if (exactDefinition?.subject !== lineSubjectNumber || targetVisibleHasPicture) {
+      throw new H3PromptValidationError('REFERENCE_PLAYBACK_SUBJECT_DEFINITION_INVALID', String(lineSubjectNumber), 'subject_definitions',
+        { message: `<Subject ${lineSubjectNumber}> claims ${playbackDefinition[2]} playback.` })
     }
     if (REFERENCE_PLAYBACK_SUBJECT_AUDIENCE_CONFLICT.test(line)) {
       throw new H3PromptValidationError('REFERENCE_PLAYBACK_SUBJECT_AUDIENCE_CONFLICT', `${String(lineSubjectNumber)}`)
@@ -758,7 +747,11 @@ function assertH3ReferenceManifest(
           playbackSubjectNumbers,
         )
       ))) {
-        throw new H3PromptValidationError('AUDIO_REFERENCE_APPLICATION_MISSING', `${String(audioNumber)}`)
+        throw new H3PromptValidationError('AUDIO_REFERENCE_APPLICATION_MISSING', String(audioNumber), undefined,
+          {
+            message: `<Audio ${audioNumber}> is unbound. Cite its actual ambience/sound, or use this form only for a defined visible playback entity. Do not invent a speaker.`,
+            syntaxForms: ['diegeticPlayback'],
+          })
       }
     }
   }
@@ -852,8 +845,8 @@ function assertH3ReferenceManifest(
             })
         ))
         if (appliesToAnotherOwnerSpeaker || (appliesToBoundSpeaker && !subjectMatches)) {
-          throw new H3PromptValidationError('AUDIO_REFERENCE_APPLICATION_INVALID', `${String(citedAudioNumber)}`,
-          )
+          throw new H3PromptValidationError('AUDIO_REFERENCE_APPLICATION_INVALID', String(citedAudioNumber), 'detailed_description',
+            { message: `<Audio ${citedAudioNumber}> belongs to (S${citedBinding.speakerNumber})${citedBinding.subjectNumber === null ? '' : ` / <Subject ${citedBinding.subjectNumber}>`}; correct the unison mapping to this owner.` })
         }
         if (appliesToBoundSpeaker && subjectMatches) {
           citedAudioNumbers.push(citedAudioNumber)
@@ -869,8 +862,8 @@ function assertH3ReferenceManifest(
       })
       if (!appliesToSingleSpeaker) continue
       if (!speakerNumbers.includes(citedBinding.speakerNumber) || !subjectMatches) {
-        throw new H3PromptValidationError('AUDIO_REFERENCE_APPLICATION_INVALID', `${String(citedAudioNumber)}`,
-        )
+        throw new H3PromptValidationError('AUDIO_REFERENCE_APPLICATION_INVALID', String(citedAudioNumber), 'detailed_description',
+          { message: `<Audio ${citedAudioNumber}> belongs to (S${citedBinding.speakerNumber})${citedBinding.subjectNumber === null ? '' : ` / <Subject ${citedBinding.subjectNumber}>`}; event owner is ${speakerNumbers.length === 1 ? `(S${speakerNumbers[0]})` : 'an unrecognized speaker ID'}${subjectNumber === null ? '' : ` / <Subject ${subjectNumber}>`}.` })
       }
       citedAudioNumbers.push(citedAudioNumber)
     }
@@ -881,11 +874,14 @@ function assertH3ReferenceManifest(
     for (const binding of citedBindings) appliedAudioNumbers.add(binding.audioNumber)
   }
   for (const binding of audioBindings) {
+    const bindingContext = `<Audio ${binding.audioNumber}> -> (S${binding.speakerNumber})${binding.subjectNumber === null ? '' : ` / <Subject ${binding.subjectNumber}>`}.`
     if (!speakersWithDialogue.has(binding.speakerNumber)) {
-      throw new H3PromptValidationError('AUDIO_SPEAKER_DIALOGUE_MISSING', `${String(binding.audioNumber)}`)
+      throw new H3PromptValidationError('AUDIO_SPEAKER_DIALOGUE_MISSING', String(binding.audioNumber), 'detailed_description',
+        { message: `${bindingContext} ID not recognized in dialogue.` })
     }
     if (!appliedAudioNumbers.has(binding.audioNumber)) {
-      throw new H3PromptValidationError('AUDIO_REFERENCE_APPLICATION_MISSING', `${String(binding.audioNumber)}`, 'detailed_description')
+      throw new H3PromptValidationError('AUDIO_REFERENCE_APPLICATION_MISSING', String(binding.audioNumber), 'detailed_description',
+        { message: `${bindingContext} Dialogue exists; voice binding missing.` })
     }
   }
   return visualManifest

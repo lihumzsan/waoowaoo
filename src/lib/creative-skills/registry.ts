@@ -15,6 +15,7 @@ function defineSkill(
 export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeSkillDefinition>> = {
   'creative-core': defineSkill({
     id: 'creative-core',
+    instructionAppendix: null,
     version: '1.5.0',
     title: '创作核心',
     summary: '主 Agent 专业创作共用的事实边界、目标忠实性、假设管理、续作状态锚定、剧本时间线纪律、通用时长估算与交付自检。',
@@ -22,6 +23,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'story-development': defineSkill({
     id: 'story-development',
+    instructionAppendix: null,
     version: '5.0.0',
     title: '故事与剧本开发',
     summary: '忠实且真正好看的剧本创作方法：人物因果、节奏档位、开场与对白纪律；只处理故事文本，不登记生产资产。',
@@ -29,6 +31,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'creative-direction': defineSkill({
     id: 'creative-direction',
+    instructionAppendix: null,
     version: '5.0.1',
     title: '创作方向',
     summary: '把用户意图与必要研究收敛为一份只决定呈现、不改写剧本内容或时间线的六领域方向。',
@@ -36,6 +39,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'asset-development': defineSkill({
     id: 'asset-development',
+    instructionAppendix: null,
     version: '5.2.0',
     title: '资产范围与视觉设计',
     summary: '从精确剧本筛选可复用资产，完成稳定设计与最终图片提示词；生成画幅由服务端资产策略决定。',
@@ -43,13 +47,15 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'video-direction': defineSkill({
     id: 'video-direction',
-    version: '4.5.1',
+    instructionAppendix: 'h3-prompt-grammar',
+    version: '4.6.0',
     title: '视频导演与生成设计',
-    summary: '以结构化状态接力和物理表演设计完成整片时间线、内容适配分段、最终提示词与接缝自检。',
+    summary: '把客户效果要求转成来源有据的导演设计，按 H3 结构构造和修订最终提示词、参考关系与时间线。',
     tags: ['video', 'director', 'prompt', 'editing', 'timeline', 'shot', 'camera', 'continuity', 'audio'],
   }),
   'music-direction': defineSkill({
     id: 'music-direction',
+    instructionAppendix: null,
     version: '3.0.0',
     title: '音乐与配乐设计',
     summary: '从剧情与真实成片时间线决定配乐窗口，并按生产能力直接创作最终音乐提示词（人声模式含显式歌词）或 Composition Plan 与精确 cue 合成参数。',
