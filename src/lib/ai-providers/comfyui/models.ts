@@ -30,6 +30,7 @@ export const COMFYUI_H3_MODEL_ID = 'minimax-h3-dual-stage-2mp'
 export const COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY = `comfyui::${COMFYUI_H3_MODEL_ID}`
 export const COMFYUI_H3_DEFAULT_GENERATION_OPTIONS = {
   generateAudio: true,
+  referenceVideoUpscale: false,
 } as const satisfies Record<string, CapabilityValue>
 export const COMFYUI_ACE_STEP_1_5_MODEL_ID = ACE_STEP_1_5_PROFILE.modelId
 export const COMFYUI_ACE_STEP_1_5_MODEL_KEY = ACE_STEP_1_5_PROFILE.modelKey
@@ -93,6 +94,7 @@ export const COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
           continuation: { durationOptions: [...listH3DurationOptions('continuation')] },
         },
         generateAudioOptions: [true], supportGenerateAudio: true,
+        referenceVideoUpscaleOptions: [false, true],
         assetReferenceMultiReference: true, firstlastframe: true,
         maxReferenceImages: H3_MAX_REFERENCE_IMAGES,
         maxReferenceAudios: H3_MAX_REFERENCE_AUDIOS,

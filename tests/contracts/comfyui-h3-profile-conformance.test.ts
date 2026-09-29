@@ -6,7 +6,11 @@ import {
   getCapabilityOptionFields,
   resolveGenerationOptionsForModel,
 } from '@/lib/ai-registry/capabilities-catalog'
-import { COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES, COMFYUI_H3_MODEL_ID } from '@/lib/ai-providers/comfyui/models'
+import {
+  COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES,
+  COMFYUI_H3_DEFAULT_GENERATION_OPTIONS,
+  COMFYUI_H3_MODEL_ID,
+} from '@/lib/ai-providers/comfyui/models'
 import { comfyuiAdapter } from '@/lib/ai-providers/comfyui/adapter'
 import {
   H3_ASPECT_RATIOS,
@@ -163,7 +167,7 @@ describe('ComfyUI H3 dual-stage profile', () => {
     if (!capabilities) throw new Error('COMFYUI_H3_CAPABILITIES_MISSING')
     const resolved = resolveGenerationOptionsForModel({
       modelType: 'video', modelKey: `comfyui::${COMFYUI_H3_MODEL_ID}`, capabilities,
-      capabilityDefaults: { [`comfyui::${COMFYUI_H3_MODEL_ID}`]: { generateAudio: true } },
+      capabilityDefaults: { [`comfyui::${COMFYUI_H3_MODEL_ID}`]: COMFYUI_H3_DEFAULT_GENERATION_OPTIONS },
       runtimeSelections: { aspectRatio: '9:16' },
     })
     expect(resolved.issues).toEqual([])
@@ -178,7 +182,7 @@ describe('ComfyUI H3 dual-stage profile', () => {
     const resolved = resolveGenerationOptionsForModel({
       modelType: 'video', modelKey: `comfyui::${COMFYUI_H3_MODEL_ID}`, capabilities,
       capabilityDefaults: {
-        [`comfyui::${COMFYUI_H3_MODEL_ID}`]: { generateAudio: true, aspectRatio: '21:9' },
+        [`comfyui::${COMFYUI_H3_MODEL_ID}`]: { ...COMFYUI_H3_DEFAULT_GENERATION_OPTIONS, aspectRatio: '21:9' },
       },
       runtimeSelections: { aspectRatio: '16:9' },
     })
@@ -207,16 +211,32 @@ describe('ComfyUI H3 dual-stage profile', () => {
     expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: false } })).toThrow()
   })
 
-  it('accepts every registry-advertised mode duration through provider preflight and the runtime resolver', () => {
+  it('accepts every registry-advertised mode duration and reference-upscale choice through provider preflight', () => {
     ensureAiCatalogsRegistered()
     const selection = { provider: 'comfyui' as const, modelId: COMFYUI_H3_MODEL_ID, modelKey: `comfyui::${COMFYUI_H3_MODEL_ID}`, variantSubKind: 'official' as const }
     const capabilities = findBuiltinCapabilities('video', 'comfyui', COMFYUI_H3_MODEL_ID)
     if (!capabilities?.video) throw new Error('COMFYUI_H3_CAPABILITIES_MISSING')
+    const upscaleOptions = capabilities.video.referenceVideoUpscaleOptions
+    if (!upscaleOptions?.length) throw new Error('COMFYUI_H3_REFERENCE_UPSCALE_OPTIONS_MISSING')
     for (const inputMode of capabilities.video.supportedInputModes ?? []) {
       const durations = capabilities.video.inputModePolicies?.[inputMode]?.durationOptions
       if (!durations) throw new Error(`H3_MODE_POLICY_MISSING:${inputMode}`)
       for (const duration of durations) {
-        expect(normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration, aspectRatio: '9:16', generateAudio: true } })?.duration).toBe(duration)
+        for (const referenceVideoUpscale of upscaleOptions) {
+          const resolved = resolveGenerationOptionsForModel({
+            modelType: 'video',
+            modelKey: selection.modelKey,
+            capabilities,
+            capabilityDefaults: { [selection.modelKey]: COMFYUI_H3_DEFAULT_GENERATION_OPTIONS },
+            runtimeSelections: { aspectRatio: '9:16', referenceVideoUpscale },
+          })
+          expect(resolved.issues).toEqual([])
+          expect(normalizeMediaOptionsForSelection({
+            selection,
+            modality: 'video',
+            options: { ...resolved.options, duration },
+          })).toMatchObject({ duration, referenceVideoUpscale })
+        }
         expect(resolveH3DurationPlan({ inputMode, requestedDurationSeconds: duration }).requestedDurationSeconds).toBe(duration)
       }
     }

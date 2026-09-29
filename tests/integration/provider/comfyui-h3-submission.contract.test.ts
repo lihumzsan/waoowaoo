@@ -236,6 +236,13 @@ function objectInfo(className: string): Record<string, unknown> {
     ]]
     output = ['VAE']
   }
+  if (className === 'MiniMaxH3HyperVAE2xLoaderEXPT8') {
+    // External schema: T8mars/comfyui-minimax-h3-audio-T8 h3_t8/nodes_hyper_vae_2x.py.
+    // The optional path widget is still a required STRING input; output 1 is a report, not a VAE.
+    required.vae_name = [['hyperVAEKrea2Minimax_v20MinimaxX2Upscale.safetensors']]
+    required.absolute_path = ['STRING', { default: '' }]
+    output = ['VAE', 'STRING']
+  }
   if (className === 'MiniMaxH3LearnedLatentUpscaleT8Advanced') {
     required.model_name = [['h3_upscaler_lms_v0.1.safetensors']]
     required.av_latent = ['LATENT']
@@ -676,6 +683,99 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
     expect(server!.getRequests('GET', '/object_info/UNETLoader')).toHaveLength(1)
     expect(server!.getRequests('GET', '/object_info/CLIPLoader')).toHaveLength(1)
     expect(server!.getRequests('POST', '/prompt')).toHaveLength(2)
+  })
+
+  it.each([
+    {
+      unavailable: 'node',
+      info: {},
+      error: 'COMFYUI_NODE_MISSING:MiniMaxH3HyperVAE2xLoaderEXPT8',
+    },
+    {
+      unavailable: 'weight',
+      info: {
+        MiniMaxH3HyperVAE2xLoaderEXPT8: {
+          input: { required: { vae_name: [['native-video-vae.safetensors']], absolute_path: ['STRING'] } },
+          output: ['VAE', 'STRING'],
+        },
+      },
+      error: 'COMFYUI_MODEL_MISSING:hyperVAEKrea2Minimax_v20MinimaxX2Upscale.safetensors',
+    },
+  ])('rejects an unavailable HyperVAE $unavailable before upload even after disabled preflight is cached', async ({ info, error }) => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    server!.defineScenario({
+      method: 'GET',
+      path: '/object_info/MiniMaxH3HyperVAE2xLoaderEXPT8',
+      mode: 'success',
+      submitResponse: { status: 200, body: info },
+    })
+    server!.defineScenario({
+      method: 'POST', path: '/prompt', mode: 'success',
+      submitResponse: { status: 200, body: { prompt_id: PROMPT_ID } },
+    })
+
+    for (const referenceVideoUpscale of [undefined, false]) {
+      await expect(executeComfyUiH3VideoGeneration({
+        ...videoInput,
+        options: { ...videoInput.options, referenceVideoUpscale },
+      })).resolves.toMatchObject({ requestId: PROMPT_ID })
+    }
+    expect(server!.getRequests('GET', '/object_info/MiniMaxH3HyperVAE2xLoaderEXPT8')).toHaveLength(0)
+    const uploadsBeforeEnable = server!.getRequests('POST', '/upload/image')
+    const promptsBeforeEnable = server!.getRequests('POST', '/prompt')
+
+    await expect(executeComfyUiH3VideoGeneration({
+      ...videoInput,
+      options: { ...videoInput.options, referenceVideoUpscale: true },
+    })).rejects.toThrow(error)
+    expect(server!.getRequests('POST', '/upload/image')).toEqual(uploadsBeforeEnable)
+    expect(server!.getRequests('POST', '/prompt')).toEqual(promptsBeforeEnable)
+  })
+
+  it('submits the upstream HyperVAE decode contract without changing sampling, encoding, audio, or delivery', async () => {
+    vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
+    defineValidPreflight(server!)
+    server!.defineScenario({
+      method: 'GET',
+      path: '/object_info/MiniMaxH3HyperVAE2xLoaderEXPT8',
+      mode: 'success',
+      submitResponse: { status: 200, body: objectInfo('MiniMaxH3HyperVAE2xLoaderEXPT8') },
+    })
+    server!.defineScenario({
+      method: 'POST', path: '/prompt', mode: 'success',
+      submitResponse: { status: 200, body: { prompt_id: PROMPT_ID } },
+    })
+
+    for (const referenceVideoUpscale of [false, true, false]) {
+      await expect(executeComfyUiH3VideoGeneration({
+        ...videoInput,
+        options: { ...videoInput.options, referenceVideoUpscale },
+      })).resolves.toMatchObject({ requestId: PROMPT_ID })
+    }
+    type SubmittedGraph = Record<string, { class_type: string; inputs: Record<string, unknown> }>
+    const graphs = server!.getRequests('POST', '/prompt').map((request) => (
+      (JSON.parse(request.bodyText) as { prompt: SubmittedGraph }).prompt
+    ))
+    const [nativeGraph, hyperGraph, nativeAgain] = graphs
+    if (!nativeGraph || !hyperGraph || !nativeAgain) throw new Error('H3_SUBMISSION_GRAPH_MISSING')
+    const hyperLoader = Object.entries(hyperGraph).find(([, node]) => (
+      node.class_type === 'MiniMaxH3HyperVAE2xLoaderEXPT8'
+    ))
+    if (!hyperLoader) throw new Error('H3_HYPERVAE_LOADER_MISSING')
+    expect(hyperLoader[1].inputs.absolute_path).toBe('')
+    const decoders = Object.entries(hyperGraph).filter(([, node]) => node.class_type === 'MiniMaxH3AVDecodeT8')
+    expect(decoders).toHaveLength(1)
+    expect(decoders[0]?.[1].inputs.video_vae).toEqual([hyperLoader[0], 0])
+    // Upstream HyperVAE is a final video decode choice. Its 12-channel head must not
+    // change reference encoding or audio, and a later disabled request must stay native.
+    for (const [nodeId, nativeNode] of Object.entries(nativeGraph)) {
+      const hyperNode = hyperGraph[nodeId]
+      expect(hyperNode).toEqual(nativeNode.class_type === 'MiniMaxH3AVDecodeT8'
+        ? { ...nativeNode, inputs: { ...nativeNode.inputs, video_vae: [hyperLoader[0], 0] } }
+        : nativeNode)
+    }
+    expect(nativeAgain).toEqual(nativeGraph)
   })
 
   it('revalidates request-specific values when the runtime schema cache is warm', async () => {
@@ -1533,7 +1633,7 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
     expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
   })
 
-  it('routes first-frame and first-last-frame transport through the same frame profile', async () => {
+  it.each([undefined, true])('keeps frame transport independent of reference-only upscale preference %s', async (referenceVideoUpscale) => {
     vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
     defineValidPreflight(server!)
     server!.defineScenario({
@@ -1542,8 +1642,14 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
     })
 
     const referenceResult = await executeComfyUiH3VideoGeneration(videoInput)
-    const firstResult = await executeComfyUiH3VideoGeneration(firstFrameInput)
-    const firstLastResult = await executeComfyUiH3VideoGeneration(firstLastFrameInput)
+    const firstResult = await executeComfyUiH3VideoGeneration({
+      ...firstFrameInput,
+      options: { ...firstFrameInput.options, referenceVideoUpscale },
+    })
+    const firstLastResult = await executeComfyUiH3VideoGeneration({
+      ...firstLastFrameInput,
+      options: { ...firstLastFrameInput.options, referenceVideoUpscale },
+    })
     expect(referenceResult.endpoint).toBe('h3-dual-stage-2mp')
     expect(firstResult.endpoint).toBe('h3-dual-stage-2mp')
     expect(firstLastResult.endpoint).toBe('h3-dual-stage-2mp')

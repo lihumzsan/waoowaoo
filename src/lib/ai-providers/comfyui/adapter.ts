@@ -29,7 +29,7 @@ export const comfyuiAdapter: AiProviderAdapter = {
       selection,
       executionMode: 'async',
       optionSchema: buildMediaOptionSchema('video', {
-        allowedKeys: ['referenceImages', 'referenceAudios', 'lastFrameImageUrl', 'continuationVideoUrl'],
+        allowedKeys: ['referenceImages', 'referenceAudios', 'referenceVideoUpscale', 'lastFrameImageUrl', 'continuationVideoUrl'],
         required: ['duration', 'aspectRatio', 'generateAudio'],
         excludedKeys: ['resolution', 'referenceVideos', 'size', 'promptExtend', 'serviceTier', 'executionExpiresAfter', 'returnLastFrame', 'draft', 'seed', 'cameraFixed', 'watermark'],
         validators: {
@@ -39,6 +39,7 @@ export const comfyuiAdapter: AiProviderAdapter = {
             .flatMap((mode) => listH3DurationOptions(mode))),
           aspectRatio: enumValidator(H3_ASPECT_RATIOS),
           generateAudio: booleanValidator(),
+          referenceVideoUpscale: booleanValidator(),
           referenceImages: stringArrayValidator({ maxLength: H3_MAX_REFERENCE_IMAGES }),
           referenceAudios: stringArrayValidator({ maxLength: H3_MAX_REFERENCE_AUDIOS }),
           lastFrameImageUrl: nonEmptyStringValidator(),

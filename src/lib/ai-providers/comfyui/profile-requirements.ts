@@ -7,6 +7,7 @@ const REQUIRED_OPTION_INPUT_NAMES_BY_CLASS = {
   CLIPLoader: ['clip_name'],
   DualCLIPLoader: ['clip_name1', 'clip_name2'],
   VAELoader: ['vae_name'],
+  MiniMaxH3HyperVAE2xLoaderEXPT8: ['vae_name'],
   LoraLoaderModelOnly: ['lora_name'],
   LoraLoaderBypassModelOnly: ['lora_name'],
   MiniMaxH3LearnedLatentUpscaleT8Advanced: [

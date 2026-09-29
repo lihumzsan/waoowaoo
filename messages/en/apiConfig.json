@@ -35,6 +35,7 @@
   "defaultModelDesc": {
     "analysisModel": "Handles script analysis, shot planning and full-pipeline text reasoning.",
     "videoModel": "Synthesizes images and instructions into final video clips.",
+    "referenceVideoUpscale": "HyperVAE 2× decoding applies only to new reference-to-video tasks. Final output dimensions stay the same; retries keep the original setting.",
     "characterModel": "Generate character portraits and appearance references from script descriptions",
     "locationModel": "Generate scene environments and spatial references from script descriptions",
     "editModel": "Perform localized edits, style adjustments and refinements on existing images",

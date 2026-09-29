@@ -4,6 +4,7 @@
     "duration": "时长",
     "resolution": "分辨率",
     "quality": "图片质量",
+    "referenceVideoUpscale": "HyperVAE 2× · 仅参考生视频",
     "aspectRatio": "画幅比例",
     "reasoningEffort": "推理强度",
     "rate": "语速",
