@@ -1,19 +1,25 @@
 @echo off
 setlocal EnableExtensions
 
-cd /d C:\work\workspace\waoowaoo
-
-netstat -ano | findstr /R /C:":3000[^0-9].*LISTENING" >nul 2>&1
-if not errorlevel 1 (
-  echo [ERROR] Port 3000 is already in use. Something may already be running.
-  echo Run "netstat -ano | findstr :3000" to find the PID, then "taskkill /PID <pid> /F" to stop it.
-  exit /b 1
+set "START_SCRIPT=%~dp0scripts\dev\start.ps1"
+if not exist "%START_SCRIPT%" (
+  echo [ERROR] Local startup script is missing: "%START_SCRIPT%"
+  set "START_EXIT=1"
+  goto :finish
 )
 
-call npm run storage:init
-if errorlevel 1 (
-  echo [ERROR] storage:init failed.
-  exit /b 1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%START_SCRIPT%"
+set "START_EXIT=%errorlevel%"
+echo.
+if "%START_EXIT%"=="0" (
+  echo [OK] Open http://localhost:3000/zh
+  echo The service runs in the background. Closing this window does not stop it.
+) else (
+  echo [ERROR] Startup failed. Review the error above.
+  echo Logs: "%~dp0.runtime\local-startup"
 )
 
-call npx concurrently --kill-others "npm run dev:next" "npm run dev:temporal-worker"
+:finish
+echo.
+pause
+exit /b %START_EXIT%
