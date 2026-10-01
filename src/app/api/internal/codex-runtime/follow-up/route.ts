@@ -7,6 +7,11 @@ import {
   type AssistantRuntimeTaskFollowUpHttpResponse,
 } from '@/lib/assistant-runtime/task-follow-up-http'
 import { apiHandler } from '@/lib/api-errors'
+import { normalizeAnyError } from '@/lib/errors/normalize'
+import { EXTERNAL_OPERATION } from '@/lib/external-operation/registry'
+import { createScopedLogger } from '@/lib/logging/core'
+
+const logger = createScopedLogger({ module: 'assistant-runtime.follow-up' })
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -91,6 +96,16 @@ export const POST = apiHandler(async (request) => {
         499,
       )
     }
+    const failure = normalizeAnyError(error, {
+      context: { system: 'runtime', phase: 'task-follow-up-delivery' },
+      operation: EXTERNAL_OPERATION.ASSISTANT_FOLLOW_UP_DELIVERY,
+      details: { batchId: input.batchId },
+    })
+    logger.error({
+      action: 'assistant_runtime.follow_up_failed',
+      message: 'assistant runtime follow-up failed',
+      details: { batchId: input.batchId, failure },
+    })
     return json(
       {
         ok: false,
