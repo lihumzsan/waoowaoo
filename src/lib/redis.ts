@@ -15,6 +15,7 @@ function buildBaseConfig() {
   return {
     host: redisConfig.host,
     port: redisConfig.port,
+    db: redisConfig.db,
     username: redisConfig.username,
     password: redisConfig.password,
     tls: redisConfig.tls ? {} : undefined,
