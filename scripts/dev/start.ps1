@@ -5,6 +5,7 @@ $nextPath = Join-Path $projectRoot 'node_modules/next/dist/bin/next'
 $workerPath = Join-Path $projectRoot 'src/lib/temporal/worker.ts'
 $tsxPath = Join-Path $projectRoot 'node_modules/tsx/dist/cli.mjs'
 $checkPath = Join-Path $PSScriptRoot 'check-services.ts'
+$infraCheckPath = Join-Path $projectRoot 'scripts/check-local-infra.ts'
 Set-Location -LiteralPath $projectRoot
 
 # Prefer an installed Node.js; Codex desktop also supplies a per-user runtime.
@@ -12,7 +13,7 @@ $nodeCommand = Get-Command node.exe -CommandType Application -ErrorAction Silent
 $nodePath = if ($nodeCommand) { $nodeCommand.Source } else {
     Join-Path $env:USERPROFILE '.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe'
 }
-foreach ($requiredPath in @($nodePath, $nextPath, $workerPath, $tsxPath, $checkPath, (Join-Path $projectRoot '.env'))) {
+foreach ($requiredPath in @($nodePath, $nextPath, $workerPath, $tsxPath, $checkPath, $infraCheckPath, (Join-Path $projectRoot '.env'))) {
     if (!(Test-Path -LiteralPath $requiredPath -PathType Leaf)) { throw "Required local file is missing: $requiredPath" }
 }
 & $nodePath -e 'if (parseInt(process.versions.node, 10) < 22) process.exit(1)'
@@ -53,11 +54,23 @@ try {
     if ($web -and $web.CommandLine -notmatch '(?:^|\s)-p\s+3000(?:\s|$)') {
         throw 'The recorded web process does not use port 3000. Stop that local process before restarting.'
     }
-    if (!$web -and (Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue)) {
-        throw 'Port 3000 is already occupied. Existing processes were left running.'
+    if (!$web) {
+        $listenerIds = @(Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique)
+        foreach ($listenerId in $listenerIds) {
+            Write-Output "Stopping port 3000 listener $listenerId and its process tree..."
+            & taskkill.exe /PID $listenerId /T /F
+            if ($LASTEXITCODE -ne 0) { throw "Failed to stop port 3000 listener $listenerId." }
+        }
+        $portDeadline = (Get-Date).AddSeconds(20)
+        while (Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue) {
+            if ((Get-Date) -ge $portDeadline) { throw 'Port 3000 is still in use after 20 seconds. Startup cancelled.' }
+            Start-Sleep -Seconds 1
+        }
     }
 
     & $nodePath '--env-file=.env' '--import' 'tsx' $checkPath 'preflight'
+    if ($LASTEXITCODE -ne 0) { throw 'Infrastructure preflight failed. No service was started.' }
+    & $nodePath '--env-file=.env' '--import' 'tsx' $infraCheckPath '--initialize-storage'
     if ($LASTEXITCODE -ne 0) { throw 'Infrastructure preflight failed. No service was started.' }
     if (!$worker) {
         $workerArguments = @(('"' + $tsxPath + '"'), 'watch', '--env-file=.env', ('"' + $workerPath + '"'))

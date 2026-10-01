@@ -168,6 +168,15 @@ npm run db:push
 npm run dev
 ```
 
+Local startup runs `npm run infra:check` from the host to verify MySQL, Redis, the MinIO
+bucket, and the Temporal namespace before starting Web/Worker. Run it independently
+for read-only diagnostics. Container health does not verify Windows port forwarding.
+
+After Windows updates WSL or you restart WSL manually, fully restart Docker Desktop
+and run `npm run infra:check` so the backend does not retain old container addresses.
+The check does not restart services, delete data, or change update settings. It cannot
+prevent a Windows update from interrupting WSL while the application is running.
+
 ---
 
 Visit [http://localhost:13000](http://localhost:13000) (Method 1 & 2) or [http://localhost:3000](http://localhost:3000) (Method 3) to get started!

@@ -2,6 +2,7 @@
   "extends": "./tsconfig.json",
   "include": [
     "src/types/next-auth.d.ts",
+    "scripts/check-local-infra.ts",
     "scripts/billing-cleanup-pending-freezes.ts",
     "scripts/billing-reconcile-ledger.ts",
     "scripts/migrations/assistant-message-cutover.ts",

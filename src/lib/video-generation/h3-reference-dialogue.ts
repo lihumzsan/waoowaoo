@@ -1,5 +1,5 @@
 import { H3PromptValidationError } from './h3-prompt-error'
-import type { MinimaxH3PromptSection } from './h3-prompt'
+import { createH3SyntaxMatcher, type MinimaxH3PromptSection } from './h3-prompt-grammar'
 import { findLastReferenceSentenceBoundary, isReferenceSentenceBoundary } from './h3-reference-audio'
 
 const REFERENCE_DIALOGUE_TAG = /<\/?d>/gu
@@ -12,10 +12,10 @@ const DIALOGUE_LANGUAGE_PREFIX = /^\[[^\]\r\n]+\]\s*/u
 const REFERENCE_DIALOGUE_CONTENT_MARKER = /<(?:cutoff|scenetrans)>/gu
 const REFERENCE_DIALOGUE_SCENETRANS_TAG = /<scenetrans>/gu
 const REFERENCE_DIALOGUE_TERMINAL_PUNCTUATION = /[.!?。！？](?=(?:["”]\s*)?(?:<scenetrans>\s*)*$)/u
-const REFERENCE_DIALOGUE_CONTINUITY = /(?:(?:(?:the|this|that|same|his|her|their)\s+){0,3}(?:dialogue|lyrics?|speech|voice|vocals?)|<Audio\s+\d+>)\s+(?:continues?\s+(?:seamlessly\s+across\s+the\s+cut|uninterrupted\s+into\s+the\s+next\s+shot)|carries?\s+over\s+from\s+the\s+previous\s+shot|remains?\s+audible\s+across\s+the\s+transition)\b/iu
+const REFERENCE_DIALOGUE_CONTINUITY = createH3SyntaxMatcher('dialogueContinuity')
 const REFERENCE_VOCAL_EVENT_BOUNDARY = /;|\[Shot\s+\d+\]|\bAt\s+\d{2}:\d{2}\.\d{3},?/gu
 const SHOT_MARKER = /\[Shot (\d+)\]/gu
-const SHOT_TRANSITION = /^\[Shot (\d+)\] At (\d{2}):(\d{2}\.\d{3}), the camera (?:cuts|dissolves|fades|wipes)\b/u
+const SHOT_TRANSITION = createH3SyntaxMatcher('shotTransition')
 const REFERENCE_VISIBLE_TEXT_DIRECT_CARRIER = /^(?:(?:a|an|the|this|that|these|those|his|her|its|their|our|your)\s+)?((?:[\p{L}\p{N}][\p{L}\p{N}'’-]*\s+){0,4})(?:banners?|labels?|signs?|subtitles?|texts?)\s*$/iu
 const REFERENCE_VISIBLE_TEXT_NON_MODIFIER = /\b(?:a|an|and|are|as|at|beside|by|carries|carry|displays?|for|from|has|have|he|her|his|holds?|i|in|is|it|its|looks?|moves?|near|of|on|or|our|over|points?|reads?|she|sits?|stands?|that|the|their|these|they|this|those|to|under|walks?|was|we|wears?|were|which|while|who|whose|with|without|you|your)\b/iu
 const REFERENCE_VISIBLE_TEXT_EXPLICIT_CARRIER = /\b(?:bears?|bearing|contains?|containing|displays?|displaying|has|shows?|showing|with)\s+(?:clearly\s+)?(?:visible|on-screen)\s+text\s*$/iu
