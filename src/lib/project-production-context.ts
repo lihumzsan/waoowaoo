@@ -71,14 +71,13 @@ export type ProjectProductionCapabilities = {
 }
 
 export type ProjectProductionContext = {
-  readonly schemaVersion: 10
+  readonly schemaVersion: 11
   readonly version: string
   readonly project: {
     readonly projectId: string
     readonly name: string
     readonly description: string | null
     readonly videoRatio: string | null
-    readonly videoResolution: string
     readonly imageResolution: string
   }
   readonly productionCapabilities: ProjectProductionCapabilities
@@ -242,7 +241,6 @@ export async function readProjectProductionContext(input: {
         id: true,
         name: true,
         description: true,
-        videoResolution: true,
         imageResolution: true,
       },
     }),
@@ -250,13 +248,12 @@ export async function readProjectProductionContext(input: {
   ])
   if (!project) throw new ProjectProductionContextError()
   const value: Omit<ProjectProductionContext, 'version'> = {
-    schemaVersion: 10,
+    schemaVersion: 11,
     project: {
       projectId: project.id,
       name: project.name,
       description: project.description,
       videoRatio: modelConfig.videoRatio,
-      videoResolution: project.videoResolution,
       imageResolution: project.imageResolution,
     },
     productionCapabilities: resolveProjectProductionCapabilities(modelConfig),
