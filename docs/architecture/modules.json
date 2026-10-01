@@ -289,8 +289,9 @@
         "package-lock.json",
         "Dockerfile",
         "docker-entrypoint.sh",
-        "docker-compose.yml",
-        "next.config.ts"
+          "docker-compose.yml",
+          "scripts/check-local-infra.ts",
+          "next.config.ts"
       ]
     },
     {
