@@ -1,19 +1,20 @@
 @echo off
 setlocal EnableExtensions
 
-cd /d C:\work\workspace\waoowaoo
-
-netstat -ano | findstr /R /C:":3000[^0-9].*LISTENING" >nul 2>&1
-if not errorlevel 1 (
-  echo [ERROR] Port 3000 is already in use. Something may already be running.
-  echo Run "netstat -ano | findstr :3000" to find the PID, then "taskkill /PID <pid> /F" to stop it.
-  exit /b 1
-)
-
-call npm run storage:init
+cd /d "%~dp0"
 if errorlevel 1 (
-  echo [ERROR] storage:init failed.
+  pause
   exit /b 1
 )
 
-call npx concurrently --kill-others "npm run dev:next" "npm run dev:temporal-worker"
+if not defined PORT set "PORT=3000"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\dev-prepare.ps1" -AppPort "%PORT%"
+if errorlevel 1 (
+  pause
+  exit /b 1
+)
+
+call npm run dev
+set "START_EXIT=%errorlevel%"
+if not "%START_EXIT%"=="0" pause
+exit /b %START_EXIT%
