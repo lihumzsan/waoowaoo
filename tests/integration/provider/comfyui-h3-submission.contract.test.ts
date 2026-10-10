@@ -237,7 +237,10 @@ function objectInfo(className: string): Record<string, unknown> {
     output = ['VAE']
   }
   if (className === 'MiniMaxH3LearnedLatentUpscaleT8Advanced') {
-    required.model_name = [['h3_upscaler_lms_v0.1.safetensors']]
+    required.model_name = [[
+      'h3_upscaler_lms_v0.1.safetensors',
+      'minimax_h3_latent_upscaler_3d_fp16.safetensors',
+    ]]
     required.av_latent = ['LATENT']
     required.size_mode = [['target_megapixels', 'scale_by', 'target_dimensions']]
     required.scale_by = ['FLOAT']
@@ -1367,7 +1370,7 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
 
     await expect(executeComfyUiH3VideoGeneration(videoInput)).rejects.toMatchObject({
       message: expect.stringContaining(
-        'COMFYUI_MODEL_MISSING:h3_upscaler_lms_v0.1.safetensors',
+        `COMFYUI_MODEL_MISSING:${H3_DUAL_STAGE_RUNTIME_PROFILE.workflow[H3_DUAL_STAGE_RUNTIME_PROFILE.learnedUpscaleNodeId].inputs.model_name}`,
       ),
     })
     expect(server!.getRequests('POST', '/upload/image')).toHaveLength(0)

@@ -37,7 +37,7 @@
     "class_type": "MiniMaxH3LearnedLatentUpscaleT8Advanced",
     "inputs": {
       "av_latent": ["12", 1],
-      "model_name": "h3_upscaler_lms_v0.1.safetensors",
+      "model_name": "minimax_h3_latent_upscaler_3d_fp16.safetensors",
       "size_mode": "target_megapixels",
       "scale_by": 1.5,
       "target_megapixels": 1.0,
