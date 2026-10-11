@@ -443,6 +443,11 @@ export function DefaultModelCards(allProps: DefaultModelCardsProps) {
                             placeholder={t('defaultModelSection.corePlaceholder')}
                             locale={locale} t={t} props={allProps}
                         />
+                        {videoModel.current?.capabilities?.video?.referenceVideoUpscaleOptions?.includes(true) && (
+                            <p className="mt-2 text-[11px] leading-relaxed text-[var(--glass-text-tertiary)]">
+                                {t('defaultModelDesc.referenceVideoUpscale')}
+                            </p>
+                        )}
                     </div>
                 </div>
 

@@ -84,6 +84,7 @@ export type AiProviderVideoExecutionContext = {
     resolution?: string
     aspectRatio?: string
     generateAudio?: boolean
+    referenceVideoUpscale?: boolean
     lastFrameImageUrl?: string
     referenceImages?: string[]
     referenceAudios?: string[]

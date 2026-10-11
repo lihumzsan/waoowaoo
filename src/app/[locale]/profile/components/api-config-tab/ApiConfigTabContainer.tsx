@@ -32,9 +32,10 @@ export function ApiConfigTabContainer() {
   const {
     providers,
     models,
-    defaultModels,
+    displayedDefaultModels: defaultModels,
     workflowConcurrency,
-    capabilityDefaults,
+    displayedCapabilityDefaults: capabilityDefaults,
+    runtimeManagedModelKeys,
     loading,
     saveStatus,
     saveError,
@@ -80,6 +81,7 @@ export function ApiConfigTabContainer() {
   } = useApiConfigFilters({
     providers,
     models,
+    runtimeManagedModelKeys,
   })
 
   const handleWorkflowConcurrencyChange = useCallback(

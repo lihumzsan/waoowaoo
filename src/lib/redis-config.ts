@@ -26,10 +26,21 @@ function resolveOptionalCredential(value: string | undefined): string | undefine
   return value
 }
 
+function resolveRedisDatabase(value: string | undefined): number {
+  if (value === undefined || value.trim() === '') return 0
+  const normalized = value.trim()
+  const database = Number(normalized)
+  if (!/^(0|[1-9]\d*)$/.test(normalized) || !Number.isSafeInteger(database)) {
+    throw new Error('REDIS_DB_INVALID')
+  }
+  return database
+}
+
 export function resolveRedisRuntimeConfig(env: RuntimeEnvironment = process.env) {
   const configuredHost = resolveOptionalText('REDIS_HOST', env.REDIS_HOST)
   return {
     host: configuredHost ?? '127.0.0.1',
+    db: resolveRedisDatabase(env.REDIS_DB),
     port: resolvePositiveIntegerConfig({
       name: 'REDIS_PORT',
       value: env.REDIS_PORT,

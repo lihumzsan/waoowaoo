@@ -255,14 +255,13 @@ const testPersistence: RuntimeSessionPersistence = {
 
 function testModel(project: { readonly id: string; readonly name: string }): AssistantRuntimeModelConfiguration {
   const projectProductionContext: ProjectProductionContext = {
-    schemaVersion: 10,
+    schemaVersion: 11,
     version: 'test',
     project: {
       projectId: project.id,
       name: project.name,
       description: null,
       videoRatio: null,
-      videoResolution: '1080p',
       imageResolution: '1024x1024',
     },
     productionCapabilities: { video: null, music: null, sound: null },

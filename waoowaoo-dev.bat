@@ -1,20 +1,24 @@
 @echo off
 setlocal EnableExtensions
 
-cd /d "%~dp0"
-if errorlevel 1 (
-  pause
-  exit /b 1
+set "START_SCRIPT=%~dp0scripts\dev\start.ps1"
+if not exist "%START_SCRIPT%" (
+  echo [ERROR] Local startup script is missing: "%START_SCRIPT%"
+  set "START_EXIT=1"
+  goto :finish
 )
 
-if not defined PORT set "PORT=3000"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\dev-prepare.ps1" -AppPort "%PORT%"
-if errorlevel 1 (
-  pause
-  exit /b 1
-)
-
-call npm run dev
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%START_SCRIPT%"
 set "START_EXIT=%errorlevel%"
-if not "%START_EXIT%"=="0" pause
+echo.
+if "%START_EXIT%"=="0" (
+  echo The service runs in the background. Closing this window does not stop it.
+) else (
+  echo [ERROR] Startup failed. Review the error above.
+  echo Logs: "%~dp0.runtime\local-startup"
+)
+
+:finish
+echo.
+pause
 exit /b %START_EXIT%

@@ -1,10 +1,11 @@
-import type { MinimaxH3PromptSection } from './h3-prompt'
+import { describeH3SyntaxCorrection, type H3SyntaxFormId, type MinimaxH3PromptSection } from './h3-prompt-grammar'
 import { AppError } from '@/lib/errors/app-error'
 
 type PromptIssueDescription = {
   readonly section: MinimaxH3PromptSection | null
   /** Instructions for the model, not localized UI copy. Null denotes a system/configuration defect. */
   readonly correction: string | null
+  readonly syntaxForms?: readonly H3SyntaxFormId[]
 }
 
 // Every throw site selects a declared issue. Consumers use typed fields, never
@@ -22,9 +23,9 @@ export const H3_PROMPT_ISSUES = {
   REFERENCE_STYLE_OPENING_REQUIRED: { section: 'detailed_description', correction: 'Add one or two English sentences establishing the source-backed visual style before [Shot 1].' },
   REFERENCE_STYLE_OPENING_INVALID: { section: 'detailed_description', correction: 'Use one or two English style sentences before [Shot 1], without dialogue, timestamps, or shot actions.' },
   CONTINUATION_TIME_SECTION_INVALID: { section: null, correction: 'Keep continuation timestamps in detailed_description, following the injected duration plan.' },
-  CONTINUATION_TIME_FORMAT_INVALID: { section: 'detailed_description', correction: 'Use At MM:SS.mmm timestamps for continuation and the injected guide-relative timeline.' },
+  CONTINUATION_TIME_FORMAT_INVALID: { section: 'detailed_description', syntaxForms: ['time'], correction: 'Use the time form for each time phase. Follow the injected prompt start/end; continuation uses its guide-relative timeline.' },
   SHOT_SEQUENCE_INVALID: { section: 'detailed_description', correction: 'Number actual shots consecutively from [Shot 1]. The detail identifies the expected shot.' },
-  SHOT_TRANSITION_INVALID: { section: 'detailed_description', correction: 'Begin each later shot with [Shot N] At MM:SS.mmm, the camera cuts/dissolves/fades/wipes ...; preserve the intended cut and narrative.' },
+  SHOT_TRANSITION_INVALID: { section: 'detailed_description', syntaxForms: ['shotTransition'], correction: 'Begin each later shot with the transition form; preserve the intended cut and narrative.' },
   SHOT_TIME_OUT_OF_RANGE: { section: 'detailed_description', correction: 'Use increasing shot times within the injected prompt start/end. Split at a real semantic boundary if natural delivery exceeds the segment.' },
   SHOT_TRANSITION_ORPHANED: { section: 'detailed_description', correction: 'Give each actual camera transition exactly one later [Shot N] marker and timestamp; do not mark continuous motion as a cut.' },
   TIMED_EVENT_OUT_OF_RANGE: { section: 'detailed_description', correction: 'Place the identified event within the injected prompt start/end without speeding up or deleting source dialogue.' },
@@ -42,7 +43,7 @@ export const H3_PROMPT_ISSUES = {
   REFERENCE_VISUAL_DEFINITION_DUPLICATE: { section: 'subject_definitions', correction: 'Give the identified visual reference exactly one definition; merge its actual source-backed attributes.' },
   REFERENCE_SUBJECT_DEFINITION_INVALID: { section: 'subject_definitions', correction: 'Define each Subject on its own line, with one Subject identity and its actual Picture source(s).' },
   REFERENCE_SUBJECT_DEFINITION_DUPLICATE: { section: 'subject_definitions', correction: 'Keep one definition per Subject identity and use that same identity throughout the prompt.' },
-  REFERENCE_PLAYBACK_SUBJECT_DEFINITION_INVALID: { section: 'subject_definitions', correction: 'Use the director Skill source-backed or target-visible in-scene playback entity definition, only for a real playback entity.' },
+  REFERENCE_PLAYBACK_SUBJECT_DEFINITION_INVALID: { section: 'subject_definitions', syntaxForms: ['sourceBackedPlayback', 'targetVisiblePlayback'], correction: 'Use the matching definition and its colon; target-visible has no Picture.' },
   REFERENCE_PLAYBACK_SUBJECT_AUDIENCE_CONFLICT: { section: 'subject_definitions', correction: 'Describe audible physical playback in the scene; audience-only score belongs to the separate music operation.' },
   REFERENCE_SUBJECT_UNDEFINED: { section: 'subject_definitions', correction: 'Define the referenced source-backed Subject with its actual Picture binding; describe source-established unreferenced extras in plain prose.' },
   REFERENCE_SUBJECT_SOURCE_MISSING: { section: 'subject_definitions', correction: 'Bind this Subject to the actual ready Picture source(s). For a source-established extra without a reference image, use plain description and a stable speaker ID instead of an unbound Subject. Do not remove principal-character references or invent a Picture source.' },
@@ -59,16 +60,16 @@ export const H3_PROMPT_ISSUES = {
   AUDIO_SPEAKER_BINDING_INVALID: { section: 'subject_definitions', correction: 'Bind one Audio to one actual Subject/Speaker or stable voice description plus (Sx). Do not invent a speaker for unbound ambience or synchronized cues.' },
   AUDIO_REFERENCE_RETENTION_MISSING: { section: 'retention_analysis', correction: 'Add one retention entry for this Audio using its actual official audio relationship, without (Sx).' },
   AUDIO_REFERENCE_RETENTION_INVALID: { section: 'retention_analysis', correction: 'Give this Audio one entry using fully_copy, partially_copy, reference, or weak_reference; do not mix another Audio label into the entry.' },
-  AUDIO_REFERENCE_APPLICATION_MISSING: { section: null, correction: 'Explicitly apply this Audio to its intended speaker in the same vocal event as (Sx) and <d>. Unbound audio must be cited in its actual audible layer. Preserve required voice references.' },
+  AUDIO_REFERENCE_APPLICATION_MISSING: { section: null, syntaxForms: ['singleSpeaker', 'compoundSpeaker'], correction: 'Apply this Audio in its actual audible event; use the applicable form.' },
   AUDIO_REFERENCE_APPLICATION_INVALID: { section: 'detailed_description', correction: 'Apply the Audio to its defined speaker in the same shot/phase and vocal event. Do not borrow a different speaker or a reference across an event boundary.' },
-  AUDIO_SPEAKER_DIALOGUE_MISSING: { section: 'detailed_description', correction: 'Use the bound speaker ID in its intended source-backed dialogue event; correct an unused audio selection explicitly without inventing dialogue.' },
+  AUDIO_SPEAKER_DIALOGUE_MISSING: { section: 'detailed_description', syntaxForms: ['singleSpeaker', 'compoundSpeaker'], correction: 'Check IDs on existing dialogue; unison needs commas, not and/+. Do not invent words.' },
   PROMPT_EMPTY: { section: null, correction: 'Provide the complete final prompt with all six H3 sections.' },
   PROFILE_UNKNOWN: { section: null, correction: null },
   REFERENCE_DIALOGUE_TAG_INVALID: { section: 'detailed_description', correction: 'Use balanced, non-nested <d>...</d> blocks for spoken source text.' },
   REFERENCE_DIALOGUE_CONTENT_INVALID: { section: 'detailed_description', correction: 'Put [Language] and verbatim dialogue inside <d>; complete sentences need .?! or 。！？ before </d>. Only source-required cutoff or paired scenetrans permits an unfinished ending. Do not delete or rewrite dialogue to pass.' },
   REFERENCE_DIALOGUE_CUTOFF_INVALID: { section: 'detailed_description', correction: 'Use <cutoff> only for the explicitly interrupted last utterance, at its end; its </d> must finish detailed_description.' },
   REFERENCE_QUOTED_TEXT_CONTEXT_INVALID: { section: null, correction: 'Use <d> for speech. Reserve escaped ASCII quoted literals for explicitly source-required visible text with a valid visible-text carrier.' },
-  REFERENCE_SCENETRANS_INVALID: { section: 'detailed_description', correction: 'Pair trailing and leading <scenetrans> inside adjacent dialogue blocks across a real cut, with explicit audible continuity. Preserve source words.' },
+  REFERENCE_SCENETRANS_INVALID: { section: 'detailed_description', syntaxForms: ['dialogueAcrossCut'], correction: 'Pair tags across a real cut; continue the same voice. Audio mapping only if supplied.' },
 } as const satisfies Record<string, PromptIssueDescription>
 
 export type H3PromptIssueCode = keyof typeof H3_PROMPT_ISSUES
@@ -79,8 +80,11 @@ export class H3PromptValidationError extends AppError {
   readonly detail: string | null
   readonly correction: string | null
 
-  constructor(code: H3PromptIssueCode, detail?: string, section?: MinimaxH3PromptSection) {
-    const description = H3_PROMPT_ISSUES[code]
+  constructor(code: H3PromptIssueCode, detail?: string, section?: MinimaxH3PromptSection, correctionContext?: {
+    readonly message: string
+    readonly syntaxForms?: readonly H3SyntaxFormId[]
+  }) {
+    const description: PromptIssueDescription = H3_PROMPT_ISSUES[code]
     super(
       description.correction === null ? 'INTERNAL_ERROR' : 'INVALID_PARAMS',
       `VIDEO_PROMPT_PROFILE_INVALID:${code}${detail === undefined ? '' : `:${detail}`}`,
@@ -93,6 +97,11 @@ export class H3PromptValidationError extends AppError {
     this.issueCode = code
     this.section = section ?? description.section
     this.detail = detail ?? null
-    this.correction = description.correction
+    const syntaxForms = correctionContext?.syntaxForms ?? description.syntaxForms
+    this.correction = description.correction === null ? null : [
+      description.correction,
+      correctionContext?.message,
+      syntaxForms ? describeH3SyntaxCorrection(syntaxForms) : null,
+    ].filter((part): part is string => typeof part === 'string').join('\n')
   }
 }

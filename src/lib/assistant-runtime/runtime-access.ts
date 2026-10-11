@@ -20,6 +20,10 @@ import {
 
 const MCP_PATH = '/api/internal/codex-runtime/mcp'
 const WAO_MCP_RUNTIME_BEARER_ENV_KEY = 'WAO_MCP_RUNTIME_BEARER_TOKEN' as const
+// The local Next.js development route can take longer than Codex's default
+// handshake budget to compile. Keep required-tool startup bounded separately
+// from tool execution and the runtime ownership lease.
+const WAO_MCP_STARTUP_TIMEOUT_SECONDS = 180
 // Codex defaults MCP tool calls to 60 seconds. Wao production calls can spend
 // most of that time planning before they suspend on a user-owned decision, so
 // the default races the approval UI. Bound the interaction independently from
@@ -156,6 +160,7 @@ function runtimeConfig(input: {
         // approval remains enabled for shell/file permissions,
         // but must not add a second prompt in front of Wao MCP tools.
         default_tools_approval_mode: tools.waoMcp.defaultToolsApprovalMode,
+        startup_timeout_sec: WAO_MCP_STARTUP_TIMEOUT_SECONDS,
         tool_timeout_sec: WAO_MCP_TOOL_TIMEOUT_SECONDS,
       },
     },

@@ -2,6 +2,7 @@
   "extends": "./tsconfig.json",
   "include": [
     "src/types/next-auth.d.ts",
+    "scripts/check-local-infra.ts",
     "scripts/billing-cleanup-pending-freezes.ts",
     "scripts/billing-reconcile-ledger.ts",
     "scripts/migrations/assistant-message-cutover.ts",
@@ -10,6 +11,7 @@
     "scripts/check-outbound-image-runtime-sample.ts",
     "scripts/check-outbound-image-success-rate.ts",
     "scripts/codex-runtime-smoke.ts",
+    "scripts/dev/check-services.ts",
     "scripts/media-archive-legacy-refs.ts",
     "scripts/media-backfill-refs.ts",
     "scripts/media-build-unreferenced-index.ts",

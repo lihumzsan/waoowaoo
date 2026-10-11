@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { describeH3SyntaxForms } from '@/lib/video-generation/h3-prompt-grammar'
 import { getCreativeSkillDefinition } from './registry'
 import { parseCreativeSkillUri } from './uri'
 import type { CreativeSkillResource, ReadCreativeSkillResourceInput } from './types'
@@ -39,6 +40,18 @@ export async function readCreativeSkillResource(
       `CREATIVE_SKILL_RESOURCE_NOT_FOUND:${definition.id}:${code}`,
       { cause: error },
     )
+  }
+
+  switch (definition.instructionAppendix) {
+    case null:
+      break
+    case 'h3-prompt-grammar':
+      content = `${content.trimEnd()}\n\n${describeH3SyntaxForms()}\n`
+      break
+    default: {
+      const unsupported: never = definition.instructionAppendix
+      throw new Error(`CREATIVE_SKILL_APPENDIX_UNSUPPORTED:${String(unsupported)}`)
+    }
   }
 
   return {

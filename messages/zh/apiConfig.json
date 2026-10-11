@@ -35,6 +35,7 @@
   "defaultModelDesc": {
     "analysisModel": "负责剧本解析、镜头规划等全流程文本分析能力。",
     "videoModel": "负责将图像与指令合成为最终视频片段。",
+    "referenceVideoUpscale": "HyperVAE 2× 解码仅用于新建的参考生视频任务，最终输出尺寸保持不变；重试沿用原任务设置。",
     "characterModel": "根据剧本描述生成角色形象与外观参考图",
     "locationModel": "根据剧本描述生成场景环境与空间参考图",
     "editModel": "对已有图片进行局部修改、风格调整与精修",

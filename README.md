@@ -168,6 +168,14 @@ npm run db:push
 npm run dev
 ```
 
+本机启动会通过 `npm run infra:check` 从宿主机实际验证 MySQL、Redis、MinIO bucket 和
+Temporal namespace；任一不可达都会阻止 Web/Worker 启动。也可单独运行该命令只读排查。
+容器显示 `healthy` 只证明容器内检查成功，不证明 Windows 端口转发正常。
+
+Windows 更新 WSL 或手动重启 WSL 后，应完整重启 Docker Desktop，再运行
+`npm run infra:check`，避免仍在运行的 Docker 后台保留旧容器地址。基础设施检查不会自动
+重启服务、清理数据或更改系统更新设置，也不能保证运行中的 WSL 不被系统更新中断。
+
 ---
 
 访问 [http://localhost:13000](http://localhost:13000)（方式一、二）或 [http://localhost:3000](http://localhost:3000)（方式三）开始使用！

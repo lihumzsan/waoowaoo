@@ -7,6 +7,7 @@ import { getProviderKey } from '../../api-config'
 interface UseApiConfigFiltersParams {
   providers: Provider[]
   models: CustomModel[]
+  runtimeManagedModelKeys: ReadonlySet<string>
 }
 
 interface EnabledModelOption extends CustomModel {
@@ -47,6 +48,7 @@ function shouldExposeModelForProvider(provider: Provider | undefined, model: Cus
 export function useApiConfigFilters({
   providers,
   models,
+  runtimeManagedModelKeys,
 }: UseApiConfigFiltersParams) {
   const modelProviderKeys = useMemo(() => {
     const keys = new Set<string>(MODEL_PROVIDER_KEYS)
@@ -88,11 +90,13 @@ export function useApiConfigFilters({
     const providersById = new Map(providers.map((provider) => [provider.id, provider] as const))
 
     for (const model of models) {
-      if (!model.enabled) continue
       if (!isDefaultModelType(model.type)) continue
       const provider = providersById.get(model.provider)
-      if (!hasProviderApiKey(provider)) continue
-      if (!shouldExposeModelForProvider(provider, model)) continue
+      if (!runtimeManagedModelKeys.has(model.modelKey) && (
+        !model.enabled
+        || !hasProviderApiKey(provider)
+        || !shouldExposeModelForProvider(provider, model)
+      )) continue
 
       const option: EnabledModelOption = {
         ...model,
@@ -103,7 +107,7 @@ export function useApiConfigFilters({
     }
 
     return grouped
-  }, [models, providers])
+  }, [models, providers, runtimeManagedModelKeys])
 
   const providersById = useMemo(() => new Map(providers.map((provider) => [provider.id, provider] as const)), [providers])
 

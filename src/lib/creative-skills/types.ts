@@ -46,6 +46,7 @@ export interface CreativeSkillDefinition {
   readonly summary: string
   readonly tags: readonly string[]
   readonly entryUri: CreativeSkillUri
+  readonly instructionAppendix: 'h3-prompt-grammar' | null
 }
 
 export interface ReadCreativeSkillResourceInput {
