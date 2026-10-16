@@ -387,6 +387,9 @@ function buildReferencePromptGraph(
   })
   for (const nodeId of profile.referenceImageNodeIds) delete graph[nodeId]
   for (const nodeId of profile.referenceAudioNodeIds) delete graph[nodeId]
+  for (const key of Object.keys(finalUpscaleNode.inputs)) {
+    if (key.startsWith('ref_image_') || key.startsWith('ref_audio_')) delete finalUpscaleNode.inputs[key]
+  }
   for (const conditioningNode of conditioningNodes) {
     if (!conditioningNode) continue
     for (const key of Object.keys(conditioningNode.inputs)) {
@@ -404,6 +407,7 @@ function buildReferencePromptGraph(
       if (!conditioningNode) continue
       conditioningNode.inputs['ref_images.ref_image_' + String(index)] = [loadNodeId, 0]
     }
+    finalUpscaleNode.inputs['ref_image_' + String(index)] = [loadNodeId, 0]
   })
   referenceAudioFilenames.forEach((filename, index) => {
     const loadNodeId = profile.referenceAudioNodeIds[index]!
@@ -415,6 +419,7 @@ function buildReferencePromptGraph(
       if (!conditioningNode) continue
       conditioningNode.inputs['ref_audios.ref_audio_' + String(index)] = [loadNodeId, 0]
     }
+    finalUpscaleNode.inputs['ref_audio_' + String(index)] = [loadNodeId, 0]
   })
   const [coarseNode, refineNode] = conditioningNodes
   if (!coarseNode || !refineNode) throw new Error('COMFYUI_H3_PROFILE_NODE_MISSING:' + profile.id)
@@ -428,6 +433,7 @@ function buildReferencePromptGraph(
   learnedUpscaleNode.inputs.target_height = secondDimensions.height
   finalUpscaleNode.inputs.width = finalDimensions.width
   finalUpscaleNode.inputs.height = finalDimensions.height
+  finalUpscaleNode.inputs.seed = input.seed
   noiseNode.inputs.noise_seed = input.seed
   if (input.referenceVideoUpscale === true) {
     graph[profile.hyperVaeNodeId] = {

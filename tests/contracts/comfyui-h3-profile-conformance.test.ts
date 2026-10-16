@@ -257,7 +257,6 @@ describe('ComfyUI H3 dual-stage profile', () => {
   it('keeps the canonical graph wired to the final output node', () => {
     const nodes = Object.values(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow)
     expect(nodes.filter((node) => node.class_type === 'MiniMaxH3AudioConditioningT8')).toHaveLength(2)
-    expect(nodes.filter((node) => node.class_type === 'ImageResizeKJv2' && node.inputs.upscale_method === 'nvidia_rtx_vsr')).toHaveLength(1)
     expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow[H3_DUAL_STAGE_RUNTIME_PROFILE.outputNodeId]?.class_type).toBe('VHS_VideoCombine')
     expect(H3_DUAL_STAGE_RUNTIME_PROFILE.workflow['2']).toEqual({
       class_type: 'VAELoader',

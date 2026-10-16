@@ -116,7 +116,7 @@
   "51": { "class_type": "LoraLoaderBypassModelOnly", "inputs": { "model": ["52", 0], "lora_name": "h3\\minimax_h3_turbo_v4_step600_ema_DasiwaREF2VAHybridV1_0_curveproj1025_compat_v001.safetensors", "strength_model": 0.9 } },
   "52": { "class_type": "LoraLoaderModelOnly", "inputs": { "model": ["56", 0], "lora_name": "h3\\H3_Combat_V2.safetensors", "strength_model": 0.7 } },
   "53": { "class_type": "LoraLoaderModelOnly", "inputs": { "model": ["56", 0], "lora_name": "h3\\H3_Combat_V2.safetensors", "strength_model": 0.49 } },
-  "55": { "class_type": "ImageResizeKJv2", "inputs": { "image": ["20", 0], "width": 1920, "height": 1088, "upscale_method": "nvidia_rtx_vsr", "keep_proportion": "crop", "pad_color": "0, 0, 0", "crop_position": "center", "divisible_by": 32, "device": "cpu" } },
+  "55": {"class_type": "WaoH3RefAutoFaceRefineV1", "inputs": {"runtime_contract": "h3-ref-face-auto/v1", "source_frames": ["20", 0], "source_audio": ["20", 1], "raw_model": ["4", 0], "clip": ["3", 0], "video_vae": ["1", 0], "audio_vae": ["2", 0], "prompt": ["28", 0], "width": 1920, "height": 1088, "seed": 0, "ref_image_0": ["6", 0], "ref_audio_0": ["18", 0]}},
   "56": { "class_type": "MiniMaxH3ChunkFeedForwardT8Advanced", "inputs": { "model": ["34", 0], "chunks": 4, "seq_threshold": 4096 } },
   "168": { "class_type": "VHS_VideoCombine", "inputs": { "images": ["55", 0], "audio": ["20", 1], "frame_rate": 24, "loop_count": 0, "filename_prefix": "waoowaoo/h3-reference-t8-dual-stage-2mp", "format": "video/h264-mp4", "pix_fmt": "yuv420p", "crf": 10, "save_metadata": true, "pingpong": false, "save_output": true } }
 }

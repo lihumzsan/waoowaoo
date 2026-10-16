@@ -284,8 +284,14 @@ function assertReferenceT8GraphContract(profile: H3DualStageRuntimeProfile): voi
   }
   if (
     audioDecodeNode?.class_type !== 'MiniMaxH3AVDecodeT8'
-    || finalUpscaleNode?.class_type !== 'ImageResizeKJv2'
-    || finalUpscaleNode.inputs.upscale_method !== 'nvidia_rtx_vsr'
+    || finalUpscaleNode?.class_type !== 'WaoH3RefAutoFaceRefineV1'
+    || finalUpscaleNode.inputs.runtime_contract !== 'h3-ref-face-auto/v1'
+    || !Array.isArray(finalUpscaleNode.inputs.source_frames)
+    || finalUpscaleNode.inputs.source_frames[0] !== profile.audioDecodeNodeId
+    || finalUpscaleNode.inputs.source_frames[1] !== 0
+    || !Array.isArray(finalUpscaleNode.inputs.source_audio)
+    || finalUpscaleNode.inputs.source_audio[0] !== profile.audioDecodeNodeId
+    || finalUpscaleNode.inputs.source_audio[1] !== 1
     || outputNode?.class_type !== 'VHS_VideoCombine'
     || !Array.isArray(outputNode.inputs.images)
     || outputNode.inputs.images[0] !== profile.finalUpscaleNodeId
