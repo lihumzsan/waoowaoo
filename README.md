@@ -207,6 +207,15 @@ Windows 更新 WSL 或手动重启 WSL 后，应完整重启 Docker Desktop，�
 用户已登录的 Codex App Server 提供，图片生成与编辑走 Codex 图片 Provider；视频、音乐、
 环境音效、TTS 和配音统一走本机 ComfyUI。设置中心只展示这两个边界内的可用能力。
 
+Qwen3-TTS 音色设计与 H3 共用 `COMFYUI_H3_DUAL_STAGE_BASE_URL`。音色工作流要求
+[ComfyUI-Qwen3-TTS](https://github.com/shinrali/ComfyUI-Qwen3-TTS/tree/7ec281a883bee318d265a6555bd91d488242ec9b)
+提供 `Qwen3TTSVoiceDesign` 和 `SaveQwen3TTSAudio` 节点，以及可用的 VoiceDesign 模型。
+确认人物资源后，在项目对话中要求设计该人物的声音，AI 会根据人物设定起草声音描述与试听台词，
+通过 `create_audio` 生成 WAV 候选。详情与预览同时展示音频和两项文字；可以修改后生成新候选，
+再点击采用。选择保存到这份人物资源，H3 后续按实际说话人复用精确音频版本；视频对白仍来自剧本。
+提交前会检查节点契约，缺失或不兼容时明确报错。更新应用前需应用人物音色选择的数据库迁移并重新生成
+Prisma Client；应先排空进行中的音色任务，再一起更新应用与 Worker。
+
 ---
 
 ## 📦 技术栈

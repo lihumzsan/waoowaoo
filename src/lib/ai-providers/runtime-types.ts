@@ -135,14 +135,28 @@ export type AiProviderSoundExecutionContext = {
   }
 }
 
-type AiProviderMediaExecutionContext<M extends 'image' | 'video' | 'music' | 'sound'> =
+export type AiProviderVoiceExecutionContext = {
+  userId: string
+  selection: AiResolvedSelection & { provider: string; modelId: string; modelKey: string }
+  prompt: string
+  options?: {
+    previewText?: string
+    language?: string
+    outputFormat?: 'wav'
+    [key: string]: unknown
+  }
+}
+
+type AiProviderMediaExecutionContext<M extends 'image' | 'video' | 'music' | 'sound' | 'voice'> =
   M extends 'image'
     ? AiProviderImageExecutionContext
     : M extends 'video'
       ? AiProviderVideoExecutionContext
       : M extends 'music'
         ? AiProviderMusicExecutionContext
-        : AiProviderSoundExecutionContext
+        : M extends 'sound'
+          ? AiProviderSoundExecutionContext
+          : AiProviderVoiceExecutionContext
 
 export type AiProviderPreparedMediaExecution = {
   readonly execute: () => Promise<GenerateResult>
@@ -153,13 +167,13 @@ type AiProviderMediaModalityAdapterBase = {
   describe: (selection: AiResolvedSelection) => AiVariantDescriptor
 }
 
-type AiProviderDirectMediaModalityAdapter<M extends 'image' | 'video' | 'music' | 'sound'> =
+type AiProviderDirectMediaModalityAdapter<M extends 'image' | 'video' | 'music' | 'sound' | 'voice'> =
   AiProviderMediaModalityAdapterBase & {
     execute: (input: AiProviderMediaExecutionContext<M>) => Promise<GenerateResult>
     prepare?: never
   }
 
-type AiProviderPreparedMediaModalityAdapter<M extends 'image' | 'video' | 'music' | 'sound'> =
+type AiProviderPreparedMediaModalityAdapter<M extends 'image' | 'video' | 'music' | 'sound' | 'voice'> =
   AiProviderMediaModalityAdapterBase & {
     execute?: never
     prepare: (
@@ -167,7 +181,7 @@ type AiProviderPreparedMediaModalityAdapter<M extends 'image' | 'video' | 'music
     ) => Promise<AiProviderPreparedMediaExecution>
   }
 
-export type AiProviderMediaModalityAdapter<M extends 'image' | 'video' | 'music' | 'sound'> =
+export type AiProviderMediaModalityAdapter<M extends 'image' | 'video' | 'music' | 'sound' | 'voice'> =
   AiProviderDirectMediaModalityAdapter<M> | AiProviderPreparedMediaModalityAdapter<M>
 
 export type AiProviderConnectionTestStepName = 'models' | 'textGen' | 'imageGen' | 'musicGen'
@@ -220,5 +234,6 @@ export interface AiProviderAdapter {
   video?: AiProviderMediaModalityAdapter<'video'>
   music?: AiProviderMediaModalityAdapter<'music'>
   sound?: AiProviderMediaModalityAdapter<'sound'>
+  voice?: AiProviderMediaModalityAdapter<'voice'>
   connectionTest?: AiProviderConnectionTester
 }

@@ -18,6 +18,8 @@ import { PreviewableImage, SELECTABLE_TEXT_CLASS } from '../nodes/renderers/rend
 import type { WorkspaceNodeDetailsActions } from './WorkspaceNodeDetailsCard'
 import type { WorkspaceResourceCardView } from '../contracts/workspace-canvas-interactions'
 import { WorkspaceNodeActionBar } from './WorkspaceNodeActionBar'
+import { WorkspaceVoiceDesignPanel } from './WorkspaceVoiceDesignPanel'
+import { WorkspaceCharacterVoicePanel } from './WorkspaceCharacterVoicePanel'
 
 /** Media-family icon for tiles that have no visual thumbnail of their own. */
 const INPUT_MEDIA_ICONS: Record<WorkspaceResourceMediaType, AppIconName> = {
@@ -361,6 +363,25 @@ export function WorkspaceNodeDetailsPanel({
 
   return (
     <section className="space-y-2.5 rounded-[20px] border border-slate-200 bg-white/96 p-4 shadow-[0_18px_48px_rgba(15,23,42,0.14)] backdrop-blur-xl">
+      {card.resource.voiceDesign ? (
+        <WorkspaceVoiceDesignPanel
+          key={`${card.resource.resourceId}:${card.resource.contentVersion}`}
+          voice={card.resource.voiceDesign}
+          resourceName={card.resource.name}
+          resourceStatus={card.resource.status}
+          modelName={modelName}
+          audioUrl={card.presentation.summary.kind === 'media' ? card.presentation.summary.url : null}
+          busy={actions.busy}
+          onOperation={actions.onOperation}
+        />
+      ) : null}
+      {card.resource.characterVoiceSelection ? (
+        <WorkspaceCharacterVoicePanel
+          selection={card.resource.characterVoiceSelection}
+          busy={actions.busy}
+          onDesignVoice={actions.onAssistantPrefill}
+        />
+      ) : null}
       {isTextResource ? (
         <SectionShell title={t('contentSection')}>
           {fullContentText !== null ? (
@@ -468,7 +489,7 @@ export function WorkspaceNodeDetailsPanel({
         </SectionShell>
       ) : null}
 
-      {prompt ? (
+      {!card.resource.voiceDesign && prompt ? (
         <SectionShell
           title={labels('generationPrompt')}
           trailing={(
@@ -499,13 +520,13 @@ export function WorkspaceNodeDetailsPanel({
             </p>
           </div>
         </SectionShell>
-      ) : modelName ? (
+      ) : !card.resource.voiceDesign && modelName ? (
         <SectionShell title={labels('generationModel')}>
           <p className={`${SELECTABLE_TEXT_CLASS} break-all text-xs text-slate-700`}>{modelName}</p>
         </SectionShell>
       ) : null}
 
-      {!prompt && !modelName && inputs.length === 0 && !isTextResource ? (
+      {!prompt && !modelName && inputs.length === 0 && !isTextResource && !card.resource.voiceDesign && !card.resource.characterVoiceSelection ? (
         <p className={`${SELECTABLE_TEXT_CLASS} px-1 py-2 text-xs text-[var(--glass-text-tertiary)]`}>
           {t('empty')}
         </p>

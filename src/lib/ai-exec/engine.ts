@@ -43,12 +43,13 @@ import {
 import { createScopedLogger } from "@/lib/logging/core";
 import type { MusicCompositionPlan } from "@/lib/music/composition-plan";
 import { hashCanonicalJson } from "@/lib/operation-plan-contract/canonical-json";
+import type { VoiceDesignGenerationOptions } from "@/lib/voice/voice-design-contract";
 
 const mediaExecutionLogger = createScopedLogger({ module: "ai-exec.media" });
 
 export type AiMediaExecutionModality = Extract<
   AiModality,
-  "image" | "video" | "music" | "sound"
+  "image" | "video" | "music" | "sound" | "voice"
 >;
 
 export type AiImageExecutionOptions = {
@@ -99,6 +100,8 @@ export type AiSoundExecutionOptions = {
   outputFormat?: "mp3";
 };
 
+export type AiVoiceExecutionOptions = VoiceDesignGenerationOptions;
+
 export type AiMediaExecutionInput =
   | {
       modality: "image";
@@ -132,6 +135,13 @@ export type AiMediaExecutionInput =
       modelKey: string;
       prompt: string;
       options?: AiSoundExecutionOptions;
+    }
+  | {
+      modality: "voice";
+      userId: string;
+      modelKey: string;
+      prompt: string;
+      options: AiVoiceExecutionOptions;
     };
 
 async function executeProviderRouteWithoutFence<TResult>(
@@ -337,6 +347,32 @@ export async function executeMediaGeneration(
             : { execute: async () => await modalityAdapter.execute(context) }),
         };
       }
+      case "voice": {
+        const modalityAdapter = adapter.voice;
+        if (!modalityAdapter) {
+          throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${routeSelection.provider}:voice`);
+        }
+        const options = normalizeMediaOptionsForSelection({
+          selection: routeSelection,
+          modality: input.modality,
+          options: input.options,
+          prompt: input.prompt,
+        }) as AiVoiceExecutionOptions;
+        const context = {
+          userId: input.userId,
+          selection: routeSelection,
+          prompt: input.prompt,
+          options,
+        };
+        return {
+          provider: routeSelection.provider,
+          modelKey: routeSelection.modelKey,
+          request: createMediaProviderRequestIdentity({ ...input, modelKey: routeSelection.modelKey }),
+          ...(modalityAdapter.prepare
+            ? { prepare: async () => await modalityAdapter.prepare(context) }
+            : { execute: async () => await modalityAdapter.execute(context) }),
+        };
+      }
     }
   };
   // Logging-only wrapper around the provider execution throat; it swallows its
@@ -430,7 +466,8 @@ export async function executeMediaGeneration(
 
   if (
     (input.modality !== "music" &&
-      input.modality !== "sound") ||
+      input.modality !== "sound" &&
+      input.modality !== "voice") ||
     !result.async
   )
     return result;
@@ -599,6 +636,21 @@ export async function generateSound(
       prompt,
       options,
     },
+    invocation,
+    wait,
+  );
+}
+
+export async function generateVoice(
+  userId: string,
+  modelKey: string,
+  prompt: string,
+  options: AiVoiceExecutionOptions,
+  invocation?: TaskProviderInvocation,
+  wait?: AsyncProviderWaitCallbacks,
+): Promise<GenerateResult> {
+  return await executeMediaGeneration(
+    { modality: "voice", userId, modelKey, prompt, options },
     invocation,
     wait,
   );

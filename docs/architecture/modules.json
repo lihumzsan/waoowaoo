@@ -117,6 +117,7 @@
         "src/lib/ai-providers/google/music.ts",
         "src/lib/ai-providers/elevenlabs",
         "src/lib/music",
+        "src/lib/voice/voice-design-contract.ts",
         "src/lib/task/execution/artifacts/audio.ts",
         "src/lib/task/execution/handlers/workspace-resource-audio.ts",
         "src/lib/task/execution/handlers/workspace-resource-voice.ts",

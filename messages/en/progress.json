@@ -49,6 +49,8 @@
     "persistSound": "Persist sound-effect resource",
     "generateMusicSubmit": "Submit music generation task",
     "persistMusic": "Persist music resource",
+    "generateVoiceSubmit": "Generate voice preview",
+    "persistVoice": "Persist voice resource",
     "pollingExternal": "Waiting for external service",
     "retrying": "Retrying task",
     "enqueueFailed": "Task enqueue failed",

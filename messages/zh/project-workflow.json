@@ -18,6 +18,54 @@
         "delete": "删除",
         "unavailable": "当前无法执行此操作"
       },
+      "voiceDesign": {
+        "title": "人物声音",
+        "character": "所属人物：{name}",
+        "selected": "已采用",
+        "audioLabel": "试听 {name}",
+        "audioUnavailable": "试听音频尚不可用。",
+        "description": "声音描述",
+        "previewText": "试听台词",
+        "candidateName": "新候选名称",
+        "candidateNameDefault": "{name} · {time}",
+        "language": "语言",
+        "languageUnavailable": "暂无语言信息",
+        "editHint": "可调整描述和台词后生成新候选，试听音频保持原样。",
+        "draftNotice": "当前为修改后的草稿，播放器仍播放原候选。请生成新候选后再试听和采用。",
+        "selectUnavailableReasons": {
+          "character_unavailable": "需要关联当前可用的人物才能采用此声音，请确认人物后重新设计。",
+          "audio_unavailable": "音频尚不可用，暂时无法采用。",
+          "video_unsupported": "当前视频模型不支持采用这个声音。",
+          "duration_unsupported": "实际试听时长不符合 H3 的参考音频范围。请调整试听台词长度，生成新候选后再采用。"
+        },
+        "generateCandidate": "生成新候选",
+        "selectVoice": "采用此声音",
+        "selectOriginalHint": "恢复原稿后可采用当前试听声音。",
+        "resetDraft": "恢复原稿",
+        "detailsLoading": "正在加载声音详情…",
+        "detailsLoadFailed": "声音详情加载失败，请关闭后重新打开。",
+        "languages": {
+          "Auto": "自动识别",
+          "Chinese": "中文",
+          "English": "英语",
+          "Japanese": "日语",
+          "Korean": "韩语",
+          "German": "德语",
+          "French": "法语",
+          "Russian": "俄语",
+          "Portuguese": "葡萄牙语",
+          "Spanish": "西班牙语",
+          "Italian": "意大利语"
+        }
+      },
+      "characterVoice": {
+        "title": "已选人物声音",
+        "designVoice": "AI 设计声音",
+        "designRequest": "请根据当前人物设定设计适合的声音，自动写好声音描述和试听台词，生成可试听、可修改的声音候选。",
+        "empty": "尚未选择声音。可让 AI 根据人物设定生成候选后试听和采用。",
+        "reuseHint": "后续制作这个人物发声的视频时，AI 会复用所选声音；实际台词按视频内容编写。",
+        "unavailable": "所选声音已不可用，请重新选择可用候选。"
+      },
       "errors": {
         "unknown": "这个资源生成失败，你可以重新尝试。",
         "providerDiagnostic": "服务商原始错误：{message}"

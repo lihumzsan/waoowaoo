@@ -1,8 +1,31 @@
-import type { AsyncTaskProviderRegistration } from '@/lib/ai-providers/async-task-types'
+import type { AsyncPollResult, AsyncTaskProviderRegistration } from '@/lib/ai-providers/async-task-types'
 import { normalizeAsyncPollResult } from '@/lib/ai-providers/async-task-types'
-import { formatComfyUiExternalId, parseComfyUiExternalId } from './external-id'
-import { cancelComfyUiMusic, pollComfyUiMusic } from './music-runtime'
+import { formatComfyUiExternalId, parseComfyUiExternalId, type ComfyUiAsyncType } from './external-id'
+import type { ComfyUiRuntimeTargetId } from './config'
+import { cancelComfyUiAudio, pollComfyUiAudio } from './audio-runtime'
 import { cancelComfyUiH3Video, pollComfyUiH3Video } from './h3'
+
+type ComfyUiAsyncRuntime = {
+  readonly poll: (promptId: string, targetId: string | undefined) => Promise<AsyncPollResult>
+  readonly cancel: (promptId: string, targetId: string | undefined) => Promise<void>
+}
+
+export const COMFYUI_ASYNC_RUNTIMES = {
+  VIDEO: { poll: pollComfyUiH3Video, cancel: cancelComfyUiH3Video },
+  MUSIC: {
+    poll: (promptId, targetId) => pollComfyUiAudio('MUSIC', promptId, targetId),
+    cancel: (promptId, targetId) => cancelComfyUiAudio('MUSIC', promptId, targetId),
+  },
+  VOICE: {
+    poll: (promptId, targetId) => pollComfyUiAudio('VOICE', promptId, targetId),
+    cancel: (promptId, targetId) => cancelComfyUiAudio('VOICE', promptId, targetId),
+  },
+} satisfies Record<ComfyUiAsyncType, ComfyUiAsyncRuntime>
+
+function resolveAsyncRuntime(type: string): ComfyUiAsyncRuntime {
+  if (!Object.hasOwn(COMFYUI_ASYNC_RUNTIMES, type)) throw new Error(`COMFYUI_ASYNC_TYPE_UNSUPPORTED:${type}`)
+  return COMFYUI_ASYNC_RUNTIMES[type as ComfyUiAsyncType]
+}
 
 export const comfyuiAsyncTaskProvider: AsyncTaskProviderRegistration = {
   providerCode: 'COMFYUI',
@@ -10,26 +33,12 @@ export const comfyuiAsyncTaskProvider: AsyncTaskProviderRegistration = {
   canParseExternalId: (externalId) => externalId.startsWith('COMFYUI:'),
   parseExternalId: parseComfyUiExternalId,
   formatExternalId: (input) => formatComfyUiExternalId({
-    targetId: input.endpoint as 'shared' | 'h3-dual-stage-2mp',
-    type: input.type as 'VIDEO' | 'MUSIC',
+    targetId: input.endpoint as ComfyUiRuntimeTargetId,
+    type: input.type as ComfyUiAsyncType,
     requestId: input.requestId,
   }),
-  poll: async ({ parsed }) => {
-    const result = parsed.type === 'MUSIC'
-      ? await pollComfyUiMusic(parsed.requestId, parsed.endpoint)
-      : await pollComfyUiH3Video(parsed.requestId, parsed.endpoint)
-    if (result.status === 'pending') return normalizeAsyncPollResult(result)
-    if (result.status === 'completed') {
-      if (parsed.type === 'MUSIC') {
-        if (!('audioUrl' in result)) throw new Error(`COMFYUI_${parsed.type}_RESULT_MISSING`)
-        return normalizeAsyncPollResult({ status: 'completed', resultUrl: result.audioUrl })
-      }
-      if (!('temporaryMediaFile' in result)) throw new Error('COMFYUI_VIDEO_RESULT_MISSING')
-      return normalizeAsyncPollResult({ status: 'completed', temporaryMediaFile: result.temporaryMediaFile })
-    }
-    return normalizeAsyncPollResult(result)
-  },
-  cancel: async ({ parsed }) => parsed.type === 'MUSIC'
-      ? await cancelComfyUiMusic(parsed.requestId, parsed.endpoint)
-      : await cancelComfyUiH3Video(parsed.requestId, parsed.endpoint),
+  poll: async ({ parsed }) => normalizeAsyncPollResult(
+    await resolveAsyncRuntime(parsed.type).poll(parsed.requestId, parsed.endpoint),
+  ),
+  cancel: async ({ parsed }) => resolveAsyncRuntime(parsed.type).cancel(parsed.requestId, parsed.endpoint),
 }

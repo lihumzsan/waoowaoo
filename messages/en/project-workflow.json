@@ -18,6 +18,54 @@
         "delete": "Delete",
         "unavailable": "This action is unavailable"
       },
+      "voiceDesign": {
+        "title": "Character voice",
+        "character": "Character: {name}",
+        "selected": "Selected",
+        "audioLabel": "Preview {name}",
+        "audioUnavailable": "The audio preview is not available yet.",
+        "description": "Voice description",
+        "previewText": "Preview dialogue",
+        "candidateName": "New candidate name",
+        "candidateNameDefault": "{name} · {time}",
+        "language": "Language",
+        "languageUnavailable": "Language unavailable",
+        "editHint": "Edit the description and dialogue to generate a new candidate. The current audio stays unchanged.",
+        "draftNotice": "You are editing a draft; the player still plays the original candidate. Generate a new candidate before previewing and selecting your changes.",
+        "selectUnavailableReasons": {
+          "character_unavailable": "This voice must be linked to an available character. Confirm the character and design a new candidate.",
+          "audio_unavailable": "The audio is not available and cannot be selected yet.",
+          "video_unsupported": "The current video model cannot use this voice.",
+          "duration_unsupported": "The actual preview duration falls outside H3's reference audio range. Adjust the preview dialogue length and generate a new candidate before selecting it."
+        },
+        "generateCandidate": "Generate candidate",
+        "selectVoice": "Use this voice",
+        "selectOriginalHint": "Restore the original draft to select the current audio preview.",
+        "resetDraft": "Restore original",
+        "detailsLoading": "Loading voice details…",
+        "detailsLoadFailed": "Voice details could not load. Close the preview and open it again.",
+        "languages": {
+          "Auto": "Auto-detect",
+          "Chinese": "Chinese",
+          "English": "English",
+          "Japanese": "Japanese",
+          "Korean": "Korean",
+          "German": "German",
+          "French": "French",
+          "Russian": "Russian",
+          "Portuguese": "Portuguese",
+          "Spanish": "Spanish",
+          "Italian": "Italian"
+        }
+      },
+      "characterVoice": {
+        "title": "Selected character voice",
+        "designVoice": "Design with AI",
+        "designRequest": "Design a suitable voice from the selected character's profile. Write the voice description and preview dialogue, then generate voice candidates I can listen to and edit.",
+        "empty": "No voice selected. Ask AI to generate candidates from the character profile, then preview and choose one.",
+        "reuseHint": "AI will reuse this voice when creating videos where this character speaks. The dialogue will follow the video content.",
+        "unavailable": "The selected voice is no longer available. Choose another candidate."
+      },
       "errors": {
         "unknown": "This Resource could not be generated. You can retry it.",
         "providerDiagnostic": "Provider error: {message}"

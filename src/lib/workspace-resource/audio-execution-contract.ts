@@ -9,11 +9,29 @@ import {
 } from '@/lib/music/score-specification'
 import type { AudioGenerationItem } from './generation-request'
 import type { WorkspaceResourceJsonValue } from './contracts'
+import {
+  voiceDesignDescriptionSchema,
+  voiceDesignGenerationOptionsSchema,
+} from '@/lib/voice/voice-design-contract'
+import { WORKSPACE_RESOURCE_SCHEMA } from './schema-registry'
+
+export const audioGenerationKindSchema = z.enum(['music', 'sound', 'voice'])
+
+export const AUDIO_GENERATION_KIND_DEFINITIONS = {
+  music: { modelPurpose: 'music', modelPayloadKey: 'musicModel', schemaId: WORKSPACE_RESOURCE_SCHEMA.BGM_AUDIO },
+  sound: { modelPurpose: 'sound', modelPayloadKey: 'soundModel', schemaId: WORKSPACE_RESOURCE_SCHEMA.SOUND_EFFECT_AUDIO },
+  voice: { modelPurpose: 'voice-design', modelPayloadKey: 'voiceModel', schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE },
+} as const satisfies Record<z.infer<typeof audioGenerationKindSchema>, {
+  readonly modelPurpose: string
+  readonly modelPayloadKey: string
+  readonly schemaId: string
+}>
 
 export const audioExecutionModeSchema = z.enum([
   'sound',
   'prompt_music',
   'composition_music',
+  'voice_design',
 ])
 
 export type AudioExecutionMode = z.infer<typeof audioExecutionModeSchema>
@@ -103,17 +121,33 @@ const compositionMusicAudioExecutionSchema = z.object({
   generationOptions: musicScoreGenerationOptionsSchema,
 }).strict()
 
+const voiceDesignAudioExecutionSchema = z.object({
+  mode: z.literal('voice_design'),
+  audioKind: z.literal('voice'),
+  prompt: voiceDesignDescriptionSchema,
+  durationSeconds: z.null(),
+  generationOptions: voiceDesignGenerationOptionsSchema,
+}).strict()
+
 export const frozenAudioExecutionSchema = z.discriminatedUnion('mode', [
   soundAudioExecutionSchema,
   promptMusicAudioExecutionSchema,
   compositionMusicAudioExecutionSchema,
+  voiceDesignAudioExecutionSchema,
 ])
 
 export type FrozenAudioExecution = z.infer<typeof frozenAudioExecutionSchema>
 
 export function resolveAudioExecutionMode(item: AudioGenerationItem): AudioExecutionMode {
-  if (item.audioKind === 'sound') return 'sound'
-  return 'compositionPlan' in item ? 'composition_music' : 'prompt_music'
+  switch (item.audioKind) {
+    case 'sound': return 'sound'
+    case 'voice': return 'voice_design'
+    case 'music': return 'compositionPlan' in item ? 'composition_music' : 'prompt_music'
+    default: {
+      const exhaustive: never = item
+      throw new Error(`AUDIO_GENERATION_KIND_UNSUPPORTED:${String(exhaustive)}`)
+    }
+  }
 }
 
 export function musicGenerationModeForAudioExecution(
@@ -126,7 +160,7 @@ export function musicGenerationModeForAudioExecution(
 
 type FrozenAudioExecutionFields = {
   readonly audioExecutionMode: AudioExecutionMode | undefined
-  readonly audioKind: 'music' | 'sound' | undefined
+  readonly audioKind: AudioGenerationItem['audioKind'] | undefined
   readonly prompt: string | null
   readonly durationSeconds: number | undefined
   readonly generationOptions: Readonly<Record<string, WorkspaceResourceJsonValue>>
@@ -138,6 +172,18 @@ export function freezeAudioExecution(input: {
 }): FrozenAudioExecution {
   const mode = resolveAudioExecutionMode(input.item)
   switch (mode) {
+    case 'voice_design': {
+      if (input.item.audioKind !== 'voice') {
+        throw new Error('AUDIO_EXECUTION_MODE_ITEM_MISMATCH:voice_design')
+      }
+      return frozenAudioExecutionSchema.parse({
+        mode,
+        audioKind: 'voice',
+        prompt: input.item.prompt,
+        durationSeconds: null,
+        generationOptions: input.generationOptions,
+      })
+    }
     case 'sound': {
       if (input.item.audioKind !== 'sound') {
         throw new Error('AUDIO_EXECUTION_MODE_ITEM_MISMATCH:sound')

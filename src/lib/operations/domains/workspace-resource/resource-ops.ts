@@ -13,6 +13,11 @@ import {
   readWorkspaceResourceAtVersion,
 } from '@/lib/workspace-resource/view-service'
 import { WORKSPACE_RESOURCE_FOLDER_SCHEMA_ID } from '@/lib/workspace-resource/schema-registry'
+import { selectCharacterVoiceInTransaction } from '@/lib/workspace-resource/character-voice-selection'
+import {
+  selectCharacterVoiceInputSchema,
+  selectCharacterVoiceOutputSchema,
+} from '@/lib/workspace-resource/selection-contract'
 import { defineOperation } from '@/lib/operations/define-operation'
 import type {
   ProjectAgentOperationRegistryDraft,
@@ -163,6 +168,26 @@ function writeEffects(input: { readonly destructive: boolean; readonly overwrite
 
 export function createWorkspaceResourceOperations(): ProjectAgentOperationRegistryDraft {
   return {
+    select_character_voice: defineOperation({
+      id: 'select_character_voice',
+      summary: 'Adopt an exact ready voice candidate for its source character Resource. The candidate must belong to that character, and the expected selection revision prevents stale replacement.',
+      intent: 'act',
+      channels: { tool: true, api: true, mcp: true },
+      toolContractRevision: 'select_character_voice/v1',
+      effects: writeEffects({ destructive: false, overwrite: true, bulk: false }),
+      resourceContract: { kind: 'none', reason: 'selects an existing exact voice version on its character Resource' },
+      confirmation: { kind: 'none', required: false },
+      inputSchema: selectCharacterVoiceInputSchema,
+      outputSchema: selectCharacterVoiceOutputSchema,
+      executeInTransaction: async (ctx, input, tx) => selectCharacterVoiceOutputSchema.parse({
+        success: true,
+        ...await selectCharacterVoiceInTransaction(tx, {
+          ...input,
+          userId: ctx.userId,
+          projectId: ctx.projectId,
+        }),
+      }),
+    }),
     list_resources: defineOperation({
       id: 'list_resources',
       summary: 'List the canonical project file/folder tree or search it. Results include stable hierarchy, exact versions, lineage summaries, alternatives, and server-projected actions.',

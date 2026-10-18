@@ -48,18 +48,18 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   'video-direction': defineSkill({
     id: 'video-direction',
     instructionAppendix: 'h3-prompt-grammar',
-    version: '4.8.0',
+    version: '4.9.0',
     title: '视频导演与生成设计',
-    summary: '把客户效果要求转成来源有据的导演设计，按 H3 结构构造和修订最终提示词、参考关系与时间线。',
+    summary: '把客户效果要求转成来源有据的导演设计，按人物已选音色和 H3 结构构造和修订最终提示词、参考关系与时间线。',
     tags: ['video', 'director', 'prompt', 'editing', 'timeline', 'shot', 'camera', 'continuity', 'audio'],
   }),
   'music-direction': defineSkill({
     id: 'music-direction',
     instructionAppendix: null,
-    version: '3.0.0',
-    title: '音乐与配乐设计',
-    summary: '从剧情与真实成片时间线决定配乐窗口，并按生产能力直接创作最终音乐提示词（人声模式含显式歌词）或 Composition Plan 与精确 cue 合成参数。',
-    tags: ['music', 'bgm', 'score', 'audio', 'composition-plan', 'timeline'],
+    version: '3.2.0',
+    title: '音乐与声音设计',
+    summary: '按目标创作配乐、环境音或已确认人物的音色试听；人物音色默认完成声音描述与试听台词，供用户比较、修改和采用。',
+    tags: ['music', 'bgm', 'score', 'audio', 'voice', 'composition-plan', 'timeline'],
   }),
 }
 

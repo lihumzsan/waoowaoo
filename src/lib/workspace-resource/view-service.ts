@@ -37,6 +37,22 @@ import {
 } from './path'
 import { resolveActiveWorkspaceResourceByPath } from './persistence'
 import { readWorkspaceResourceRevision } from './projection-revision'
+import { WORKSPACE_RESOURCE_SCHEMA } from './schema-registry'
+import {
+  VOICE_CHARACTER_REFERENCE_ROLE,
+  voiceDesignDescriptionSchema,
+  voiceDesignGenerationOptionsSchema,
+} from '@/lib/voice/voice-design-contract'
+import {
+  isCharacterVoiceDurationAvailable,
+  readCharacterVoiceDurationLimits,
+  type CharacterVoiceDurationLimits,
+} from './character-voice-selection'
+import {
+  readVoiceDesignFields,
+  type WorkspaceResourceCharacterVoiceSelectionView,
+  type WorkspaceResourceVoiceDesignView,
+} from './selection-contract'
 
 const DEFAULT_PAGE_SIZE = 100
 const MAX_PAGE_SIZE = 200
@@ -44,6 +60,7 @@ const MAX_RUNTIME_RESOURCES = 5_000
 
 const resourceSelect = {
   id: true,
+  userId: true,
   projectId: true,
   workspacePath: true,
   resourceKind: true,
@@ -55,6 +72,29 @@ const resourceSelect = {
   prompt: true,
   modelKey: true,
   generationOptions: true,
+  selectedVoiceVersionId: true,
+  selectedVoiceRevision: true,
+  selectedVoiceVersion: {
+    select: {
+      resourceId: true,
+      version: true,
+      contentKind: true,
+      media: { select: { publicId: true, durationMs: true } },
+      resource: {
+        select: {
+          userId: true,
+          projectId: true,
+          workspacePath: true,
+          mediaType: true,
+          schemaId: true,
+          status: true,
+          deletedAt: true,
+          prompt: true,
+          generationOptions: true,
+        },
+      },
+    },
+  },
   vocalPerformanceMode: true,
   operationId: true,
   memberIndex: true,
@@ -138,6 +178,121 @@ function previewUrl(version: VersionRow | undefined): string | null {
   return version?.contentKind === 'media'
     ? `/m/${encodeURIComponent(version.media.publicId)}`
     : null
+}
+
+function projectCharacterVoiceSelection(
+  row: ResourceRow,
+  limits: CharacterVoiceDurationLimits | null,
+): WorkspaceResourceCharacterVoiceSelectionView | null {
+  if (row.schemaId !== WORKSPACE_RESOURCE_SCHEMA.CHARACTER_IMAGE) return null
+  const version = row.selectedVoiceVersion
+  if (!version) return { revision: row.selectedVoiceRevision, selectedVoice: null }
+  const voice = version.resource
+  if (voice.userId !== row.userId || voice.projectId !== row.projectId) {
+    throw new Error('WORKSPACE_RESOURCE_SELECTED_VOICE_SCOPE_MISMATCH')
+  }
+  const available = row.deletedAt === null && row.status === 'ready'
+    && voice.deletedAt === null && voice.status === 'ready'
+    && voice.mediaType === 'audio' && voice.schemaId === WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE
+    && version.contentKind === 'media'
+    && isCharacterVoiceDurationAvailable(version.media.durationMs, limits)
+  return {
+    revision: row.selectedVoiceRevision,
+    selectedVoice: {
+      resourceId: version.resourceId,
+      contentVersion: version.version,
+      name: workspaceResourceDisplayName({ workspacePath: voice.workspacePath, resourceId: version.resourceId }),
+      url: available ? `/m/${encodeURIComponent(version.media.publicId)}` : null,
+      durationMs: version.media.durationMs,
+      ...readVoiceDesignFields(voice),
+      available,
+    },
+  }
+}
+
+function projectVoiceDesign(input: {
+  readonly resource: ResourceRow
+  readonly version: VersionRow | undefined
+  readonly inputs: readonly WorkspaceResourceInputRef[]
+  readonly inputResources: ReadonlyMap<string, ResourceRow>
+  readonly inputVersions: ReadonlyMap<string, VersionRow>
+  readonly limits: CharacterVoiceDurationLimits | null
+}): WorkspaceResourceVoiceDesignView | null {
+  const row = input.resource
+  if (row.schemaId !== WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE) return null
+  const fields = readVoiceDesignFields(row)
+  const characterRefs = input.inputs.filter((reference) => reference.role === VOICE_CHARACTER_REFERENCE_ROLE)
+  if (characterRefs.length > 1) throw new Error('WORKSPACE_RESOURCE_VOICE_CHARACTER_AMBIGUOUS')
+  const characterRef = characterRefs[0]
+  const character = characterRef ? input.inputResources.get(characterRef.resourceId) : undefined
+  if (character && (character.userId !== row.userId || character.projectId !== row.projectId)) {
+    throw new Error('WORKSPACE_RESOURCE_VOICE_CHARACTER_SCOPE_MISMATCH')
+  }
+  const characterAvailable = Boolean(character && characterRef
+    && character.deletedAt === null && character.status === 'ready'
+    && character.schemaId === WORKSPACE_RESOURCE_SCHEMA.CHARACTER_IMAGE && character.mediaType === 'image'
+    && input.inputVersions.has(`${character.id}:${String(characterRef.contentVersion)}`))
+  const isSelected = Boolean(input.version && character?.selectedVoiceVersionId === input.version.id)
+  let selectUnavailableReason: WorkspaceResourceVoiceDesignView['selectUnavailableReason'] = null
+  if (!isSelected) {
+    if (!characterAvailable) selectUnavailableReason = 'character_unavailable'
+    else if (row.deletedAt !== null || row.status !== 'ready' || input.version?.contentKind !== 'media') {
+      selectUnavailableReason = 'audio_unavailable'
+    } else if (input.limits === null) selectUnavailableReason = 'video_unsupported'
+    else if (!isCharacterVoiceDurationAvailable(input.version.media.durationMs, input.limits)) {
+      selectUnavailableReason = 'duration_unsupported'
+    }
+  }
+  const description = voiceDesignDescriptionSchema.safeParse(row.prompt)
+  const options = voiceDesignGenerationOptionsSchema.safeParse(row.generationOptions)
+  return {
+    ...fields,
+    character: character && characterRef ? {
+      resourceId: character.id,
+      contentVersion: characterRef.contentVersion,
+      name: workspaceResourceDisplayName({ workspacePath: character.workspacePath, resourceId: character.id }),
+      available: characterAvailable,
+    } : null,
+    isSelected,
+    selectUnavailableReason,
+    candidateAction: row.deletedAt === null && characterAvailable && characterRef && description.success && options.success ? {
+      execution: 'planned',
+      operationId: 'create_audio',
+      input: {
+        request: {
+          kind: 'new',
+          items: [{
+            itemId: row.id,
+            name: workspaceResourceDisplayName({ workspacePath: row.workspacePath, resourceId: row.id }),
+            folderPath: parentWorkspacePath(row.workspacePath),
+            count: 1,
+            mediaType: 'audio',
+            audioKind: 'voice',
+            schemaId: WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
+            prompt: description.data,
+            previewText: options.data.previewText,
+            language: options.data.language,
+            references: [{
+              resourceId: characterRef.resourceId,
+              contentVersion: characterRef.contentVersion,
+              role: VOICE_CHARACTER_REFERENCE_ROLE,
+              channel: 'context',
+            }],
+          }],
+        },
+      },
+    } : null,
+    selectAction: selectUnavailableReason === null && !isSelected && character && input.version ? {
+      execution: 'direct',
+      operationId: 'select_character_voice',
+      input: {
+        characterResourceId: character.id,
+        voiceResourceId: row.id,
+        voiceContentVersion: input.version.version,
+        expectedSelectionRevision: character.selectedVoiceRevision,
+      },
+    } : null,
+  }
 }
 
 function projectActions(input: {
@@ -234,6 +389,13 @@ async function loadViews(
   },
 ): Promise<WorkspaceResourceView[]> {
   if (rows.length === 0) return []
+  const voiceProjects = new Map(rows
+    .filter((row) => row.schemaId === WORKSPACE_RESOURCE_SCHEMA.CHARACTER_IMAGE
+      || row.schemaId === WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE)
+    .map((row) => [row.projectId, { projectId: row.projectId, userId: row.userId }]))
+  const voiceLimitsByProject = new Map(await Promise.all(Array.from(voiceProjects.values()).map(async (project) => (
+    [project.projectId, await readCharacterVoiceDurationLimits(project)] as const
+  ))))
   const contentVersionFor = (row: ResourceRow): number => (
     options.contentVersionsByResourceId?.get(row.id) ?? row.currentVersion
   )
@@ -402,6 +564,15 @@ async function loadViews(
       prompt: row.prompt,
       modelName: resolvePublicModelName(row.modelKey),
       generationOptions: jsonProjection(row.generationOptions),
+      voiceDesign: projectVoiceDesign({
+        resource: row,
+        version,
+        inputs: inputsByOutput.get(lineageKey) ?? [],
+        inputResources: inputById,
+        inputVersions: versionByKey,
+        limits: voiceLimitsByProject.get(row.projectId) ?? null,
+      }),
+      characterVoiceSelection: projectCharacterVoiceSelection(row, voiceLimitsByProject.get(row.projectId) ?? null),
       vocalPerformanceMode: row.vocalPerformanceMode,
       operationId: row.operationId,
       memberIndex: row.memberIndex,

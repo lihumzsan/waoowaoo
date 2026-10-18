@@ -10,7 +10,7 @@ import {
   type MusicKeyScale, type MusicTimeSignature,
 } from '@/lib/workspace-resource/music-parameter-contract'
 import type { ComfyUiRuntimeTargetId } from './config'
-import type { ComfyUiPromptGraph } from './profiles'
+import { freezeComfyUiPromptGraph, type ComfyUiPromptGraph } from './profiles'
 import aceStepWorkflow from './workflows/ace-step-1.5.json'
 import miniMaxWorkflow from './workflows/minimax-music-3.json'
 
@@ -47,17 +47,6 @@ export type ComfyUiMusicProfile = {
   readonly outputNodeId: typeof COMFYUI_MUSIC_OUTPUT_NODE_ID
   readonly optionSchema: AiOptionSchema
   readonly buildGraph: (input: ComfyUiMusicGraphInput) => ComfyUiMusicGraphResult
-}
-
-function freezeWorkflow(graph: ComfyUiPromptGraph): ComfyUiPromptGraph {
-  for (const node of Object.values(graph)) {
-    for (const value of Object.values(node.inputs)) {
-      if (Array.isArray(value)) Object.freeze(value)
-    }
-    Object.freeze(node.inputs)
-    Object.freeze(node)
-  }
-  return Object.freeze(graph)
 }
 
 export function resolveAceStepDurationPlan(requestedDurationSeconds: number): ComfyUiMusicDurationPlan {
@@ -178,7 +167,7 @@ export const ACE_STEP_1_5_PROFILE: ComfyUiMusicProfile = {
     bpmRange: { min: 20, max: 300 }, keyScaleOptions: [...MUSIC_KEY_SCALE_VALUES], timeSignatureOptions: [...MUSIC_TIME_SIGNATURE_VALUES],
   },
   defaultGenerationOptions: { outputFormat: 'mp3' },
-  workflow: freezeWorkflow(aceStepWorkflow),
+  workflow: freezeComfyUiPromptGraph(aceStepWorkflow),
   outputNodeId: COMFYUI_MUSIC_OUTPUT_NODE_ID,
   optionSchema: aceStepOptionSchema,
   buildGraph: (input) => {
@@ -204,7 +193,7 @@ export const MINIMAX_MUSIC_3_PROFILE: ComfyUiMusicProfile = {
     vocalModeOptions: ['instrumental', 'vocal'], outputFormatOptions: ['mp3'],
   },
   defaultGenerationOptions: { outputFormat: 'mp3' },
-  workflow: freezeWorkflow(miniMaxWorkflow),
+  workflow: freezeComfyUiPromptGraph(miniMaxWorkflow),
   outputNodeId: COMFYUI_MUSIC_OUTPUT_NODE_ID,
   optionSchema: miniMaxOptionSchema,
   buildGraph: (input) => {

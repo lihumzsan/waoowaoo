@@ -34,6 +34,14 @@ export type ComfyUiOutput = {
   readonly type: string
 }
 
+export const COMFYUI_AUDIO_FORMATS = {
+  mp3: { extension: '.mp3', contentType: 'audio/mpeg', acceptedContentTypes: ['audio/mpeg'] },
+  // ComfyUI /view uses Python mimetypes, whose standard WAV mapping is audio/x-wav.
+  wav: { extension: '.wav', contentType: 'audio/wav', acceptedContentTypes: ['audio/wav', 'audio/x-wav'] },
+} as const
+
+export type ComfyUiAudioFormat = keyof typeof COMFYUI_AUDIO_FORMATS
+
 export function asComfyUiRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -143,6 +151,7 @@ export function readComfyUiOutput(value: unknown): ComfyUiOutput | null {
 export function readComfyUiDeclaredNodeAudioOutput(
   value: unknown,
   expectedNodeId: string,
+  format: ComfyUiAudioFormat,
 ): ComfyUiOutput | null {
   const record = asComfyUiRecord(value)
   if (!record) return null
@@ -153,7 +162,7 @@ export function readComfyUiDeclaredNodeAudioOutput(
   if (!Array.isArray(audio) || audio.length !== 1) return null
   const file = asComfyUiRecord(audio[0])
   const filename = readComfyUiString(file?.filename)
-  if (!filename || !/\.mp3$/iu.test(filename)) return null
+  if (!filename || !filename.toLowerCase().endsWith(COMFYUI_AUDIO_FORMATS[format].extension)) return null
   return {
     filename,
     subfolder: readComfyUiString(file?.subfolder),
@@ -188,7 +197,7 @@ export function readComfyUiDeclaredNodeVideoOutput(
 export async function readComfyUiOutputData(input: {
   readonly baseUrl: string
   readonly output: ComfyUiOutput
-  readonly contentType: string
+  readonly format: ComfyUiAudioFormat
   readonly maxBytes: number
   readonly label: string
 }): Promise<string> {
@@ -204,11 +213,12 @@ export async function readComfyUiOutputData(input: {
   })
   if (!response.ok) throw new Error(`COMFYUI_OUTPUT_HTTP_${response.status}`)
   const actualContentType = (response.headers.get('content-type') || '').split(';', 1)[0]!.trim().toLowerCase()
-  if (actualContentType !== input.contentType) {
+  const format = COMFYUI_AUDIO_FORMATS[input.format]
+  if (!(format.acceptedContentTypes as readonly string[]).includes(actualContentType)) {
     throw new Error(`COMFYUI_OUTPUT_CONTENT_TYPE_INVALID:${actualContentType || '<missing>'}`)
   }
   const buffer = await readResponseBufferWithLimit(response, input.maxBytes, input.label)
-  return `data:${actualContentType};base64,${buffer.toString('base64')}`
+  return `data:${format.contentType};base64,${buffer.toString('base64')}`
 }
 
 export async function downloadComfyUiOutputToTemporaryFile(input: {

@@ -11,7 +11,7 @@ export interface WorkspaceCanvasPathFocusRequest {
   readonly workspacePath: string
 }
 
-export type WorkspaceCanvasResourceOperationKind = 'retry' | 'variant' | 'delete'
+export type WorkspaceCanvasResourceOperationKind = 'retry' | 'variant' | 'voice_candidate' | 'select_voice' | 'delete'
 
 export type WorkspaceCanvasNodeActionKey =
   | 'discuss'
@@ -19,6 +19,8 @@ export type WorkspaceCanvasNodeActionKey =
   | 'preview_alternatives'
   | 'retry'
   | 'variant'
+  | 'voice_candidate'
+  | 'select_voice'
   | 'delete'
 
 /**
@@ -30,6 +32,7 @@ export interface WorkspaceCanvasMediaOperationView {
   readonly kind: Exclude<WorkspaceCanvasResourceOperationKind, 'delete'>
   readonly operationId: string
   readonly confirmation: 'none'
+  readonly execution: 'planned' | 'direct'
   readonly input: WorkspaceResourceJsonObject
 }
 
@@ -60,6 +63,7 @@ export type WorkspaceCanvasResourceFileView = WorkspaceResourceView & {
 
 export interface WorkspaceCanvasResourcePreviewView {
   readonly resourceId: string
+  readonly schemaId: string
   readonly name: string
   readonly status: WorkspaceResourceStatus
   readonly mediaType: WorkspaceResourceMediaType

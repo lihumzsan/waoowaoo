@@ -6,23 +6,59 @@ import GlassModalShell from '@/components/ui/primitives/GlassModalShell'
 import { AppIcon } from '@/components/ui/icons'
 import { useWorkspaceResourceView } from '@/lib/query/hooks'
 import { workspaceResourceContentText } from '@/lib/workspace-resource/contracts'
+import { WORKSPACE_RESOURCE_SCHEMA } from '@/lib/workspace-resource/schema-registry'
 import { useWorkspaceProvider } from '../../WorkspaceProvider'
 import type { WorkspaceResourceCardMemberView } from '../contracts/workspace-canvas-interactions'
+import type { WorkspaceNodeDetailsActions } from '../details/WorkspaceNodeDetailsCard'
+import { WorkspaceVoiceDesignPanel } from '../details/WorkspaceVoiceDesignPanel'
 
-function ResourcePreviewBody({ card }: { readonly card: WorkspaceResourceCardMemberView }) {
+function ResourcePreviewBody({ card, busy, onOperation }: {
+  readonly card: WorkspaceResourceCardMemberView
+  readonly busy: boolean
+  readonly onOperation: WorkspaceNodeDetailsActions['onOperation']
+}) {
   const statusLabels = useTranslations('projectWorkflow.canvas.workspace.status')
   const previewLabels = useTranslations('projectWorkflow.canvas.workspace.preview')
+  const voiceLabels = useTranslations('projectWorkflow.canvas.workspace.voiceDesign')
   const { projectId } = useWorkspaceProvider()
   const summary = card.presentation.summary
   // Text/structured previews are bounded summaries; the modal upgrades to the
   // full content through the single-resource read while showing the summary.
   const isTextPreview = card.resource.status === 'ready'
     && (summary.kind === 'text' || summary.kind === 'structured')
+  const isVoicePreview = card.resource.schemaId === WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE
   const contentQuery = useWorkspaceResourceView({
     projectId,
-    resourceId: isTextPreview ? card.resource.resourceId : null,
+    resourceId: isTextPreview || isVoicePreview ? card.resource.resourceId : null,
   })
   const fullContentText = workspaceResourceContentText(contentQuery.data?.current?.content)
+  if (isVoicePreview) {
+    const resource = contentQuery.data
+    if (!resource?.voiceDesign) {
+      return (
+        <p className="rounded-2xl bg-slate-50 p-5 text-sm text-[var(--glass-text-secondary)]">
+          {contentQuery.isLoading ? voiceLabels('detailsLoading') : voiceLabels('detailsLoadFailed')}
+        </p>
+      )
+    }
+    return (
+      <div className="max-h-[62vh] overflow-y-auto p-0.5">
+        {resource.status !== 'ready' ? (
+          <p className="mb-2 text-xs text-[var(--glass-text-secondary)]">{statusLabels(resource.status)}</p>
+        ) : null}
+        <WorkspaceVoiceDesignPanel
+          key={`${resource.resourceId}:${resource.contentVersion}`}
+          voice={resource.voiceDesign}
+          resourceName={resource.name}
+          resourceStatus={resource.status}
+          modelName={resource.modelName}
+          audioUrl={resource.summary.kind === 'media' ? resource.summary.url : null}
+          busy={busy}
+          onOperation={onOperation}
+        />
+      </div>
+    )
+  }
   if (card.resource.status !== 'ready') {
     return (
       <div className="flex min-h-[18rem] items-center justify-center rounded-2xl bg-slate-50 text-sm text-[var(--glass-text-tertiary)]">
@@ -70,21 +106,27 @@ export function WorkspaceResourcePreviewModal({
   initialResourceId,
   onClose,
   onDiscuss,
+  busy,
+  onOperation,
 }: {
   readonly members: readonly WorkspaceResourceCardMemberView[]
   readonly initialResourceId: string
   readonly onClose: () => void
   readonly onDiscuss: (card: WorkspaceResourceCardMemberView) => void
+  readonly busy: boolean
+  readonly onOperation: WorkspaceNodeDetailsActions['onOperation']
 }) {
   const t = useTranslations('projectWorkflow.canvas.workspace.preview')
   const initialIndex = Math.max(0, members.findIndex((card) => card.resource.resourceId === initialResourceId))
   const [index, setIndex] = useState(initialIndex)
   const card = members[index] ?? members[0] ?? null
   const canNavigate = members.length > 1
+  const isVoicePreview = card?.resource.schemaId === WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE
 
   useEffect(() => {
     if (!canNavigate) return
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.target instanceof Element && event.target.closest('input, textarea, select, button, audio, [contenteditable="true"], [role="listbox"]')) return
       if (event.key === 'ArrowLeft') {
         event.preventDefault()
         setIndex((current) => (current - 1 + members.length) % members.length)
@@ -99,10 +141,22 @@ export function WorkspaceResourcePreviewModal({
   }, [canNavigate, members.length])
 
   const footer = useMemo(() => card ? (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-xs tabular-nums text-[var(--glass-text-tertiary)]">
-        {t('position', { current: index + 1, total: members.length })}
-      </span>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-center gap-3">
+        {isVoicePreview && canNavigate ? (
+          <button type="button" aria-label={t('previous')} className="glass-btn-base glass-btn-secondary h-9 w-9" onClick={() => setIndex((current) => (current - 1 + members.length) % members.length)}>
+            <AppIcon name="chevronLeft" className="h-4 w-4" />
+          </button>
+        ) : null}
+        <span className="text-xs tabular-nums text-[var(--glass-text-tertiary)]">
+          {t('position', { current: index + 1, total: members.length })}
+        </span>
+        {isVoicePreview && canNavigate ? (
+          <button type="button" aria-label={t('next')} className="glass-btn-base glass-btn-secondary h-9 w-9" onClick={() => setIndex((current) => (current + 1) % members.length)}>
+            <AppIcon name="chevronRight" className="h-4 w-4" />
+          </button>
+        ) : null}
+      </div>
       <button
         type="button"
         className="glass-btn-base glass-btn-primary px-4 py-2 text-sm"
@@ -111,7 +165,7 @@ export function WorkspaceResourcePreviewModal({
         {t('discuss')}
       </button>
     </div>
-  ) : null, [card, index, members.length, onDiscuss, t])
+  ) : null, [canNavigate, card, index, isVoicePreview, members.length, onDiscuss, t])
 
   if (!card) return null
   return (
@@ -124,8 +178,8 @@ export function WorkspaceResourcePreviewModal({
       size="xl"
     >
       <div className="relative">
-        <ResourcePreviewBody card={card} />
-        {canNavigate ? (
+        <ResourcePreviewBody card={card} busy={busy} onOperation={onOperation} />
+        {canNavigate && !isVoicePreview ? (
           <>
             <button
               type="button"

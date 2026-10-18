@@ -94,7 +94,7 @@ async function requireOwnedProject(
   if (!project) throw new Error('WORKSPACE_RESOURCE_PROJECT_NOT_OWNED')
 }
 
-async function lockOwnedProject(
+export async function lockOwnedProject(
   tx: Prisma.TransactionClient,
   projectId: string,
   userId: string,
