@@ -1,6 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { ApiError } from '@/lib/api-errors'
-import { clearProjectCharacterVoiceSelectionsInTransaction } from './character-voice-selection'
+import { clearProjectCharacterVoiceSelectionsInTransaction } from './persistence'
 
 export async function deleteProjectOwnedWorkspaceResourceLineage(params: {
   projectId: string

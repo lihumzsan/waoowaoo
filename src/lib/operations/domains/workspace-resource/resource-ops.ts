@@ -6,6 +6,7 @@ import {
   moveWorkspaceResourceInTransaction,
   resolveActiveWorkspaceResourceByPath,
   restoreWorkspaceResourceInTransaction,
+  selectCharacterVoiceInTransaction,
   softDeleteWorkspaceResourceInTransaction,
 } from '@/lib/workspace-resource/persistence'
 import {
@@ -13,7 +14,6 @@ import {
   readWorkspaceResourceAtVersion,
 } from '@/lib/workspace-resource/view-service'
 import { WORKSPACE_RESOURCE_FOLDER_SCHEMA_ID } from '@/lib/workspace-resource/schema-registry'
-import { selectCharacterVoiceInTransaction } from '@/lib/workspace-resource/character-voice-selection'
 import {
   selectCharacterVoiceInputSchema,
   selectCharacterVoiceOutputSchema,
