@@ -94,7 +94,6 @@ export type H3ReferenceDualStageRuntimeProfile = H3RuntimeProfileBase & {
   readonly audioVaeNodeId: string
   readonly audioDecodeNodeId: string
   readonly audioSamplerNodeId: string
-  readonly hyperVaeNodeId: string
 }
 
 export type H3FrameDualStageRuntimeProfile = H3RuntimeProfileBase & {
@@ -127,7 +126,6 @@ export const H3_DUAL_STAGE_RUNTIME_PROFILE: H3ReferenceDualStageRuntimeProfile =
   audioVaeNodeId: '2',
   audioDecodeNodeId: '20',
   audioSamplerNodeId: '19',
-  hyperVaeNodeId: '57',
   promptNodeId: '28',
   h3NodeId: '7',
   noiseNodeId: '11',
@@ -236,7 +234,6 @@ export type H3ReferencePromptGraphInput = H3PromptGraphBaseInput & {
   readonly requestedDurationSeconds: number
   readonly referenceImageFilenames: readonly string[]
   readonly referenceAudioFilenames: readonly string[]
-  readonly referenceVideoUpscale?: boolean
 }
 
 export type H3FirstFramePromptGraphInput = H3PromptGraphCommonInput & {
@@ -358,7 +355,6 @@ function buildReferencePromptGraph(
   const noiseNode = graph[profile.noiseNodeId]
   const learnedUpscaleNode = graph[profile.learnedUpscaleNodeId]
   const finalUpscaleNode = graph[profile.finalUpscaleNodeId]
-  const avDecodeNode = graph[profile.audioDecodeNodeId]
   const conditioningNodes = profile.conditioningNodeIds.map((nodeId) => graph[nodeId])
   if (
     !baseLoadNode
@@ -367,7 +363,6 @@ function buildReferencePromptGraph(
     || !noiseNode
     || !learnedUpscaleNode
     || !finalUpscaleNode
-    || !avDecodeNode
     || conditioningNodes.some((node) => !node)
   ) {
     throw new Error('COMFYUI_H3_PROFILE_NODE_MISSING:' + profile.id)
@@ -429,16 +424,6 @@ function buildReferencePromptGraph(
   finalUpscaleNode.inputs.width = finalDimensions.width
   finalUpscaleNode.inputs.height = finalDimensions.height
   noiseNode.inputs.noise_seed = input.seed
-  if (input.referenceVideoUpscale === true) {
-    graph[profile.hyperVaeNodeId] = {
-      class_type: 'MiniMaxH3HyperVAE2xLoaderEXPT8',
-      inputs: {
-        vae_name: 'hyperVAEKrea2Minimax_v20MinimaxX2Upscale.safetensors',
-        absolute_path: '',
-      },
-    }
-    avDecodeNode.inputs.video_vae = [profile.hyperVaeNodeId, 0]
-  }
   return { profile, graph }
 }
 

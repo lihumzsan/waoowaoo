@@ -211,32 +211,28 @@ describe('ComfyUI H3 dual-stage profile', () => {
     expect(() => normalizeMediaOptionsForSelection({ selection, modality: 'video', options: { duration: 4, aspectRatio: '9:16', generateAudio: false } })).toThrow()
   })
 
-  it('accepts every registry-advertised mode duration and reference-upscale choice through provider preflight', () => {
+  it('accepts every registry-advertised mode duration through provider preflight', () => {
     ensureAiCatalogsRegistered()
     const selection = { provider: 'comfyui' as const, modelId: COMFYUI_H3_MODEL_ID, modelKey: `comfyui::${COMFYUI_H3_MODEL_ID}`, variantSubKind: 'official' as const }
     const capabilities = findBuiltinCapabilities('video', 'comfyui', COMFYUI_H3_MODEL_ID)
     if (!capabilities?.video) throw new Error('COMFYUI_H3_CAPABILITIES_MISSING')
-    const upscaleOptions = capabilities.video.referenceVideoUpscaleOptions
-    if (!upscaleOptions?.length) throw new Error('COMFYUI_H3_REFERENCE_UPSCALE_OPTIONS_MISSING')
     for (const inputMode of capabilities.video.supportedInputModes ?? []) {
       const durations = capabilities.video.inputModePolicies?.[inputMode]?.durationOptions
       if (!durations) throw new Error(`H3_MODE_POLICY_MISSING:${inputMode}`)
       for (const duration of durations) {
-        for (const referenceVideoUpscale of upscaleOptions) {
-          const resolved = resolveGenerationOptionsForModel({
-            modelType: 'video',
-            modelKey: selection.modelKey,
-            capabilities,
-            capabilityDefaults: { [selection.modelKey]: COMFYUI_H3_DEFAULT_GENERATION_OPTIONS },
-            runtimeSelections: { aspectRatio: '9:16', referenceVideoUpscale },
-          })
-          expect(resolved.issues).toEqual([])
-          expect(normalizeMediaOptionsForSelection({
-            selection,
-            modality: 'video',
-            options: { ...resolved.options, duration },
-          })).toMatchObject({ duration, referenceVideoUpscale })
-        }
+        const resolved = resolveGenerationOptionsForModel({
+          modelType: 'video',
+          modelKey: selection.modelKey,
+          capabilities,
+          capabilityDefaults: { [selection.modelKey]: COMFYUI_H3_DEFAULT_GENERATION_OPTIONS },
+          runtimeSelections: { aspectRatio: '9:16' },
+        })
+        expect(resolved.issues).toEqual([])
+        expect(normalizeMediaOptionsForSelection({
+          selection,
+          modality: 'video',
+          options: { ...resolved.options, duration },
+        })).toMatchObject({ duration })
         expect(resolveH3DurationPlan({ inputMode, requestedDurationSeconds: duration }).requestedDurationSeconds).toBe(duration)
       }
     }
