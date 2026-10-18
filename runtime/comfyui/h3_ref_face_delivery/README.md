@@ -31,8 +31,7 @@ This is an experimental branch, with automatic refinement for Ref inputs and no
 new UI toggle. The application's node 55 is the automatic adapter. It receives
 node 20's second-pass decoded video and source audio, the raw model from node 4,
 the original encoding/decoding VAEs, the existing prompt, seed and every ordered
-reference. Optional HyperVAE affects the source decode, while crop encoding and
-decoding retain the original VAE. Output 168 still consumes images from node 55
+reference. Output 168 still consumes images from node 55
 and audio directly from node 20. No provider, Task, submission or terminal writer
 is added. The old standalone node-55 resize is replaced by the shared KJ entry
 inside this package.

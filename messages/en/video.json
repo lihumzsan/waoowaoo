@@ -4,7 +4,6 @@
     "duration": "Duration",
     "resolution": "Resolution",
     "quality": "Image quality",
-    "referenceVideoUpscale": "HyperVAE 2× · Ref only",
     "aspectRatio": "Aspect ratio",
     "reasoningEffort": "Reasoning effort",
     "rate": "Rate",

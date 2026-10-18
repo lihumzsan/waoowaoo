@@ -116,7 +116,6 @@ function missingOptionError(option: ComfyUiProfileRequirementOption): Error {
     'UNETLoader:unet_name',
     'CLIPLoader:clip_name',
     'VAELoader:vae_name',
-    'MiniMaxH3HyperVAE2xLoaderEXPT8:vae_name',
     'LoraLoaderModelOnly:lora_name',
     'LoraLoaderBypassModelOnly:lora_name',
     'MiniMaxH3LearnedLatentUpscaleT8Advanced:model_name',
@@ -580,7 +579,6 @@ function buildGraph(
       seed,
       referenceImageFilenames: prepared.referenceImageFilenames,
       referenceAudioFilenames: prepared.referenceAudioFilenames,
-      referenceVideoUpscale: options.referenceVideoUpscale === true,
     }), inputMode, referenceAudioUrls }
   }
   if (inputMode === 'first_frame') {

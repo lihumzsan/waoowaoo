@@ -157,8 +157,6 @@ export interface VideoCapabilities {
   supportsTextToVideo?: boolean
   generationModeOptions?: string[]
   generateAudioOptions?: boolean[]
-  /** Decode upscaling preference applied only to reference video generation. */
-  referenceVideoUpscaleOptions?: boolean[]
   supportedAspectRatios?: string[]
   inputModePolicies?: Partial<Record<VideoInputMode, VideoInputModePolicy>>
   resolutionOptions?: string[]
@@ -276,7 +274,6 @@ const VIDEO_ALLOWED_FIELDS = new Set<keyof VideoCapabilities>([
   'supportsTextToVideo',
   'generationModeOptions',
   'generateAudioOptions',
-  'referenceVideoUpscaleOptions',
   'supportedAspectRatios',
   'inputModePolicies',
   'resolutionOptions',
@@ -835,15 +832,6 @@ function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unk
     })
   }
 
-  const referenceVideoUpscaleOptions = raw.referenceVideoUpscaleOptions
-  if (referenceVideoUpscaleOptions !== undefined && !isBooleanArray(referenceVideoUpscaleOptions)) {
-    issues.push({
-      code: 'CAPABILITY_FIELD_INVALID',
-      field: 'capabilities.video.referenceVideoUpscaleOptions',
-      message: 'referenceVideoUpscaleOptions must be a boolean array',
-    })
-  }
-
   const resolutionOptions = raw.resolutionOptions
   if (resolutionOptions !== undefined && !isStringArray(resolutionOptions)) {
     issues.push({
@@ -958,7 +946,6 @@ function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unk
   validateFieldI18nMap(issues, 'video', raw.fieldI18n, {
     generationMode: isStringArray(generationModeOptions) ? generationModeOptions : undefined,
     generateAudio: isBooleanArray(generateAudioOptions) ? generateAudioOptions : undefined,
-    referenceVideoUpscale: isBooleanArray(referenceVideoUpscaleOptions) ? referenceVideoUpscaleOptions : undefined,
     duration: durationOptionsForI18n.length > 0
       ? Array.from(new Set(durationOptionsForI18n))
       : undefined,
