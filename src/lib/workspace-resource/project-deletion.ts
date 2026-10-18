@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { ApiError } from '@/lib/api-errors'
+import { clearProjectCharacterVoiceSelectionsInTransaction } from './persistence'
 
 export async function deleteProjectOwnedWorkspaceResourceLineage(params: {
   projectId: string
@@ -23,6 +24,10 @@ export async function deleteProjectOwnedWorkspaceResourceLineage(params: {
       code: 'PROJECT_RESOURCE_EXTERNAL_LINEAGE_CONFLICT',
     })
   }
+
+  await clearProjectCharacterVoiceSelectionsInTransaction(params.transaction, {
+    projectId: params.projectId,
+  })
 
   await params.transaction.workspaceResourceLineage.deleteMany({
     where: {

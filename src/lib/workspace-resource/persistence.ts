@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { ApiError } from '@/lib/api-errors'
 import { storeWorkspaceResourceContent, workspaceResourceContentPreview } from './content-store'
 import type {
   WorkspaceResourceInputRef,
@@ -1083,4 +1084,23 @@ export async function restoreWorkspaceResourceInTransaction(
     }
     await advanceWorkspaceResourceRevisionInTransaction(tx, input)
   return { resourceId: root.id, workspacePath: destinationPath, restoredCount: cohort.length }
+}
+
+/** Only used inside the transaction that permanently deletes the entire project. */
+export async function clearProjectCharacterVoiceSelectionsInTransaction(
+  tx: Prisma.TransactionClient,
+  input: { readonly projectId: string },
+): Promise<void> {
+  const externalSelection = await tx.workspaceResource.findFirst({
+    where: {
+      projectId: { not: input.projectId },
+      selectedVoiceVersion: { resource: { projectId: input.projectId } },
+    },
+    select: { id: true },
+  })
+  if (externalSelection) throw new ApiError('CONFLICT', { code: 'PROJECT_RESOURCE_EXTERNAL_VOICE_CONFLICT' })
+  await tx.workspaceResource.updateMany({
+    where: { projectId: input.projectId, selectedVoiceVersionId: { not: null } },
+    data: { selectedVoiceVersionId: null },
+  })
 }

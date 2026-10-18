@@ -752,6 +752,8 @@ model WorkspaceResource {
   modelKey                    String?                    @db.VarChar(191)
   generationOptions           Json?
   vocalPerformanceMode        String?                    @db.VarChar(32)
+  selectedVoiceVersionId      String?
+  selectedVoiceRevision       Int                        @default(0)
   operationId                 String?                    @db.VarChar(128)
   inputHash                   String?                    @db.VarChar(64)
   taskId                      String?
@@ -768,6 +770,7 @@ model WorkspaceResource {
   operationExecution          OperationExecution?        @relation("WorkspaceResourceOperationExecution", fields: [operationExecutionId], references: [id], onDelete: Restrict)
   alternativeGroupExecution   OperationExecution?        @relation("WorkspaceResourceAlternativeGroupExecution", fields: [alternativeGroupExecutionId], references: [id], onDelete: Restrict)
   versions                    WorkspaceResourceVersion[]
+  selectedVoiceVersion        WorkspaceResourceVersion?  @relation("CharacterSelectedVoice", fields: [selectedVoiceVersionId], references: [id], onDelete: Restrict)
   inputLineage                WorkspaceResourceLineage[] @relation("WorkspaceResourceLineageInput")
   outputLineage               WorkspaceResourceLineage[] @relation("WorkspaceResourceLineageOutput")
 
@@ -778,6 +781,7 @@ model WorkspaceResource {
   @@index([userId, projectId, createdAt], map: "workspace_resources_user_project_idx")
   @@index([resourceKind, schemaId, mediaType, createdAt], map: "workspace_resources_kind_schema_media_idx")
   @@index([taskId], map: "workspace_resources_task_idx")
+  @@index([selectedVoiceVersionId], map: "workspace_resources_selected_voice_idx")
   @@index([operationExecutionId], map: "workspace_resources_execution_idx")
   @@index([alternativeGroupExecutionId], map: "workspace_resources_alternative_group_idx")
   @@index([operationId, inputHash], map: "workspace_resources_operation_input_idx")
@@ -841,6 +845,7 @@ model WorkspaceResourceVersion {
   createdAt      DateTime          @default(now())
   resource       WorkspaceResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
   media          MediaObject       @relation(fields: [mediaId], references: [id], onDelete: Restrict)
+  selectedByCharacters WorkspaceResource[] @relation("CharacterSelectedVoice")
 
   @@unique([resourceId, version], map: "workspace_resource_versions_resource_version_key")
   @@index([mediaId], map: "workspace_resource_versions_media_idx")
