@@ -88,6 +88,13 @@ export function summarizeMediaRequestInput(input: AiMediaExecutionInput): Record
       durationSeconds: input.options?.durationSeconds ?? null,
       outputFormat: input.options?.outputFormat ?? null,
     }
+  case 'voice':
+    return {
+      promptChars: input.prompt.length,
+      previewTextChars: input.options?.previewText.length ?? 0,
+      language: input.options?.language ?? null,
+      outputFormat: input.options?.outputFormat ?? null,
+    }
   }
 }
 

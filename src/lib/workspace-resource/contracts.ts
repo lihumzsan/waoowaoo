@@ -1,3 +1,15 @@
+import type {
+  WorkspaceResourceCharacterVoiceSelectionView,
+  WorkspaceResourceVoiceDesignView,
+} from './selection-contract'
+export type {
+  WorkspaceResourceCharacterVoiceSelectionView,
+  WorkspaceResourceSelectedVoiceView,
+  WorkspaceResourceVoiceCandidateAction,
+  WorkspaceResourceVoiceDesignView,
+  WorkspaceResourceVoiceSelectAction,
+} from './selection-contract'
+
 export const WORKSPACE_RESOURCE_ROOT_FOLDER_KEY = '@root' as const
 
 const WORKSPACE_RESOURCE_MAX_PATH_BYTES = 512
@@ -207,6 +219,8 @@ export interface WorkspaceResourceView {
   /** Public model label. Provider-qualified routing identity is never exposed. */
   readonly modelName: string | null
   readonly generationOptions: WorkspaceResourceJsonValue | null
+  readonly voiceDesign: WorkspaceResourceVoiceDesignView | null
+  readonly characterVoiceSelection: WorkspaceResourceCharacterVoiceSelectionView | null
   readonly vocalPerformanceMode: string | null
   readonly operationId: string | null
   readonly memberIndex: number | null

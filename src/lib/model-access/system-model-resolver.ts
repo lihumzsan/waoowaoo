@@ -1,5 +1,6 @@
 import { ApiError } from '@/lib/api-errors'
 import { getProjectModelConfig, getUserModelConfig } from '@/lib/config-service'
+import { FIXED_PRODUCTION_MODEL_KEYS } from '@/lib/ai-registry/platform-models'
 
 export type SystemModelPurpose =
   | 'analysis'
@@ -9,6 +10,7 @@ export type SystemModelPurpose =
   | 'video'
   | 'music'
   | 'sound'
+  | 'voice-design'
 
 function requireModel(modelKey: string | null | undefined, purpose: SystemModelPurpose): string {
   if (typeof modelKey === 'string' && modelKey.trim()) return modelKey.trim()
@@ -23,6 +25,7 @@ export async function resolveSystemModelKey(input: {
   projectId?: string | null
   purpose: SystemModelPurpose
 }): Promise<string> {
+  if (input.purpose === 'voice-design') return FIXED_PRODUCTION_MODEL_KEYS[input.purpose]
   const config = input.projectId
     ? await getProjectModelConfig(input.projectId, input.userId)
     : await getUserModelConfig(input.userId)

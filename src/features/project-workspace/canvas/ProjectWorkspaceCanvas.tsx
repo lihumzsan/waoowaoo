@@ -598,7 +598,7 @@ function ProjectWorkspaceFolderCanvas({
   const requestAssistantDraft = useCallback((text: string | null) => {
     onAssistantDraftRequest({ requestId: createBrowserUuid(), text, focus: true })
   }, [onAssistantDraftRequest])
-  const beginResourceOperation = useCallback((operation: WorkspaceCanvasResourceOperationView) => {
+  const beginResourceOperation = useCallback((operation: WorkspaceCanvasResourceOperationView, onAccepted?: () => void) => {
     if (operation.confirmation === 'destructive') {
       if (!selectedNode || selectedNode.data.kind !== 'resourceCard') return
       deleteAction.begin(operation, selectedNode.data.resourceDetails.resource.workspacePath)
@@ -608,6 +608,8 @@ function ProjectWorkspaceFolderCanvas({
       operationId: operation.operationId,
       input: operation.input,
       confirmation: operation.confirmation,
+      execution: operation.execution,
+      onAccepted,
     })
   }, [deleteAction, operationAction, selectedNode])
   const selectionForCard = useCallback((card: WorkspaceResourceCardMemberView): WorkspaceCanvasSelection | null => {
@@ -857,6 +859,8 @@ function ProjectWorkspaceFolderCanvas({
         <WorkspaceResourcePreviewModal
           members={preview.members}
           initialResourceId={preview.initialResourceId}
+          busy={operationAction.busy || deleteAction.busy}
+          onOperation={beginResourceOperation}
           onClose={() => setPreview(null)}
           onDiscuss={(card) => {
             const nextSelection = selectionForCard(card)

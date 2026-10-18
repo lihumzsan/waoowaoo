@@ -1,9 +1,12 @@
 import { z } from 'zod'
+import { VOICE_CHARACTER_REFERENCE_ROLE } from '@/lib/voice/voice-design-contract'
 import { taskRuntimePayloadEnvelopeShape } from '@/lib/task/progress-payload'
 import type { WorkspaceResourceJsonValue } from './contracts'
 import { workspaceResourceLifecycleProjectionSchema } from './task-runtime-envelope'
 import { vocalPerformanceModeSchema } from './vocal-performance-contract'
 import {
+  AUDIO_GENERATION_KIND_DEFINITIONS,
+  audioGenerationKindSchema,
   audioExecutionModeSchema,
   frozenAudioExecutionSchema,
 } from './audio-execution-contract'
@@ -44,7 +47,7 @@ const frozenResourceSchema = z.object({
   resourceId: z.string().trim().min(1).max(32),
   workspacePath: z.string().trim().min(1).max(512),
   mediaType: z.enum(['image', 'audio', 'video']),
-  audioKind: z.enum(['music', 'sound']).optional(),
+  audioKind: audioGenerationKindSchema.optional(),
   schemaId: z.string().trim().min(1).max(96),
   inputHash: z.string().length(64),
   prompt: z.string().min(1).max(100_000)
@@ -90,7 +93,17 @@ const frozenResourceSchema = z.object({
     || resource.audioInputPositions.length > 0
     || resource.videoInputPositions.length > 0
   )) {
-    context.addIssue({ code: 'custom', path: ['inputs'], message: 'Sound resources cannot declare provider references.' })
+    context.addIssue({ code: 'custom', path: ['inputs'], message: 'Sound resources cannot declare references.' })
+  }
+  if (resource.audioKind === 'voice' && (
+    resource.inputs.length !== 1
+    || resource.inputs[0].role !== VOICE_CHARACTER_REFERENCE_ROLE
+    || providerPositions.length > 0
+  )) {
+    context.addIssue({ code: 'custom', path: ['inputs'], message: 'Voice design requires one character context input and no provider media inputs.' })
+  }
+  if (resource.audioKind && resource.schemaId !== AUDIO_GENERATION_KIND_DEFINITIONS[resource.audioKind].schemaId) {
+    context.addIssue({ code: 'custom', path: ['schemaId'], message: 'Audio resource schema must match its audioKind.' })
   }
 })
 
@@ -102,6 +115,7 @@ export const workspaceResourceGenerationTaskPayloadSchema = z.object({
   videoModel: z.string().trim().min(1).optional(),
   musicModel: z.string().trim().min(1).optional(),
   soundModel: z.string().trim().min(1).optional(),
+  voiceModel: z.string().trim().min(1).optional(),
   audioExecutionMode: audioExecutionModeSchema.optional(),
   durationSeconds: z.number().int().min(1).max(600).optional(),
   scoreCue: z.object({
@@ -207,6 +221,7 @@ export function parseWorkspaceResourceGenerationTaskPayload(
     videoModel: parsed.videoModel,
     musicModel: parsed.musicModel,
     soundModel: parsed.soundModel,
+    voiceModel: parsed.voiceModel,
     audioExecutionMode: parsed.audioExecutionMode,
     durationSeconds: parsed.durationSeconds,
     scoreCue: parsed.scoreCue,
@@ -233,6 +248,7 @@ export function parseWorkspaceResourceGenerationRetrySource(
     videoModel: parsed.videoModel,
     musicModel: parsed.musicModel,
     soundModel: parsed.soundModel,
+    voiceModel: parsed.voiceModel,
     audioExecutionMode: parsed.audioExecutionMode,
     durationSeconds: parsed.durationSeconds,
     scoreCue: parsed.scoreCue,

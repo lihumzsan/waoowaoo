@@ -51,7 +51,7 @@ export const WORKSPACE_CANVAS_NODE_DEFINITIONS = {
       ],
       audio: [
         'discuss', 'preview_alternatives', 'download',
-        'retry', 'variant', 'delete',
+        'retry', 'variant', 'voice_candidate', 'select_voice', 'delete',
       ],
       video: [
         'discuss', 'preview_alternatives', 'download',

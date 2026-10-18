@@ -1,13 +1,15 @@
 ---
 name: music-direction
-description: Design narrative score windows and author provider-ready prompt or composition-plan music instructions.
+description: Use when creating narrative music, environmental sounds, or voice previews for confirmed characters.
 ---
 
-# 音乐与配乐设计
+# 音乐与声音设计
 
 ## 作用
 
-根据项目中已经锁定的剧情、最终视频提示词、剪辑事实和真实成片时间线，决定哪里需要配乐、哪里不需要配乐，并直接写出最终可执行的音乐指令。你是 cue 选择、音乐结构、Caption 和歌词的唯一创作者；执行层只校验、冻结、映射、生成和合成，不会改写、补全或解析出另一版音乐设计。
+根据当前目标创作配乐、环境音效或已确认人物的音色试听。你是音乐 cue、Caption、歌词、声音描述和试听台词的唯一创作者；执行层只校验、冻结、映射、生成和合成，不会改写或补全创作输入。配乐判断使用已经锁定的剧情、最终视频提示词、剪辑事实和真实成片时间线。
+
+先按用户目标选择音频类型。人物音色请求直接使用下方“人物音色设计”，环境音请求使用“环境音效模式”；只有音乐请求才应用配乐窗口、音乐生成模式与混音规则。三种类型共享同一严格音频批次结果，不共享各自的创作参数。
 
 ## 事实边界
 
@@ -90,13 +92,13 @@ description: Design narrative score windows and author provider-ready prompt or 
 ## 返回音频生成批次
 
 - 唯一专业结果是运行时注入 Schema 约束的一份 `outputKind: "audio_generation_batch"` 严格对象。机器 Schema 是字段、必填项、层级与枚举的唯一权威；本 Skill 不复制 JSON 模板。
-- `decision: "produce"` 时，每个 cue 是一个 `mediaType: "audio"`、`audioKind: "music"` item；按当前 `generationMode` 只输出对应 variant 的字段。BGM 使用机器 Schema 允许的 `schemaId`。
+- `decision: "produce"` 时，每个 item 使用其目标对应的 `audioKind` 和严格 variant。音乐 cue 使用 `audioKind: "music"`，按当前 `generationMode` 输出字段；环境音与人物音色按下方各自规则提交。
 - `decision: "no_audio"` 时 `items` 必须为空，并在 Schema 允许的说明字段中写清叙事理由。
 - 输出前逐字段对照注入 Schema：包含全部 required 字段、不含 unknown 字段、`itemId` 唯一、展开后的 count 不超过批次限制。不要从本 Skill 的 prose 猜字段。
 
 ## 边界
 
-本 Skill 是音乐 Caption、歌词、Composition Plan、cue 窗口和混音意图的单一 writer。模型选择、能力校验、Operation Plan、Task、durable provider invocation、日志错误码、Resource 终态和最终合成全部由系统既有统一链路负责；不得另建 prompt rewrite 服务，不得调用 Provider 的自动 plan/video-to-music 能力制造第二个创作者。
+主 Agent 使用本 Skill 写出唯一音频专业结果，包括音乐 Caption、歌词、Composition Plan、cue 窗口、混音意图，以及人物声音描述和试听台词。模型选择、能力校验、Operation Plan、Task、durable provider invocation、日志错误码、Resource 终态和最终合成全部由系统既有统一链路负责；不得另建 prompt rewrite 服务，不得调用 Provider 的自动 plan/video-to-music 能力制造第二个创作者。
 
 ## 环境音效模式
 
@@ -106,3 +108,16 @@ description: Design narrative score windows and author provider-ready prompt or 
 - `durationSeconds` 必须落在注入范围内，默认选择能完整听出事件起承转合的最短时长；每个 item 只生成一个 sound cue，不把无关事件拼进同一条指令。
 - 环境音效不接受 `references`；需要多个事件时拆成多个独立 item。不要输出机器 Schema 未声明的格式字段。
 - `negativePrompt` 只用于排除音乐、人声、对白、歌唱、节拍循环、合成器铺底、爆音削波和不需要的机械噪声，不用它补充正向事件描述。
+
+## 人物音色设计
+
+- 在用户已授权的声音设计、候选比较，或明确包含人物音色的完整制作范围内生成试听。普通视频请求和缺少音色本身不授权新增声音生产；可以说明缺口并建议设计。先读取非空的 `productionCapabilities.voice`，确认 `useCase=voice_design`。
+- **先人物、后音色。** 通过 `list_resources` / `get_resource` 读取用户指定的 ready `project.character_image` 精确版本，以及该人物已确认的设定、剧本和创作方向。新生成的人物资产先完成既有视觉资产验收，再设计依赖它的声音；已有已确认人物直接复用。人物目标不明确时先消除指代歧义，不从文件名、画布邻近或最近记录猜身份。
+- **声音描述由你写。** 把已确认的人物设定和用户声音偏好转成最终 `prompt`，具体描述年龄感、音区、质感、口音、语速与表达习惯；不要求用户填写专业参数。用户明确给出的最终声音描述逐字保留，直到用户要求修改。资料未支持的音色细节作为可修改的创作选择说明，不伪装成人物原有事实。多个方向分别写出可听辨的差异，数量遵循本次请求。
+- **试听台词默认由你写。** `previewText` 只包含将被逐字朗读的内容。用户给过试听台词时原样使用；没有提供时，从该人物已有对白中选择完整、自然的短句，没有适合的对白则代拟能展示声音特点的短句并说明。不要把“先提供试听台词”设为生成前提，也不要把人物说明、说话指令或舞台动作混入台词。比较候选时共用同一台词与语言；`language` 从注入能力中选择并与台词语言一致。
+- 以自然、能听清音色且适合后续 H3 参考的短样本为创作目标，兼顾当前视频能力声明的单段最低时长与总参考音频预算；多人声音将同时使用时，为全部样本留出预算。文字长度遵守注入能力，不靠字数承诺实际秒数，也不擅自删改用户提供的台词来凑时长。只有目标人物、关键声音方向或逐字内容存在实质歧义时才补充询问；其余创作细节直接完成并说明，用户要求先确认时才先呈现“声音描述 / 试听台词”两栏等待修改。
+- 每个 item 使用 `audioKind=voice`、`schemaId=project.voice_reference`，并携带恰好一个 `channel=context, role=voice_character` reference，指向该 ready 人物图片的精确 `resourceId + contentVersion`。它记录人物来源，不把人物图片传给声音 Provider。其余字段严格服从注入 Schema；不附加媒体通道引用、配乐参数、时间线、`durationSeconds` 或模型标识。
+- 生成完成后交付每个 ready 候选的可试听音频，并同时呈现该 Resource 的声音描述、试听台词和语言，让用户能比较和修改。显示内容读取 `voiceDesign` View，不从聊天草稿重建，也不把名称当作人物归属。
+- 生成候选不等于采用。用户明确采用某个候选时，读取所属人物当前 `characterVoiceSelection.revision`，通过 `select_character_voice` 提交人物 ID、候选音频 ID、精确 `voiceContentVersion` 与该 `expectedSelectionRevision`；界面已经完成采用时直接读取正式 View，不重复提交。冲突时读取实际选择并说明，不用旧 revision 覆盖新选择。成功后以后续读取的 `characterVoiceSelection.selectedVoice` 为准，不用聊天承诺、候选顺序或 `voiceDesign.isSelected` 另建选择事实。
+- 用户修改声音描述、试听台词或语言时，以修改后的完整输入生成新候选，保留同一精确人物来源；原候选和当前已选版本不变，新候选仍需用户明确采用。试听台词用于展示声音，不是剧本修改，也不能成为后续视频的正式对白。
+- 后续 H3 按视频 Skill 从每段实际说话人的 `characterVoiceSelection.selectedVoice` 读取已采用的精确版本；音色采用本身不授权视频制作。使用前检查 `available`、真实时长和当前视频能力；不合要求时说明原因，不自动替换、裁剪、补静音或声称音色已锁定。

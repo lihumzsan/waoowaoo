@@ -3,6 +3,11 @@ import { MUSIC_KEY_SCALE_VALUES, MUSIC_TIME_SIGNATURE_VALUES } from './music-par
 import { OPERATION_EXECUTION_MAX_TASKS } from '@/lib/temporal/operation-execution/contracts'
 import { musicScoreCueRequestSchema } from '@/lib/music/score-specification'
 import {
+  voiceDesignDescriptionSchema,
+  voiceDesignGenerationOptionsSchema,
+  VOICE_CHARACTER_REFERENCE_ROLE,
+} from '@/lib/voice/voice-design-contract'
+import {
   musicLyricsSchema,
   validateMusicLyricsContract,
 } from './audio-execution-contract'
@@ -127,7 +132,7 @@ export const compositionPlanMusicGenerationItemSchema = musicScoreCueRequestSche
   ...commonItemShape,
   mediaType: z.literal('audio'),
   audioKind: z.literal('music'),
-  schemaId: z.enum(WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.audio),
+  schemaId: z.literal(WORKSPACE_RESOURCE_SCHEMA.BGM_AUDIO),
   references: z.array(generationReferenceSchema.extend({
     channel: z.literal('context'),
     role: z.literal('score_timeline'),
@@ -151,14 +156,31 @@ export const soundGenerationItemSchema = z.object({
     .optional(),
 }).strict()
 
+export const voiceDesignGenerationItemSchema = z.object({
+  ...commonItemShape,
+  mediaType: z.literal('audio'),
+  audioKind: z.literal('voice'),
+  prompt: voiceDesignDescriptionSchema
+    .describe('Exact voice identity description: timbre, accent, pace, energy, and emotional texture.'),
+  schemaId: z.literal(WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE),
+  references: z.array(generationReferenceSchema.extend({
+    channel: z.literal('context'),
+    role: z.literal(VOICE_CHARACTER_REFERENCE_ROLE),
+  }).strict()).length(1)
+    .describe('Exact accepted character image Resource used to design this voice. Context provenance only; no image is sent to the voice provider.'),
+  previewText: voiceDesignGenerationOptionsSchema.shape.previewText,
+  language: voiceDesignGenerationOptionsSchema.shape.language,
+}).strict()
+
 export const audioGenerationItemSchema = z.union([
   musicGenerationItemSchema,
   soundGenerationItemSchema,
+  voiceDesignGenerationItemSchema,
 ])
 
 export type AudioGenerationItem = z.infer<typeof audioGenerationItemSchema>
 
-export type AudioGenerationKind = 'music' | 'sound'
+export type AudioGenerationKind = AudioGenerationItem['audioKind']
 
 export const videoGenerationItemSchema = z.object({
   ...commonItemShape,

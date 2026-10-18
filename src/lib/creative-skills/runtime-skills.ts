@@ -63,14 +63,14 @@ export const CREATIVE_RUNTIME_SKILL_REGISTRY: Readonly<
     title: '视频导演与生成设计',
     description: '完成视频导演、分段和最终视频提示词，形成 video_generation_batch 专业结果。',
     skillIds: ['creative-core', 'video-direction'],
-    executionFacts: 'Use only the non-null productionCapabilities.video facts injected by the Wao system. Never guess capability limits.',
+    executionFacts: 'Use only the non-null productionCapabilities.video facts injected by the Wao system. Read canonical characterVoiceSelection Views for character voice references. Never guess capability limits.',
   }),
   music: defineRuntimeSkill({
     kind: 'music',
-    title: '音乐与配乐设计',
-    description: '从剧情与真实时间线规划配乐窗口，并按生产能力创作最终音乐提示词或 Composition Plan，形成 audio_generation_batch 专业结果。',
+    title: '音乐与声音设计',
+    description: '创作背景配乐、环境音效或已确认人物的音色试听，默认编写声音描述与试听台词，形成 audio_generation_batch 专业结果。',
     skillIds: ['creative-core', 'music-direction'],
-    executionFacts: 'Use only the non-null productionCapabilities.music facts for BGM or productionCapabilities.sound facts for environmental sound effects, as selected by each item audioKind. Never guess capability limits.',
+    executionFacts: 'Use only the non-null productionCapabilities.music for BGM, productionCapabilities.sound for environmental sound effects, or productionCapabilities.voice for voice design, as selected by each item audioKind. Never guess capability limits.',
   }),
 }
 

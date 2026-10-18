@@ -15,6 +15,17 @@ export type ComfyUiPromptGraph = Record<string, {
   readonly inputs: Record<string, unknown>
 }>
 
+export function freezeComfyUiPromptGraph(graph: ComfyUiPromptGraph): ComfyUiPromptGraph {
+  for (const node of Object.values(graph)) {
+    for (const value of Object.values(node.inputs)) {
+      if (Array.isArray(value)) Object.freeze(value)
+    }
+    Object.freeze(node.inputs)
+    Object.freeze(node)
+  }
+  return Object.freeze(graph)
+}
+
 const H3_DELIVERY_SCALE_NUMERATOR = 3
 const H3_DELIVERY_SCALE_DENOMINATOR = 2
 export const H3_MAX_REFERENCE_IMAGES = 9
@@ -355,7 +366,6 @@ function buildReferencePromptGraph(
   const noiseNode = graph[profile.noiseNodeId]
   const learnedUpscaleNode = graph[profile.learnedUpscaleNodeId]
   const finalUpscaleNode = graph[profile.finalUpscaleNodeId]
-  const avDecodeNode = graph[profile.audioDecodeNodeId]
   const conditioningNodes = profile.conditioningNodeIds.map((nodeId) => graph[nodeId])
   if (
     !baseLoadNode
@@ -364,7 +374,6 @@ function buildReferencePromptGraph(
     || !noiseNode
     || !learnedUpscaleNode
     || !finalUpscaleNode
-    || !avDecodeNode
     || conditioningNodes.some((node) => !node)
   ) {
     throw new Error('COMFYUI_H3_PROFILE_NODE_MISSING:' + profile.id)

@@ -1524,7 +1524,7 @@ describe('provider contract - ComfyUI H3 preparation and submission disposition'
     expect(server!.getRequests('POST', '/prompt')).toHaveLength(0)
   })
 
-  it('routes first-frame and first-last-frame transport through the same frame profile', async () => {
+  it('submits reference, first-frame, and first-last-frame graphs through their selected profiles', async () => {
     vi.stubEnv('COMFYUI_H3_DUAL_STAGE_BASE_URL', server!.baseUrl)
     defineValidPreflight(server!)
     server!.defineScenario({

@@ -17,6 +17,8 @@ const STAGE_LABELS: Record<string, string> = {
   persist_sound: 'progress.stage.persistSound',
   generate_music_submit: 'progress.stage.generateMusicSubmit',
   persist_music: 'progress.stage.persistMusic',
+  generate_voice_submit: 'progress.stage.generateVoiceSubmit',
+  persist_voice: 'progress.stage.persistVoice',
   polling_external: 'progress.stage.pollingExternal',
   retrying: 'progress.stage.retrying',
   enqueue_failed: 'progress.stage.enqueueFailed',

@@ -120,6 +120,7 @@ function alternativeMember(
   return {
     resource: {
       resourceId: member.resourceId,
+      schemaId: member.schemaId,
       name: memberName(member),
       status: member.status,
       mediaType,
@@ -181,6 +182,7 @@ function resourceCard(resourceView: WorkspaceResourceView): WorkspaceResourceCar
       kind: action.kind,
       operationId: action.operationId,
       confirmation: 'none' as const,
+      execution: 'planned' as const,
       input: action.input,
     }]
   })
