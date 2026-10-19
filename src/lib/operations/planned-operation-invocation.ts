@@ -303,7 +303,11 @@ export async function invokePlannedOperation<Input, Output>(params: {
         operationId: operation.id, taskIds: followUpTaskIds,
       })
     }
-    if (followUpTaskIds.length > 0 && !params.ctx.followUpBatchBinding?.isBound()) {
+    if (
+      params.ctx.context.turnId &&
+      followUpTaskIds.length > 0 &&
+      !params.ctx.followUpBatchBinding?.isBound()
+    ) {
       throw new Error(`OPERATION_EXECUTION_FOLLOW_UP_BATCH_MISSING:${operation.id}`)
     }
     await tx.operationExecution.update({
