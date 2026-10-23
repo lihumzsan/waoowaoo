@@ -90,7 +90,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Worker readiness failed. Check $stateRoot/worker.stderr.log before retrying." }
 
     if (!$web) {
-        $webArguments = @('--env-file=.env', '--no-deprecation', ('"' + $nextPath + '"'), 'dev', '--turbopack', '-H', '127.0.0.1', '-p', [string]$appPort)
+        $webArguments = @('--env-file=.env', '--no-deprecation', ('"' + $nextPath + '"'), 'dev', '--turbopack', '-H', '0.0.0.0', '-p', [string]$appPort)
         $web = Start-Process -FilePath $nodePath -ArgumentList $webArguments -WorkingDirectory $projectRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $stateRoot 'web.stdout.log') -RedirectStandardError (Join-Path $stateRoot 'web.stderr.log') -PassThru
         Set-Content -LiteralPath (Join-Path $stateRoot 'web.pid') -Value $web.Id
     }
