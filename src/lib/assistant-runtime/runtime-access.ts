@@ -69,7 +69,8 @@ export const ASSISTANT_RUNTIME_STATIC_CONTRACT = {
       standaloneWebSearch: false,
       codeMode: {
         enabled: true,
-        directOnlyToolNamespaces: ['wao'],
+        // Code mode matches the native tool namespace, not the MCP server key.
+        directOnlyToolNamespaces: ['mcp__wao'],
       },
       codeModeHost: {
         enabled: true,
