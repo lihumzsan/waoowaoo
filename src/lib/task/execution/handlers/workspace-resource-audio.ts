@@ -15,6 +15,7 @@ import { assertTaskActive, requireTaskProviderRouteSelection } from '../provider
 import {
   AUDIO_GENERATION_KIND_DEFINITIONS,
   parseFrozenAudioExecution,
+  projectPromptMusicProviderOptions,
 } from '@/lib/workspace-resource/audio-execution-contract'
 
 export async function handleWorkspaceResourceAudioTask(context: TaskExecutionContext) {
@@ -82,7 +83,7 @@ export async function handleWorkspaceResourceAudioTask(context: TaskExecutionCon
           data.userId,
           model,
           { kind: 'prompt', prompt: execution.prompt },
-          execution.generationOptions,
+          projectPromptMusicProviderOptions(execution.generationOptions),
           { key: invocationKey },
           wait,
         )

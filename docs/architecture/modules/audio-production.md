@@ -26,15 +26,17 @@ JSON 专业结果，并把同一 items 直接提交给 `create_audio`。系统�
   只有显式采用入口可按选择版本原子更新此事实；生成成功不自动采用。来源 Lineage 不表示当前采用，
   名称、路径、聊天和最近记录不解释对应关系。H3 只接收本次输入显式引用并冻结的音色版本，不能在执行时
   读取或追加“当前音色”；试听文本不替代来源对白。所选音色不可用时明确失败，不静默换用其他候选。
-- **AP-05 — 混音确定且有界。** 每个音乐 cue 必须携带一个精确成片版本的 lineage；输入、顺序、
-  毫秒放置、计划派生时长、增益与自动化由既有 merge Operation 唯一冻结。执行只统一采样率、时间戳、
+- **AP-05 — 混音确定且有界。** 每个音乐 cue 必须携带一个精确成片版本的 lineage；所有音乐生成模式
+  与环境音效使用同一显式放置契约，输入、顺序、毫秒放置、可用音频内的时长、增益与自动化由既有
+  merge Operation 唯一冻结，不从生成参数推断最终放置。执行只统一采样率、时间戳、
   pad/trim、cue 总线与对白 ducking，不能分析内容后改写创作决定。
 - **AP-06 — 终态不连锁。** 音频 Task 只结算自身 Resource；后续采用、重做、混音或视频均需
   独立用户意图和授权。
-- **AP-07 — 音乐输入是唯一结构化计划。** 主 Agent 的音乐结果直接写 Composition Plan、绝对时间线
-  放置、混音意图与精确成片引用；不得再由 Provider 自动 plan、video-to-music、Prompt 编译器或 handler
-  产生第二份配乐解释。Planner 在 Task 前校验并冻结同一结构；retry、adapter、Resource provenance
-  与 merge planner 只消费这份冻结事实。
+- **AP-07 — 音乐创作输入按声明模式原样冻结。** 主 Agent 按 registry 声明的模式提交完整 Prompt 或
+  Composition Plan 与精确引用；生成请求中的时间线信息属于创作意图，不授予最终装配的放置权。
+  不得再由 Provider 自动 plan、video-to-music、Prompt 编译器或 handler 产生第二份配乐解释。
+  Planner 在 Task 前校验并冻结同一创作输入；retry、adapter 与 Resource provenance 消费这份事实，
+  Provider transport 只投影 Provider 参数，最终装配单独遵守 AP-05。
 
 ## Sound-effect invariant
 
@@ -69,3 +71,4 @@ JSON 专业结果，并把同一 items 直接提交给 `create_audio`。系统�
 - 公开 `audioKind` 与 provider 分支正确仍不足以保证音频模式正确：编曲方案重构曾把“全部 audio 等于
   `music_score_v1`”遗留在通用规划、冻结重建和重试路径，导致环境音效在提交前被错误 schema 拒绝；音频
   模式必须由持久化判别式 resolver 一次裁决，planner、retry 与 Worker 只能穷尽消费。
+- Prompt 配乐接入后仍复发 cue 丢失：上一版只冻结 Composition Plan 放置，Prompt 的起点未保留且 merge 仍将所有音乐强制解析为 score，真实音乐因此无法进入已有 mixer；创作意图原样冻结且不发给 Provider，最终放置统一由 merge 显式输入，按精确媒体版本、实际时长和 lineage 校验（AP-05/07）。

@@ -66,6 +66,8 @@ export const soundGenerationOptionsSchema = z.object({
 
 export const promptMusicGenerationOptionsSchema = z.object({
   durationSeconds: z.number().int().min(1).max(600),
+  startSeconds: z.number().finite().nonnegative().optional()
+    .describe('Creative cue-start intent only; final placement is supplied explicitly to merge_videos.'),
   providerDurationSeconds: z.number().int().min(1).max(600).optional(),
   negativePrompt: negativePromptSchema.optional(),
   vocalMode: z.enum(['instrumental', 'vocal']).optional(),
@@ -80,6 +82,14 @@ export const promptMusicGenerationOptionsSchema = z.object({
 
 export type SoundGenerationOptions = z.infer<typeof soundGenerationOptionsSchema>
 export type PromptMusicGenerationOptions = z.infer<typeof promptMusicGenerationOptionsSchema>
+
+export function projectPromptMusicProviderOptions(
+  options: PromptMusicGenerationOptions,
+): Omit<PromptMusicGenerationOptions, 'startSeconds'> {
+  const providerOptions = { ...options }
+  delete providerOptions.startSeconds
+  return providerOptions
+}
 
 const soundAudioExecutionSchema = z.object({
   mode: z.literal('sound'),
@@ -217,7 +227,10 @@ export function freezeAudioExecution(input: {
         audioKind: 'music',
         prompt: input.item.prompt,
         durationSeconds: input.item.durationSeconds,
-        generationOptions: input.generationOptions,
+        generationOptions: {
+          ...input.generationOptions,
+          ...(input.item.startSeconds !== undefined ? { startSeconds: input.item.startSeconds } : {}),
+        },
       })
     }
     default: {

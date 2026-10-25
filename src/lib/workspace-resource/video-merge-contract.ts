@@ -19,8 +19,7 @@ export const videoMergeTimedCueGenerationOptionsSchema = z.object({
   audioMode: z.literal('preserve'),
 }).strict()
 
-export const videoMergeCuePlacementSchema = z.object({
-  inputPosition: z.number().int().nonnegative(),
+const videoMergeCueTimingSchema = z.object({
   startMs: z.number().int().nonnegative(),
   durationMs: z.number().int().positive(),
   fadeInMs: z.number().int().nonnegative(),
@@ -30,6 +29,18 @@ export const videoMergeCuePlacementSchema = z.object({
   if (cue.fadeInMs > cue.durationMs) context.addIssue({ code: 'custom', path: ['fadeInMs'], message: 'fadeInMs exceeds cue duration.' })
   if (cue.fadeOutMs > cue.durationMs) context.addIssue({ code: 'custom', path: ['fadeOutMs'], message: 'fadeOutMs exceeds cue duration.' })
 })
+
+export const videoMergeTimedCueInputSchema = videoMergeCueTimingSchema.safeExtend({
+  resourceId: z.string().trim().min(1).max(32),
+  contentVersion: z.number().int().positive(),
+})
+
+export const videoMergeCuePlacementSchema = videoMergeCueTimingSchema.safeExtend({
+  inputPosition: z.number().int().nonnegative(),
+})
+
+export type VideoMergeTimedCueInput = z.infer<typeof videoMergeTimedCueInputSchema>
+export type VideoMergeCuePlacement = z.infer<typeof videoMergeCuePlacementSchema>
 
 const videoMergeInputRefSchema = z.object({
   resourceId: z.string().trim().min(1),

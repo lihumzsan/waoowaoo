@@ -46,6 +46,7 @@ import {
   freezeAudioExecution,
   musicGenerationModeForAudioExecution,
   parseFrozenAudioExecution,
+  projectPromptMusicProviderOptions,
   resolveAudioExecutionMode,
   type FrozenAudioExecution,
 } from '@/lib/workspace-resource/audio-execution-contract'
@@ -1157,7 +1158,9 @@ async function preflightFrozenRetry(input: {
     mediaType: input.mediaType,
     options: musicSpecification
       ? { outputFormat: musicSpecification.outputFormat }
-      : frozenOptions,
+      : input.audioExecution?.mode === 'prompt_music'
+        ? projectPromptMusicProviderOptions(input.audioExecution.generationOptions)
+        : frozenOptions,
     imageCount: input.source.resource.imageInputPositions.length,
     referenceImageCount,
     audioCount: input.source.resource.audioInputPositions.length,
