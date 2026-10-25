@@ -7,8 +7,18 @@ import type { VideoContinuationInputCapabilities, VideoInputMode, VideoPromptPro
 import type { VocalPerformanceMode } from '@/lib/workspace-resource/vocal-performance-contract'
 import { resolveH3DurationPlan } from '@/lib/video-generation/h3-duration'
 import { H3_CONTINUATION_GUIDE_FRAMES, H3_FRAMES_PER_SECOND } from '@/lib/video-generation/h3-timeline'
+import { FIXED_PRODUCTION_MODEL_KEYS } from '@/lib/ai-registry/platform-models'
+import { VOICE_DESIGN_DESCRIPTION_MAX_CHARS } from '@/lib/voice/voice-design-contract'
 
 export type ProjectProductionCapabilities = {
+  readonly voice: {
+    readonly modelKey: string
+    readonly useCase: 'voice_design'
+    readonly languageOptions: readonly string[]
+    readonly descriptionMaxCharacters: number
+    readonly previewTextMaxCharacters: number
+    readonly outputFormatOptions: readonly string[]
+  } | null
   readonly video: {
     readonly modelKey: string
     readonly promptProfile: VideoPromptProfile
@@ -73,7 +83,7 @@ export type ProjectProductionCapabilities = {
 }
 
 export type ProjectProductionContext = {
-  readonly schemaVersion: 10
+  readonly schemaVersion: 12
   readonly version: string
   readonly project: {
     readonly projectId: string
@@ -233,7 +243,23 @@ export function resolveProjectProductionCapabilities(config: ProjectModelConfig)
       }
       : null
 
-  return { video: videoCapabilities, music: musicCapabilities, sound: soundCapabilities }
+  const voiceModelKey = FIXED_PRODUCTION_MODEL_KEYS['voice-design']
+  const voice = resolveBuiltinCapabilitiesByModelKey('voice', voiceModelKey)?.voice
+  const voiceCapabilities = voice?.useCases?.includes('voice_design')
+    && voice.languageOptions?.length
+    && voice.textMaxChars
+    && voice.outputFormatOptions?.length
+    ? {
+        modelKey: voiceModelKey,
+        useCase: 'voice_design' as const,
+        languageOptions: voice.languageOptions,
+        descriptionMaxCharacters: VOICE_DESIGN_DESCRIPTION_MAX_CHARS,
+        previewTextMaxCharacters: voice.textMaxChars,
+        outputFormatOptions: voice.outputFormatOptions,
+      }
+    : null
+
+  return { video: videoCapabilities, music: musicCapabilities, sound: soundCapabilities, voice: voiceCapabilities }
 }
 
 function contextVersion(value: Omit<ProjectProductionContext, 'version'>): string {
@@ -259,7 +285,7 @@ export async function readProjectProductionContext(input: {
   ])
   if (!project) throw new ProjectProductionContextError()
   const value: Omit<ProjectProductionContext, 'version'> = {
-    schemaVersion: 10,
+    schemaVersion: 12,
     project: {
       projectId: project.id,
       name: project.name,

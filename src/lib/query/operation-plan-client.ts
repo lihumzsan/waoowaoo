@@ -1,10 +1,11 @@
 'use client'
 
 import { apiFetch } from '@/lib/api-fetch'
+import type { QueryClient } from '@tanstack/react-query'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import type { OperationPlanView } from '@/lib/operations/plan-contract'
 import { readClientApiError } from '@/lib/errors/client'
-import { requestJsonWithError } from '@/lib/query/mutations/mutation-shared'
+import { requestJsonWithError, requestOperationMutationWithError } from '@/lib/query/mutations/mutation-shared'
 
 export async function fetchOperationPlanView(params: {
   projectId: string
@@ -37,20 +38,27 @@ export async function fetchAssetOperationPlanView(params: {
   return await response.json() as OperationPlanView
 }
 
-export async function executePlannedCanvasOperation(params: {
+export async function executeCanvasOperation(params: {
   projectId: string
   operationId: string
   input: Readonly<Record<string, unknown>>
   context?: Readonly<Record<string, unknown>>
   operationRequestId: string
-  planSnapshotId: string
+  execution: { readonly kind: 'planned'; readonly planSnapshotId: string } | { readonly kind: 'direct' }
+  queryClient: QueryClient
 }): Promise<unknown> {
-  return await requestJsonWithError<unknown>(
-    `/api/projects/${encodeURIComponent(params.projectId)}/operations/${encodeURIComponent(params.operationId)}/execute`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': params.operationRequestId },
-      body: JSON.stringify({ input: params.input, context: params.context ?? {}, planSnapshotId: params.planSnapshotId, operationRequestId: params.operationRequestId }),
-    },
-  )
+  const url = `/api/projects/${encodeURIComponent(params.projectId)}/operations/${encodeURIComponent(params.operationId)}/execute`
+  const init = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Idempotency-Key': params.operationRequestId },
+    body: JSON.stringify({
+      input: params.input,
+      context: params.context ?? {},
+      operationRequestId: params.operationRequestId,
+      ...(params.execution.kind === 'planned' ? { planSnapshotId: params.execution.planSnapshotId } : {}),
+    }),
+  }
+  return params.execution.kind === 'direct'
+    ? await requestOperationMutationWithError(url, init, params.queryClient)
+    : await requestJsonWithError<unknown>(url, init)
 }

@@ -3,6 +3,8 @@ import { describeMediaVariantBase } from '@/lib/ai-providers/shared/media-adapte
 import { buildMediaOptionSchema, booleanValidator, enumValidator, integerRangeValidator, nonEmptyStringValidator, stringArrayValidator } from '@/lib/ai-providers/shared/option-schema'
 import { describeComfyUiMusic } from './music-profiles'
 import { prepareComfyUiMusicGeneration } from './music-runtime'
+import { describeComfyUiVoice } from './voice-profiles'
+import { prepareComfyUiVoiceGeneration } from './voice-runtime'
 import {
   COMFYUI_H3_MODEL_ID,
 } from './models'
@@ -23,6 +25,10 @@ export const comfyuiAdapter: AiProviderAdapter = {
   music: {
     describe: describeComfyUiMusic,
     prepare: prepareComfyUiMusicGeneration,
+  },
+  voice: {
+    describe: describeComfyUiVoice,
+    prepare: prepareComfyUiVoiceGeneration,
   },
   video: {
     describe: (selection) => describeMediaVariantBase({

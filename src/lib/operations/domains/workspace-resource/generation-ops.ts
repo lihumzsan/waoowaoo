@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { VOICE_CHARACTER_REFERENCE_ROLE } from '@/lib/voice/voice-design-contract'
 import {
   resolveProjectModelCapabilityGenerationOptions,
   getProjectModelConfig,
@@ -41,6 +42,7 @@ import {
   type WorkspaceResourceGenerationTaskPayload,
 } from '@/lib/workspace-resource/generation-contract'
 import {
+  AUDIO_GENERATION_KIND_DEFINITIONS,
   freezeAudioExecution,
   musicGenerationModeForAudioExecution,
   parseFrozenAudioExecution,
@@ -123,7 +125,7 @@ import {
 import { collectGenerationPlans } from './generation-plan-validation'
 
 const MAX_BATCH_ITEMS = OPERATION_EXECUTION_MAX_TASKS
-const MEDIA_GENERATION_PLAN_CONTRACT_REVISION = 'workspace-resource-generation-batch/v8'
+const MEDIA_GENERATION_PLAN_CONTRACT_REVISION = 'workspace-resource-generation-batch/v10'
 const CAPABILITY_SELECTION_FAILURE_PREFIXES = [
   'CAPABILITY_SELECTION_INVALID:',
   'CAPABILITY_FIELD_INVALID:',
@@ -283,13 +285,14 @@ async function modelForMedia(
   assetKind: 'character' | 'location' | 'prop' | null,
   audioKind?: AudioGenerationKind,
 ): Promise<string> {
+  if (mediaType === 'audio' && audioKind === undefined) throw new Error('AUDIO_GENERATION_KIND_REQUIRED')
   return await resolveSystemModelKey({
     userId: ctx.userId,
     projectId: ctx.projectId,
     purpose: mediaType === 'video'
       ? 'video'
       : mediaType === 'audio'
-        ? audioKind === 'sound' ? 'sound' : 'music'
+        ? AUDIO_GENERATION_KIND_DEFINITIONS[audioKind!].modelPurpose
         : assetKind === 'character'
           ? 'character-image'
           : assetKind === 'location'
@@ -536,9 +539,22 @@ function validateReferenceCapabilities(input: {
   }
 
   if (input.mediaType === 'audio') {
-    if (input.audioKind === 'sound') {
+    if (input.audioKind === undefined) throw new Error('AUDIO_GENERATION_KIND_REQUIRED')
+    if (input.audioKind === 'voice') {
+      if (input.references.length !== 1
+        || input.references[0].channel !== 'context'
+        || input.references[0].role !== VOICE_CHARACTER_REFERENCE_ROLE) {
+        throw new ApiError('INVALID_PARAMS', {
+          code: 'VOICE_CHARACTER_REFERENCE_REQUIRED',
+          field: 'references',
+        })
+      }
+    } else if (input.audioKind === 'sound') {
       if (input.references.length > 0) {
-        throw new ApiError('INVALID_PARAMS', { code: 'SOUND_MODEL_REFERENCES_FORBIDDEN', field: 'references' })
+        throw new ApiError('INVALID_PARAMS', {
+          code: `${input.audioKind.toUpperCase()}_MODEL_REFERENCES_FORBIDDEN`,
+          field: 'references',
+        })
       }
     } else if (input.references.some((reference) => reference.role === 'score_timeline')) {
       const timelineReferences = input.references.filter((reference) => (
@@ -949,6 +965,12 @@ async function compileMediaExecution(input: {
         ...(item.negativePrompt ? { negativePrompt: item.negativePrompt } : {}),
         outputFormat: 'mp3',
       }
+    } else if (item.mediaType === 'audio' && item.audioKind === 'voice') {
+      requested = {
+        previewText: item.previewText,
+        language: item.language,
+        outputFormat: 'wav',
+      }
     } else {
       throw new Error('AUDIO_EXECUTION_MODE_ITEM_MISMATCH')
     }
@@ -1177,7 +1199,10 @@ function modelPayload(
   audioKind?: AudioGenerationKind,
 ): Record<string, string> {
   if (mediaType === 'image') return { imageModel: modelKey }
-  if (mediaType === 'audio') return audioKind === 'sound' ? { soundModel: modelKey } : { musicModel: modelKey }
+  if (mediaType === 'audio') {
+    if (audioKind === undefined) throw new Error('AUDIO_GENERATION_KIND_REQUIRED')
+    return { [AUDIO_GENERATION_KIND_DEFINITIONS[audioKind].modelPayloadKey]: modelKey }
+  }
   return { videoModel: modelKey }
 }
 
@@ -1208,6 +1233,10 @@ async function freezeReferences(
       contentVersion: reference.contentVersion,
       role: reference.role,
       position,
+      ...(reference.role === VOICE_CHARACTER_REFERENCE_ROLE ? {
+        expectedMediaType: 'image' as const,
+        allowedSchemaIds: [WORKSPACE_RESOURCE_SCHEMA.CHARACTER_IMAGE],
+      } : {}),
     })),
   })
   const resources = frozen.length === 0 ? [] : await prisma.workspaceResource.findMany({
@@ -1296,9 +1325,7 @@ async function buildPlannedItem(input: {
   const assetKind = item.mediaType === 'image' ? item.assetKind : null
   const audioKind = item.mediaType === 'audio' ? item.audioKind : undefined
   const modelKey = await modelForMedia(input.ctx, mediaType, assetKind, audioKind)
-  const publicReferences = item.mediaType === 'audio' && item.audioKind === 'sound'
-    ? []
-    : ('references' in item ? item.references ?? [] : [])
+  const publicReferences = 'references' in item ? item.references ?? [] : []
   validateReferenceCapabilities({ mediaType, audioKind, modelKey, references: publicReferences })
   const references = await freezeReferences(input.ctx, publicReferences)
   await validateReferenceMediaCapabilities({

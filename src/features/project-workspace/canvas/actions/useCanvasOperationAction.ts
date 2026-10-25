@@ -7,7 +7,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import type { OperationPlanView } from '@/lib/operations/plan-contract'
 import {
-  executePlannedCanvasOperation,
+  executeCanvasOperation,
   fetchOperationPlanView,
 } from '@/lib/query/operation-plan-client'
 import { queryKeys } from '@/lib/query/keys'
@@ -16,12 +16,13 @@ export interface CanvasOperationRequest {
   readonly operationId: string
   readonly input: Readonly<Record<string, unknown>>
   readonly confirmation: 'none'
+  readonly execution: 'planned' | 'direct'
   readonly onAccepted?: (plan: OperationPlanView | null) => void
 }
 
 interface PendingCanvasOperation extends CanvasOperationRequest {
   readonly operationRequestId: string
-  readonly plan: OperationPlanView
+  readonly plan: OperationPlanView | null
 }
 
 type CanvasOperationPhase = 'idle' | 'planning' | 'executing'
@@ -43,28 +44,43 @@ export function useCanvasOperationAction(params: {
     busyRef.current = true
     const operationRequestId = createBrowserUuid()
     try {
-      setPhase('planning')
-      const plan = await fetchOperationPlanView({
-        projectId: params.projectId,
-        operationId: request.operationId,
-        input: { ...request.input },
-        context,
-        operationRequestId,
-      })
-      if (!plan.planSnapshotId) throw new Error('OPERATION_PLAN_SNAPSHOT_ID_REQUIRED')
+      let plan: OperationPlanView | null = null
+      let execution: Parameters<typeof executeCanvasOperation>[0]['execution']
+      switch (request.execution) {
+        case 'planned':
+          setPhase('planning')
+          plan = await fetchOperationPlanView({
+            projectId: params.projectId,
+            operationId: request.operationId,
+            input: { ...request.input },
+            context,
+            operationRequestId,
+          })
+          if (!plan.planSnapshotId) throw new Error('OPERATION_PLAN_SNAPSHOT_ID_REQUIRED')
+          execution = { kind: 'planned', planSnapshotId: plan.planSnapshotId }
+          break
+        case 'direct':
+          execution = { kind: 'direct' }
+          break
+        default:
+          throw new Error('CANVAS_OPERATION_EXECUTION_KIND_INVALID')
+      }
       setPending({ ...request, operationRequestId, plan })
       setPhase('executing')
-      await executePlannedCanvasOperation({
+      await executeCanvasOperation({
         projectId: params.projectId,
         operationId: request.operationId,
         input: request.input,
         context,
-        planSnapshotId: plan.planSnapshotId,
+        execution,
         operationRequestId,
+        queryClient,
       })
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.project.workspaceResourcesAll(params.projectId),
-      })
+      if (request.execution === 'planned') {
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.project.workspaceResourcesAll(params.projectId),
+        })
+      }
       request.onAccepted?.(plan)
       setPending(null)
       setPhase('idle')

@@ -4,9 +4,8 @@ import {
   type ComfyUiRuntimeTargetId,
 } from './config'
 
-export type ComfyUiAsyncType = 'VIDEO' | 'MUSIC'
-
-const COMFYUI_ASYNC_TYPES: readonly ComfyUiAsyncType[] = ['VIDEO', 'MUSIC']
+export const COMFYUI_ASYNC_TYPES = ['VIDEO', 'MUSIC', 'VOICE'] as const
+export type ComfyUiAsyncType = (typeof COMFYUI_ASYNC_TYPES)[number]
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
 
 function isRuntimeTargetId(value: string): value is ComfyUiRuntimeTargetId {
@@ -28,7 +27,10 @@ export function formatComfyUiExternalId(input: {
   return `COMFYUI:${input.targetId}:${input.type}:${input.requestId}`
 }
 
-export function parseComfyUiExternalId(externalId: string): ParsedAsyncExternalId {
+export function parseComfyUiExternalId(externalId: string): ParsedAsyncExternalId & {
+  readonly endpoint: ComfyUiRuntimeTargetId
+  readonly type: ComfyUiAsyncType
+} {
   const parts = externalId.split(':')
   const targetId = parts[1]
   const type = parts[2]

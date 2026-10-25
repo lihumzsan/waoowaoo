@@ -255,7 +255,7 @@ const testPersistence: RuntimeSessionPersistence = {
 
 function testModel(project: { readonly id: string; readonly name: string }): AssistantRuntimeModelConfiguration {
   const projectProductionContext: ProjectProductionContext = {
-    schemaVersion: 10,
+    schemaVersion: 12,
     version: 'test',
     project: {
       projectId: project.id,
@@ -265,7 +265,7 @@ function testModel(project: { readonly id: string; readonly name: string }): Ass
       videoResolution: '1080p',
       imageResolution: '1024x1024',
     },
-    productionCapabilities: { video: null, music: null, sound: null },
+    productionCapabilities: { video: null, music: null, sound: null, voice: null },
     productionDefaults: {
       video: { vocalPerformanceMode: 'native_dialogue' },
     },

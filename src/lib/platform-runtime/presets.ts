@@ -4,6 +4,7 @@ import type { SystemModelPurpose } from '@/lib/model-access/system-model-resolve
 import { findBuiltinCapabilities } from '@/lib/ai-registry/capabilities-catalog'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
+import { FIXED_PRODUCTION_MODEL_KEYS } from '@/lib/ai-registry/platform-models'
 import {
   COMFYUI_H3_DEFAULT_GENERATION_OPTIONS,
   COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
@@ -83,6 +84,7 @@ export function getPlatformSoundGenerationOptions(): Record<string, CapabilityVa
 }
 
 function resolveModelKey(purpose: PlatformRuntimePurpose): string {
+  if (purpose === 'voice-design') return FIXED_PRODUCTION_MODEL_KEYS[purpose]
   const defaults = getPlatformDefaultModels()
   switch (purpose) {
     case 'analysis':
@@ -115,6 +117,7 @@ function resolveGenerationOptions(purpose: PlatformRuntimePurpose): Record<strin
     case 'sound':
       return getPlatformSoundGenerationOptions()
     case 'analysis':
+    case 'voice-design':
       return {}
   }
 }

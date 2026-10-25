@@ -11,6 +11,7 @@ import {
   resolveModelSelection,
 } from '@/lib/user-api/runtime-config'
 import { resolveProviderRouteSet } from '@/lib/ai-registry/provider-route-set'
+import { voiceDesignDescriptionSchema } from '@/lib/voice/voice-design-contract'
 
 export function normalizeMediaOptionsForSelection(input: {
   readonly selection: AiResolvedSelection
@@ -25,6 +26,21 @@ export function normalizeMediaOptionsForSelection(input: {
     throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${input.selection.provider}:${input.modality}`)
   }
   const descriptor = modalityAdapter.describe(input.selection)
+  if (input.modality === 'voice') {
+    if (!descriptor.capabilities.voice?.useCases?.includes('voice_design')) {
+      throw new AiOptionValidationError({
+        failure: 'invalid_option', context: `voice:${input.selection.modelKey}`,
+        field: 'useCase', reason: 'voice_design_required',
+      })
+    }
+    const description = voiceDesignDescriptionSchema.safeParse(input.prompt)
+    if (!description.success) {
+      throw new AiOptionValidationError({
+        failure: 'invalid_option', context: `voice:${input.selection.modelKey}`,
+        field: 'prompt', reason: description.error.issues[0]?.message ?? 'invalid_voice_description',
+      })
+    }
+  }
   if (input.modality === 'music') {
     if (!input.musicGenerationMode) {
       throw new AiOptionValidationError({

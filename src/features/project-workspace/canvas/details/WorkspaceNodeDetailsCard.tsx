@@ -26,7 +26,7 @@ export interface WorkspaceNodeDetailsActions {
   readonly busy: boolean
   readonly onAssistantPrefill: (text: string | null) => void
   readonly onPreview: () => void
-  readonly onOperation: (operation: WorkspaceCanvasResourceOperationView) => void
+  readonly onOperation: (operation: WorkspaceCanvasResourceOperationView, onAccepted?: () => void) => void
 }
 
 export function WorkspaceNodeDetailsCard({

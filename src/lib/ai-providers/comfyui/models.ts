@@ -25,6 +25,7 @@ import {
   COMFYUI_MUSIC_PROFILES,
   MINIMAX_MUSIC_3_PROFILE,
 } from './music-profiles'
+import { COMFYUI_VOICE_PROFILES, QWEN_VOICE_DESIGN_PROFILE } from './voice-profiles'
 
 export const COMFYUI_H3_MODEL_ID = 'minimax-h3-dual-stage-2mp'
 export const COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY = `comfyui::${COMFYUI_H3_MODEL_ID}`
@@ -34,6 +35,7 @@ export const COMFYUI_H3_DEFAULT_GENERATION_OPTIONS = {
 export const COMFYUI_ACE_STEP_1_5_MODEL_ID = ACE_STEP_1_5_PROFILE.modelId
 export const COMFYUI_ACE_STEP_1_5_MODEL_KEY = ACE_STEP_1_5_PROFILE.modelKey
 export const COMFYUI_PLATFORM_DEFAULT_MUSIC_MODEL_KEY = MINIMAX_MUSIC_3_PROFILE.modelKey
+export const COMFYUI_PLATFORM_DEFAULT_VOICE_MODEL_KEY = QWEN_VOICE_DESIGN_PROFILE.modelKey
 export const COMFYUI_ACE_STEP_DEFAULT_GENERATION_OPTIONS = ACE_STEP_1_5_PROFILE.defaultGenerationOptions
 export const COMFYUI_ACE_STEP_KEY_SCALE_OPTIONS = MUSIC_KEY_SCALE_VALUES
 export const COMFYUI_ACE_STEP_TIME_SIGNATURE_OPTIONS = MUSIC_TIME_SIGNATURE_VALUES
@@ -45,11 +47,13 @@ export const COMFYUI_MUSIC_DEFAULT_GENERATION_OPTIONS_BY_MODEL_KEY: Readonly<
 export const COMFYUI_REGISTERED_MODEL_KEYS = [
   COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
   ...COMFYUI_MUSIC_PROFILES.map((profile) => profile.modelKey),
+  ...COMFYUI_VOICE_PROFILES.map((profile) => profile.modelKey),
 ] as const
 
 const COMFYUI_RUNTIME_TARGET_BY_MODEL_KEY: Readonly<Record<string, ComfyUiRuntimeTargetId>> = Object.freeze({
   [COMFYUI_PLATFORM_DEFAULT_VIDEO_MODEL_KEY]: 'h3-dual-stage-2mp',
   ...Object.fromEntries(COMFYUI_MUSIC_PROFILES.map((profile) => [profile.modelKey, profile.runtimeTargetId])),
+  ...Object.fromEntries(COMFYUI_VOICE_PROFILES.map((profile) => [profile.modelKey, profile.runtimeTargetId])),
 })
 
 function resolveH3ContinuationSourceAspectRatios(
@@ -115,6 +119,12 @@ export const COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: profile.modelId,
     capabilities: { music: profile.capabilities },
   })),
+  ...COMFYUI_VOICE_PROFILES.map((profile) => ({
+    modelType: 'voice' as const,
+    provider: 'comfyui' as const,
+    modelId: profile.modelId,
+    capabilities: { voice: profile.capabilities },
+  })),
 ] as const
 
 export const COMFYUI_API_CONFIG_CATALOG_MODELS = [
@@ -123,6 +133,12 @@ export const COMFYUI_API_CONFIG_CATALOG_MODELS = [
     modelId: profile.modelId,
     name: profile.name,
     type: 'music' as const,
+    provider: 'comfyui' as const,
+  })),
+  ...COMFYUI_VOICE_PROFILES.map((profile) => ({
+    modelId: profile.modelId,
+    name: profile.name,
+    type: 'voice' as const,
     provider: 'comfyui' as const,
   })),
 ] as const
@@ -134,5 +150,11 @@ export const COMFYUI_PLATFORM_MODEL_PRESETS: readonly PlatformModelPreset[] = [
     modelId: profile.modelId,
     name: profile.name,
     type: 'music' as const,
+  })),
+  ...COMFYUI_VOICE_PROFILES.map((profile) => ({
+    provider: 'comfyui',
+    modelId: profile.modelId,
+    name: profile.name,
+    type: 'voice' as const,
   })),
 ]

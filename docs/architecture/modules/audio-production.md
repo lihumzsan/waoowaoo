@@ -21,8 +21,11 @@ JSON 专业结果，并把同一 items 直接提交给 `create_audio`。系统�
 - **AP-03 — Provider 能力只约束单次执行。** 生成模式、Composition Plan、时长、格式和输入上限由
   capability registry 唯一声明；Skill 可把真实 Provider 限制重复为创作纪律，但执行校验仍只读
   registry。能力缺失原地失败，不自动换模型、改写计划、拆分作品或创建系统层级实体。
-- **AP-04 — 音色是资源。** 参考音色只有在本次输入显式引用并冻结其资源 id 与版本时才传给 Provider；
-  "当前音色"或最近记录不是事实。
+- **AP-04 — 音色来源与采用分离。** 音色试听由 `create_audio` 唯一提交，声音描述、逐字试听文本、语言
+  与精确人物来源在执行前冻结；产物时长必须从实际音频测量。人物 Resource 拥有所选音色的精确版本，
+  只有显式采用入口可按选择版本原子更新此事实；生成成功不自动采用。来源 Lineage 不表示当前采用，
+  名称、路径、聊天和最近记录不解释对应关系。H3 只接收本次输入显式引用并冻结的音色版本，不能在执行时
+  读取或追加“当前音色”；试听文本不替代来源对白。所选音色不可用时明确失败，不静默换用其他候选。
 - **AP-05 — 混音确定且有界。** 每个音乐 cue 必须携带一个精确成片版本的 lineage；输入、顺序、
   毫秒放置、计划派生时长、增益与自动化由既有 merge Operation 唯一冻结。执行只统一采样率、时间戳、
   pad/trim、cue 总线与对白 ducking，不能分析内容后改写创作决定。
@@ -41,7 +44,8 @@ JSON 专业结果，并把同一 items 直接提交给 `create_audio`。系统�
 
 - 创作知识：`src/lib/creative-skills/skills/music-direction/SKILL.md`
 - 计划、Placement、冻结与提交：生产 Operation registry + PlanSnapshot
-- 执行：独立音乐/音效使用 workspace-resource-audio handler；H3 参考音色由 workspace-resource-video handler 经唯一 video provider adapter 传入原生音轨。
+- 人物音色采用：`select_character_voice` Operation → WorkspaceResource selection persistence；正式 Resource View 投影唯一选择。
+- 执行：独立音频使用 workspace-resource-audio handler；H3 参考音色由 workspace-resource-video handler 经唯一 video provider adapter 传入原生音轨。
 - 确定性装配：video merge Operation/handler
 - 终态：Task Terminal Service 与 WorkspaceResource materializer
 

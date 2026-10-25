@@ -15,6 +15,17 @@ export type ComfyUiPromptGraph = Record<string, {
   readonly inputs: Record<string, unknown>
 }>
 
+export function freezeComfyUiPromptGraph(graph: ComfyUiPromptGraph): ComfyUiPromptGraph {
+  for (const node of Object.values(graph)) {
+    for (const value of Object.values(node.inputs)) {
+      if (Array.isArray(value)) Object.freeze(value)
+    }
+    Object.freeze(node.inputs)
+    Object.freeze(node)
+  }
+  return Object.freeze(graph)
+}
+
 const H3_DELIVERY_SCALE_NUMERATOR = 3
 const H3_DELIVERY_SCALE_DENOMINATOR = 2
 export const H3_MAX_REFERENCE_IMAGES = 9

@@ -156,15 +156,6 @@ const IMPORT_ORIGIN_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new Set
   WORKSPACE_RESOURCE_SCHEMA.UPLOAD_AUDIO,
 ])
 
-/**
- * Schemas minted only by their own dedicated operation. The generic create_*
- * generation operations must never offer or mint these identities: a
- * Voice references have a distinct provenance contract.
- */
-const DEDICATED_ORIGIN_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new Set([
-  WORKSPACE_RESOURCE_SCHEMA.VOICE_REFERENCE,
-])
-
 const RETIRED_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new Set([
   WORKSPACE_RESOURCE_SCHEMA.LEGACY_STYLE,
   WORKSPACE_RESOURCE_SCHEMA.LONG_FORM_PLAN,
@@ -190,7 +181,6 @@ function generationMintableSchemas(
 ): readonly WorkspaceResourceSchemaId[] {
   return schemaIds.filter((schemaId) => (
     !IMPORT_ORIGIN_SCHEMA_IDS.has(schemaId)
-    && !DEDICATED_ORIGIN_SCHEMA_IDS.has(schemaId)
     && !CREATIVE_OUTPUT_SCHEMA_IDS.has(schemaId)
     && !RETIRED_SCHEMA_IDS.has(schemaId)
   ))

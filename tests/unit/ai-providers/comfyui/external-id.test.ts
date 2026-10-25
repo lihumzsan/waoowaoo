@@ -28,7 +28,6 @@ describe('ComfyUI external id protocol', () => {
     `COMFYUI:unknown:VIDEO:${PROMPT_ID}`,
     `COMFYUI:shared:IMAGE:${PROMPT_ID}`,
     `COMFYUI:shared:SOUND:${PROMPT_ID}`,
-    `COMFYUI:shared:VOICE:${PROMPT_ID}`,
     'COMFYUI:shared:VOICE:not-a-uuid',
     `COMFYUI:shared:VOICE:${PROMPT_ID}:extra`,
   ])('rejects a non-canonical id: %s', (externalId) => {

@@ -11,8 +11,11 @@ import {
 } from '@/lib/ai-providers/comfyui/models'
 import { COMFYUI_MUSIC_PROFILES } from '@/lib/ai-providers/comfyui/music-profiles'
 import { comfyuiAdapter } from '@/lib/ai-providers/comfyui/adapter'
+import { COMFYUI_AUDIO_RUNTIMES } from '@/lib/ai-providers/comfyui/audio-runtime'
+import { COMFYUI_ASYNC_RUNTIMES } from '@/lib/ai-providers/comfyui/async-task'
 import { COMFYUI_RUNTIME_TARGET_IDS } from '@/lib/ai-providers/comfyui/config'
-import { formatComfyUiExternalId, parseComfyUiExternalId } from '@/lib/ai-providers/comfyui/external-id'
+import { COMFYUI_ASYNC_TYPES, formatComfyUiExternalId, parseComfyUiExternalId } from '@/lib/ai-providers/comfyui/external-id'
+import { readComfyUiDeclaredNodeAudioOutput } from '@/lib/ai-providers/comfyui/transport'
 import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
 import { getPlatformCapabilityDefaults, getPlatformRuntimePlan } from '@/lib/platform-runtime/presets'
 
@@ -30,18 +33,41 @@ describe('ComfyUI runtime target registry', () => {
     }
   })
 
-  it('gives every music profile an unambiguous target, canonical MP3 output and adapter schema', () => {
-    expect(new Set(COMFYUI_MUSIC_PROFILES.map((profile) => profile.modelKey)).size).toBe(COMFYUI_MUSIC_PROFILES.length)
-    for (const profile of COMFYUI_MUSIC_PROFILES) {
-      expect(COMFYUI_RUNTIME_TARGET_IDS).toContain(profile.runtimeTargetId)
-      expect(profile.modelKey).toBe(`comfyui::${profile.modelId}`)
-      expect(profile.outputNodeId).toBe('107')
-      expect(profile.workflow[profile.outputNodeId]).toMatchObject({ class_type: 'SaveAudioAdvanced', inputs: { format: 'mp3', 'format.quality': 'V0' } })
-      const descriptor = comfyuiAdapter.music!.describe({ provider: 'comfyui', modelId: profile.modelId, modelKey: profile.modelKey, variantSubKind: 'official' })
-      expect(descriptor.optionSchema).toBe(profile.optionSchema)
-      expect(descriptor.capabilities.music).toEqual(profile.capabilities)
-      const externalId = formatComfyUiExternalId({ targetId: profile.runtimeTargetId, type: 'MUSIC', requestId: '00000000-0000-4000-8000-000000000004' })
-      expect(parseComfyUiExternalId(externalId)).toMatchObject({ endpoint: profile.runtimeTargetId, type: 'MUSIC' })
+  it('connects every audio profile to its catalog, adapter, async runtime and single declared output', () => {
+    expect(Object.keys(COMFYUI_ASYNC_RUNTIMES).sort()).toEqual([...COMFYUI_ASYNC_TYPES].sort())
+    for (const [type, runtime] of Object.entries(COMFYUI_AUDIO_RUNTIMES)) {
+      const profileKeys = runtime.profiles.map((profile) => profile.modelKey).sort()
+      expect(new Set(profileKeys).size).toBe(profileKeys.length)
+      for (const profile of runtime.profiles) {
+        const catalog = COMFYUI_API_CONFIG_CATALOG_MODELS.find((entry) => `comfyui::${entry.modelId}` === profile.modelKey)
+        if (!catalog || (catalog.type !== 'music' && catalog.type !== 'voice')) throw new Error(`Missing audio catalog: ${profile.modelKey}`)
+        const adapter = comfyuiAdapter[catalog.type]
+        expect(adapter).toBeDefined()
+        const descriptor = adapter!.describe({ provider: 'comfyui', modelId: profile.modelId, modelKey: profile.modelKey, variantSubKind: 'official' })
+        expect(COMFYUI_RUNTIME_TARGET_IDS).toContain(profile.runtimeTargetId)
+        expect(resolveComfyUiRuntimeTargetIdForModelKey(profile.modelKey)).toBe(profile.runtimeTargetId)
+        expect(profile.modelKey).toBe(`comfyui::${profile.modelId}`)
+        expect(profile.outputNodeId).toBe(runtime.outputNodeId)
+        expect(profile.workflow[profile.outputNodeId]).toBeDefined()
+        expect(descriptor.optionSchema).toBe(profile.optionSchema)
+        expect(descriptor.capabilities[catalog.type]).toEqual(profile.capabilities)
+        expect(descriptor.capabilities[catalog.type]?.outputFormatOptions).toEqual([runtime.format])
+        expect(COMFYUI_PLATFORM_MODEL_PRESETS.filter((entry) => `${entry.provider}::${entry.modelId}` === profile.modelKey)).toHaveLength(1)
+        const capability = COMFYUI_BUILTIN_CAPABILITY_CATALOG_ENTRIES.filter((entry) => `${entry.provider}::${entry.modelId}` === profile.modelKey)
+        expect(capability).toHaveLength(1)
+        expect(capability[0]?.capabilities).toEqual(descriptor.capabilities)
+
+        const identity = { provider: 'COMFYUI', endpoint: profile.runtimeTargetId, type, requestId: '00000000-0000-4000-8000-000000000004' }
+        const parsed = parseComfyUiExternalId(`COMFYUI:${identity.endpoint}:${type}:${identity.requestId}`)
+        expect(parsed).toEqual(identity)
+        expect(formatComfyUiExternalId({ targetId: parsed.endpoint, type: parsed.type, requestId: parsed.requestId })).toBe(`COMFYUI:${identity.endpoint}:${type}:${identity.requestId}`)
+
+        const audio = { filename: `output.${runtime.format}`, subfolder: '', type: 'output' }
+        expect(readComfyUiDeclaredNodeAudioOutput({ [runtime.outputNodeId]: { audio: [audio] } }, runtime.outputNodeId, runtime.format)).toEqual(audio)
+        for (const outputs of [[], [audio, audio], [{ ...audio, filename: 'output.invalid' }]]) {
+          expect(readComfyUiDeclaredNodeAudioOutput({ [runtime.outputNodeId]: { audio: outputs } }, runtime.outputNodeId, runtime.format)).toBeNull()
+        }
+      }
     }
   })
 
