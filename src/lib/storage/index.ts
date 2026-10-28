@@ -119,6 +119,7 @@ export async function getObjectMetadata(key: string): Promise<ObjectMetadata> {
 export type SignedObjectUrlOptions = {
   readonly expiresInSeconds?: number
   readonly responseCacheControl?: string
+  readonly responseContentDisposition?: string
 }
 
 export async function getSignedObjectUrl(
@@ -130,6 +131,7 @@ export async function getSignedObjectUrl(
     run: async () => await getStorageProvider().getSignedObjectUrl({
       key,
       expiresInSeconds: options.expiresInSeconds ?? DEFAULT_SIGNED_URL_EXPIRES_SECONDS,
+      ...(options.responseContentDisposition ? {responseContentDisposition:options.responseContentDisposition} : {}),
       ...(options.responseCacheControl
         ? { responseCacheControl: options.responseCacheControl }
         : {}),

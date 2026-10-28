@@ -40,7 +40,7 @@ description: Use when creating narrative music, environmental sounds, or voice p
 
 - 每个音乐 item 的 `prompt` 是最终 provider-ready Caption。直接写清音乐风格边界、配器与音色、速度与律动、调性与和声、结构弧线、演唱安排、空间和混音目标、对白安全及需要排除的俗套；不要把待改写的草稿或需要下游解析的计划塞给执行层。
 - Caption 必须非空且不超过注入的 `promptMaxCharacters`，以 `promptTargetCharacters` 作为内容密度参考。执行层会逐字冻结并发送 `prompt`，不会再重写、扩写、摘要或从其他字段拼装 Caption。
-- `durationSeconds` 只能从非空的 `durationSecondsOptions` 选择，或在注入的 `durationSecondsRange` 内选择整数。时间线配乐使用 Schema 的 `startSeconds` 记录创作起点；各 Prompt cue 不得重叠，且已知真实时间线时不能越过其 duration。生成不会自动装配，最终位置必须在 `merge_videos.musicCues` 显式提交。
+- `durationSeconds` 只能从非空的 `durationSecondsOptions` 选择，或在注入的 `durationSecondsRange` 内选择整数。时间线配乐使用 Schema 的 `startSeconds` 记录创作起点；各 Prompt cue 不得重叠，且已知真实时间线时不能越过其 duration。生成不会自动装配，最终位置必须在 `merge_videos.composition.audio.musicCues` 显式提交。
 - `vocalMode` 只能从注入的 `vocalModeOptions` 选择。请求需要人声但能力不含 `vocal`，或请求需要纯器乐但能力不含 `instrumental` 时，停止提交而不是擅自改变创作意图。
 - `vocalMode: "vocal"` 时必须同时写 `lyrics`：内容非空、完整、可直接演唱，并用清晰的方括号段落标签组织段落。`lyrics` 是最终 provider-ready 歌词，执行层逐字冻结，不会生成或改写歌词。
 - `vocalMode: "instrumental"` 时必须省略 `lyrics`，不能输出空字符串、占位词或器乐标记。
@@ -78,7 +78,7 @@ description: Use when creating narrative music, environmental sounds, or voice p
 - 每个 item 按机器 Schema 填写 `startMs`、`fadeInMs`、`fadeOutMs` 和 `gainDb`。淡入淡出都不能超过该 cue 的 Composition Plan 总时长。
 - 每个 item 引用恰好一个 canonical `score_timeline` context reference；`startMs + sum(chunk.durationMs)` 不能越过该视频的真实 duration。
 - 多个 cue 可以重叠；重叠会由 mixer 真实叠加独立生成的音乐，只在确需分层且音乐关系经过设计时使用。
-- 最终 mixer 只消费 `merge_videos.musicCues` 显式冻结的放置与时长，在 cue 间保留静音，并对完成的 BGM 总线进行对白 ducking。不要在 Composition Plan 中补偿这些机械行为。
+- 最终 mixer 只消费 `merge_videos.composition.audio.musicCues` 显式冻结的放置与时长，在 cue 间保留静音，并对完成的 BGM 总线进行对白 ducking。不要在 Composition Plan 中补偿这些机械行为。
 - 不要输出 Composition Plan variant 不接受的 `prompt`、`durationSeconds`、`vocalMode`、`lyrics`、`genre`、`mood`、`bpm`、`keyScale`、`timeSignature`、`startSeconds`、`purpose`、`musicalDirection` 或 `dialogueSafety`。
 
 ## 音乐理论与叙事
@@ -91,7 +91,7 @@ description: Use when creating narrative music, environmental sounds, or voice p
 
 ## 返回音频生成批次
 
-- 为视频创作任何模式的配乐时，用机器 Schema 允许的 `score_timeline` context 引用记录精确成片版本。音乐 ready 后，通过现有 `merge_videos` 对该单个视频使用 `audioMode: "preserve"`，每个 `musicCues` 项显式提交精确音乐版本及 `startMs`、`durationMs`、`fadeInMs`、`fadeOutMs`、`gainDb`；Prompt 与 Composition Plan 使用同一合成契约。按 ready 媒体的实测时长确定可用窗口，不能越过音乐或视频边界。不省略参数，也不假定生成参数会自动决定最终位置。
+- 为视频创作任何模式的配乐时，用机器 Schema 允许的 `score_timeline` context 引用记录精确成片版本。音乐 ready 后，通过现有 `merge_videos` 对该单个视频使用 `composition.audio.mode: "preserve"`，每个 `musicCues` 项显式提交精确音乐版本及 `startMs`、`durationMs`、`fadeInMs`、`fadeOutMs`、`gainDb`；Prompt 与 Composition Plan 使用同一合成契约。按 ready 媒体的实测时长确定可用窗口，不能越过音乐或视频边界。不省略参数，也不假定生成参数会自动决定最终位置。
 
 - 唯一专业结果是运行时注入 Schema 约束的一份 `outputKind: "audio_generation_batch"` 严格对象。机器 Schema 是字段、必填项、层级与枚举的唯一权威；本 Skill 不复制 JSON 模板。
 - `decision: "produce"` 时，每个 item 使用其目标对应的 `audioKind` 和严格 variant。音乐 cue 使用 `audioKind: "music"`，按当前 `generationMode` 输出字段；环境音与人物音色按下方各自规则提交。

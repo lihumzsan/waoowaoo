@@ -1,5 +1,5 @@
 import type { FfmpegCommandRunner } from './ffmpeg-command'
-import type { VideoMergeAudioMode } from '@/lib/workspace-resource/video-merge-contract'
+import type { VideoMergeAudioMode } from './audio-contract'
 
 export type VideoMergeAudioCommandRunner = FfmpegCommandRunner
 
@@ -196,6 +196,7 @@ export async function renderVideoMergeClipAudio(input: {
   readonly sourcePath: string
   readonly outputPath: string
   readonly durationSeconds: number
+  readonly sourceStartSeconds?: number
 }): Promise<boolean> {
   const clipDurationFilter = exactAudioDurationFilter(input.durationSeconds)
   const hasAudio = await hasAudioStream(input.runCommand, input.sourcePath)
@@ -221,6 +222,10 @@ export async function renderVideoMergeClipAudio(input: {
 
   await input.runCommand('ffmpeg', [
     '-y',
+    '-ss',
+    (input.sourceStartSeconds ?? 0).toFixed(3),
+    '-t',
+    input.durationSeconds.toFixed(9),
     '-i',
     input.sourcePath,
     '-vn',
@@ -386,7 +391,7 @@ export async function muxVideoMergeTimedAudioCues(input: {
       '-c:a', 'aac',
       '-b:a', '192k',
       '-movflags', '+faststart',
-      '-t', input.durationSeconds.toFixed(3),
+      '-t', input.durationSeconds.toFixed(9),
       input.outputPath,
     ])
     return { hasSourceAudio: false, bgm: bgmMeasurements, sound: soundMeasurements }
@@ -421,7 +426,7 @@ export async function muxVideoMergeTimedAudioCues(input: {
     '-c:a', 'aac',
     '-b:a', '192k',
     '-movflags', '+faststart',
-    '-t', input.durationSeconds.toFixed(3),
+    '-t', input.durationSeconds.toFixed(9),
     input.outputPath,
   ])
   return {
@@ -463,7 +468,7 @@ export async function muxVideoMergeSourceAudio(input: {
       '-movflags',
       '+faststart',
       '-t',
-      input.durationSeconds.toFixed(3),
+      input.durationSeconds.toFixed(9),
       input.outputPath,
     ])
     return { hasSourceAudio: false }
@@ -491,7 +496,7 @@ export async function muxVideoMergeSourceAudio(input: {
     '-movflags',
     '+faststart',
     '-t',
-    input.durationSeconds.toFixed(3),
+    input.durationSeconds.toFixed(9),
     input.outputPath,
   ])
   return {
@@ -513,7 +518,7 @@ async function muxVideoMergeReplacementAudio(input: {
     '-filter_complex',
     `[1:a]${loudnormApplyFilter(MAIN_AUDIO_TARGET, measurement)},${exactAudioDurationFilter(input.durationSeconds)},alimiter=limit=0.95[aout]`,
     '-map', '0:v:0', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart',
-    '-t', input.durationSeconds.toFixed(3), input.outputPath,
+    '-t', input.durationSeconds.toFixed(9), input.outputPath,
   ])
 }
 
@@ -525,7 +530,7 @@ async function muxVideoMergeWithoutAudio(input: {
 }): Promise<void> {
   await input.runCommand('ffmpeg', [
     '-y', '-i', input.stitchedPath, '-map', '0:v:0', '-c:v', 'copy', '-an', '-movflags', '+faststart',
-    '-t', input.durationSeconds.toFixed(3), input.outputPath,
+    '-t', input.durationSeconds.toFixed(9), input.outputPath,
   ])
 }
 
@@ -543,7 +548,7 @@ async function muxVideoMergeBackgroundMusic(input: {
   const exactDurationFilter = exactAudioDurationFilter(input.durationSeconds)
   const bgmMeasurement = await analyzeAudioLoudness(input.runCommand, input.musicPath, BGM_AUDIO_TARGET)
   const bgmFilter = [
-    `atrim=0:${input.durationSeconds.toFixed(3)}`,
+    `atrim=0:${input.durationSeconds.toFixed(9)}`,
     'asetpts=PTS-STARTPTS',
     `afade=t=in:st=0:d=${fadeDuration.toFixed(3)}`,
     `afade=t=out:st=${fadeOutStart.toFixed(3)}:d=${fadeDuration.toFixed(3)}`,
@@ -556,7 +561,7 @@ async function muxVideoMergeBackgroundMusic(input: {
       '-y', '-i', input.stitchedPath, '-i', input.musicPath,
       '-filter_complex', `[1:a]${bgmFilter},alimiter=limit=0.95[aout]`,
       '-map', '0:v:0', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
-      '-movflags', '+faststart', '-t', input.durationSeconds.toFixed(3), input.outputPath,
+      '-movflags', '+faststart', '-t', input.durationSeconds.toFixed(9), input.outputPath,
     ])
     return
   }
@@ -572,7 +577,7 @@ async function muxVideoMergeBackgroundMusic(input: {
       '[main_mix][ducked_bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[aout]',
     ].join(';'),
     '-map', '0:v:0', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
-    '-movflags', '+faststart', '-t', input.durationSeconds.toFixed(3), input.outputPath,
+    '-movflags', '+faststart', '-t', input.durationSeconds.toFixed(9), input.outputPath,
   ])
 }
 
@@ -644,7 +649,7 @@ export async function renderVideoMergeAutomatedAudio(input: {
   await input.runCommand('ffmpeg', [
     '-y', '-i', input.inputPath, '-vn', '-af',
     `aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,${input.volumeFilter},${exactAudioDurationFilter(input.durationSeconds)}`,
-    '-c:a', 'pcm_s24le', '-ar', '48000', '-ac', '2', '-t', input.durationSeconds.toFixed(3), input.outputPath,
+    '-c:a', 'pcm_s24le', '-ar', '48000', '-ac', '2', '-t', input.durationSeconds.toFixed(9), input.outputPath,
   ])
 }
 
@@ -659,6 +664,6 @@ export async function applyVideoMergeMasterAutomation(input: {
     '-y', '-i', input.inputPath, '-filter_complex',
     `[0:a]${input.volumeFilter},${exactAudioDurationFilter(input.durationSeconds)},alimiter=limit=0.95[aout]`,
     '-map', '0:v:0', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart',
-    '-t', input.durationSeconds.toFixed(3), input.outputPath,
+    '-t', input.durationSeconds.toFixed(9), input.outputPath,
   ])
 }

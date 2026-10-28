@@ -5,6 +5,7 @@ export const CREATIVE_SKILL_IDS = [
   'asset-development',
   'video-direction',
   'music-direction',
+  'video-editing',
 ] as const
 
 export type CreativeSkillId = (typeof CREATIVE_SKILL_IDS)[number]
@@ -15,6 +16,7 @@ export const CREATIVE_DOMAIN_KINDS = [
   'assets',
   'video',
   'music',
+  'editing',
 ] as const
 
 export type CreativeDomainKind = (typeof CREATIVE_DOMAIN_KINDS)[number]
@@ -25,6 +27,7 @@ export const CREATIVE_OUTPUT_KINDS = [
   'asset_generation_batch',
   'video_generation_batch',
   'audio_generation_batch',
+  'video_edit',
 ] as const
 
 export type CreativeOutputKind = (typeof CREATIVE_OUTPUT_KINDS)[number]

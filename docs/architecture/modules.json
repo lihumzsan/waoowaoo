@@ -103,7 +103,10 @@
         "scripts/media-safety-backup.ts",
         "src/lib/home",
         "prisma/schema.prisma",
-        "prisma/migrations"
+        "prisma/migrations",
+        "src/lib/operations/project-video-ratio-policy.ts",
+        "src/lib/jianying",
+        "scripts/jianying"
       ]
     },
     {

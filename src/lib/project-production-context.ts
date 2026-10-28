@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto'
+import { COMPOSITION_TARGETS } from '@/lib/video-compose/composition-target-registry'
+import { isJianyingConfigured } from '@/lib/jianying/profile'
 import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
 import { getProjectModelConfig, type ProjectModelConfig } from '@/lib/config-service'
 import { prisma } from '@/lib/prisma'
@@ -11,6 +13,14 @@ import { FIXED_PRODUCTION_MODEL_KEYS } from '@/lib/ai-registry/platform-models'
 import { VOICE_DESIGN_DESCRIPTION_MAX_CHARS } from '@/lib/voice/voice-design-contract'
 
 export type ProjectProductionCapabilities = {
+  readonly editing: {
+    readonly targets: typeof COMPOSITION_TARGETS
+    readonly jianyingConfigurationPresent: boolean
+    readonly nativeAcceptanceRequired: true
+    readonly textStyles: readonly ['lower_third']
+    readonly textPlacements: readonly ['bottom_left','bottom_right']
+    readonly textAnimations: readonly ['none','fade']
+  }
   readonly voice: {
     readonly modelKey: string
     readonly useCase: 'voice_design'
@@ -83,7 +93,7 @@ export type ProjectProductionCapabilities = {
 }
 
 export type ProjectProductionContext = {
-  readonly schemaVersion: 12
+  readonly schemaVersion: 13
   readonly version: string
   readonly project: {
     readonly projectId: string
@@ -259,7 +269,8 @@ export function resolveProjectProductionCapabilities(config: ProjectModelConfig)
       }
     : null
 
-  return { video: videoCapabilities, music: musicCapabilities, sound: soundCapabilities, voice: voiceCapabilities }
+  return { video: videoCapabilities, music: musicCapabilities, sound: soundCapabilities, voice: voiceCapabilities,
+    editing:{targets:COMPOSITION_TARGETS,jianyingConfigurationPresent:isJianyingConfigured(),nativeAcceptanceRequired:true,textStyles:['lower_third'],textPlacements:['bottom_left','bottom_right'],textAnimations:['none','fade']} }
 }
 
 function contextVersion(value: Omit<ProjectProductionContext, 'version'>): string {
@@ -285,7 +296,7 @@ export async function readProjectProductionContext(input: {
   ])
   if (!project) throw new ProjectProductionContextError()
   const value: Omit<ProjectProductionContext, 'version'> = {
-    schemaVersion: 12,
+    schemaVersion: 13,
     project: {
       projectId: project.id,
       name: project.name,

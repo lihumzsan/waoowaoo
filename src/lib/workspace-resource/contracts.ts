@@ -64,7 +64,7 @@ export type WorkspaceResourceTreeScope = (typeof WORKSPACE_RESOURCE_TREE_SCOPES)
 export const WORKSPACE_RESOURCE_KINDS = ['file', 'folder'] as const
 export type WorkspaceResourceKind = (typeof WORKSPACE_RESOURCE_KINDS)[number]
 
-export const WORKSPACE_RESOURCE_MEDIA_TYPES = ['text', 'image', 'audio', 'video'] as const
+export const WORKSPACE_RESOURCE_MEDIA_TYPES = ['text', 'image', 'audio', 'video', 'archive'] as const
 export type WorkspaceResourceMediaType = (typeof WORKSPACE_RESOURCE_MEDIA_TYPES)[number]
 
 export type WorkspaceResourceAlternativeMediaKind = 'image' | 'video' | 'music' | 'voice'

@@ -1,6 +1,7 @@
 import { createProjectAgentOperationRegistry as createRawProjectAgentOperationRegistry } from './project-agent'
 import { createApiOnlyOperationRegistry } from './api-only'
 import { assertAssistantToolWriteAuthority } from './write-authority'
+import { isWorkspaceResourceMediaType } from '@/lib/workspace-resource/contracts'
 import { WORKSPACE_RESOURCE_IMPACT } from '@/lib/workspace-resource/resource-impact'
 export type { ProjectAgentOperationContext, ProjectAgentOperationDefinition, ProjectAgentOperationRegistry } from './types'
 
@@ -88,7 +89,7 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
         || (producesFile && resourceContract.outputMediaTypes.length === 0)
         || (!producesFile && resourceContract.outputMediaTypes.length !== 0)
         || resourceContract.outputMediaTypes.some((mediaType) => (
-          mediaType !== 'text' && mediaType !== 'image' && mediaType !== 'audio' && mediaType !== 'video'
+          !isWorkspaceResourceMediaType(mediaType)
         ))
         || new Set(resourceContract.outputMediaTypes).size !== resourceContract.outputMediaTypes.length
       ) {

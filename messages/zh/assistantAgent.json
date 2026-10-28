@@ -48,7 +48,8 @@
       "text": "文本",
       "image": "图片",
       "audio": "音频",
-      "video": "视频"
+      "video": "视频",
+      "archive": "工程包"
     }
   },
   "plan": {
@@ -145,7 +146,8 @@
         "creative-direction": "创作方向",
         "asset-development": "资产范围与视觉设计",
         "video-direction": "视频导演与生成设计",
-        "music-direction": "音乐与配乐设计"
+        "music-direction": "音乐与配乐设计",
+        "video-editing": "视频编排与剪映工程"
       },
       "web": {
         "search": "搜索：{query}",

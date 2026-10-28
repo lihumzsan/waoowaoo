@@ -1,162 +1,195 @@
 import { z } from 'zod'
+import {
+  COMPOSITION_TARGETS,
+  validateCompositionTarget,
+} from '@/lib/video-compose/composition-target-registry'
+import { resolveCompositionTiming } from '@/lib/video-compose/composition-timing'
 import { taskRuntimePayloadEnvelopeShape } from '@/lib/task/progress-payload'
 import {
-  workspaceResourceLifecycleProjectionSchema,
-} from './task-runtime-envelope'
-import { workspaceResourceGenerationOptionsSchema } from './generation-contract'
+  videoCompositionSchema,
+  compositionFormatSchema,
+  compositionTargetSchema,
+} from '@/lib/video-compose/composition-contract'
+import { compositionSourceFactsSchema } from '@/lib/video-compose/composition-contract'
+import { videoMergeCuePlacementSchema } from '@/lib/video-compose/audio-contract'
+import { jianyingProfileSchema } from '@/lib/jianying/profile'
+import { workspaceResourceLifecycleProjectionSchema } from './task-runtime-envelope'
 
-export const VIDEO_MERGE_AUDIO_MODES = ['preserve', 'mix', 'replace', 'mute'] as const
-export const videoMergeAudioModeSchema = z.enum(VIDEO_MERGE_AUDIO_MODES)
-export type VideoMergeAudioMode = z.infer<typeof videoMergeAudioModeSchema>
-
-export const videoMergeGenerationOptionsSchema = z.object({
-  mergeMode: z.literal('ordered_concat'),
-  audioMode: videoMergeAudioModeSchema,
-}).strict()
-
-export const videoMergeTimedCueGenerationOptionsSchema = z.object({
-  mergeMode: z.literal('timed_cues'),
-  audioMode: z.literal('preserve'),
-}).strict()
-
-const videoMergeCueTimingSchema = z.object({
-  startMs: z.number().int().nonnegative(),
-  durationMs: z.number().int().positive(),
-  fadeInMs: z.number().int().nonnegative(),
-  fadeOutMs: z.number().int().nonnegative(),
-  gainDb: z.number().finite().min(-60).max(12),
-}).strict().superRefine((cue, context) => {
-  if (cue.fadeInMs > cue.durationMs) context.addIssue({ code: 'custom', path: ['fadeInMs'], message: 'fadeInMs exceeds cue duration.' })
-  if (cue.fadeOutMs > cue.durationMs) context.addIssue({ code: 'custom', path: ['fadeOutMs'], message: 'fadeOutMs exceeds cue duration.' })
-})
-
-export const videoMergeTimedCueInputSchema = videoMergeCueTimingSchema.safeExtend({
-  resourceId: z.string().trim().min(1).max(32),
-  contentVersion: z.number().int().positive(),
-})
-
-export const videoMergeCuePlacementSchema = videoMergeCueTimingSchema.safeExtend({
-  inputPosition: z.number().int().nonnegative(),
-})
-
-export type VideoMergeTimedCueInput = z.infer<typeof videoMergeTimedCueInputSchema>
-export type VideoMergeCuePlacement = z.infer<typeof videoMergeCuePlacementSchema>
-
-const videoMergeInputRefSchema = z.object({
-  resourceId: z.string().trim().min(1),
-  contentVersion: z.number().int().positive(),
-  workspacePath: z.string().trim().min(1).max(512),
-  role: z.enum(['source_video', 'background_music', 'replacement_audio', 'bgm_audio', 'sound_effect_audio']),
-  position: z.number().int().min(0),
-}).strict()
-
-const videoMergeInputsSchema = z.array(videoMergeInputRefSchema).min(1).max(51)
-  .refine(
-    (inputs) => {
-      const sourceCount = inputs.filter((input) => input.role === 'source_video').length
-      return sourceCount >= 1 && sourceCount <= 50
-    },
-    { message: 'VIDEO_MERGE_SOURCE_VIDEO_COUNT_INVALID' },
-  )
-  .refine(
-    (inputs) => new Set(inputs.map((input) => input.position)).size === inputs.length,
-    { message: 'VIDEO_MERGE_INPUT_POSITIONS_DUPLICATE' },
-  )
-
-export const workspaceResourceVideoMergeTaskPayloadSchema = z.object({
-  lifecycleProjection: workspaceResourceLifecycleProjectionSchema,
-  protocol: z.literal('workspace_resource_video_merge_v2'),
-  resource: z.object({
-    resourceId: z.string().trim().min(1),
-    mediaType: z.literal('video'),
-    schemaId: z.literal('generic.video'),
-    prompt: z.null(),
-    modelKey: z.null(),
-    inputHash: z.string().length(64),
-    inputs: videoMergeInputsSchema,
-    generationOptions: z.union([
-      videoMergeGenerationOptionsSchema,
-      videoMergeTimedCueGenerationOptionsSchema,
-      workspaceResourceGenerationOptionsSchema,
-    ]),
-    musicCues: z.array(videoMergeCuePlacementSchema).max(50).default([]),
-    soundCues: z.array(videoMergeCuePlacementSchema).max(50).default([]),
-    toolCallId: z.string().trim().min(1).nullable(),
-  }).strict().superRefine((resource, context) => {
-    const sourceCount = resource.inputs.filter((input) => input.role === 'source_video').length
-    const backgroundMusicCount = resource.inputs.filter((input) => input.role === 'background_music').length
-    const replacementAudioCount = resource.inputs.filter((input) => input.role === 'replacement_audio').length
-    const audioMode = 'audioMode' in resource.generationOptions
-      ? resource.generationOptions.audioMode
-      : null
-    const bgmPositions = new Set(resource.inputs.filter((input) => input.role === 'bgm_audio').map((input) => input.position))
-    const soundPositions = new Set(resource.inputs.filter((input) => input.role === 'sound_effect_audio').map((input) => input.position))
-    const cuePositions = resource.musicCues.map((cue) => cue.inputPosition)
-    const soundCuePositions = resource.soundCues.map((cue) => cue.inputPosition)
-    const hasTimedCues = cuePositions.length > 0 || soundCuePositions.length > 0
-    if (hasTimedCues) {
-      if (
-        resource.generationOptions.mergeMode !== 'timed_cues'
-        || audioMode !== 'preserve'
-        || sourceCount !== 1
-        || backgroundMusicCount > 0
-        || replacementAudioCount > 0
-      ) {
-        context.addIssue({ code: 'custom', path: ['generationOptions'], message: 'Timed audio cues require one source video and preserve mode without an assembly audio input.' })
-      }
-      if (cuePositions.length !== bgmPositions.size || new Set(cuePositions).size !== cuePositions.length || cuePositions.some((position) => !bgmPositions.has(position))) {
-        context.addIssue({ code: 'custom', path: ['musicCues'], message: 'Every bgm_audio input must have exactly one music cue.' })
-      }
-      if (soundCuePositions.length !== soundPositions.size || new Set(soundCuePositions).size !== soundCuePositions.length || soundCuePositions.some((position) => !soundPositions.has(position))) {
-        context.addIssue({ code: 'custom', path: ['soundCues'], message: 'Every sound_effect_audio input must have exactly one sound cue.' })
-      }
-      if (bgmPositions.size + soundPositions.size > 50) {
-        context.addIssue({ code: 'custom', path: ['inputs'], message: 'Timed audio cues cannot exceed 50 inputs.' })
-      }
-      return
-    }
-    if (bgmPositions.size > 0 || soundPositions.size > 0) {
-      context.addIssue({
+export const videoMergeRecipeSchema = z
+  .object({
+    name: z.string().trim().min(1).max(300),
+    locale: z.enum(['zh', 'en']),
+    composition: videoCompositionSchema,
+    outputTarget: compositionTargetSchema,
+    format: compositionFormatSchema,
+    sourceFacts: z.array(compositionSourceFactsSchema).min(1).max(50),
+    jianyingProfile: jianyingProfileSchema.nullable(),
+  })
+  .strict()
+  .superRefine((recipe, ctx) => {
+    if (
+      (recipe.outputTarget === 'jianying_project') !==
+      (recipe.jianyingProfile !== null)
+    )
+      ctx.addIssue({
         code: 'custom',
-        path: ['inputs'],
-        message: 'Timed audio inputs require matching frozen cues.',
+        message: 'COMPOSITION_PROFILE_TARGET_MISMATCH',
       })
-      return
-    }
-    if (resource.generationOptions.mergeMode !== 'ordered_concat') {
-      context.addIssue({ code: 'custom', path: ['generationOptions'], message: 'Non-timed video merge requires ordered_concat mode.' })
-      return
-    }
-    if (!audioMode) {
-      context.addIssue({ code: 'custom', path: ['generationOptions'], message: 'VIDEO_MERGE_AUDIO_MODE_REQUIRED' })
-      return
-    }
-    if (audioMode === 'preserve' && sourceCount < 2) {
-      context.addIssue({ code: 'custom', path: ['inputs'], message: 'VIDEO_MERGE_PRESERVE_REQUIRES_MULTIPLE_VIDEOS' })
-    }
-    const validAudioInputs = audioMode === 'mix'
-      ? backgroundMusicCount === 1 && replacementAudioCount === 0
-      : audioMode === 'replace'
-        ? replacementAudioCount === 1 && backgroundMusicCount === 0
-        : backgroundMusicCount === 0 && replacementAudioCount === 0
-    if (!validAudioInputs) {
-      context.addIssue({ code: 'custom', path: ['inputs'], message: 'VIDEO_MERGE_AUDIO_MODE_INPUT_MISMATCH' })
-    }
-  }),
-}).strict()
+    if (recipe.format.frameRate !== recipe.sourceFacts[0]?.frameRate) ctx.addIssue({code:'custom',message:'COMPOSITION_FRAME_RATE_MISMATCH'})
+    if (recipe.sourceFacts.length !== recipe.composition.clips.length)
+      ctx.addIssue({ code: 'custom', message: 'COMPOSITION_FACTS_INCOMPLETE' })
+  })
 
-const workspaceResourceVideoMergeTaskEnvelopeSchema = workspaceResourceVideoMergeTaskPayloadSchema.extend({
-  ...taskRuntimePayloadEnvelopeShape,
-}).strict()
-
+const inputRef = z
+  .object({
+    resourceId: z.string().trim().min(1),
+    contentVersion: z.number().int().positive(),
+    workspacePath: z.string().trim().min(1).max(512),
+    role: z.enum([
+      'source_video',
+      'background_music',
+      'replacement_audio',
+      'bgm_audio',
+      'sound_effect_audio',
+      'character_context',
+      'editing_context',
+    ]),
+    position: z.number().int().nonnegative(),
+  })
+  .strict()
+export const workspaceResourceVideoMergeTaskPayloadSchema = z
+  .object({
+    lifecycleProjection: workspaceResourceLifecycleProjectionSchema,
+    protocol: z.literal('workspace_resource_video_merge_v3'),
+    resource: z
+      .object({
+        resourceId: z.string().trim().min(1),
+        mediaType: z.enum(['video', 'archive']),
+        schemaId: z.enum(['generic.video', 'project.jianying_project']),
+        prompt: z.null(),
+        modelKey: z.null(),
+        inputHash: z.string().length(64),
+        inputs: z.array(inputRef).min(1).max(168),
+        generationOptions: videoMergeRecipeSchema,
+        musicCues: z.array(videoMergeCuePlacementSchema).max(50),
+        soundCues: z.array(videoMergeCuePlacementSchema).max(50),
+        toolCallId: z.string().trim().min(1).nullable(),
+      })
+      .strict()
+      .superRefine((resource, ctx) => {
+        const recipe = resource.generationOptions
+        const { composition, sourceFacts, outputTarget } = recipe
+        const issue = (message: string) =>
+          ctx.addIssue({ code: 'custom', message })
+        const target = COMPOSITION_TARGETS[outputTarget]
+        if (
+          resource.mediaType !== target.mediaType ||
+          resource.schemaId !== target.schemaId
+        )
+          issue('COMPOSITION_OUTPUT_TARGET_MISMATCH')
+        try {
+          validateCompositionTarget(outputTarget, composition)
+          resolveCompositionTiming(composition,recipe.format.frameRate)
+        } catch {
+          issue('COMPOSITION_TARGET_OR_TIMING_INVALID')
+        }
+        if (
+          new Set(resource.inputs.map((ref) => ref.position)).size !==
+          resource.inputs.length
+        )
+          issue('COMPOSITION_INPUT_POSITIONS_DUPLICATE')
+        const videos = resource.inputs.filter(
+          (ref) => ref.role === 'source_video',
+        )
+        if (videos.length !== composition.clips.length)
+          issue('COMPOSITION_VIDEO_INPUT_COUNT_INVALID')
+        for (const [index, clip] of composition.clips.entries()) {
+          const ref = videos[index]
+          const fact = sourceFacts[index]
+          if (
+            !ref ||
+            ref.resourceId !== clip.source.resourceId ||
+            ref.contentVersion !== clip.source.contentVersion ||
+            !fact ||
+            fact.position !== ref.position
+          )
+            issue('COMPOSITION_FROZEN_SOURCE_MISMATCH')
+          if (fact && clip.sourceStartMs + clip.durationMs > fact.durationMs)
+            issue('COMPOSITION_SOURCE_RANGE_INVALID')
+        }
+        const cueGroups = [
+          {
+            role: 'bgm_audio',
+            placements: resource.musicCues,
+            cues: composition.audio.musicCues,
+          },
+          {
+            role: 'sound_effect_audio',
+            placements: resource.soundCues,
+            cues: composition.audio.soundCues,
+          },
+        ]
+        for (const group of cueGroups) {
+          const refs = resource.inputs.filter((ref) => ref.role === group.role)
+          if (
+            refs.length !== group.cues.length ||
+            group.placements.length !== group.cues.length
+          )
+            issue('COMPOSITION_CUE_COUNT_INVALID')
+          for (const [index, cue] of group.cues.entries()) {
+            const ref = refs[index]
+            const placement = group.placements[index]
+            if (
+              !ref ||
+              ref.resourceId !== cue.resourceId ||
+              ref.contentVersion !== cue.contentVersion ||
+              !placement ||
+              placement.inputPosition !== ref.position
+            )
+              issue('COMPOSITION_CUE_REFERENCE_MISMATCH')
+            if (
+              placement &&
+              (
+                [
+                  'startMs',
+                  'durationMs',
+                  'fadeInMs',
+                  'fadeOutMs',
+                  'gainDb',
+                ] as const
+              ).some((key) => placement[key] !== cue[key])
+            )
+              issue('COMPOSITION_CUE_TIMING_MISMATCH')
+          }
+        }
+        const audio = composition.audio
+        for (const [role, reference] of [
+          ['background_music', audio.backgroundMusic],
+          ['replacement_audio', audio.replacementAudio],
+        ] as const) {
+          const refs = resource.inputs.filter((ref) => ref.role === role)
+          if (
+            reference
+              ? refs.length !== 1 ||
+                refs[0]?.resourceId !== reference.resourceId ||
+                refs[0]?.contentVersion !== reference.contentVersion
+              : refs.length !== 0
+          )
+            issue('COMPOSITION_ASSEMBLY_AUDIO_MISMATCH')
+        }
+      }),
+  })
+  .strict()
+const envelopeSchema = workspaceResourceVideoMergeTaskPayloadSchema
+  .extend(taskRuntimePayloadEnvelopeShape)
+  .strict()
 export type WorkspaceResourceVideoMergeTaskPayload = z.infer<
   typeof workspaceResourceVideoMergeTaskPayloadSchema
 >
-
 export function parseWorkspaceResourceVideoMergeTaskPayload(
   value: unknown,
 ): WorkspaceResourceVideoMergeTaskPayload {
-  const parsed = workspaceResourceVideoMergeTaskEnvelopeSchema.parse(value)
+  const parsed = envelopeSchema.parse(value)
   return workspaceResourceVideoMergeTaskPayloadSchema.parse({
     lifecycleProjection: parsed.lifecycleProjection,
     protocol: parsed.protocol,

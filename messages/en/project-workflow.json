@@ -78,7 +78,8 @@
         "previous": "Previous result",
         "next": "Next result",
         "structuredUnknown": "Structured content",
-        "structuredEntries": "Structured content · {count} entries"
+        "structuredEntries": "Structured content · {count} entries",
+        "archiveImport": "Extract the archive, close Jianying, and follow README.txt to import into a new draft directory. Reopen Jianying and check clip order, trims, names, text animations and source audio."
       },
       "operationConfirm": {
         "failed": "The operation could not be completed",
@@ -170,6 +171,18 @@
         },
         "folder": {
           "eyebrow": "Folder"
+        }
+      },
+      "archive": {
+        "title": "Editable Jianying project",
+        "description": "Download the ZIP and follow the included import instructions.",
+        "exportReadme": {
+          "title": "Wao editable Jianying project",
+          "extract": "Extract this ZIP into a new folder. Close Jianying before importing.",
+          "command": "python import_project.py --source \".\" --destination \"D:/YOUR-JIANYING-DRAFTS/NEW-PROJECT\"",
+          "destination": "Replace the destination with a NEW project directory under your actual Jianying drafts directory. Existing directories are rejected.",
+          "review": "Reopen Jianying and verify clip order, trims, names, text fades and source audio.",
+          "acceptance": "Native Jianying 5.0 acceptance is required; serialization does not prove playback compatibility."
         }
       }
     }

@@ -1,3 +1,4 @@
+import { videoCompositionFixture } from './video-composition-fixture'
 import { randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { createAgentFollowUpBatchBinding } from '@/lib/agent-turn/follow-up-batch'
@@ -77,7 +78,7 @@ function buildPayload(
         name,
       },
     ]),
-    protocol: 'workspace_resource_video_merge_v2',
+    protocol: 'workspace_resource_video_merge_v3',
     resource: {
       resourceId,
       mediaType: 'video',
@@ -86,8 +87,9 @@ function buildPayload(
       modelKey: null,
       inputHash: 'd'.repeat(64),
       inputs,
-      generationOptions: { mergeMode: 'ordered_concat', audioMode: 'preserve' },
+      generationOptions: videoCompositionFixture(inputs),
       musicCues: [],
+              soundCues: [],
       toolCallId: null,
     },
   }
@@ -307,7 +309,7 @@ export async function createTaskDependencyGateFixture(input: {
               operationExecutionId,
               taskId: task.task.id,
               inputHash: 'd'.repeat(64),
-              generationOptions: { mergeMode: 'ordered_concat', audioMode: 'preserve' },
+              generationOptions: videoCompositionFixture(inputReferences),
             })
           }
           await followUpBatchBinding.bindInTransaction(transaction, {

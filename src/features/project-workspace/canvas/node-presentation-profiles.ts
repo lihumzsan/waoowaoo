@@ -50,6 +50,7 @@ const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
       image: { form: 'frame', maxMediaWidth: 360, maxMediaHeight: 460 },
       video: { form: 'frame', maxMediaWidth: 360, maxMediaHeight: 460 },
       audio: { form: 'bar', maxMediaWidth: 360, maxMediaHeight: 64 },
+      archive: { form:'card',maxMediaWidth:360,maxMediaHeight:160 },
       text: { form: 'card', maxMediaWidth: 360, maxMediaHeight: 220 },
     },
   },

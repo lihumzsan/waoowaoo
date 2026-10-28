@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
-import { ASPECT_RATIO_CONFIGS } from '@/lib/constants'
+import { ASPECT_RATIO_CONFIGS, VIDEO_RESOLUTIONS } from '@/lib/constants'
 import { prisma } from '@/lib/prisma'
 import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
 import type { OperationPlan } from './plan-contract'
@@ -63,6 +63,45 @@ export async function readProjectVideoRatioSnapshot(input: {
   })
   if (!project) throw new ApiError('NOT_FOUND')
   return requireProjectVideoRatio(project.videoRatio)
+}
+
+/** Extend the project-format owner; source media never chooses the output canvas. */
+export function resolveProjectVideoCanvas(input: {
+  aspectRatio: string
+  resolution: string
+}) {
+  const ratio = requireProjectVideoRatio(input.aspectRatio).value
+  if (!VIDEO_RESOLUTIONS.some((option) => option.value === input.resolution)) {
+    throw new ApiError('INVALID_PARAMS', {
+      field: 'videoResolution',
+      allowedValues: VIDEO_RESOLUTIONS.map((option) => option.value),
+    })
+  }
+  const [rw, rh] = ratio.split(':').map(Number)
+  if (!rw || !rh) throw new Error('PROJECT_VIDEO_RATIO_DIMENSIONS_INVALID')
+  const shortEdge = Number.parseInt(input.resolution, 10)
+  const scale = shortEdge / Math.min(rw, rh)
+  return {
+    width: Math.round((rw * scale) / 2) * 2,
+    height: Math.round((rh * scale) / 2) * 2,
+    aspectRatio: ratio,
+    resolution: input.resolution,
+  }
+}
+
+export async function readProjectVideoCanvas(input: {
+  projectId: string
+  userId: string
+}) {
+  const project = await prisma.project.findFirst({
+    where: { id: input.projectId, userId: input.userId },
+    select: { videoRatio: true, videoResolution: true },
+  })
+  if (!project) throw new ApiError('NOT_FOUND')
+  return resolveProjectVideoCanvas({
+    aspectRatio: requireProjectVideoRatio(project.videoRatio).value,
+    resolution: project.videoResolution,
+  })
 }
 
 function containsProjectImageOrVideoTask(plan: OperationPlan): boolean {

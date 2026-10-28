@@ -1,3 +1,4 @@
+import type { WorkspaceResourceMediaType } from '@/lib/workspace-resource/contracts'
 import type { UIMessage, UIMessageChunk } from 'ai'
 import type {
   RuntimeJsonValue,
@@ -49,7 +50,7 @@ export type AssistantRuntimeSelectedResourceReference = {
   readonly contentVersion: number
   readonly workspacePath: string
   readonly name: string
-  readonly mediaType: 'text' | 'image' | 'audio' | 'video'
+  readonly mediaType: WorkspaceResourceMediaType
 }
 
 export type AssistantRuntimeSubmitCommand = AssistantRuntimeScope & {

@@ -127,7 +127,7 @@ function alternativeMember(
       error: null,
     },
     inputSummaries: [],
-    download: member.previewUrl ? { href: member.previewUrl, fileName: memberName(member) } : null,
+    download: member.previewUrl ? { href: member.previewUrl, fileName: mediaType === 'archive' ? `${memberName(member)}.zip` : memberName(member) } : null,
     presentation: {
       rendererKey: 'resourceCard',
       fallbackMediaType: mediaType,
@@ -190,7 +190,7 @@ function resourceCard(resourceView: WorkspaceResourceView): WorkspaceResourceCar
   const primary: WorkspaceResourceCardMemberView = {
     resource,
     inputSummaries: resource.inputSummaries,
-    download: download?.href ? { href: download.href, fileName: resource.name } : null,
+    download: download?.href ? { href: download.href, fileName: resource.mediaType === 'archive' ? `${resource.name}.zip` : resource.name } : null,
     presentation: {
       rendererKey: 'resourceCard',
       fallbackMediaType: resource.mediaType,

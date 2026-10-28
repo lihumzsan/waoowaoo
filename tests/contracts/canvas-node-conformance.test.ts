@@ -54,6 +54,7 @@ describe('workspace Canvas node registry conformance', () => {
     expect(Object.keys(profile.media).sort()).toEqual([...WORKSPACE_RESOURCE_MEDIA_TYPES].sort())
 
     const schemaByMedia = {
+      archive: WORKSPACE_RESOURCE_SCHEMA.JIANYING_PROJECT,
       text: WORKSPACE_RESOURCE_SCHEMA.GENERIC_TEXT,
       image: WORKSPACE_RESOURCE_SCHEMA.GENERIC_IMAGE,
       audio: WORKSPACE_RESOURCE_SCHEMA.BGM_AUDIO,

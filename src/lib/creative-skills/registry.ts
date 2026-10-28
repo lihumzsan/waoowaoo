@@ -53,6 +53,12 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
     summary: '把客户效果要求转成来源有据的导演设计，按人物已选音色和 H3 结构构造和修订最终提示词、参考关系与时间线。',
     tags: ['video', 'director', 'prompt', 'editing', 'timeline', 'shot', 'camera', 'continuity', 'audio'],
   }),
+  'video-editing': defineSkill({
+    id:'video-editing', instructionAppendix:null, version:'1.0.1',
+    title:'视频编排与剪映工程',
+    summary:'编排已有视频、裁切片段、添加有据的角色姓名说明与文字渐入渐出，并通过 Wao 导出可编辑剪映工程。',
+    tags:['editing','jianying','timeline','character','text','archive'],
+  }),
   'music-direction': defineSkill({
     id: 'music-direction',
     instructionAppendix: null,

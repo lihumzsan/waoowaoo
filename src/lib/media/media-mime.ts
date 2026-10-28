@@ -3,6 +3,7 @@ import path from 'node:path'
 const DEFAULT_CONTENT_TYPE = 'application/octet-stream'
 
 const MIME_BY_EXT: Readonly<Record<string, string>> = {
+  '.zip': 'application/zip',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',

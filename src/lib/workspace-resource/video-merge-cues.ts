@@ -2,7 +2,7 @@ import { ApiError } from '@/lib/api-errors'
 import { prisma } from '@/lib/prisma'
 import type { WorkspaceResourceInputRef } from './contracts'
 import { resolveWorkspaceResourceInputMedia } from './input-media'
-import type { VideoMergeCuePlacement, VideoMergeTimedCueInput } from './video-merge-contract'
+import type { VideoMergeCuePlacement, VideoMergeTimedCueInput } from '@/lib/video-compose/audio-contract'
 
 /** Freeze final placement from the merge request, independently of music generation mode. */
 export async function resolveFrozenVideoMergeAudioCues(input: {

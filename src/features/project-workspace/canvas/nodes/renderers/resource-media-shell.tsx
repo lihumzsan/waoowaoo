@@ -78,6 +78,7 @@ function MediaBody({
   readonly summary: WorkspaceCanvasResourceSummaryView
   readonly fit: WorkspaceCanvasMediaShell['fit']
 }) {
+  if (summary.kind === 'media' && summary.mediaType === 'archive') return <ArchiveBody />
   if (summary.kind === 'media' && summary.url) {
     if (summary.mediaType === 'image') {
       return (
@@ -128,6 +129,17 @@ function MediaBody({
     return <StructuredBody entryCount={summary.entryCount} preview={summary.preview} />
   }
   return <EmptyMediaBody />
+}
+
+export function ArchiveBody() {
+  const labels = useTranslations('projectWorkflow.canvas.workspace.archive')
+  return (
+    <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-5 py-4 text-center">
+      <AppIcon name="package" className="h-8 w-8 text-[var(--glass-text-secondary)]" />
+      <p className="text-sm font-semibold text-[var(--glass-text-primary)]">{labels('title')}</p>
+      <p className="text-xs leading-5 text-[var(--glass-text-secondary)]">{labels('description')}</p>
+    </div>
+  )
 }
 
 function StructuredBody({

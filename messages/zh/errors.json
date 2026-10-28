@@ -111,5 +111,12 @@
   "PROJECT_AGENT_CONTROL_ALREADY_RESOLVED": "该确认已由更新的操作处理，已为你同步最新状态。",
   "PROJECT_AGENT_INTERRUPTION_NOT_PENDING": "该确认已由更新的操作处理，已为你同步最新状态。",
   "PROJECT_ASSISTANT_CARD_RESPONSE_FAILED": "卡片响应提交失败，请重试该卡片操作。",
-  "PROJECT_ASSISTANT_BACKGROUND_FOLLOW_UP_FAILED": "后台任务跟进中断，请刷新状态或重试当前步骤。"
+  "PROJECT_ASSISTANT_BACKGROUND_FOLLOW_UP_FAILED": "后台任务跟进中断，请刷新状态或重试当前步骤。",
+  "COMPOSITION_INPUT_INVALID": "视频编排参数不完整或不一致。",
+  "COMPOSITION_TARGET_UNSUPPORTED": "所选导出格式不支持当前编排中的效果或音频方式。",
+  "COMPOSITION_SOURCE_RANGE_INVALID": "片段的裁切区间超出所选视频版本的实际时长。",
+  "COMPOSITION_INPUT_TOO_LARGE": "编排素材总大小超出限制。",
+  "JIANYING_CONFIGURATION_REQUIRED": "请配置可用的 Python 3.10+ 及完整序列化依赖，并指定目标剪映版本的空白草稿模板。",
+  "JIANYING_TEMPLATE_INVALID": "剪映模板必须是目标版本创建的有效空白草稿。",
+  "JIANYING_EXPORT_FAILED": "剪映工程生成失败，请检查运行日志和模板格式。"
 }

@@ -34,6 +34,7 @@ export const GET = apiHandler(async (
   const signedUrl = await getSignedObjectUrl(media.storageKey, {
     expiresInSeconds: MEDIA_SIGNED_URL_EXPIRES_SECONDS,
     responseCacheControl: MEDIA_CACHE_CONTROL,
+    ...(media.mimeType === 'application/zip' ? {responseContentDisposition:'attachment; filename="jianying-project.zip"'} : {}),
   })
 
   return new NextResponse(null, {

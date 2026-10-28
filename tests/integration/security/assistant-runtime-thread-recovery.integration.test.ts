@@ -1,3 +1,4 @@
+import { COMPOSITION_TARGETS } from '@/lib/video-compose/composition-target-registry'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import type { UIMessage } from 'ai'
@@ -255,7 +256,7 @@ const testPersistence: RuntimeSessionPersistence = {
 
 function testModel(project: { readonly id: string; readonly name: string }): AssistantRuntimeModelConfiguration {
   const projectProductionContext: ProjectProductionContext = {
-    schemaVersion: 12,
+    schemaVersion: 13,
     version: 'test',
     project: {
       projectId: project.id,
@@ -265,7 +266,7 @@ function testModel(project: { readonly id: string; readonly name: string }): Ass
       videoResolution: '1080p',
       imageResolution: '1024x1024',
     },
-    productionCapabilities: { video: null, music: null, sound: null, voice: null },
+    productionCapabilities: { video:null,music:null,sound:null,voice:null,editing:{targets:COMPOSITION_TARGETS,jianyingConfigurationPresent:false,nativeAcceptanceRequired:true,textStyles:['lower_third'],textPlacements:['bottom_left','bottom_right'],textAnimations:['none','fade']} },
     productionDefaults: {
       video: { vocalPerformanceMode: 'native_dialogue' },
     },

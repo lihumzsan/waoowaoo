@@ -48,7 +48,8 @@
       "text": "Text",
       "image": "Image",
       "audio": "Audio",
-      "video": "Video"
+      "video": "Video",
+      "archive": "Project archive"
     }
   },
   "plan": {
@@ -145,7 +146,8 @@
         "creative-direction": "Creative direction",
         "asset-development": "Asset scope and visual design",
         "video-direction": "Video direction and generation design",
-        "music-direction": "Music and score design"
+        "music-direction": "Music and score design",
+        "video-editing": "Video editing and Jianying projects"
       },
       "web": {
         "search": "Search: {query}",

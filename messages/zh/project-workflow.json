@@ -78,7 +78,8 @@
         "previous": "上一个结果",
         "next": "下一个结果",
         "structuredUnknown": "结构化内容",
-        "structuredEntries": "结构化内容 · {count} 项"
+        "structuredEntries": "结构化内容 · {count} 项",
+        "archiveImport": "解压工程包，关闭剪映，按 README.txt 将工程导入尚不存在的新草稿目录。打开剪映后检查片段顺序、裁切、姓名说明、文字动画与原声。"
       },
       "operationConfirm": {
         "failed": "操作未能完成",
@@ -170,6 +171,18 @@
         },
         "folder": {
           "eyebrow": "文件夹"
+        }
+      },
+      "archive": {
+        "title": "剪映可编辑工程",
+        "description": "下载 ZIP，解压后按说明导入剪映。",
+        "exportReadme": {
+          "title": "Wao 剪映可编辑工程",
+          "extract": "将 ZIP 解压到新目录，关闭剪映后再导入。",
+          "command": "python import_project.py --source \".\" --destination \"D:/YOUR-JIANYING-DRAFTS/NEW-PROJECT\"",
+          "destination": "把目标路径替换为剪映实际草稿目录下尚不存在的新工程目录，脚本拒绝覆盖。",
+          "review": "重新打开剪映，检查片段顺序、裁切、姓名、文字渐入渐出与原声。",
+          "acceptance": "剪映 5.0 原生验收尚需完成；工程生成成功不代表已验证播放兼容性。"
         }
       }
     }

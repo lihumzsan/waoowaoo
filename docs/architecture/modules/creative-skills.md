@@ -32,7 +32,7 @@ fallback。
 - **CS-06 — 单一类型结果。** 每次专业工作只构造一个根 outputKind 的 strict JSON 对象。该对象是
   当前 Turn 内的执行连接件，不要求作为最终回复裸输出，也不会因写入 scratch 自动持久化；用户明确
   要求保存文档时才通过正式 Operation 创建 Resource。
-- **CS-07 — 生成 items 直接执行。** 图片、视频和音乐对象包含可直接传给对应媒体 Operation 的完整
+- **CS-07 — 专业生产输入直接执行。** 剪辑对象直接提交完整 composition；图片、视频和音乐对象包含可直接传给对应媒体 Operation 的完整
   items，包括最终 Prompt、创作身份、创作参数和 Resource 版本引用。Project 画幅、资产格式、模型、
   能力校验、计费和 Task 仍由各自系统 owner 决定；服务端不得补写创作内容。
 - **CS-08 — Wao 不创建 Agent 委派旁路。** 专业创作不得创建、等待、中断或恢复 child Thread，也不得保留

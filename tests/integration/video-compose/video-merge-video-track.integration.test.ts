@@ -1,11 +1,30 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, readFile, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { runFfmpegCommand } from '@/lib/video-compose/ffmpeg-command'
+import { resolveCompositionTiming } from '@/lib/video-compose/composition-timing'
 import { composeVideoMergeVideoTrack } from '@/lib/video-compose/video-merge-ffmpeg'
 
 const DURATION_SECONDS = 1
+
+function timeline(count: number,durationMs=DURATION_SECONDS*1000,sourceStartMs=0) {
+  return resolveCompositionTiming(
+    {
+      schemaVersion: 1,
+      clips: Array.from({ length: count }, (_, index) => ({
+        clipId: `clip-${index}`,
+        source: { resourceId: `source-${index}`, contentVersion: 1 },
+        sourceStartMs,
+        durationMs,
+      })),
+      textLayers: [],
+      audio: { mode: 'mute', musicCues: [], soundCues: [] },
+      contextReferences: [],
+    },
+    '24/1',
+  )
+}
 
 describe('video merge single-video track preparation', () => {
   let workspaceDir = ''
@@ -25,7 +44,7 @@ describe('video merge single-video track preparation', () => {
 
     const { stitchedPath: result } = await composeVideoMergeVideoTrack({
       sourcePaths: [sourcePath],
-      durations: [DURATION_SECONDS],
+      timeline: timeline(1),
       workspaceDir,
       width: 320,
       height: 180,
@@ -35,7 +54,6 @@ describe('video merge single-video track preparation', () => {
       '-of', 'default=noprint_wrappers=1', result,
     ], { stage: 'video_merge_track_test_probe' })
 
-    expect(result).toBe(sourcePath)
     expect(probe.stdout).toContain('codec_name=h264')
     expect(probe.stdout).toContain('r_frame_rate=24/1')
   })
@@ -55,7 +73,7 @@ describe('video merge single-video track preparation', () => {
 
     const { stitchedPath: result } = await composeVideoMergeVideoTrack({
       sourcePaths: [firstPath, secondPath],
-      durations: [DURATION_SECONDS, DURATION_SECONDS],
+      timeline: timeline(2),
       workspaceDir,
       width: 320,
       height: 180,
@@ -67,4 +85,22 @@ describe('video merge single-video track preparation', () => {
 
     expect(probe.stdout.trim()).toBe('24/1')
   })
+
+  it('retains the covering source frame for off-grid starts and the final source interval', async () => {
+    workspaceDir = await mkdtemp(path.join(tmpdir(),'wao-offgrid-frame-'))
+    const sourcePath=path.join(workspaceDir,'source.mp4')
+    await runFfmpegCommand('ffmpeg',[
+      '-y','-f','lavfi','-i',"color=c=blue:s=160x90:r=24:d=2,drawbox=c=red:t=fill:enable='eq(mod(n,24),0)'",'-c:v','libx264','-g','24','-pix_fmt','yuv420p',sourcePath,
+    ],{stage:'offgrid_frame_source',expectedDurationSeconds:2})
+    for(const [startMs,durationMs,color] of [[10,21,'red'],[1970,30,'blue'],[1010,21,'red']] as const){
+      const directory=path.join(workspaceDir,String(startMs));await mkdir(directory)
+      const {stitchedPath}=await composeVideoMergeVideoTrack({sourcePaths:[sourcePath],timeline:timeline(1,durationMs,startMs),workspaceDir:directory,width:160,height:90})
+      const rgb=path.join(directory,'frame.rgb')
+      await runFfmpegCommand('ffmpeg',['-y','-i',stitchedPath,'-frames:v','1','-vf','scale=1:1','-pix_fmt','rgb24','-f','rawvideo',rgb],{stage:'offgrid_frame_pixel',expectedDurationSeconds:1})
+      const pixel=await readFile(rgb)
+      expect(pixel[color==='red'?0:2]).toBeGreaterThan(240)
+      expect(pixel[color==='red'?2:0]).toBeLessThan(10)
+    }
+  })
+
 })

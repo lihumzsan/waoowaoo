@@ -151,6 +151,7 @@ export class S3StorageProvider implements StorageProvider {
       new GetObjectCommand({
         Bucket: this.config.bucket,
         Key: normalizeKey(params.key),
+        ...(params.responseContentDisposition ? {ResponseContentDisposition:params.responseContentDisposition} : {}),
         ...(params.responseCacheControl ? { ResponseCacheControl: params.responseCacheControl } : {}),
       }),
       { expiresIn: normalizeSignedUrlExpiry(params.expiresInSeconds) },

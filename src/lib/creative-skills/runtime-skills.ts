@@ -65,6 +65,12 @@ export const CREATIVE_RUNTIME_SKILL_REGISTRY: Readonly<
     skillIds: ['creative-core', 'video-direction'],
     executionFacts: 'Use only the non-null productionCapabilities.video facts injected by the Wao system. Read canonical characterVoiceSelection Views for character voice references. Never guess capability limits.',
   }),
+  editing: defineRuntimeSkill({
+    kind:'editing',title:'视频编排与剪映工程',
+    description:'编排已有视频，添加角色姓名说明与文字渐入渐出，导出可编辑剪映工程。',
+    skillIds:['creative-core','video-editing'],
+    executionFacts:'Use productionCapabilities.editing and exact ready Resource versions. Pass composition and outputTarget directly to merge_videos; never execute arbitrary code or control Jianying from runtime scratch.',
+  }),
   music: defineRuntimeSkill({
     kind: 'music',
     title: '音乐与声音设计',
@@ -115,7 +121,7 @@ async function buildRuntimeSkill(skill: CreativeRuntimeSkillDefinition): Promise
     '',
     'Use this Skill only when the current request matches this professional domain.',
     'You are the primary Wao Agent and the sole author of this professional result. This Skill owns only its declared domain and outputKind; complete this result from its contract instead of importing another domain method into it.',
-    `Construct exactly one object with outputKind=${JSON.stringify(skill.outputKind)} during this Turn. The object is the single professional result: use it directly in the response, pass its exact media items to the matching Wao Operation, or save it only when the user explicitly requests persistence.`,
+    `Construct exactly one object with outputKind=${JSON.stringify(skill.outputKind)} during this Turn. The object is the single professional result: use it directly in the response, pass its exact production inputs to the matching Wao Operation, or save it only when the user explicitly requests persistence.`,
     'Never invent project paths or Resource identities. Use only canonical Resource ids and versions supplied by Wao tools or current context. Runtime scratch has no delivery meaning.',
     skill.executionFacts,
     ...resources.map(({ definition, checksum, body }) => [
@@ -123,7 +129,7 @@ async function buildRuntimeSkill(skill: CreativeRuntimeSkillDefinition): Promise
       body,
       '</wao_skill_source>',
     ].join('\n')),
-    'The professional object must match the authoritative schema below exactly: include every required field, include no unknown field, and never invent fields from prose examples. Media item fields are the same contract consumed by the corresponding generation Operation.',
+    'The professional object must match the authoritative schema below exactly: include every required field, include no unknown field, and never invent fields from prose examples. Production inputs use the same contract consumed by the corresponding Wao Operation.',
     `<wao_output_schema outputKind=${JSON.stringify(skill.outputKind)}>`,
     jsonSchema,
     '</wao_output_schema>',

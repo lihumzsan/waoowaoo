@@ -135,7 +135,7 @@ export function workspaceResourceDisplayName(input: {
 
 function safeGeneratedResourceStem(rawName: string, mediaType: Exclude<WorkspaceResourceMediaType, 'text'>): string {
   const withoutExtension = rawName.replace(
-    /\.(?:png|jpe?g|webp|gif|mp3|wav|ogg|m4a|aac|mp4|mov|webm|mkv)$/iu,
+    /\.(?:png|jpe?g|webp|gif|mp3|wav|ogg|m4a|aac|mp4|mov|webm|mkv|zip)$/iu,
     '',
   )
   const normalized = withoutExtension

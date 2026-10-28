@@ -1,3 +1,4 @@
+import { videoCompositionFixture } from './video-composition-fixture'
 import { randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { createAgentFollowUpBatchBinding } from '@/lib/agent-turn/follow-up-batch'
@@ -159,7 +160,7 @@ async function submitFixtureTask(input: {
                 name: `Task durability ${input.suffix}`,
               },
             ]),
-            protocol: 'workspace_resource_video_merge_v2',
+            protocol: 'workspace_resource_video_merge_v3',
             resource: {
               resourceId,
               mediaType: 'video',
@@ -168,8 +169,9 @@ async function submitFixtureTask(input: {
               modelKey: null,
               inputHash: 'b'.repeat(64),
               inputs: input.references,
-              generationOptions: { mergeMode: 'ordered_concat', audioMode: 'preserve' },
+              generationOptions: videoCompositionFixture(input.references),
               musicCues: [],
+              soundCues: [],
               toolCallId: null,
             },
           },
@@ -187,7 +189,7 @@ async function submitFixtureTask(input: {
               operationId,
               inputHash: 'b'.repeat(64),
               taskId: task.id,
-              generationOptions: { mergeMode: 'ordered_concat', audioMode: 'preserve' },
+              generationOptions: videoCompositionFixture(input.references),
             })
           },
         },

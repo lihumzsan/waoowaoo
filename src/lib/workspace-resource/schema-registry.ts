@@ -10,6 +10,8 @@ export const WORKSPACE_RESOURCE_SCHEMA = {
   GENERIC_TEXT: 'generic.text',
   GENERIC_IMAGE: 'generic.image',
   GENERIC_VIDEO: 'generic.video',
+  JIANYING_PROJECT: 'project.jianying_project',
+  VIDEO_EDIT: 'project.video_edit',
   SCREENPLAY: 'project.screenplay',
   // Historical read-only identity: the long_form domain was removed and
   // continuity now flows through delivered screenplays and batch exit states.
@@ -74,6 +76,7 @@ function firstText(...values: readonly (string | null)[]): string | null {
 const STRUCTURED_SUMMARY_PROJECTORS: Partial<
   Record<WorkspaceResourceSchemaId, WorkspaceResourceStructuredSummaryProjector>
 > = {
+  [WORKSPACE_RESOURCE_SCHEMA.VIDEO_EDIT]: (data) => stringValue(objectValue(data), 'overview'),
   [WORKSPACE_RESOURCE_SCHEMA.SCREENPLAY]: (data) => {
     const object = objectValue(data)
     return firstText(
@@ -118,6 +121,7 @@ export const WORKSPACE_RESOURCE_SCHEMA_IDS_BY_MEDIA = {
     WORKSPACE_RESOURCE_SCHEMA.ASSET_GENERATION_BATCH,
     WORKSPACE_RESOURCE_SCHEMA.VIDEO_GENERATION_BATCH,
     WORKSPACE_RESOURCE_SCHEMA.AUDIO_GENERATION_BATCH,
+    WORKSPACE_RESOURCE_SCHEMA.VIDEO_EDIT,
   ],
   image: [
     WORKSPACE_RESOURCE_SCHEMA.GENERIC_IMAGE,
@@ -141,6 +145,7 @@ export const WORKSPACE_RESOURCE_SCHEMA_IDS_BY_MEDIA = {
     WORKSPACE_RESOURCE_SCHEMA.COMPOSITE_VIDEO,
     WORKSPACE_RESOURCE_SCHEMA.RENDERED_VIDEO,
   ],
+  archive: [WORKSPACE_RESOURCE_SCHEMA.JIANYING_PROJECT],
 } as const satisfies Record<WorkspaceResourceMediaType, readonly WorkspaceResourceSchemaId[]>
 
 /**
@@ -174,6 +179,7 @@ const CREATIVE_OUTPUT_SCHEMA_IDS: ReadonlySet<WorkspaceResourceSchemaId> = new S
   WORKSPACE_RESOURCE_SCHEMA.ASSET_GENERATION_BATCH,
   WORKSPACE_RESOURCE_SCHEMA.VIDEO_GENERATION_BATCH,
   WORKSPACE_RESOURCE_SCHEMA.AUDIO_GENERATION_BATCH,
+  WORKSPACE_RESOURCE_SCHEMA.VIDEO_EDIT,
 ])
 
 function generationMintableSchemas(
@@ -196,6 +202,7 @@ export const WORKSPACE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA = {
   image: generationMintableSchemas(WORKSPACE_RESOURCE_SCHEMA_IDS_BY_MEDIA.image),
   audio: generationMintableSchemas(WORKSPACE_RESOURCE_SCHEMA_IDS_BY_MEDIA.audio),
   video: generationMintableSchemas(WORKSPACE_RESOURCE_SCHEMA_IDS_BY_MEDIA.video),
+  archive: [],
 } satisfies Record<WorkspaceResourceMediaType, readonly WorkspaceResourceSchemaId[]>
 
 export function isImportOriginWorkspaceResourceSchema(schemaId: string): boolean {
@@ -231,6 +238,7 @@ export const WORKSPACE_RESOURCE_SCHEMAS: readonly WorkspaceResourceSchemaDefinit
   ...schemaDefinitions('image', WORKSPACE_RESOURCE_SCHEMA_IDS_BY_MEDIA.image),
   ...schemaDefinitions('audio', WORKSPACE_RESOURCE_SCHEMA_IDS_BY_MEDIA.audio),
   ...schemaDefinitions('video', WORKSPACE_RESOURCE_SCHEMA_IDS_BY_MEDIA.video),
+  ...schemaDefinitions('archive', WORKSPACE_RESOURCE_SCHEMA_IDS_BY_MEDIA.archive),
 ]
 
 const SCHEMA_BY_ID = new Map(WORKSPACE_RESOURCE_SCHEMAS.map((definition) => [definition.schemaId, definition]))

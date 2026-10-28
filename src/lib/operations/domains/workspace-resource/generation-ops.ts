@@ -224,7 +224,7 @@ type PlannedResource = {
   readonly resourceId: string
   readonly workspacePath: string
   readonly folderPath: string | null
-  readonly mediaType: Exclude<WorkspaceResourceMediaType, 'text'>
+  readonly mediaType: Exclude<WorkspaceResourceMediaType, 'text' | 'archive'>
   readonly schemaId: string
   readonly memberIndex: number
   readonly taskPlanId: string

@@ -41,6 +41,7 @@ export const WORKSPACE_CANVAS_NODE_DEFINITIONS = {
     ],
     rendererKey: 'resourceCard',
     actionKeysByMediaType: {
+      archive:['discuss','preview_alternatives','download','delete'],
       text: [
         'discuss', 'preview_alternatives',
         'retry', 'variant', 'delete',
@@ -76,6 +77,7 @@ export const WORKSPACE_CANVAS_NODE_DEFINITIONS = {
       image: [],
       audio: [],
       video: [],
+      archive: [],
     },
     presentation: {
       iconName: 'folder',

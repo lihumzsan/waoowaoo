@@ -13,89 +13,54 @@ import { buildWorkspaceResourceLifecycleProjection } from '@/lib/workspace-resou
 import { workspaceResourceDisplayName } from '@/lib/workspace-resource/path'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { resolveOperationLocale } from '@/lib/operations/environment-input'
-import { refineTaskSubmitOperationOutputSchema, taskSubmitOperationOutputSchemaBase } from '@/lib/operations/output-schemas'
+import {
+  refineTaskSubmitOperationOutputSchema,
+  taskSubmitOperationOutputSchemaBase,
+} from '@/lib/operations/output-schemas'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { prisma } from '@/lib/prisma'
 import { stableArgsFingerprint } from '@/lib/project-agent/stable-args-hash'
 import { TASK_TYPE } from '@/lib/task/types'
 import {
-  videoMergeAudioModeSchema,
-  videoMergeTimedCueInputSchema,
-  type VideoMergeAudioMode,
-} from '@/lib/workspace-resource/video-merge-contract'
+  videoCompositionSchema,
+  compositionTargetSchema,
+} from '@/lib/video-compose/composition-contract'
+import {
+  COMPOSITION_TARGETS,
+  validateCompositionTarget,
+} from '@/lib/video-compose/composition-target-registry'
+import { resolveCompositionTiming } from '@/lib/video-compose/composition-timing'
+import { readProjectVideoCanvas } from '@/lib/operations/project-video-ratio-policy'
+import { freezeCompositionSources } from '@/lib/video-compose/freeze-composition'
+import { freezeJianyingProfile } from '@/lib/jianying/profile'
+import { workspaceResourceVideoMergeTaskPayloadSchema } from '@/lib/workspace-resource/video-merge-contract'
 import { resolveFrozenVideoMergeAudioCues } from '@/lib/workspace-resource/video-merge-cues'
 
-export function buildVideoMergeInputHash(
-  references: readonly WorkspaceResourceInputRef[],
-  audioMode: VideoMergeAudioMode,
-): string {
-  return stableArgsFingerprint({ references, audioMode })
-}
-
-const mergeVideosInputSchema = z.object({
-  folderPath: z.string().trim().min(1).max(512).nullable().optional()
-    .describe('Optional project-relative destination folder. Missing folders are created atomically with the merged video Resource.'),
-  name: z.string().trim().min(1).max(300),
-  videos: z.array(z.object({
-    resourceId: z.string().trim().min(1).max(32),
-    contentVersion: z.number().int().positive(),
-  }).strict()).min(1).max(50),
-  audioMode: videoMergeAudioModeSchema.describe(
-    'Required final-audio behavior: preserve keeps source audio; mix keeps source audio and mixes the selected audio; replace removes source audio and uses only the selected audio; mute outputs no audio track.',
-  ),
-  backgroundMusic: z.object({
-    resourceId: z.string().trim().min(1).max(32),
-    contentVersion: z.number().int().positive(),
-  }).strict().optional().describe('Exact BGM or uploaded-audio Resource version required only by mix. It is treated as background music with fades and ducking.'),
-  replacementAudio: z.object({
-    resourceId: z.string().trim().min(1).max(32),
-    contentVersion: z.number().int().positive(),
-  }).strict().optional().describe('Exact audio Resource version required only by replace. It becomes the complete final soundtrack.'),
-  musicCues: z.array(videoMergeTimedCueInputSchema).min(1).max(50).optional()
-    .describe('Exact music versions with explicit millisecond placement, duration, fades and gain for every generation mode. Each music version must reference this video through score_timeline lineage; placement is never inferred from generation options.'),
-  soundCues: z.array(videoMergeTimedCueInputSchema).min(1).max(50).optional(),
-}).strict().superRefine((input, context) => {
-  const musicCues = input.musicCues ?? []
-  const soundCues = input.soundCues ?? []
-  if (musicCues.length > 0 || soundCues.length > 0) {
-    if (input.videos.length !== 1 || input.audioMode !== 'preserve' || input.backgroundMusic || input.replacementAudio) {
-      context.addIssue({ code: 'custom', path: ['audioMode'], message: 'Timed audio cues require one source video and preserve mode without another audio input.' })
-    }
-    const identities = [...musicCues, ...soundCues].map((cue) => `${cue.resourceId}:${String(cue.contentVersion)}`)
-    if (new Set(identities).size !== identities.length) {
-      context.addIssue({ code: 'custom', path: ['soundCues'], message: 'Timed audio cue references must be unique.' })
-    }
-    if (musicCues.length + soundCues.length > 50) {
-      context.addIssue({ code: 'custom', path: ['soundCues'], message: 'Timed audio cues cannot exceed 50 inputs.' })
-    }
-    return
-  }
-  if (input.audioMode === 'preserve' && input.videos.length < 2) {
-    context.addIssue({ code: 'custom', path: ['videos'], message: 'Preserve mode requires at least two videos.' })
-  }
-  const validAudioInputs = input.audioMode === 'mix'
-    ? Boolean(input.backgroundMusic) && !input.replacementAudio
-    : input.audioMode === 'replace'
-      ? Boolean(input.replacementAudio) && !input.backgroundMusic
-      : !input.backgroundMusic && !input.replacementAudio
-  if (!validAudioInputs) {
-    context.addIssue({ code: 'custom', path: ['audioMode'], message: `${input.audioMode} mode audio input does not match its declared semantics.` })
-  }
-})
+const mergeVideosInputSchema = z
+  .object({
+    folderPath: z.string().trim().min(1).max(512).nullable().optional(),
+    name: z.string().trim().min(1).max(300),
+    composition: videoCompositionSchema,
+    outputTarget: compositionTargetSchema,
+  })
+  .strict()
 
 const mergeVideosOutputSchema = refineTaskSubmitOperationOutputSchema(
-  taskSubmitOperationOutputSchemaBase.extend({
-    resourceId: z.string().min(1),
-    workspacePath: z.string().min(1),
-  }).passthrough(),
+  taskSubmitOperationOutputSchemaBase
+    .extend({
+      resourceId: z.string().min(1),
+      workspacePath: z.string().min(1),
+    })
+    .passthrough(),
 )
 
 export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOperationRegistryDraft {
   return {
     merge_videos: defineOperation({
       id: 'merge_videos',
-      summary: 'Concatenate exact frozen video Resource versions, explicitly control final audio, or place exact music and environment-sound cues onto one merged source video.',
+      summary:
+        'Compose exact video versions using explicit clip instances and source trims. Export MP4, or an editable Jianying project ZIP with character names and native text fades. MP4 does not support text layers.',
       intent: 'act',
       channels: { tool: true, api: true, mcp: true },
       effects: {
@@ -112,98 +77,184 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
         assistantPresentation: 'created_resources',
         acceptsReferences: true,
         outputResourceKinds: ['file'],
-        outputMediaTypes: ['video'],
-        outputSchemaIds: [WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO],
+        outputMediaTypes: ['video', 'archive'],
+        outputSchemaIds: [
+          WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
+          WORKSPACE_RESOURCE_SCHEMA.JIANYING_PROJECT,
+        ],
         placement: 'required',
       },
       confirmation: { kind: 'none', required: false },
       assistantWriteAuthority: {
         kind: 'temporal_operation_execution',
-        contractRevision: 'merge_videos/v8',
+        contractRevision: 'merge_videos/v9',
         followUpPolicy: 'after_all_terminal',
       },
       inputSchema: mergeVideosInputSchema,
       outputSchema: mergeVideosOutputSchema,
       execute: async (ctx, input) => {
-        const references: readonly WorkspaceResourceInputRef[] = await resolveWorkspaceResourceInputs(prisma, {
-          userId: ctx.userId,
-          projectId: ctx.projectId,
-          references: [
-            ...input.videos.map((video, position) => ({
-              ...video,
-              role: 'source_video',
-              position,
-              expectedMediaType: 'video' as const,
-            })),
-            ...(input.backgroundMusic ? [{
-              ...input.backgroundMusic,
-              role: 'background_music',
-              position: input.videos.length,
-              expectedMediaType: 'audio' as const,
-              allowedSchemaIds: [WORKSPACE_RESOURCE_SCHEMA.BGM_AUDIO, WORKSPACE_RESOURCE_SCHEMA.UPLOAD_AUDIO],
-            }] : []),
-            ...(input.replacementAudio ? [{
-              ...input.replacementAudio,
-              role: 'replacement_audio',
-              position: input.videos.length,
-              expectedMediaType: 'audio' as const,
-            }] : []),
-            ...(input.musicCues ?? []).map((music, index) => ({
-              resourceId: music.resourceId,
-              contentVersion: music.contentVersion,
-              role: 'bgm_audio',
-              position: input.videos.length + index,
-              expectedMediaType: 'audio' as const,
-              allowedSchemaIds: [WORKSPACE_RESOURCE_SCHEMA.BGM_AUDIO],
-            })),
-            ...(input.soundCues ?? []).map((sound, index) => ({
-              resourceId: sound.resourceId,
-              contentVersion: sound.contentVersion,
-              role: 'sound_effect_audio',
-              position: input.videos.length + (input.musicCues?.length ?? 0) + index,
-              expectedMediaType: 'audio' as const,
-              allowedSchemaIds: [WORKSPACE_RESOURCE_SCHEMA.SOUND_EFFECT_AUDIO],
-            })),
-          ],
-        })
-        const { musicCues, soundCues } = await resolveFrozenVideoMergeAudioCues({
+        const { composition, outputTarget } = input
+        validateCompositionTarget(outputTarget, composition)
+        const target = COMPOSITION_TARGETS[outputTarget]
+        const jianyingProfile =
+          outputTarget === 'jianying_project'
+            ? await freezeJianyingProfile()
+            : null
+        const audio = composition.audio
+        const videos = composition.clips.map((clip) => clip.source)
+        const audioReferences = [
+          ...(audio.backgroundMusic
+            ? [
+                {
+                  ...audio.backgroundMusic,
+                  role: 'background_music',
+                  allowedSchemaIds: [
+                    WORKSPACE_RESOURCE_SCHEMA.BGM_AUDIO,
+                    WORKSPACE_RESOURCE_SCHEMA.UPLOAD_AUDIO,
+                  ],
+                },
+              ]
+            : []),
+          ...(audio.replacementAudio
+            ? [{ ...audio.replacementAudio, role: 'replacement_audio' }]
+            : []),
+          ...audio.musicCues.map((cue) => ({
+            resourceId: cue.resourceId,
+            contentVersion: cue.contentVersion,
+            role: 'bgm_audio',
+            allowedSchemaIds: [WORKSPACE_RESOURCE_SCHEMA.BGM_AUDIO],
+          })),
+          ...audio.soundCues.map((cue) => ({
+            resourceId: cue.resourceId,
+            contentVersion: cue.contentVersion,
+            role: 'sound_effect_audio',
+            allowedSchemaIds: [WORKSPACE_RESOURCE_SCHEMA.SOUND_EFFECT_AUDIO],
+          })),
+        ]
+        const characters = composition.textLayers.flatMap((layer) =>
+          layer.nameSource.kind === 'character_resource'
+            ? [layer.nameSource.reference]
+            : [],
+        )
+        const references: readonly WorkspaceResourceInputRef[] =
+          await resolveWorkspaceResourceInputs(prisma, {
+            userId: ctx.userId,
+            projectId: ctx.projectId,
+            references: [
+              ...videos.map((video, position) => ({
+                ...video,
+                role: 'source_video',
+                position,
+                expectedMediaType: 'video' as const,
+              })),
+              ...audioReferences.map((ref, index) => ({
+                ...ref,
+                position: videos.length + index,
+                expectedMediaType: 'audio' as const,
+              })),
+              ...characters.map((ref, index) => ({
+                ...ref,
+                role: 'character_context',
+                position: videos.length + audioReferences.length + index,
+                expectedMediaType: 'image' as const,
+                allowedSchemaIds: [WORKSPACE_RESOURCE_SCHEMA.CHARACTER_IMAGE],
+              })),
+              ...composition.contextReferences.map((ref, index) => ({
+                ...ref,
+                role: 'editing_context',
+                position:
+                  videos.length +
+                  audioReferences.length +
+                  characters.length +
+                  index,
+                allowedSchemaIds: [
+                  WORKSPACE_RESOURCE_SCHEMA.SCREENPLAY,
+                  WORKSPACE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
+                  WORKSPACE_RESOURCE_SCHEMA.GENERIC_TEXT,
+                  WORKSPACE_RESOURCE_SCHEMA.VIDEO_EDIT,
+                ],
+              })),
+            ],
+          })
+        const sourceFacts = await freezeCompositionSources({
           userId: ctx.userId,
           projectId: ctx.projectId,
           references,
-          musicCues: input.musicCues ?? [],
-          soundCues: input.soundCues ?? [],
+          composition,
+          maxInputBytes: target.maxInputBytes,
         })
-        const inputHash = stableArgsFingerprint({ references, audioMode: input.audioMode, musicCues, soundCues })
+        const { musicCues, soundCues } = await resolveFrozenVideoMergeAudioCues(
+          {
+            userId: ctx.userId,
+            projectId: ctx.projectId,
+            references,
+            musicCues: audio.musicCues,
+            soundCues: audio.soundCues,
+          },
+        )
+        const canvas = await readProjectVideoCanvas({
+          userId: ctx.userId,
+          projectId: ctx.projectId,
+        })
+        const firstSource = sourceFacts[0]
+        if (!firstSource) throw new Error('COMPOSITION_SOURCE_FACTS_MISSING')
+        resolveCompositionTiming(composition,firstSource.frameRate)
+        const generationOptions = {
+          format: { ...canvas, frameRate: firstSource.frameRate },
+          name: input.name,
+          locale: resolveOperationLocale(ctx.context),
+          composition,
+          outputTarget,
+          sourceFacts,
+          jianyingProfile,
+        }
+        const inputHash = stableArgsFingerprint({
+          references,
+          generationOptions,
+          musicCues,
+          soundCues,
+        })
         const requestId = [
-          'merge_videos', ctx.userId, ctx.projectId,
+          'merge_videos',
+          ctx.userId,
+          ctx.projectId,
           ctx.context.turnId?.trim() || 'no-turn',
           ctx.toolCallId?.trim() || ctx.requestId?.trim() || inputHash,
         ].join(':')
-        const resourceId = buildWorkspaceResourceId({ operationId: 'merge_videos', requestId, memberIndex: 0 })
-        const outputPath = await resolveGeneratedWorkspaceResourcePlacement(prisma, {
-          userId: ctx.userId,
-          projectId: ctx.projectId,
-          folderPath: input.folderPath,
-          name: input.name,
-          resourceId,
-          mediaType: 'video',
-          schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
+        const resourceId = buildWorkspaceResourceId({
+          operationId: 'merge_videos',
+          requestId,
+          memberIndex: 0,
         })
-        const generationOptions: Record<string, string | number> = musicCues.length > 0 || soundCues.length > 0
-          ? { mergeMode: 'timed_cues', audioMode: 'preserve' }
-          : { mergeMode: 'ordered_concat', audioMode: input.audioMode }
-        const payload = {
-          lifecycleProjection: buildWorkspaceResourceLifecycleProjection([{
+        const outputPath = await resolveGeneratedWorkspaceResourcePlacement(
+          prisma,
+          {
+            userId: ctx.userId,
+            projectId: ctx.projectId,
+            folderPath: input.folderPath,
+            name: input.name,
             resourceId,
-            mediaType: 'video',
-            schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
-            name: workspaceResourceDisplayName({ workspacePath: outputPath, resourceId }),
-          }]),
-          protocol: 'workspace_resource_video_merge_v2' as const,
+            mediaType: target.mediaType,
+            schemaId: target.schemaId,
+          },
+        )
+        const payload = workspaceResourceVideoMergeTaskPayloadSchema.parse({
+          lifecycleProjection: buildWorkspaceResourceLifecycleProjection([
+            {
+              resourceId,
+              mediaType: target.mediaType,
+              schemaId: target.schemaId,
+              name: workspaceResourceDisplayName({
+                workspacePath: outputPath,
+                resourceId,
+              }),
+            },
+          ]),
+          protocol: 'workspace_resource_video_merge_v3',
           resource: {
             resourceId,
-            mediaType: 'video' as const,
-            schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
+            mediaType: target.mediaType,
+            schemaId: target.schemaId,
             prompt: null,
             modelKey: null,
             inputHash,
@@ -213,7 +264,7 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
             soundCues,
             toolCallId: ctx.toolCallId?.trim() || null,
           },
-        }
+        })
         const result = await submitOperationTask({
           request: ctx.request,
           requestId: ctx.requestId,
@@ -241,17 +292,21 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
                 sourceId: null,
               })
             }
-            await validateWorkspaceResourceInputReferencesInTransaction(tx, {
-              userId: ctx.userId,
-              projectId: ctx.projectId,
-            }, references)
+            await validateWorkspaceResourceInputReferencesInTransaction(
+              tx,
+              {
+                userId: ctx.userId,
+                projectId: ctx.projectId,
+              },
+              references,
+            )
             await reserveWorkspaceResourceInTransaction(tx, {
               resourceId,
               userId: ctx.userId,
               projectId: ctx.projectId,
               outputPath,
-              mediaType: 'video',
-              schemaId: WORKSPACE_RESOURCE_SCHEMA.GENERIC_VIDEO,
+              mediaType: target.mediaType,
+              schemaId: target.schemaId,
               operationId: 'merge_videos',
               inputHash,
               taskId: task.id,
@@ -261,7 +316,11 @@ export function createWorkspaceResourceVideoMergeOperations(): ProjectAgentOpera
             })
           },
         })
-        return mergeVideosOutputSchema.parse({ ...result, resourceId, workspacePath: outputPath })
+        return mergeVideosOutputSchema.parse({
+          ...result,
+          resourceId,
+          workspacePath: outputPath,
+        })
       },
     }),
   }

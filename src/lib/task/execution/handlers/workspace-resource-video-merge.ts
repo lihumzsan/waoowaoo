@@ -1,5 +1,10 @@
+import {
+  COMPOSITION_TARGETS,
+  validateCompositionTarget,
+} from '@/lib/video-compose/composition-target-registry'
+import { exportJianyingProject } from '@/lib/jianying/export-project'
 import { randomUUID } from 'node:crypto'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { parseWorkspaceResourceVideoMergeTaskPayload } from '@/lib/workspace-resource/video-merge-contract'
@@ -7,21 +12,18 @@ import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { resolveWorkspaceResourceInputMedia } from '@/lib/workspace-resource/input-media'
 import { getObjectBuffer, uploadObject } from '@/lib/storage'
 import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
-import {
-  concatVideoMergeAudioClips,
-  muxVideoMergeFinalAudio,
-  muxVideoMergeTimedAudioCues,
-  renderVideoMergeClipAudio,
-} from '@/lib/video-compose/video-merge-audio'
-import { createFfmpegCommandRunner } from '@/lib/video-compose/ffmpeg-command'
-import {
-  composeVideoMergeVideoTrack,
-  probeVideoDimensions,
-  probeVideoDurationSeconds,
-} from '@/lib/video-compose/video-merge-ffmpeg'
+import { renderMp4Composition } from '@/lib/video-compose/render-mp4-composition'
+import type { CompositionTarget } from '@/lib/video-compose/composition-contract'
 import { reportTaskProgress } from '../progress'
 import type { TaskExecutionContext } from '../context'
 import { assertTaskActive } from '../provider-media'
+
+type CompositionArtifact = {
+  buffer: Buffer
+  width: number | null
+  height: number | null
+  durationMs: number | null
+}
 
 export async function handleWorkspaceResourceVideoMergeTask(
   context: TaskExecutionContext,
@@ -30,11 +32,17 @@ export async function handleWorkspaceResourceVideoMergeTask(
   if (data.targetType !== 'WorkspaceResource') {
     throw new Error(`WORKSPACE_RESOURCE_TASK_TARGET_INVALID:${data.targetType}`)
   }
-  const payload = parseWorkspaceResourceVideoMergeTaskPayload(data.payload ?? {})
+  const payload = parseWorkspaceResourceVideoMergeTaskPayload(
+    data.payload ?? {},
+  )
   if (payload.resource.resourceId !== data.targetId) {
-    throw new Error(`WORKSPACE_RESOURCE_VIDEO_MERGE_TARGET_MISMATCH:${data.taskId}`)
+    throw new Error(
+      `WORKSPACE_RESOURCE_VIDEO_MERGE_TARGET_MISMATCH:${data.taskId}`,
+    )
   }
-  const videoInputs = payload.resource.inputs.filter((input) => input.role === 'source_video')
+  const videoInputs = payload.resource.inputs.filter(
+    (input) => input.role === 'source_video',
+  )
   const resolvedVideos = await resolveWorkspaceResourceInputMedia({
     userId: data.userId,
     projectId: data.projectId,
@@ -45,182 +53,150 @@ export async function handleWorkspaceResourceVideoMergeTask(
     input: resource.reference,
     storageKey: resource.storageKey,
   }))
-  const assemblyAudioInput = payload.resource.inputs.find((input) => (
-    input.role === 'background_music' || input.role === 'replacement_audio'
-  )) ?? null
-  const [resolvedAssemblyAudio] = assemblyAudioInput ? await resolveWorkspaceResourceInputMedia({
-    userId: data.userId,
-    projectId: data.projectId,
-    references: [assemblyAudioInput],
-    expectedMediaType: 'audio',
-  }) : []
+  const assemblyAudioInput =
+    payload.resource.inputs.find(
+      (input) =>
+        input.role === 'background_music' || input.role === 'replacement_audio',
+    ) ?? null
+  const [resolvedAssemblyAudio] = assemblyAudioInput
+    ? await resolveWorkspaceResourceInputMedia({
+        userId: data.userId,
+        projectId: data.projectId,
+        references: [assemblyAudioInput],
+        expectedMediaType: 'audio',
+      })
+    : []
   const assemblyAudioStorageKey = resolvedAssemblyAudio?.storageKey ?? null
-  const audioMode = 'audioMode' in payload.resource.generationOptions
-    && ['preserve', 'mix', 'replace', 'mute'].includes(String(payload.resource.generationOptions.audioMode))
-    ? payload.resource.generationOptions.audioMode as 'preserve' | 'mix' | 'replace' | 'mute'
-    : 'preserve'
-  const hasTimedAudioCues = payload.resource.musicCues.length > 0 || payload.resource.soundCues.length > 0
-  const usesSourceAudio = hasTimedAudioCues || audioMode === 'preserve' || audioMode === 'mix'
-  const inputByPosition = new Map(payload.resource.inputs.map((input) => [input.position, input]))
+  const recipe = payload.resource.generationOptions
+  const { composition, outputTarget, sourceFacts, jianyingProfile } = recipe
+  validateCompositionTarget(outputTarget, composition)
+  const target = COMPOSITION_TARGETS[outputTarget]
+  const inputByPosition = new Map(
+    payload.resource.inputs.map((input) => [input.position, input]),
+  )
   const bgmInputs = payload.resource.musicCues.map((cue) => {
     const reference = inputByPosition.get(cue.inputPosition)
     if (!reference || reference.role !== 'bgm_audio') {
-      throw new Error(`WORKSPACE_RESOURCE_VIDEO_MERGE_BGM_POSITION_INVALID:${String(cue.inputPosition)}`)
+      throw new Error(
+        `WORKSPACE_RESOURCE_VIDEO_MERGE_BGM_POSITION_INVALID:${String(cue.inputPosition)}`,
+      )
     }
     return reference
   })
-  const resolvedBgm = bgmInputs.length > 0 ? await resolveWorkspaceResourceInputMedia({
-    userId: data.userId,
-    projectId: data.projectId,
-    references: bgmInputs,
-    expectedMediaType: 'audio',
-  }) : []
+  const resolvedBgm =
+    bgmInputs.length > 0
+      ? await resolveWorkspaceResourceInputMedia({
+          userId: data.userId,
+          projectId: data.projectId,
+          references: bgmInputs,
+          expectedMediaType: 'audio',
+        })
+      : []
   const soundInputs = payload.resource.soundCues.map((cue) => {
     const reference = inputByPosition.get(cue.inputPosition)
     if (!reference || reference.role !== 'sound_effect_audio') {
-      throw new Error(`WORKSPACE_RESOURCE_VIDEO_MERGE_SOUND_POSITION_INVALID:${String(cue.inputPosition)}`)
+      throw new Error(
+        `WORKSPACE_RESOURCE_VIDEO_MERGE_SOUND_POSITION_INVALID:${String(cue.inputPosition)}`,
+      )
     }
     return reference
   })
-  const resolvedSound = soundInputs.length > 0 ? await resolveWorkspaceResourceInputMedia({
-    userId: data.userId,
-    projectId: data.projectId,
-    references: soundInputs,
-    expectedMediaType: 'audio',
-  }) : []
+  const resolvedSound =
+    soundInputs.length > 0
+      ? await resolveWorkspaceResourceInputMedia({
+          userId: data.userId,
+          projectId: data.projectId,
+          references: soundInputs,
+          expectedMediaType: 'audio',
+        })
+      : []
 
-  const workspaceDir = await mkdtemp(path.join(tmpdir(), `waoowaoo-resource-merge-${randomUUID()}-`))
+  const workspaceDir = await mkdtemp(
+    path.join(tmpdir(), `waoowaoo-resource-merge-${randomUUID()}-`),
+  )
   try {
-    await reportTaskProgress(context, 10, { stage: 'workspace_resource_video_merge_prepare' })
+    await reportTaskProgress(context, 10, {
+      stage: 'workspace_resource_video_merge_prepare',
+    })
     const sourcePaths: string[] = []
+    let totalBytes = 0
+    const downloadedPaths = new Map<string, string>()
     for (const [index, item] of ordered.entries()) {
+      const existing = downloadedPaths.get(item.storageKey)
+      if (existing) {
+        sourcePaths.push(existing)
+        continue
+      }
       const sourcePath = path.join(workspaceDir, `source-${String(index)}.mp4`)
-      await writeFile(sourcePath, await getObjectBuffer(item.storageKey))
+      const buffer = await getObjectBuffer(item.storageKey, {
+        maxBytes: target.maxInputBytes - totalBytes,
+      })
+      totalBytes += buffer.length
+      await writeFile(sourcePath, buffer)
+      downloadedPaths.set(item.storageKey, sourcePath)
       sourcePaths.push(sourcePath)
     }
-    const dimensions = await probeVideoDimensions(sourcePaths[0] ?? '')
-    const durations = await Promise.all(sourcePaths.map(async (sourcePath) => (
-      await probeVideoDurationSeconds(sourcePath)
-    )))
-
-    const { stitchedPath, clipDurations } = await composeVideoMergeVideoTrack({
-      sourcePaths,
-      durations,
-      workspaceDir,
-      width: dimensions.width,
-      height: dimensions.height,
+    await reportTaskProgress(context, 65, {
+      stage: 'workspace_resource_video_merge_compose',
     })
-    const audioPaths: string[] = []
-    let hasSourceAudio = false
-    for (const [index, sourcePath] of sourcePaths.entries()) {
-      const durationSeconds = clipDurations[index]
-      if (!durationSeconds) throw new Error(`WORKSPACE_RESOURCE_VIDEO_MERGE_DURATION_MISSING:${String(index)}`)
-      if (usesSourceAudio) {
-        const audioPath = path.join(workspaceDir, `audio-${String(index)}.wav`)
-        const clipHasAudio = await renderVideoMergeClipAudio({
-          runCommand: createFfmpegCommandRunner({
-            stage: 'workspace_resource_video_merge_clip_audio',
-            expectedDurationSeconds: durationSeconds,
+    const renderers = {
+      mp4: async () =>
+        await renderMp4Composition({
+          payload,
+          sourcePaths,
+          workspaceDir,
+          assemblyAudioStorageKey,
+          resolvedBgm,
+          resolvedSound,
+        }),
+      jianying_project: async () => {
+        if (!jianyingProfile) throw new Error('JIANYING_PROFILE_REQUIRED')
+        return {
+          buffer: await exportJianyingProject({
+            identity: data.taskId,
+            name: recipe.name,
+            locale: recipe.locale,
+            composition,
+            profile: jianyingProfile,
+            sourceFacts,
+            format: recipe.format,
+            sourcePaths,
+            workspaceDir,
           }),
-          sourcePath,
-          outputPath: audioPath,
-          durationSeconds,
-        })
-        hasSourceAudio = hasSourceAudio || clipHasAudio
-        audioPaths.push(audioPath)
-      }
-    }
-
-    await reportTaskProgress(context, 65, { stage: 'workspace_resource_video_merge_compose' })
-    const stitchedDurationSeconds = await probeVideoDurationSeconds(stitchedPath)
-    const mainAudioPath = usesSourceAudio ? path.join(workspaceDir, 'audio.wav') : null
-    if (mainAudioPath) {
-      await concatVideoMergeAudioClips({
-        runCommand: createFfmpegCommandRunner({
-          stage: 'workspace_resource_video_merge_concat_audio',
-          expectedDurationSeconds: stitchedDurationSeconds,
-        }),
-        clipAudioPaths: audioPaths,
-        outputPath: mainAudioPath,
-        durationSeconds: stitchedDurationSeconds,
-      })
-    }
-    const outputPath = path.join(workspaceDir, 'merged.mp4')
-    if (hasTimedAudioCues) {
-      if (!mainAudioPath) throw new Error('WORKSPACE_RESOURCE_VIDEO_MERGE_MAIN_AUDIO_REQUIRED')
-      const musicCues = await Promise.all(resolvedBgm.map(async (bgm, index) => {
-        const placement = payload.resource.musicCues[index]
-        if (!placement) throw new Error(`WORKSPACE_RESOURCE_VIDEO_MERGE_BGM_PLACEMENT_MISSING:${String(index)}`)
-        const musicPath = path.join(workspaceDir, `bgm-source-${String(index)}`)
-        await writeFile(musicPath, await getObjectBuffer(bgm.storageKey))
-        return { ...placement, audioPath: musicPath }
-      }))
-      const soundCues = await Promise.all(resolvedSound.map(async (sound, index) => {
-        const placement = payload.resource.soundCues[index]
-        if (!placement) throw new Error(`WORKSPACE_RESOURCE_VIDEO_MERGE_SOUND_PLACEMENT_MISSING:${String(index)}`)
-        const soundPath = path.join(workspaceDir, `sound-source-${String(index)}`)
-        await writeFile(soundPath, await getObjectBuffer(sound.storageKey))
-        return { ...placement, audioPath: soundPath }
-      }))
-      await muxVideoMergeTimedAudioCues({
-        runCommand: createFfmpegCommandRunner({
-          stage: 'workspace_resource_video_merge_concat_audio',
-          expectedDurationSeconds: stitchedDurationSeconds,
-        }),
-        stitchedPath,
-        mainAudioPath,
-        hasSourceAudio,
-        musicCues,
-        soundCues,
-        outputPath,
-        durationSeconds: stitchedDurationSeconds,
-      })
-    } else {
-      const assemblyAudioPath = assemblyAudioStorageKey ? path.join(workspaceDir, 'assembly-audio-source') : null
-      if (assemblyAudioPath && assemblyAudioStorageKey) {
-        await writeFile(assemblyAudioPath, await getObjectBuffer(assemblyAudioStorageKey))
-      }
-      await muxVideoMergeFinalAudio({
-        runCommand: createFfmpegCommandRunner({
-          stage: 'workspace_resource_video_merge_mux',
-          expectedDurationSeconds: stitchedDurationSeconds,
-        }),
-        audioMode,
-        stitchedPath,
-        mainAudioPath,
-        hasSourceAudio,
-        assemblyAudioPath,
-        outputPath,
-        durationSeconds: stitchedDurationSeconds,
-      })
-    }
-
-    await reportTaskProgress(context, 92, { stage: 'workspace_resource_video_merge_persist' })
+          width: null,
+          height: null,
+          durationMs: null,
+        }
+      },
+    } satisfies Record<CompositionTarget, () => Promise<CompositionArtifact>>
+    const artifact = await renderers[outputTarget]()
+    await reportTaskProgress(context, 92, {
+      stage: 'workspace_resource_video_merge_persist',
+    })
     await assertTaskActive(context, 'persist_workspace_resource_video_merge')
-    const outputBuffer = await readFile(outputPath)
     const storageKey = await uploadObject(
-      outputBuffer,
+      artifact.buffer,
       buildTaskArtifactStorageKey({
         taskId: data.taskId,
         artifact: `workspace-resource-video-merge:${payload.resource.resourceId}`,
-        extension: 'mp4',
+        extension: target.extension,
       }),
-      'video/mp4',
+      target.mimeType,
     )
     const media = await ensureMediaObjectFromStorageKey(storageKey, {
-      mimeType: 'video/mp4',
-      sizeBytes: outputBuffer.byteLength,
-      width: dimensions.width,
-      height: dimensions.height,
-      durationMs: Math.round(stitchedDurationSeconds * 1000),
+      mimeType: target.mimeType,
+      sizeBytes: artifact.buffer.length,
+      width: artifact.width,
+      height: artifact.height,
+      durationMs: artifact.durationMs,
     })
     return {
       mediaId: media.id,
-      videoUrl: media.url,
       storageKey: media.storageKey,
-      durationMs: Math.round(stitchedDurationSeconds * 1000),
-      width: dimensions.width,
-      height: dimensions.height,
+      mediaUrl: media.url,
+      durationMs: artifact.durationMs,
+      width: artifact.width,
+      height: artifact.height,
       clipCount: ordered.length,
     }
   } finally {

@@ -5,7 +5,7 @@
 ## 为什么是这样
 
 一个 Project 只有一棵创作资源树。`WorkspaceResource` 同时表示目录、用户可编辑文字文件，以及
-生产出的图片、音频和视频；不存在 Authoring File、CreativeResource、Episode Resource 或 Canvas
+生产出的图片、音频、视频及工程归档；不存在 Authoring File、CreativeResource、Episode Resource 或 Canvas
 Card Resource 等平行实体。
 
 Episode、Chapter、Scene、Shot、Canon 都是用户目录与文件内容，不是系统 scope、外键或第二状态机。
@@ -79,6 +79,11 @@ Episode、Chapter、Scene、Shot、Canon 都是用户目录与文件内容，不
   同一 Project 的精确版本，只有采用 persistence 入口能修改；采用修订号与项目投影水位同事务推进，
   旧请求不能覆盖新选择。生成来源和当前采用不能相互推导；删除音色保留不可用的选择事实，恢复不改选
   其他版本。后续生产仍必须冻结精确输入，不得把采用指针当作执行时的动态引用。
+
+- **WR-20 — 剪辑结果绑定精确片段使用。** 素材版本身份与片段使用身份分开；重复使用与重排不能改变
+  文字层的归属。源区间、文字区间、目标能力及序列化模板在预留输出前校验并冻结，执行与重试只消费
+  该快照。工程归档与成片仍由同一合并 Operation 提交、同一终态 writer 物化；归档成功不代表外部编辑器
+  已导入或完成渲染。外部导入只能创建显式选择的新目录，不能覆盖已有工程。
 
 ## 权威入口
 

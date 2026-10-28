@@ -27,6 +27,7 @@ const INPUT_MEDIA_ICONS: Record<WorkspaceResourceMediaType, AppIconName> = {
   video: 'video',
   audio: 'audioWave',
   text: 'fileText',
+  archive:'package',
 }
 
 const TILE_BOX_CLASS = 'relative h-[76px] w-[76px] overflow-hidden rounded-[12px] bg-white'

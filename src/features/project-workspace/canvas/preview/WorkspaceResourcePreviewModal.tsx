@@ -10,6 +10,7 @@ import { WORKSPACE_RESOURCE_SCHEMA } from '@/lib/workspace-resource/schema-regis
 import { useWorkspaceProvider } from '../../WorkspaceProvider'
 import type { WorkspaceResourceCardMemberView } from '../contracts/workspace-canvas-interactions'
 import type { WorkspaceNodeDetailsActions } from '../details/WorkspaceNodeDetailsCard'
+import { ArchiveBody } from '../nodes/renderers/resource-media-shell'
 import { WorkspaceVoiceDesignPanel } from '../details/WorkspaceVoiceDesignPanel'
 
 function ResourcePreviewBody({ card, busy, onOperation }: {
@@ -65,6 +66,9 @@ function ResourcePreviewBody({ card, busy, onOperation }: {
         {statusLabels(card.resource.status)}
       </div>
     )
+  }
+  if (summary.kind === 'media' && summary.mediaType === 'archive') {
+    return <div className="min-h-[18rem] rounded-2xl bg-slate-50"><ArchiveBody /><p className="px-6 pb-6 text-sm leading-6 text-[var(--glass-text-secondary)]">{previewLabels('archiveImport')}</p></div>
   }
   if (summary.kind === 'media' && summary.url) {
     if (summary.mediaType === 'image') {

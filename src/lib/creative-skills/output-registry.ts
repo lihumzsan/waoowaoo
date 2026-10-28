@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { videoEditOutputSchema } from '@/lib/video-compose/composition-contract'
 import { creativeDirectionSchema } from '@/lib/creative-direction/contracts'
 import {
   assetGenerationBatchOutputSchema,
@@ -42,6 +43,7 @@ export const creativeDirectionOutputSchema = creativeDirectionSchema.safeExtend(
 }).strict()
 
 export const CREATIVE_OUTPUT_SCHEMAS = {
+  video_edit: videoEditOutputSchema,
   screenplay: screenplayOutputSchema,
   creative_direction: creativeDirectionOutputSchema,
   asset_generation_batch: assetGenerationBatchOutputSchema,
@@ -50,6 +52,7 @@ export const CREATIVE_OUTPUT_SCHEMAS = {
 } as const satisfies Record<CreativeOutputKind, z.ZodType>
 
 export const creativeOutputSchema = z.discriminatedUnion('outputKind', [
+  videoEditOutputSchema,
   screenplayOutputSchema,
   creativeDirectionOutputSchema,
   assetGenerationBatchOutputSchema,
@@ -65,6 +68,7 @@ export const CREATIVE_DOMAIN_OUTPUT_KIND = {
   assets: 'asset_generation_batch',
   video: 'video_generation_batch',
   music: 'audio_generation_batch',
+  editing:'video_edit',
 } as const satisfies Record<CreativeDomainKind, CreativeOutputKind>
 
 type CreativeOutputDefinition = {
@@ -72,7 +76,7 @@ type CreativeOutputDefinition = {
   readonly domainKind: CreativeDomainKind
   readonly professionalSkillId: Exclude<CreativeSkillId, 'creative-core'>
   readonly savedDocumentSchemaId: WorkspaceResourceSchemaId
-  readonly mediaOperationId: 'create_image' | 'create_audio' | 'create_video' | null
+  readonly mediaOperationId: 'create_image' | 'create_audio' | 'create_video' | 'merge_videos' | null
   readonly schema: z.ZodType
 }
 
@@ -83,6 +87,10 @@ function defineOutput(
 }
 
 export const CREATIVE_OUTPUT_REGISTRY: Readonly<Record<CreativeOutputKind, CreativeOutputDefinition>> = {
+  video_edit: defineOutput({
+    outputKind:'video_edit',domainKind:'editing',professionalSkillId:'video-editing',
+    savedDocumentSchemaId:WORKSPACE_RESOURCE_SCHEMA.VIDEO_EDIT,mediaOperationId:'merge_videos',schema:videoEditOutputSchema,
+  }),
   screenplay: defineOutput({
     outputKind: 'screenplay',
     domainKind: 'story',

@@ -1,5 +1,7 @@
+import { z } from 'zod'
 import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import type { ResolvedCompositionTiming } from './composition-timing'
 import { runFfmpegCommand } from './ffmpeg-command'
 
 const MIN_VIDEO_FRAME_RATE = 1
@@ -45,31 +47,49 @@ export async function probeVideoDurationSeconds(filePath: string): Promise<numbe
 export async function normalizeVideoClip(input: {
   readonly sourcePath: string
   readonly outputPath: string
-  readonly durationSeconds: number
+  readonly sourceDurationSeconds: number
+  readonly sourceStartSeconds: number
+  readonly videoFrameCount: number
   readonly width: number
   readonly height: number
   readonly frameRate: string
 }): Promise<void> {
-  await runFfmpegCommand('ffmpeg', [
-    '-y',
-    '-i',
-    input.sourcePath,
-    '-t',
-    input.durationSeconds.toFixed(3),
-    '-vf',
-    `scale=${input.width}:${input.height}:force_original_aspect_ratio=decrease,pad=${input.width}:${input.height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${input.frameRate},format=yuv420p`,
-    '-an',
-    '-c:v',
-    'libx264',
-    '-preset',
-    'veryfast',
-    '-crf',
-    '20',
-    input.outputPath,
-  ], {
-    stage: 'workspace_resource_video_merge_normalize',
-    expectedDurationSeconds: input.durationSeconds,
-  })
+  // Retain the preceding keyframe context; trim by source timestamps before
+  // rebasing so an off-grid start keeps its covering frame, including at EOF.
+  // The input duration bounds decoding from the earlier seek point; trim owns
+  // the exact source endpoint, while fps alone projects onto the output grid.
+  const sourceEndSeconds = input.sourceStartSeconds + input.sourceDurationSeconds
+  await runFfmpegCommand(
+    'ffmpeg',
+    [
+      '-y',
+      '-copyts',
+      '-start_at_zero',
+      '-noaccurate_seek',
+      '-ss',
+      input.sourceStartSeconds.toFixed(3),
+      '-t',
+      sourceEndSeconds.toFixed(3),
+      '-i',
+      input.sourcePath,
+      '-vf',
+      `trim=end=${sourceEndSeconds.toFixed(3)},setpts=PTS-${input.sourceStartSeconds.toFixed(3)}/TB,scale=${input.width}:${input.height}:force_original_aspect_ratio=decrease,pad=${input.width}:${input.height}:(ow-iw)/2:(oh-ih)/2,setsar=1,tpad=stop_mode=clone:stop=-1,fps=${input.frameRate}:start_time=0:round=near:eof_action=pass,format=yuv420p`,
+      '-frames:v',
+      String(input.videoFrameCount),
+      '-an',
+      '-c:v',
+      'libx264',
+      '-preset',
+      'veryfast',
+      '-crf',
+      '20',
+      input.outputPath,
+    ],
+    {
+      stage: 'workspace_resource_video_merge_normalize',
+      expectedDurationSeconds: input.sourceDurationSeconds,
+    },
+  )
 }
 
 export async function probeVideoFrameRate(filePath: string): Promise<string> {
@@ -135,58 +155,81 @@ export async function concatVideoClips(input: {
   })
 }
 
-async function probeVideoCodec(filePath: string): Promise<string> {
-  const result = await runFfmpegCommand('ffprobe', [
-    '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name',
-    '-of', 'default=noprint_wrappers=1:nokey=1', filePath,
-  ], { stage: 'workspace_resource_video_merge_probe_codec' })
-  const codec = result.stdout.trim().toLowerCase()
-  if (!codec) throw new Error('WORKSPACE_RESOURCE_VIDEO_MERGE_CODEC_INVALID')
-  return codec
-}
+const encodedVideoTimingSchema = z.object({
+  streams: z.tuple([
+    z.object({
+      nb_frames: z.string().regex(/^[1-9]\d*$/u),
+      duration: z
+        .string()
+        .refine((value) => Number.isFinite(Number(value)) && Number(value) > 0),
+    }),
+  ]),
+})
 
 export async function composeVideoMergeVideoTrack(input: {
   readonly sourcePaths: readonly string[]
-  readonly durations: readonly number[]
+  readonly timeline: ResolvedCompositionTiming
   readonly workspaceDir: string
   readonly width: number
   readonly height: number
-}): Promise<{
-  readonly stitchedPath: string
-  readonly clipDurations: readonly number[]
-}> {
-  const sourcePath = input.sourcePaths[0]
-  if (!sourcePath || input.sourcePaths.length !== input.durations.length) {
+}): Promise<{ readonly stitchedPath: string; readonly encodedDurationMs: number }> {
+  const { timeline } = input
+  if (input.sourcePaths.length !== timeline.clips.length) {
     throw new Error('WORKSPACE_RESOURCE_VIDEO_MERGE_INPUT_INVALID')
   }
-  if (input.sourcePaths.length === 1 && await probeVideoCodec(sourcePath) === 'h264') {
-    return { stitchedPath: sourcePath, clipDurations: [await probeVideoDurationSeconds(sourcePath)] }
-  }
-
-  const frameRate = await probeVideoFrameRate(sourcePath)
   const normalizedPaths: string[] = []
-  const clipDurations: number[] = []
-  for (const [index, currentSourcePath] of input.sourcePaths.entries()) {
-    const durationSeconds = input.durations[index]
-    if (!durationSeconds) throw new Error(`WORKSPACE_RESOURCE_VIDEO_MERGE_DURATION_MISSING:${String(index)}`)
-    const normalizedPath = path.join(input.workspaceDir, `normalized-${String(index)}.mp4`)
+  for (const [index, sourcePath] of input.sourcePaths.entries()) {
+    const clip = timeline.clips[index]
+    if (!clip) throw new Error('WORKSPACE_RESOURCE_VIDEO_MERGE_INPUT_INVALID')
+    const normalizedPath = path.join(
+      input.workspaceDir,
+      `normalized-${String(index)}.mp4`,
+    )
     await normalizeVideoClip({
-      sourcePath: currentSourcePath,
+      sourcePath,
       outputPath: normalizedPath,
-      durationSeconds,
+      sourceDurationSeconds: clip.durationMs / 1000,
+      sourceStartSeconds: clip.sourceStartMs / 1000,
+      videoFrameCount: clip.videoFrameCount,
       width: input.width,
       height: input.height,
-      frameRate,
+      frameRate: timeline.frameRate,
     })
     normalizedPaths.push(normalizedPath)
-    clipDurations.push(await probeVideoDurationSeconds(normalizedPath))
   }
   const stitchedPath = path.join(input.workspaceDir, 'stitched.mp4')
   await concatVideoClips({
     clipPaths: normalizedPaths,
     listPath: path.join(input.workspaceDir, 'concat.txt'),
     outputPath: stitchedPath,
-    durationSeconds: clipDurations.reduce((sum, duration) => sum + duration, 0),
+    durationSeconds: timeline.videoDurationUs / 1000000,
   })
-  return { stitchedPath, clipDurations }
+  // Validate encoded facts; never turn them into a second placement authority.
+  const probe = await runFfmpegCommand(
+    'ffprobe',
+    [
+      '-v',
+      'error',
+      '-select_streams',
+      'v:0',
+      '-show_entries',
+      'stream=nb_frames,duration',
+      '-of',
+      'json',
+      stitchedPath,
+    ],
+    { stage: 'workspace_resource_video_merge_verify_timing' },
+  )
+  const data: unknown = JSON.parse(probe.stdout)
+  const parsed = encodedVideoTimingSchema.parse(data)
+  const stream = parsed.streams[0]
+  const frameDurationUs = timeline.videoDurationUs / timeline.videoFrameCount
+  if (
+    Number(stream.nb_frames) !== timeline.videoFrameCount ||
+    Math.abs(Number(stream.duration) * 1000000 - timeline.videoDurationUs) >
+      frameDurationUs / 2
+  ) {
+    throw new Error('WORKSPACE_RESOURCE_VIDEO_MERGE_OUTPUT_TIMING_MISMATCH')
+  }
+  return { stitchedPath, encodedDurationMs: Math.round(Number(stream.duration) * 1000) }
 }

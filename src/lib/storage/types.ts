@@ -19,6 +19,7 @@ export interface SignedUrlParams {
   key: string
   expiresInSeconds: number
   responseCacheControl?: string
+  responseContentDisposition?: string
 }
 
 export interface ObjectMetadata {

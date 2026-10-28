@@ -1,3 +1,9 @@
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { uploadObject, deleteObjects } from '@/lib/storage'
+import { runFfmpegCommand } from '@/lib/video-compose/ffmpeg-command'
+import { videoCompositionFixture } from './video-composition-fixture'
 import { randomUUID } from 'node:crypto'
 import {
   OPERATION_EXECUTION_PROTOCOL,
@@ -30,18 +36,17 @@ async function seedVideoInputs(input: {
   readonly userId: string
   readonly projectId: string
 }) {
-  const media = await Promise.all([0, 1].map(async (index) => (
-    await ensureMediaObjectFromStorageKey(
-      `tests/temporal/operation-durability/${input.suffix}-${String(index)}.mp4`,
-      {
-        mimeType: 'video/mp4',
-        sizeBytes: 1,
-        width: 1,
-        height: 1,
-        durationMs: 1_000,
-      },
-    )
-  )))
+  const directory = await mkdtemp(path.join(tmpdir(),'wao-operation-durability-'))
+  const file = path.join(directory,'source.mp4')
+  let bytes: Buffer
+  try {
+    await runFfmpegCommand('ffmpeg',['-y','-f','lavfi','-i','color=c=black:s=16x16:r=24:d=1','-an','-c:v','libx264','-pix_fmt','yuv420p',file],{stage:'operation_durability_fixture',expectedDurationSeconds:1})
+    bytes = await readFile(file)
+  } finally {await rm(directory,{recursive:true,force:true})}
+  const media = await Promise.all([0,1].map(async (index) => {
+    const key = await uploadObject(bytes,`tests/temporal/operation-durability/${input.suffix}-${String(index)}.mp4`,'video/mp4')
+    return await ensureMediaObjectFromStorageKey(key,{mimeType:'video/mp4',sizeBytes:bytes.length,width:16,height:16,durationMs:1000})
+  }))
   const resources = await prisma.$transaction(async (tx) => {
     const created: WorkspaceResourceInputRef[] = []
     for (const [index, mediaObject] of media.entries()) {
@@ -125,6 +130,7 @@ Promise<OperationExecutionDurabilityFixture> {
         create: {
           id: projectId,
           name: 'Operation durability project',
+          videoRatio:'1:1',videoResolution:'480p',
         },
       },
     },
@@ -133,11 +139,8 @@ Promise<OperationExecutionDurabilityFixture> {
   const parsedInput = operation.inputSchema.safeParse({
     folderPath: null,
     name: `Operation durability output ${suffix}`,
-    audioMode: 'preserve',
-    videos: seededInputs.resources.map(({ resourceId, contentVersion }) => ({
-      resourceId,
-      contentVersion,
-    })),
+    outputTarget:'mp4',
+    composition:videoCompositionFixture(seededInputs.resources).composition,
   })
   if (!parsedInput.success) {
     throw new Error('OPERATION_DURABILITY_INPUT_INVALID')
@@ -236,6 +239,8 @@ export async function removeOperationExecutionDurabilityFixture(
   await prisma.user.deleteMany({
     where: { id: fixture.userId },
   })
+  const media = await prisma.mediaObject.findMany({where:{id:{in:[...fixture.mediaObjectIds]}},select:{storageKey:true}})
+  await deleteObjects(media.map((item) => item.storageKey))
   await prisma.mediaObject.deleteMany({
     where: { id: { in: [...fixture.mediaObjectIds] } },
   })

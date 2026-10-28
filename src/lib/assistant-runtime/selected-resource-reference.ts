@@ -1,13 +1,9 @@
 import type { AssistantRuntimeSelectedResourceReference } from './contracts'
+import { WORKSPACE_RESOURCE_MEDIA_TYPES } from '@/lib/workspace-resource/contracts'
 import type { WorkspaceResourceView } from '@/lib/workspace-resource/contracts'
 import { readWorkspaceResource } from '@/lib/workspace-resource/view-service'
 
-const selectedResourceMediaTypes = new Set<AssistantRuntimeSelectedResourceReference['mediaType']>([
-  'text',
-  'image',
-  'audio',
-  'video',
-])
+const selectedResourceMediaTypes = new Set<AssistantRuntimeSelectedResourceReference['mediaType']>(WORKSPACE_RESOURCE_MEDIA_TYPES)
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)

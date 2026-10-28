@@ -111,5 +111,12 @@
   "PROJECT_AGENT_CONTROL_ALREADY_RESOLVED": "This confirmation was already handled by a newer action. The latest status has been refreshed.",
   "PROJECT_AGENT_INTERRUPTION_NOT_PENDING": "This confirmation was already handled by a newer action. The latest status has been refreshed.",
   "PROJECT_ASSISTANT_CARD_RESPONSE_FAILED": "Card response failed. Retry the card action.",
-  "PROJECT_ASSISTANT_BACKGROUND_FOLLOW_UP_FAILED": "Background follow-up was interrupted. Refresh status or retry the current step."
+  "PROJECT_ASSISTANT_BACKGROUND_FOLLOW_UP_FAILED": "Background follow-up was interrupted. Refresh status or retry the current step.",
+  "COMPOSITION_INPUT_INVALID": "Video composition is invalid.",
+  "COMPOSITION_TARGET_UNSUPPORTED": "The selected export target cannot represent the requested composition.",
+  "COMPOSITION_SOURCE_RANGE_INVALID": "A clip exceeds its exact source video duration.",
+  "COMPOSITION_INPUT_TOO_LARGE": "The composition exceeds the media size limit.",
+  "JIANYING_CONFIGURATION_REQUIRED": "Configure a working Python 3.10+ executable with intact serializer dependencies and an empty native Jianying draft template.",
+  "JIANYING_TEMPLATE_INVALID": "The Jianying template must be a valid empty native draft.",
+  "JIANYING_EXPORT_FAILED": "Jianying project serialization failed."
 }
